@@ -28,6 +28,79 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260709-005 — Retire "C-number" as a product-phase implementation identifier; use explicit names
+
+Status: accepted
+Date: 2026-07-09
+Owner: Roben (approved); recorded by Claude (GitHub session)
+Related task: none (documentation clarification only — no code, no issue closed, no roadmap reprioritization)
+
+#### Context
+"C3" is currently used for at least two unrelated things in this workspace, and "C4" for one
+undefined placeholder plus one unrelated thing:
+
+- **Atelier design-phase C3** (canonical scope, per `PROJECT_STATUS.md` and the
+  `2026-07-08-technical-status.md` / `2026-07-09-board-clean-governance-complete.md` handoffs):
+  Atelier V2 migration of `/about`, `/contact`, `/faq`. Its own governing scope **explicitly
+  forbids "No landing hero animation."**
+- **PR #899**, titled *"C3 — landing hero polish"*: a rotating slogan tail, hand-drawn underline,
+  and ambient wash added to the **production landing hero** — open draft, unmerged. This both
+  reuses the "C3" label *and* does the exact thing the canonical C3 scope forbids.
+- **#198 security-audit finding IDs `C1`–`C4`** (`2026-07-09-security-data-risk-deep-dive.md`,
+  `TASKS.md`): a completely unrelated "Critical"-tier finding-severity numbering from the #198
+  bug-hunt issue (alongside `H1`–`H6`, `M1`–`M7`, `L1`–`L4`). `C1`/`C2` there are connection-leak
+  and maintenance-mode findings, already triaged; `C3`/`C4` there are unrelated, uninvestigated
+  findings, deferred as lower-severity.
+- **Design-phase "C4"** is referenced repeatedly across three handoffs only as "not started" /
+  a forbidden-list filler (`no C4/C8`) — no page, feature, or PR has ever had a defined C4 scope.
+- Separately, PR #912 (merged, live) shipped real `/command` chat UX polish (copy, retry,
+  new-chat button, keyboard shortcuts, guest-only history) without ever using a "C" label —
+  it sits outside this numbering system entirely and is not the C8 rewrite.
+
+Continuing to use bare "C#" labels risks a real production mistake: an agent or reviewer could
+treat PR #899 as satisfying the canonical "C3" milestone (`/about`/`/contact`/`/faq`) when it is
+an entirely different, still-unapproved change to the production landing hero — or confuse a
+design-phase reference with a security-finding reference sharing the same short code.
+
+#### Decision
+Retire bare "C#" labels (`C1`–`C8`) as implementation identifiers for new work. Use explicit
+names instead:
+
+| Old label | Canonical explicit name | Status |
+|---|---|---|
+| Design C1 | **Legal Pages Migration — `/terms`** | done, live |
+| Design C2 | **Legal Pages Migration — `/privacy` + `/refund-policy`** | done, live |
+| Design C3 (canonical scope) | **About/Contact/FAQ Migration** | not started, owner-gated |
+| PR #899 ("C3" landing hero) | **Landing Hero Polish** — kept fully separate from About/Contact/FAQ Migration; not renamed by this decision, not started/merged by this decision | open draft, unmerged, held |
+| Design "C4" (undefined) | *(retired — no scope was ever assigned; do not reuse until a real scope is defined and named explicitly)* | n/a |
+| Design C8 | **Command Streaming Chat Rewrite** | deferred |
+| PR #912 (already shipped) | **Command UI Incremental Polish** (retroactive label for board clarity only) | done, live |
+| #872 | **Design Gallery Integration — Nocturne Prototype** | held |
+| #873 | **Design Gallery Integration — Rico-Alive Prototype** | held |
+| #198 findings `C1`–`C4` | Reference as **`#198-C1`…`#198-C4`** (issue-scoped prefix) so a security-finding ID can never again collide with a product-phase name | 2 fixed, 2 not yet investigated |
+
+This decision is documentation clarification only. It does not rename PR #899, does not start
+#899/#872/#873/#908/#909/#446 Stage 2, does not close any issue, and does not reprioritize the
+roadmap. Existing "C1"/"C2" references to already-shipped work (`/terms`, `/privacy`,
+`/refund-policy`) are historical fact and are not being undone — future *new* work should use the
+explicit names above instead of minting further "C#" labels.
+
+#### Consequences
+- Positive: a design-phase reference and a security-finding reference can no longer collide on
+  the same short code; a mislabeled PR (like #899) can be spotted immediately by name instead of
+  requiring cross-referencing three handoffs; future planning docs read unambiguously without
+  needing this decision as a lookup table.
+- Negative/trade-off: existing docs (`PROJECT_STATUS.md`, `CURRENT_STATE.md`, several historical
+  handoffs) still contain the old "C#" phrasing for already-shipped work; those are left as
+  historical record rather than rewritten, per the Historical-handoffs rule in `MASTER_INDEX.md`.
+
+#### Follow-up
+- [ ] When any of About/Contact/FAQ Migration, Landing Hero Polish, Command Streaming Chat
+  Rewrite, or Design Gallery Integration is next picked up, use the explicit name above in the
+  PR title/branch, not a "C#" label.
+- [ ] If #899 is revisited, resolve it under its own explicit name (Landing Hero Polish) —
+  independently of whether/when About/Contact/FAQ Migration starts.
+
 ### DEC-20260708-004 — Quarantine the Lovable streaming-chat experiment; command chat must be reimplemented in the production repo
 
 Status: accepted

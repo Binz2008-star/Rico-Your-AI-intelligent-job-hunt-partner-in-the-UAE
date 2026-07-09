@@ -1,7 +1,16 @@
 # Current State
 
-> **Reconciliation header — 2026-07-09 (latest; supersedes all headers below).** `main` has
-> advanced to `b9563a78154743d0270586ce23326bc372be6192` (#904, security/data-risk deep-dive
+> **Reconciliation header — 2026-07-09 (latest; supersedes all headers below).** Docs-only:
+> `DEC-20260709-005` retires bare "C#" labels as implementation identifiers. "C3" was found in
+> use for two unrelated things — the canonical Atelier `/about`/`/contact`/`/faq` migration
+> (per `PROJECT_STATUS.md`) and PR #899's unapproved landing-hero animation (open draft,
+> unmerged) — plus an unrelated #198 security-finding ID. "C4" was referenced only as an
+> undefined placeholder, never given a scope. Full conflict table and canonical map in
+> `AI_WORKSPACE/DECISIONS.md` (`DEC-20260709-005`). No runtime code, no UI, no Neon, no issue
+> closed, no roadmap reprioritization, PR #899 not renamed.
+>
+> **Reconciliation header — 2026-07-09 (earlier same day; now itself superseded by the header
+> above).** `main` has advanced to `b9563a78154743d0270586ce23326bc372be6192` (#904, security/data-risk deep-dive
 > verdict persisted).
 >
 > **#446 Stage 1 cleanup executed and validated (2026-07-09).** Run by a session with live Neon

@@ -129,5 +129,6 @@ without duplicating them into separate files.
 | DEC-20260708-002 | Agentic-UI action routing contract (no frontend-only actions) | Safety/actions |
 | DEC-20260708-003 | Design-system boundary: Atelier (marketing) vs Nocturne (workspace) | Design systems |
 | DEC-20260708-004 | Quarantine the Lovable streaming-chat experiment | Prototype governance |
+| DEC-20260709-005 | Retire "C-number" implementation labels; use explicit names | Documentation governance |
 
 _When you add a `DEC-*` entry, add a row here in the same PR._
