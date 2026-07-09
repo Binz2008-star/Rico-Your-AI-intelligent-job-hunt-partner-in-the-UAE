@@ -91,6 +91,59 @@ interface Message {
     permission_dismissed?: boolean;
     proposed_dismissed?: boolean;
     actions?: RicoChatAction[];
+    // Set on network/timeout/generic send failures so the bubble can offer a
+    // Retry that resends the exact user text that failed (retryText).
+    isError?: boolean;
+    retryText?: string;
+}
+
+// ── Public/guest session history (localStorage only) ───────────────────────
+// Authenticated users already have server-truth history via fetchChatHistory
+// (src/api routers) — this mirror is scoped to public/guest sessions only,
+// which currently have zero persistence across reloads. It intentionally
+// stores plain role+text pairs only: agentic_ui (permission_request,
+// proposed_changes) and job/action cards are never replayed from storage, so
+// a reload can never resurrect a stale approve/apply affordance.
+const PUBLIC_HISTORY_KEY = "rico_command_public_history_v1";
+const PUBLIC_HISTORY_LIMIT = 40;
+
+interface StoredPublicMessage {
+    role: "user" | "rico";
+    text: string;
+}
+
+function loadPublicHistory(sessionIdRef: React.MutableRefObject<string | null>): StoredPublicMessage[] {
+    if (typeof window === "undefined") return [];
+    try {
+        const raw = window.localStorage.getItem(PUBLIC_HISTORY_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw) as { sid?: string; messages?: unknown };
+        if (!parsed || parsed.sid !== getSessionId(sessionIdRef) || !Array.isArray(parsed.messages)) return [];
+        return parsed.messages.filter(
+            (m): m is StoredPublicMessage =>
+                !!m && typeof m === "object" &&
+                ((m as StoredPublicMessage).role === "user" || (m as StoredPublicMessage).role === "rico") &&
+                typeof (m as StoredPublicMessage).text === "string",
+        );
+    } catch {
+        return [];
+    }
+}
+
+function savePublicHistory(sessionIdRef: React.MutableRefObject<string | null>, messages: Message[]): void {
+    if (typeof window === "undefined") return;
+    try {
+        const flat: StoredPublicMessage[] = messages
+            .filter((m) => m.text && m.text.length > 0)
+            .slice(-PUBLIC_HISTORY_LIMIT)
+            .map((m) => ({ role: m.role, text: m.text }));
+        window.localStorage.setItem(
+            PUBLIC_HISTORY_KEY,
+            JSON.stringify({ sid: getSessionId(sessionIdRef), messages: flat }),
+        );
+    } catch {
+        /* localStorage unavailable (private mode / quota) — persistence is best-effort */
+    }
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -755,6 +808,32 @@ function ProfileGapCard({ gaps }: { gaps: string[] }) {
     );
 }
 
+function IconCopy() {
+    return (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+    );
+}
+
+function IconCheck() {
+    return (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12" />
+        </svg>
+    );
+}
+
+function IconRetry() {
+    return (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 12a9 9 0 1 0 2.64-6.36" />
+            <polyline points="3 3 3 9 9 9" />
+        </svg>
+    );
+}
+
 function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction: (prompt: string) => void }) {
     return (
         <div className="flex flex-wrap gap-2 mt-2">
@@ -800,6 +879,8 @@ export default function CommandPage() {
     const [historyState, setHistoryState] = useState<"pending" | "has_history" | "empty">("pending");
     const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
     const [initialContentReady, setInitialContentReady] = useState(false);
+    // id of the message whose "Copy" button most recently confirmed a copy
+    const [copiedId, setCopiedId] = useState<number | null>(null);
 
     // True when the latest Rico message has an unresolved permission request — blocks new input.
     const hasPendingPermission = messages.some(
@@ -862,6 +943,25 @@ export default function CommandPage() {
         ]);
         textareaRef.current?.focus();
     }, [t]);
+
+    // Keyboard shortcuts: Esc cancels an in-flight request (same action as the
+    // composer's Cancel button); Ctrl/Cmd+K focuses the composer. Both are pure
+    // additions — this page previously wired no global shortcuts, so neither
+    // combo can collide with an existing handler.
+    useEffect(() => {
+        function onKeyDown(e: KeyboardEvent) {
+            const mod = e.metaKey || e.ctrlKey;
+            if (mod && e.key.toLowerCase() === "k") {
+                e.preventDefault();
+                textareaRef.current?.focus();
+            } else if (e.key === "Escape" && thinking) {
+                e.preventDefault();
+                cancelRequest();
+            }
+        }
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [thinking, cancelRequest]);
 
     useEffect(() => {
         ensureSessionId(sessionIdRef);
@@ -945,6 +1045,35 @@ export default function CommandPage() {
             cancelled = true;
         };
     }, [chatAudience, useMock]);
+
+    // Load locally-persisted history for public/guest sessions (no server-side
+    // history exists for guests). Mirrors the authenticated effect above: sets
+    // historyState + promptSentRef so the welcome effect below defers to it.
+    useEffect(() => {
+        if (chatAudience !== "public") return;
+        if (useMock) { setHistoryState("empty"); return; }
+
+        ensureSessionId(sessionIdRef);
+        const stored = loadPublicHistory(sessionIdRef);
+        if (stored.length > 0) {
+            setMessages(stored.map((m, idx) => ({ id: idx, role: m.role, text: m.text })));
+            promptSentRef.current = true;
+            setHistoryState("has_history");
+            setInitialContentReady(true);
+            return;
+        }
+        setHistoryState("empty");
+    }, [chatAudience, useMock]);
+
+    // Persist public/guest conversation on every settled turn (never mid-stream,
+    // to keep localStorage writes quiet and avoid partial-token snapshots).
+    useEffect(() => {
+        if (chatAudience !== "public") return;
+        if (useMock) return;
+        if (historyState === "pending") return;
+        if (thinking) return;
+        savePublicHistory(sessionIdRef, messages);
+    }, [chatAudience, useMock, historyState, thinking, messages]);
 
     const scrollBottom = useCallback(() => {
         const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
@@ -1209,16 +1338,16 @@ export default function CommandPage() {
                             return;
                         }
                     }
-                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrTimeout") }]);
+                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrTimeout"), isError: true, retryText: trimmed }]);
                     return;
                 }
                 if (err.message.includes("401")) { setSessionExpired(true); return; }
                 if (err.name === "TypeError" || err.message === "Failed to fetch" || err.message.includes("network")) {
-                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrNetwork") }]);
+                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrNetwork"), isError: true, retryText: trimmed }]);
                     return;
                 }
             }
-            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrGeneric") }]);
+            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrGeneric"), isError: true, retryText: trimmed }]);
         } finally {
             clearTimeout(timeoutId);
             clearTimeout(slowHintId);
@@ -1238,8 +1367,10 @@ export default function CommandPage() {
 
     useEffect(() => {
         if (chatAudience === "checking") return;
-        // For authenticated users wait until we know whether history exists
+        // For authenticated users wait until we know whether history exists;
+        // public/guest sessions wait on the localStorage history check above.
         if (chatAudience === "authenticated" && historyState === "pending") return;
+        if (chatAudience === "public" && historyState === "pending") return;
         if (promptSentRef.current) return;
         promptSentRef.current = true;
 
@@ -1496,6 +1627,17 @@ export default function CommandPage() {
         }
     }
 
+    async function handleCopyMessage(id: number, text: string) {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedId(id);
+            window.setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 1600);
+        } catch {
+            // Clipboard unavailable (insecure context / permission denied) — no-op,
+            // the text is already visible on screen for manual selection.
+        }
+    }
+
     /** Execute a permission-engine approved action and add the result to the thread.
      *
      * Called by PermissionRequestCard.onApprove. Throws on network/API errors so
@@ -1655,37 +1797,53 @@ export default function CommandPage() {
                 {/* Messages Container */}
                 <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pt-12 pb-5 space-y-4 scroll-pb-32 sm:px-4 sm:pt-14 sm:pb-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
 
-                    {/* Clear history control — shown at top when authenticated with loaded history */}
-                    {chatAudience === "authenticated" && messages.length > 1 && (
-                        <div className="flex justify-end pb-1">
-                            {confirmClear ? (
-                                <div className="flex items-center gap-2 text-[11px]">
-                                    <span className="text-text-muted">{t("cmdDeleteHistory")}</span>
+                    {/* Desktop conversation toolbar — New chat + (authenticated) Clear history.
+                        Mobile already has both via MobileCommandHeader's overflow menu, so this
+                        is desktop-only to avoid a redundant duplicate control on small screens.
+                        Lives inside the scrollable pane (like the row it replaces) so it can
+                        never shift the composer's position — see command-composer-stability e2e. */}
+                    {chatAudience !== "checking" && messages.length > 0 && (
+                        <div className="hidden md:flex items-center justify-end gap-3 pb-1">
+                            <button
+                                type="button"
+                                onClick={handleNewChat}
+                                disabled={thinking}
+                                className="text-[11px] text-text-muted hover:text-text-secondary transition-colors disabled:opacity-50"
+                                aria-label={t("newChat")}
+                                title={t("newChat")}
+                            >
+                                {t("newChat")}
+                            </button>
+                            {chatAudience === "authenticated" && messages.length > 1 && (
+                                confirmClear ? (
+                                    <div className="flex items-center gap-2 text-[11px]">
+                                        <span className="text-text-muted">{t("cmdDeleteHistory")}</span>
+                                        <button
+                                            type="button"
+                                            onClick={handleClearHistory}
+                                            disabled={clearingHistory}
+                                            className="px-2.5 py-1 rounded-lg bg-rico-red/20 border border-rico-red/40 text-rico-red hover:bg-rico-red/30 transition-colors disabled:opacity-50"
+                                        >
+                                            {clearingHistory ? t("cmdClearing") : t("cmdClearConfirm")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setConfirmClear(false)}
+                                            className="px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:text-rico-text transition-colors"
+                                        >
+                                            {t("cancel")}
+                                        </button>
+                                    </div>
+                                ) : (
                                     <button
                                         type="button"
                                         onClick={handleClearHistory}
-                                        disabled={clearingHistory}
-                                        className="px-2.5 py-1 rounded-lg bg-rico-red/20 border border-rico-red/40 text-rico-red hover:bg-rico-red/30 transition-colors disabled:opacity-50"
+                                        className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
+                                        aria-label={t("cmdClearHistory")}
                                     >
-                                        {clearingHistory ? t("cmdClearing") : t("cmdClearConfirm")}
+                                        {t("cmdClearHistory")}
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setConfirmClear(false)}
-                                        className="px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:text-rico-text transition-colors"
-                                    >
-                                        {t("cancel")}
-                                    </button>
-                                </div>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={handleClearHistory}
-                                    className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
-                                    aria-label={t("cmdClearHistory")}
-                                >
-                                    {t("cmdClearHistory")}
-                                </button>
+                                )
                             )}
                         </div>
                     )}
@@ -2048,6 +2206,37 @@ export default function CommandPage() {
                                                         </button>
                                                     ))}
                                                 </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Copy / Retry row — copy is offered on every settled Rico turn;
+                                        retry only on turns marked isError (network/timeout/generic send
+                                        failures), and resends the exact original user text. */}
+                                    {!m.streaming && m.role === "rico" && (m.text || (m.isError && m.retryText)) && (
+                                        <div className="mt-2 flex items-center gap-3">
+                                            {m.text && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleCopyMessage(m.id, m.text)}
+                                                    className="inline-flex items-center gap-1 text-[10px] text-text-muted transition-colors hover:text-text-secondary rico-focus-strong"
+                                                    aria-label={copiedId === m.id ? t("cmdCopied") : t("cmdCopy")}
+                                                >
+                                                    {copiedId === m.id ? <IconCheck /> : <IconCopy />}
+                                                    {copiedId === m.id ? t("cmdCopied") : t("cmdCopy")}
+                                                </button>
+                                            )}
+                                            {m.isError && m.retryText && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => sendMessage(m.retryText!)}
+                                                    disabled={thinking}
+                                                    className="inline-flex items-center gap-1 text-[10px] text-gold transition-colors hover:text-gold-hover disabled:opacity-50 rico-focus-strong"
+                                                    aria-label={t("retry")}
+                                                >
+                                                    <IconRetry />
+                                                    {t("retry")}
+                                                </button>
                                             )}
                                         </div>
                                     )}
