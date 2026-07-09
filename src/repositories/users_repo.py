@@ -107,6 +107,77 @@ def create_user(email: str, password_hash: str, role: str = "user") -> Optional[
         conn.close()
 
 
+def set_signup_attribution(user_id: int, source: str, attribution: dict) -> bool:
+    """Persist signup attribution for a user (requires migration 036).
+
+    Best-effort: returns False when the DB or the columns are unavailable so
+    registration proceeds regardless of migration state. Never raises.
+    Logs user_id only — no email/PII.
+    """
+    from src.db import get_db_connection, is_db_available
+    if not is_db_available():
+        return False
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        from psycopg2.extras import Json
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET signup_source = %s,
+                    signup_attribution = %s
+                WHERE id = %s
+                """,
+                (source, Json(attribution) if attribution else None, user_id),
+            )
+        conn.commit()
+        return True
+    except Exception:
+        logger.warning("users_repo_set_signup_attribution_failed user_id=%s", user_id)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        conn.close()
+
+
+def get_signup_sources(user_ids: List[int]) -> dict[int, str]:
+    """Map user id → signup_source for admin surfaces (requires migration 036).
+
+    Best-effort: returns {} when the DB or the column is unavailable so callers
+    degrade to showing no source. Never raises.
+    """
+    if not user_ids:
+        return {}
+    from src.db import get_db_connection, is_db_available
+    if not is_db_available():
+        return {}
+    conn = get_db_connection()
+    if not conn:
+        return {}
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, signup_source
+                FROM users
+                WHERE id = ANY(%s) AND signup_source IS NOT NULL
+                """,
+                (list(user_ids),),
+            )
+            rows = cur.fetchall()
+        return {row[0]: row[1] for row in rows}
+    except Exception:
+        logger.warning("users_repo_get_signup_sources_failed count=%s", len(user_ids))
+        return {}
+    finally:
+        conn.close()
+
+
 def update_password(email: str, new_hash: str) -> bool:
     """Update password_hash for the given email. Returns True on success."""
     from src.db import get_db_connection, is_db_available

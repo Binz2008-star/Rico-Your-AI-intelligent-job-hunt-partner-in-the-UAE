@@ -42,3 +42,12 @@ class JobAlertEmailsResponse(BaseModel):
     skipped: int = 0
     failed: int = 0
     dry_run: bool = False
+
+
+class AdminDigestResponse(BaseModel):
+    status: str
+    sent: bool = False
+    dry_run: bool = False
+    period_start: Optional[str] = None
+    period_end: Optional[str] = None
+    metrics: Optional[dict] = None

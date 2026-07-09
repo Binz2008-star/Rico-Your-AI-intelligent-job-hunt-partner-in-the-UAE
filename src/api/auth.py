@@ -511,6 +511,28 @@ def register(
         except Exception:
             logger.exception("public_profile_merge_failed public_user_id=%s", req.public_user_id_to_merge)
 
+    # Signup attribution (issue #922): sanitize client-provided UTM/referrer data,
+    # persist it, and surface the summary in the admin signup notification.
+    # Best-effort — never fails registration, even if migration 036 is missing.
+    signup_source_summary = None
+    try:
+        from src.services.signup_source import format_signup_source, sanitize_attribution
+        raw_attribution = (
+            req.signup_attribution.model_dump(exclude_none=True)
+            if req.signup_attribution
+            else {}
+        )
+        attribution = sanitize_attribution(raw_attribution)
+        signup_source_summary = format_signup_source(attribution)
+        if attribution:
+            from src.repositories.users_repo import set_signup_attribution
+            set_signup_attribution(user.id, signup_source_summary, attribution)
+    except Exception:
+        logger.exception(
+            "signup_attribution_persist_failed user_id=%s",
+            getattr(user, "id", "unknown"),
+        )
+
     # Persist display name to rico_users if provided (best-effort, never fails registration)
     display_name = req.name.strip() if req.name and req.name.strip() else None
     if display_name:
@@ -570,7 +592,14 @@ def register(
         except Exception:
             logger.exception("register_profile_db_unavailable email=%s", email)
 
-        background_tasks.add_task(send_admin_signup_notification, user=user, name=display_name, plan="free", profile=profile_data)
+        background_tasks.add_task(
+            send_admin_signup_notification,
+            user=user,
+            name=display_name,
+            plan="free",
+            profile=profile_data,
+            signup_source=signup_source_summary,
+        )
     except Exception:
         logger.exception(
             "signup_notification_schedule_failed user_id=%s",

@@ -127,5 +127,13 @@ def list_recent_signups(
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
         })
+    # Signup source (issue #922) — best-effort; absent until migration 036 is applied.
+    try:
+        from src.repositories.users_repo import get_signup_sources
+        sources = get_signup_sources([r["id"] for r in result])
+    except Exception:
+        sources = {}
+    for r in result:
+        r["signup_source"] = sources.get(r["id"])
     result.sort(key=lambda x: x["created_at"] or "", reverse=True)
     return result

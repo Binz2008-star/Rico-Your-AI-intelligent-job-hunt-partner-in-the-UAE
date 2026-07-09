@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from src.api.deps import get_current_user, require_admin, require_cron_secret
 from src.schemas.pipeline import (
+    AdminDigestResponse,
     JobAlertEmailsResponse,
     PipelineStatusResponse,
     PipelineTriggerResponse,
@@ -103,3 +104,24 @@ def run_profile_nudge(
     """
     summary = run_profile_nudge_sweep()
     return ProfileNudgeResponse(**summary)
+
+
+@router.post("/admin-digest", response_model=AdminDigestResponse)
+def run_admin_digest(
+    request: Request,
+    _cron: None = Depends(require_cron_secret),
+) -> AdminDigestResponse:
+    """Weekly admin activation digest (issue #922; requires migration 036).
+
+    Aggregates the previous full ISO week of signup/activation metrics and
+    emails one summary to the admin recipient. Guarded by X-Cron-Secret.
+    Idempotent per ISO week: reruns return status="already_sent" without
+    emailing. Pass ``?dry_run=true`` to compute metrics WITHOUT claiming the
+    week or sending.
+    """
+    from src.services.admin_digest_service import run_weekly_admin_digest
+
+    raw = (request.query_params.get("dry_run") or "").strip().lower()
+    dry_run = raw in {"1", "true", "yes", "on"}
+    summary = run_weekly_admin_digest(dry_run=dry_run)
+    return AdminDigestResponse(**summary)

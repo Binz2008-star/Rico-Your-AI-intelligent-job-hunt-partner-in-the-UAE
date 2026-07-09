@@ -10,6 +10,7 @@ interface SignupRecord {
     role: string;
     created_at: string | null;
     last_login_at: string | null;
+    signup_source?: string | null;
 }
 
 interface IntentRecord {
@@ -190,6 +191,7 @@ export default function AdminLeadsPage() {
                                 <tr className="border-b border-white/[0.06] bg-white/[0.02]">
                                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-white/30">Email</th>
                                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-white/30">Role</th>
+                                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-white/30">Source</th>
                                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-white/30">Signed up</th>
                                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-white/30">Last login</th>
                                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-white/30">Follow up</th>
@@ -208,6 +210,7 @@ export default function AdminLeadsPage() {
                                                 {u.role}
                                             </span>
                                         </td>
+                                        <td className="px-4 py-3 text-white/40 text-xs">{u.signup_source ?? "direct / unknown"}</td>
                                         <td className="px-4 py-3 text-white/40 text-xs">{fmt(u.created_at)}</td>
                                         <td className="px-4 py-3 text-white/40 text-xs">{fmt(u.last_login_at)}</td>
                                         <td className="px-4 py-3">
