@@ -1,0 +1,135 @@
+/*
+ * Atelier Console — scoped design tokens (gallery reference only).
+ *
+ * Ported from the Lovable prototype's Tailwind v4 `src/styles.css` (@theme /
+ * @utility) into a plain, Tailwind-v3-compatible scoped layer. Everything is
+ * nested under `.atelier-console` so it cannot leak into production routes or
+ * collide with Rico's global tokens or the existing `.atelier` legal-page layer.
+ *
+ * Theme is applied by toggling `.dark` on the `.atelier-console` wrapper (NOT
+ * <html>); language/dir by `dir`/`lang` on the same wrapper. Font families are
+ * remapped onto Rico's Tailwind font utilities (`font-display`, `font-mono`,
+ * `font-sans`/`font-body`) via CSS variables scoped to the wrapper, so those
+ * utilities resolve to the Atelier fonts only inside the console subtree.
+ */
+
+.atelier-console {
+  /* Atelier raw palette — light */
+  --paper: #f2ece0;
+  --paper-2: #e8dfcd;
+  --ink: #14110d;
+  --ink-soft: #3a342c;
+  --ink-mute: #6b6355;
+  --rule: #d3c9b4;
+  --sun: #cf3d17;
+  --sun-soft: #ea8a4e;
+  --card: #faf6ec;
+  --destructive: #b23a1a;
+
+  /* Remap Rico's Tailwind font utilities onto the Atelier families,
+     scoped to this subtree only. */
+  --font-display: var(--font-atl-fraunces), "Amiri", Georgia, "Times New Roman", serif;
+  --font-body: var(--font-atl-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-atl-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Atelier at night — dark, same design language inverted */
+.atelier-console.dark {
+  --paper: #16130e;
+  --paper-2: #1f1a12;
+  --ink: #f2ece0;
+  --ink-soft: #d7cebc;
+  --ink-mute: #9a907d;
+  --rule: #35302a;
+  --sun: #ee6a3a;
+  --sun-soft: #f0a170;
+  --card: #1c1811;
+  --destructive: #d6552e;
+  color-scheme: dark;
+}
+
+/* Editorial serif headings default to 400 with tight tracking (source parity). */
+.atelier-console :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+/* Arabic typography: swap display serif to Amiri, body to Plex Arabic,
+   and neutralise Latin tracking that shreds Arabic shaping. */
+.atelier-console[dir="rtl"],
+.atelier-console[lang="ar"] {
+  --font-display: var(--font-atl-amiri), var(--font-atl-fraunces), "Times New Roman", serif;
+  --font-body: var(--font-atl-plex-ar), var(--font-atl-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-body);
+}
+.atelier-console[dir="rtl"] :is(h1, h2, h3, h4, h5, h6) {
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+.atelier-console[dir="rtl"] .font-mono {
+  letter-spacing: 0.04em;
+}
+/* Arabic has no italic — synthesised slant looks broken. */
+.atelier-console[dir="rtl"] .italic {
+  font-style: normal;
+}
+
+.atelier-console ::selection {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Paper grain — quiet, warm; softer in dark. Scoped to the console only. */
+.atelier-console::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.06;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.07 0 0 0 0 0.05 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.atelier-console.dark::before {
+  opacity: 0.08;
+  mix-blend-mode: screen;
+}
+.atelier-console > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Text-reveal + working-state motion (ported from source keyframes). */
+@keyframes atl-console-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes atl-console-caret {
+  0%, 45% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.atelier-console .atl-fade-up {
+  animation: atl-console-fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.atelier-console .atl-caret {
+  animation: atl-console-caret 1s steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atelier-console .atl-fade-up,
+  .atelier-console .atl-caret {
+    animation: none;
+  }
+}

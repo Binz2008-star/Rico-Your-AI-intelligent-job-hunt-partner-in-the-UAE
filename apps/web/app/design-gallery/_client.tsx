@@ -42,6 +42,11 @@ const RicoAlivePrototype = dynamic(
   { ssr: false, loading: () => <LoadingShell /> }
 );
 
+const AtelierConsole = dynamic(
+  () => import("@/components/design-gallery/atelier-console"),
+  { ssr: false, loading: () => <LoadingShell /> }
+);
+
 function LoadingShell() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0b0d1c]">
@@ -50,7 +55,7 @@ function LoadingShell() {
   );
 }
 
-type VariantKey = "v2" | "classic" | "nocturne" | "rico-alive";
+type VariantKey = "v2" | "classic" | "nocturne" | "rico-alive" | "atelier-console";
 
 interface Variant {
   key: VariantKey;
@@ -92,6 +97,16 @@ const VARIANTS: Variant[] = [
     riskLevel: "prototype-only",
     productionSafeNotes: "Zero production routes, backend, auth, or billing touched. Isolated standalone component.",
     prototypeOnlyNotes: "All data is simulated. No real AI calls. No provider names exposed. Uses framer-motion + Tailwind only — no new packages.",
+  },
+  {
+    key: "atelier-console",
+    label: "Atelier Console ✦ Lovable Reference",
+    description: "AtelierConsole — warm editorial job-hunt console (paper/ink/sun). Scripted walkthrough, shortlist/pipeline/signal rails, composer. Light/dark + EN/AR + RTL. All data is SAMPLE/DEMO.",
+    status: "prototype",
+    category: "command-concept",
+    riskLevel: "prototype-only",
+    productionSafeNotes: "Zero production routes, backend, auth, or billing touched. Ported from the Lovable Atelier prototype into an isolated, self-contained gallery component (scoped theme/fonts, no <html> mutation).",
+    prototypeOnlyNotes: "Reference only. Scripted demo — no live chat/job/apply/save/CV action; every action button surfaces a reference-only notice. Adds Fraunces/Amiri/IBM Plex Sans Arabic (next/font) + lucide-react.",
   },
 ];
 
@@ -261,6 +276,8 @@ export default function DesignGalleryClient() {
         )}
 
         {active === "rico-alive" && <RicoAlivePrototype />}
+
+        {active === "atelier-console" && <AtelierConsole />}
       </div>
     </div>
   );
