@@ -69,6 +69,55 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260709-003 — #446 Stage 1 data-integrity cleanup
+
+Status: done (Stage 1 only — Stage 2 deferred, #446 stays open)
+Owner: Roben (execution via a Neon-connector session) / Claude (precheck, documentation)
+Branch: docs/446-stage1-cleanup (docs-only persistence PR)
+Issue/PR: #446 (Stage 1 of 2)
+
+#### Objective
+Clean up the 16 `public:web-*` `rico_users` rows that were corrupted by the old `ON CONFLICT`
+bug (root cause fixed in #445), without touching the 5 non-public rows sharing the same email —
+those need separate review (Stage 2).
+
+#### Continuity Block
+- Task ID: TASK-20260709-003
+- GitHub issue/PR: #446 (Stage 1 of 2; issue not closed)
+- Branch: none for the cleanup itself (executed via a session with live Neon connector access,
+  not a git branch); this entry is persisted via `docs/446-stage1-cleanup`
+- Base branch: main
+- Last safe commit SHA: b9563a78154743d0270586ce23326bc372be6192
+- Current head SHA: b9563a78154743d0270586ce23326bc372be6192 (this task made no code commits)
+- Status: done (Stage 1 only)
+- Files changed: none by the cleanup itself; this docs-only PR changes `PROJECT_STATUS.md`,
+  `CURRENT_STATE.md`, `TASKS.md`, `HANDOFFS/2026-07-09-446-stage1-cleanup.md`, `MASTER_INDEX.md`
+- Files intentionally not touched: all runtime code, tests, schema, Vercel/Render config, issue
+  labels/state; the 5 non-public `rico_users` rows (Stage 2, deferred)
+- What is complete: Stage 1 precheck (fresh capture confirmed 16 target rows, primary excluded),
+  Stage 1 `UPDATE` executed and committed, full post-cleanup validation passed
+- What is incomplete: Stage 2 (5 non-public rows, including the primary) — not started, needs a
+  separate review/decision before any mutation; #446 issue itself not yet updated/closed on GitHub
+- Known blockers: none for Stage 1; Stage 2 requires manual inspection of 5 rows' `external_user_id`/
+  `source`/`created_at` and cross-reference against Jotform/Telegram history before any decision
+- Validation already run (via the Neon-connector session, not this session):
+  before-count = 21 → capture confirmed 16 → primary-in-target-set = 0 → `UPDATE` on the 16
+  explicit IDs → after-count = 5 → 16/16 target IDs confirmed `email IS NULL` → primary confirmed
+  still `email = 'robenedwan@gmail.com'` → 0 orphaned `rico_chat_history` rows
+- Validation still required: none for Stage 1 (complete); Stage 2 validation TBD once scoped
+- Next exact action: Stage 2 review of the 5 non-public rows (separate task, no mutation without
+  a fresh decision); independently, fix `profile_repo.py` connection leak → #758 → #812
+- Stop condition: do not run any further Neon mutation without a new explicit owner approval
+  scoped to that specific change; do not close #446 until Stage 2 is resolved or the issue is
+  updated to reflect partial completion
+- Rollback plan: `UPDATE rico_users SET email = 'robenedwan@gmail.com' WHERE id IN (<the 16
+  manifest IDs>);` — full manifest and ready-to-run SQL in
+  `HANDOFFS/2026-07-09-446-stage1-cleanup.md`
+
+#### Full detail
+See `AI_WORKSPACE/HANDOFFS/2026-07-09-446-stage1-cleanup.md` for the complete 16-ID rollback
+manifest, before/after counts, and validation detail.
+
 ### TASK-20260709-002 — Security/data-risk deep dive on #127 and #198 (read-only)
 
 Status: done
