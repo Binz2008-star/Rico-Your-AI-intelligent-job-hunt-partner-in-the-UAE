@@ -10,12 +10,12 @@
 | Field | Value |
 | --- | --- |
 | **Current Version** | Pre-1.0 (production, unversioned; `/version.commit` tracks deploys) |
-| **Current Main SHA** | `e5dd9091` (`origin/main`); PR #900 is ahead by 3 docs commits |
+| **Current Main SHA** | `f6996b4` (`origin/main`) — #900 (docs audit + SSOT hardening) and #902 (Rico Continuity Gate) merged and live. Supersedes the earlier `e5dd9091` / "PR #900 active" row further below in history — that reference is now stale. |
 | **Current Phase** | Phases 0–1 complete · **2 Hardening + 3 Chat Integration active** · 4–7 planned |
-| **Production Status** | 🟢 Render backend healthy · Vercel up · Neon = source of truth |
-| **Open Critical Risks** | `005 pipeline_runs` migration drift (#712); `#885`/`#891` deploy verification unconfirmed from agent sessions |
-| **Active PR** | **#900** — documentation audit + single-source-of-truth hardening (draft) |
-| **Next Milestone** | Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
+| **Production Status** | 🟢 Render backend healthy · Vercel up (production deploy `dpl_6uiUB8yuF1FAf4uyBsNN4G8BToZQ` READY on `f6996b4`, alias `ricohunt.com`) · Neon = source of truth |
+| **Open Critical Risks** | `005 pipeline_runs` migration drift (#712); **#127/#198/#263 flagged in the 2026-07-09 board-health scan as "needs full deep dive" — unverified claims of SQL injection (#127), DB connection leaks + public-chat identity gap (#198), and product-trust contradictions (#263). Verify before further product fixes.**; #446 data-integrity cleanup (root cause fixed, cleanup owner-gated); `#885`/`#891` deploy verification unconfirmed from agent sessions |
+| **Active PR** | none — #900 and #902 both merged; see `HANDOFFS/2026-07-09-board-health-scan.md` for current board state |
+| **Next Milestone** | Security/data-risk deep dive on #127 and #198 (then #263 if time remains) before touching #758/#812/#446; Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
 | **Last Updated** | 2026-07-09 |
 
 _Refresh the dashboard row(s) in the same PR as any merge that moves `main` HEAD,
@@ -51,6 +51,10 @@ changes production status, or resolves/opens a critical risk._
 
 ## Next (ordered)
 
-1. Continue **Phase 3 Chat Integration** slices (verify-first, synthetic data only).
-2. **C3** — Atelier migration of `/about`, `/contact`, `/faq` (owner-gated, not started).
-3. **Phase 2 Hardening** — fix gaps only as the audit proves them.
+1. **Security/data-risk deep dive** on #127 (claimed SQL injection + hardcoded credentials) and
+   #198 (DB connection leaks, public-chat identity gap, billing webhook races); #263 if time
+   remains. See `HANDOFFS/2026-07-09-board-health-scan.md`. If live issues are confirmed, fix
+   those first; if stale/fixed, proceed to #446 (owner-gated cleanup), then #758, then #812.
+2. Continue **Phase 3 Chat Integration** slices (verify-first, synthetic data only).
+3. **C3** — Atelier migration of `/about`, `/contact`, `/faq` (owner-gated, not started).
+4. **Phase 2 Hardening** — fix gaps only as the audit proves them.

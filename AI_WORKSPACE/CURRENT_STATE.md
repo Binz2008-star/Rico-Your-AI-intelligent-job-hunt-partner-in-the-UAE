@@ -1,6 +1,25 @@
 # Current State
 
-> **Reconciliation header — 2026-07-09.** The dated sections in this file are a
+> **Reconciliation header — 2026-07-09 (later same day; supersedes the header
+> immediately below).** `main` has advanced to `f6996b4da04f6d3812fe873067e89247c8bb165e`.
+> Both #900 (documentation audit + single-source-of-truth hardening, incl.
+> `PROJECT_STATUS.md`/`MASTER_INDEX.md`) and #902 (Rico Continuity Gate) are
+> **merged and live** — Vercel production deployment `dpl_6uiUB8yuF1FAf4uyBsNN4G8BToZQ`
+> confirmed `READY` on `f6996b4` (alias `ricohunt.com`). The reconciliation header
+> below this one, and `PROJECT_STATUS.md`'s prior "Current Main SHA: `e5dd9091`" /
+> "Active PR: #900 (draft)" rows, are now **stale/superseded** — do not treat them
+> as current.
+>
+> A read-only board-health scan (2026-07-09) classified all 34 open issues; full
+> detail in `AI_WORKSPACE/HANDOFFS/2026-07-09-board-health-scan.md`. Headline:
+> #446 is confirmed data-integrity cleanup debt (P0, owner-gated, root cause
+> already fixed); #127, #198, and #263 are flagged **needs full deep dive** —
+> unverified claims of SQL injection (#127), DB connection leaks + a public-chat
+> identity gap (#198), and product-trust contradictions (#263). Per owner
+> decision, verify these before touching #758/#812/#446. No code changes, no
+> issues closed, no labels changed in the scan itself.
+>
+> **Reconciliation header — 2026-07-09 (earlier same day).** The dated sections in this file are a
 > **historical log**; the newest detailed narrative below stops at **2026-07-03**
 > (`main` `b021273`). Since then the operational-memory / governance / Atelier
 > train has merged and `main` has advanced. For the authoritative "where is Rico
