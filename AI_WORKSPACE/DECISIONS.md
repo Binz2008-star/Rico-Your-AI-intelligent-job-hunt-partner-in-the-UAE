@@ -28,6 +28,58 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260709-006 — Atelier Console is the candidate authenticated-workspace direction (preview/exploration only)
+
+Status: accepted
+Date: 2026-07-09
+Owner: Roben
+Related task: Atelier Console gallery reference (#924)
+
+#### Context
+The Lovable "Atelier Console" — a warm editorial paper/ink/sun console with a
+matched dark mode, EN/AR + RTL, and a scripted job-hunt workflow — was ported at
+high fidelity into an isolated `/design-gallery` reference tab and merged (#924).
+The owner has accepted it visually as the intended future direction for the
+authenticated Career Workspace surface. `DEC-20260708-003` currently scopes the
+authenticated workspace to Nocturne (dark navy/gold/aura) and forbids merging the
+Atelier and Nocturne systems. That boundary needs an explicit, bounded amendment
+so future workspace *exploration* can proceed — without changing any production
+surface. This record captures the direction only; it authorizes no code.
+
+#### Decision
+1. **Atelier Console is the candidate design direction for the authenticated
+   Career Workspace**, going forward, for preview and exploration only.
+2. This **amends / supersedes `DEC-20260708-003` for future workspace-exploration
+   work only** — the "authenticated workspace = Nocturne" boundary no longer
+   blocks Atelier-based *preview* surfaces. It does **not** retroactively change
+   any shipped surface, and it still governs all production surfaces.
+3. **The current production workspace is unchanged.** Nocturne remains the
+   production design for the authenticated app. **`/command` is not replaced.
+   `/rico` is not replaced** (no such production route exists today, and none is
+   created by this decision). No production route changes under this decision.
+4. **`/design-gallery` remains reference-only** — internal, `noindex`, demo/sample
+   data, all actions disabled/reference-only, not linked from production
+   navigation.
+5. **The next implementation step, if approved separately, is `/rico-preview`** —
+   an internal, `noindex`, demo-only preview route reusing the #924 Atelier
+   Console. It is **not approved by this decision** and must be its own separately
+   approved PR before any code is written.
+6. **No real actions are approved** (no real chat send, job search, save, apply,
+   follow-up, or CV action), and **no backend/auth/billing/Neon/schema changes are
+   approved** by this decision.
+
+#### Consequences
+- Positive: records the accepted workspace direction as a single source of truth
+  and unblocks *future* exploration without any risky production swap.
+- Negative/trade-off: Rico will temporarily carry two workspace design languages
+  (Nocturne in production, Atelier in reference/preview) until a future,
+  separately-approved migration decision.
+
+#### Follow-up
+- [ ] `/rico-preview` preview route — separate approval required before implementation.
+- [ ] A production migration of any authenticated surface to Atelier requires its
+      own separate DEC + approved PR (this decision does not authorize it).
+
 ### DEC-20260709-005 — Retire "C-number" as a product-phase implementation identifier; use explicit names
 
 Status: accepted
@@ -144,10 +196,17 @@ until explicitly reprioritized. The TanStack implementation is not to be ported.
 
 ### DEC-20260708-003 — Design-system boundary: Atelier for marketing, Nocturne for the workspace
 
-Status: accepted
+Status: accepted (amended in part by DEC-20260709-006)
 Date: 2026-07-08
 Owner: Roben
 Related task: design-handoffs review (command-concept-sandbox)
+
+> **Amended by DEC-20260709-006 (2026-07-09):** the "authenticated workspace =
+> Nocturne" boundary below is amended for **preview/exploration only** — Atelier
+> Console is now the candidate workspace direction behind internal preview
+> surfaces (`/design-gallery`, `/rico-preview`). Nocturne remains the current
+> **production** workspace design until a separate approved replacement PR. This
+> boundary still governs all shipped/production surfaces.
 
 #### Context
 Rico now has two live design directions: Atelier V2 (light-first "paper/ink/sun",
