@@ -10,12 +10,12 @@
 | Field | Value |
 | --- | --- |
 | **Current Version** | Pre-1.0 (production, unversioned; `/version.commit` tracks deploys) |
-| **Current Main SHA** | `f6996b4` (`origin/main`) — #900 (docs audit + SSOT hardening) and #902 (Rico Continuity Gate) merged and live. Supersedes the earlier `e5dd9091` / "PR #900 active" row further below in history — that reference is now stale. |
+| **Current Main SHA** | `d2bd860` (`origin/main`) — #900, #902, and #903 merged and live (board-health scan persisted). Supersedes the earlier `f6996b4`/`e5dd9091` rows further below in history — those references are now stale. |
 | **Current Phase** | Phases 0–1 complete · **2 Hardening + 3 Chat Integration active** · 4–7 planned |
-| **Production Status** | 🟢 Render backend healthy · Vercel up (production deploy `dpl_6uiUB8yuF1FAf4uyBsNN4G8BToZQ` READY on `f6996b4`, alias `ricohunt.com`) · Neon = source of truth |
-| **Open Critical Risks** | `005 pipeline_runs` migration drift (#712); **#127/#198/#263 flagged in the 2026-07-09 board-health scan as "needs full deep dive" — unverified claims of SQL injection (#127), DB connection leaks + public-chat identity gap (#198), and product-trust contradictions (#263). Verify before further product fixes.**; #446 data-integrity cleanup (root cause fixed, cleanup owner-gated); `#885`/`#891` deploy verification unconfirmed from agent sessions |
-| **Active PR** | none — #900 and #902 both merged; see `HANDOFFS/2026-07-09-board-health-scan.md` for current board state |
-| **Next Milestone** | Security/data-risk deep dive on #127 and #198 (then #263 if time remains) before touching #758/#812/#446; Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
+| **Production Status** | 🟢 Render backend healthy · Vercel up (production deploy confirmed READY for `d2bd860`, alias `ricohunt.com`) · Neon = source of truth |
+| **Open Critical Risks** | `005 pipeline_runs` migration drift (#712); **confirmed via 2026-07-09 read-only deep dive: `profile_repo.py` leaks a DB connection on 5 call sites (`with db.connect() as conn:` never closes) — Medium severity, real reliability risk, not yet fixed.** #263 still flagged needs-deep-dive (deferred). #446 data-integrity cleanup (root cause fixed, cleanup owner-gated, read-only precheck next). `#885`/`#891` deploy verification unconfirmed from agent sessions. **No live SQL-injection, credential-leak, or public-identity security issue found** — #127/#198's named P0 security claims are fixed; see `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md`. |
+| **Active PR** | none — #900, #902, #903 all merged; see `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for current board state |
+| **Next Milestone** | #446 read-only Neon precheck (count/identify affected rows, confirm #445 root-cause fix still holds, prepare transaction + rollback SQL) → #446 cleanup only with explicit owner approval → fix `profile_repo.py` connection leak → #758 → #812; Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
 | **Last Updated** | 2026-07-09 |
 
 _Refresh the dashboard row(s) in the same PR as any merge that moves `main` HEAD,
@@ -51,10 +51,15 @@ changes production status, or resolves/opens a critical risk._
 
 ## Next (ordered)
 
-1. **Security/data-risk deep dive** on #127 (claimed SQL injection + hardcoded credentials) and
-   #198 (DB connection leaks, public-chat identity gap, billing webhook races); #263 if time
-   remains. See `HANDOFFS/2026-07-09-board-health-scan.md`. If live issues are confirmed, fix
-   those first; if stale/fixed, proceed to #446 (owner-gated cleanup), then #758, then #812.
-2. Continue **Phase 3 Chat Integration** slices (verify-first, synthetic data only).
-3. **C3** — Atelier migration of `/about`, `/contact`, `/faq` (owner-gated, not started).
-4. **Phase 2 Hardening** — fix gaps only as the audit proves them.
+1. **#446 read-only precheck** — count/identify affected duplicate rows, confirm the #445
+   root-cause fix still holds, prepare transaction + rollback SQL. Read-only Neon queries only.
+2. **#446 cleanup** — execute only with explicit owner approval.
+3. **Fix `profile_repo.py` connection leak** — `with db.connect() as conn:` at lines 541, 583,
+   615, 651, 742 never closes the connection; confirmed still present by the 2026-07-09 deep dive.
+4. **#758** — unify job-key scheme (duplicate DB rows from save-path key mismatch).
+5. **#812** — fix compound-title role splitting.
+6. Continue **Phase 3 Chat Integration** slices (verify-first, synthetic data only).
+7. **C3** — Atelier migration of `/about`, `/contact`, `/faq` (owner-gated, not started).
+8. **Phase 2 Hardening** — fix gaps only as the audit proves them.
+
+See `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for the full #127/#198 verdict.
