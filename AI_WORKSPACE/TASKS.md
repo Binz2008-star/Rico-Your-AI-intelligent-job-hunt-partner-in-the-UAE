@@ -69,6 +69,63 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260709-004 — Sync #906/#907 merges + triage #908/#909
+
+Status: done (docs-only sync/triage)
+Owner: Claude
+Branch: docs/908-909-triage-and-906-907-sync
+Issue/PR: #906 (merged), #907 (merged), #908 (triage only), #909 (triage only)
+
+#### Objective
+Record that #906 (`profile_repo.py` connection-leak fix) and #907 (#758 job-key unification) are
+merged and live (`main` at `ec06ef5`), and triage two new issues opened after the last
+board-health scan: #908 (attachment-first orchestration bug, owner-flagged High) and #909
+(governance-doc request, owner-flagged High).
+
+#### Context
+- Relevant files: none changed besides `AI_WORKSPACE/*`
+- Relevant docs: `HANDOFFS/2026-07-09-board-health-scan.md` (last full scan, 34 issues, predates
+  #908/#909), `HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` (full triage detail)
+
+#### Constraints
+- Do not touch: runtime code, tests, Neon, Vercel/Render config, issue labels/state, any
+  `GOVERNANCE/` files
+- No migrations
+- Keep scope limited to: `AI_WORKSPACE/PROJECT_STATUS.md`, this file, the new handoff,
+  `AI_WORKSPACE/MASTER_INDEX.md`
+
+#### Acceptance criteria
+- [x] #906/#907 merge state and production-READY status recorded in `PROJECT_STATUS.md`
+- [x] #908 triaged: owner's own comments quoted verbatim (orchestration root-cause, not symptom
+      patches); flagged as needing owner sign-off before a deep-dive is launched
+- [x] #909 triaged: conflict with existing governance docs and the PR #901 precedent flagged;
+      no `GOVERNANCE/` file created
+
+#### Continuity Block
+- Task ID: TASK-20260709-004
+- GitHub issue/PR: #906 (merged), #907 (merged), #908 (triage only), #909 (triage only)
+- Branch: docs/908-909-triage-and-906-907-sync
+- Base branch: main
+- Last safe commit SHA: ec06ef54d45f6ba81d7ee764e55a1bf8ffa94081
+- Current head SHA: (this docs commit, no runtime change)
+- Status: done
+- Files changed: `AI_WORKSPACE/PROJECT_STATUS.md`, this file,
+  `HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md`, `AI_WORKSPACE/MASTER_INDEX.md`
+- Files intentionally not touched: all runtime code, tests, Neon, Vercel/Render config, issue
+  labels/state, any `GOVERNANCE/` files
+- What is complete: sync + triage, both new issues read in full including #908's 2 owner comments
+- What is incomplete: #908 orchestration deep-dive (not started, awaiting scope/cost approval);
+  #909 governance decision (not started, awaiting owner direction)
+- Known blockers: owner decision needed on both #908 scope and #909 reuse-vs-new
+- Validation already run: `git log origin/main` (`ec06ef5` HEAD confirmed); `list_issues` +
+  `issue_read` (34 → 36 open issues, #908/#909 confirmed new)
+- Validation still required: none for this docs-only sync
+- Next exact action: #812 proceeds per prior explicit approval (separate task); #908/#909 wait for
+  owner direction
+- Stop condition: do not start #908's investigation or write any `GOVERNANCE/` file without
+  explicit owner approval
+- Rollback plan: revert this docs-only PR; no schema/env/runtime changes
+
 ### TASK-20260709-003 — #446 Stage 1 data-integrity cleanup
 
 Status: done (Stage 1 only — Stage 2 deferred, #446 stays open)
