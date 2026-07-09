@@ -139,6 +139,60 @@ def test_multi_role_list_with_city_attaches_location():
     assert result.entities.get("location") == "Dubai"
 
 
+# ── #812: compound-title connectives must not be split on "and" ──────────────
+# Production bug: "find environmental health and safety manager jobs in Dubai"
+# was parsed as two fragment roles ["environmental health", "safety manager"]
+# because extract_role_list() splits every bare "and". These "X and Y" phrases
+# are themselves job-title vocabulary in the UAE market and must survive as a
+# single role.
+
+@pytest.mark.parametrize("text,expected_role", [
+    ("find environmental health and safety manager jobs in Dubai",
+     "environmental health and safety manager"),
+    ("search for food and beverage manager jobs",
+     "food and beverage manager"),
+    ("find oil and gas engineer positions",
+     "oil and gas engineer"),
+    ("show me facilities and maintenance manager roles",
+     "facilities and maintenance manager"),
+    ("search for health and safety officer jobs",
+     "health and safety officer"),
+])
+def test_compound_title_connective_not_split(text, expected_role):
+    roles, excluded = extract_role_list(text)
+    assert roles == [expected_role]
+    assert excluded == []
+
+
+def test_compound_title_routes_to_single_role_intent():
+    """The exact production message from #812 must route to a single-role
+    search with the whole compound title, not job_search_multi_role."""
+    result = classify_intent(
+        "find environmental health and safety manager jobs in Dubai",
+        has_cv_profile=True,
+    )
+    assert result.legacy_intent != "job_search_multi_role"
+    assert result.extracted_role == "environmental health and safety manager"
+    assert result.entities.get("location") == "Dubai"
+
+
+def test_compound_title_alongside_a_real_second_role_still_splits():
+    """A compound title combined with an unrelated second role via a real list
+    connector must still split into two roles — only the known "X and Y"
+    connective phrases are protected, not "and" in general."""
+    roles, _ = extract_role_list(
+        "search for health and safety officer and marketing manager jobs"
+    )
+    assert roles == ["health and safety officer", "marketing manager"]
+
+
+def test_and_between_two_cities_still_splits():
+    """Regression guard: the compound-title shield must not affect plain
+    location lists joined by "and" (unrelated to any protected phrase)."""
+    roles, _ = extract_role_list("search for jobs in Dubai and Abu Dhabi")
+    assert roles == []
+
+
 def test_single_role_search_is_not_multi_role():
     """Single-role searches keep the existing job_search_explicit routing."""
     result = classify_intent("find operations manager jobs in ajman", has_cv_profile=True)

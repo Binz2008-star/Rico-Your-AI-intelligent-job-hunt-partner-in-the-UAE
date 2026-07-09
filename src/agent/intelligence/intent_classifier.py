@@ -884,6 +884,38 @@ _ROLE_TOKEN_TAIL_RE = re.compile(
 # and the words "and" / "or".
 _ROLE_LIST_SPLIT_RE = re.compile(r"\s*(?:,|;|/|&|\band\b|\bor\b|\bplus\b)\s*", re.IGNORECASE)
 
+# Known compound-title connectives (#812): these "X and Y" phrases are themselves
+# job-title vocabulary, not two roles joined by "and" — e.g. "environmental
+# health and safety manager" is ONE title, not "environmental health" +
+# "safety manager". Shielded before the "and" split above, then restored.
+_COMPOUND_ROLE_PHRASES = (
+    "health and safety",
+    "food and beverage",
+    "oil and gas",
+    "facilities and maintenance",
+)
+_COMPOUND_ROLE_RE = re.compile(
+    r"\b(?:" + "|".join(p.replace(" ", r"\s+") for p in _COMPOUND_ROLE_PHRASES) + r")\b",
+    re.IGNORECASE,
+)
+_COMPOUND_ROLE_AND_SENTINEL = "\x00ROLECONNECTOR\x00"
+_INNER_AND_RE = re.compile(r"\s+and\s+", re.IGNORECASE)
+
+
+def _shield_compound_role_phrases(segment: str) -> str:
+    """Replace " and " inside a known compound-title phrase with a sentinel so
+    `_ROLE_LIST_SPLIT_RE` doesn't split it into two fragment roles (#812)."""
+    return _COMPOUND_ROLE_RE.sub(
+        lambda m: _INNER_AND_RE.sub(_COMPOUND_ROLE_AND_SENTINEL, m.group(0)),
+        segment,
+    )
+
+
+def _unshield_compound_role_phrases(token: str) -> str:
+    """Restore the sentinel inserted by `_shield_compound_role_phrases` back to
+    " and " once splitting on the real list connectors is done."""
+    return token.replace(_COMPOUND_ROLE_AND_SENTINEL, " and ")
+
 # Leading filler dropped from a single role token. Reuses the role-prefix
 # stopwords plus list-specific qualifiers ("pure Software Engineer" -> "Software
 # Engineer").
@@ -958,9 +990,11 @@ def _split_role_phrase(segment: str) -> list[str]:
         return []
     # Drop a trailing subordinate clause that is not part of the list itself.
     segment = _ROLE_LIST_TAIL_CLAUSE_RE.split(segment, maxsplit=1)[0]
+    segment = _shield_compound_role_phrases(segment)
     roles: list[str] = []
     seen: set[str] = set()
     for part in _ROLE_LIST_SPLIT_RE.split(segment):
+        part = _unshield_compound_role_phrases(part)
         role = _clean_role_token(part)
         if role and role.lower() not in seen:
             seen.add(role.lower())
