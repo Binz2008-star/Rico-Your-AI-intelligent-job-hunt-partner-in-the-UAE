@@ -19,7 +19,6 @@ Pure and dependency-light: no DB, no network, never raises.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -50,11 +49,18 @@ def _trusted_source_identity(job: dict[str, Any]) -> Optional[str]:
 
 
 def _fallback_identity(job: dict[str, Any]) -> str:
-    """Deterministic ``title|company`` hash so the same job de-dupes on save."""
-    title = str(job.get("title") or job.get("job_title") or "").strip().lower()
-    company = str(job.get("company") or job.get("company_name") or "").strip().lower()
-    raw = f"{title}|{company}"
-    return "tc:" + hashlib.md5(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
+    """Deterministic ``title|company`` hash so the same job de-dupes on save.
+
+    Delegates to ``get_job_id`` so this matches the key auto-persist derives
+    in ``RicoChatAPI._derive_lifecycle_job_key`` (#758) — otherwise the two
+    write paths key the same job differently and ``ON CONFLICT (user_id,
+    job_key)`` never fires, leaving a duplicate row per job.
+    """
+    from src.applications import get_job_id
+
+    title = str(job.get("title") or job.get("job_title") or "").strip()
+    company = str(job.get("company") or job.get("company_name") or "").strip()
+    return get_job_id({"title": title, "company": company})
 
 
 def resolve_save_decision(

@@ -46,7 +46,19 @@ def test_fallback_identity_is_deterministic():
     a = resolve_save_decision({"job_id": "a", "title": "Eng", "company": "Acme"}, origin="recent_context")
     b = resolve_save_decision({"job_id": "b", "title": "Eng", "company": "Acme"}, origin="recent_context")
     assert a.save_key == b.save_key
-    assert a.save_key.startswith("tc:")
+    assert a.save_key
+
+
+def test_fallback_identity_matches_lifecycle_job_key():
+    """#758: explicit chat save and auto-persist-on-search must key the same job
+    identically, or ON CONFLICT (user_id, job_key) never fires and the DB ends
+    up with two rows (one 'opened', one 'saved') for what is really one job."""
+    from src.rico_chat_api import RicoChatAPI
+
+    job = {"job_id": "ephemeral-llm-id", "title": "HSE Manager", "company": "Acme Corp"}
+    save_key = resolve_save_decision(job, origin="recent_context").save_key
+    lifecycle_key = RicoChatAPI._derive_lifecycle_job_key("HSE Manager", "Acme Corp")
+    assert save_key == lifecycle_key
 
 
 def test_trusted_db_job_yields_apply_url():
