@@ -96,13 +96,14 @@ jobs:
             echo "dashboard.html not found — skipping deploy"
             exit 0
           fi
-          mkdir -p docs
-          cp dashboard.html docs/index.html
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
+          # Pull latest main BEFORE regenerating/committing: docs/index.html is
+          # fully regenerated every run, so committing first and rebasing after
+          # guarantees a conflict against any other run's dashboard commit.
+          git pull --rebase origin main
+          mkdir -p docs
+          cp dashboard.html docs/index.html
           git add docs/index.html
           git diff --staged --quiet || git commit -m "Update dashboard [skip ci]"
-          # Pull latest changes before pushing to avoid non-fast-forward rejections
-          git pull --rebase origin main
-          # Use force-with-lease for dashboard updates (safer than force, checks remote hasn't changed unexpectedly)
-          git push --force-with-lease origin main || echo "Dashboard push failed — likely concurrent main update"
+          git push origin main || echo "Dashboard push failed — likely concurrent main update"
