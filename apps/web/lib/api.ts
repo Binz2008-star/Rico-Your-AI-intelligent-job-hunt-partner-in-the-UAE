@@ -17,6 +17,7 @@ import type {
   ExecutePermissionActionRequest,
   ExecutePermissionActionResponse,
 } from "@/lib/schemas";
+import { getSignupAttribution } from "@/lib/signupAttribution";
 import type {
   Application,
   ApplicationActionRequest,
@@ -1241,6 +1242,10 @@ export async function register(
   }
   if (name && name.trim()) {
     body.name = name.trim();
+  }
+  const attribution = getSignupAttribution();
+  if (attribution) {
+    body.signup_attribution = attribution;
   }
   const res = await fetch(`${PROXY}/api/v1/auth/register`, {
     method: "POST",

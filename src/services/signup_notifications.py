@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.services.mailer import send_email
+from src.services.signup_source import SIGNUP_SOURCE_FALLBACK
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ def build_signup_notification_body(
     created_at: Any,
     plan: str | None = None,
     profile: dict[str, Any] | None = None,
+    signup_source: str | None = None,
 ) -> str:
     display_name = name.strip() if isinstance(name, str) and name.strip() else "Not provided"
     display_plan = plan.strip() if isinstance(plan, str) and plan.strip() else "free"
@@ -117,7 +119,7 @@ def build_signup_notification_body(
             f"- Email: {email}",
             f"- User ID: {user_id}",
             f"- Plan: {display_plan}",
-            f"- Signup source: website",
+            f"- Signup source: {signup_source or SIGNUP_SOURCE_FALLBACK}",
             f"- Signup time: {_format_created_at(created_at)}",
             "",
             "Location & Language:",
@@ -138,7 +140,14 @@ def build_signup_notification_body(
     )
 
 
-def send_admin_signup_notification(*, user: Any, name: str | None = None, plan: str | None = None, profile: dict[str, Any] | None = None) -> None:
+def send_admin_signup_notification(
+    *,
+    user: Any,
+    name: str | None = None,
+    plan: str | None = None,
+    profile: dict[str, Any] | None = None,
+    signup_source: str | None = None,
+) -> None:
     """Best-effort notification. Never raises to the registration flow."""
     if not _notifications_enabled():
         return
@@ -153,6 +162,7 @@ def send_admin_signup_notification(*, user: Any, name: str | None = None, plan: 
             created_at=getattr(user, "created_at", None),
             plan=plan,
             profile=profile,
+            signup_source=signup_source,
         )
         display_name = name.strip() if isinstance(name, str) and name.strip() else getattr(user, "email", "unknown")
         ok = send_email(

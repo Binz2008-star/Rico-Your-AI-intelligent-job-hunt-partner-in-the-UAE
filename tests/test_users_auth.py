@@ -345,7 +345,52 @@ class TestRegisterEndpoint:
         assert "Email: notify@rico.ai" in kwargs["body"]
         assert "User ID: 12" in kwargs["body"]
         assert "Plan: free" in kwargs["body"]
-        assert "Signup source: website" in kwargs["body"]
+        # No attribution submitted → safe fallback, never a fake "website".
+        assert "Signup source: direct / unknown" in kwargs["body"]
+
+    def test_register_with_attribution_reports_real_source(self, user_client):
+        _reset_limiter()
+        created = User(
+            id=15, email="attributed@rico.ai", password_hash="$2b$12$fakehash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
+            last_login_at=None,
+        )
+        env = {
+            "ENABLE_SIGNUP_EMAIL_NOTIFICATIONS": "true",
+            "ADMIN_SIGNUP_NOTIFICATION_EMAIL": "info@ricohunt.com",
+        }
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
+             patch("src.repositories.users_repo.create_user", return_value=created), \
+             patch("src.repositories.users_repo.set_signup_attribution", return_value=True) as set_attr, \
+             patch("src.services.signup_notifications.send_email", return_value=True) as send_email, \
+             patch.dict(os.environ, env, clear=False):
+            r = user_client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "attributed@rico.ai",
+                    "password": "SecurePass1",
+                    "signup_attribution": {
+                        "utm_source": "google",
+                        "utm_medium": "cpc",
+                        "utm_campaign": "brand-uae",
+                        "landing_path": "/",
+                        "unknown_field": "ignored",
+                    },
+                },
+            )
+
+        assert r.status_code == 201
+        send_email.assert_called_once()
+        assert "Signup source: google / cpc / brand-uae" in send_email.call_args.kwargs["body"]
+        set_attr.assert_called_once()
+        args, kwargs = set_attr.call_args
+        stored = args if args else (kwargs.get("user_id"), kwargs.get("source"), kwargs.get("attribution"))
+        assert stored[0] == 15
+        assert stored[1] == "google / cpc / brand-uae"
+        assert stored[2]["utm_source"] == "google"
+        assert "unknown_field" not in stored[2]
 
     def test_register_succeeds_when_signup_notification_fails(self, user_client):
         _reset_limiter()

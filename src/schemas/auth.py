@@ -48,6 +48,23 @@ class LoginResponse(BaseModel):
     email: str
 
 
+class SignupAttribution(BaseModel):
+    """Marketing attribution captured client-side at signup (issue #922).
+
+    All fields are optional and untrusted — the backend re-sanitizes them via
+    src.services.signup_source before storage or display.
+    """
+    model_config = {"extra": "ignore"}
+
+    utm_source: str | None = Field(None, max_length=500)
+    utm_medium: str | None = Field(None, max_length=500)
+    utm_campaign: str | None = Field(None, max_length=500)
+    utm_content: str | None = Field(None, max_length=500)
+    utm_term: str | None = Field(None, max_length=500)
+    referrer: str | None = Field(None, max_length=2000)
+    landing_path: str | None = Field(None, max_length=500)
+
+
 class RegisterRequest(BaseModel):
     email: str = Field(..., min_length=3, max_length=256)
     password: str = Field(..., min_length=8, max_length=128,
@@ -57,6 +74,10 @@ class RegisterRequest(BaseModel):
     public_user_id_to_merge: str | None = Field(
         None,
         description="Optional public guest user ID to merge profile data from after signup",
+    )
+    signup_attribution: SignupAttribution | None = Field(
+        None,
+        description="Optional UTM/referrer/landing-path attribution captured before signup",
     )
 
     @field_validator("password", mode="after")

@@ -56,6 +56,8 @@ CHECKS: list[tuple[str, str, object]] = [
     ("032", "table", "uploaded_document_context"),
     ("033", "table", "email_alert_log"),
     ("035", "constraint", "rico_job_recommendations_user_id_job_key_key"),
+    ("036", "column", ("users", "signup_source")),
+    ("036", "table", "admin_digest_log"),
 ]
 
 
