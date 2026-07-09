@@ -15,7 +15,7 @@
 | **Production Status** | 🟢 Render backend healthy · Vercel up (production deploy confirmed READY for `ec06ef5`, alias `ricohunt.com`) · Neon = source of truth |
 | **Open Critical Risks** | `005 pipeline_runs` migration drift (#712). ~~`profile_repo.py` DB connection leak~~ — **fixed via #906** (8 sites, not the originally-estimated 5). ~~#758 duplicate DB rows from job-key mismatch~~ — **fixed via #907**. **NEW #908** — attachment-first reasoning bypassed; owner reframes as a conversation-orchestration/intent-routing root cause, not a quick patch — needs a scoped deep-dive before any fix, owner sign-off pending. **NEW #909** — governance-doc request that duplicates existing Active docs (`RICO_EXECUTION_PRINCIPLES.md`, `AGENT_OPERATING_MODEL.md`, `PR_QUALITY_GATE_RULES.md`, `DECISIONS.md` as ADR log); this repo already rejected a parallel `GOVERNANCE/` folder once (PR #901) — owner decision needed before any doc is written. **#446 Stage 1 (16 `public:web-*` rows) executed and validated 2026-07-09**; **Stage 2 (5 non-public rows, incl. the primary) is deferred, not started — #446 stays open until Stage 2 is decided.** #263 still flagged needs-deep-dive (deferred). `#885`/`#891` deploy verification unconfirmed from agent sessions. No live SQL-injection, credential-leak, or public-identity security issue found (#127/#198); see `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md`. |
 | **Active PR** | none merged-pending — #812 (compound-title role splitting) starting next per owner approval; see `HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` for current board state |
-| **Next Milestone** | **#812** (compound-title role splitting) — in progress; #908 orchestration deep-dive and #909 governance-doc conflict both await owner direction; Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
+| **Next Milestone** | **#812** (compound-title role splitting) — in progress; #908 orchestration deep-dive and #909 governance-doc conflict both await owner direction; Continue Phase 3 chat slices; **About/Contact/FAQ Migration** (was labeled "C3" — see `DEC-20260709-005`: that label collided with PR #899's unrelated landing-hero work; approved, owner-gated, not started) |
 | **Last Updated** | 2026-07-09 |
 
 _Refresh the dashboard row(s) in the same PR as any merge that moves `main` HEAD,
@@ -64,10 +64,18 @@ changes production status, or resolves/opens a critical risk._
    owner decision (reuse existing docs vs. a dedicated `GOVERNANCE/` namespace) before any file
    is written.
 5. Continue **Phase 3 Chat Integration** slices (verify-first, synthetic data only).
-6. **C3** — Atelier migration of `/about`, `/contact`, `/faq` (owner-gated, not started).
+6. **About/Contact/FAQ Migration** — Atelier migration of `/about`, `/contact`, `/faq` (formerly
+   labeled "C3"; owner-gated, not started). **Not** the same as PR #899 ("Landing Hero Polish",
+   also formerly self-labeled "C3") — see `DEC-20260709-005` for the naming-collision record.
 7. **Phase 2 Hardening** — fix gaps only as the audit proves them.
 
+**Naming note:** bare "C#" labels (C1–C8) are retired as implementation identifiers per
+`DEC-20260709-005` — "C3" was found in use for two unrelated things (this About/Contact/FAQ
+migration and PR #899's landing-hero work) plus an unrelated #198 security-finding ID. Use the
+explicit names above for new work; see the decision for the full conflict table and canonical map.
+
 See `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for the #127/#198 verdict,
-`HANDOFFS/2026-07-09-446-stage1-cleanup.md` for the #446 Stage 1 cleanup record, and
+`HANDOFFS/2026-07-09-446-stage1-cleanup.md` for the #446 Stage 1 cleanup record,
 `HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` for the #906/#907 merge sync and
-#908/#909 triage.
+#908/#909 triage, and `DECISIONS.md` (`DEC-20260709-005`) for the C-number naming-collision
+clarification.
