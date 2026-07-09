@@ -42,3 +42,7 @@ One objective only.
 - No unrelated files:
 - No secrets or credentials:
 - Rollback plan included:
+- If this session was approaching a token/context/tool/usage/time limit,
+  the Continuity Block in `AI_WORKSPACE/TASKS.md` was updated before
+  stopping (see `AGENT_OPERATING_MODEL.md`, "Session continuity /
+  limit-approach handoff"):

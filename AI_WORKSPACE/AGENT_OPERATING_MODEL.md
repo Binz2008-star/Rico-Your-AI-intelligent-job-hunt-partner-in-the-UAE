@@ -286,6 +286,62 @@ Does it protect production?
 
 ---
 
+## Session continuity / limit-approach handoff (mandatory, all agents)
+
+This applies to every agent session working on this repository individually,
+regardless of tool — Claude, Codex, Lovable, Devin, or any other. An agent
+must not assume its next invocation (even the "same" agent, in a new
+session) carries this conversation's hidden chat context. The repository
+files are the only continuity that reliably survives between sessions.
+
+**Trigger:** if an agent notices, at any point, that the current session may
+hit its token, context-window, tool-call, usage-quota, or time limit before
+the current task is complete, the agent must immediately stop expanding
+scope and create or update a handoff before doing anything else.
+Documenting the handoff takes priority over continuing implementation once
+this trigger fires.
+
+**The handoff is the existing Continuity Block** (`AI_WORKSPACE/TASKS.md`'s
+task template) — do not invent a parallel format or a new document type. It
+must record:
+
+1. Current objective
+2. Current branch
+3. Current PR number, if any
+4. Latest commit / head SHA, if any
+5. Files inspected
+6. Files changed
+7. Tests run and results
+8. Exact current status
+9. What remains unfinished
+10. Known risks or blockers
+11. Exact next recommended step
+12. Explicit list of what must not be touched
+13. Whether there are uncommitted changes
+14. Whether any deployment, CI, Neon, or Vercel state must still be checked next
+
+**Rules:**
+
+- If the current task already has a Continuity Block in `TASKS.md`, update
+  it in place — never create a duplicate entry for the same task.
+- If no Continuity Block exists yet for the current task, create one under
+  the existing `TASKS.md` template and, if the task is not `done`/`verified`,
+  a dated `AI_WORKSPACE/HANDOFFS/<date>-<topic>.md` entry with the block
+  copied in — the same pattern `START_HERE.md`'s Continuity Gate already
+  requires at the end of any task, just triggered earlier and explicitly by
+  approaching a limit rather than only by finishing.
+- The handoff must be understandable from repository files alone. Never
+  write a handoff that only makes sense with this conversation's context in
+  hand.
+- If there is an active PR, a short PR comment summarizing the same status
+  is welcome and encouraged, but `AI_WORKSPACE` remains the source of truth
+  — a PR comment is not a substitute for the Continuity Block.
+- This rule does not replace `START_HERE.md`'s Continuity Gate — it adds an
+  explicit, mandatory "stop and record now" trigger for the specific case of
+  an agent noticing mid-task that it is approaching a hard limit.
+
+---
+
 ## Non-negotiable operating rules
 
 - Protect production auth and user data.

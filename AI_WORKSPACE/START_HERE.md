@@ -96,6 +96,13 @@ the Continuity Block for the task it touched, and — if the task isn't
 Continuity Block copied in. A task with no Continuity Block, or one left
 `in_progress` with no "next exact action," is not a valid stopping point.
 
+**Approaching a token/context/tool/usage/time limit mid-task is its own
+mandatory trigger for this same step — do not wait until the task is
+finished.** See "Session continuity / limit-approach handoff" in
+`AGENT_OPERATING_MODEL.md` for the exact required fields. This applies to
+every agent on this repo (Claude, Codex, Lovable, Devin, or any other), not
+just Claude.
+
 ## Branch ownership
 
 Use one writer per branch. Other tools or reviewers can inspect and comment without editing the same branch.
