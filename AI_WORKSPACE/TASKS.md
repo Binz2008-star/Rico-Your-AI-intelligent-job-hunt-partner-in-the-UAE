@@ -69,6 +69,54 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260709-001 — Board-health scan (read-only)
+
+Status: done
+Owner: Roben / Claude
+Branch: docs/board-health-scan-sync (docs-only state-sync PR)
+Issue/PR: none (read-only board scan); persisted via this docs-only PR
+
+#### Objective
+Classify all 34 open GitHub issues (P0/P1/P2/P3/close-candidate/needs-deep-dive) using the
+newly-active Rico Continuity Gate, so the next work item is chosen from evidence, not guesswork.
+
+#### Continuity Block
+- Task ID: TASK-20260709-001
+- GitHub issue/PR: none (read-only board scan)
+- Branch: none during the scan itself (no branch created — read-only); this entry is persisted
+  via `docs/board-health-scan-sync`
+- Base branch: main
+- Last safe commit SHA: f6996b4da04f6d3812fe873067e89247c8bb165e
+- Current head SHA: f6996b4da04f6d3812fe873067e89247c8bb165e (scan made no code commits)
+- Status: done
+- Files changed: none during the scan; this docs-only PR changes `PROJECT_STATUS.md`,
+  `CURRENT_STATE.md`, `TASKS.md`, `HANDOFFS/2026-07-09-board-health-scan.md`, `MASTER_INDEX.md`
+- Files intentionally not touched: all runtime code, tests, Neon, Vercel/Render config, issue
+  labels/state
+- What is complete: full metadata scan of all 34 open issues; full-body read + classification of
+  18 issues matching risk trigger categories, plus #446 per explicit instruction; report delivered
+- What is incomplete: #127, #198, #263 flagged "needs full deep dive" — classification pending
+  actual code verification against current `main`, not resolved by this scan
+- Known blockers: none
+- Validation already run: `list_pull_requests` (4 open, all previously triaged),
+  `search_issues`/`list_issues` cross-check (34 open, consistent counts across both calls)
+- Validation still required: code-level verification for #127 (SQL injection claim in
+  `src/rico_db.py#get_recommendations`), #198 (connection-leak claims in `rico_db.py`/
+  `subscription_repo.py`, public-chat identity gap in `src/api/routers/rico_chat.py`), #263
+  (product-behavior contradiction claims — check against #892/#747 fixes)
+- Next exact action: security/data-risk deep dive on #127 and #198 (then #263 if time remains),
+  per `HANDOFFS/2026-07-09-board-health-scan.md`; if live issues confirmed, fix those first; if
+  stale/fixed, proceed to #446 (owner-gated cleanup) → #758 → #812
+- Stop condition: do not start #758/#812/#446 until #127/#198 deep-dive verification is reported
+  and the owner confirms priority; stop and report if deep dive finds a live, unpatched security
+  issue rather than silently fixing it
+- Rollback plan: revert this docs-only PR; no schema/env/runtime changes, isolated to the 5
+  workspace files listed above
+
+#### Full detail
+See `AI_WORKSPACE/HANDOFFS/2026-07-09-board-health-scan.md` for the complete issue-by-issue
+classification, top 10 risks, close candidates, and old-roadmap list.
+
 ### TASK-20260708-001 — Phase 3 chat integration: follow-up readiness query (first slice)
 
 Status: done (merged #891 → `80e246b`; deploy verification pending — Render egress blocked from the working session)

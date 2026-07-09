@@ -63,7 +63,8 @@ edit for content); the newest doubles as the current status pointer.
 
 | Handoff | Status |
 | --- | --- |
-| `HANDOFFS/2026-07-09-board-clean-governance-complete.md` | Latest (current pointer) |
+| `HANDOFFS/2026-07-09-board-health-scan.md` | Latest (current pointer) |
+| `HANDOFFS/2026-07-09-board-clean-governance-complete.md` | Historical |
 | `HANDOFFS/2026-07-08-technical-status.md` | Historical |
 | `HANDOFFS/2026-07-04-search-relevance-followup.md` | Historical |
 | `HANDOFFS/2026-07-03-tc2-tc8-merge-pair-decision.md` | Historical |
