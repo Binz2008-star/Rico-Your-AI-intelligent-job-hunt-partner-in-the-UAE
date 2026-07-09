@@ -47,11 +47,24 @@ Issue/PR: <link or number>
 - [ ] Local smoke:
 - [ ] Production/deploy smoke if applicable:
 
-#### Handoff notes
-- Changed files:
-- Commands run:
-- Risks:
-- Rollback plan:
+#### Continuity Block
+- Task ID: TASK-YYYYMMDD-001
+- GitHub issue/PR: <#number or link>
+- Branch: <branch-name>
+- Base branch: <branch, e.g. main>
+- Last safe commit SHA: <sha the task can be safely resumed/rolled back to>
+- Current head SHA: <sha>
+- Status: proposed | scoped | in_progress | blocked | review | verified | done
+- Files changed: <path — reason>
+- Files intentionally not touched: <path — reason, or "none">
+- What is complete: <bullet list>
+- What is incomplete: <bullet list>
+- Known blockers: <bullet list, or "none">
+- Validation already run: <command → result>
+- Validation still required: <command or check, not yet run>
+- Next exact action: <single next step, concrete enough to resume cold>
+- Stop condition: <what state means "stop and ask the owner" vs. "safe to keep going">
+- Rollback plan: <exact revert path>
 ```
 
 ## Active tasks

@@ -102,6 +102,9 @@ Before recommending merge, verify:
 8. Backend changes include Render deploy expectations.
 9. Frontend changes include Vercel/build/browser expectations.
 10. The PR body and workspace state do not contain stale claims.
+11. The linked TASKS.md entry has a complete Continuity Block (scope, risk,
+    validation run/required, rollback) — no PR merges on a task with an
+    empty or stale Continuity Block.
 
 Do not merge if any blocker remains unresolved.
 

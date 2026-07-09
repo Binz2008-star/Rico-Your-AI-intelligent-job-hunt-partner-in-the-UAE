@@ -26,6 +26,13 @@ Copy this file into `AI_WORKSPACE/HANDOFFS/YYYY-MM-DD-task-slug.md` for each tas
 - [ ]
 - [ ]
 
+## Continuity Block
+
+Copy verbatim from the `AI_WORKSPACE/TASKS.md` entry this handoff closes:
+Task ID, branch, base branch, last safe SHA, current head SHA, status,
+files changed, files intentionally not touched, blockers, validation
+run/required, next exact action, stop condition, rollback plan.
+
 ## Deliverables
 
 - changed files
