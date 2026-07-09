@@ -538,7 +538,9 @@ def list_saved_searches(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
 
         db_user_id = str(bundle["id"])
 
-        with db.connect() as conn:
+        with _db_transaction() as conn:
+            if not conn:
+                return []
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -580,14 +582,15 @@ def delete_search(user_id: str, search_id: str) -> bool:
 
         db_user_id = str(bundle["id"])
 
-        with db.connect() as conn:
+        with _db_transaction() as conn:
+            if not conn:
+                return False
             with conn.cursor() as cur:
                 cur.execute(
                     "DELETE FROM rico_saved_searches WHERE id = %s AND user_id = %s",
                     (search_id, db_user_id)
                 )
                 deleted = cur.rowcount > 0
-            conn.commit()
 
         if deleted:
             logger.info("profile_repo: deleted search user_id=%s search_id=%s", user_id, search_id)
@@ -612,7 +615,9 @@ def get_search_by_id(user_id: str, search_id: str) -> dict[str, Any] | None:
 
         db_user_id = str(bundle["id"])
 
-        with db.connect() as conn:
+        with _db_transaction() as conn:
+            if not conn:
+                return None
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -648,7 +653,9 @@ def get_profiles_by_role(target_role: str, limit: int = 100) -> list[RicoProfile
         return []
 
     try:
-        with db.connect() as conn:
+        with _db_transaction() as conn:
+            if not conn:
+                return []
             with conn.cursor() as cur:
                 # Use JSONB array contains operator for proper array matching
                 cur.execute(
@@ -739,21 +746,22 @@ def find_profiles_by_email(email: str) -> list[Any]:
     db = _db()
     if db:
         try:
-            with db.connect() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT u.*, p.data as profile_data, s.data as settings_data
-                        FROM rico_users u
-                        LEFT JOIN rico_profiles p ON p.user_id = u.id
-                        LEFT JOIN rico_settings s ON s.user_id = u.id
-                        WHERE LOWER(u.email) = %s
-                        LIMIT 10
-                        """,
-                        (email_norm,)
-                    )
-                    rows = cur.fetchall()
-                    candidates.extend(_bundle_rows_to_profiles(rows))
+            with _db_transaction() as conn:
+                if conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT u.*, p.data as profile_data, s.data as settings_data
+                            FROM rico_users u
+                            LEFT JOIN rico_profiles p ON p.user_id = u.id
+                            LEFT JOIN rico_settings s ON s.user_id = u.id
+                            WHERE LOWER(u.email) = %s
+                            LIMIT 10
+                            """,
+                            (email_norm,)
+                        )
+                        rows = cur.fetchall()
+                        candidates.extend(_bundle_rows_to_profiles(rows))
         except Exception:
             logger.exception("profile_repo: find_profiles_by_email failed email=%s", email_norm)
 
@@ -780,22 +788,23 @@ def find_profiles_by_phone(phone: str) -> list[Any]:
     db = _db()
     if db:
         try:
-            with db.connect() as conn:
-                with conn.cursor() as cur:
-                    # Remove non-digits from stored phone and compare last N digits
-                    cur.execute(
-                        """
-                        SELECT u.*, p.data as profile_data, s.data as settings_data
-                        FROM rico_users u
-                        LEFT JOIN rico_profiles p ON p.user_id = u.id
-                        LEFT JOIN rico_settings s ON s.user_id = u.id
-                        WHERE REGEXP_REPLACE(u.phone, '[^0-9]', '', 'g') LIKE %s
-                        LIMIT 10
-                        """,
-                        (f"%{digits}",)
-                    )
-                    rows = cur.fetchall()
-                    candidates.extend(_bundle_rows_to_profiles(rows))
+            with _db_transaction() as conn:
+                if conn:
+                    with conn.cursor() as cur:
+                        # Remove non-digits from stored phone and compare last N digits
+                        cur.execute(
+                            """
+                            SELECT u.*, p.data as profile_data, s.data as settings_data
+                            FROM rico_users u
+                            LEFT JOIN rico_profiles p ON p.user_id = u.id
+                            LEFT JOIN rico_settings s ON s.user_id = u.id
+                            WHERE REGEXP_REPLACE(u.phone, '[^0-9]', '', 'g') LIKE %s
+                            LIMIT 10
+                            """,
+                            (f"%{digits}",)
+                        )
+                        rows = cur.fetchall()
+                        candidates.extend(_bundle_rows_to_profiles(rows))
         except Exception:
             logger.exception("profile_repo: find_profiles_by_phone failed phone=%s", digits)
 
@@ -823,21 +832,22 @@ def find_profiles_by_telegram_username(username: str) -> list[Any]:
     db = _db()
     if db:
         try:
-            with db.connect() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT u.*, p.data as profile_data, s.data as settings_data
-                        FROM rico_users u
-                        LEFT JOIN rico_profiles p ON p.user_id = u.id
-                        LEFT JOIN rico_settings s ON s.user_id = u.id
-                        WHERE LOWER(u.telegram_username) = %s
-                        LIMIT 10
-                        """,
-                        (username_norm,)
-                    )
-                    rows = cur.fetchall()
-                    candidates.extend(_bundle_rows_to_profiles(rows))
+            with _db_transaction() as conn:
+                if conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT u.*, p.data as profile_data, s.data as settings_data
+                            FROM rico_users u
+                            LEFT JOIN rico_profiles p ON p.user_id = u.id
+                            LEFT JOIN rico_settings s ON s.user_id = u.id
+                            WHERE LOWER(u.telegram_username) = %s
+                            LIMIT 10
+                            """,
+                            (username_norm,)
+                        )
+                        rows = cur.fetchall()
+                        candidates.extend(_bundle_rows_to_profiles(rows))
         except Exception:
             logger.exception(
                 "profile_repo: find_profiles_by_telegram_username failed username=%s",
@@ -971,7 +981,9 @@ def health_check() -> dict[str, Any]:
         return {"status": "degraded", "db_available": False, "fallback_active": True}
 
     try:
-        with db.connect() as conn:
+        with _db_transaction() as conn:
+            if not conn:
+                return {"status": "degraded", "db_available": False, "fallback_active": True}
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
         return {"status": "healthy", "db_available": True, "fallback_active": False}
