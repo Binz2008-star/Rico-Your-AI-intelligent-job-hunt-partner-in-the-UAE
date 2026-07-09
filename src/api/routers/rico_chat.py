@@ -1489,11 +1489,23 @@ async def rico_upload_cv(
                 ),
             }
 
-        # Non-CV documents with sufficient confidence → return classification + actions.
+        # Non-CV documents → return classification + actions, never the CV pipeline.
         # CV types that also proceed through extraction: "cv", "cover_letter", "unknown"
+        #
+        # #908 RC4: doc_type is already the argmax classification across every
+        # category INCLUDING "cv" (see DocumentClassifier._classify_text's
+        # ranking) — if a non-CV type won that comparison, the document is not
+        # a CV regardless of how low the blended `confidence` score is. The
+        # previous gate additionally required `confidence >= 0.18 and
+        # confidence > cv_score`, but `confidence` is a *scaled-down* blend of
+        # the top raw score (penalised when a runner-up is close), so it can
+        # fall below cv_score's raw, unscaled value even though doc_type
+        # legitimately won on raw score. That let a low-confidence invoice
+        # slip into the CV extraction pipeline and, once confirmed, become
+        # the user's permanent "Active CV". Exclusion is now type-driven —
+        # confidence is no longer part of the decision.
         _CV_PIPELINE_TYPES = {"cv", "cover_letter", "unknown"}
-        cv_score = classification.confidence_scores.get("cv", 0.0)
-        if doc_type not in _CV_PIPELINE_TYPES and confidence >= 0.18 and confidence > cv_score:
+        if doc_type not in _CV_PIPELINE_TYPES:
             _metrics.record_request((time.time() - start_time) * 1000)
             logger.info(
                 "doc_classify_routed user=%s filename=%s type=%s confidence=%.2f request_ref=%s",
@@ -1775,17 +1787,30 @@ async def confirm_cv_profile(
                 _doc_db = _RicoDB()
                 if _doc_db.available:
                     skills = profile_updates.get("skills") or []
+                    # #908 RC4: an unrecognized/non-CV-family doc_type must never be
+                    # silently coerced to "cv" -- that previously let a mis-routed
+                    # non-CV upload (e.g. an invoice that slipped into the CV
+                    # pipeline) be written as doc_type="cv" with is_primary=True,
+                    # becoming the user's permanent "Active CV". Server-side value,
+                    # never trust the client payload for anything outside the
+                    # known-safe set. is_primary is only ever set for an actual
+                    # "cv" document -- cover_letter/other are saved but never
+                    # marked primary from this confirm-CV endpoint.
+                    _CONFIRMABLE_DOC_TYPES = ("cv", "cover_letter", "other")
+                    _resolved_doc_type = (
+                        payload.doc_type if payload.doc_type in _CONFIRMABLE_DOC_TYPES else "other"
+                    )
                     _doc_db.save_user_document(
                         user_id=resolved_user_id,
                         filename=payload.filename,
                         original_filename=payload.filename,
-                        doc_type=payload.doc_type if payload.doc_type in ("cv", "cover_letter", "other") else "cv",
+                        doc_type=_resolved_doc_type,
                         file_size=0,
                         skills_count=len(skills),
                         skills_json=list(skills),
                         years_experience=profile_updates.get("years_experience"),
                         current_role=profile_updates.get("current_role"),
-                        is_primary=True,
+                        is_primary=(_resolved_doc_type == "cv"),
                     )
             except Exception as _doc_exc:
                 logger.warning("cv_confirm_doc_save_failed user=%s error=%s", resolved_user_id, str(_doc_exc))
