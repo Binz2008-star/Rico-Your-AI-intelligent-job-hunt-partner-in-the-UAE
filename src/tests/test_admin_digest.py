@@ -69,7 +69,7 @@ class FakeCursor:
                 self.db.claimed.add(key)
                 self._result = [{"id": len(self.db.claimed)}]
         elif "profile_nudge_sent_at" in sql_flat:
-            self._result = [{"n": self.db.nudges_sent}]
+            self._result = [{"n": self.db.nudge_stamps}]
         elif "FROM users u" in sql_flat:
             self._result = list(self.db.signup_rows)
         else:  # pragma: no cover - unexpected query
@@ -99,9 +99,9 @@ class FakeConn:
 class FakeDB:
     available = True
 
-    def __init__(self, signup_rows=None, nudges_sent=2, migration_applied=True):
+    def __init__(self, signup_rows=None, nudge_stamps=2, migration_applied=True):
         self.signup_rows = signup_rows or []
-        self.nudges_sent = nudges_sent
+        self.nudge_stamps = nudge_stamps
         self.migration_applied = migration_applied
         self.claimed = set()
 
@@ -138,7 +138,7 @@ class TestDigestAggregation:
             _signup_row(4, "test@gmail.com", verified=True, cv="cv.pdf", source="x"),
             _signup_row(5, "user_123@gmail.com", verified=True, source="y"),
             _signup_row(6, "admin@ricohunt.com", verified=True, source="z"),
-        ], nudges_sent=2)
+        ], nudge_stamps=2)
 
         summary, sent = _run(db)
 
@@ -153,7 +153,7 @@ class TestDigestAggregation:
         assert m["cv_uploaded"] == 1
         assert m["target_roles_set"] == 1
         assert m["preferred_cities_set"] == 1
-        assert m["nudges_sent"] == 2
+        assert m["nudges_stamped"] == 2
         assert m["top_sources"][0] == ("google / cpc", 2)
         assert ("direct / unknown", 1) in m["top_sources"]
 
@@ -168,11 +168,53 @@ class TestDigestAggregation:
         assert "reyaz@gmail.com" not in body
 
     def test_zero_signups_week(self, digest_env):
-        summary, sent = _run(FakeDB(signup_rows=[], nudges_sent=0))
+        summary, sent = _run(FakeDB(signup_rows=[], nudge_stamps=0))
         assert summary["status"] == "ok"
         assert summary["metrics"]["signups"] == 0
         assert len(sent) == 1
         assert "no signups this week" in sent[0]["body"]
+
+
+class TestNudgeMetricSemantics:
+    """profile_nudge_sent_at is an idempotency stamp, not a delivery receipt.
+
+    The nudge sweep also stamps (1) synthetic/internal skips, (2) complete-
+    profile skips, and (3) stamps BEFORE sending, so a failed send stays
+    stamped. The digest must therefore never present this count as emails
+    sent — only as processed/stamped. These tests pin that wording so a
+    future rename back to "sent" fails loudly.
+    """
+
+    def test_stamp_count_reported_as_processed_stamped_never_as_sent(self, digest_env):
+        # 3 stamps in the window; in reality these could be one synthetic skip,
+        # one complete-profile skip, and one failed-send-after-stamp — the
+        # column cannot distinguish them, so the digest must not claim sends.
+        db = FakeDB(signup_rows=[_signup_row(1, "reyaz@gmail.com")], nudge_stamps=3)
+        summary, sent = _run(db)
+
+        m = summary["metrics"]
+        assert m["nudges_stamped"] == 3
+        assert "nudges_sent" not in m  # old misleading key must stay gone
+
+        body = sent[0]["body"]
+        assert "Profile nudges processed/stamped this week: 3" in body
+        assert "not confirmed email sends" in body
+        assert "nudges sent" not in body.lower()
+
+    def test_stamp_metric_absent_when_column_unavailable(self, digest_env):
+        db = FakeDB(signup_rows=[], nudge_stamps=0)
+        original_cursor = FakeCursor.execute
+
+        def failing_nudge_query(self, sql, params=None):
+            if "profile_nudge_sent_at" in sql:
+                raise RuntimeError("column missing (migration 029 not applied)")
+            return original_cursor(self, sql, params)
+
+        with patch.object(FakeCursor, "execute", failing_nudge_query):
+            summary, sent = _run(db)
+
+        assert summary["metrics"]["nudges_stamped"] is None
+        assert "processed/stamped" not in sent[0]["body"]
 
 
 class TestDigestIdempotency:

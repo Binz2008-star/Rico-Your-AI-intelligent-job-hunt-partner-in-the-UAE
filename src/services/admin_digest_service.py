@@ -92,8 +92,12 @@ def _collect_metrics(conn, period_start: datetime, period_end: datetime) -> Dict
             cities += 1
         sources[row["signup_source"] or SIGNUP_SOURCE_FALLBACK] += 1
 
-    # Nudge count is best-effort: the column ships with migration 029.
-    nudges_sent = None
+    # Nudge stamp count is best-effort: the column ships with migration 029.
+    # NOTE: profile_nudge_sent_at is an idempotency stamp, not a delivery
+    # receipt — the sweep also stamps synthetic/internal skips, complete-profile
+    # skips, and stamps BEFORE sending (a failed send stays stamped). So this
+    # metric is "nudges processed/stamped", never "emails sent".
+    nudges_stamped = None
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -103,7 +107,7 @@ def _collect_metrics(conn, period_start: datetime, period_end: datetime) -> Dict
                 """,
                 (period_start, period_end),
             )
-            nudges_sent = cur.fetchone()["n"]
+            nudges_stamped = cur.fetchone()["n"]
     except Exception:
         logger.warning("admin_digest_nudge_count_unavailable")
 
@@ -114,7 +118,7 @@ def _collect_metrics(conn, period_start: datetime, period_end: datetime) -> Dict
         "cv_uploaded": cv,
         "target_roles_set": roles,
         "preferred_cities_set": cities,
-        "nudges_sent": nudges_sent,
+        "nudges_stamped": nudges_stamped,
         "top_sources": sources.most_common(TOP_SOURCES_LIMIT),
     }
 
@@ -136,8 +140,11 @@ def _build_digest_body(period_start, period_end, metrics: Dict[str, Any]) -> str
         f"Target roles set: {metrics['target_roles_set']}/{total} ({_pct(metrics['target_roles_set'], total)})",
         f"Preferred cities set: {metrics['preferred_cities_set']}/{total} ({_pct(metrics['preferred_cities_set'], total)})",
     ]
-    if metrics["nudges_sent"] is not None:
-        lines.append(f"Profile nudges sent this week: {metrics['nudges_sent']}")
+    if metrics["nudges_stamped"] is not None:
+        lines.append(
+            f"Profile nudges processed/stamped this week: {metrics['nudges_stamped']}"
+            " (includes skipped/idempotency stamps — not confirmed email sends)"
+        )
     lines.append("")
     if metrics["top_sources"]:
         lines.append("Top signup sources:")
