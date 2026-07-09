@@ -69,6 +69,61 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260709-002 — Security/data-risk deep dive on #127 and #198 (read-only)
+
+Status: done
+Owner: Roben / Claude
+Branch: docs/security-data-risk-deep-dive (docs-only persistence PR)
+Issue/PR: #127, #198 (read-only code-inspection deep dive; #263 deferred, not checked)
+
+#### Objective
+Verify, by direct code inspection against current `main`, whether the security/data-risk claims
+in #127 and #198 (flagged "needs full deep dive" by the 2026-07-09 board-health scan) are still
+live, before touching #758/#812/#446.
+
+#### Continuity Block
+- Task ID: TASK-20260709-002
+- GitHub issue/PR: #127, #198 (read-only; #263 deferred)
+- Branch: none during the deep dive itself (read-only); persisted via
+  `docs/security-data-risk-deep-dive`
+- Base branch: main
+- Last safe commit SHA: d2bd86093a155b91522c4cb02e9cd6db23b498d2
+- Current head SHA: d2bd86093a155b91522c4cb02e9cd6db23b498d2 (deep dive made no code commits)
+- Status: done
+- Files changed: none during the deep dive; this docs-only PR changes `PROJECT_STATUS.md`,
+  `CURRENT_STATE.md`, `TASKS.md`, `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md`,
+  `MASTER_INDEX.md`
+- Files intentionally not touched: all runtime code (read-only inspection only — `src/rico_db.py`,
+  `src/repositories/subscription_repo.py`, `src/repositories/profile_repo.py`,
+  `src/repositories/applications_repo.py`, `src/indeed_apply.py`, `src/run_daily.py`, `src/db.py`,
+  `src/services/chat_service.py`, `.github/workflows/daily.yml`, `.env.example`,
+  `requirements.txt`, `apps/web/components/auth/LoginForm.tsx`, `apps/web/app/subscription/page.tsx`
+  were all read, none edited), tests, Neon, Vercel/Render config, issue labels/state
+- What is complete: every named claim in #127 and #198 checked against current code (see handoff
+  for the full per-claim table); no Codex/automated review was run — this was direct manual
+  inspection only, and is not represented as a Codex-reviewed result
+- What is incomplete: #263 (product-behavior contradiction claims) not yet checked — deferred per
+  time constraints, same as the original scan noted; several lower-severity #198 findings (C3, C4,
+  H1, H2, H4, M1–M7, L1–L4) not checked
+- Known blockers: none
+- Validation already run: `grep`/`Read` inspection of the specific files/functions named in each
+  claim; cross-checked `profile_repo.py` call sites against the leak pattern documented in
+  `rico_db.py`'s own code comment
+- Validation still required: #263 deep dive (if picked up); the lower-severity #198 items listed
+  above
+- Next exact action: #446 read-only Neon precheck (count/identify affected rows, confirm #445
+  root cause still holds, prepare transaction + rollback SQL) — no cleanup execution without
+  explicit owner approval
+- Stop condition: do not execute the #446 cleanup, or start #758/#812, or fix the `profile_repo.py`
+  leak, until the owner has reviewed the precheck result and explicitly approves each next step
+- Rollback plan: revert this docs-only PR; no schema/env/runtime changes, isolated to the 5
+  workspace files above
+
+#### Full detail
+See `AI_WORKSPACE/HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for the complete per-claim
+table (claim / file-function checked / status / severity / smallest-safe-fix / tests-needed /
+rollback) for both #127 and #198.
+
 ### TASK-20260709-001 — Board-health scan (read-only)
 
 Status: done

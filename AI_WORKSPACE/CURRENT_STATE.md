@@ -1,7 +1,24 @@
 # Current State
 
-> **Reconciliation header — 2026-07-09 (later same day; supersedes the header
-> immediately below).** `main` has advanced to `f6996b4da04f6d3812fe873067e89247c8bb165e`.
+> **Reconciliation header — 2026-07-09 (latest; supersedes both headers below).**
+> `main` has advanced to `d2bd86093a155b91522c4cb02e9cd6db23b498d2` (#903, board-health
+> scan persisted). A read-only security/data-risk deep dive on #127 and #198 (per owner
+> decision after the board-health scan) found **no live SQL-injection, hardcoded-credential,
+> public-identity, or recommendation-TOCTOU security issue** — all those named claims are
+> already fixed in current code (confirmed by direct inspection, not automated review; no
+> Codex pass was run on this deep dive). One confirmed still-live issue: **`profile_repo.py`
+> leaks a DB connection** on 5 call sites (`with db.connect() as conn:` never closes) —
+> Medium severity, a real reliability risk, not a security breach. #263 remains flagged
+> needs-deep-dive (deferred, not yet checked). Full verdict, methodology, and per-claim
+> file/function evidence: `AI_WORKSPACE/HANDOFFS/2026-07-09-security-data-risk-deep-dive.md`.
+>
+> **Updated priority:** #446 read-only precheck → #446 cleanup (owner-approval only) → fix
+> `profile_repo.py` connection leak → #758 → #812. No fixes started yet; no code changed by
+> either the scan or the deep dive.
+>
+> **Reconciliation header — 2026-07-09 (earlier same day; now itself superseded by the header
+> above — `main` has since advanced from `f6996b4` to `d2bd860`).** At the time this header was
+> written, `main` had just advanced to `f6996b4da04f6d3812fe873067e89247c8bb165e`.
 > Both #900 (documentation audit + single-source-of-truth hardening, incl.
 > `PROJECT_STATUS.md`/`MASTER_INDEX.md`) and #902 (Rico Continuity Gate) are
 > **merged and live** — Vercel production deployment `dpl_6uiUB8yuF1FAf4uyBsNN4G8BToZQ`
