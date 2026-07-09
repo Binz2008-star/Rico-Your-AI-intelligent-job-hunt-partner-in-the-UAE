@@ -79,6 +79,16 @@ Each task should have:
 - verification steps
 - rollback plan
 
+## Continuity Gate (read before writing anything)
+
+Every agent starts by reading, in order: this file → `TASKS.md` (active
+Continuity Blocks) → `CURRENT_STATE.md` → the latest `HANDOFFS/*` → the
+active PR body → the linked GitHub issue. Every agent ends by writing/updating
+the Continuity Block for the task it touched, and — if the task isn't
+`done`/`verified` — a dated `HANDOFFS/<date>-<topic>.md` entry with the
+Continuity Block copied in. A task with no Continuity Block, or one left
+`in_progress` with no "next exact action," is not a valid stopping point.
+
 ## Branch ownership
 
 Use one writer per branch. Other tools or reviewers can inspect and comment without editing the same branch.
