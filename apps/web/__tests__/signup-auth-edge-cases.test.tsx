@@ -43,7 +43,7 @@ function fillAndSubmit(email = "test@example.com", password = "Password1!") {
   fireEvent.change(screen.getByPlaceholderText("Your name"), { target: { value: "Test User" } });
   fireEvent.change(screen.getByPlaceholderText("you@example.com"), { target: { value: email } });
   fireEvent.change(screen.getByPlaceholderText("••••••••"), { target: { value: password } });
-  fireEvent.click(screen.getByRole("button", { name: /begin journey/i }));
+  fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 }
 
 afterEach(() => {

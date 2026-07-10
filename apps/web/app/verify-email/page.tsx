@@ -1,10 +1,9 @@
 "use client";
 
-import { AuraGlow } from "@/components/ui/AuraGlow";
-import { GlassPanel } from "@/components/ui/GlassPanel";
-import { MaterialIcon } from "@/components/ui/MaterialIcon";
-import { PageTransition } from "@/components/ui/PageTransition";
+import { AtelierAuthShell } from "@/components/auth/AtelierAuthShell";
 import { verifyEmail, resendVerification } from "@/lib/api";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { Suspense, useEffect, useState } from "react";
@@ -14,12 +13,12 @@ type Status = "loading" | "success" | "error";
 function VerifyEmailContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const token = searchParams.get("token") ?? "";
 
     const [status, setStatus] = useState<Status>(() => token ? "loading" : "error");
-    const [message, setMessage] = useState(() =>
-        token ? "" : "No verification token found. Please use the link from your email."
-    );
+    const [message, setMessage] = useState(() => token ? "" : t("atlVerifyNoToken"));
     const [resendEmail, setResendEmail] = useState("");
     const [resendLoading, setResendLoading] = useState(false);
     const [resendMessage, setResendMessage] = useState("");
@@ -38,9 +37,9 @@ function VerifyEmailContent() {
             })
             .catch(() => {
                 setStatus("error");
-                setMessage("This verification link is invalid, expired, or has already been used.");
+                setMessage(t("atlVerifyInvalid"));
             });
-    }, [token, router]);
+    }, [token, router, t]);
 
     const handleResend = async () => {
         if (!resendEmail) return;
@@ -48,104 +47,101 @@ function VerifyEmailContent() {
         setResendMessage("");
         try {
             await resendVerification(resendEmail);
-            setResendMessage("Verification email sent. Please check your inbox.");
+            setResendMessage(t("verificationEmailSent"));
         } catch {
-            setResendMessage("Couldn't resend right now. Please try again in a moment.");
+            setResendMessage(t("couldNotResend"));
         } finally {
             setResendLoading(false);
         }
     };
 
-    return (
-        <main className="flex min-h-screen items-center justify-center bg-background px-4 relative overflow-hidden">
-            <AuraGlow variant="cyan" position="top-right" className="animate-pulse-magenta" />
-            <AuraGlow variant="magenta" position="bottom-left" className="animate-pulse-magenta" style={{ animationDelay: "-2s" }} />
-
-            <div className="w-full max-w-sm relative z-10">
-                <PageTransition>
-                    <GlassPanel className="w-full p-8 rounded-2xl border border-white/10 text-center">
-                        {status === "loading" && (
-                            <>
-                                <MaterialIcon icon="hourglass_empty" className="text-primary text-4xl animate-spin mb-4" />
-                                <p className="text-on-surface-variant text-sm">Verifying your email…</p>
-                            </>
-                        )}
-
-                        {status === "success" && (
-                            <>
-                                <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
-                                    <MaterialIcon icon="check_circle" className="text-primary text-3xl" />
-                                </div>
-                                <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">Email verified!</h1>
-                                <p className="text-on-surface-variant text-sm mb-6">
-                                    Welcome to RicoHunt. You can now sign in.
-                                </p>
-                                <Link
-                                    href="/login"
-                                    className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
-                                >
-                                    <MaterialIcon icon="arrow_forward" className="text-sm" />
-                                    Sign in now
-                                </Link>
-                            </>
-                        )}
-
-                        {status === "error" && (
-                            <>
-                                <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
-                                    <MaterialIcon icon="error_outline" className="text-red-400 text-3xl" />
-                                </div>
-                                <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">Verification failed</h1>
-                                <p className="text-on-surface-variant text-sm mb-6">{message}</p>
-
-                                <div className="space-y-3">
-                                    <p className="text-xs text-on-surface-variant">Need a new link? Enter your email:</p>
-                                    <input
-                                        type="email"
-                                        value={resendEmail}
-                                        onChange={(e) => setResendEmail(e.target.value)}
-                                        className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-2.5 text-on-surface text-sm focus:outline-none focus:border-primary transition-all"
-                                        placeholder="you@example.com"
-                                    />
-                                    {resendMessage && (
-                                        <p className="text-xs text-primary/80">{resendMessage}</p>
-                                    )}
-                                    <button
-                                        onClick={handleResend}
-                                        disabled={resendLoading || !resendEmail}
-                                        className="w-full bg-primary/10 text-primary rounded-lg px-4 py-2.5 text-sm font-label-caps uppercase tracking-widest hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        {resendLoading ? (
-                                            <MaterialIcon icon="hourglass_empty" className="text-sm animate-spin" />
-                                        ) : (
-                                            <MaterialIcon icon="refresh" className="text-sm" />
-                                        )}
-                                        Resend verification email
-                                    </button>
-                                </div>
-
-                                <div className="mt-6">
-                                    <Link href="/login" className="text-sm text-on-surface-variant hover:text-primary transition-colors">
-                                        Back to login
-                                    </Link>
-                                </div>
-                            </>
-                        )}
-                    </GlassPanel>
-                </PageTransition>
+    if (status === "loading") {
+        return (
+            <div className="atl-status">
+                <span className="atl-status-badge" aria-hidden="true">
+                    <span className="atl-spin" />
+                </span>
+                <div>
+                    <h1 className="atl-auth-title">{t("atlVerifyingTitle")}</h1>
+                    <p className="atl-auth-sub" style={{ marginBottom: 0 }}>{t("atlVerifyingSub")}</p>
+                </div>
             </div>
-        </main>
+        );
+    }
+
+    if (status === "success") {
+        return (
+            <div className="atl-status">
+                <span className="atl-status-badge" aria-hidden="true">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                </span>
+                <div>
+                    <h1 className="atl-auth-title">{t("atlVerifiedTitle")}</h1>
+                    <p className="atl-auth-sub" style={{ marginBottom: 0 }}>{t("atlVerifiedSub")}</p>
+                </div>
+                <div className="atl-auth-foot" style={{ textAlign: "start" }}>
+                    <Link href="/login" className="atl-link">{t("atlSignInNow")}</Link>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="atl-status">
+            <span className="atl-status-badge is-error" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 8v5M12 16.5h.01" />
+                </svg>
+            </span>
+            <div>
+                <h1 className="atl-auth-title">{t("atlVerifyFailedTitle")}</h1>
+                <p className="atl-auth-sub" style={{ marginBottom: 0 }}>{message}</p>
+            </div>
+
+            <div className="atl-field">
+                <label htmlFor="resend-email" className="atl-field-label">{t("atlResetNeedEmail")}</label>
+                <input
+                    id="resend-email"
+                    type="email"
+                    value={resendEmail}
+                    onChange={(e) => setResendEmail(e.target.value)}
+                    className="atl-input"
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                />
+            </div>
+            {resendMessage && <p className="atl-note" style={{ textAlign: "start" }}>{resendMessage}</p>}
+            <button
+                onClick={handleResend}
+                disabled={resendLoading || !resendEmail}
+                className="atl-btn atl-btn-ghost"
+            >
+                {resendLoading ? (
+                    <><span className="atl-spin" /><span>{t("atlSending")}</span></>
+                ) : (
+                    <span>{t("resendVerification")}</span>
+                )}
+            </button>
+
+            <hr className="atl-auth-divider" />
+            <div className="atl-auth-foot">
+                <Link href="/login" className="atl-link">{t("atlBackToSignIn")}</Link>
+            </div>
+        </div>
     );
 }
 
 export default function VerifyEmailPage() {
     return (
         <Suspense fallback={
-            <main className="flex min-h-screen items-center justify-center bg-background px-4">
-                <p className="text-sm text-on-surface-variant">Loading…</p>
-            </main>
+            <AtelierAuthShell><p className="atl-note">…</p></AtelierAuthShell>
         }>
-            <VerifyEmailContent />
+            <AtelierAuthShell>
+                <VerifyEmailContent />
+            </AtelierAuthShell>
         </Suspense>
     );
 }

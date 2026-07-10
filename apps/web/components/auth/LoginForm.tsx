@@ -1,9 +1,6 @@
 'use client';
 
-import { AuraGlow } from '@/components/ui/AuraGlow';
-import { GlassPanel } from '@/components/ui/GlassPanel';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
-import { PageTransition, StaggerChildren } from '@/components/ui/PageTransition';
+import { AtelierAuthShell } from '@/components/auth/AtelierAuthShell';
 import { ApiError, resendVerification } from '@/lib/api';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -69,149 +66,126 @@ export function LoginForm({ initialEmail = '' }: { initialEmail?: string }) {
     };
 
     return (
-        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-            <AuraGlow variant="magenta" position="top-right" className="animate-pulse-magenta" />
-            <AuraGlow variant="cyan" position="bottom-left" className="animate-pulse-magenta" style={{ animationDelay: '-2s' }} />
+        <AtelierAuthShell>
+            <h1 className="atl-auth-title">{t('atlLoginTitle')}</h1>
+            <p className="atl-auth-sub">{t('atlLoginSub')}</p>
 
-            <PageTransition>
-                <GlassPanel className="w-full max-w-md p-8 rounded-2xl border border-white/10 transition-all duration-300">
-                    <StaggerChildren baseDelay={100} className="text-center mb-8">
-                        <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">{t('welcomeBack')}</h1>
-                        <p className="text-body-md text-on-surface-variant">{t('accessTrajectory')}</p>
-                    </StaggerChildren>
+            {maintenanceMode && (
+                <div className="atl-alert atl-alert-error" style={{ marginBottom: 18 }}>
+                    <strong>{t('backendMaintenance')}</strong>
+                    <p style={{ margin: '6px 0 0' }}>{t('backendMaintenanceAuth')}</p>
+                </div>
+            )}
 
-                    {maintenanceMode && (
-                        <div className="mb-6 rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-left">
-                            <p className="text-sm font-semibold text-amber-300">{t('backendMaintenance')}</p>
-                            <p className="mt-1 text-xs leading-relaxed text-amber-100/80">
-                                {t('backendMaintenanceAuth')}
-                            </p>
-                        </div>
-                    )}
+            <form onSubmit={handleSubmit} className="atl-auth-form">
+                <div className="atl-field">
+                    <label htmlFor="email" className="atl-field-label">{t('atlEmail')}</label>
+                    <input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="atl-input"
+                        placeholder="you@example.com"
+                        autoComplete="email"
+                        required
+                    />
+                </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div>
-                            <label htmlFor="email" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">
-                                {t('email')}
-                            </label>
-                            <input
-                                id="email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all"
-                                placeholder="you@example.com"
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <div className="flex items-center justify-between mb-2">
-                                <label htmlFor="password" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">
-                                    {t('password')}
-                                </label>
-                                <a
-                                    href="/forgot-password"
-                                    className="text-xs text-primary hover:text-primary/80 transition-colors"
-                                >
-                                    {t('forgotPassword')}
-                                </a>
-                            </div>
-                            <div className="relative">
-                                <input
-                                    id="password"
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 pr-12 text-on-surface focus:outline-none focus:border-primary transition-all"
-                                    placeholder="••••••••"
-                                    required
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword((prev) => !prev)}
-                                    aria-label={showPassword ? t('hidePassword') : t('showPassword')}
-                                    aria-pressed={showPassword}
-                                    tabIndex={0}
-                                    className="absolute inset-y-0 right-0 flex items-center px-3 text-on-surface-variant hover:text-primary transition-colors focus:outline-none focus-visible:text-primary"
-                                >
-                                    <MaterialIcon icon={showPassword ? 'visibility_off' : 'visibility'} className="text-lg" />
-                                </button>
-                            </div>
-                        </div>
-
+                <div className="atl-field">
+                    <div className="atl-field-labelrow">
+                        <label htmlFor="password" className="atl-field-label">{t('atlPassword')}</label>
+                        <Link href="/forgot-password" className="atl-link-quiet">
+                            {t('atlForgotPasswordLink')}
+                        </Link>
+                    </div>
+                    <div className="atl-input-wrap">
+                        <input
+                            id="password"
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="atl-input"
+                            placeholder="••••••••"
+                            autoComplete="current-password"
+                            required
+                        />
                         <button
-                            type="submit"
-                            disabled={isLoading || maintenanceMode}
-                            className="w-full bg-gold text-[#0a0a1a] rounded-lg px-6 py-4 font-label-caps uppercase tracking-widest font-semibold hover:bg-gold-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(245,166,35,0.28)]"
+                            type="button"
+                            onClick={() => setShowPassword((prev) => !prev)}
+                            aria-label={showPassword ? t('hidePassword') : t('showPassword')}
+                            aria-pressed={showPassword}
+                            className="atl-reveal"
                         >
-                            {maintenanceMode ? (
-                                <span>{t('backendMaintenance')}</span>
-                            ) : isLoading ? (
-                                <>
-                                    <MaterialIcon icon="hourglass_empty" className="animate-spin" />
-                                    <span>{t('authenticating')}</span>
-                                </>
+                            {showPassword ? (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M17.9 17.9A10.4 10.4 0 0 1 12 20C5 20 1 12 1 12a19.6 19.6 0 0 1 5.1-6M9.9 4.2A9.5 9.5 0 0 1 12 4c7 0 11 8 11 8a19.5 19.5 0 0 1-2.2 3.2M1 1l22 22M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+                                </svg>
                             ) : (
-                                <>
-                                    <span>{t('accessIntelligence')}</span>
-                                    <MaterialIcon icon="arrow_forward" />
-                                </>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
                             )}
                         </button>
-                    </form>
+                    </div>
+                </div>
 
-                    {error && (
-                        <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center animate-[fadeSlideIn_0.3s_ease-out]">
-                            {error}
+                <button type="submit" disabled={isLoading || maintenanceMode} className="atl-btn atl-btn-primary">
+                    {maintenanceMode ? (
+                        <span>{t('backendMaintenance')}</span>
+                    ) : isLoading ? (
+                        <><span className="atl-spin" /><span>{t('atlAuthenticating')}</span></>
+                    ) : (
+                        <span>{t('atlSignIn')}</span>
+                    )}
+                </button>
+            </form>
 
-                            {showUnverified && (
-                                <div className="mt-3 pt-3 border-t border-red-500/20 space-y-2">
-                                    {resendMessage ? (
-                                        <p className="text-xs text-primary/80">{resendMessage}</p>
-                                    ) : (
-                                        <button
-                                            onClick={handleResend}
-                                            disabled={resendLoading || !email}
-                                            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
-                                        >
-                                            {resendLoading ? (
-                                                <MaterialIcon icon="hourglass_empty" className="text-sm animate-spin" />
-                                            ) : (
-                                                <MaterialIcon icon="refresh" className="text-sm" />
-                                            )}
-                                            {t('resendVerification')}
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+            {error && (
+                <div className="atl-alert atl-alert-error" style={{ marginTop: 16 }}>
+                    {error}
 
-                            {!showUnverified && failedAttempts >= 2 && (
-                                <div className="mt-3 pt-3 border-t border-red-500/20">
-                                    <p className="text-xs text-red-300/80 mb-2">{t('stillHavingTrouble')}</p>
-                                    <Link
-                                        href="/forgot-password"
-                                        className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
-                                    >
-                                        <MaterialIcon icon="lock_reset" className="text-sm" />
-                                        {t('resetPassword')}
-                                    </Link>
-                                </div>
+                    {showUnverified && (
+                        <div className="atl-alert-inline">
+                            {resendMessage ? (
+                                <span>{resendMessage}</span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleResend}
+                                    disabled={resendLoading || !email}
+                                    className="atl-link"
+                                >
+                                    {resendLoading ? t('atlSending') : t('resendVerification')}
+                                </button>
                             )}
                         </div>
                     )}
 
-                    <div className="mt-6 text-center">
-                        <a href="/signup" className="text-sm text-on-surface-variant hover:text-primary transition-colors">
-                            {t('createAccount')}
-                        </a>
-                    </div>
-                </GlassPanel>
-            </PageTransition>
+                    {!showUnverified && failedAttempts >= 2 && (
+                        <div className="atl-alert-inline">
+                            <span>{t('stillHavingTrouble')}</span>
+                            <Link href="/forgot-password" className="atl-link">
+                                {t('resetPassword')}
+                            </Link>
+                        </div>
+                    )}
+                </div>
+            )}
 
-            <div className="fixed top-0 left-0 w-full h-full pointer-events-none">
-                <div className="absolute inset-0 opacity-[0.04] bg-[url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%27.85%27 numOctaves=%274%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%27.025%27/%3E%3C/svg%3E')]" />
+            <p className="atl-auth-legal">
+                {t('atlLegal')}{' '}
+                <Link href="/terms">{t('atlLegalTerms')}</Link>{' '}
+                {t('atlLegalAnd')}{' '}
+                <Link href="/privacy">{t('atlLegalPrivacy')}</Link>.
+            </p>
+
+            <hr className="atl-auth-divider" />
+
+            <div className="atl-auth-foot">
+                <Link href="/signup" className="atl-link">{t('atlNoAccount')}</Link>
             </div>
-        </div>
+        </AtelierAuthShell>
     );
 }
