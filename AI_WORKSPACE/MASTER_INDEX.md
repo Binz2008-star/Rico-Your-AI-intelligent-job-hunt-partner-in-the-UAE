@@ -64,7 +64,8 @@ edit for content); the newest doubles as the current status pointer.
 
 | Handoff | Status |
 | --- | --- |
-| `HANDOFFS/2026-07-10-fe-test-health-ci-gate.md` | Latest (current pointer) |
+| `HANDOFFS/2026-07-10-fe-green-residual-fixes.md` | Latest (current pointer) |
+| `HANDOFFS/2026-07-10-fe-test-health-ci-gate.md` | Historical |
 | `HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` | Historical |
 | `HANDOFFS/2026-07-09-446-stage1-cleanup.md` | Historical |
 | `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` | Historical |

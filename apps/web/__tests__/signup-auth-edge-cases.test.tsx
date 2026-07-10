@@ -66,7 +66,10 @@ describe("SignupForm error mapping", () => {
   });
 
   it("shows validation message on 400", async () => {
-    mockRegister.mockRejectedValueOnce(new ApiError("Bad request", 400, {}));
+    // Empty backend message exercises the generic fallback copy: mapSignupError
+    // uses `err.message || checkDetails`, so a non-empty message would render
+    // verbatim and never reach the fallback this test asserts.
+    mockRegister.mockRejectedValueOnce(new ApiError("", 400, {}));
     fillAndSubmit();
     await waitFor(
       () => expect(screen.getByText(/check your details/i)).toBeInTheDocument(),
@@ -76,7 +79,8 @@ describe("SignupForm error mapping", () => {
   });
 
   it("shows validation message on 422", async () => {
-    mockRegister.mockRejectedValueOnce(new ApiError("Unprocessable", 422, {}));
+    // Empty backend message exercises the generic fallback copy (see the 400 case).
+    mockRegister.mockRejectedValueOnce(new ApiError("", 422, {}));
     fillAndSubmit();
     await waitFor(
       () => expect(screen.getByText(/check your details/i)).toBeInTheDocument(),

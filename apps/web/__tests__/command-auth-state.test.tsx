@@ -45,8 +45,10 @@ describe("/command auth-state containment (issue #281)", () => {
 
     render(<CommandPage />);
 
-    // Once /me resolves, the authenticated controls appear…
-    expect(await screen.findByText("Sign out")).toBeInTheDocument();
+    // Once /me resolves, the authenticated controls appear. The logout affordance
+    // is an accessible control (sidebar avatar button + mobile drawer item) labelled
+    // "Log out", not visible "Sign out" text — assert on its accessible name.
+    expect((await screen.findAllByRole("button", { name: /log out/i })).length).toBeGreaterThan(0);
     // …and the public links must NOT be rendered for a signed-in user.
     expect(screen.queryByText("Sign up free")).not.toBeInTheDocument();
     expect(screen.queryByText("Sign in")).not.toBeInTheDocument();
@@ -67,7 +69,7 @@ describe("/command auth-state containment (issue #281)", () => {
     // "Sign in" renders in two responsive variants (compact top bar + slide-in
     // drawer), so assert presence rather than a single match.
     expect(screen.getAllByText("Sign in").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Sign out")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /log out/i })).not.toBeInTheDocument();
   });
 
   it("/me resolving as authenticated always yields authenticated audience, never public", async () => {
@@ -82,7 +84,7 @@ describe("/command auth-state containment (issue #281)", () => {
     render(<CommandPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Sign out")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /log out/i }).length).toBeGreaterThan(0);
     });
     // Authenticated user must never see public links — guards against fallback timeout
     // silently downgrading an authenticated session to guest (regression for 2 s timeout).
@@ -105,6 +107,6 @@ describe("/command auth-state containment (issue #281)", () => {
     // During 'checking' a neutral placeholder is shown — neither auth state is revealed.
     expect(screen.queryByText("Sign up free")).not.toBeInTheDocument();
     expect(screen.queryByText("Sign in")).not.toBeInTheDocument();
-    expect(screen.queryByText("Sign out")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /log out/i })).not.toBeInTheDocument();
   });
 });
