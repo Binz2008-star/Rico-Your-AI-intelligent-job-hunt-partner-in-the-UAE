@@ -20,43 +20,49 @@ const fraunces = Fraunces({
    corner ticks. These tokens drive the below-the-fold sections only; the hero stays
    on the dark V2 canvas untouched. */
 const PAPER = {
-    bg: "#EDE6DA",
-    plate: "#F6F1E8",
-    ink: "#211E1A",
-    ink70: "rgba(33,30,26,0.72)",
-    ink55: "rgba(33,30,26,0.55)",
-    hair: "rgba(33,30,26,0.16)",
-    red: "#C34B2C",
+    bg: "#F0E9DC",
+    plate: "#F7F1E6",
+    inset: "#EDE5D6",
+    ink: "#211C15",
+    ink70: "rgba(33,28,21,0.70)",
+    ink55: "rgba(33,28,21,0.52)",
+    hair: "rgba(33,28,21,0.16)",
+    red: "#C24E2C",
 } as const;
 
-/* Below-the-fold section heading — Atelier prospectus voice: ink serif display at
-   an editorial scale with the emphasised phrase in italic. Copy comes through as-is. */
-function SectionHeading({ lead, emphasis, className = "" }: { lead: React.ReactNode; emphasis: React.ReactNode; className?: string }) {
+/* Editorial section header — the reference's left-aligned "§ THE IDEA /
+   Three quiet convictions, held stubbornly." device: a red mono kicker (square
+   mark + label + em-dash rule) over a large left-aligned ink serif heading with
+   the emphasised phrase in italic. Copy comes through verbatim. */
+function EditorialHeader({ kicker, lead, emphasis, className = "" }: { kicker: React.ReactNode; lead: React.ReactNode; emphasis: React.ReactNode; className?: string }) {
     return (
-        <h2
-            className={`text-[1.9rem] leading-[1.12] sm:text-[2.5rem] sm:leading-[1.08] font-normal tracking-[-0.01em] ${className}`}
-            style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif", color: PAPER.ink }}
-        >
-            {lead}{" "}
-            <em className="italic font-semibold">{emphasis}</em>
-        </h2>
+        <div className={className}>
+            <div className="flex items-center gap-3 mb-6">
+                <span className="w-[9px] h-[9px] flex-shrink-0" style={{ background: PAPER.red }} aria-hidden="true" />
+                <span className="text-[11px] font-mono uppercase tracking-[0.24em]" style={{ color: PAPER.red }}>{kicker}</span>
+                <span className="h-px flex-1 max-w-[240px]" style={{ background: PAPER.hair }} aria-hidden="true" />
+            </div>
+            <h2
+                className="font-normal tracking-[-0.015em] text-[2.2rem] leading-[1.06] sm:text-[3.1rem] sm:leading-[1.02] max-w-3xl"
+                style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif", color: PAPER.ink }}
+            >
+                {lead}{" "}
+                <em className="italic font-semibold">{emphasis}</em>
+            </h2>
+        </div>
     );
 }
 
-/* Atelier editorial eyebrow — red mono small-caps label with a red dot and ink
-   hairline rules (the reference's "§ THE IDEA" / "INTERVIEW ——— TRANSCRIBED" device). */
-function SectionEyebrow({ children, align = "center", className = "" }: { children: React.ReactNode; align?: "center" | "start"; className?: string }) {
-    const label = (
-        <p className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.22em]" style={{ color: PAPER.red }}>
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: PAPER.red }} aria-hidden="true" />
-            {children}
-        </p>
+/* Plate header row — mono uppercase label + em-dash rule (+ optional right node),
+   the reference's "PLATE 01 — SAMPLE MATCH … [ILLUSTRATION]" plate caption. */
+function PlateLabel({ children, right, className = "" }: { children: React.ReactNode; right?: React.ReactNode; className?: string }) {
+    return (
+        <div className={`flex items-center gap-3 ${className}`}>
+            <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: PAPER.ink55 }}>{children}</span>
+            <span className="h-px flex-1" style={{ background: PAPER.hair }} aria-hidden="true" />
+            {right}
+        </div>
     );
-    const rule = <span className="h-px w-8" style={{ background: PAPER.hair }} aria-hidden="true" />;
-    if (align === "start") {
-        return <div className={`flex items-center gap-3 ${className}`}>{label}{rule}</div>;
-    }
-    return <div className={`flex items-center justify-center gap-3 ${className}`}>{rule}{label}{rule}</div>;
 }
 
 /* Ink-on-paper plate with corner tick-marks — the reference's "PLATE 01" card frame. */
@@ -586,17 +592,18 @@ function FeatureCard({ feature }: { feature: typeof FEATURES[0] }) {
 
 function StoryCard({ story }: { story: typeof STORIES[0] }) {
     return (
-        <Plate className="flex-shrink-0 w-80 p-6 flex flex-col gap-4">
-            <div className="flex items-center gap-2">
+        <Plate className="flex-shrink-0 w-[19rem] p-6 flex flex-col gap-5">
+            <div className="flex items-start justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-[0.2em] pt-2" style={{ color: PAPER.ink55 }}>Match</span>
                 <span
-                    className="text-xs font-mono uppercase tracking-widest px-2 py-0.5 rounded-full tabular-nums"
-                    style={{ color: PAPER.red, background: "rgba(195,75,44,0.10)" }}
+                    className="inline-flex items-center justify-center w-14 h-14 rounded-full text-[13px] font-mono tabular-nums"
+                    style={{ border: `1.5px solid ${PAPER.red}`, color: PAPER.red }}
                 >
-                    Match {story.score}
+                    {story.score}
                 </span>
             </div>
-            <p className="text-[0.95rem] leading-relaxed flex-1 italic" style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif", color: PAPER.ink }}>&ldquo;{story.quote}&rdquo;</p>
-            <div>
+            <p className="text-[1.05rem] leading-snug flex-1 italic" style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif", color: PAPER.ink }}>&ldquo;{story.quote}&rdquo;</p>
+            <div className="pt-4" style={{ borderTop: `1px solid ${PAPER.hair}` }}>
                 <p className="text-sm font-semibold" style={{ color: PAPER.ink }}>{story.name}</p>
                 <p className="text-xs" style={{ color: PAPER.ink55 }}>{story.title}</p>
             </div>
@@ -604,20 +611,22 @@ function StoryCard({ story }: { story: typeof STORIES[0] }) {
     );
 }
 
-function FaqItem({ faq }: { faq: typeof FAQS[0] }) {
+function FaqItem({ faq, index }: { faq: typeof FAQS[0]; index: number }) {
     const [open, setOpen] = useState(false);
+    const num = String(index + 1).padStart(2, "0");
     return (
         <div style={{ borderBottom: `1px solid ${PAPER.hair}` }} className="last:border-0">
             <button
                 onClick={() => setOpen(!open)}
-                className="w-full flex items-center justify-between py-5 text-left gap-4 group cursor-pointer"
+                className="w-full flex items-start gap-4 py-5 text-left group cursor-pointer"
                 aria-expanded={open}
             >
-                <span className="text-sm font-medium transition-colors" style={{ color: open ? PAPER.ink : PAPER.ink70 }}>
+                <span className="text-[11px] font-mono tabular-nums pt-1 flex-shrink-0" style={{ color: PAPER.red }} aria-hidden="true">{num}</span>
+                <span className="flex-1 text-[0.95rem] font-medium transition-colors" style={{ color: open ? PAPER.ink : PAPER.ink70 }}>
                     {faq.q}
                 </span>
                 <span
-                    className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-transform duration-200 ${open ? "rotate-45" : ""}`}
+                    className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-transform duration-200 mt-0.5 ${open ? "rotate-45" : ""}`}
                     style={{ border: `1px solid ${open ? PAPER.red : PAPER.hair}` }}
                 >
                     <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5" style={{ color: open ? PAPER.red : PAPER.ink55 }}>
@@ -626,7 +635,7 @@ function FaqItem({ faq }: { faq: typeof FAQS[0] }) {
                 </span>
             </button>
             {open && (
-                <p className="pb-5 text-sm leading-relaxed pr-8" style={{ color: PAPER.ink70 }}>{faq.a}</p>
+                <p className="pb-5 pl-9 pr-8 text-sm leading-relaxed" style={{ color: PAPER.ink70 }}>{faq.a}</p>
             )}
         </div>
     );
@@ -820,47 +829,41 @@ export default function LandingPageV2() {
                     style={{ background: PAPER.bg, color: PAPER.ink, borderTop: `1px solid ${PAPER.red}` }}
                 >
 
-                {/* ── Why Rico ── */}
+                {/* ── Why Rico — bare numbered editorial list (reference "WHY THIS FITS" 01/02/03) ── */}
                 <section className="relative px-4 pt-24 pb-20">
                     <div className="max-w-5xl mx-auto">
-                        <div className="text-center mb-12">
-                            <SectionEyebrow className="mb-4">Why Rico</SectionEyebrow>
-                            <SectionHeading lead="Built for the" emphasis="UAE job market" />
-                        </div>
-                        <div className="grid md:grid-cols-3 gap-6">
+                        <EditorialHeader kicker="Why Rico" lead="Built for the" emphasis="UAE job market" className="mb-16" />
+                        <div className="grid md:grid-cols-3 gap-x-12 gap-y-12">
                             {WHY_RICO.map((item) => (
-                                <Plate key={item.num} className="p-6 transition-shadow hover:shadow-[0_6px_22px_-14px_rgba(33,30,26,0.35)]">
-                                    <p className="flex items-center gap-2.5 mb-4">
-                                        <span className="font-mono text-[11px] font-semibold tracking-[0.18em] tabular-nums" style={{ color: PAPER.red }}>{item.num}</span>
+                                <div key={item.num}>
+                                    <div className="flex items-center gap-3 mb-5">
+                                        <span className="font-mono text-[13px] font-semibold tracking-[0.12em] tabular-nums" style={{ color: PAPER.red }}>{item.num}</span>
                                         <span className="h-px flex-1" style={{ background: PAPER.hair }} aria-hidden="true" />
-                                    </p>
-                                    <h3 className="text-sm font-semibold mb-2" style={{ color: PAPER.ink }}>{item.headline}</h3>
-                                    <p className="text-sm leading-relaxed" style={{ color: PAPER.ink70 }}>{item.body}</p>
-                                </Plate>
+                                    </div>
+                                    <h3 className="text-lg font-semibold mb-2.5 tracking-tight" style={{ color: PAPER.ink }}>{item.headline}</h3>
+                                    <p className="text-[0.9rem] leading-relaxed" style={{ color: PAPER.ink70 }}>{item.body}</p>
+                                </div>
                             ))}
                         </div>
                     </div>
                 </section>
 
                 {/* ── Employer logo marquee ── */}
-                <section className="py-12 overflow-hidden" style={{ borderTop: `1px solid ${PAPER.hair}`, borderBottom: `1px solid ${PAPER.hair}` }}>
-                    <p className="text-center text-xs font-mono uppercase tracking-widest mb-6" style={{ color: PAPER.ink55 }}>
-                        Jobs from leading UAE employers
-                    </p>
+                <section className="py-14 overflow-hidden" style={{ borderTop: `1px solid ${PAPER.hair}`, borderBottom: `1px solid ${PAPER.hair}` }}>
+                    <div className="max-w-5xl mx-auto px-4 mb-8">
+                        <PlateLabel>Jobs from leading UAE employers</PlateLabel>
+                    </div>
                     <MarqueeRow items={EMPLOYERS_ROW1} />
                     <div className="mt-3">
                         <MarqueeRow items={EMPLOYERS_ROW2} reverse />
                     </div>
                 </section>
 
-                {/* ── Features grid ── */}
-                <section id="features" className="px-4 py-20">
+                {/* ── Features — illustration plates (reference "PLATE 01" illustration card) ── */}
+                <section id="features" className="px-4 py-24">
                     <div className="max-w-5xl mx-auto">
-                        <div className="text-center mb-12">
-                            <SectionEyebrow className="mb-3">Features</SectionEyebrow>
-                            <SectionHeading lead="Every tool your" emphasis="job search needs" />
-                        </div>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <EditorialHeader kicker="Features" lead="Every tool your" emphasis="job search needs" className="mb-14" />
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                             {FEATURES.map((f) => (
                                 <FeatureCard key={f.title} feature={f} />
                             ))}
@@ -871,11 +874,8 @@ export default function LandingPageV2() {
                 {/* ── Success stories carousel ── */}
                 <section className="py-20" style={{ borderTop: `1px solid ${PAPER.hair}`, borderBottom: `1px solid ${PAPER.hair}` }}>
                     <div className="max-w-5xl mx-auto px-4">
-                        <div className="flex items-end justify-between mb-8">
-                            <div>
-                                <SectionEyebrow align="start" className="mb-3">Success Stories</SectionEyebrow>
-                                <SectionHeading lead="Real results," emphasis="real candidates" />
-                            </div>
+                        <div className="flex items-end justify-between mb-10">
+                            <EditorialHeader kicker="Success Stories" lead="Real results," emphasis="real candidates" />
                             <div className="hidden sm:flex items-center gap-2">
                                 <button
                                     onClick={() => scrollCarousel(-1)}
@@ -913,75 +913,52 @@ export default function LandingPageV2() {
                     </div>
                 </section>
 
-                {/* ── CTA highlight — ink "colophon" plate stamped on the cream page ── */}
-                <section className="px-4 py-20">
+                {/* ── CTA — editorial band (reference "§ THE IDEA" big-serif + ink pill) ── */}
+                <section className="px-4 py-24" style={{ borderTop: `1px solid ${PAPER.hair}` }}>
                     <div className="max-w-5xl mx-auto">
-                        <div className="relative overflow-hidden rounded-[6px] p-10 sm:p-16 text-center" style={{ background: PAPER.ink }}>
-                            {/* corner ticks in cream (inverse plate) */}
-                            <span className="absolute top-2 left-2 w-2.5 h-2.5" style={{ borderTop: "1px solid rgba(246,241,232,0.3)", borderLeft: "1px solid rgba(246,241,232,0.3)" }} aria-hidden="true" />
-                            <span className="absolute top-2 right-2 w-2.5 h-2.5" style={{ borderTop: "1px solid rgba(246,241,232,0.3)", borderRight: "1px solid rgba(246,241,232,0.3)" }} aria-hidden="true" />
-                            <span className="absolute bottom-2 left-2 w-2.5 h-2.5" style={{ borderBottom: "1px solid rgba(246,241,232,0.3)", borderLeft: "1px solid rgba(246,241,232,0.3)" }} aria-hidden="true" />
-                            <span className="absolute bottom-2 right-2 w-2.5 h-2.5" style={{ borderBottom: "1px solid rgba(246,241,232,0.3)", borderRight: "1px solid rgba(246,241,232,0.3)" }} aria-hidden="true" />
-                            <div className="relative z-10">
-                                <p className="flex items-center justify-center gap-2 text-[11px] font-mono uppercase tracking-[0.22em] mb-4" style={{ color: PAPER.red }}>
-                                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: PAPER.red }} aria-hidden="true" />
-                                    Get Started Today
-                                </p>
-                                <h2
-                                    className="text-3xl sm:text-[2.75rem] font-normal mb-4 leading-[1.1] tracking-[-0.01em]"
-                                    style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif", color: PAPER.plate }}
-                                >
-                                    Your next UAE role{" "}
-                                    <br className="hidden sm:block" />
-                                    <em className="italic font-semibold" style={{ color: PAPER.red }}>
-                                        is already in Rico&apos;s queue
-                                    </em>
-                                </h2>
-                                <p className="text-base max-w-md mx-auto mb-8" style={{ color: "rgba(246,241,232,0.6)" }}>
-                                    Upload your CV and get your first personalized match report in under 60 seconds.
-                                </p>
-                                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                                    <Link
-                                        href="/signup"
-                                        className="inline-flex items-center gap-2 px-7 py-3 rounded-full font-semibold text-sm transition-all hover:brightness-95"
-                                        style={{ background: PAPER.plate, color: PAPER.ink }}
-                                    >
-                                        Create free account
-                                        <span aria-hidden="true">→</span>
-                                    </Link>
-                                    <Link
-                                        href="/chat"
-                                        className="px-7 py-3 rounded-full font-medium text-sm transition-all hover:bg-[rgba(246,241,232,0.08)]"
-                                        style={{ border: "1px solid rgba(246,241,232,0.25)", color: "rgba(246,241,232,0.85)" }}
-                                    >
-                                        Try chat first
-                                    </Link>
-                                </div>
-                            </div>
+                        <EditorialHeader kicker="Get Started Today" lead="Your next UAE role" emphasis="is already in Rico's queue" className="mb-6" />
+                        <p className="text-base max-w-md mb-9" style={{ color: PAPER.ink70 }}>
+                            Upload your CV and get your first personalized match report in under 60 seconds.
+                        </p>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+                            <Link
+                                href="/signup"
+                                className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-full font-semibold text-sm transition-all hover:brightness-110"
+                                style={{ background: PAPER.ink, color: PAPER.plate }}
+                            >
+                                Create free account
+                                <span aria-hidden="true">→</span>
+                            </Link>
+                            <Link
+                                href="/chat"
+                                className="text-[11px] font-mono uppercase tracking-[0.16em] underline underline-offset-4 decoration-1 transition-colors hover:opacity-70"
+                                style={{ color: PAPER.ink70, textDecorationColor: PAPER.red }}
+                            >
+                                Try chat first
+                            </Link>
                         </div>
                     </div>
                 </section>
 
-                {/* ── Pricing ── */}
-                <section id="pricing" className="px-4 py-20">
+                {/* ── Pricing — labelled plates (reference plate caption + red pill) ── */}
+                <section id="pricing" className="px-4 py-24" style={{ borderTop: `1px solid ${PAPER.hair}` }}>
                     <div className="max-w-5xl mx-auto">
-                        <div className="text-center mb-12">
-                            <SectionEyebrow className="mb-3">Pricing</SectionEyebrow>
-                            <SectionHeading lead="Simple," emphasis="transparent pricing" />
-                        </div>
+                        <EditorialHeader kicker="Pricing" lead="Simple," emphasis="transparent pricing" className="mb-14" />
                         <div className="grid md:grid-cols-3 gap-5">
                             {PLANS.map((plan) => (
                                 <Plate key={plan.name} primary={plan.primary} className="p-7 flex flex-col gap-6">
-                                    {plan.badge && (
-                                        <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: PAPER.red, color: PAPER.plate }}>
-                                            {plan.badge}
-                                        </span>
-                                    )}
                                     <div>
-                                        <p className="text-sm font-medium mb-1" style={{ color: plan.primary ? PAPER.red : PAPER.ink70 }}>{plan.name}</p>
-                                        <div className="flex items-baseline gap-1">
-                                            <span className="text-3xl font-bold tabular-nums tracking-tight" style={{ color: PAPER.ink }}>{plan.price}</span>
-                                            {plan.period && <span className="text-sm" style={{ color: PAPER.ink55 }}>{plan.period}</span>}
+                                        <PlateLabel
+                                            className="mb-5"
+                                            right={plan.badge
+                                                ? <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-[0.12em]" style={{ background: PAPER.red, color: PAPER.plate }}>{plan.badge}</span>
+                                                : undefined}
+                                        >
+                                            {plan.name}
+                                        </PlateLabel>
+                                        <div className="flex items-baseline gap-1.5">
+                                            <span className="text-[2.5rem] leading-none font-normal tabular-nums tracking-tight" style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif", color: PAPER.ink }}>{plan.price}</span>
+                                            {plan.period && <span className="text-sm font-mono" style={{ color: PAPER.ink55 }}>{plan.period}</span>}
                                         </div>
                                     </div>
                                     <ul className="flex flex-col gap-2.5 flex-1">
@@ -996,12 +973,13 @@ export default function LandingPageV2() {
                                     </ul>
                                     <Link
                                         href={plan.href}
-                                        className="block text-center py-3 rounded-full text-sm font-semibold transition-all hover:brightness-95"
+                                        className="inline-flex items-center justify-center gap-2 py-3 rounded-full text-sm font-semibold transition-all hover:brightness-110"
                                         style={plan.primary
                                             ? { background: PAPER.ink, color: PAPER.plate }
                                             : { border: `1px solid ${PAPER.hair}`, color: PAPER.ink }}
                                     >
                                         {plan.cta}
+                                        {plan.primary && <span aria-hidden="true">→</span>}
                                     </Link>
                                 </Plate>
                             ))}
@@ -1009,16 +987,13 @@ export default function LandingPageV2() {
                     </div>
                 </section>
 
-                {/* ── FAQ ── */}
-                <section id="faq" className="px-4 py-20">
-                    <div className="max-w-2xl mx-auto">
-                        <div className="text-center mb-12">
-                            <SectionEyebrow className="mb-3">FAQ</SectionEyebrow>
-                            <SectionHeading lead="Common" emphasis="questions" />
-                        </div>
-                        <div className="rounded-[5px] px-6" style={{ border: `1px solid ${PAPER.hair}`, background: PAPER.plate }}>
-                            {FAQS.map((faq) => (
-                                <FaqItem key={faq.q} faq={faq} />
+                {/* ── FAQ — mono-numbered editorial list ── */}
+                <section id="faq" className="px-4 py-24" style={{ borderTop: `1px solid ${PAPER.hair}` }}>
+                    <div className="max-w-3xl mx-auto">
+                        <EditorialHeader kicker="FAQ" lead="Common" emphasis="questions" className="mb-10" />
+                        <div style={{ borderTop: `1px solid ${PAPER.hair}` }}>
+                            {FAQS.map((faq, i) => (
+                                <FaqItem key={faq.q} faq={faq} index={i} />
                             ))}
                         </div>
                     </div>
