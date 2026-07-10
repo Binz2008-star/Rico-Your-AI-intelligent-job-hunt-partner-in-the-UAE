@@ -313,6 +313,16 @@ function BilingualBand() {
     );
 }
 
+/* The three convictions body — verbatim from the approved /design-preview
+   prospectus (rico-lovable-source.zip: src/lib/landing-content.ts → EN.manifesto,
+   rendered by src/components/landing/WhyRico.tsx). Copy unchanged; presented in
+   the existing editorial ledger style under the shipped #idea heading. */
+const CONVICTIONS = [
+    { n: "01", title: "The conversation is the product", body: "Rico is not a dashboard with a chatbot bolted on. It is a single quiet voice that reads you, reads the market, and only interrupts with reason." },
+    { n: "02", title: "Reasoning, not percentages", body: "Every score opens up. Why this role fits. What is missing. What to do about it. No black-box confidence bars." },
+    { n: "03", title: "Approval before action", body: "Rico can draft, tailor, and prepare. It never presses submit. The safety gate is not a setting — it is the shape of the thing." },
+];
+
 function IdeaSection() {
     return (
         <section id="idea" className="max-w-6xl mx-auto px-5 sm:px-8 py-24 sm:py-32">
@@ -323,6 +333,15 @@ function IdeaSection() {
                     <span className="italic font-medium">held stubbornly.</span>
                 </h2>
             </div>
+            <ol className="mt-16">
+                {CONVICTIONS.map((m, i) => (
+                    <li key={m.n} className="lpv2-fade-up grid gap-3 sm:grid-cols-[110px_minmax(0,1fr)_minmax(0,1.5fr)] sm:gap-10 lg:gap-14 py-9" style={{ borderTop: `1px solid ${C.hair}`, animationDelay: `${i * 80}ms` }}>
+                        <span className="leading-none text-[3.25rem] sm:text-[4.25rem]" style={{ fontFamily: SERIF, color: C.red }}>{m.n}</span>
+                        <h3 className="self-center leading-tight text-[1.5rem] sm:text-[1.75rem]" style={{ fontFamily: SERIF, color: C.ink }}>{m.title}</h3>
+                        <p className="self-center leading-relaxed text-[1.05rem]" style={{ color: C.ink70 }}>{m.body}</p>
+                    </li>
+                ))}
+            </ol>
         </section>
     );
 }
