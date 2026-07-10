@@ -78,6 +78,44 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260710-001 — #908 RC1/RC4 fixes + Atelier Console direction (gallery, DEC, /rico-preview)
+
+Status: done
+Owner: Claude
+Branch: multiple (all merged); docs sync on `docs/workspace-sync-2026-07-10`
+Issue/PR: #914, #916, #921, #919, #924, #925, #926 (merged); #918 (closed); #920 (opened); #908 (closed)
+
+#### Objective
+Land the approved #908 attachment/Active-CV fixes, then explore the Atelier Console
+as the candidate authenticated-workspace direction behind reference/preview surfaces —
+without any production replacement or real actions.
+
+#### What shipped (all owner-approved, merged unless noted)
+- #914 — #908 RC1: widen attachment-follow-up regex → transcript-grounded handler.
+- #916 — #908 RC4: prevent non-CV documents becoming the Active CV (`/upload-cv` +
+  `/confirm-cv-profile`). Both RC1+RC4 confirmed by owner-run production smoke; **#908 closed**.
+  RC2 (confidence wording) + RC3 (rejection taxonomy) deferred as separate items.
+- #922/#923 — activation analytics (owner-authored); **production verified PASS** via a
+  `weekly-admin-digest` `dry_run=true` Actions run (migration 036 applied; no email sent).
+- #924 — Atelier Console isolated `/design-gallery` reference tab (Lovable "Atelier" port;
+  light/dark, EN/AR, RTL, mobile; demo-only; actions reference-only; +lucide-react +3 fonts).
+- #925 — `DEC-20260709-006`: Atelier Console = candidate workspace direction (preview only);
+  amends `DEC-20260708-003` for exploration only. Nocturne stays production.
+- #926 — internal `/rico-preview` route (noindex, reference-only) reusing the #924 console.
+- #919 — dashboard-deploy CI fix (pull before regenerating `docs/index.html`).
+- #921 — C2 privacy/refund handoff reclassified (stale brief rejected; ref zip → reviewed).
+- #918 closed (command-concept gallery tab; superseded by #924; reviewed ref preserved).
+- #920 opened — legal-review question for the shipped `/privacy` & `/refund-policy` copy.
+
+#### Scope guardrails honored
+- No production route/nav change; `/command`, `/rico`, `/` untouched. No real chat/job/apply/
+  save/CV actions. No backend/auth/billing/Neon/schema change in the frontend/docs PRs.
+- Not started: #917, #899, #872, #873, Phase 3, any production migration off Nocturne.
+
+#### Next (owner-gated)
+- Answer #920 (legal review of live privacy/refund copy).
+- Any `/rico-preview` → production migration needs its own DEC + approved PR.
+
 ### TASK-20260709-004 — Sync #906/#907 merges + triage #908/#909
 
 Status: done (docs-only sync/triage)
