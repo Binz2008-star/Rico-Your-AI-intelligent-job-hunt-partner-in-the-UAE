@@ -1,6 +1,41 @@
 # Current State
 
-> **Reconciliation header — 2026-07-09 (latest; supersedes all headers below).** Docs-only:
+> **Reconciliation header — 2026-07-10 (latest; supersedes all headers below).** `main` is at
+> `b3811ef6cd0aa598549a06c3a089536887e4c8e3`. Session outcomes (all merged unless noted):
+> - **#908 attachment / Active-CV bug — RESOLVED & CLOSED.** RC1 (attachment-follow-up regex,
+>   #914) and RC4 (prevent non-CV documents becoming the Active CV, #916) merged and confirmed
+>   by owner-run production smoke (attachment answers stay transcript-grounded; an
+>   invoice/image never becomes the Active CV). RC2 (low-confidence message wording) and RC3
+>   (rejection taxonomy) were deferred as separate smaller items; #908 closed as completed with
+>   that scope noted.
+> - **#922 / #923 activation analytics — merged + production verified PASS.** Migration 036
+>   (signup attribution columns + `admin_digest_log`) confirmed applied via a GitHub Actions
+>   `weekly-admin-digest` `dry_run=true` run: HTTP 200, `status=ok`, `sent=false`, real metrics
+>   returned (not `migration_pending`). Backend serving the code; no rollback needed.
+> - **Design direction — `DEC-20260709-006` (#925):** records **Atelier Console as the candidate
+>   authenticated-workspace direction (preview/exploration only)**, amending `DEC-20260708-003`
+>   for exploration only. Nocturne remains the production workspace design; `/command` and
+>   `/rico` are unchanged and not replaced.
+> - **#924** — Atelier Console added as an isolated `/design-gallery` reference tab (ported from
+>   the Lovable "Atelier" prototype: light/dark, EN/AR, RTL, mobile; demo data; all actions
+>   reference-only). Adds `lucide-react` + Fraunces/Amiri/IBM Plex Sans Arabic via `next/font`.
+> - **#926** — internal `/rico-preview` route (noindex, reference-only) reusing the #924 Atelier
+>   Console behind an INTERNAL PREVIEW / SAMPLE DATA / ACTIONS DISABLED banner. Demo-only.
+> - **#919** — dashboard-deploy CI fix (pull latest `main` before regenerating
+>   `docs/index.html`) in `daily.yml` and `daily-job-bot.yml`; removes the recurring
+>   self-inflicted rebase conflict.
+> - **#921** — the incoming C2 privacy/refund handoff was reclassified (stale brief → rejected;
+>   general design-reference zip → reviewed). The shipped `/privacy` and `/refund-policy` pages
+>   were NOT changed.
+> - **#918 closed** (command-concept gallery tab, superseded by #924; its reviewed reference
+>   remains at `design-handoffs/reviewed/command-concept-sandbox/`).
+> - **#920 open** — legal-review question: confirm whether the live `/privacy` & `/refund-policy`
+>   "Last updated: June 2026" copy was legally reviewed. Not a design task; shipped pages left
+>   untouched pending owner/legal.
+> No backend/auth/billing/Neon/schema changes in this session's frontend/docs PRs. No #917,
+> #899, #872, or #873 work started.
+>
+> **Reconciliation header — 2026-07-09 (superseded by the header above).** Docs-only:
 > `DEC-20260709-005` retires bare "C#" labels as implementation identifiers. "C3" was found in
 > use for two unrelated things — the canonical Atelier `/about`/`/contact`/`/faq` migration
 > (per `PROJECT_STATUS.md`) and PR #899's unapproved landing-hero animation (open draft,
