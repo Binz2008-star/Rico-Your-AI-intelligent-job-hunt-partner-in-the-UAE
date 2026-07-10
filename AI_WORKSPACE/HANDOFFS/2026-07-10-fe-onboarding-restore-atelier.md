@@ -1,10 +1,80 @@
-# Handoff — Onboarding restoration + Atelier migration (IN PROGRESS)
+# Handoff — Onboarding restoration + Atelier migration (MERGED — production deploy confirmed; browser smoke PARTIAL)
 
 > **For the next Claude session (continuing on a different account).** Pick up from
 > branch `claude/onboarding-restore-atelier` (based on `origin/main` @ `c43bedc`). This
 > handoff + `DEC-20260710-004` are the source of truth. Owner already APPROVED Option 1
 > (re-enable + migrate onboarding). No onboarding runtime code has been written yet —
 > only investigation + the DEC + this handoff.
+
+## ✅ Merge + deployment record (2026-07-10)
+
+The work shipped as **PR #955** (`feat(onboarding): restore /onboarding + Atelier migration
++ status-driven routing`), **squash-merged into `main`** by the owner at `2026-07-10T22:31:08Z`.
+
+- **Merge SHA (verified new `main` HEAD): `3cf539841fd47c7aad7458f8c66bd80aa31ee018`.**
+  (Recorded from the merged HEAD of `main`, not a pre-merge test-merge ref.)
+- **Pre-merge gates (green on head `ccf74a00b6aca78ddf8dfc5e4333aa32bac11821`):** GitHub QA
+  Tests, pytest, frontend/vitest (337 passing), Playwright, Vercel Preview READY, mergeable
+  = clean, zero unresolved review threads.
+- **Production deployments (both confirmed via CI on `3cf5398`):**
+  - Frontend — Vercel "Deploy to Production": **success**.
+  - Backend — Render "Deploy Render Backend" (`deploy-render.yml`): **success**. This job
+    triggers the deploy hook and **blocks until `/version.commit` matches the pushed SHA**,
+    so success confirms the backend at `3cf5398` is live and carries the new read-only
+    `GET /api/v1/onboarding/status` endpoint + strict reader.
+
+### Production verification — PARTIAL (owner-run browser smoke, 2026-07-10)
+
+Deployments are confirmed live via CI. The **owner ran a manual production browser smoke on
+2026-07-10** (the CI/agent container cannot reach production — the network policy denies
+`rico-job-automation-api.onrender.com` and `ricohunt.com` with `403 CONNECT`).
+
+**Status remains PARTIAL.** The new-account authenticated onboarding flows could not be
+exercised end-to-end because creating a new account requires **email verification** — this is
+**expected production security behavior** (this repo uses FastAPI + JWT + custom email
+verification). Email verification must **not** be disabled in production to make these checks
+easier.
+
+**PASS**
+- unauthenticated `/onboarding` → `/signup?next=%2Fonboarding`
+- completed authenticated user → `/command`
+- EN/AR and RTL on login / signup / settings / command
+- mobile layout
+- adjacent public pages
+- no observed cross-user data leakage
+- basic performance acceptable
+
+**BLOCKED / NOT VERIFIED** (gated by the required email verification for a new account)
+- authenticated **incomplete** user → `/onboarding`
+- **Skip for now** does not persist completion
+- successful onboarding **submit** persists completion
+- CV upload / rejection / retry within onboarding
+
+**Backend `503` read-failure contract:** verified through **automated tests only**
+(`tests/test_onboarding_status_endpoint.py`, `tests/test_onboarding_repo_readonly.py`). It
+must **not** be tested by disrupting production, so it is deliberately excluded from the
+browser smoke.
+
+**Findings (owner-observed, recorded as classified):**
+1. `/onboarding` redirect takes ~2–3s. **PASS with a low-priority latency note** — not a
+   functional failure.
+2. `/settings` renders the application shell for a guest after logout. **P2 protected-route /
+   auth-boundary UX bug.** The page showed **no private settings data**; cookie persistence
+   and data leakage are **not** claimed (neither is verified).
+3. `/command` public access is **intentional current behavior** — it supports guest/public
+   chat and stays public unless a separate product decision changes it.
+4. The initial Rico message remains **English while the Arabic UI is active** — **confirmed
+   i18n UX bug**.
+5. `/profile` showed a connection error for a guest/incomplete account. **Unconfirmed** —
+   retest with a completed authenticated account (likely related to missing protected-route
+   gating).
+
+**Next:** the BLOCKED onboarding flows (incomplete→onboarding, skip non-persistence, submit
+persistence, CV upload/rejection/retry) still require an owner run with a **verified**
+account before this phase is called fully verified. Findings #2 (P2 auth-boundary) and #4
+(i18n) are follow-up bugs, and #5 needs a retest — track them separately; they are outside
+this onboarding PR's scope. **Do not start the workspace/dashboard migration** until the
+blocked flows pass.
 
 ## ⚠️ Evidence correction (2026-07-10) — read before using the "completion signal" notes below
 
