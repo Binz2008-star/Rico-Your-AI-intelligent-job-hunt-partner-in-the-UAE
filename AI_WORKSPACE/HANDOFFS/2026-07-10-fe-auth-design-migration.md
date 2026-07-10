@@ -1,5 +1,14 @@
 # Handoff — FE Auth design migration to the approved `/design-preview` Atelier surface
 
+> **STATUS: MERGED & PRODUCTION-VERIFIED (2026-07-10).** PR #948 squash-merged to `main` as
+> `be312e8`. Vercel production (`ricohunt.com`) serves the new build: all 5 auth routes return
+> HTTP 200; `/signup`, `/forgot-password`, `/reset-password`, `/verify-email` SSR the `.atelier
+> atl-auth` shell; `/login` is the new client-hydrated shell (old Nocturne markup absent). QA Tests
+> / PR-branch workflow / Vercel Preview were all green; no blocking review comments. Local + Vercel
+> preview verified EN/AR + RTL + desktop/mobile + loading/validation/disabled/success/error via 24
+> Playwright screenshots (production serves the byte-identical immutable preview artifact). Merged
+> branch deleted (local + remote). Next phase: Support/contact + remaining Legal presentation.
+
 ## Task
 
 Migrate the five production Auth surfaces to the approved `/design-preview` Atelier design language
