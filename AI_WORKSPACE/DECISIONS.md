@@ -28,6 +28,73 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260710-001 — Atelier production rollout, phases 1–6 (visual-only, per-phase owner gate)
+
+Status: accepted
+Date: 2026-07-10
+Owner: Roben (plan + audit verdict accepted in-session; recorded by Claude)
+Related task: TASK-20260710-003 (Phase 1); TASK-20260710-004..007 (audit P2 items)
+
+#### Context
+The owner reviewed and approved the `/design-preview` consolidation hub (#929, merged,
+production-verified) as the intended Rico Atelier direction, and accepted a phased
+production implementation plan. A full read-only system audit (2026-07-10, on `main`
+`db3d722`) returned **YELLOW — acceptable: zero P0/P1 blockers**, production stable
+(Render serving `main` exactly, all public routes healthy, chat EN/AR correct, billing in
+safe manual/WhatsApp mode, no security exposures). Full audit record:
+`HANDOFFS/2026-07-10-system-audit-phase0-gate.md`.
+
+#### Decision
+1. **Phased visual-only rollout** of the approved Atelier direction, one route group per
+   small PR, logic/handlers/endpoints frozen in every phase:
+   - Phase 1: public landing static sections (`/`, about/contact/FAQ statics) — below the
+     fold first, hero as its own PR.
+   - Phase 2: legal/support alignment (`/terms`, support surface; `/privacy` and
+     `/refund-policy` are already Atelier-live).
+   - Phase 3: auth visual shells (`/login`, `/signup`, `/forgot-password`,
+     `/reset-password`, `/verify-email`).
+   - Phase 4: onboarding shell (`/onboarding` steps).
+   - Phase 5: workspace read surfaces (`/dashboard`, `/profile`, `/settings`).
+   - Phase 6: workspace action surfaces (`/flow`/applications, `/upload`;
+     `/subscription` additionally gated on a separate billing DEC).
+2. **Scope of amendment**: phases 1–2 are consistent with `DEC-20260708-003` (Atelier
+   already owns marketing). For phases 3–6 this DEC amends `DEC-20260709-006`: Atelier
+   workspace surfaces may migrate to production **visually, per phase, with explicit
+   per-PR owner approval** — logic unchanged.
+3. **Explicit exclusions**: `/command` (and any `/rico` route) migration requires its own
+   future DEC + approved PR — not authorized here. shadcn/ui adoption requires its own
+   DEC — conversions must be shadcn-free on the existing stack (Tailwind, lucide-react,
+   fonts shipped by #924). No backend/auth/billing/Neon/schema change is authorized by
+   this DEC. No real data/action wiring beyond what already exists.
+4. **Phase gates** (from the 2026-07-10 audit):
+   - **Phase 3 gate**: the vitest `next/navigation` router-mock baseline must be fixed
+     (TASK-20260710-006) AND an authenticated production smoke path must exist —
+     owner-run or via a provisioned synthetic smoke account (TASK-20260710-007).
+   - **Phase 4 gate**: the `/onboarding` hybrid dead-UI state must be resolved first
+     (TASK-20260710-005, per DEC-20260628-001).
+5. **Per-phase acceptance (uniform)**: build passes; no new test failures vs the known
+   baseline; diff shows zero logic changes; EN + AR RTL verified; mobile verified;
+   owner approves the phase PR on its Vercel preview before merge; post-merge production
+   smoke on affected routes; workspace docs synced.
+6. **Rollback (uniform)**: revert the phase PR → Vercel auto-redeploy → re-run the
+   phase's smoke set. Every phase must remain single-PR revertible; each phase deletes
+   the Nocturne code it replaces (No Dead UI rule) so reverts restore it cleanly.
+7. **Stop conditions**: any new P0/P1 mid-rollout; a failed post-merge smoke; a phase PR
+   touching backend/auth/billing/Neon/schema; or an unsatisfiable phase gate.
+
+#### Consequences
+- Positive: the approved direction ships incrementally with bounded blast radius, explicit
+  gates, and one-revert rollback at every step.
+- Negative/trade-off: Nocturne and Atelier coexist in the workspace during phases 3–6
+  (accepted in DEC-20260709-006); reference screens needing shadcn must be rewritten
+  shadcn-free, which is slower.
+
+#### Follow-up
+- [ ] Phase 1 PR (landing below-the-fold statics) — TASK-20260710-003; requires this DEC
+      merged first (owner instruction 2026-07-10: migration starts only after Phase 0 docs merge).
+- [ ] Future `/command` migration DEC (not started).
+- [ ] Billing DEC before any `/subscription` visual conversion implies purchasable plans.
+
 ### DEC-20260709-006 — Atelier Console is the candidate authenticated-workspace direction (preview/exploration only)
 
 Status: accepted

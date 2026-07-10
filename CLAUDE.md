@@ -221,10 +221,9 @@ The repo combines three layers:
 - `POST /api/v1/rico/webhooks/telegram`
 - `POST /api/v1/rico/webhooks/github`
 - `POST /api/v1/agent/chat`
-- `POST /api/v1/actions/{action}`
+- `POST /api/v1/actions/run`
 - `GET /api/v1/pipeline/status`
 - `POST /api/v1/pipeline/trigger`
-- `GET /api/v1/user/profile`
 - `GET /health`
 - `GET /version`
 
