@@ -28,6 +28,64 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260710-004 — `/onboarding` is the real authenticated first-run setup flow (supersedes "chat is the app" routing for `/onboarding` only)
+
+Status: accepted
+Date: 2026-07-10
+Owner: Roben (owner) / Claude
+Related task: Onboarding restoration + Atelier migration (branch `claude/onboarding-restore-atelier`)
+
+#### Evidence correction (2026-07-10) — supersedes the completion-signal claims below
+
+The original evidence in this decision named `ProfileResponse.profile_exists` as the
+"canonical persisted onboarding-completion signal." **That is incorrect and is corrected
+here.** The prose below is kept verbatim for traceability; where it conflicts with this
+note, **this note wins.**
+
+1. **`profile_exists` means career data exists — it does NOT mean onboarding is complete.**
+   It is `True` whenever *any* career-profile data is present (a partial profile, a
+   merged-guest profile, one skill, one target role, or CV evidence). It is not a
+   completion signal.
+2. **Persisted onboarding status is the primary completion signal.** The repository
+   already has the real system: table `rico_onboarding_states` (statuses
+   `pending` / `in_progress` / `completed`) with `get_onboarding_state(user_id)`,
+   `is_onboarding_complete(user_id)`, and `set_onboarding_status(user_id, status)`.
+3. **The backend minimum-profile gate is the canonical readiness evaluation.**
+   `src/services/profile_context_resolver.py::evaluate_minimum_profile` is the single
+   source of truth for "is this profile ready." `POST /api/v1/onboarding/submit` already
+   runs this gate and persists `completed` or `in_progress` accordingly.
+4. **No frontend duplication of `evaluate_minimum_profile` is allowed.** Next.js must NOT
+   re-implement completion rules. It reads the decision from the backend.
+5. **Exposed signal:** `GET /api/v1/onboarding/status` (read-only, authenticated) returns
+   `{status, complete, source, missing_fields, profile_exists, profile_completeness}`.
+   Legacy/merged users with no `rico_onboarding_states` row are resolved via the gate and
+   reported with `source: "derived_legacy"` (a GET never backfills status).
+6. **Filename correction:** the redirect lives in **`apps/web/next.config.js`** (this
+   decision and the handoff originally wrote `next.config` / `next.config.mjs`).
+
+#### Context
+`apps/web/next.config` 307-redirects `/onboarding → /command`, grouped with other "deprecated user-facing routes redirect to /command (chat is the app)" routes (`/dashboard`, `/jobs`, `/signals`, `/archive`, `/saved-searches`, `/orchestrate`). This made the real, working 466-line `apps/web/app/onboarding/page.tsx` (CV upload → profile confirm → done, wired to `uploadCV` / `submitOnboarding` / `fetchMe`) unreachable dead-UI. The approved `/design-preview` direction requires a real onboarding flow, directly conflicting with the redirect. Owner reviewed the evidence and chose to re-enable + migrate onboarding.
+
+#### Decision
+This decision supersedes the "chat is the app" routing deprecation **for `/onboarding` only**:
+- `/onboarding` becomes the real authenticated first-run setup flow.
+- `/command` remains Rico's primary application after onboarding. **This does NOT authorize any `/command` redesign.**
+- Remove **only** the `/onboarding → /command` redirect from `next.config`. **Keep all other deprecated-route redirects unchanged.**
+
+Required user flow:
+1. Create account → 2. verify email (where required) → 3. sign in → 4. if onboarding/profile setup is **incomplete**, route to `/onboarding` → 5. if setup is **already complete**, route directly to `/command` → 6. after successful onboarding, route to `/command` → 7. "Skip for now" also routes to `/command` **without** falsely claiming profile completion → 8. returning completed users must **not** be forced through onboarding again.
+
+Completion signal (from repo evidence): `GET /api/v1/rico/profile` → `ProfileResponse.profile_exists` is the canonical persisted signal. `GET /api/v1/me` (`MeResponse`: email/role/authenticated/guest/name) carries **no** onboarding flag. **Do not invent a new completion flag or schema** unless no reliable existing state exists; `profile_exists` is the existing signal.
+
+#### Consequences
+- Positive: delivers the approved onboarding design; real flow + APIs already exist (low restore risk).
+- Trade-off: changes post-signup routing behavior; must gate on `profile_exists` so completed users skip onboarding.
+- The misleading `/dashboard?skip=1` completion/skip destinations in `onboarding/page.tsx` (3 usages) must become `/command` (`/dashboard` itself redirects to `/command`, and `?skip=1` falsely implies completion).
+
+#### Follow-up
+- [ ] One focused PR: restore `/onboarding` reachability + migrate to Atelier + fix routing (see handoff `2026-07-10-fe-onboarding-restore-atelier.md`).
+- [ ] Do NOT begin workspace/dashboard migration until this PR is merged and production-verified.
+
 ### DEC-20260710-003 — Landing rates section stays omitted; `/subscription` is the single pricing source of truth
 
 Status: accepted

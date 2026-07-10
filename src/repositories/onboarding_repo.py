@@ -17,6 +17,16 @@ from src.models.onboarding import (
 
 logger = logging.getLogger(__name__)
 
+
+class OnboardingStateUnavailable(RuntimeError):
+    """The onboarding-state store could not be read (DB down / query error).
+
+    Distinct from a legitimately-absent row (returned as ``None``): callers of
+    the strict reader use this to avoid misclassifying an infrastructure failure
+    as "no persisted onboarding row".
+    """
+
+
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS rico_onboarding_states (
     user_id      TEXT        PRIMARY KEY,
@@ -75,6 +85,70 @@ def get_onboarding_state(user_id: str) -> Optional[OnboardingState]:
         return None
     finally:
         conn.close()
+
+
+def get_onboarding_state_readonly(user_id: str) -> Optional[OnboardingState]:
+    """Strict read-only reader for the onboarding status endpoint.
+
+    Unlike :func:`get_onboarding_state`, this NEVER creates the table, never
+    writes, and never commits — a GET must be truly read-only. It also
+    distinguishes a legitimate absence from an infrastructure failure:
+
+    * DB unavailable / no connection      → raise ``OnboardingStateUnavailable``
+    * SELECT / query failure              → raise ``OnboardingStateUnavailable``
+    * table absent (legacy environment)   → return ``None`` (does NOT create it)
+    * table present but no row for user   → return ``None``
+    * row present                         → return :class:`OnboardingState`
+
+    The connection is always closed. Callers translate the raised error into a
+    sanitized ``503`` rather than falling through to a "derived" answer.
+    """
+    from src.db import get_db_connection, is_db_available
+
+    if not is_db_available():
+        raise OnboardingStateUnavailable("database unavailable")
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            raise OnboardingStateUnavailable("no database connection")
+
+        with conn.cursor() as cur:
+            # Read-only existence check — never creates the table (to_regclass
+            # returns NULL when the relation is absent). Legacy environments
+            # without the table read as "no row", not an error.
+            cur.execute("SELECT to_regclass('public.rico_onboarding_states')")
+            reg = cur.fetchone()
+            if reg is None or reg[0] is None:
+                return None
+
+            cur.execute(
+                "SELECT status, completed_at, updated_at "
+                "FROM rico_onboarding_states WHERE user_id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            return None
+        return OnboardingState(
+            user_id=user_id,
+            status=row[0],
+            completed_at=row[1],
+            updated_at=row[2],
+        )
+    except OnboardingStateUnavailable:
+        raise
+    except Exception as exc:  # DB/driver/query error — never a silent None.
+        logger.exception("onboarding_repo: readonly_get_failed user_id=%s", user_id)
+        raise OnboardingStateUnavailable("onboarding state read failed") from exc
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def set_onboarding_status(user_id: str, status: str) -> None:

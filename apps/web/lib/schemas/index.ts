@@ -380,6 +380,19 @@ export const MeResponseSchema = z.object({
     name: z.string().nullable().optional(),
 });
 
+// GET /api/v1/onboarding/status — the canonical onboarding-completion signal.
+// `complete` is the only value the UI routes on; `status`/`source`/`missing_fields`
+// are informational. `profile_exists` is informational ONLY and must never be
+// treated as completion (the backend gate + persisted state decide `complete`).
+export const OnboardingStatusResponseSchema = z.object({
+    status: z.enum(['pending', 'in_progress', 'completed']),
+    complete: z.boolean(),
+    source: z.enum(['persisted', 'derived_legacy']),
+    missing_fields: z.array(z.string()),
+    profile_exists: z.boolean(),
+    profile_completeness: z.number(),
+});
+
 export const JobMatchSchema = z.object({
     title: StringFromUnknownSchema.default('Untitled role'),
     company: StringFromUnknownSchema.default('Unknown company'),
@@ -760,6 +773,7 @@ export type RicoChatRequest = z.infer<typeof RicoChatRequestSchema>;
 export type RicoPublicChatRequest = z.infer<typeof RicoPublicChatRequestSchema>;
 export type RicoFeedbackRequest = z.infer<typeof RicoFeedbackRequestSchema>;
 export type MeResponse = z.infer<typeof MeResponseSchema>;
+export type OnboardingStatusResponse = z.infer<typeof OnboardingStatusResponseSchema>;
 export type JobMatch = z.infer<typeof JobMatchSchema>;
 export type RicoChatResponse = z.infer<typeof RicoChatResponseSchema>;
 export type RicoProfileResponse = z.infer<typeof RicoProfileResponseSchema>;

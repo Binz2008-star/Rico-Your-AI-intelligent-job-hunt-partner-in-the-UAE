@@ -4,6 +4,7 @@ import {
   ConfirmCVProfileResponseSchema,
   ExecutePermissionActionResponseSchema,
   MeResponseSchema,
+  OnboardingStatusResponseSchema,
   ProfileUpdateResponseSchema,
   RicoChatHistoryResponseSchema,
   RicoChatResponseSchema,
@@ -16,6 +17,7 @@ import type {
   AgentUIResponse,
   ExecutePermissionActionRequest,
   ExecutePermissionActionResponse,
+  OnboardingStatusResponse,
 } from "@/lib/schemas";
 import { getSignupAttribution } from "@/lib/signupAttribution";
 import type {
@@ -1080,6 +1082,40 @@ export interface OnboardingPayload {
   years_experience?: number;
   current_role?: string;
   skills?: string[];
+}
+
+export type { OnboardingStatusResponse };
+
+/**
+ * GET /api/v1/onboarding/status — read-only canonical completion signal.
+ *
+ * Routing must branch on `complete` (never on `profile_exists`, which only
+ * indicates that some career data exists). The completion decision is owned by
+ * the backend (persisted onboarding state + the minimum-profile gate); the
+ * frontend does NOT re-implement any completion rules — it reads this endpoint.
+ *
+ * Throws ApiError on failure (401 when unauthenticated). Callers on the
+ * onboarding surface treat a non-401 failure as a recoverable state (Retry /
+ * Continue to Rico) rather than assuming completion.
+ */
+export async function fetchOnboardingStatus(
+  signal?: AbortSignal,
+): Promise<OnboardingStatusResponse> {
+  const res = await fetch(`${PROXY}/api/v1/onboarding/status`, {
+    credentials: "include",
+    signal,
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new ApiError(
+      extractDetail(body.detail, `Onboarding status failed: ${res.status}`),
+      res.status,
+      body,
+    );
+  }
+  const data = await res.json().catch(() => null);
+  if (data === null) throw new Error("Onboarding status response was not valid JSON");
+  return validateShape(OnboardingStatusResponseSchema, data, "onboarding status");
 }
 
 export async function submitOnboarding(

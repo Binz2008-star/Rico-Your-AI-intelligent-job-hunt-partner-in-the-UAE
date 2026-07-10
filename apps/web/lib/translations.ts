@@ -991,6 +991,13 @@ export const translations = {
     onboardingFieldExperiencePlaceholder: "e.g. 8",
     onboardingFieldSkills: "Additional skills (if any missed)",
     onboardingFieldSkillsPlaceholder: "Comma-separated",
+    onboardingGoToRico: "Continue to Rico →",
+    onboardingContinueToRico: "Continue to Rico",
+    onboardingSkipNote: "Skipping keeps your setup incomplete — Rico may ask for these details again later.",
+    onboardingCheckSetup: "Checking your setup…",
+    onboardingStatusErrTitle: "We couldn't load your setup",
+    onboardingStatusErrDesc: "Something went wrong while checking your onboarding. Retry, or continue to Rico for now.",
+    onboardingRetry: "Retry",
 
     // Dashboard page
     dashboardSectionMission: "Career Mission",
@@ -2136,6 +2143,13 @@ export const translations = {
     onboardingFieldExperiencePlaceholder: "مثال: 8",
     onboardingFieldSkills: "مهارات إضافية (إن وُجدت)",
     onboardingFieldSkillsPlaceholder: "مفصولة بفواصل",
+    onboardingGoToRico: "← المتابعة إلى ريكو",
+    onboardingContinueToRico: "المتابعة إلى ريكو",
+    onboardingSkipNote: "التخطي يُبقي إعدادك غير مكتمل — قد يطلب ريكو هذه التفاصيل مرة أخرى لاحقاً.",
+    onboardingCheckSetup: "جاري التحقق من إعدادك…",
+    onboardingStatusErrTitle: "تعذّر تحميل إعدادك",
+    onboardingStatusErrDesc: "حدث خطأ أثناء التحقق من إعدادك. أعد المحاولة أو تابع إلى ريكو الآن.",
+    onboardingRetry: "إعادة المحاولة",
 
     // Dashboard page
     dashboardSectionMission: "المهمة المهنية",

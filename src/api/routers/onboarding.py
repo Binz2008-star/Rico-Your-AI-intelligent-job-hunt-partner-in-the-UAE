@@ -14,7 +14,11 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.api.deps import get_current_user
-from src.models.onboarding import ONBOARDING_COMPLETED, ONBOARDING_IN_PROGRESS
+from src.models.onboarding import (
+    ONBOARDING_COMPLETED,
+    ONBOARDING_IN_PROGRESS,
+    ONBOARDING_PENDING,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +86,86 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
         "profile_exists": has_career_profile_data(ctx),
         "profile_completeness": round(ctx.completion_score, 2),
     }
+
+
+@router.get("/status")
+def onboarding_status(request: Request) -> Dict[str, Any]:
+    """Read-only onboarding-completion signal for the authenticated user.
+
+    This is the canonical readiness endpoint the frontend routes on:
+    persisted onboarding status is the primary signal, and the backend
+    minimum-profile gate (``evaluate_minimum_profile``) is the canonical
+    readiness evaluation. ``profile_exists`` alone is NOT a completion signal —
+    it only means *some* career data exists.
+
+    Compatibility for users with no persisted ``rico_onboarding_states`` row
+    (established legacy users, successfully-merged guest profiles):
+
+    * persisted ``completed``                → complete, source ``persisted``
+    * persisted ``pending`` / ``in_progress``→ incomplete, source ``persisted``
+    * no row + minimum gate passes           → complete, source ``derived_legacy``
+    * no row + minimum gate fails            → incomplete, source ``derived_legacy``
+
+    Read-only: this endpoint never writes or backfills status during a GET.
+    It returns only status/derived booleans and missing *field names* — never
+    profile content or other sensitive fields.
+    """
+    user = get_current_user(request)  # raises HTTP 401 when unauthenticated
+    user_id: str = user["email"]
+
+    try:
+        from src.repositories.onboarding_repo import get_onboarding_state_readonly
+        from src.repositories.profile_repo import get_profile
+        from src.services.profile_context_resolver import (
+            evaluate_minimum_profile,
+            has_career_profile_data,
+            resolve_profile_context,
+        )
+
+        # Strict read-only: never creates the table, never writes/commits, and
+        # raises (→ sanitized 503 below) on DB/query failure rather than
+        # returning None — so an infra failure is never misread as "no row"
+        # and mis-routed to derived_legacy.
+        state = get_onboarding_state_readonly(user_id)
+
+        merged = get_profile(user_id)
+        ctx = resolve_profile_context(user_id, merged)
+        gate_ok, missing_fields = evaluate_minimum_profile(ctx)
+        profile_exists = has_career_profile_data(ctx)
+
+        if state is not None:
+            # Persisted status is authoritative — do not let a partial profile
+            # override a real onboarding record in either direction.
+            status = state.status
+            complete = state.is_complete()
+            source = "persisted"
+        else:
+            # No persisted row: derive from the canonical minimum-profile gate so
+            # established legacy users / merged guests are not forced back through
+            # onboarding. Never mutate status here (read-only).
+            source = "derived_legacy"
+            if gate_ok:
+                status, complete = ONBOARDING_COMPLETED, True
+            elif profile_exists:
+                status, complete = ONBOARDING_IN_PROGRESS, False
+            else:
+                status, complete = ONBOARDING_PENDING, False
+
+        return {
+            "status": status,
+            "complete": complete,
+            "source": source,
+            "missing_fields": missing_fields,
+            "profile_exists": profile_exists,
+            "profile_completeness": round(ctx.completion_score, 2),
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        # Never leak internals (stack traces, DB errors) to the client. The
+        # frontend treats a non-200 as a recoverable state (Retry / Continue).
+        logger.exception("onboarding_status: failed user_id=%s", user_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Onboarding status temporarily unavailable",
+        )

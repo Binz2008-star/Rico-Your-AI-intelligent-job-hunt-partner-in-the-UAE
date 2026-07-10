@@ -1,15 +1,43 @@
 "use client";
 
-import { ApiError, fetchMe, submitOnboarding, uploadCV, type OnboardingPayload, type ParsedCV } from "@/lib/api";
+/**
+ * /onboarding — the real authenticated first-run setup flow (DEC-20260710-004).
+ *
+ * Migrated to the approved Atelier design as a scoped light-first `.atelier`
+ * island (same pattern as the auth surfaces), preserving ALL existing behavior:
+ * fetchMe/auth guard, CV upload + accepted types + non-CV rejection + 413,
+ * parsing state, extracted-data review, the target-roles/cities/salary/
+ * experience/skills fields, submitOnboarding, submission-error handling, and
+ * EN/AR + RTL.
+ *
+ * Routing (DEC-20260710-004): completion is decided by the backend via
+ * GET /api/v1/onboarding/status (`complete`) — the frontend never re-implements
+ * completion rules and never routes on `profile_exists`.
+ *   - unauthenticated              → signup/login with return path
+ *   - authenticated + complete     → /command (never forced through onboarding)
+ *   - authenticated + incomplete   → render onboarding
+ *   - status request failure       → recoverable state (Retry / Continue to Rico),
+ *                                     no redirect loop, no false completion claim
+ *   - after successful submit       → /command
+ *   - "Skip for now"               → /command WITHOUT marking onboarding complete
+ */
+
+import {
+  ApiError,
+  fetchOnboardingStatus,
+  submitOnboarding,
+  uploadCV,
+  type OnboardingPayload,
+  type ParsedCV,
+} from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
-import { AuraGlow } from "@/components/ui/AuraGlow";
-import { GlassPanel } from "@/components/ui/GlassPanel";
-import { PageTransition } from "@/components/ui/PageTransition";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import "../_atelier/atelier-tokens.css";
+import "../_atelier/atelier-onboarding.css";
 
 type TFunc = (key: TranslationKey) => string;
 
@@ -18,142 +46,76 @@ type TFunc = (key: TranslationKey) => string;
 function StepIndicator({ current, t }: { current: 0 | 1 | 2; t: TFunc }) {
   const steps = [t("onboardingStepUpload"), t("onboardingStepComplete"), t("onboardingStepReady")] as const;
   return (
-    <div className="mb-8 flex items-center gap-0" aria-label="Onboarding progress">
+    <ol className="atl-onb-steps" aria-label="Onboarding progress">
       {steps.map((label, idx) => {
         const done = idx < current;
         const active = idx === current;
         return (
-          <div key={label} className="flex items-center">
-            <div className="flex flex-col items-center gap-1.5">
-              <div
-                className={[
-                  "flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold transition-all duration-300",
-                  done
-                    ? "border-gold bg-gold text-[#0a0a1a]"
-                    : active
-                    ? "border-gold bg-gold/15 text-gold shadow-[0_0_12px_rgba(245,166,35,0.25)]"
-                    : "border-overlay/20 bg-surface-elevated/40 text-text-tertiary",
-                ].join(" ")}
-                aria-current={active ? "step" : undefined}
-              >
-                {done ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : (
-                  idx + 1
-                )}
-              </div>
-              <span className={[
-                "text-[10px] font-semibold tracking-wide whitespace-nowrap",
-                active ? "text-gold" : done ? "text-text-secondary" : "text-text-tertiary",
-              ].join(" ")}>
-                {label}
-              </span>
-            </div>
-            {idx < steps.length - 1 && (
-              <div
-                className={[
-                  "mx-2 mb-4 h-px w-12 transition-all duration-500",
-                  idx < current ? "bg-gold/60" : "bg-overlay/15",
-                ].join(" ")}
-                aria-hidden="true"
-              />
-            )}
-          </div>
+          <li key={label} className="atl-onb-step">
+            <span
+              className={[
+                "atl-onb-step-dot",
+                done ? "is-done" : active ? "is-active" : "",
+              ].join(" ").trim()}
+              aria-current={active ? "step" : undefined}
+            >
+              {done ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                idx + 1
+              )}
+            </span>
+            <span className={["atl-onb-step-label", active ? "is-active" : done ? "is-done" : ""].join(" ").trim()}>
+              {label}
+            </span>
+            {idx < steps.length - 1 && <span className="atl-onb-step-line" aria-hidden="true" />}
+          </li>
         );
       })}
+    </ol>
+  );
+}
+
+// ── Spinner block ────────────────────────────────────────────────────────────
+
+function SpinnerBlock({ label }: { label: string }) {
+  return (
+    <div className="atl-onb-spinner-wrap" role="status" aria-live="polite">
+      <span className="atl-onb-spin" />
+      <p className="atl-onb-spinner-label">{label}</p>
     </div>
-  );
-}
-
-// ── Brand header ─────────────────────────────────────────────────────────────
-
-function BrandHeader() {
-  return (
-    <Link href="/" className="mb-10 inline-flex items-center gap-2.5">
-      <div className="w-8 h-8 rounded-[9px] bg-rico-amber flex items-center justify-center text-sm font-black text-background shadow-[0_4px_16px_rgba(245,166,35,0.35)]">
-        R
-      </div>
-      <span className="font-display font-black text-lg text-text-primary tracking-tight">
-        Rico <span className="text-rico-amber">Hunt</span>
-      </span>
-    </Link>
-  );
-}
-
-// ── Spinner card ─────────────────────────────────────────────────────────────
-
-function SpinnerCard({ label }: { label: string }) {
-  return (
-    <GlassPanel className="w-full max-w-lg p-8 text-center">
-      <div className="mb-4 mx-auto w-10 h-10 rounded-full border-2 border-gold/30 border-t-gold animate-spin" />
-      <p className="text-sm text-text-secondary">{label}</p>
-    </GlassPanel>
-  );
-}
-
-// ── Completion screen ─────────────────────────────────────────────────────────
-
-function CompletionCard({ onGo, t }: { onGo: () => void; t: TFunc }) {
-  return (
-    <div className="w-full max-w-lg text-center">
-      <div className="mb-6 mx-auto w-14 h-14 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-gold">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      </div>
-      <h2 className="mb-2 font-display font-bold text-2xl text-text-primary tracking-tight">
-        {t("onboardingDoneTitle")}
-      </h2>
-      <p className="mb-8 text-sm text-text-secondary leading-relaxed max-w-sm mx-auto">
-        {t("onboardingDoneDesc")}
-      </p>
-      <button
-        onClick={onGo}
-        className="inline-flex items-center gap-2 rounded-lg bg-gold text-[#0a0a1a] px-6 py-3 text-sm font-semibold uppercase tracking-widest hover:bg-gold-hover transition-all shadow-[0_4px_16px_rgba(245,166,35,0.28)]"
-      >
-        {t("onboardingGoToDashboard")}
-      </button>
-    </div>
-  );
-}
-
-// ── Error screen ──────────────────────────────────────────────────────────────
-
-function ErrorCard({ message, onRetry, t }: { message: string; onRetry: () => void; t: TFunc }) {
-  return (
-    <GlassPanel className="w-full max-w-lg p-6 text-center border-error/30 bg-error/5">
-      <p className="mb-4 text-sm text-error">{message}</p>
-      <button
-        onClick={onRetry}
-        className="rounded-lg bg-gold text-[#0a0a1a] px-5 py-2.5 text-sm font-semibold uppercase tracking-widest hover:bg-gold-hover transition-all"
-      >
-        {t("onboardingTryAgain")}
-      </button>
-    </GlassPanel>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type PageState = "upload" | "parsing" | "form" | "submitting" | "done" | "error";
-type AuthState = "checking" | "ready";
+type Phase = "checking" | "ready" | "guardError";
+type PageState = "upload" | "parsing" | "form" | "submitting";
 
 function isAuthFailure(error: unknown): boolean {
+  if (error instanceof ApiError && error.statusCode === 401) return true;
   const message = error instanceof Error ? error.message : String(error ?? "");
   return message.includes("401") || /not authenticated|expired/i.test(message);
 }
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { language } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const t = useTranslation(language);
-  const [authState, setAuthState] = useState<AuthState>("checking");
+  const isAr = language === "ar";
+  const [dark, setDark] = useState(false);
+  const [phase, setPhase] = useState<Phase>("checking");
   const [pageState, setPageState] = useState<PageState>("upload");
   const [parsed, setParsed] = useState<ParsedCV | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [errorMsg, setErrorMsg] = useState("");
+  const cancelledRef = useRef(false);
+  // Keep a stable ref to the (per-render) router so the mount guard effect and
+  // its useCallback don't re-run on every render (router identity is not stable).
+  const routerRef = useRef(router);
+  routerRef.current = router;
   const signUpHref = buildAuthHref("/signup", "/onboarding");
   const loginHref = buildAuthHref("/login", "/onboarding");
   const yearsExperience =
@@ -167,32 +129,37 @@ export default function OnboardingPage() {
     { key: "skills", label: t("onboardingFieldSkills"), placeholder: t("onboardingFieldSkillsPlaceholder"), isList: true },
   ];
 
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        if (!me.authenticated) {
-          router.replace(signUpHref);
+  // ── Completion guard: the backend decides via /onboarding/status ──────────
+  const runGuard = useCallback(() => {
+    setPhase("checking");
+    fetchOnboardingStatus()
+      .then((status) => {
+        if (cancelledRef.current) return;
+        // Route on `complete` only — never on profile_exists.
+        if (status.complete) {
+          routerRef.current.replace("/command");
           return;
         }
-        setAuthState("ready");
+        setPhase("ready");
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (cancelledRef.current) return;
         if (isAuthFailure(err)) {
-          router.replace(signUpHref);
+          routerRef.current.replace(signUpHref);
           return;
         }
-        setErrorMsg(t("onboardingErrSession"));
-        setAuthState("ready");
+        // Recoverable — do NOT loop, do NOT assume complete.
+        setPhase("guardError");
       });
+  }, [signUpHref]);
 
+  useEffect(() => {
+    cancelledRef.current = false;
+    runGuard();
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
-  }, [router, signUpHref, t]);
+  }, [runGuard]);
 
   const handleFile = useCallback(async (file: File) => {
     const ACCEPTED_TYPES = [
@@ -209,7 +176,7 @@ export default function OnboardingPage() {
     setErrorMsg("");
     try {
       const res = await uploadCV(file);
-      // Finding 4: reject non-CV classified files (job descriptions, images, etc.)
+      // Reject non-CV classified files (job descriptions, images, etc.)
       if (res.status === "classified" && res.document_type !== "cv") {
         setErrorMsg(t("onboardingErrNotCv"));
         setPageState("upload");
@@ -267,200 +234,212 @@ export default function OnboardingPage() {
     }
 
     try {
+      // Route to /command only after a successful, persisted submit response.
       await submitOnboarding(payload);
-      setPageState("done");
+      router.push("/command");
     } catch (err) {
       if (isAuthFailure(err)) {
         router.replace(loginHref);
         return;
       }
+      // Submission failure stays on the form and shows no success state.
       setErrorMsg(err instanceof Error ? err.message : t("onboardingErrSave"));
       setPageState("form");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fieldValues, loginHref, router, t]);
 
-  const pageContent = (
-    <>
-      {/* ── Auth check spinner ── */}
-      {authState === "checking" && (
-        <SpinnerCard label={t("onboardingCheckSession")} />
-      )}
-
-      {authState === "ready" && (
-        <>
-          {/* ── Step progress ── */}
-          {pageState !== "error" && (
-            <StepIndicator
-              current={
-                pageState === "upload" || pageState === "parsing" ? 0
-                : pageState === "form" || pageState === "submitting" ? 1
-                : 2
-              }
-              t={t}
-            />
-          )}
-
-          {/* ── Upload zone ── */}
-          {pageState === "upload" && (
-            <GlassPanel className="w-full max-w-md p-8">
-              <div className="mb-8 text-center">
-                <h1 className="font-display font-bold text-2xl text-text-primary tracking-tight mb-2">
-                  {t("onboardingUploadTitle")}
-                </h1>
-                <p className="text-sm text-text-secondary">
-                  {t("onboardingUploadDesc")}
-                </p>
-              </div>
-
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
-                className="w-full rounded-xl border-2 border-dashed border-border-medium p-10 text-center transition-colors hover:border-gold/40"
-              >
-                <input type="file" accept="application/pdf,.doc,.docx,image/jpeg,image/png,image/webp" onChange={handleFileInput} className="hidden" id="cv-upload" />
-                <label htmlFor="cv-upload" className="flex flex-col items-center gap-3 cursor-pointer">
-                  <div className="w-12 h-12 rounded-full bg-gold/10 flex items-center justify-center">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gold">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="17 8 12 3 7 8" />
-                      <line x1="12" y1="3" x2="12" y2="15" />
-                    </svg>
-                  </div>
-                  <span className="text-sm text-text-primary font-medium">{t("onboardingClickUpload")}</span>
-                  <span className="text-xs text-text-secondary">{t("onboardingPdfOnly")}</span>
-                </label>
-              </div>
-
-              {errorMsg && (
-                <p className="mt-4 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error text-center">
-                  {errorMsg}
-                </p>
-              )}
-
-              <p className="mt-6 text-xs text-text-secondary text-center">
-                {t("onboardingHaveProfile")}{" "}
-                <Link href="/dashboard?skip=1" className="text-primary hover:text-primary/80 transition-colors">
-                  {t("onboardingGoToDashboard")}
-                </Link>
-              </p>
-            </GlassPanel>
-          )}
-
-          {/* ── Parsing spinner ── */}
-          {pageState === "parsing" && <SpinnerCard label={t("onboardingParsing")} />}
-
-          {/* ── Missing fields form ── */}
-          {pageState === "form" && (
-            <GlassPanel className="w-full max-w-2xl p-8">
-              <h1 className="mb-1 font-display font-bold text-2xl text-text-primary tracking-tight">
-                {t("onboardingExtractedTitle")}
-              </h1>
-              <p className="mb-6 text-sm text-text-secondary">
-                {t("onboardingExtractedDesc")}
-              </p>
-
-              {parsed && (
-                <div className="mb-6 rounded-xl bg-surface p-4 border border-border-subtle space-y-1">
-                  <p className="text-[11px] uppercase tracking-wider text-text-tertiary mb-2">{t("onboardingExtractedFrom")}</p>
-                  {yearsExperience != null && (
-                    <p className="text-sm text-text-secondary">
-                      <span className="text-text-tertiary">{t("onboardingExperience")} </span>{yearsExperience} {t("onboardingYrs")}
-                    </p>
-                  )}
-                  {(parsed.skills?.length ?? 0) > 0 && (
-                    <p className="text-sm text-text-secondary">
-                      <span className="text-text-tertiary">{t("onboardingSkillsLabel")} </span>{(parsed.skills ?? []).slice(0, 8).join(", ")}
-                    </p>
-                  )}
-                  {(parsed.certifications?.length ?? 0) > 0 && (
-                    <p className="text-sm text-text-secondary">
-                      <span className="text-text-tertiary">{t("onboardingCerts")} </span>{(parsed.certifications ?? []).join(", ")}
-                    </p>
-                  )}
-                  {(parsed.languages?.length ?? 0) > 0 && (
-                    <p className="text-sm text-text-secondary">
-                      <span className="text-text-tertiary">{t("onboardingLanguagesLabel")} </span>{(parsed.languages ?? []).join(", ")}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-4">
-                {missingFields.map((field) => (
-                  <div key={field.key}>
-                    <label className="block text-[10px] uppercase tracking-widest text-text-secondary mb-1.5">
-                      {field.label}
-                    </label>
-                    <input
-                      type="text"
-                      value={fieldValues[field.key] ?? ""}
-                      onChange={(e) => setFieldValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                      placeholder={field.placeholder}
-                      className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 transition-all"
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {errorMsg && (
-                <p className="mt-4 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error text-center">
-                  {errorMsg}
-                </p>
-              )}
-
-              <div className="mt-6 flex items-center justify-between">
-                <button
-                  onClick={() => router.push("/dashboard?skip=1")}
-                  className="text-sm text-text-secondary hover:text-text-primary transition-colors"
-                >
-                  {t("onboardingSkipForNow")}
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  className="inline-flex items-center gap-2 rounded-lg bg-gold text-[#0a0a1a] px-6 py-3 text-sm font-semibold uppercase tracking-widest hover:bg-gold-hover transition-all shadow-[0_4px_16px_rgba(245,166,35,0.28)]"
-                >
-                  {t("onboardingCompleteProfile")}
-                </button>
-              </div>
-            </GlassPanel>
-          )}
-
-          {/* ── Saving spinner ── */}
-          {pageState === "submitting" && <SpinnerCard label={t("onboardingSaving")} />}
-
-          {/* ── Done ── */}
-          {pageState === "done" && (
-            <CompletionCard onGo={() => router.push("/dashboard?skip=1")} t={t} />
-          )}
-
-          {/* ── Error (fatal) ── */}
-          {pageState === "error" && (
-            <ErrorCard
-              message={errorMsg}
-              onRetry={() => { setPageState("upload"); setErrorMsg(""); }}
-              t={t}
-            />
-          )}
-        </>
-      )}
-    </>
-  );
+  // "Skip for now" — go to Rico WITHOUT marking onboarding complete.
+  const handleSkip = useCallback(() => {
+    router.push("/command");
+  }, [router]);
 
   return (
-    <main
-      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-4"
-      dir={language === "ar" ? "rtl" : "ltr"}
+    <div
+      className="atelier atl-onb"
+      data-atl-theme={dark ? "dark" : "light"}
+      dir={isAr ? "rtl" : "ltr"}
+      lang={isAr ? "ar" : "en"}
     >
-      <AuraGlow variant="magenta" position="top-right" className="animate-pulse-magenta" />
-      <AuraGlow variant="cyan" position="bottom-left" className="animate-pulse-magenta" style={{ animationDelay: "-2s" }} />
+      <header className="atl-onb-header">
+        <Link href="/" className="atl-onb-brand" aria-label="Rico">
+          Rico <span className="atl-onb-brand-accent">Hunt</span>
+        </Link>
+        <div className="atl-onb-controls">
+          <div className="atl-onb-seg" role="group" aria-label="Language">
+            <button type="button" className="atl-onb-seg-btn" aria-pressed={!isAr} onClick={() => setLanguage("en")}>EN</button>
+            <button type="button" className="atl-onb-seg-btn" aria-pressed={isAr} onClick={() => setLanguage("ar")}>عربي</button>
+          </div>
+          <button
+            type="button"
+            className="atl-onb-toggle"
+            aria-label={dark ? t("atlToLight") : t("atlToDark")}
+            aria-pressed={dark}
+            onClick={() => setDark((v) => !v)}
+          >
+            {dark ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </header>
 
-      <div className="relative z-10 flex flex-col items-center w-full">
-        <BrandHeader />
-        <PageTransition className="w-full flex flex-col items-center">
-          {pageContent}
-        </PageTransition>
-      </div>
-    </main>
+      <main className="atl-onb-main">
+        <div className="atl-onb-col">
+          {/* ── Guard: checking status ── */}
+          {phase === "checking" && <SpinnerBlock label={t("onboardingCheckSetup")} />}
+
+          {/* ── Guard: status failure (recoverable, no loop, no false completion) ── */}
+          {phase === "guardError" && (
+            <div className="atl-onb-panel atl-onb-status" role="alert">
+              <h1 className="atl-onb-title">{t("onboardingStatusErrTitle")}</h1>
+              <p className="atl-onb-sub">{t("onboardingStatusErrDesc")}</p>
+              <div className="atl-onb-status-actions">
+                <button type="button" className="atl-onb-btn atl-onb-btn-primary" onClick={runGuard}>
+                  {t("onboardingRetry")}
+                </button>
+                <button type="button" className="atl-onb-btn atl-onb-btn-ghost" onClick={handleSkip}>
+                  {t("onboardingContinueToRico")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Ready: the onboarding flow ── */}
+          {phase === "ready" && (
+            <>
+              <StepIndicator
+                current={
+                  pageState === "upload" || pageState === "parsing" ? 0
+                  : 1
+                }
+                t={t}
+              />
+
+              {/* Upload zone */}
+              {pageState === "upload" && (
+                <section className="atl-onb-panel">
+                  <p className="atl-onb-eyebrow">{t("onboardingStepUpload")}</p>
+                  <h1 className="atl-onb-title">{t("onboardingUploadTitle")}</h1>
+                  <p className="atl-onb-sub">{t("onboardingUploadDesc")}</p>
+
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleDrop}
+                    className="atl-onb-drop"
+                  >
+                    <input type="file" accept="application/pdf,.doc,.docx,image/jpeg,image/png,image/webp" onChange={handleFileInput} className="atl-onb-file" id="cv-upload" />
+                    <label htmlFor="cv-upload" className="atl-onb-drop-inner">
+                      <span className="atl-onb-drop-icon" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                      </span>
+                      <span className="atl-onb-drop-main">{t("onboardingClickUpload")}</span>
+                      <span className="atl-onb-drop-hint">{t("onboardingPdfOnly")}</span>
+                    </label>
+                  </div>
+
+                  {errorMsg && <p className="atl-onb-alert" role="alert">{errorMsg}</p>}
+
+                  <p className="atl-onb-foot">
+                    {t("onboardingHaveProfile")}{" "}
+                    <Link href="/command" className="atl-onb-link">{t("onboardingGoToRico")}</Link>
+                  </p>
+                </section>
+              )}
+
+              {/* Parsing spinner */}
+              {pageState === "parsing" && (
+                <section className="atl-onb-panel">
+                  <SpinnerBlock label={t("onboardingParsing")} />
+                </section>
+              )}
+
+              {/* Missing-fields form */}
+              {pageState === "form" && (
+                <section className="atl-onb-panel">
+                  <p className="atl-onb-eyebrow">{t("onboardingStepComplete")}</p>
+                  <h1 className="atl-onb-title">{t("onboardingExtractedTitle")}</h1>
+                  <p className="atl-onb-sub">{t("onboardingExtractedDesc")}</p>
+
+                  {parsed && (
+                    <div className="atl-onb-plate">
+                      <p className="atl-onb-plate-label">{t("onboardingExtractedFrom")}</p>
+                      {yearsExperience != null && (
+                        <p className="atl-onb-plate-row">
+                          <span className="atl-onb-plate-key">{t("onboardingExperience")} </span>{yearsExperience} {t("onboardingYrs")}
+                        </p>
+                      )}
+                      {(parsed.skills?.length ?? 0) > 0 && (
+                        <p className="atl-onb-plate-row">
+                          <span className="atl-onb-plate-key">{t("onboardingSkillsLabel")} </span>{(parsed.skills ?? []).slice(0, 8).join(", ")}
+                        </p>
+                      )}
+                      {(parsed.certifications?.length ?? 0) > 0 && (
+                        <p className="atl-onb-plate-row">
+                          <span className="atl-onb-plate-key">{t("onboardingCerts")} </span>{(parsed.certifications ?? []).join(", ")}
+                        </p>
+                      )}
+                      {(parsed.languages?.length ?? 0) > 0 && (
+                        <p className="atl-onb-plate-row">
+                          <span className="atl-onb-plate-key">{t("onboardingLanguagesLabel")} </span>{(parsed.languages ?? []).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="atl-onb-fields">
+                    {missingFields.map((field) => (
+                      <div key={field.key} className="atl-onb-field">
+                        <label htmlFor={`onb-${field.key}`} className="atl-onb-label">{field.label}</label>
+                        <input
+                          id={`onb-${field.key}`}
+                          type="text"
+                          value={fieldValues[field.key] ?? ""}
+                          onChange={(e) => setFieldValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                          placeholder={field.placeholder}
+                          className="atl-onb-input"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {errorMsg && <p className="atl-onb-alert" role="alert">{errorMsg}</p>}
+
+                  <div className="atl-onb-actions">
+                    <div className="atl-onb-skip-group">
+                      <button type="button" onClick={handleSkip} className="atl-onb-link atl-onb-skip">
+                        {t("onboardingSkipForNow")}
+                      </button>
+                      <p className="atl-onb-note">{t("onboardingSkipNote")}</p>
+                    </div>
+                    <button onClick={handleSubmit} className="atl-onb-btn atl-onb-btn-primary">
+                      {t("onboardingCompleteProfile")}
+                    </button>
+                  </div>
+                </section>
+              )}
+
+              {/* Saving spinner */}
+              {pageState === "submitting" && (
+                <section className="atl-onb-panel">
+                  <SpinnerBlock label={t("onboardingSaving")} />
+                </section>
+              )}
+            </>
+          )}
+        </div>
+      </main>
+    </div>
   );
 }
