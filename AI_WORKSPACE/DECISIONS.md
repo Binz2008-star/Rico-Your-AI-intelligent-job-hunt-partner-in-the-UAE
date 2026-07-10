@@ -28,6 +28,48 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260710-003 — Landing rates section stays omitted; `/subscription` is the single pricing source of truth
+
+Status: accepted
+Date: 2026-07-10
+Owner: Roben (decision) / Claude (recorded)
+Related task: landing content completion follow-up to #936/#937/#938/#939
+
+#### Context
+The approved `/design-preview` prospectus (see `DEC-20260710-002`) includes an on-page
+"Rates" section using **editorial** plan names — **Reader / Correspondent / Editor** (AED
+0 / 29 / 49) from `rico-lovable-source.zip → src/lib/landing-content.ts → EN.rates`. The
+live product prices those same tiers under **billing-facing** names — **Free / Pro /
+Premium** — defined in the backend (`src/schemas/subscription.py` `PlanTier`; Stripe price
+IDs keyed to `pro`/`premium` in `src/services/subscription_webhook_service.py`) and
+rendered by `apps/web/app/subscription/page.tsx` (+ `apps/web/lib/translations.ts`
+`planProName`/`planPremiumName`). Prices align exactly; only the **names** differ. The
+production landing (`apps/web/components/LandingPageV2.tsx`) currently has **no** on-page
+rates section and routes nav "Rates" → `/subscription`.
+
+#### Decision
+**Option D — keep the landing rates section omitted for now.**
+- Do not add an on-page rates section to the landing.
+- Landing "Rates" navigation continues to route to `/subscription`.
+- `/subscription` remains the **single source of truth** for pricing and plan names.
+- Do not mix editorial names (Reader / Correspondent / Editor) with billing-facing names
+  (Free / Pro / Premium) anywhere user-facing.
+- If an on-page rates teaser is ever added, it **must** use the billing-facing names
+  (Free / Pro / Premium) — or explicitly map to them — and only after owner approval and a
+  follow-up decision record.
+
+#### Consequences
+- Positive: no duplicated pricing content; no editorial-vs-billing name mismatch at
+  checkout; no pricing/name drift risk; user trust and billing integrity protected; one
+  canonical pricing surface.
+- Trade-off: the landing has no on-page rates teaser (the reference intended one); revisit
+  only if the owner wants it, under the naming constraint above.
+
+#### Follow-up
+- [ ] Revisit an on-page rates teaser only on owner request, using billing-facing names.
+- [ ] Any future rates work is YELLOW (pricing/rates naming, billing-facing copy) and must
+      not read/alter live billing data without owner approval.
+
 ### DEC-20260710-002 — `/design-preview` is the approved production target: shape + content + flows
 
 Status: accepted
