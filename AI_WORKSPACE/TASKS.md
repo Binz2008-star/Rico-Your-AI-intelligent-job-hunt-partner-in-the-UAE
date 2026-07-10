@@ -253,13 +253,14 @@ Baseline moved 309/12 → 317/4. All fixes were test-only (no product code):
       before/after-save delta assertion; (c) the saved name renders in two surfaces →
       `findAllByText`.
 
-#### REMAINING — YELLOW, needs owner decision (B3 + B4, NOT started)
-- [ ] `chat-action-card.test.tsx` (3) — B3. `disabledReason()` has no `open_drawer` branch, so it
-      falls through to `"Not available"` (test wants `"Coming soon"`); and the `submit`-no-endpoint
-      case renders `"No endpoint configured for this action"` (test wants `"Not available yet"`).
-      Decision: add the missing `open_drawer` → "Coming soon" branch (one-line product change) and
-      update the `submit` test string to the current (more useful) message. Blocked on owner sign-off
-      because it touches product code (`ChatActionCard.tsx`).
+#### RESOLVED — PR B3 (owner-approved YELLOW, merged via `fix(frontend): align chat action disabled reasons`)
+Baseline moved 317/4 → 320/1. One scoped product-code touch (`ChatActionCard.tsx`) + one test update:
+- [x] `chat-action-card.test.tsx` (3) — added an explicit `open_drawer → "Coming soon"` branch to
+      `disabledReason()` (product), kept the `submit`-no-endpoint message
+      `"No endpoint configured for this action"` as-is, and updated that test's expectation to the
+      current (more useful) message. No other component behavior changed.
+
+#### REMAINING — YELLOW, needs owner decision (B4, NOT started)
 - [ ] `sidebar-nav-routing.test.ts` (1) — B4. Test expects a `/queue` ("Applications") sidebar nav
       item that no longer exists in `components/layout/app-nav.ts` (the `/queue` page still exists
       and builds; a stale `NAV_ITEM_KEYS["/queue"]` entry lingers in `AppSidebar.tsx`). Decision
@@ -269,13 +270,14 @@ Baseline moved 309/12 → 317/4. All fixes were test-only (no product code):
 #### Constraints
 - Do not touch: backend/API, auth/session internals, billing, schema/migrations, dependencies,
   AI provider/prompt/routing, #920.
-- B3/B4 each require an owner decision on which side (test vs. product) is correct before any fix.
+- B4 requires an owner decision on which side (test vs. product) is correct before any fix.
 
 #### Acceptance criteria
 - [x] The 8 clearly test-only failures resolved without touching product code (PR B1+B2).
-- [ ] B3 (`chat-action-card`) + B4 (`sidebar-nav-routing`) resolved with owner sign-off.
+- [x] B3 (`chat-action-card`) resolved with owner sign-off (scoped product touch).
+- [ ] B4 (`sidebar-nav-routing`) resolved with owner sign-off.
 - [ ] `npm run test` promoted from informational (`continue-on-error: true`) to a required,
-      green CI gate (the "B5" step, after B3+B4 land and the suite is 321/321).
+      green CI gate (the "B5" step, after B4 lands and the suite is 321/321; currently 320/1).
 
 ### TASK-20260710-002 — #929 `/design-preview` consolidation hub (one preview entry point)
 

@@ -51,6 +51,9 @@ function disabledReason(action: RicoChatAction): string {
     if (action.requires_confirmation) {
         return "Confirmation required before this action can proceed";
     }
+    if (action.kind === "open_drawer") {
+        return "Coming soon";
+    }
     if (action.kind === "submit" && !action.endpoint) {
         return "No endpoint configured for this action";
     }

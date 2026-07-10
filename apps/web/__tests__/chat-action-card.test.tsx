@@ -367,7 +367,7 @@ describe("disabled reason labels", () => {
         expect(btn).toHaveAttribute("title", "Use the permission card below to approve or cancel");
     });
 
-    it("submit kind explains it is not available yet", () => {
+    it("submit kind without an endpoint explains none is configured", () => {
         render(
             <ChatActionsRow
                 actions={[{
@@ -382,7 +382,7 @@ describe("disabled reason labels", () => {
             />,
         );
         const btn = screen.getByTestId("action-card-disabled");
-        expect(btn).toHaveAttribute("title", "Not available yet");
+        expect(btn).toHaveAttribute("title", "No endpoint configured for this action");
     });
 
     it("navigate with missing href explains no destination", () => {

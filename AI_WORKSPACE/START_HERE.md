@@ -12,30 +12,33 @@ Rico mode. Start from AI_WORKSPACE/START_HERE.md.
 
 Before starting new Rico work, read the latest rollout handoff:
 
-1. `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-green-residual-fixes.md` (latest — `main` at `2c685e7`; PR
-   `test(frontend): resolve green residual vitest failures` (B1+B2). Resolved 8 of the 12 residual FE
-   vitest failures **test-only** (no product code): vitest baseline 309/12 → **317/4**. Remaining 4 are
-   the two YELLOW groups held for owner decision — `chat-action-card` (B3) and `sidebar-nav-routing`
-   `/queue` (B4). `npm run test` stays informational (`continue-on-error: true`) until B3/B4 land and
-   the suite is 321/321. See TASK-20260710-008.)
-2. `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-test-health-ci-gate.md` (`main` at `877b18b`; PR #942
+1. `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-chat-action-disabled-reasons.md` (latest — `main` at
+   `36f56fc`; PR `fix(frontend): align chat action disabled reasons` (B3, owner-approved YELLOW).
+   Added an explicit `open_drawer → "Coming soon"` disabled reason in `ChatActionCard.tsx` (one scoped
+   product touch) + a test-string update: vitest baseline **317/4 → 320/1**. The single remaining
+   failure is `sidebar-nav-routing` `/queue` (B4), still awaiting an owner decision. `npm run test`
+   stays informational until B4 lands and B5 flips it to blocking at 321/321. See TASK-20260710-008.)
+2. `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-green-residual-fixes.md` (`main` at `2c685e7`; PR
+   `test(frontend): resolve green residual vitest failures` (B1+B2). Resolved 8 residual FE vitest
+   failures **test-only** (no product code): vitest baseline 309/12 → 317/4. See TASK-20260710-008.)
+3. `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-test-health-ci-gate.md` (`main` at `877b18b`; PR #942
    "frontend build gate + frontend test visibility baseline" merged. FE vitest baseline established
    (302 passed/19 failed) and 7 shared `next/navigation`/`LanguageProvider` test-crash failures fixed
    via test-config only (309 passed/12 failed, zero product code changed). `npm run build` added as a
    required/blocking CI gate (green); `npm run test` added as informational-only; #941
    terminology-lexicon audit merged read-only, no code)
-2. `AI_WORKSPACE/HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` (`main` at
+4. `AI_WORKSPACE/HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` (`main` at
    `ec06ef5`; #906 `profile_repo.py` connection-leak fix and #907 #758 job-key unification both
    merged and Vercel-production-READY; #812 in progress; #908 (attachment-first orchestration bug)
    and #909 (governance-doc conflict) triaged, both awaiting owner direction)
-2. `AI_WORKSPACE/HANDOFFS/2026-07-09-board-clean-governance-complete.md` (#890 agent operating model merged at `ac0cd99`; #897 technical handoff merged at `bb9555e`; #898 Docker local-dev merged at `7fb41bc`; board clean with only #872/#873 held; no C3/C4/C8 started)
-3. `AI_WORKSPACE/HANDOFFS/2026-07-08-technical-status.md` (#892 #764 trust guard merged, #894 Lovable quarantine merged, #895 C2 legal pages live, #896 duplicate closed, #898 Docker local-dev merged; #886/#867 closed as stale/superseded; #872/#873 held)
-4. `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md` (PRs #727/#724/#723/#728/#729/#730 merged + deployed; only PR C remains for Tests 1–9)
-5. `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization.md` (earlier stabilization handoff — superseded by the complete handoff above)
-6. `AI_WORKSPACE/HANDOFFS/2026-06-21-system-quality-audit.md` (codebase audit — bugs fixed, tech debt documented)
-7. `AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md` (which Career OS milestones are actually built)
-8. `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`
-9. Then continue with the read order below.
+5. `AI_WORKSPACE/HANDOFFS/2026-07-09-board-clean-governance-complete.md` (#890 agent operating model merged at `ac0cd99`; #897 technical handoff merged at `bb9555e`; #898 Docker local-dev merged at `7fb41bc`; board clean with only #872/#873 held; no C3/C4/C8 started)
+6. `AI_WORKSPACE/HANDOFFS/2026-07-08-technical-status.md` (#892 #764 trust guard merged, #894 Lovable quarantine merged, #895 C2 legal pages live, #896 duplicate closed, #898 Docker local-dev merged; #886/#867 closed as stale/superseded; #872/#873 held)
+7. `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md` (PRs #727/#724/#723/#728/#729/#730 merged + deployed; only PR C remains for Tests 1–9)
+8. `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization.md` (earlier stabilization handoff — superseded by the complete handoff above)
+9. `AI_WORKSPACE/HANDOFFS/2026-06-21-system-quality-audit.md` (codebase audit — bugs fixed, tech debt documented)
+10. `AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md` (which Career OS milestones are actually built)
+11. `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`
+12. Then continue with the read order below.
 
 ## Project map (read first)
 
