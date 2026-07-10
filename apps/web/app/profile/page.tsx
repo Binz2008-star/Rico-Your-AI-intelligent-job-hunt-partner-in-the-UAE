@@ -1,6 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { AuthGate } from "@/components/auth/AuthGate";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
@@ -9,6 +10,7 @@ import { StatusCard } from "@/components/StatusCard";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useToast } from "@/hooks/useToast";
 import { ApiError, fetchProfile, logout, updateProfile, type ProfileResponse } from "@/lib/api";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
@@ -697,6 +699,10 @@ export default function ProfilePage() {
     const { language } = useLanguage();
     const t = useTranslation(language);
     const { toasts, toast } = useToast();
+    // Authenticated-only: guests are redirected to /login?next=/profile and see
+    // a neutral loader; profile data is only fetched once authorized, so no
+    // private request fires for a guest (fixes the misleading connection error).
+    const { authorized } = useRequireAuth();
 
     const handleLogout = useCallback(async () => {
         try {
@@ -727,11 +733,14 @@ export default function ProfilePage() {
     }, []);
 
     useEffect(() => {
+        // Do not fire the private profile request until an authenticated
+        // identity is confirmed (guests never trigger it).
+        if (!authorized) return;
         const timeoutId = window.setTimeout(() => {
             void loadProfile();
         }, 0);
         return () => window.clearTimeout(timeoutId);
-    }, [loadProfile]);
+    }, [authorized, loadProfile]);
 
     const handleRetry = useCallback(() => {
         setError(null);
@@ -921,6 +930,9 @@ export default function ProfilePage() {
             warnRefreshFail();
         }
     }, [warnRefreshFail]);
+
+    // Never render the private shell until an authenticated identity is confirmed.
+    if (!authorized) return <AuthGate />;
 
     return (
         <AppShell

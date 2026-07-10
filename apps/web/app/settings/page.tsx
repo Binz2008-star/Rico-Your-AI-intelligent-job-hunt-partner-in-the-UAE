@@ -1,11 +1,12 @@
 "use client";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { AuthGate } from "@/components/auth/AuthGate";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
 import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useToast } from "@/hooks/useToast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
@@ -30,7 +31,10 @@ function splitKeywords(value: string): string[] {
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  // Authenticated-only: guests are redirected to /login?next=/settings and see
+  // a neutral loader (never the private AppShell); `user` stays null until an
+  // authenticated identity is confirmed, so no private API fires for a guest.
+  const { user, authorized } = useRequireAuth();
   const { toasts, toast } = useToast();
   const { language } = useLanguage();
   const t = useTranslation(language);
@@ -142,6 +146,9 @@ export default function SettingsPage() {
   const telegramOn = Boolean(telegram?.opted_in);
   const inputClass =
     "w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-text-primary outline-none transition focus:border-rico-accent placeholder:text-text-tertiary";
+
+  // Never render the private shell until an authenticated identity is confirmed.
+  if (!authorized) return <AuthGate />;
 
   return (
     <AppShell

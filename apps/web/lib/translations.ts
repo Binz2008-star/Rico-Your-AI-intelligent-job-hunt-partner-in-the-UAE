@@ -998,6 +998,7 @@ export const translations = {
     onboardingStatusErrTitle: "We couldn't load your setup",
     onboardingStatusErrDesc: "Something went wrong while checking your onboarding. Retry, or continue to Rico for now.",
     onboardingRetry: "Retry",
+    authChecking: "Checking your session…",
 
     // Dashboard page
     dashboardSectionMission: "Career Mission",
@@ -2150,6 +2151,7 @@ export const translations = {
     onboardingStatusErrTitle: "تعذّر تحميل إعدادك",
     onboardingStatusErrDesc: "حدث خطأ أثناء التحقق من إعدادك. أعد المحاولة أو تابع إلى ريكو الآن.",
     onboardingRetry: "إعادة المحاولة",
+    authChecking: "جاري التحقق من جلستك…",
 
     // Dashboard page
     dashboardSectionMission: "المهمة المهنية",

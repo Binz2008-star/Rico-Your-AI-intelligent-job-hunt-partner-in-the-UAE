@@ -23,6 +23,15 @@ vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn() }),
 }));
 
+// Authenticated session so the /profile auth guard allows the page to render.
+vi.mock("@/hooks/useAuth", () => ({
+    useAuth: () => ({
+        user: { user_id: "u@test.com", name: "u", email: "u@test.com" },
+        ready: true,
+        logout: vi.fn(),
+    }),
+}));
+
 vi.mock("@/components/DashboardShell", () => ({
     DashboardShell: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
