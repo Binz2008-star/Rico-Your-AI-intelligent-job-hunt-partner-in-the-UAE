@@ -35,11 +35,15 @@ See the matching correction block in `DEC-20260710-004`.
 - **Filename correction:** the redirect line is in **`apps/web/next.config.js`** (this
   handoff and the DEC originally wrote `next.config` / `next.config.mjs`). It is line ~81:
   `{ source: "/onboarding", destination: "/command", permanent: false }`.
-- **Runtime scope note (this branch):** the read-only `GET /api/v1/onboarding/status`
-  endpoint + its backend tests landed on `claude/onboarding-completion-signal-j8qmxz`
-  (the session's designated branch). The frontend consumption + Atelier onboarding-page
-  migration remain to be completed on `claude/onboarding-restore-atelier`, which owns the
-  Atelier design-system islands, consuming this endpoint (no completion logic duplicated).
+- **Delivery (this branch/PR):** shipped as ONE focused PR on
+  `claude/onboarding-completion-signal-j8qmxz` (branched from `main` @ `c43bedc`, which
+  already carries the Atelier token/island layer). Contents: this DEC/handoff correction,
+  the read-only `GET /api/v1/onboarding/status` endpoint + backend tests, the frontend
+  `fetchOnboardingStatus` client + typed schema, the `/onboarding` Atelier migration
+  (`app/_atelier/atelier-onboarding.css` + rewritten `app/onboarding/page.tsx`), the
+  removed `/onboarding → /command` redirect in `apps/web/next.config.js`, post-login
+  routing on the completion signal, and frontend tests. No completion logic is duplicated
+  in Next.js — the UI reads `/onboarding/status`.
 
 ## Overall design-migration status (approved `/design-preview` Atelier direction)
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { AtelierAuthShell } from '@/components/auth/AtelierAuthShell';
-import { ApiError, resendVerification } from '@/lib/api';
+import { ApiError, fetchOnboardingStatus, resendVerification } from '@/lib/api';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation } from '@/lib/translations';
@@ -32,7 +32,19 @@ export function LoginForm({ initialEmail = '' }: { initialEmail?: string }) {
         setResendMessage('');
         try {
             await login(email, password);
-            router.push('/command');
+            // Route on the backend-owned completion signal: complete users go
+            // straight to the app; incomplete users finish onboarding first.
+            // Never assume completion — a status failure routes to /onboarding,
+            // whose own guard recovers (and bounces already-complete users to
+            // /command) rather than skipping setup here.
+            let destination = '/onboarding';
+            try {
+                const status = await fetchOnboardingStatus();
+                destination = status.complete ? '/command' : '/onboarding';
+            } catch {
+                destination = '/onboarding';
+            }
+            router.push(destination);
             router.refresh();
         } catch (err) {
             if (process.env.NODE_ENV === 'development') {

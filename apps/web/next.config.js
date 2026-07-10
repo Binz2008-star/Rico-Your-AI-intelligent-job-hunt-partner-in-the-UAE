@@ -78,7 +78,6 @@ const nextConfig = {
             { source: "/signals", destination: "/command", permanent: false },
             { source: "/archive", destination: "/command", permanent: false },
             { source: "/saved-searches", destination: "/command", permanent: false },
-            { source: "/onboarding", destination: "/command", permanent: false },
             { source: "/orchestrate", destination: "/command", permanent: false },
         ];
     },
