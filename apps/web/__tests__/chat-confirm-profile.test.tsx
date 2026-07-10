@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/command",
 }));
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: any) => (
