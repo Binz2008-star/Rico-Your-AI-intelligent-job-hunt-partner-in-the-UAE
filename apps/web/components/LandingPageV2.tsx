@@ -270,7 +270,13 @@ const LANDING_MOTION_CSS = `
 .lpv2-root .lpv2-cta:hover .lpv2-arrow { transform: translateX(2px); }
 .lpv2-root.lpv2-ar .lpv2-cta:hover .lpv2-arrow { transform: translateX(-2px); }
 
-/* Arabic: synthesised italic looks broken — render upright. */
+/* Arabic typography guards (mirror the reference :lang(ar) rules):
+   - wide letter-spacing shreds the connected Arabic script — remove it everywhere
+     (overrides the inline tracking on mono/eyebrow labels via !important);
+   - uppercase labels render in the system Arabic sans (IBM Plex Mono has no Arabic);
+   - synthesised italic looks broken — render upright. */
+.lpv2-root.lpv2-ar, .lpv2-root.lpv2-ar * { letter-spacing: 0 !important; }
+.lpv2-root.lpv2-ar .uppercase { font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif !important; }
 .lpv2-root.lpv2-ar .italic { font-style: normal; }
 
 /* keyboard focus — visible ring on every interactive element (was browser-default only) */
