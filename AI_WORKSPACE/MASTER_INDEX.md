@@ -64,7 +64,8 @@ edit for content); the newest doubles as the current status pointer.
 
 | Handoff | Status |
 | --- | --- |
-| `HANDOFFS/2026-07-10-fe-sidebar-routing-ia.md` | Latest (current pointer) |
+| `HANDOFFS/2026-07-10-fe-vitest-blocking-gate.md` | Latest (current pointer) |
+| `HANDOFFS/2026-07-10-fe-sidebar-routing-ia.md` | Historical |
 | `HANDOFFS/2026-07-10-fe-chat-action-disabled-reasons.md` | Historical |
 | `HANDOFFS/2026-07-10-fe-green-residual-fixes.md` | Historical |
 | `HANDOFFS/2026-07-10-fe-test-health-ci-gate.md` | Historical |
