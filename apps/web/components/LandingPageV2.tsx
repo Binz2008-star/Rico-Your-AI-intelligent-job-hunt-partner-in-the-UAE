@@ -14,37 +14,64 @@ const fraunces = Fraunces({
     variable: "--font-fraunces-landing",
 });
 
-/* Below-the-fold section heading — Atelier prospectus voice on the V2 canvas:
-   serif display with the emphasised phrase in italic. Copy comes through as-is. */
+/* ─── Atelier prospectus palette (below-the-fold only, DEC-20260710-001) ───────
+   The /design-preview reference is a warm cream "prospectus": paper canvas, near-
+   black ink, a single sun-red accent, thin ink hairlines, ink-on-paper plates with
+   corner ticks. These tokens drive the below-the-fold sections only; the hero stays
+   on the dark V2 canvas untouched. */
+const PAPER = {
+    bg: "#EDE6DA",
+    plate: "#F6F1E8",
+    ink: "#211E1A",
+    ink70: "rgba(33,30,26,0.72)",
+    ink55: "rgba(33,30,26,0.55)",
+    hair: "rgba(33,30,26,0.16)",
+    red: "#C34B2C",
+} as const;
+
+/* Below-the-fold section heading — Atelier prospectus voice: ink serif display at
+   an editorial scale with the emphasised phrase in italic. Copy comes through as-is. */
 function SectionHeading({ lead, emphasis, className = "" }: { lead: React.ReactNode; emphasis: React.ReactNode; className?: string }) {
     return (
         <h2
-            className={`text-2xl sm:text-3xl font-normal text-white/95 tracking-tight ${className}`}
-            style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif" }}
+            className={`text-[1.9rem] leading-[1.12] sm:text-[2.5rem] sm:leading-[1.08] font-normal tracking-[-0.01em] ${className}`}
+            style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif", color: PAPER.ink }}
         >
             {lead}{" "}
-            <em className="italic font-semibold text-white">{emphasis}</em>
+            <em className="italic font-semibold">{emphasis}</em>
         </h2>
     );
 }
 
-/* Atelier editorial eyebrow — mono small-caps label with hairline rules. */
-function SectionEyebrow({ children, tone = "cyan", align = "center", className = "" }: { children: React.ReactNode; tone?: "cyan" | "pink"; align?: "center" | "start"; className?: string }) {
-    const toneClass = tone === "pink" ? "text-pink-400/70" : "text-cyan-400/70";
-    const label = <p className={`text-[11px] font-mono ${toneClass} uppercase tracking-[0.22em]`}>{children}</p>;
+/* Atelier editorial eyebrow — red mono small-caps label with a red dot and ink
+   hairline rules (the reference's "§ THE IDEA" / "INTERVIEW ——— TRANSCRIBED" device). */
+function SectionEyebrow({ children, align = "center", className = "" }: { children: React.ReactNode; align?: "center" | "start"; className?: string }) {
+    const label = (
+        <p className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.22em]" style={{ color: PAPER.red }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: PAPER.red }} aria-hidden="true" />
+            {children}
+        </p>
+    );
+    const rule = <span className="h-px w-8" style={{ background: PAPER.hair }} aria-hidden="true" />;
     if (align === "start") {
-        return (
-            <div className={`flex items-center gap-3 ${className}`}>
-                {label}
-                <span className="h-px w-8 bg-white/10" aria-hidden="true" />
-            </div>
-        );
+        return <div className={`flex items-center gap-3 ${className}`}>{label}{rule}</div>;
     }
+    return <div className={`flex items-center justify-center gap-3 ${className}`}>{rule}{label}{rule}</div>;
+}
+
+/* Ink-on-paper plate with corner tick-marks — the reference's "PLATE 01" card frame. */
+function Plate({ primary = false, className = "", children }: { primary?: boolean; className?: string; children: React.ReactNode }) {
+    const tick = "absolute w-2 h-2 pointer-events-none";
     return (
-        <div className={`flex items-center justify-center gap-3 ${className}`}>
-            <span className="h-px w-8 bg-white/10" aria-hidden="true" />
-            {label}
-            <span className="h-px w-8 bg-white/10" aria-hidden="true" />
+        <div
+            className={`relative rounded-[5px] ${className}`}
+            style={{ background: PAPER.plate, border: `1px solid ${primary ? "rgba(195,75,44,0.45)" : PAPER.hair}` }}
+        >
+            <span className={`${tick} top-1.5 left-1.5`} style={{ borderTop: `1px solid ${PAPER.hair}`, borderLeft: `1px solid ${PAPER.hair}` }} aria-hidden="true" />
+            <span className={`${tick} top-1.5 right-1.5`} style={{ borderTop: `1px solid ${PAPER.hair}`, borderRight: `1px solid ${PAPER.hair}` }} aria-hidden="true" />
+            <span className={`${tick} bottom-1.5 left-1.5`} style={{ borderBottom: `1px solid ${PAPER.hair}`, borderLeft: `1px solid ${PAPER.hair}` }} aria-hidden="true" />
+            <span className={`${tick} bottom-1.5 right-1.5`} style={{ borderBottom: `1px solid ${PAPER.hair}`, borderRight: `1px solid ${PAPER.hair}` }} aria-hidden="true" />
+            {children}
         </div>
     );
 }
@@ -406,9 +433,10 @@ function MarqueeRow({ items, reverse }: { items: string[]; reverse?: boolean }) 
                 {doubled.map((name, i) => (
                     <span
                         key={i}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/[0.04] text-sm font-medium text-white/50 hover:text-white/80 hover:border-white/20 transition-colors cursor-default"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium cursor-default transition-colors"
+                        style={{ border: `1px solid ${PAPER.hair}`, background: PAPER.plate, color: PAPER.ink70 }}
                     >
-                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60 inline-block" />
+                        <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: PAPER.red }} />
                         {name}
                     </span>
                 ))}
@@ -524,16 +552,17 @@ const FEATURE_MOTIFS: Record<string, React.ReactNode> = {
 };
 
 function FeatureMedia({ feature }: { feature: typeof FEATURES[0] }) {
-    const isCyan = feature.accent === "cyan";
     return (
-        <div className={`fx-media ${isCyan ? "fx-media--a" : "fx-media--b"}`} aria-hidden="true">
-            <span className="fx-media__glow" />
-            <span className="fx-media__dots" />
-            <svg className="fx-media__net" viewBox="0 0 300 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <div
+            className="atelier-fx relative h-[124px] overflow-hidden"
+            style={{ background: "linear-gradient(158deg,#F3EDE3 0%,#EBE3D6 100%)", borderBottom: `1px solid ${PAPER.hair}` }}
+            aria-hidden="true"
+        >
+            <span className="atelier-fx__dots" />
+            <svg className="atelier-fx__net" viewBox="0 0 300 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
                 {FEATURE_MOTIFS[feature.title]}
             </svg>
-            <span className="fx-media__streak" />
-            <span className={`fx-media__icon ${isCyan ? "text-cyan-300" : "text-pink-300"}`}>
+            <span className="atelier-fx__icon" style={{ color: PAPER.ink }}>
                 {feature.icon}
             </span>
         </div>
@@ -542,11 +571,14 @@ function FeatureMedia({ feature }: { feature: typeof FEATURES[0] }) {
 
 function FeatureCard({ feature }: { feature: typeof FEATURES[0] }) {
     return (
-        <div className="fx-card group relative rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden hover:border-white/20 hover:bg-white/[0.05] transition-all duration-300 cursor-default">
+        <div
+            className="atelier-fx-card group relative rounded-[5px] overflow-hidden transition-all duration-300 cursor-default"
+            style={{ background: PAPER.plate, border: `1px solid ${PAPER.hair}` }}
+        >
             <FeatureMedia feature={feature} />
             <div className="p-6">
-                <h3 className="text-base font-semibold text-white mb-2">{feature.title}</h3>
-                <p className="text-sm text-white/50 leading-relaxed">{feature.desc}</p>
+                <h3 className="text-base font-semibold mb-2" style={{ color: PAPER.ink }}>{feature.title}</h3>
+                <p className="text-sm leading-relaxed" style={{ color: PAPER.ink70 }}>{feature.desc}</p>
             </div>
         </div>
     );
@@ -554,41 +586,47 @@ function FeatureCard({ feature }: { feature: typeof FEATURES[0] }) {
 
 function StoryCard({ story }: { story: typeof STORIES[0] }) {
     return (
-        <div className="flex-shrink-0 w-80 rounded-2xl border border-white/10 bg-white/[0.04] p-6 flex flex-col gap-4">
+        <Plate className="flex-shrink-0 w-80 p-6 flex flex-col gap-4">
             <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-full">
+                <span
+                    className="text-xs font-mono uppercase tracking-widest px-2 py-0.5 rounded-full tabular-nums"
+                    style={{ color: PAPER.red, background: "rgba(195,75,44,0.10)" }}
+                >
                     Match {story.score}
                 </span>
             </div>
-            <p className="text-sm text-white/70 leading-relaxed flex-1">&ldquo;{story.quote}&rdquo;</p>
+            <p className="text-[0.95rem] leading-relaxed flex-1 italic" style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif", color: PAPER.ink }}>&ldquo;{story.quote}&rdquo;</p>
             <div>
-                <p className="text-sm font-semibold text-white">{story.name}</p>
-                <p className="text-xs text-white/40">{story.title}</p>
+                <p className="text-sm font-semibold" style={{ color: PAPER.ink }}>{story.name}</p>
+                <p className="text-xs" style={{ color: PAPER.ink55 }}>{story.title}</p>
             </div>
-        </div>
+        </Plate>
     );
 }
 
 function FaqItem({ faq }: { faq: typeof FAQS[0] }) {
     const [open, setOpen] = useState(false);
     return (
-        <div className="border-b border-white/10 last:border-0">
+        <div style={{ borderBottom: `1px solid ${PAPER.hair}` }} className="last:border-0">
             <button
                 onClick={() => setOpen(!open)}
                 className="w-full flex items-center justify-between py-5 text-left gap-4 group cursor-pointer"
                 aria-expanded={open}
             >
-                <span className="text-sm font-medium text-white/80 group-hover:text-white transition-colors">
+                <span className="text-sm font-medium transition-colors" style={{ color: open ? PAPER.ink : PAPER.ink70 }}>
                     {faq.q}
                 </span>
-                <span className={`flex-shrink-0 w-5 h-5 rounded-full border border-white/20 flex items-center justify-center transition-transform duration-200 ${open ? "rotate-45 border-cyan-400/50" : ""}`}>
-                    <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5 text-white/60">
+                <span
+                    className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-transform duration-200 ${open ? "rotate-45" : ""}`}
+                    style={{ border: `1px solid ${open ? PAPER.red : PAPER.hair}` }}
+                >
+                    <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5" style={{ color: open ? PAPER.red : PAPER.ink55 }}>
                         <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
                     </svg>
                 </span>
             </button>
             {open && (
-                <p className="pb-5 text-sm text-white/50 leading-relaxed pr-8">{faq.a}</p>
+                <p className="pb-5 text-sm leading-relaxed pr-8" style={{ color: PAPER.ink70 }}>{faq.a}</p>
             )}
         </div>
     );
@@ -622,33 +660,15 @@ export default function LandingPageV2() {
                     [style*=marquee] { animation: none !important; }
                 }
 
-                /* ── Feature-card cinematic media headers (adapted from approved mock) ── */
-                @keyframes fx-streak {
-                    0% { transform: translateX(-160%) skewX(-14deg); opacity: 0; }
-                    22% { opacity: 0.85; }
-                    70% { opacity: 0.85; }
-                    100% { transform: translateX(320%) skewX(-14deg); opacity: 0; }
-                }
-                .fx-media { position: relative; height: 132px; overflow: hidden; background: radial-gradient(140% 120% at 72% 0%, #0a1519 0%, #050506 62%); border-bottom: 0.5px solid rgba(255,255,255,0.06); }
-                .fx-media__glow { position: absolute; inset: -35%; filter: blur(4px); opacity: 0.85; transform: scale(1.06); transform-origin: 72% 22%; transition: opacity 550ms cubic-bezier(0.16,1,0.3,1), transform 750ms cubic-bezier(0.16,1,0.3,1), filter 550ms cubic-bezier(0.16,1,0.3,1); background: radial-gradient(38% 52% at 78% 20%, rgba(0,218,243,0.42), transparent 60%), radial-gradient(46% 64% at 20% 90%, rgba(255,72,149,0.16), transparent 62%), conic-gradient(from 210deg at 74% 24%, transparent 0deg, rgba(0,218,243,0.16) 42deg, transparent 120deg); }
-                .fx-card:hover .fx-media__glow { opacity: 1; transform: scale(1.16); filter: blur(4px) brightness(1.28); }
-                .fx-media__dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(190,244,255,0.55) 0.6px, transparent 0.7px); background-size: 13px 13px; opacity: 0.13; -webkit-mask-image: radial-gradient(78% 100% at 78% 22%, #000, transparent 72%); mask-image: radial-gradient(78% 100% at 78% 22%, #000, transparent 72%); transition: opacity 550ms cubic-bezier(0.16,1,0.3,1); }
-                .fx-card:hover .fx-media__dots { opacity: 0.22; }
-                .fx-media__streak { position: absolute; top: -20%; bottom: -20%; left: 0; width: 34%; background: linear-gradient(90deg, transparent, rgba(190,244,255,0.32), transparent); filter: blur(3px); opacity: 0; }
-                .fx-card:hover .fx-media__streak { animation: fx-streak 1.9s cubic-bezier(0.16,1,0.3,1); }
-                .fx-media__icon { position: absolute; left: 18px; bottom: 14px; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(6,10,12,0.5); border: 0.5px solid rgba(255,255,255,0.14); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
-                .fx-media__icon svg { width: 20px; height: 20px; }
-                .fx-media__net { position: absolute; inset: 0; width: 100%; height: 100%; color: #00daf3; opacity: 0.5; pointer-events: none; transition: opacity 550ms cubic-bezier(0.16,1,0.3,1); filter: drop-shadow(0 0 4px rgba(0,218,243,0.35)); -webkit-mask-image: linear-gradient(175deg, #000 52%, transparent 92%); mask-image: linear-gradient(175deg, #000 52%, transparent 92%); }
-                .fx-card:hover .fx-media__net { opacity: 0.82; }
-                .fx-media--b { background: radial-gradient(140% 120% at 28% 0%, #170a12 0%, #050506 62%); }
-                .fx-media--b .fx-media__glow { background: radial-gradient(40% 54% at 24% 22%, rgba(255,72,149,0.34), transparent 60%), radial-gradient(48% 66% at 82% 88%, rgba(0,218,243,0.14), transparent 62%), conic-gradient(from 150deg at 28% 24%, transparent 0deg, rgba(255,72,149,0.16) 42deg, transparent 120deg); }
-                .fx-media--b .fx-media__dots { -webkit-mask-image: radial-gradient(78% 100% at 24% 22%, #000, transparent 72%); mask-image: radial-gradient(78% 100% at 24% 22%, #000, transparent 72%); }
-                .fx-media--b .fx-media__net { color: #ff4895; filter: drop-shadow(0 0 4px rgba(255,72,149,0.35)); }
-                @media (max-width: 640px) { .fx-media { height: 116px; } }
-                @media (prefers-reduced-motion: reduce) {
-                    .fx-card:hover .fx-media__glow { transform: scale(1.04); }
-                    .fx-card:hover .fx-media__streak { animation: none; }
-                }
+                /* ── Feature-card illustration plates (Atelier ink-on-paper) ── */
+                .atelier-fx-card { box-shadow: 0 1px 0 rgba(33,30,26,0.03); }
+                .atelier-fx-card:hover { border-color: rgba(195,75,44,0.40) !important; box-shadow: 0 6px 22px -14px rgba(33,30,26,0.35); }
+                .atelier-fx__dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(33,30,26,0.30) 0.6px, transparent 0.7px); background-size: 14px 14px; opacity: 0.28; -webkit-mask-image: radial-gradient(84% 100% at 76% 24%, #000, transparent 74%); mask-image: radial-gradient(84% 100% at 76% 24%, #000, transparent 74%); }
+                .atelier-fx__net { position: absolute; inset: 0; width: 100%; height: 100%; color: ${PAPER.ink}; opacity: 0.42; pointer-events: none; transition: color 400ms ease, opacity 400ms ease; -webkit-mask-image: linear-gradient(175deg, #000 54%, transparent 94%); mask-image: linear-gradient(175deg, #000 54%, transparent 94%); }
+                .atelier-fx-card:hover .atelier-fx__net { color: ${PAPER.red}; opacity: 0.72; }
+                .atelier-fx__icon { position: absolute; left: 18px; bottom: 14px; width: 38px; height: 38px; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: ${PAPER.plate}; border: 1px solid ${PAPER.hair}; }
+                .atelier-fx__icon svg { width: 20px; height: 20px; }
+                @media (max-width: 640px) { .atelier-fx { height: 112px !important; } }
             `}</style>
 
             {/* ── Canvas ribbons ── */}
@@ -791,31 +811,40 @@ export default function LandingPageV2() {
                     </div>
                 </section>
 
-                {/* ── AMD-inspired: Why Rico ── */}
-                <section className="relative px-4 py-20">
+                {/* ══ PAPER REGION ══ Below-the-fold sections in the /design-preview
+                    prospectus language (cream/ink/sun-red). The dark hero above ends
+                    at a crisp sun-red ledger rule — the "cover" opening into "pages".
+                    Hero, nav, and footer stay on the dark canvas (DEC-20260710-001). */}
+                <div
+                    className="relative z-10"
+                    style={{ background: PAPER.bg, color: PAPER.ink, borderTop: `1px solid ${PAPER.red}` }}
+                >
+
+                {/* ── Why Rico ── */}
+                <section className="relative px-4 pt-24 pb-20">
                     <div className="max-w-5xl mx-auto">
                         <div className="text-center mb-12">
-                            <SectionEyebrow className="mb-3">Why Rico</SectionEyebrow>
+                            <SectionEyebrow className="mb-4">Why Rico</SectionEyebrow>
                             <SectionHeading lead="Built for the" emphasis="UAE job market" />
                         </div>
                         <div className="grid md:grid-cols-3 gap-6">
                             {WHY_RICO.map((item) => (
-                                <div key={item.num} className="p-6 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] transition-colors group">
+                                <Plate key={item.num} className="p-6 transition-shadow hover:shadow-[0_6px_22px_-14px_rgba(33,30,26,0.35)]">
                                     <p className="flex items-center gap-2.5 mb-4">
-                                        <span className="font-mono text-[11px] font-medium tracking-[0.18em] text-cyan-400/60">{item.num}</span>
-                                        <span className="h-px flex-1 bg-white/[0.07] group-hover:bg-cyan-400/25 transition-colors" aria-hidden="true" />
+                                        <span className="font-mono text-[11px] font-semibold tracking-[0.18em] tabular-nums" style={{ color: PAPER.red }}>{item.num}</span>
+                                        <span className="h-px flex-1" style={{ background: PAPER.hair }} aria-hidden="true" />
                                     </p>
-                                    <h3 className="text-sm font-semibold text-white mb-2">{item.headline}</h3>
-                                    <p className="text-sm text-white/40 leading-relaxed">{item.body}</p>
-                                </div>
+                                    <h3 className="text-sm font-semibold mb-2" style={{ color: PAPER.ink }}>{item.headline}</h3>
+                                    <p className="text-sm leading-relaxed" style={{ color: PAPER.ink70 }}>{item.body}</p>
+                                </Plate>
                             ))}
                         </div>
                     </div>
                 </section>
 
-                {/* ── AMD-inspired: Employer logo marquee ── */}
-                <section className="py-12 border-y border-white/[0.06] overflow-hidden">
-                    <p className="text-center text-xs font-mono text-white/25 uppercase tracking-widest mb-6">
+                {/* ── Employer logo marquee ── */}
+                <section className="py-12 overflow-hidden" style={{ borderTop: `1px solid ${PAPER.hair}`, borderBottom: `1px solid ${PAPER.hair}` }}>
+                    <p className="text-center text-xs font-mono uppercase tracking-widest mb-6" style={{ color: PAPER.ink55 }}>
                         Jobs from leading UAE employers
                     </p>
                     <MarqueeRow items={EMPLOYERS_ROW1} />
@@ -839,18 +868,19 @@ export default function LandingPageV2() {
                     </div>
                 </section>
 
-                {/* ── AMD-inspired: Success stories carousel ── */}
-                <section className="py-20 border-y border-white/[0.06]">
+                {/* ── Success stories carousel ── */}
+                <section className="py-20" style={{ borderTop: `1px solid ${PAPER.hair}`, borderBottom: `1px solid ${PAPER.hair}` }}>
                     <div className="max-w-5xl mx-auto px-4">
                         <div className="flex items-end justify-between mb-8">
                             <div>
-                                <SectionEyebrow tone="pink" align="start" className="mb-2">Success Stories</SectionEyebrow>
+                                <SectionEyebrow align="start" className="mb-3">Success Stories</SectionEyebrow>
                                 <SectionHeading lead="Real results," emphasis="real candidates" />
                             </div>
                             <div className="hidden sm:flex items-center gap-2">
                                 <button
                                     onClick={() => scrollCarousel(-1)}
-                                    className="w-9 h-9 rounded-full border border-white/15 flex items-center justify-center text-white/50 hover:text-white hover:border-white/30 transition-colors cursor-pointer"
+                                    className="w-9 h-9 rounded-full flex items-center justify-center transition-colors cursor-pointer hover:bg-[rgba(33,30,26,0.05)]"
+                                    style={{ border: `1px solid ${PAPER.hair}`, color: PAPER.ink70 }}
                                     aria-label="Scroll left"
                                 >
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
@@ -859,7 +889,8 @@ export default function LandingPageV2() {
                                 </button>
                                 <button
                                     onClick={() => scrollCarousel(1)}
-                                    className="w-9 h-9 rounded-full border border-white/15 flex items-center justify-center text-white/50 hover:text-white hover:border-white/30 transition-colors cursor-pointer"
+                                    className="w-9 h-9 rounded-full flex items-center justify-center transition-colors cursor-pointer hover:bg-[rgba(33,30,26,0.05)]"
+                                    style={{ border: `1px solid ${PAPER.hair}`, color: PAPER.ink70 }}
                                     aria-label="Scroll right"
                                 >
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
@@ -882,38 +913,46 @@ export default function LandingPageV2() {
                     </div>
                 </section>
 
-                {/* ── AMD-inspired: Image-background CTA highlight ── */}
+                {/* ── CTA highlight — ink "colophon" plate stamped on the cream page ── */}
                 <section className="px-4 py-20">
                     <div className="max-w-5xl mx-auto">
-                        <div className="relative overflow-hidden rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/60 via-black to-pink-950/40 p-10 sm:p-16 text-center">
-                            {/* background glow blobs */}
-                            <div className="absolute -top-20 -left-20 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-                            <div className="absolute -bottom-20 -right-20 w-72 h-72 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
+                        <div className="relative overflow-hidden rounded-[6px] p-10 sm:p-16 text-center" style={{ background: PAPER.ink }}>
+                            {/* corner ticks in cream (inverse plate) */}
+                            <span className="absolute top-2 left-2 w-2.5 h-2.5" style={{ borderTop: "1px solid rgba(246,241,232,0.3)", borderLeft: "1px solid rgba(246,241,232,0.3)" }} aria-hidden="true" />
+                            <span className="absolute top-2 right-2 w-2.5 h-2.5" style={{ borderTop: "1px solid rgba(246,241,232,0.3)", borderRight: "1px solid rgba(246,241,232,0.3)" }} aria-hidden="true" />
+                            <span className="absolute bottom-2 left-2 w-2.5 h-2.5" style={{ borderBottom: "1px solid rgba(246,241,232,0.3)", borderLeft: "1px solid rgba(246,241,232,0.3)" }} aria-hidden="true" />
+                            <span className="absolute bottom-2 right-2 w-2.5 h-2.5" style={{ borderBottom: "1px solid rgba(246,241,232,0.3)", borderRight: "1px solid rgba(246,241,232,0.3)" }} aria-hidden="true" />
                             <div className="relative z-10">
-                                <SectionEyebrow className="mb-4">Get Started Today</SectionEyebrow>
+                                <p className="flex items-center justify-center gap-2 text-[11px] font-mono uppercase tracking-[0.22em] mb-4" style={{ color: PAPER.red }}>
+                                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: PAPER.red }} aria-hidden="true" />
+                                    Get Started Today
+                                </p>
                                 <h2
-                                    className="text-3xl sm:text-4xl font-normal text-white/95 mb-4 leading-tight tracking-tight"
-                                    style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif" }}
+                                    className="text-3xl sm:text-[2.75rem] font-normal mb-4 leading-[1.1] tracking-[-0.01em]"
+                                    style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif", color: PAPER.plate }}
                                 >
                                     Your next UAE role{" "}
                                     <br className="hidden sm:block" />
-                                    <em className="italic font-semibold bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent">
+                                    <em className="italic font-semibold" style={{ color: PAPER.red }}>
                                         is already in Rico&apos;s queue
                                     </em>
                                 </h2>
-                                <p className="text-base text-white/40 max-w-md mx-auto mb-8 font-light">
+                                <p className="text-base max-w-md mx-auto mb-8" style={{ color: "rgba(246,241,232,0.6)" }}>
                                     Upload your CV and get your first personalized match report in under 60 seconds.
                                 </p>
                                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                                     <Link
                                         href="/signup"
-                                        className="px-7 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-400 text-black font-semibold text-sm hover:brightness-110 transition-all shadow-[0_0_40px_rgba(0,218,243,0.3)]"
+                                        className="inline-flex items-center gap-2 px-7 py-3 rounded-full font-semibold text-sm transition-all hover:brightness-95"
+                                        style={{ background: PAPER.plate, color: PAPER.ink }}
                                     >
                                         Create free account
+                                        <span aria-hidden="true">→</span>
                                     </Link>
                                     <Link
                                         href="/chat"
-                                        className="px-7 py-3 rounded-xl border border-white/20 text-white/70 font-medium text-sm hover:bg-white/[0.06] hover:border-white/30 transition-all"
+                                        className="px-7 py-3 rounded-full font-medium text-sm transition-all hover:bg-[rgba(246,241,232,0.08)]"
+                                        style={{ border: "1px solid rgba(246,241,232,0.25)", color: "rgba(246,241,232,0.85)" }}
                                     >
                                         Try chat first
                                     </Link>
@@ -932,29 +971,23 @@ export default function LandingPageV2() {
                         </div>
                         <div className="grid md:grid-cols-3 gap-5">
                             {PLANS.map((plan) => (
-                                <div
-                                    key={plan.name}
-                                    className={`relative rounded-2xl border p-7 flex flex-col gap-6 ${plan.primary
-                                        ? "border-cyan-500/40 bg-gradient-to-b from-cyan-950/50 to-black shadow-[0_0_48px_rgba(0,218,243,0.1)]"
-                                        : "border-white/10 bg-white/[0.03]"
-                                        }`}
-                                >
+                                <Plate key={plan.name} primary={plan.primary} className="p-7 flex flex-col gap-6">
                                     {plan.badge && (
-                                        <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-400 text-black">
+                                        <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: PAPER.red, color: PAPER.plate }}>
                                             {plan.badge}
                                         </span>
                                     )}
                                     <div>
-                                        <p className={`text-sm font-medium mb-1 ${plan.primary ? "text-cyan-400" : "text-white/60"}`}>{plan.name}</p>
+                                        <p className="text-sm font-medium mb-1" style={{ color: plan.primary ? PAPER.red : PAPER.ink70 }}>{plan.name}</p>
                                         <div className="flex items-baseline gap-1">
-                                            <span className="text-3xl font-bold text-white tabular-nums tracking-tight">{plan.price}</span>
-                                            {plan.period && <span className="text-sm text-white/30">{plan.period}</span>}
+                                            <span className="text-3xl font-bold tabular-nums tracking-tight" style={{ color: PAPER.ink }}>{plan.price}</span>
+                                            {plan.period && <span className="text-sm" style={{ color: PAPER.ink55 }}>{plan.period}</span>}
                                         </div>
                                     </div>
                                     <ul className="flex flex-col gap-2.5 flex-1">
                                         {plan.features.map((f) => (
-                                            <li key={f} className="flex items-start gap-2.5 text-sm text-white/55">
-                                                <svg viewBox="0 0 16 16" fill="none" className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${plan.primary ? "text-cyan-400" : "text-white/30"}`}>
+                                            <li key={f} className="flex items-start gap-2.5 text-sm" style={{ color: PAPER.ink70 }}>
+                                                <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: plan.primary ? PAPER.red : PAPER.ink55 }}>
                                                     <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
                                                 </svg>
                                                 {f}
@@ -963,14 +996,14 @@ export default function LandingPageV2() {
                                     </ul>
                                     <Link
                                         href={plan.href}
-                                        className={`block text-center py-3 rounded-xl text-sm font-semibold transition-all ${plan.primary
-                                            ? "bg-gradient-to-r from-cyan-500 to-cyan-400 text-black hover:brightness-110 shadow-[0_0_24px_rgba(0,218,243,0.2)]"
-                                            : "border border-white/15 text-white/70 hover:bg-white/[0.06] hover:border-white/25"
-                                            }`}
+                                        className="block text-center py-3 rounded-full text-sm font-semibold transition-all hover:brightness-95"
+                                        style={plan.primary
+                                            ? { background: PAPER.ink, color: PAPER.plate }
+                                            : { border: `1px solid ${PAPER.hair}`, color: PAPER.ink }}
                                     >
                                         {plan.cta}
                                     </Link>
-                                </div>
+                                </Plate>
                             ))}
                         </div>
                     </div>
@@ -983,13 +1016,15 @@ export default function LandingPageV2() {
                             <SectionEyebrow className="mb-3">FAQ</SectionEyebrow>
                             <SectionHeading lead="Common" emphasis="questions" />
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.02] px-6">
+                        <div className="rounded-[5px] px-6" style={{ border: `1px solid ${PAPER.hair}`, background: PAPER.plate }}>
                             {FAQS.map((faq) => (
                                 <FaqItem key={faq.q} faq={faq} />
                             ))}
                         </div>
                     </div>
                 </section>
+
+                </div>{/* ══ /PAPER REGION ══ */}
 
                 {/* ── Footer ── */}
                 <footer className="border-t border-white/[0.06] px-4 py-10">
