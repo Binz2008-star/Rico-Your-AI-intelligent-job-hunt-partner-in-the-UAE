@@ -1,10 +1,47 @@
-# Handoff — Onboarding restoration + Atelier migration (IN PROGRESS)
+# Handoff — Onboarding restoration + Atelier migration (MERGED — production deploy confirmed; browser smoke PARTIAL)
 
 > **For the next Claude session (continuing on a different account).** Pick up from
 > branch `claude/onboarding-restore-atelier` (based on `origin/main` @ `c43bedc`). This
 > handoff + `DEC-20260710-004` are the source of truth. Owner already APPROVED Option 1
 > (re-enable + migrate onboarding). No onboarding runtime code has been written yet —
 > only investigation + the DEC + this handoff.
+
+## ✅ Merge + deployment record (2026-07-10)
+
+The work shipped as **PR #955** (`feat(onboarding): restore /onboarding + Atelier migration
++ status-driven routing`), **squash-merged into `main`** by the owner at `2026-07-10T22:31:08Z`.
+
+- **Merge SHA (verified new `main` HEAD): `3cf539841fd47c7aad7458f8c66bd80aa31ee018`.**
+  (Recorded from the merged HEAD of `main`, not a pre-merge test-merge ref.)
+- **Pre-merge gates (green on head `ccf74a00b6aca78ddf8dfc5e4333aa32bac11821`):** GitHub QA
+  Tests, pytest, frontend/vitest (337 passing), Playwright, Vercel Preview READY, mergeable
+  = clean, zero unresolved review threads.
+- **Production deployments (both confirmed via CI on `3cf5398`):**
+  - Frontend — Vercel "Deploy to Production": **success**.
+  - Backend — Render "Deploy Render Backend" (`deploy-render.yml`): **success**. This job
+    triggers the deploy hook and **blocks until `/version.commit` matches the pushed SHA**,
+    so success confirms the backend at `3cf5398` is live and carries the new read-only
+    `GET /api/v1/onboarding/status` endpoint + strict reader.
+
+### Production verification — PARTIAL (owner browser smoke still required)
+
+Deployments are confirmed live via CI, but **functional production smoke could not be run
+from the CI/agent container**: the outbound network policy denies
+`rico-job-automation-api.onrender.com` and `ricohunt.com` (proxy `403 CONNECT`). An
+**authenticated browser smoke must be run by the owner** before this phase is called fully
+verified. Required checks (owner-run):
+
+- unauthenticated `/onboarding` access → signup/login with return path
+- authenticated **incomplete** user → `/onboarding`
+- authenticated **completed** user → `/command`
+- **Skip for now** → `/command` **without** a completion mutation
+- successful **submit** persists status and routes to `/command`
+- `/api/v1/onboarding/status` success **and** sanitized `503` on a real backend read failure
+- EN/AR, RTL, desktop/mobile
+
+An unauthenticated `401` from `/api/v1/onboarding/status` proves **liveness only**, not the
+authenticated contract. **Do not start the workspace/dashboard migration until the owner
+completes this authenticated browser smoke.**
 
 ## ⚠️ Evidence correction (2026-07-10) — read before using the "completion signal" notes below
 
