@@ -22,7 +22,6 @@ const NAV_SECTION_KEYS: Record<string, TranslationKey> = {
 const NAV_ITEM_KEYS: Record<string, TranslationKey> = {
     "/command": "navAskRico",
     "/flow": "navPipeline",
-    "/queue": "applications",
     "/profile": "profileTitle",
     "/upload": "navMyCv",
     "/subscription": "navMyPlan",

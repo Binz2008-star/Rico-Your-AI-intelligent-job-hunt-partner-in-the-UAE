@@ -63,7 +63,6 @@ describe("sidebar nav routing — items with real destinations", () => {
 
 describe("sidebar nav routing — specific pages", () => {
     const pipeline = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/flow")!;
-    const applications = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/queue")!;
     const profile = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/profile")!;
     const settings = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/settings")!;
 
@@ -71,9 +70,10 @@ describe("sidebar nav routing — specific pages", () => {
         expect(resolveNavHref(pipeline.href, pipeline.chatPrompt, "/settings")).toBe("/flow");
     });
 
-    it("/queue (Applications) opens /queue from /flow", () => {
-        expect(resolveNavHref(applications.href, applications.chatPrompt, "/flow")).toBe("/queue");
-    });
+    // Note: Applications (/queue) was intentionally removed from the sidebar IA.
+    // The /queue page still exists as a route (see below, used as an origin
+    // pathname), but it is no longer a sidebar nav item, so there is no nav-item
+    // routing contract to assert for it.
 
     it("/profile (Profile) opens /profile from /queue", () => {
         expect(resolveNavHref(profile.href, profile.chatPrompt, "/queue")).toBe("/profile");

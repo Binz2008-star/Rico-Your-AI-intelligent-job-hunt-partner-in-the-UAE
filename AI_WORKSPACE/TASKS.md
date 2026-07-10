@@ -260,24 +260,38 @@ Baseline moved 317/4 → 320/1. One scoped product-code touch (`ChatActionCard.t
       `"No endpoint configured for this action"` as-is, and updated that test's expectation to the
       current (more useful) message. No other component behavior changed.
 
-#### REMAINING — YELLOW, needs owner decision (B4, NOT started)
-- [ ] `sidebar-nav-routing.test.ts` (1) — B4. Test expects a `/queue` ("Applications") sidebar nav
-      item that no longer exists in `components/layout/app-nav.ts` (the `/queue` page still exists
-      and builds; a stale `NAV_ITEM_KEYS["/queue"]` entry lingers in `AppSidebar.tsx`). Decision
-      needed: was the nav item intentionally removed (delete the test cases + orphaned key) or
-      accidentally dropped (restore it)?
+#### RESOLVED — PR B4 (owner-approved YELLOW, merged via `test(frontend): align sidebar routing with current IA`)
+Owner decision: the `/queue` ("Applications") sidebar nav removal is **intentional** — do not restore
+it; keep the `/queue` page itself untouched. Suite is now **320/0** (total dropped from 321 because
+the obsolete nav-item test was removed, not "fixed"):
+- [x] `sidebar-nav-routing.test.ts` — removed the obsolete `applications`/`/queue` nav-item lookup and
+      its routing test (there is no longer a `/queue` sidebar nav item to assert a contract for). The
+      `/queue` route is kept as a valid *origin* pathname in the other cases since the page still
+      exists.
+- [x] `AppSidebar.tsx` — removed the orphaned `NAV_ITEM_KEYS["/queue"]` entry (verified dead: both
+      `NAV_ITEM_KEYS[item.href]` lookups run only over `mainNavSections`, which no longer contains a
+      `/queue` item). No sidebar UX/rendering change.
+
+#### KNOWN FLAKE — must fix before B5 (test-infra, NOT product)
+`chat-confirm-profile.test.tsx` intermittently fails in the *full-suite* run (passes deterministically
+in isolation) because jsdom has no `Element.prototype.scrollTo` and `vitest.setup.ts` mocks only
+`scrollIntoView`; the command page's `scrollMessagesPane` throws inside a requestAnimationFrame
+callback that leaks across files. Pre-existing, not introduced by B1–B4. Does not block PRs today
+(vitest is `continue-on-error`), but must be fixed (mock `scrollTo` in `vitest.setup.ts`) before B5
+flips vitest to a required gate.
 
 #### Constraints
 - Do not touch: backend/API, auth/session internals, billing, schema/migrations, dependencies,
   AI provider/prompt/routing, #920.
-- B4 requires an owner decision on which side (test vs. product) is correct before any fix.
 
 #### Acceptance criteria
 - [x] The 8 clearly test-only failures resolved without touching product code (PR B1+B2).
 - [x] B3 (`chat-action-card`) resolved with owner sign-off (scoped product touch).
-- [ ] B4 (`sidebar-nav-routing`) resolved with owner sign-off.
-- [ ] `npm run test` promoted from informational (`continue-on-error: true`) to a required,
-      green CI gate (the "B5" step, after B4 lands and the suite is 321/321; currently 320/1).
+- [x] B4 (`sidebar-nav-routing`) resolved with owner sign-off (obsolete test + orphaned metadata
+      removed; `/queue` nav stays removed, `/queue` page untouched).
+- [ ] B5: fix the `scrollTo` full-suite flake in `vitest.setup.ts`, then promote `npm run test` from
+      informational (`continue-on-error: true`) to a required, green CI gate. Suite is 320/0 when
+      deterministic; the flake must be closed first.
 
 ### TASK-20260710-002 — #929 `/design-preview` consolidation hub (one preview entry point)
 
