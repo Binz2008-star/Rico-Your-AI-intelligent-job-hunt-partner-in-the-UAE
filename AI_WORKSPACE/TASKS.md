@@ -78,6 +78,109 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260710-003 — Phase 1: landing below-the-fold static sections (Atelier rollout)
+
+Status: scoped (NOT started — gated on the Phase 0 docs PR merging; owner instruction 2026-07-10)
+Owner: unassigned
+Branch: TBD
+Issue/PR: none yet — governed by `DEC-20260710-001`
+
+#### Objective
+First implementation step of the approved Atelier rollout: align the production landing's
+below-the-fold static marketing sections to the approved `/design-preview` reference.
+Hero is explicitly excluded (own follow-up PR within Phase 1).
+
+#### Constraints
+- Do not touch: hero, `app/page.tsx` auth redirect, nav, `/command`, `/rico`, backend,
+  auth, billing, Neon, schema. No shadcn; existing stack only. Visual-only; zero logic diff.
+- Note: draft PR #899 (landing hero polish, held under the #871 freeze) overlaps the hero —
+  hero work must reconcile with it; below-the-fold sections do not.
+
+#### Acceptance criteria
+- [ ] Per-phase uniform acceptance in `DEC-20260710-001` §5 (build, no new test failures,
+      EN/AR RTL, mobile, owner preview approval pre-merge, post-merge smoke).
+- [ ] Lighthouse/CLS not worse than current landing; sitemap/robots/meta unchanged.
+
+#### Rollback
+Revert the PR → Vercel auto-redeploy → re-smoke landing.
+
+### TASK-20260710-004 — P2: stale apply-link tests + `test_agent.py` absent from CI
+
+Status: proposed (audit 2026-07-10; does not block rollout)
+Owner: unassigned
+Branch: TBD
+Issue/PR: none yet
+
+#### Objective
+Three `tests/test_agent.py::TestApplyServiceIndeedMethod` tests encode the pre-trust-gate
+link contract and fail on clean `main` (expect `success`/`manual_required`, get
+`error: Job is missing a link` because the Phase-0 trust gate in
+`src/services/job_link_trust.py` deliberately rejects non-source-backed URLs). CI's
+`qa-tests.yml` pytest job never runs `tests/test_agent.py`, so this is invisible.
+Test-only fix: update the 3 tests to the trust-gate contract (source-backed fixtures) and
+consider adding `tests/test_agent.py` to the CI selection. Production behavior is correct
+and unchanged (`RICO_ENABLE_AUTO_APPLY=false` in prod); do NOT weaken the trust gate.
+
+#### Acceptance criteria
+- [ ] `python -m pytest tests/test_agent.py -q` green on clean `main`.
+- [ ] No `src/` behavior change.
+
+### TASK-20260710-005 — P2: resolve `/onboarding` hybrid dead-UI state (Phase 4 gate)
+
+Status: proposed (audit 2026-07-10; **blocks Phase 4**, not phases 1–3)
+Owner: unassigned
+Branch: TBD
+Issue/PR: none yet
+
+#### Objective
+`next.config.js` redirects `/onboarding` → `/command` while a real 466-line
+`apps/web/app/onboarding/page.tsx` still exists — the hybrid state prohibited by
+`DEC-20260628-001` (No Dead UI rule). Owner decision then one small PR: either make the
+route live (remove redirect) or strip `page.tsx` to nothing/thin passthrough. Must be
+resolved before the Phase 4 onboarding-shell work in `DEC-20260710-001`.
+
+#### Acceptance criteria
+- [ ] Route is in exactly one legal state per the No Dead UI rule.
+- [ ] CLAUDE.md "Key Frontend Files" entry for onboarding matches reality afterwards.
+
+### TASK-20260710-006 — P2: fix vitest `next/navigation` router-mock baseline (Phase 3 gate)
+
+Status: proposed (audit 2026-07-10; **blocks Phase 3**, not phases 1–2)
+Owner: unassigned
+Branch: TBD
+Issue/PR: none yet
+
+#### Objective
+19 pre-existing vitest failures across 9 files ("invariant expected app router to be
+mounted" — missing `useRouter` mock in test setup) sit in exactly the surfaces Phase 3
+reskins (signup/auth/chat/landing/profile/signals). They mask regressions where detection
+matters most. Single test-infra PR: proper `next/navigation` mock in the vitest setup;
+target 0 failed files on clean `main`. No component changes.
+
+#### Acceptance criteria
+- [ ] `npm test` green (0 failures) on clean `main`, or any remaining failures are real
+      and individually justified.
+- [ ] No `apps/web` component/runtime changes — test setup only.
+
+### TASK-20260710-007 — P2: authenticated production smoke path for agent sessions (Phase 3 gate)
+
+Status: proposed (audit 2026-07-10; **blocks Phase 3** together with -006)
+Owner: Roben (decision) + Claude (documentation)
+Branch: n/a (process/credential task, not a code PR)
+Issue/PR: none yet
+
+#### Objective
+Agent sessions have no approved smoke credentials, so login → `/me` → profile/settings →
+authenticated `/command` (incl. auth-flash and "Sign in while logged in" checks) cannot be
+verified without the owner. Owner decides: (a) provision a synthetic smoke account and
+expose its credentials to agent sessions as env/secrets (never in repo), or (b) owner runs
+the documented auth smoke per release. Document the chosen path in OPERATING_RULES.
+
+#### Acceptance criteria
+- [ ] Auth smoke runnable (by agent or documented owner procedure) before the Phase 3
+      auth-shell PR merges.
+- [ ] No credentials in repo/docs; synthetic account only; never a real user account.
+
 ### TASK-20260710-002 — #929 `/design-preview` consolidation hub (one preview entry point)
 
 Status: done (merged + production verified)

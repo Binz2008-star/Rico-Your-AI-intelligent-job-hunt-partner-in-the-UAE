@@ -1,6 +1,30 @@
 # Current State
 
-> **Reconciliation header — 2026-07-10, later same day (latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-10, evening (latest; supersedes all headers below).**
+> `main` is at `db3d7226c1ed87990db2abbb964e6e4196526213` (#930 workspace sync merged,
+> owner-approved). **Full read-only system audit run and verdict accepted by owner:
+> YELLOW — acceptable, zero P0/P1 blockers; production stable.** Verified: Render
+> `/version.commit` == `main` exactly (auto-deploy healthy); Vercel proxy chain healthy;
+> DB reachable, no localhost fallback; 15/15 public routes 200; `/design-preview`
+> noindex + not nav-linked; public chat correct EN/AR (guest job search returns an
+> onboarding CTA, zero fabricated listings; empty message → 422); billing live in
+> manual/WhatsApp mode with a no-Stripe guard; `/flow` confirmed as the pipeline source
+> of truth (`/applications` is a thin redirect); admin API 401s unauth; no secrets in
+> tracked files; frontend build green; vitest exactly at the known 19-failure baseline
+> (zero new); backend focused suite 225 passed / 3 known-stale (trust-gate contract,
+> `test_agent.py` not in CI); guest render smoke of `/command`, `/flow`, `/dashboard`
+> (mobile+desktop, local prod build) 0 app errors. **Not run (honest gaps):**
+> authenticated smokes (no smoke credentials — TASK-20260710-007), Render log
+> inspection (MCP unauthorized), production-domain browser execution (proxy/TLS
+> tooling; covered by local build + CI Playwright). Audit P2s recorded as
+> TASK-20260710-004..007; P3s in the handoff. Full record:
+> `HANDOFFS/2026-07-10-system-audit-phase0-gate.md`.
+> **Rollout governance: `DEC-20260710-001`** (Atelier phases 1–6, visual-only,
+> per-phase owner gate; Phase 3 gated on -006 + -007, Phase 4 on -005; `/command`
+> excluded pending its own DEC). **Phase 1 implementation is NOT started** — owner
+> instruction: UI migration begins only after this Phase 0 docs PR merges.
+>
+> **Reconciliation header — 2026-07-10, later same day (superseded by the header above).**
 > `main` is at `9d47711961be58c767ef60271a0ab004e2f278ee`. **#929 merged (owner-approved
 > draft merge) and production verified — `/design-preview` internal consolidation hub.** One
 > noindex entry point to review the whole Atelier direction at once: live tiles
