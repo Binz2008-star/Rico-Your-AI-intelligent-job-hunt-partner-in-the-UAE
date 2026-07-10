@@ -24,7 +24,7 @@ from src.db import get_top_jobs, get_application_stats, is_db_available, get_see
 from src.job_history import load_job_history
 from src.applications import get_applied_jobs
 from src.decision_engine import JobDecisionEngine
-from src.profile import get_candidate_profile, get_target_roles
+from src.candidate_profile import get_candidate_profile, get_target_roles
 from src.feedback_loop import FeedbackLoopOrchestrator
 from src.response_intelligence import ResponseType
 from src.pdf_manager import PDFManager, initialize_pdf_system

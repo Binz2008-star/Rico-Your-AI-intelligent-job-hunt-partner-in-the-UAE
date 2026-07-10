@@ -105,7 +105,7 @@ def import_profile_file(
 
     if run_jobs:
         from src.rico_repo_adapter import RicoRepoAdapter
-        from src.profile import get_candidate_profile
+        from src.candidate_profile import get_candidate_profile
 
         adapter = RicoRepoAdapter()
         profile = get_candidate_profile()

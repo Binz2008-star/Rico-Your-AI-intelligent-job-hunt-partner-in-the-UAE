@@ -241,7 +241,7 @@ class TestImportProfileFile:
              patch("src.cli.import_profile.mark_onboarding_complete"), \
              patch("src.cli.import_profile.resolve_profile_context", return_value=MagicMock()), \
              patch("src.rico_repo_adapter.RicoRepoAdapter", return_value=mock_adapter), \
-             patch("src.profile.get_candidate_profile", return_value={"target_roles": []}):
+             patch("src.candidate_profile.get_candidate_profile", return_value={"target_roles": []}):
 
             result = import_profile_file(file_path=str(file_path), run_jobs=True)
 

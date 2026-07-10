@@ -342,7 +342,7 @@ def _llm_answers(questions: List[str], job: Dict[str, Any]) -> Dict[str, str]:
         return {}
     try:
         from src.llm_scorer import get_llm_response
-        from src.profile import get_candidate_profile
+        from src.candidate_profile import get_candidate_profile
 
         p   = get_candidate_profile()
         ctx = (

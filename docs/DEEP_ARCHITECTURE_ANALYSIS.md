@@ -289,7 +289,7 @@ The original automation system that runs twice daily via GitHub Actions.
 | Job Sources | `src/job_sources.py` | Indeed scraper (5 ESG/HSE queries), deduplication |
 | LLM Scorer | `src/llm_scorer.py` | HF `sentence-transformers/all-MiniLM-L6-v2` + keyword hybrid |
 | Scoring | `src/scoring.py` | Keyword fallback scorer |
-| Profile | `src/profile.py` | Roben's CV-aware candidate profile |
+| Profile | `src/candidate_profile.py` | Roben's CV-aware candidate profile |
 | Filter | `src/filter.py` | Job deduplication via `seen_jobs.json` |
 | Gmail Importer | `src/gmail_importer.py` | Monitor replies, scam filter, semantic matching |
 | Feedback Loop | `src/feedback_loop.py` | Learning from application outcomes |

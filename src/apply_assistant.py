@@ -91,7 +91,7 @@ def _get_decision_engine():
 
     try:
         from src.decision_engine import JobDecisionEngine
-        from src.profile import get_candidate_profile, get_target_roles
+        from src.candidate_profile import get_candidate_profile, get_target_roles
 
         engine = JobDecisionEngine.from_loaders(
             get_candidate_profile,

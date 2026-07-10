@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple, Any
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.decision_engine import JobDecisionEngine
-from src.profile import get_candidate_profile, get_target_roles
+from src.candidate_profile import get_candidate_profile, get_target_roles
 from src.repositories.learning_repo import get_learning_repository
 
 # Sample jobs from Indeed/jobspy

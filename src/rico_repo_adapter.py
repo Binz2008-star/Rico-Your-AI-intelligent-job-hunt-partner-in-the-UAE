@@ -353,7 +353,7 @@ class RicoSystem:
             if self.config.enable_decision_engine and not using_profile_jsearch:
                 try:
                     from src.decision_engine import JobDecisionEngine
-                    from src.profile import get_candidate_profile, get_target_roles
+                    from src.candidate_profile import get_candidate_profile, get_target_roles
 
                     engine = JobDecisionEngine.from_loaders(
                         get_candidate_profile,
@@ -479,7 +479,7 @@ def run_rico_for_default_profile(config: Optional[AdapterConfig] = None) -> Dict
     Args:
         config: Optional adapter configuration for testability
     """
-    from src.profile import get_candidate_profile
+    from src.candidate_profile import get_candidate_profile
 
     candidate = get_candidate_profile()
     profile = RicoProfile(
