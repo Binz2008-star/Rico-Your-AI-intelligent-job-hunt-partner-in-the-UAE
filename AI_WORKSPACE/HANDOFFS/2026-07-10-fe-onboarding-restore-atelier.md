@@ -6,6 +6,41 @@
 > (re-enable + migrate onboarding). No onboarding runtime code has been written yet —
 > only investigation + the DEC + this handoff.
 
+## ⚠️ Evidence correction (2026-07-10) — read before using the "completion signal" notes below
+
+The original evidence in this handoff called `ProfileResponse.profile_exists` the
+"canonical completion signal." **That is wrong.** The rest of this file is kept verbatim
+for traceability, but where it conflicts with this correction, **this correction wins.**
+See the matching correction block in `DEC-20260710-004`.
+
+- **`profile_exists` = career data exists; it does NOT mean onboarding is complete.**
+  A partial profile, a merged-guest profile, one skill, one target role, or CV evidence
+  all make it `True`. Do not route solely on it (evidence #2, #4, plan step #4 below are
+  corrected by this note).
+- **Persisted onboarding status is the primary completion signal** —
+  `rico_onboarding_states` (`pending` / `in_progress` / `completed`) via
+  `get_onboarding_state` / `is_onboarding_complete` / `set_onboarding_status`.
+- **The backend minimum-profile gate is the canonical readiness evaluation** —
+  `src/services/profile_context_resolver.py::evaluate_minimum_profile`. `POST
+  /api/v1/onboarding/submit` already runs it and persists `completed` / `in_progress`.
+- **No frontend duplication of `evaluate_minimum_profile`.** Next.js must NOT re-implement
+  completion rules; it reads them from the backend.
+- **Exposed signal:** `GET /api/v1/onboarding/status` (read-only, authenticated) returns
+  `{status, complete, source, missing_fields, profile_exists, profile_completeness}`.
+  Frontend routing: after login/submit and on direct `/onboarding` visits, call this
+  endpoint and route `complete=true → /command`, `complete=false → /onboarding`. Users
+  with no `rico_onboarding_states` row resolve via the gate with `source:"derived_legacy"`
+  (a GET never backfills). On a status-request failure, show a recoverable UI
+  (Retry / Continue to Rico) — no redirect loop, no false completion claim.
+- **Filename correction:** the redirect line is in **`apps/web/next.config.js`** (this
+  handoff and the DEC originally wrote `next.config` / `next.config.mjs`). It is line ~81:
+  `{ source: "/onboarding", destination: "/command", permanent: false }`.
+- **Runtime scope note (this branch):** the read-only `GET /api/v1/onboarding/status`
+  endpoint + its backend tests landed on `claude/onboarding-completion-signal-j8qmxz`
+  (the session's designated branch). The frontend consumption + Atelier onboarding-page
+  migration remain to be completed on `claude/onboarding-restore-atelier`, which owns the
+  Atelier design-system islands, consuming this endpoint (no completion logic duplicated).
+
 ## Overall design-migration status (approved `/design-preview` Atelier direction)
 
 | Phase | Status |
