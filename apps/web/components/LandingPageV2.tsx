@@ -1,982 +1,343 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+/**
+ * LandingPageV2 — production public landing, rebuilt to the approved
+ * /design-preview prospectus (DEC-20260710-002, full public-landing parity).
+ *
+ * EN only. All copy is verbatim from the authoritative reference
+ * (apps/web/public/design-preview/desktop-home-en-light.png + the shared
+ * support-page colophon). No copy is invented. Sections intentionally NOT
+ * implemented because they are below the 1800px reference capture / not in
+ * any reference: the three-convictions body, an on-page rates section, and any
+ * lower-tail copy. See the PR body "missing source needed" note.
+ *
+ * app/page.tsx is untouched — it still renders this default export and keeps
+ * its auth redirect (ready && user -> /command).
+ */
+
+import { useState } from "react";
 import Link from "next/link";
+import { Fraunces } from "next/font/google";
 
-/* ─── Canvas ribbon animation ─────────────────────────────────────────────── */
-function useRibbonCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
+/* Fraunces = the reference serif display, loaded landing-scoped (Inter +
+   IBM Plex Mono are already global via app/layout). No new npm dependency. */
+const fraunces = Fraunces({
+    subsets: ["latin"],
+    weight: ["400", "500", "600"],
+    style: ["normal", "italic"],
+    display: "swap",
+    variable: "--font-fraunces-landing",
+});
 
-        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/* Reference palette: warm cream paper, near-black ink, one sun-red signal. */
+const C = {
+    bg: "#F1EADD",
+    panel: "#F7F1E6",
+    inset: "#EAE1D0",
+    ink: "#1F1B15",
+    ink70: "rgba(31,27,21,0.70)",
+    ink55: "rgba(31,27,21,0.52)",
+    ink40: "rgba(31,27,21,0.38)",
+    hair: "rgba(31,27,21,0.16)",
+    red: "#C6492E",
+    footer: "#1A1712",
+    footerInk: "#EFE7D6",
+    footerInk60: "rgba(239,231,214,0.60)",
+    footerHair: "rgba(239,231,214,0.20)",
+} as const;
 
-        interface RibbonLine {
-            segs: { x: number; y: number }[];
-            isMag: boolean;
-            spd: number;
-            phase: number;
-            alpha: number;
-        }
+const SERIF = "var(--font-fraunces-landing), Georgia, serif";
+const MONO = "var(--font-mono), ui-monospace, monospace";
 
-        let W = 0, H = 0;
-        let lines: RibbonLine[] = [];
-        let raf = 0;
-        let last = 0;
-        let running = false;
-        let t = 0;
-
-        function resize() {
-            W = canvas!.width = canvas!.offsetWidth;
-            H = canvas!.height = canvas!.offsetHeight;
-            buildLines();
-        }
-
-        function buildLines() {
-            const n = W < 700 ? 22 : 42;                 // low-density mobile mode
-            const SX = W * 0.96;
-            const SY = H * 0.04;
-            lines = [];
-            for (let i = 0; i < n; i++) {
-                const spread = (i - n / 2) * 0.055;
-                const segs: { x: number; y: number }[] = [];
-                const L = 300;
-                let cx = SX, cy = SY;
-                let ang = Math.PI + spread * 0.0052 + (Math.random() - 0.5) * 0.04;
-                for (let s = 0; s < L; s++) {
-                    segs.push({ x: cx, y: cy });
-                    ang += (Math.random() - 0.5) * 0.018;
-                    cx += Math.cos(ang) * 8;
-                    cy += Math.sin(ang) * 8;
-                }
-                lines.push({
-                    segs,
-                    isMag: Math.random() < 0.28,
-                    spd: 0.4 + Math.random() * 0.6,
-                    phase: Math.random() * 370,
-                    alpha: 0.12 + Math.random() * 0.18,
-                });
-            }
-        }
-
-        function draw() {
-            ctx!.clearRect(0, 0, W, H);
-            for (const L of lines) {
-                const len = L.segs.length;
-                const head = ((t * L.spd + L.phase) % (len + 70));
-                const tailN = 28;
-                for (let s = 1; s < len; s++) {
-                    const a = L.segs[s - 1], b = L.segs[s];
-                    const dist = Math.abs(s - head);
-                    let alpha = L.alpha * 0.35;
-                    if (dist < tailN) {
-                        const bright = 1 - dist / tailN;
-                        alpha = L.alpha * (0.35 + bright * 1.2);
-                    }
-                    ctx!.beginPath();
-                    ctx!.moveTo(a.x, a.y);
-                    ctx!.lineTo(b.x, b.y);
-                    ctx!.lineWidth = dist < tailN ? 1.5 + (1 - dist / tailN) * 1.5 : 1;
-                    if (L.isMag) {
-                        ctx!.strokeStyle = dist < 4 ? `rgba(255,150,190,${alpha})` : `rgba(255,72,149,${alpha})`;
-                    } else {
-                        ctx!.strokeStyle = dist < 4 ? `rgba(150,240,255,${alpha})` : `rgba(0,218,243,${alpha})`;
-                    }
-                    ctx!.stroke();
-                }
-            }
-        }
-
-        // requestAnimationFrame, throttled to ~30fps so motion speed is IDENTICAL
-        // to the previous setInterval(draw, 33) implementation.
-        const FRAME_MS = 33;
-        function loop(now: number) {
-            if (!running) return;
-            raf = requestAnimationFrame(loop);
-            if (now - last < FRAME_MS) return;
-            last = now;
-            t += 1;
-            draw();
-        }
-        function start() {
-            if (running || reduced || document.hidden) return;
-            running = true;
-            last = performance.now();
-            raf = requestAnimationFrame(loop);
-        }
-        function stop() {
-            running = false;
-            cancelAnimationFrame(raf);
-        }
-
-        resize();
-        // ResizeObserver.observe() schedules an implicit async initial callback
-        // (per spec) shortly after attaching, even with no real size change.
-        // Assigning canvas.width/height inside resize() always clears the
-        // bitmap, so under reduced motion that async callback was wiping the
-        // one-time static frame moments after mount. Redraw on every resize
-        // when reduced so the static frame survives it; no-op change for the
-        // animated path (the rAF loop already redraws every frame regardless).
-        const ro = new ResizeObserver(() => {
-            resize();
-            if (reduced) draw();
-        });
-        ro.observe(canvas);
-
-        // Reduced motion → render ONE static frame, never animate.
-        if (reduced) {
-            t = 120;
-            draw();
-            return () => ro.disconnect();
-        }
-
-        // Pause when the tab/page is hidden; resume when visible.
-        const onVisibility = () => (document.hidden ? stop() : start());
-        document.addEventListener("visibilitychange", onVisibility);
-
-        start();
-
-        return () => {
-            stop();
-            document.removeEventListener("visibilitychange", onVisibility);
-            ro.disconnect();
-        };
-    }, [canvasRef]);
+/* Mono uppercase editorial label. */
+function Mono({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
+    return (
+        <span className={`uppercase ${className}`} style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.2em", ...style }}>
+            {children}
+        </span>
+    );
 }
 
-/* ─── Logo marquee data ────────────────────────────────────────────────────── */
-const EMPLOYERS_ROW1 = [
-    "TALENTMATE", "BAYT", "GulfTalent", "Naukrigulf", "LinkedIn",
-    "Emirates NBD", "ADNOC", "Etisalat", "Majid Al Futtaim", "DEWA",
-];
-const EMPLOYERS_ROW2 = [
-    "Careem", "Noon", "Chalhoub Group", "Jumeirah Group", "DP World",
-    "Abu Dhabi Islamic Bank", "Mashreq", "FAB", "RTA", "Emaar",
-];
-
-/* ─── Feature card data ────────────────────────────────────────────────────── */
-const FEATURES = [
-    {
-        icon: (
-            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
-            </svg>
-        ),
-        title: "AI Match Engine",
-        desc: "Rico reads your CV and scores every UAE listing — surfacing only the roles where your profile lands in the top tier.",
-        accent: "cyan",
-    },
-    {
-        icon: (
-            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-            </svg>
-        ),
-        title: "CV Intelligence",
-        desc: "Upload your CV once. Rico parses skills, seniority, and salary expectations and keeps your profile current automatically.",
-        accent: "cyan",
-    },
-    {
-        icon: (
-            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
-            </svg>
-        ),
-        title: "Application Tracker",
-        desc: "Every application in one timeline — status, follow-up reminders, and recruiter contact — so nothing falls through the cracks.",
-        accent: "magenta",
-    },
-    {
-        icon: (
-            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
-            </svg>
-        ),
-        title: "Bilingual Chat",
-        desc: "Ask Rico anything — in English or Arabic. Get job advice, salary benchmarks, and application tips tailored to the UAE market.",
-        accent: "magenta",
-    },
-    {
-        icon: (
-            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-            </svg>
-        ),
-        title: "Smart Alerts",
-        desc: "Telegram and email notifications the moment a high-match job is posted — before the listing fills up.",
-        accent: "cyan",
-    },
-    {
-        icon: (
-            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-            </svg>
-        ),
-        title: "Approval Safeguards",
-        desc: "Rico never applies on your behalf without your explicit sign-off. You stay in control of every submission.",
-        accent: "magenta",
-    },
-];
-
-/* ─── Why Rico data ────────────────────────────────────────────────────────── */
-const WHY_RICO = [
-    {
-        num: "01",
-        headline: "UAE-Specific Intelligence",
-        body: "Rico is trained on UAE hiring patterns, local salary benchmarks, visa sponsorship norms, and the Arabic–English bilingual job market — not a generic global tool.",
-    },
-    {
-        num: "02",
-        headline: "End-to-End Automation",
-        body: "From CV parsing to match scoring, application tracking to follow-up reminders — Rico handles every step of the search so you focus on the interviews.",
-    },
-    {
-        num: "03",
-        headline: "You Stay in Control",
-        body: "Every apply action requires your approval. Rico surfaces opportunities and prepares your submissions; you decide what goes out and when.",
-    },
-];
-
-/* ─── Success story carousel data ─────────────────────────────────────────── */
-const STORIES = [
-    {
-        quote: "Rico found a Product Manager role at a fintech in DIFC I'd completely missed. The match score was 0.94 — and I got an interview in three days.",
-        name: "Layla K.",
-        title: "Product Manager, Dubai",
-        score: "0.94",
-    },
-    {
-        quote: "I was applying manually to 20+ jobs a week. Rico cut that to 5 high-quality matches and I landed two offers within a month.",
-        name: "Ahmed R.",
-        title: "Software Engineer, Abu Dhabi",
-        score: "0.91",
-    },
-    {
-        quote: "The Arabic chat feature was a game-changer. I could ask about salary norms in my industry and get real UAE data back.",
-        name: "Sara M.",
-        title: "Marketing Manager, Sharjah",
-        score: "0.88",
-    },
-    {
-        quote: "As a recent grad, I didn't know how to price myself. Rico's benchmarks told me exactly what to ask for — and I got it.",
-        name: "Omar F.",
-        title: "Data Analyst, Dubai",
-        score: "0.89",
-    },
-];
-
-/* ─── FAQ data ─────────────────────────────────────────────────────────────── */
-const FAQS = [
-    {
-        q: "Is Rico free to use?",
-        a: "Yes — the Free plan gives you 5 job matches per week, CV parsing, and basic application tracking at no cost. Pro and Premium plans unlock unlimited matches, priority alerts, and advanced analytics.",
-    },
-    {
-        q: "Which job boards does Rico search?",
-        a: "Rico aggregates listings from Bayt, LinkedIn, Naukrigulf, GulfTalent, and direct employer sites across the UAE — covering Dubai, Abu Dhabi, Sharjah, and the wider GCC.",
-    },
-    {
-        q: "Will Rico apply on my behalf without asking?",
-        a: "Never. RICO_REQUIRE_APPROVAL = true at all times. Rico prepares the application and presents it to you; you review it and give the go-ahead before anything is submitted.",
-    },
-    {
-        q: "Does Rico support Arabic?",
-        a: "Yes. The chat interface is fully bilingual — you can ask questions and receive answers in English or Arabic. CV parsing supports Arabic text and mixed-language documents.",
-    },
-    {
-        q: "How is my data protected?",
-        a: "CV data and chat history are stored securely in an isolated account. They are never sold, shared with employers, or used to train external models. You can delete your data at any time.",
-    },
-];
-
-/* ─── Pricing data ─────────────────────────────────────────────────────────── */
-const PLANS = [
-    {
-        name: "Free",
-        price: "AED 0",
-        period: "",
-        badge: null,
-        features: [
-            "5 job matches / week",
-            "CV parsing (1 upload)",
-            "Basic application tracker",
-            "English chat",
-        ],
-        cta: "Get started",
-        href: "/signup",
-        primary: false,
-    },
-    {
-        name: "Pro",
-        price: "AED 29",
-        period: "/mo",
-        badge: "Popular",
-        features: [
-            "Unlimited job matches",
-            "CV parsing (unlimited)",
-            "Full application tracker",
-            "English + Arabic chat",
-            "Telegram + email alerts",
-            "Salary benchmarks",
-        ],
-        cta: "Start Pro",
-        href: "/signup",
-        primary: true,
-    },
-    {
-        name: "Premium",
-        price: "AED 49",
-        period: "/mo",
-        badge: null,
-        features: [
-            "Everything in Pro",
-            "Priority match queue",
-            "Application analytics",
-            "Dedicated follow-up reminders",
-            "Early access to new features",
-        ],
-        cta: "Start Premium",
-        href: "/signup",
-        primary: false,
-    },
-];
-
-/* ─── Sub-components ──────────────────────────────────────────────────────── */
-
-function MarqueeRow({ items, reverse }: { items: string[]; reverse?: boolean }) {
-    const doubled = [...items, ...items];
+/* Corner-tick plate (reference "PLATE 01" frame). */
+function Plate({ className = "", style, children }: { className?: string; style?: React.CSSProperties; children: React.ReactNode }) {
+    const t = "absolute w-2 h-2 pointer-events-none";
+    const b = `1px solid ${C.hair}`;
     return (
-        <div className="overflow-hidden py-2">
-            <div
-                className="flex gap-8 whitespace-nowrap"
-                style={{
-                    animation: `marquee${reverse ? "Rev" : ""} 28s linear infinite`,
-                    willChange: "transform",
-                }}
-            >
-                {doubled.map((name, i) => (
-                    <span
-                        key={i}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/[0.04] text-sm font-medium text-white/50 hover:text-white/80 hover:border-white/20 transition-colors cursor-default"
-                    >
-                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60 inline-block" />
-                        {name}
-                    </span>
-                ))}
-            </div>
+        <div className={`relative rounded-[4px] ${className}`} style={{ background: C.panel, border: `1px solid ${C.hair}`, ...style }}>
+            <span className={`${t} top-1.5 left-1.5`} style={{ borderTop: b, borderLeft: b }} aria-hidden="true" />
+            <span className={`${t} top-1.5 right-1.5`} style={{ borderTop: b, borderRight: b }} aria-hidden="true" />
+            <span className={`${t} bottom-1.5 left-1.5`} style={{ borderBottom: b, borderLeft: b }} aria-hidden="true" />
+            <span className={`${t} bottom-1.5 right-1.5`} style={{ borderBottom: b, borderRight: b }} aria-hidden="true" />
+            {children}
         </div>
     );
 }
 
-/* ─── Feature-card motifs ──────────────────────────────────────────────────────
-   Line-art SVG headers, viewBox 0 0 300 150, stroke/fill = currentColor (color is
-   set by the .fx-media--a / --b variant). Adapted from the approved "Rico Hunt V2"
-   mock; the Approval-Safeguards shield is authored in the same style (the mock has
-   no shield). Purely decorative → the media SVG is aria-hidden. */
-const FEATURE_MOTIFS: Record<string, React.ReactNode> = {
-    // Score gauge + spokes to matched nodes → the engine scoring & pairing roles.
-    "AI Match Engine": (
-        <>
-            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.75}>
-                <circle cx={150} cy={80} r={34} />
-                <path d="M150 46 A34 34 0 0 1 182 100" strokeWidth={2.6} />
-                <line x1={150} y1={80} x2={214} y2={42} strokeWidth={1.3} />
-                <line x1={150} y1={80} x2={96} y2={120} strokeWidth={1.3} />
-                <line x1={150} y1={80} x2={228} y2={112} strokeWidth={1.3} />
-            </g>
-            <g fill="currentColor">
-                <circle cx={150} cy={80} r={2.6} />
-                <circle cx={214} cy={42} r={2.8} />
-                <circle cx={96} cy={120} r={2.2} />
-                <circle cx={228} cy={112} r={2.4} opacity={0.7} />
-                <circle cx={182} cy={100} r={3.2} />
-            </g>
-        </>
-    ),
-    // Document + parsed field-lines + a brighter scan sweep → reading your CV.
-    "CV Intelligence": (
-        <>
-            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.75}>
-                <rect x={108} y={20} width={84} height={106} rx={6} />
-                <line x1={122} y1={44} x2={176} y2={44} />
-                <line x1={122} y1={60} x2={182} y2={60} />
-                <line x1={122} y1={76} x2={164} y2={76} />
-                <line x1={122} y1={92} x2={174} y2={92} />
-                <line x1={122} y1={108} x2={150} y2={108} />
-                <line x1={100} y1={70} x2={200} y2={70} strokeWidth={2} opacity={0.9} />
-            </g>
-            <g fill="currentColor">
-                <circle cx={200} cy={70} r={2.6} />
-            </g>
-        </>
-    ),
-    // Pipeline timeline, last stage checked → application stages (verbatim from mock).
-    "Application Tracker": (
-        <>
-            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.7}>
-                <line x1={38} y1={80} x2={262} y2={80} />
-                <circle cx={60} cy={80} r={9} />
-                <circle cx={120} cy={80} r={9} />
-                <circle cx={180} cy={80} r={9} />
-                <circle cx={240} cy={80} r={11} />
-                <path d="M234 80 l4 5 l8 -11" strokeWidth={2.2} />
-            </g>
-            <g fill="currentColor">
-                <circle cx={60} cy={80} r={3} />
-                <circle cx={120} cy={80} r={3} />
-                <circle cx={180} cy={80} r={3} />
-            </g>
-        </>
-    ),
-    // Paper-plane + dashed trail + ping rings → notifications (verbatim from mock).
-    "Smart Alerts": (
-        <>
-            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.7}>
-                <path d="M36 128 C92 118 118 58 208 44" strokeDasharray="3 6" />
-                <path d="M196 28 L232 44 L204 60 L204 47 Z" strokeWidth={1.6} />
-                <circle cx={208} cy={44} r={20} opacity={0.5} />
-                <circle cx={208} cy={44} r={32} opacity={0.28} />
-            </g>
-            <g fill="currentColor">
-                <circle cx={36} cy={128} r={2.4} />
-                <circle cx={204} cy={46} r={2} />
-            </g>
-        </>
-    ),
-    // Two chat bubbles + Arabic glyph + typing dots → bilingual chat (verbatim from mock).
-    "Bilingual Chat": (
-        <>
-            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.72}>
-                <path d="M66 38 h78 a10 10 0 0 1 10 10 v32 a10 10 0 0 1 -10 10 h-50 l-18 15 v-15 h-10 a10 10 0 0 1 -10 -10 v-32 a10 10 0 0 1 10 -10 z" />
-                <path d="M150 76 h72 a10 10 0 0 1 10 10 v26 a10 10 0 0 1 -10 10 h-8 v13 l-15 -13 h-49 a10 10 0 0 1 -10 -10 v-26 a10 10 0 0 1 10 -10 z" />
-            </g>
-            <g fill="currentColor">
-                <circle cx={88} cy={64} r={2.4} />
-                <circle cx={104} cy={64} r={2.4} />
-                <circle cx={120} cy={64} r={2.4} />
-            </g>
-            <text x={176} y={104} fontFamily="'IBM Plex Sans', sans-serif" fontSize={16} fill="currentColor" opacity={0.85}>ع</text>
-        </>
-    ),
-    // Shield + checkmark → approval / you stay in control (authored to match the family).
-    "Approval Safeguards": (
-        <>
-            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.72}>
-                <path d="M150 30 L192 46 V84 C192 108 174 122 150 132 C126 122 108 108 108 84 V46 Z" />
-                <path d="M134 82 l12 12 l22 -26" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-            </g>
-            <g fill="currentColor">
-                <circle cx={150} cy={30} r={2.6} />
-                <circle cx={108} cy={46} r={2} opacity={0.7} />
-                <circle cx={192} cy={46} r={2} opacity={0.7} />
-            </g>
-        </>
-    ),
-};
+const NAV = [
+    { label: "The idea", href: "#idea" },
+    { label: "The system", href: "#system" },
+    { label: "Rates", href: "/subscription" },
+    { label: "Colophon", href: "#colophon" },
+    { label: "Support", href: "/contact" },
+];
 
-function FeatureMedia({ feature }: { feature: typeof FEATURES[0] }) {
-    const isCyan = feature.accent === "cyan";
-    return (
-        <div className={`fx-media ${isCyan ? "fx-media--a" : "fx-media--b"}`} aria-hidden="true">
-            <span className="fx-media__glow" />
-            <span className="fx-media__dots" />
-            <svg className="fx-media__net" viewBox="0 0 300 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                {FEATURE_MOTIFS[feature.title]}
-            </svg>
-            <span className="fx-media__streak" />
-            <span className={`fx-media__icon ${isCyan ? "text-cyan-300" : "text-pink-300"}`}>
-                {feature.icon}
-            </span>
-        </div>
-    );
-}
-
-function FeatureCard({ feature }: { feature: typeof FEATURES[0] }) {
-    return (
-        <div className="fx-card group relative rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden hover:border-white/20 hover:bg-white/[0.05] transition-all duration-300 cursor-default">
-            <FeatureMedia feature={feature} />
-            <div className="p-6">
-                <h3 className="text-base font-semibold text-white mb-2">{feature.title}</h3>
-                <p className="text-sm text-white/50 leading-relaxed">{feature.desc}</p>
-            </div>
-        </div>
-    );
-}
-
-function StoryCard({ story }: { story: typeof STORIES[0] }) {
-    return (
-        <div className="flex-shrink-0 w-80 rounded-2xl border border-white/10 bg-white/[0.04] p-6 flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-full">
-                    Match {story.score}
-                </span>
-            </div>
-            <p className="text-sm text-white/70 leading-relaxed flex-1">&ldquo;{story.quote}&rdquo;</p>
-            <div>
-                <p className="text-sm font-semibold text-white">{story.name}</p>
-                <p className="text-xs text-white/40">{story.title}</p>
-            </div>
-        </div>
-    );
-}
-
-function FaqItem({ faq }: { faq: typeof FAQS[0] }) {
+function Masthead() {
     const [open, setOpen] = useState(false);
     return (
-        <div className="border-b border-white/10 last:border-0">
-            <button
-                onClick={() => setOpen(!open)}
-                className="w-full flex items-center justify-between py-5 text-left gap-4 group cursor-pointer"
-                aria-expanded={open}
-            >
-                <span className="text-sm font-medium text-white/80 group-hover:text-white transition-colors">
-                    {faq.q}
-                </span>
-                <span className={`flex-shrink-0 w-5 h-5 rounded-full border border-white/20 flex items-center justify-center transition-transform duration-200 ${open ? "rotate-45 border-cyan-400/50" : ""}`}>
-                    <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5 text-white/60">
-                        <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
-                    </svg>
-                </span>
-            </button>
-            {open && (
-                <p className="pb-5 text-sm text-white/50 leading-relaxed pr-8">{faq.a}</p>
-            )}
-        </div>
+        <header style={{ borderBottom: `1px solid ${C.hair}` }}>
+            <div className="max-w-6xl mx-auto px-5 sm:px-8">
+                {/* row 1 */}
+                <div className="flex items-center justify-between py-4 gap-4">
+                    <div className="flex items-baseline gap-3 min-w-0">
+                        <Link href="/" className="text-[1.35rem] leading-none tracking-tight" style={{ fontFamily: SERIF, color: C.ink }}>Rico Hunt</Link>
+                        <Mono className="hidden sm:inline" style={{ color: C.ink55, letterSpacing: "0.18em" }}>— Volume I · Issue 03</Mono>
+                    </div>
+                    <nav className="hidden md:flex items-center gap-6">
+                        {NAV.map((n) => (
+                            <Link key={n.label} href={n.href} className="transition-opacity hover:opacity-60">
+                                <Mono style={{ color: C.ink70, letterSpacing: "0.16em" }}>{n.label}</Mono>
+                            </Link>
+                        ))}
+                    </nav>
+                    <div className="flex items-center gap-3">
+                        {/* EN / AR control — EN active; AR disabled (content not yet localized) */}
+                        <span className="hidden sm:inline-flex items-center rounded-[3px] overflow-hidden" style={{ border: `1px solid ${C.hair}` }} title="Arabic — not yet available">
+                            <span style={{ fontFamily: MONO, fontSize: 10, padding: "3px 7px", background: C.ink, color: C.panel }}>EN</span>
+                            <span aria-disabled="true" style={{ fontFamily: MONO, fontSize: 10, padding: "3px 7px", color: C.ink40, cursor: "default" }}>عر</span>
+                        </span>
+                        <Link href="/command" className="whitespace-nowrap transition-opacity hover:opacity-60" style={{ borderBottom: `1px solid ${C.ink}` }}>
+                            <span style={{ fontFamily: MONO, fontSize: 12, color: C.ink }}>Open Rico →</span>
+                        </Link>
+                        <button className="md:hidden p-1" aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)} style={{ color: C.ink70 }}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
+                                {open ? <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />}
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                {/* row 2 */}
+                <div className="flex items-center gap-4 pb-3">
+                    <Mono style={{ color: C.ink55, letterSpacing: "0.16em" }}>Dubai · Abu Dhabi · Sharjah · 2026</Mono>
+                    <span className="h-px flex-1" style={{ background: C.hair }} aria-hidden="true" />
+                    <Mono className="hidden sm:inline" style={{ color: C.ink55, letterSpacing: "0.16em" }}>English · العربية</Mono>
+                </div>
+                {/* mobile nav */}
+                {open && (
+                    <div className="md:hidden flex flex-col gap-3 pb-4">
+                        {NAV.map((n) => (
+                            <Link key={n.label} href={n.href} onClick={() => setOpen(false)}>
+                                <Mono style={{ color: C.ink70 }}>{n.label}</Mono>
+                            </Link>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </header>
     );
 }
 
-/* ─── Main component ──────────────────────────────────────────────────────── */
+function Hero() {
+    return (
+        <section className="max-w-6xl mx-auto px-5 sm:px-8 pt-16 sm:pt-24 pb-16">
+            <p className="flex items-center gap-2.5 mb-10">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: C.red }} aria-hidden="true" />
+                <Mono style={{ color: C.ink70, letterSpacing: "0.2em" }}>Prospectus — a quiet AI for a loud job market</Mono>
+            </p>
+            <h1 className="font-normal tracking-[-0.02em] text-[2.9rem] leading-[0.98] sm:text-[4.6rem] sm:leading-[0.95] max-w-4xl" style={{ fontFamily: SERIF, color: C.ink }}>
+                A career,{" "}
+                <span className="relative inline-block italic font-medium">
+                    in conversation.
+                    <svg className="absolute left-0 w-full" style={{ bottom: "0.06em", height: "0.16em" }} viewBox="0 0 300 8" preserveAspectRatio="none" aria-hidden="true">
+                        <path d="M2 6 C 60 3, 120 5, 180 4 S 260 3, 298 5" fill="none" stroke={C.red} strokeWidth={4} strokeLinecap="round" />
+                    </svg>
+                </span>
+            </h1>
+            <p className="mt-8 max-w-xl text-[1.05rem] leading-relaxed" style={{ color: C.ink70 }}>
+                Rico is a small, patient intelligence for people looking for real work in the UAE. It reads your CV, watches the market, and only writes back when there is a job worth writing back about.
+            </p>
+            <div className="mt-10 flex flex-wrap items-center gap-6">
+                <Link href="/command" className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full text-sm font-semibold transition-all hover:brightness-110" style={{ background: C.ink, color: C.panel }}>
+                    Begin with Rico <span aria-hidden="true">→</span>
+                </Link>
+                <Link href="#system" className="underline underline-offset-4 decoration-1 transition-opacity hover:opacity-60" style={{ textDecorationColor: C.red }}>
+                    <Mono style={{ color: C.ink70 }}>Read the notebook</Mono>
+                </Link>
+            </div>
+        </section>
+    );
+}
+
+function SystemSection() {
+    return (
+        <section id="system" className="max-w-6xl mx-auto px-5 sm:px-8 py-16" style={{ borderTop: `1px solid ${C.hair}` }}>
+            <div className="grid lg:grid-cols-2 gap-12 lg:gap-16">
+                {/* interview */}
+                <div>
+                    <div className="flex items-center gap-3 mb-8">
+                        <Mono style={{ color: C.ink55 }}>Interview</Mono>
+                        <span className="h-px w-10" style={{ background: C.hair }} aria-hidden="true" />
+                        <Mono style={{ color: C.ink55 }}>Transcribed, in full</Mono>
+                    </div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-8">
+                        <Mono style={{ color: C.ink40 }}>You</Mono>
+                        <p className="text-[1.25rem] leading-snug" style={{ fontFamily: SERIF, color: C.ink }}>
+                            I want a senior product role in the UAE. Above thirty thousand. I don&apos;t want to read another job board.
+                        </p>
+                        <div>
+                            <Mono style={{ color: C.red }}>Rico</Mono>
+                            <p className="mt-2 leading-relaxed" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", color: C.ink40, textTransform: "uppercase" }}>
+                                Reads CV · Scans 6 feeds · Scores fit
+                            </p>
+                        </div>
+                        <p className="text-[1.25rem] leading-snug italic" style={{ fontFamily: SERIF, color: C.ink }}>
+                            Then don&apos;t. I&apos;ve read your CV. I&apos;ll watch the market for you and only speak when there&apos;s something worth your attention.
+                        </p>
+                    </div>
+                    <div className="mt-10 pt-8" style={{ borderTop: `1px solid ${C.hair}` }}>
+                        <Mono style={{ color: C.ink55 }}>Ask the next question</Mono>
+                        {/* illustrative, non-interactive (reference is a static prospectus) */}
+                        <div className="mt-4 text-[1.4rem]" style={{ fontFamily: SERIF, color: C.ink }} aria-hidden="true">
+                            Product roles above AED 30k<span style={{ color: C.red }}>|</span>
+                        </div>
+                        <div className="mt-5 flex flex-wrap gap-2.5" aria-hidden="true">
+                            {["Product roles above AED 30k", "Fintech openings in Abu Dhabi", "What's missing from my CV"].map((c) => (
+                                <span key={c} className="px-3 py-1.5 rounded-full" style={{ border: `1px solid ${C.hair}`, fontFamily: MONO, fontSize: 11, color: C.ink70 }}>{c}</span>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                {/* sample-match plate */}
+                <Plate className="p-7 sm:p-8">
+                    <div className="flex items-center gap-3 mb-6">
+                        <Mono style={{ color: C.ink55 }}>Plate 01 — Sample match</Mono>
+                        <span className="h-px flex-1" style={{ background: C.hair }} aria-hidden="true" />
+                        <span className="px-2.5 py-0.5 rounded-full" style={{ border: `1px solid ${C.red}`, fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.red, textTransform: "uppercase" }}>Illustration</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <Mono style={{ color: C.ink55 }}>Noon · Dubai</Mono>
+                            <h3 className="mt-3 text-[2rem] leading-[1.05] font-normal" style={{ fontFamily: SERIF, color: C.ink }}>Senior Product<br />Manager</h3>
+                            <p className="mt-3" style={{ fontFamily: MONO, fontSize: 13, color: C.ink70 }}>AED 32 – 42k</p>
+                        </div>
+                        <span className="inline-flex items-center justify-center w-16 h-16 rounded-full flex-shrink-0 text-xl" style={{ border: `1.5px solid ${C.red}`, fontFamily: SERIF, color: C.red }}>91</span>
+                    </div>
+                    <div className="my-6 h-px" style={{ background: C.hair }} aria-hidden="true" />
+                    <Mono style={{ color: C.ink55 }}>Why this fits</Mono>
+                    <ol className="mt-4 flex flex-col gap-3.5">
+                        {[
+                            "Five years of product depth, exactly the seniority asked for.",
+                            "UAE e-commerce background reads as a strong domain signal.",
+                            "Arabic fluency is a listed requirement — you match.",
+                        ].map((t, i) => (
+                            <li key={i} className="grid grid-cols-[auto_1fr] gap-3">
+                                <Mono style={{ color: C.red }}>{String(i + 1).padStart(2, "0")}</Mono>
+                                <span className="text-[0.95rem] leading-snug" style={{ color: C.ink }}>{t}</span>
+                            </li>
+                        ))}
+                    </ol>
+                    <div className="mt-6 p-4 rounded-[3px]" style={{ background: C.inset }}>
+                        <Mono style={{ color: C.red }}>Worth knowing</Mono>
+                        <p className="mt-1.5 text-[0.95rem]" style={{ color: C.ink70 }}>Occasional on-site weeks in Riyadh.</p>
+                    </div>
+                </Plate>
+            </div>
+        </section>
+    );
+}
+
+function BilingualBand() {
+    return (
+        <section className="py-10" style={{ borderTop: `1px solid ${C.hair}`, borderBottom: `1px solid ${C.hair}` }}>
+            <div className="max-w-6xl mx-auto px-5 sm:px-8">
+                <p className="text-[1.35rem] sm:text-[1.6rem] leading-snug" style={{ fontFamily: SERIF, color: C.ink }}>
+                    Bilingual by design — <span className="italic">English and العربية.</span> · Approval-first — <span className="italic">Rico never applies without you.</span> · Delivered to Telegram — <span className="italic">your inbox stays quiet.</span>
+                </p>
+            </div>
+        </section>
+    );
+}
+
+function IdeaSection() {
+    return (
+        <section id="idea" className="max-w-6xl mx-auto px-5 sm:px-8 py-24 sm:py-32">
+            <div className="grid lg:grid-cols-[auto_1fr] gap-8 lg:gap-16">
+                <Mono style={{ color: C.ink55 }}>§ The idea</Mono>
+                <h2 className="font-normal tracking-[-0.015em] text-[2.6rem] leading-[1.02] sm:text-[4rem] sm:leading-[0.98] max-w-3xl" style={{ fontFamily: SERIF, color: C.ink }}>
+                    Three quiet convictions,{" "}
+                    <span className="italic font-medium">held stubbornly.</span>
+                </h2>
+            </div>
+        </section>
+    );
+}
+
+/* Shared marketing colophon footer (the same footer pattern shown on the
+   /design-preview support page). The preview-only disclaimer line
+   ("Everything you see here is design…") is intentionally OMITTED to avoid
+   preview leakage on production; the rest is verbatim. */
+function Colophon() {
+    const meta = [
+        { k: "Set in", v: "Fraunces · Inter · IBM Plex Mono" },
+        { k: "Palette", v: "Paper, ink, and one hot signal" },
+        { k: "Languages", v: "English · العربية" },
+        { k: "Filed from", v: "The UAE, 2026" },
+    ];
+    const elsewhere = [
+        { label: "Support", href: "/contact" },
+        { label: "Terms", href: "/terms" },
+        { label: "Privacy", href: "/privacy" },
+        { label: "Pricing", href: "/subscription" },
+    ];
+    return (
+        <footer id="colophon" style={{ background: C.footer, color: C.footerInk }}>
+            <div className="max-w-6xl mx-auto px-5 sm:px-8 py-16">
+                <div className="grid lg:grid-cols-2 gap-12">
+                    <div>
+                        <span className="uppercase" style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.2em", color: C.footerInk60 }}>Colophon</span>
+                        <h2 className="mt-5 text-[2.2rem] sm:text-[2.8rem] leading-[1.02] font-normal" style={{ fontFamily: SERIF }}>
+                            Filed quietly from <span className="italic" style={{ color: C.red }}>the desert.</span>
+                        </h2>
+                        <p className="mt-5 max-w-md leading-relaxed" style={{ color: C.footerInk60 }}>
+                            Rico Hunt is an editorial-grade AI job partner for the UAE.
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-7 self-start lg:pt-2">
+                        {meta.map((m) => (
+                            <div key={m.k}>
+                                <span className="uppercase" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.18em", color: C.footerInk60 }}>{m.k}</span>
+                                <p className="mt-1.5 text-[0.95rem]" style={{ fontFamily: SERIF }}>{m.v}</p>
+                            </div>
+                        ))}
+                        <div className="col-span-2 mt-2 pt-6" style={{ borderTop: `1px solid ${C.footerHair}` }}>
+                            <span className="uppercase" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.18em", color: C.footerInk60 }}>Elsewhere</span>
+                            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+                                {elsewhere.map((e) => (
+                                    <Link key={e.label} href={e.href} className="text-sm underline underline-offset-4 decoration-1 transition-opacity hover:opacity-70" style={{ color: C.footerInk, textDecorationColor: C.footerHair }}>{e.label}</Link>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div className="mt-14 pt-6 flex items-center justify-between" style={{ borderTop: `1px solid ${C.footerHair}` }}>
+                    <span className="uppercase" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.18em", color: C.footerInk60 }}>© 2026 Rico Hunt</span>
+                    <span className="uppercase" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.18em", color: C.footerInk60 }}>Volume I · Issue 03</span>
+                </div>
+            </div>
+        </footer>
+    );
+}
 
 export default function LandingPageV2() {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    useRibbonCanvas(canvasRef);
-
-    const carouselRef = useRef<HTMLDivElement>(null);
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-    function scrollCarousel(dir: number) {
-        if (carouselRef.current) {
-            carouselRef.current.scrollBy({ left: dir * 320, behavior: "smooth" });
-        }
-    }
-
     return (
-        <div
-            className="relative min-h-screen overflow-x-hidden"
-            style={{ fontFamily: "var(--font-ibm-plex-sans), var(--font-body), sans-serif", background: "#000" }}
-        >
-            {/* Marquee keyframe styles */}
-            <style>{`
-                @keyframes marquee { from { transform: translateX(0) } to { transform: translateX(-50%) } }
-                @keyframes marqueeRev { from { transform: translateX(-50%) } to { transform: translateX(0) } }
-                @media (prefers-reduced-motion: reduce) {
-                    [style*=marquee] { animation: none !important; }
-                }
-
-                /* ── Feature-card cinematic media headers (adapted from approved mock) ── */
-                @keyframes fx-streak {
-                    0% { transform: translateX(-160%) skewX(-14deg); opacity: 0; }
-                    22% { opacity: 0.85; }
-                    70% { opacity: 0.85; }
-                    100% { transform: translateX(320%) skewX(-14deg); opacity: 0; }
-                }
-                .fx-media { position: relative; height: 132px; overflow: hidden; background: radial-gradient(140% 120% at 72% 0%, #0a1519 0%, #050506 62%); border-bottom: 0.5px solid rgba(255,255,255,0.06); }
-                .fx-media__glow { position: absolute; inset: -35%; filter: blur(4px); opacity: 0.85; transform: scale(1.06); transform-origin: 72% 22%; transition: opacity 550ms cubic-bezier(0.16,1,0.3,1), transform 750ms cubic-bezier(0.16,1,0.3,1), filter 550ms cubic-bezier(0.16,1,0.3,1); background: radial-gradient(38% 52% at 78% 20%, rgba(0,218,243,0.42), transparent 60%), radial-gradient(46% 64% at 20% 90%, rgba(255,72,149,0.16), transparent 62%), conic-gradient(from 210deg at 74% 24%, transparent 0deg, rgba(0,218,243,0.16) 42deg, transparent 120deg); }
-                .fx-card:hover .fx-media__glow { opacity: 1; transform: scale(1.16); filter: blur(4px) brightness(1.28); }
-                .fx-media__dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(190,244,255,0.55) 0.6px, transparent 0.7px); background-size: 13px 13px; opacity: 0.13; -webkit-mask-image: radial-gradient(78% 100% at 78% 22%, #000, transparent 72%); mask-image: radial-gradient(78% 100% at 78% 22%, #000, transparent 72%); transition: opacity 550ms cubic-bezier(0.16,1,0.3,1); }
-                .fx-card:hover .fx-media__dots { opacity: 0.22; }
-                .fx-media__streak { position: absolute; top: -20%; bottom: -20%; left: 0; width: 34%; background: linear-gradient(90deg, transparent, rgba(190,244,255,0.32), transparent); filter: blur(3px); opacity: 0; }
-                .fx-card:hover .fx-media__streak { animation: fx-streak 1.9s cubic-bezier(0.16,1,0.3,1); }
-                .fx-media__icon { position: absolute; left: 18px; bottom: 14px; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(6,10,12,0.5); border: 0.5px solid rgba(255,255,255,0.14); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
-                .fx-media__icon svg { width: 20px; height: 20px; }
-                .fx-media__net { position: absolute; inset: 0; width: 100%; height: 100%; color: #00daf3; opacity: 0.5; pointer-events: none; transition: opacity 550ms cubic-bezier(0.16,1,0.3,1); filter: drop-shadow(0 0 4px rgba(0,218,243,0.35)); -webkit-mask-image: linear-gradient(175deg, #000 52%, transparent 92%); mask-image: linear-gradient(175deg, #000 52%, transparent 92%); }
-                .fx-card:hover .fx-media__net { opacity: 0.82; }
-                .fx-media--b { background: radial-gradient(140% 120% at 28% 0%, #170a12 0%, #050506 62%); }
-                .fx-media--b .fx-media__glow { background: radial-gradient(40% 54% at 24% 22%, rgba(255,72,149,0.34), transparent 60%), radial-gradient(48% 66% at 82% 88%, rgba(0,218,243,0.14), transparent 62%), conic-gradient(from 150deg at 28% 24%, transparent 0deg, rgba(255,72,149,0.16) 42deg, transparent 120deg); }
-                .fx-media--b .fx-media__dots { -webkit-mask-image: radial-gradient(78% 100% at 24% 22%, #000, transparent 72%); mask-image: radial-gradient(78% 100% at 24% 22%, #000, transparent 72%); }
-                .fx-media--b .fx-media__net { color: #ff4895; filter: drop-shadow(0 0 4px rgba(255,72,149,0.35)); }
-                @media (max-width: 640px) { .fx-media { height: 116px; } }
-                @media (prefers-reduced-motion: reduce) {
-                    .fx-card:hover .fx-media__glow { transform: scale(1.04); }
-                    .fx-card:hover .fx-media__streak { animation: none; }
-                }
-            `}</style>
-
-            {/* ── Canvas ribbons ── */}
-            <canvas
-                ref={canvasRef}
-                aria-hidden="true"
-                className="pointer-events-none fixed inset-0 w-full h-full"
-                style={{ zIndex: 0 }}
-            />
-
-            {/* ── Nav ── */}
-            <nav className="fixed top-4 left-4 right-4 z-50 flex items-center justify-between px-5 py-3 rounded-2xl border border-white/10 bg-black/70 backdrop-blur-xl">
-                <Link href="/" className="flex items-center gap-2 group">
-                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-400 to-pink-500 flex items-center justify-center">
-                        <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-                            <path d="M8 2L14 6v4L8 14 2 10V6L8 2z" fill="white" fillOpacity={0.9} />
-                        </svg>
-                    </div>
-                    <span className="font-semibold text-white text-sm tracking-tight">Rico AI</span>
-                </Link>
-
-                {/* Desktop links */}
-                <div className="hidden md:flex items-center gap-6 text-sm text-white/60">
-                    <a href="#features" className="hover:text-white transition-colors">Features</a>
-                    <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
-                    <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <Link
-                        href="/login"
-                        className="hidden sm:block text-sm text-white/60 hover:text-white transition-colors px-3 py-1.5"
-                    >
-                        Sign in
-                    </Link>
-                    <Link
-                        href="/signup"
-                        className="text-sm font-medium px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-400 text-black hover:brightness-110 transition-all"
-                    >
-                        Start with Rico
-                    </Link>
-                    {/* Mobile menu toggle */}
-                    <button
-                        className="md:hidden p-1.5 text-white/60 hover:text-white cursor-pointer"
-                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                        aria-label="Toggle menu"
-                    >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
-                            {mobileMenuOpen
-                                ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-                            }
-                        </svg>
-                    </button>
-                </div>
-            </nav>
-
-            {/* Mobile menu */}
-            {mobileMenuOpen && (
-                <div className="fixed top-20 left-4 right-4 z-40 rounded-2xl border border-white/10 bg-black/90 backdrop-blur-xl p-5 flex flex-col gap-4 md:hidden">
-                    <a href="#features" className="text-sm text-white/70 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Features</a>
-                    <a href="#pricing" className="text-sm text-white/70 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
-                    <a href="#faq" className="text-sm text-white/70 hover:text-white" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
-                    <Link href="/login" className="text-sm text-white/70 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Sign in</Link>
-                </div>
-            )}
-
-            <main className="relative z-10">
-
-                {/* ── Hero ── */}
-                <section className="relative min-h-[100svh] flex flex-col items-center justify-center px-4 pt-28 pb-20 text-center">
-                    {/* Eyebrow — minimal dot + label (mock style) */}
-                    <div className="inline-flex items-center gap-2.5 mb-8">
-                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                        <span className="text-[11px] font-medium uppercase tracking-[0.22em] text-cyan-400/90">
-                            AI Career Operator · United Arab Emirates
-                        </span>
-                    </div>
-
-                    <h1 className="max-w-4xl text-[2.6rem] leading-[1.05] sm:text-6xl sm:leading-[1.04] md:text-7xl lg:text-[5.25rem] lg:leading-[1.02] font-extralight text-white/90 tracking-tight mb-7">
-                        Your AI career assistant for UAE jobs
-                    </h1>
-
-                    <p className="max-w-xl text-base sm:text-lg text-white/45 leading-relaxed mb-9 font-light">
-                        Upload your CV, find matching UAE roles, and let Rico guide your next move — quietly, in the background, in English or <span className="text-white/60">العربية</span>.
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row items-center gap-3 mb-6">
-                        <Link
-                            href="/signup"
-                            className="inline-flex items-center justify-center px-7 py-3.5 rounded-full bg-white text-black text-xs font-semibold uppercase tracking-[0.14em] hover:bg-white/90 transition-all shadow-[0_0_32px_rgba(255,255,255,0.12)]"
-                        >
-                            Start with Rico
-                        </Link>
-                        <Link
-                            href="/upload"
-                            className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full border border-white/20 text-white/80 text-xs font-medium uppercase tracking-[0.14em] hover:bg-white/[0.06] hover:border-white/35 transition-all"
-                        >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-                            </svg>
-                            Upload CV
-                        </Link>
-                    </div>
-
-                    {/* Trust row */}
-                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 mb-16 text-[10px] font-medium uppercase tracking-[0.18em] text-white/35">
-                        <span>English &amp; <span className="text-cyan-400/80">العربية</span></span>
-                        <span className="text-white/15" aria-hidden="true">·</span>
-                        <span>Telegram-first</span>
-                        <span className="text-white/15" aria-hidden="true">·</span>
-                        <span>No spam, ever</span>
-                    </div>
-
-                    {/* Illustrative sample — not a live listing */}
-                    <div className="relative mx-auto max-w-sm w-full rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm p-5 text-left">
-                        <div className="flex items-start justify-between mb-3">
-                            <div>
-                                <p className="flex items-center gap-1.5 text-xs text-pink-400/80 font-mono uppercase tracking-widest mb-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-pink-400/80" />
-                                    Match Analysis
-                                </p>
-                                <p className="text-sm font-semibold text-white">Senior Manager — Audit Programs</p>
-                                <p className="text-xs text-white/50">TALENTMATE · Abu Dhabi, UAE</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-2xl font-bold text-cyan-400 leading-none">0.91</p>
-                                <p className="text-[10px] text-white/30 font-mono uppercase tracking-wide">Confidence</p>
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 mb-4">
-                            {["Audit", "Risk & Controls", "UAE Market"].map(t => (
-                                <span key={t} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-white/50">{t}</span>
-                            ))}
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-white/30">AED 28,000 – 35,000 / mo</span>
-                            <span className="text-[10px] font-mono uppercase tracking-widest text-white/25">Sample match</span>
-                        </div>
-                    </div>
-                </section>
-
-                {/* ── AMD-inspired: Why Rico ── */}
-                <section className="relative px-4 py-20">
-                    <div className="max-w-5xl mx-auto">
-                        <div className="text-center mb-12">
-                            <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-3">Why Rico</p>
-                            <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                Built for the{" "}
-                                <span className="font-semibold">UAE job market</span>
-                            </h2>
-                        </div>
-                        <div className="grid md:grid-cols-3 gap-6">
-                            {WHY_RICO.map((item) => (
-                                <div key={item.num} className="p-6 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] transition-colors group">
-                                    <p className="font-mono text-2xl font-bold text-white/10 group-hover:text-cyan-400/20 transition-colors mb-4">{item.num}</p>
-                                    <h3 className="text-sm font-semibold text-white mb-2">{item.headline}</h3>
-                                    <p className="text-sm text-white/40 leading-relaxed">{item.body}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* ── AMD-inspired: Employer logo marquee ── */}
-                <section className="py-12 border-y border-white/[0.06] overflow-hidden">
-                    <p className="text-center text-xs font-mono text-white/25 uppercase tracking-widest mb-6">
-                        Jobs from leading UAE employers
-                    </p>
-                    <MarqueeRow items={EMPLOYERS_ROW1} />
-                    <div className="mt-3">
-                        <MarqueeRow items={EMPLOYERS_ROW2} reverse />
-                    </div>
-                </section>
-
-                {/* ── Features grid ── */}
-                <section id="features" className="px-4 py-20">
-                    <div className="max-w-5xl mx-auto">
-                        <div className="text-center mb-12">
-                            <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-3">Features</p>
-                            <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                Every tool your{" "}
-                                <span className="font-semibold">job search needs</span>
-                            </h2>
-                        </div>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {FEATURES.map((f) => (
-                                <FeatureCard key={f.title} feature={f} />
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* ── AMD-inspired: Success stories carousel ── */}
-                <section className="py-20 border-y border-white/[0.06]">
-                    <div className="max-w-5xl mx-auto px-4">
-                        <div className="flex items-end justify-between mb-8">
-                            <div>
-                                <p className="text-xs font-mono text-pink-400/70 uppercase tracking-widest mb-2">Success Stories</p>
-                                <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                    Real results,{" "}
-                                    <span className="font-semibold">real candidates</span>
-                                </h2>
-                            </div>
-                            <div className="hidden sm:flex items-center gap-2">
-                                <button
-                                    onClick={() => scrollCarousel(-1)}
-                                    className="w-9 h-9 rounded-full border border-white/15 flex items-center justify-center text-white/50 hover:text-white hover:border-white/30 transition-colors cursor-pointer"
-                                    aria-label="Scroll left"
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                                    </svg>
-                                </button>
-                                <button
-                                    onClick={() => scrollCarousel(1)}
-                                    className="w-9 h-9 rounded-full border border-white/15 flex items-center justify-center text-white/50 hover:text-white hover:border-white/30 transition-colors cursor-pointer"
-                                    aria-label="Scroll right"
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div
-                            ref={carouselRef}
-                            className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scroll-smooth"
-                            style={{ scrollbarWidth: "none" }}
-                        >
-                            {STORIES.map((s) => (
-                                <div key={s.name} className="snap-start">
-                                    <StoryCard story={s} />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* ── AMD-inspired: Image-background CTA highlight ── */}
-                <section className="px-4 py-20">
-                    <div className="max-w-5xl mx-auto">
-                        <div className="relative overflow-hidden rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/60 via-black to-pink-950/40 p-10 sm:p-16 text-center">
-                            {/* background glow blobs */}
-                            <div className="absolute -top-20 -left-20 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-                            <div className="absolute -bottom-20 -right-20 w-72 h-72 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
-                            <div className="relative z-10">
-                                <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-4">Get Started Today</p>
-                                <h2 className="text-3xl sm:text-4xl font-light text-white mb-4 leading-tight">
-                                    Your next UAE role{" "}
-                                    <br className="hidden sm:block" />
-                                    <span className="font-semibold bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent">
-                                        is already in Rico&apos;s queue
-                                    </span>
-                                </h2>
-                                <p className="text-base text-white/40 max-w-md mx-auto mb-8 font-light">
-                                    Upload your CV and get your first personalized match report in under 60 seconds.
-                                </p>
-                                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                                    <Link
-                                        href="/signup"
-                                        className="px-7 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-400 text-black font-semibold text-sm hover:brightness-110 transition-all shadow-[0_0_40px_rgba(0,218,243,0.3)]"
-                                    >
-                                        Create free account
-                                    </Link>
-                                    <Link
-                                        href="/chat"
-                                        className="px-7 py-3 rounded-xl border border-white/20 text-white/70 font-medium text-sm hover:bg-white/[0.06] hover:border-white/30 transition-all"
-                                    >
-                                        Try chat first
-                                    </Link>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* ── Pricing ── */}
-                <section id="pricing" className="px-4 py-20">
-                    <div className="max-w-5xl mx-auto">
-                        <div className="text-center mb-12">
-                            <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-3">Pricing</p>
-                            <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                Simple,{" "}
-                                <span className="font-semibold">transparent pricing</span>
-                            </h2>
-                        </div>
-                        <div className="grid md:grid-cols-3 gap-5">
-                            {PLANS.map((plan) => (
-                                <div
-                                    key={plan.name}
-                                    className={`relative rounded-2xl border p-7 flex flex-col gap-6 ${plan.primary
-                                        ? "border-cyan-500/40 bg-gradient-to-b from-cyan-950/50 to-black shadow-[0_0_48px_rgba(0,218,243,0.1)]"
-                                        : "border-white/10 bg-white/[0.03]"
-                                        }`}
-                                >
-                                    {plan.badge && (
-                                        <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-400 text-black">
-                                            {plan.badge}
-                                        </span>
-                                    )}
-                                    <div>
-                                        <p className={`text-sm font-medium mb-1 ${plan.primary ? "text-cyan-400" : "text-white/60"}`}>{plan.name}</p>
-                                        <div className="flex items-baseline gap-1">
-                                            <span className="text-3xl font-bold text-white">{plan.price}</span>
-                                            {plan.period && <span className="text-sm text-white/30">{plan.period}</span>}
-                                        </div>
-                                    </div>
-                                    <ul className="flex flex-col gap-2.5 flex-1">
-                                        {plan.features.map((f) => (
-                                            <li key={f} className="flex items-start gap-2.5 text-sm text-white/55">
-                                                <svg viewBox="0 0 16 16" fill="none" className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${plan.primary ? "text-cyan-400" : "text-white/30"}`}>
-                                                    <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-                                                </svg>
-                                                {f}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                    <Link
-                                        href={plan.href}
-                                        className={`block text-center py-3 rounded-xl text-sm font-semibold transition-all ${plan.primary
-                                            ? "bg-gradient-to-r from-cyan-500 to-cyan-400 text-black hover:brightness-110 shadow-[0_0_24px_rgba(0,218,243,0.2)]"
-                                            : "border border-white/15 text-white/70 hover:bg-white/[0.06] hover:border-white/25"
-                                            }`}
-                                    >
-                                        {plan.cta}
-                                    </Link>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* ── FAQ ── */}
-                <section id="faq" className="px-4 py-20">
-                    <div className="max-w-2xl mx-auto">
-                        <div className="text-center mb-12">
-                            <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-3">FAQ</p>
-                            <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                Common{" "}
-                                <span className="font-semibold">questions</span>
-                            </h2>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.02] px-6">
-                            {FAQS.map((faq) => (
-                                <FaqItem key={faq.q} faq={faq} />
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* ── Footer ── */}
-                <footer className="border-t border-white/[0.06] px-4 py-10">
-                    <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-400 to-pink-500 flex items-center justify-center">
-                                <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
-                                    <path d="M8 2L14 6v4L8 14 2 10V6L8 2z" fill="white" fillOpacity={0.9} />
-                                </svg>
-                            </div>
-                            <span className="text-sm font-semibold text-white/70">Rico AI</span>
-                        </div>
-                        <p className="text-xs text-white/25 text-center" suppressHydrationWarning>
-                            &copy; {new Date().getFullYear()} Rico Hunt. All rights reserved.
-                        </p>
-                        <div className="flex items-center gap-5 text-xs text-white/30">
-                            <Link href="/chat" className="hover:text-white/60 transition-colors">Chat</Link>
-                            <Link href="/login" className="hover:text-white/60 transition-colors">Sign in</Link>
-                            <Link href="/signup" className="hover:text-white/60 transition-colors">Sign up</Link>
-                        </div>
-                    </div>
-                </footer>
-
+        <div className={`min-h-screen overflow-x-hidden ${fraunces.variable}`} style={{ background: C.bg, color: C.ink, fontFamily: "var(--font-body), ui-sans-serif, sans-serif" }}>
+            <Masthead />
+            <main>
+                <Hero />
+                <SystemSection />
+                <BilingualBand />
+                <IdeaSection />
             </main>
+            <Colophon />
         </div>
     );
 }
