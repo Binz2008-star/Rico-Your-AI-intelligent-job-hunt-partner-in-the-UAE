@@ -50,6 +50,7 @@
 
 | Document | Purpose | Status | Updated |
 | --- | --- | --- | --- |
+| `AUDITS/2026-07-10-career-terminology-lexicon-audit.md` | Read-only audit of Arabic/English career terminology + domain lexicon gaps (no code/prompt changes) | Active | 2026-07-10 |
 | `AUDITS/2026-07-08-production-hardening-audit.md` | Near-term execution gate (read before feature/infra work) | Active | 2026-07-08 |
 | `AUDITS/2026-07-08-audit-gate-codex-followup.md` | Codex follow-up on the gate (synthetic-users rule) | Active | 2026-07-08 |
 | `AUDITS/attachment-document-routing-post-674-677.md` | Attachment/document routing audit (findings 1–5) | Historical | 2026-07-08 |
