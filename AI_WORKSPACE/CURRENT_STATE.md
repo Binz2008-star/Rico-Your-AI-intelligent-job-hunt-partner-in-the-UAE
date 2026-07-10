@@ -12,11 +12,16 @@
 > landing · auth · onboarding · workspace (dashboard/profile/settings/applications/upload/
 > pricing) · support+legal · states, across three shells (marketing masthead, minimal auth
 > header, workspace left sidebar), EN/AR, desktop/mobile. Delivery stays small per-route PRs
-> with owner visual-approval gates; `/command`, billing, OAuth, and backend/schema remain
-> excluded/gated; legal copy preserved. **PR #933** (landing below-the-fold cream, draft on
-> `claude/design-preview-hub-6o2ev5`, head `9627a5e`, CI green) is **paused** — it does not
-> merge unless it becomes full public-landing parity (requires unfreezing the hero + ruling on
-> #899). Migration sequence + #933 decision: `TASK-20260710-003` (revised). This header is a
+> with owner visual-approval gates; `DEC-20260710-002` carries a **binding guardrails block**
+> (source-of-truth = `/design-preview`; no separate/"inspired-by" theme; one objective per PR;
+> owner visual approval per phase; no backend/auth/billing/schema without approval; no fake
+> actions; sample data labelled/removed; legal copy unchanged without legal review;
+> command/chat requires its own DEC) plus **per-PR acceptance criteria**. **PR #933** (landing
+> below-the-fold cream, draft on `claude/design-preview-hub-6o2ev5`, head `9627a5e`, CI green)
+> is **paused** — it does not merge as a partial below-the-fold polish PR; the owner must pick
+> one of: (a) revise into full public-landing parity, (b) close and start a clean full-parity
+> PR, or (c) keep as reference only. Migration sequence + #933 decision: `TASK-20260710-003`
+> (revised). This header is a
 > docs-only workspace update on `docs/design-preview-target-inventory`; no `apps/web` or #933
 > code changed.
 >

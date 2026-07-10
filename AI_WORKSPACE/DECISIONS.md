@@ -51,10 +51,26 @@ The authoritative reference is the in-repo `/design-preview` source (live at
 `/rico-preview`. The uploaded design-preview PDF is **not present in the agent environment**;
 per owner instruction the repo source is used as authoritative in its place.
 
+#### Why this supersedes the narrower Phase 1 interpretation
+`DEC-20260710-001` was read as "visual-only, landing below-the-fold first," and #933 was built
+that way. The owner has stated that reading **under-scoped the approved target**: the goal was
+never partial landing polish or an "inspired-by" restyle. This decision **supersedes that
+narrower interpretation** and sets the target to **full `/design-preview` parity**. The
+delivery *mechanism* from `DEC-20260710-001` (small per-route PRs, per-phase owner visual
+approval, single-revert rollback) is kept; only the *scope* is corrected — from a landing
+paint job to reproducing the whole package's shape, content, sections, routes, and flows.
+
 #### Decision
 1. **`/design-preview` is the approved production target for shape, content, and flows** — not
-   merely palette/typography. This **expands** `DEC-20260710-001`; the phased, per-route,
-   owner-gated delivery model is retained.
+   merely palette/typography, and not partial landing polish. This **supersedes the narrower
+   Phase 1 reading of** `DEC-20260710-001` and expands it. Concretely the target includes:
+   - visual language (paper/ink/one-red; Fraunces · Inter · IBM Plex Mono)
+   - content structure and sections
+   - routes and page flows
+   - EN/AR coverage where applicable
+   - desktop/mobile behavior
+   - **missing production pages/sections are designed and built to match the approved package.**
+   The phased, per-route, owner-gated delivery model from `DEC-20260710-001` is retained.
 2. **Scope of the package:** public landing; auth (login/signup/forgot/reset/verify);
    onboarding; authenticated workspace (dashboard/profile/settings/applications/upload/pricing);
    support + legal; and states (empty/loading/error/mobile/RTL/light-dark). Three shells apply
@@ -72,13 +88,36 @@ per owner instruction the repo source is used as authoritative in its place.
      labelled/disabled.
 4. **Delivery:** small per-route PRs, one objective each, owner **visual approval before every
    merge**, single-revert rollback. Recommended order (safest first): PR 0 shared Atelier UI
-   kit → PR 1 public landing (full parity) → PR 2 auth → PR 3 support/legal → PR 4 onboarding
-   (after the hybrid-state fix) → PR 5 workspace read surfaces → PR 6 workspace action surfaces
-   (billing-gated) → PR 7 command/chat (own DEC).
-5. **PR #933** (landing below-the-fold cream) does **not** merge unless it becomes full
-   public-landing parity (masthead + hero + content), which requires the owner to (a) unfreeze
-   the landing hero (currently under the #871 freeze) and (b) rule on draft #899 (hero polish).
-   Otherwise #933 is kept as a draft reference only.
+   kit → PR 1 public landing (full parity) → PR 2 auth → PR 3 support/legal (preserve legal
+   copy) → PR 4 onboarding (after the hybrid-state fix) → PR 5 workspace read surfaces → PR 6
+   workspace action surfaces (billing-gated) → PR 7 command/chat (own DEC).
+5. **PR #933** (landing below-the-fold cream) does **not** merge as a partial below-the-fold
+   polish PR. Exactly one of these must be chosen by the owner (pending):
+   - **(a) revise #933 into full public-landing parity** (masthead + hero + content) — requires
+     unfreezing the landing hero (under the #871 freeze) and ruling on draft #899 (hero polish); or
+   - **(b) close #933 and start a clean full-parity PR** off the shared Atelier kit (PR 0); or
+   - **(c) keep #933 as a draft reference only** (does not merge).
+   Recommendation: (a) revise-in-place if the hero is unfrozen, else (c).
+
+#### Guardrails (binding for every migration PR)
+- `/design-preview` (live + repo source) is the **single source of truth**.
+- **No improvising a separate theme; no "inspired-by" implementation** — match the package.
+- **One objective per PR**; no mixed concerns.
+- **Owner visual approval required per phase**, before each merge.
+- **No backend/auth/billing/Neon/schema changes without explicit approval.**
+- **No fake live actions** — actions keep their existing path or are visibly disabled.
+- **Sample/demo data must be labelled or removed** (wired to existing endpoints or clearly marked).
+- **Legal copy cannot change without legal review** (`/privacy`, `/refund-policy`, `/terms`).
+- **Command/chat requires a separate DEC** before any production redesign.
+- No shadcn/ui without its own DEC — rebuild on the existing Tailwind stack.
+
+#### Acceptance criteria (per migration PR)
+- Side-by-side with its `/design-preview` reference, the route matches shape + content +
+  sections + flow (not just palette); EN/AR where the package ships it; desktop + mobile.
+- `npm run build` passes; no new test failures vs the known baseline; 0 app console errors;
+  no horizontal scroll on mobile.
+- Diff stays within the PR's one objective; guardrails above all hold.
+- Owner approves the Vercel preview before merge; post-merge production smoke on the route.
 
 #### Consequences
 - Positive: one canonical, evidence-based target removes the re-interpretation risk seen in
