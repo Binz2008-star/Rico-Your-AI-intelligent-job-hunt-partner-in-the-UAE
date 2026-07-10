@@ -84,6 +84,11 @@ describe("handleConfirmProfile", () => {
 
     render(<CommandPage />);
 
+    // Wait for the initial /me auth check to resolve out of the "checking"
+    // audience before uploading — handleCVUpload silently drops files while
+    // chatAudience === "checking", which would otherwise race this upload.
+    await screen.findByText("Sign up free");
+
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
 
@@ -144,6 +149,11 @@ describe("Edit before saving", () => {
 
     render(<CommandPage />);
 
+    // Wait for the initial /me auth check to resolve out of the "checking"
+    // audience before uploading — handleCVUpload silently drops files while
+    // chatAudience === "checking", which would otherwise race this upload.
+    await screen.findByText("Sign up free");
+
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
 
@@ -202,6 +212,11 @@ describe("Edit before saving", () => {
     });
 
     render(<CommandPage />);
+
+    // Wait for the initial /me auth check to resolve out of the "checking"
+    // audience before uploading — handleCVUpload silently drops files while
+    // chatAudience === "checking", which would otherwise race this upload.
+    await screen.findByText("Sign up free");
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));

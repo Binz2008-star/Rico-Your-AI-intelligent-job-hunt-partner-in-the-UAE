@@ -21,25 +21,26 @@ describe("LandingPage", () => {
   it("renders the hero headline and human-friendly copy", () => {
     renderWithLanguage(<LandingPage />);
 
+    // Hero headline (h1)
     expect(
       screen.getByRole("heading", {
-        name: /Upload your CV\.\s+Let Rico run your job search smarter\./i,
+        name: /Smarter UAE job hunting starts with your CV\./i,
       })
     ).toBeInTheDocument();
-    expect(screen.getByText("How Rico works")).toBeInTheDocument();
-    // Five-step flow with plain job-seeker language (step titles; "Upload your CV" also appears in CTA buttons)
-    expect(screen.getAllByText("Upload your CV").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Build your career profile")).toBeInTheDocument();
-    expect(screen.getByText("Find matching UAE jobs")).toBeInTheDocument();
-    expect(screen.getByText("Track your applications")).toBeInTheDocument();
-    expect(screen.getByText("Get guidance and alerts")).toBeInTheDocument();
-    // Section labels
-    expect(screen.getByText("Rico remembers your career goals")).toBeInTheDocument();
-    expect(screen.getByText("Smart job matching")).toBeInTheDocument();
-    expect(screen.getByText("You stay in control")).toBeInTheDocument();
+    // Problem/solution section headline
+    expect(screen.getByText("Stop guessing which jobs fit you.")).toBeInTheDocument();
+    // Three value-proposition cards
+    expect(screen.getByText("Find better matches")).toBeInTheDocument();
+    expect(screen.getByText("Know why they fit")).toBeInTheDocument();
+    expect(screen.getByText("Track every move")).toBeInTheDocument();
+    // Pricing + final CTA headlines
+    expect(screen.getByText("Start free. Upgrade only when Rico helps.")).toBeInTheDocument();
+    expect(screen.getByText("Upload your CV. Rico will show you what fits.")).toBeInTheDocument();
     // Bilingual / trust copy
-    expect(screen.getAllByText(/in English and Arabic/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/Rico never applies silently/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("English + Arabic")).toBeInTheDocument();
+    expect(
+      screen.getByText("You stay in control. Rico never applies without your approval.")
+    ).toBeInTheDocument();
   });
 
   it("preserves the primary onboarding and auth links", () => {
