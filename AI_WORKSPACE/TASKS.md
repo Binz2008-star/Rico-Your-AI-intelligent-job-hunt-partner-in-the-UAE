@@ -78,23 +78,48 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
-### TASK-20260710-003 — Phase 1: landing below-the-fold static sections (Atelier rollout)
+### TASK-20260710-003 — Migrate the full `/design-preview` package to production (shape + content + flows)
 
-Status: scoped (NOT started — gated on the Phase 0 docs PR merging; owner instruction 2026-07-10)
+Status: scoped — REVISED 2026-07-10 to full-package scope per `DEC-20260710-002`
+(was "Phase 1: landing below-the-fold"). Blocked on owner decisions listed below.
 Owner: unassigned
-Branch: TBD
-Issue/PR: none yet — governed by `DEC-20260710-001`
+Branch: docs on `docs/design-preview-target-inventory`; implementation branches TBD
+Issue/PR: #933 (landing below-the-fold, **paused draft** — see below); governed by
+`DEC-20260710-002` (expands `DEC-20260710-001`)
 
 #### Objective
-First implementation step of the approved Atelier rollout: align the production landing's
-below-the-fold static marketing sections to the approved `/design-preview` reference.
-Hero is explicitly excluded (own follow-up PR within Phase 1).
+Reproduce the approved `/design-preview` package in production — same visual language,
+sections, content structure, page flows, desktop/mobile behavior, and EN/AR coverage — via
+small per-route PRs with an owner visual-approval gate before each merge. Authoritative
+reference inventory: `HANDOFFS/2026-07-10-design-preview-target-inventory.md` (53 PNGs,
+6-group hub tile inventory, live `/design-gallery` + `/rico-preview`). The uploaded PDF is
+not present in the agent environment; the in-repo `/design-preview` source is authoritative.
+
+#### Recommended PR sequence (safest first, per DEC-20260710-002 §4)
+PR 0 shared Atelier UI kit → PR 1 public landing (full parity) → PR 2 auth → PR 3 support/legal
+→ PR 4 onboarding (after hybrid-state fix, TASK-20260710-005) → PR 5 workspace read surfaces →
+PR 6 workspace action surfaces (billing-gated) → PR 7 command/chat (own DEC).
+
+#### #933 decision
+Recommend: keep #933 as a draft reference and make PR 1 the full public-landing parity that
+supersedes it (revise-in-place if the owner unfreezes the hero and rules on #899; otherwise
+#933 does not merge). Do NOT merge #933 as below-the-fold-only.
+
+#### Owner-gated decisions before implementation
+- [ ] Unfreeze the landing hero for PR 1 + decide #899's fate.
+- [ ] Canonical onboarding flow: reference intent-flow vs production CV-first.
+- [ ] Adopt the reference workspace left-sidebar (Shell C) in production?
+- [ ] Support contact form + auth Google button: omit (recommended) or greenlight as separate
+      backend projects.
+- [ ] Approve starting PR 0 (shared Atelier UI kit).
 
 #### Constraints
-- Do not touch: hero, `app/page.tsx` auth redirect, nav, `/command`, `/rico`, backend,
-  auth, billing, Neon, schema. No shadcn; existing stack only. Visual-only; zero logic diff.
+- Excluded/gated (DEC-20260710-002 §3): `/command` (own DEC); no backend/auth/billing/Neon/
+  schema without approval; legal copy preserved verbatim; no shadcn without its own DEC;
+  no fake live actions; preview/sample data wired to existing endpoints or clearly labelled.
+- One objective per PR; owner visual approval before every merge; single-revert rollback.
 - Note: draft PR #899 (landing hero polish, held under the #871 freeze) overlaps the hero —
-  hero work must reconcile with it; below-the-fold sections do not.
+  hero parity work must reconcile with it.
 
 #### Acceptance criteria
 - [ ] Per-phase uniform acceptance in `DEC-20260710-001` §5 (build, no new test failures,

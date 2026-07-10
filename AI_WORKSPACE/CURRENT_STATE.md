@@ -1,6 +1,31 @@
 # Current State
 
-> **Reconciliation header — 2026-07-10, evening (latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-10, night (latest; supersedes all headers below).**
+> **Rollout scope corrected by the owner: `/design-preview` is the approved production target
+> for shape + content + flows** — not "visual polish" and not "landing below-the-fold only."
+> Recorded as `DEC-20260710-002` (expands `DEC-20260710-001`), with an evidence-based reference
+> inventory in `HANDOFFS/2026-07-10-design-preview-target-inventory.md` (53 reference PNGs in
+> `apps/web/public/design-preview/`, the 6-group hub tile inventory in
+> `apps/web/app/design-preview/_client.tsx`, and the live `/design-gallery` + `/rico-preview`
+> previews). The uploaded design-preview PDF is **not present in the agent environment**; the
+> in-repo `/design-preview` source is used as authoritative in its place. The package spans
+> landing · auth · onboarding · workspace (dashboard/profile/settings/applications/upload/
+> pricing) · support+legal · states, across three shells (marketing masthead, minimal auth
+> header, workspace left sidebar), EN/AR, desktop/mobile. Delivery stays small per-route PRs
+> with owner visual-approval gates; `DEC-20260710-002` carries a **binding guardrails block**
+> (source-of-truth = `/design-preview`; no separate/"inspired-by" theme; one objective per PR;
+> owner visual approval per phase; no backend/auth/billing/schema without approval; no fake
+> actions; sample data labelled/removed; legal copy unchanged without legal review;
+> command/chat requires its own DEC) plus **per-PR acceptance criteria**. **PR #933** (landing
+> below-the-fold cream, draft on `claude/design-preview-hub-6o2ev5`, head `9627a5e`, CI green)
+> is **paused** — it does not merge as a partial below-the-fold polish PR; the owner must pick
+> one of: (a) revise into full public-landing parity, (b) close and start a clean full-parity
+> PR, or (c) keep as reference only. Migration sequence + #933 decision: `TASK-20260710-003`
+> (revised). This header is a
+> docs-only workspace update on `docs/design-preview-target-inventory`; no `apps/web` or #933
+> code changed.
+>
+> **Reconciliation header — 2026-07-10, evening (superseded by the header above).**
 > `main` is at `db3d7226c1ed87990db2abbb964e6e4196526213` (#930 workspace sync merged,
 > owner-approved). **Full read-only system audit run and verdict accepted by owner:
 > YELLOW — acceptable, zero P0/P1 blockers; production stable.** Verified: Render
