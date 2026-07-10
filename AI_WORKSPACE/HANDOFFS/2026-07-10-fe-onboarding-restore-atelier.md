@@ -117,3 +117,50 @@ One focused Onboarding PR (restoration + Atelier migration) including the tied D
 ## Git state at handoff
 - Branch `claude/onboarding-restore-atelier` @ `origin/main` (`c43bedc`). **Uncommitted at handoff:** this handoff + the `DEC-20260710-004` entry in `AI_WORKSPACE/DECISIONS.md` (docs only). No onboarding runtime changes yet. Committed + pushed so the next session can resume from origin.
 - All prior phase branches deleted; backup deleted; no other open PRs from this work.
+
+---
+
+## PR #955 Merge Verification — 2026-07-11
+
+### Merge
+
+- **PR:** #955 — feat(onboarding): restore /onboarding + Atelier migration + status-driven routing
+- **Review head SHA:** `ccf74a00b6aca78ddf8dfc5e4333aa32bac11821`
+- **Merge method:** Squash merge
+- **Squash-merge SHA:** `3cf539841fd47c7aad7458f8c66bd80aa31ee018`
+- **Merged to:** `origin/main` at `3cf5398`
+
+### CI status (all green for `3cf5398`)
+
+| Check | Status |
+|-------|--------|
+| Deploy to Production (Vercel) | SUCCESS |
+| Deploy Render Backend | SUCCESS |
+| pages build and deployment | SUCCESS |
+| Error Notifications | SUCCESS |
+
+### Production verification
+
+| Endpoint | Result |
+|----------|--------|
+| `GET /health` (backend) | `200` — all job providers configured, not degraded |
+| `GET /version` (backend) | `commit: "3cf539841fd47c7aad7458f8c66bd80aa31ee018"` — matches merge SHA |
+| `GET /api/v1/onboarding/status` (backend) | `401 Unauthorized` — endpoint live, correctly rejecting unauthenticated |
+| `GET https://ricohunt.com` (frontend) | `200` — landing page live |
+| `GET /proxy/health` (Vercel proxy) | `200` — proxy pass-through working |
+| `GET /proxy/api/v1/onboarding/status` (Vercel proxy) | `401 Unauthorized` — proxy + endpoint live |
+
+### Verification scope
+
+- **PARTIAL** — backend liveness, SHA match, endpoint availability, frontend reachability, and proxy pass-through all verified via unauthenticated HTTP. Authenticated browser scenarios (login → onboarding routing, CV upload, skip, submit) were not executed from this environment.
+
+### Review summary
+
+- Independent read-only review of `ccf74a0` confirmed: VERIFIED, no blockers, READY
+- `get_onboarding_state_readonly` is truly read-only (no DDL/DML/commit)
+- DB unavailable / query failure raises `OnboardingStateUnavailable` → sanitized 503
+- No failure falls through to `derived_legacy`
+- Connections always close
+- Login routes on `complete` (not `profile_exists`); no redirect loop
+- Skip routes to `/command` without marking completion
+- PR scope is onboarding-only (15 files, no unrelated changes)
