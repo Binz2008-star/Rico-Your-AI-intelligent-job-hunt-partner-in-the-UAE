@@ -28,6 +28,73 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260710-002 — `/design-preview` is the approved production target: shape + content + flows
+
+Status: accepted
+Date: 2026-07-10
+Owner: Roben (clarified in-session; recorded by Claude)
+Related task: TASK-20260710-003 (revised scope)
+
+#### Context
+`DEC-20260710-001` framed the Atelier rollout as "visual-only, below-the-fold first." During
+Phase 1 (#933) the owner clarified that this under-scoped the goal. The approved production
+direction is to **reproduce the full Rico `/design-preview` package** — same visual language,
+same sections, same content structure, same page flows, same desktop/mobile behavior, same
+EN/AR coverage where applicable — and, where a section/page does not yet exist in production,
+to design and build it to match the package.
+
+The authoritative reference is the in-repo `/design-preview` source (live at
+`https://ricohunt.com/design-preview`), catalogued from repo evidence in
+`HANDOFFS/2026-07-10-design-preview-target-inventory.md`: 53 reference PNGs in
+`apps/web/public/design-preview/`, the 6-group tile inventory in
+`apps/web/app/design-preview/_client.tsx`, and the live previews `/design-gallery` and
+`/rico-preview`. The uploaded design-preview PDF is **not present in the agent environment**;
+per owner instruction the repo source is used as authoritative in its place.
+
+#### Decision
+1. **`/design-preview` is the approved production target for shape, content, and flows** — not
+   merely palette/typography. This **expands** `DEC-20260710-001`; the phased, per-route,
+   owner-gated delivery model is retained.
+2. **Scope of the package:** public landing; auth (login/signup/forgot/reset/verify);
+   onboarding; authenticated workspace (dashboard/profile/settings/applications/upload/pricing);
+   support + legal; and states (empty/loading/error/mobile/RTL/light-dark). Three shells apply
+   (marketing masthead, minimal auth header, workspace left sidebar).
+3. **Still excluded / gated, unchanged from prior decisions:**
+   - `/command` (and any `/rico` route) — core product behavior; requires its **own DEC**.
+   - No backend/auth/billing/Neon/schema changes unless separately approved (e.g. the auth
+     "Continue with Google" button and the support contact-form endpoint are **omitted or
+     gated**, not built, without approval).
+   - Legal copy (`/privacy`, `/refund-policy`, `/terms`) preserved verbatim unless legal review
+     approves changes.
+   - No shadcn/ui adoption without its own DEC — the workspace reference screens must be rebuilt
+     on the existing Tailwind stack.
+   - No fake live actions; preview/sample data must be wired to existing endpoints or clearly
+     labelled/disabled.
+4. **Delivery:** small per-route PRs, one objective each, owner **visual approval before every
+   merge**, single-revert rollback. Recommended order (safest first): PR 0 shared Atelier UI
+   kit → PR 1 public landing (full parity) → PR 2 auth → PR 3 support/legal → PR 4 onboarding
+   (after the hybrid-state fix) → PR 5 workspace read surfaces → PR 6 workspace action surfaces
+   (billing-gated) → PR 7 command/chat (own DEC).
+5. **PR #933** (landing below-the-fold cream) does **not** merge unless it becomes full
+   public-landing parity (masthead + hero + content), which requires the owner to (a) unfreeze
+   the landing hero (currently under the #871 freeze) and (b) rule on draft #899 (hero polish).
+   Otherwise #933 is kept as a draft reference only.
+
+#### Consequences
+- Positive: one canonical, evidence-based target removes the re-interpretation risk seen in
+  #933's first two attempts; scope, order, and gates are explicit.
+- Negative/trade-off: substantially larger than a visual polish — includes new shells and
+  screens; workspace surfaces need shadcn-free rebuilds; several screens surface
+  backend/billing/OAuth decisions that are deferred, not resolved, by this decision.
+
+#### Follow-up (owner-gated decisions before implementation)
+- [ ] Unfreeze the landing hero for PR 1, and decide #899's fate.
+- [ ] Choose canonical onboarding flow: reference intent-flow vs production CV-first.
+- [ ] Adopt the reference workspace left-sidebar (Shell C) in production?
+- [ ] Support contact form + auth Google button: omit (recommended) or greenlight as separate
+      backend projects.
+- [ ] Approve starting with PR 0 (shared Atelier UI kit).
+
 ### DEC-20260710-001 — Atelier production rollout, phases 1–6 (visual-only, per-phase owner gate)
 
 Status: accepted
