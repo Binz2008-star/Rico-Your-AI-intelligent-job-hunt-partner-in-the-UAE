@@ -34,7 +34,7 @@ from pydantic import BaseModel, Field, validator
 from src.naukrigulf_apply import run_naukrigulf_apply, NGApplyStatus
 from src.applications import mark_applied, is_applied, get_applied_jobs
 from src.filter import save_seen_jobs
-from src.profile import get_candidate_profile, get_target_roles
+from src.candidate_profile import get_candidate_profile, get_target_roles
 from src.repositories.learning_repo import get_learning_repository
 from src.decision_engine import JobDecisionEngine
 

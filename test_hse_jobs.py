@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.decision_engine import JobDecisionEngine
-from src.profile import get_candidate_profile, get_target_roles
+from src.candidate_profile import get_candidate_profile, get_target_roles
 from src.repositories.learning_repo import get_learning_repository
 from src.llm_scorer import score_jobs_llm   # uses OpenAI if available, else keyword fallback
 

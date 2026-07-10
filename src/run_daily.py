@@ -75,7 +75,7 @@ from src.db import init_db, save_job, is_db_available, get_top_jobs
 from src.repositories.subscription_repo import expire_stale_subscriptions
 from src.repositories.profile_repo import get_users_with_telegram_alerts, get_profile
 from src.telegram_bot import send_telegram_to_user, format_telegram_jobs
-from src.profile import get_candidate_profile, get_target_roles
+from src.candidate_profile import get_candidate_profile, get_target_roles
 from src.applications import get_applied_jobs, get_applied_jobs_count
 from src.decision_engine import JobDecisionEngine, generate_decision_insights
 from src.feedback_loop import FeedbackLoopOrchestrator, CycleResult

@@ -102,7 +102,7 @@ def _check_imports() -> Optional[str]:
     import src.db
     import src.job_history
     import src.applications
-    import src.profile
+    import src.candidate_profile
     import src.decision_engine
     import src.response_intelligence
     import src.feedback_loop
@@ -148,7 +148,7 @@ def _check_json_fallback() -> Optional[str]:
 
 
 def _check_decision_engine() -> Optional[str]:
-    from src.profile import get_candidate_profile, get_target_roles
+    from src.candidate_profile import get_candidate_profile, get_target_roles
     from src.decision_engine import JobDecisionEngine
     engine = JobDecisionEngine.from_loaders(get_candidate_profile, get_target_roles)
     prob = engine.calculate_success_probability({
@@ -163,7 +163,7 @@ def _check_decision_engine() -> Optional[str]:
 
 
 def _check_response_intelligence() -> Optional[str]:
-    from src.profile import get_candidate_profile, get_target_roles
+    from src.candidate_profile import get_candidate_profile, get_target_roles
     from src.decision_engine import JobDecisionEngine
     from src.response_intelligence import create_engine
     engine = JobDecisionEngine.from_loaders(get_candidate_profile, get_target_roles)
@@ -175,7 +175,7 @@ def _check_response_intelligence() -> Optional[str]:
 
 
 def _check_feedback_orchestrator() -> Optional[str]:
-    from src.profile import get_candidate_profile, get_target_roles
+    from src.candidate_profile import get_candidate_profile, get_target_roles
     from src.decision_engine import JobDecisionEngine
     from src.feedback_loop import FeedbackLoopOrchestrator
     engine = JobDecisionEngine.from_loaders(get_candidate_profile, get_target_roles)

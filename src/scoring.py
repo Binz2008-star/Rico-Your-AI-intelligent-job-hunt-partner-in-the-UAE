@@ -1,6 +1,6 @@
 import os
 import re
-from src.profile import (
+from src.candidate_profile import (
     get_candidate_profile, get_skill_weights, get_hard_reject_keywords,
     get_seniority_keywords, calculate_experience_match, get_location_preferences,
     get_salary_preferences, get_target_roles, get_profile_match_explanation
