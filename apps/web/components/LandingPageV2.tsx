@@ -2,6 +2,52 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Fraunces } from "next/font/google";
+
+/* Atelier editorial display face (DEC-20260710-001 Phase 1) — landing-scoped,
+   below-the-fold section headings only. Loaded here, not in the root layout. */
+const fraunces = Fraunces({
+    subsets: ["latin"],
+    weight: ["400", "600"],
+    style: ["normal", "italic"],
+    display: "swap",
+    variable: "--font-fraunces-landing",
+});
+
+/* Below-the-fold section heading — Atelier prospectus voice on the V2 canvas:
+   serif display with the emphasised phrase in italic. Copy comes through as-is. */
+function SectionHeading({ lead, emphasis, className = "" }: { lead: React.ReactNode; emphasis: React.ReactNode; className?: string }) {
+    return (
+        <h2
+            className={`text-2xl sm:text-3xl font-normal text-white/95 tracking-tight ${className}`}
+            style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif" }}
+        >
+            {lead}{" "}
+            <em className="italic font-semibold text-white">{emphasis}</em>
+        </h2>
+    );
+}
+
+/* Atelier editorial eyebrow — mono small-caps label with hairline rules. */
+function SectionEyebrow({ children, tone = "cyan", align = "center", className = "" }: { children: React.ReactNode; tone?: "cyan" | "pink"; align?: "center" | "start"; className?: string }) {
+    const toneClass = tone === "pink" ? "text-pink-400/70" : "text-cyan-400/70";
+    const label = <p className={`text-[11px] font-mono ${toneClass} uppercase tracking-[0.22em]`}>{children}</p>;
+    if (align === "start") {
+        return (
+            <div className={`flex items-center gap-3 ${className}`}>
+                {label}
+                <span className="h-px w-8 bg-white/10" aria-hidden="true" />
+            </div>
+        );
+    }
+    return (
+        <div className={`flex items-center justify-center gap-3 ${className}`}>
+            <span className="h-px w-8 bg-white/10" aria-hidden="true" />
+            {label}
+            <span className="h-px w-8 bg-white/10" aria-hidden="true" />
+        </div>
+    );
+}
 
 /* ─── Canvas ribbon animation ─────────────────────────────────────────────── */
 function useRibbonCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
@@ -565,7 +611,7 @@ export default function LandingPageV2() {
 
     return (
         <div
-            className="relative min-h-screen overflow-x-hidden"
+            className={`relative min-h-screen overflow-x-hidden ${fraunces.variable}`}
             style={{ fontFamily: "var(--font-ibm-plex-sans), var(--font-body), sans-serif", background: "#000" }}
         >
             {/* Marquee keyframe styles */}
@@ -749,16 +795,16 @@ export default function LandingPageV2() {
                 <section className="relative px-4 py-20">
                     <div className="max-w-5xl mx-auto">
                         <div className="text-center mb-12">
-                            <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-3">Why Rico</p>
-                            <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                Built for the{" "}
-                                <span className="font-semibold">UAE job market</span>
-                            </h2>
+                            <SectionEyebrow className="mb-3">Why Rico</SectionEyebrow>
+                            <SectionHeading lead="Built for the" emphasis="UAE job market" />
                         </div>
                         <div className="grid md:grid-cols-3 gap-6">
                             {WHY_RICO.map((item) => (
                                 <div key={item.num} className="p-6 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] transition-colors group">
-                                    <p className="font-mono text-2xl font-bold text-white/10 group-hover:text-cyan-400/20 transition-colors mb-4">{item.num}</p>
+                                    <p className="flex items-center gap-2.5 mb-4">
+                                        <span className="font-mono text-[11px] font-medium tracking-[0.18em] text-cyan-400/60">{item.num}</span>
+                                        <span className="h-px flex-1 bg-white/[0.07] group-hover:bg-cyan-400/25 transition-colors" aria-hidden="true" />
+                                    </p>
                                     <h3 className="text-sm font-semibold text-white mb-2">{item.headline}</h3>
                                     <p className="text-sm text-white/40 leading-relaxed">{item.body}</p>
                                 </div>
@@ -782,11 +828,8 @@ export default function LandingPageV2() {
                 <section id="features" className="px-4 py-20">
                     <div className="max-w-5xl mx-auto">
                         <div className="text-center mb-12">
-                            <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-3">Features</p>
-                            <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                Every tool your{" "}
-                                <span className="font-semibold">job search needs</span>
-                            </h2>
+                            <SectionEyebrow className="mb-3">Features</SectionEyebrow>
+                            <SectionHeading lead="Every tool your" emphasis="job search needs" />
                         </div>
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {FEATURES.map((f) => (
@@ -801,11 +844,8 @@ export default function LandingPageV2() {
                     <div className="max-w-5xl mx-auto px-4">
                         <div className="flex items-end justify-between mb-8">
                             <div>
-                                <p className="text-xs font-mono text-pink-400/70 uppercase tracking-widest mb-2">Success Stories</p>
-                                <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                    Real results,{" "}
-                                    <span className="font-semibold">real candidates</span>
-                                </h2>
+                                <SectionEyebrow tone="pink" align="start" className="mb-2">Success Stories</SectionEyebrow>
+                                <SectionHeading lead="Real results," emphasis="real candidates" />
                             </div>
                             <div className="hidden sm:flex items-center gap-2">
                                 <button
@@ -850,13 +890,16 @@ export default function LandingPageV2() {
                             <div className="absolute -top-20 -left-20 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
                             <div className="absolute -bottom-20 -right-20 w-72 h-72 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
                             <div className="relative z-10">
-                                <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-4">Get Started Today</p>
-                                <h2 className="text-3xl sm:text-4xl font-light text-white mb-4 leading-tight">
+                                <SectionEyebrow className="mb-4">Get Started Today</SectionEyebrow>
+                                <h2
+                                    className="text-3xl sm:text-4xl font-normal text-white/95 mb-4 leading-tight tracking-tight"
+                                    style={{ fontFamily: "var(--font-fraunces-landing), Georgia, serif" }}
+                                >
                                     Your next UAE role{" "}
                                     <br className="hidden sm:block" />
-                                    <span className="font-semibold bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent">
+                                    <em className="italic font-semibold bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent">
                                         is already in Rico&apos;s queue
-                                    </span>
+                                    </em>
                                 </h2>
                                 <p className="text-base text-white/40 max-w-md mx-auto mb-8 font-light">
                                     Upload your CV and get your first personalized match report in under 60 seconds.
@@ -884,11 +927,8 @@ export default function LandingPageV2() {
                 <section id="pricing" className="px-4 py-20">
                     <div className="max-w-5xl mx-auto">
                         <div className="text-center mb-12">
-                            <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-3">Pricing</p>
-                            <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                Simple,{" "}
-                                <span className="font-semibold">transparent pricing</span>
-                            </h2>
+                            <SectionEyebrow className="mb-3">Pricing</SectionEyebrow>
+                            <SectionHeading lead="Simple," emphasis="transparent pricing" />
                         </div>
                         <div className="grid md:grid-cols-3 gap-5">
                             {PLANS.map((plan) => (
@@ -907,7 +947,7 @@ export default function LandingPageV2() {
                                     <div>
                                         <p className={`text-sm font-medium mb-1 ${plan.primary ? "text-cyan-400" : "text-white/60"}`}>{plan.name}</p>
                                         <div className="flex items-baseline gap-1">
-                                            <span className="text-3xl font-bold text-white">{plan.price}</span>
+                                            <span className="text-3xl font-bold text-white tabular-nums tracking-tight">{plan.price}</span>
                                             {plan.period && <span className="text-sm text-white/30">{plan.period}</span>}
                                         </div>
                                     </div>
@@ -940,11 +980,8 @@ export default function LandingPageV2() {
                 <section id="faq" className="px-4 py-20">
                     <div className="max-w-2xl mx-auto">
                         <div className="text-center mb-12">
-                            <p className="text-xs font-mono text-cyan-400/70 uppercase tracking-widest mb-3">FAQ</p>
-                            <h2 className="text-2xl sm:text-3xl font-light text-white">
-                                Common{" "}
-                                <span className="font-semibold">questions</span>
-                            </h2>
+                            <SectionEyebrow className="mb-3">FAQ</SectionEyebrow>
+                            <SectionHeading lead="Common" emphasis="questions" />
                         </div>
                         <div className="rounded-2xl border border-white/10 bg-white/[0.02] px-6">
                             {FAQS.map((faq) => (
