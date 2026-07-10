@@ -1,0 +1,211 @@
+/* ============================================================================
+ * Atelier V2 — Support / FAQ / Contact island primitives.
+ *
+ * Scoped extensions for the /faq and /contact surfaces. Consumes the shared
+ * `.atelier` token layer + the `atl-doc` document-island chrome already used by
+ * the shipped /terms and /privacy pages. Same HARD SAFETY RULES: every selector
+ * is scoped under `.atelier`; no global selectors, no token overrides.
+ *
+ * Adds: a native-<details> FAQ accordion, contact channel cards, and a lede
+ * paragraph — all in the approved paper/ink/sun-red language. No fake form: the
+ * contact surface keeps the real email / WhatsApp / LinkedIn channels.
+ * ========================================================================== */
+
+.atelier .atl-doc-lede {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin: 0 0 8px;
+    max-width: 60ch;
+}
+
+/* ── FAQ accordion (native <details>/<summary>) ───────────────────────────── */
+.atelier .atl-faq {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--rule);
+}
+
+.atelier .atl-faq-item {
+    border-bottom: 1px solid var(--rule);
+}
+
+.atelier .atl-faq-item > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    cursor: pointer;
+    list-style: none;
+    padding: 20px 4px;
+    font-family: var(--atl-font-display);
+    font-size: 19px;
+    font-weight: 400;
+    color: var(--ink);
+    transition: color 0.15s ease;
+}
+
+.atelier[dir="rtl"] .atl-faq-item > summary {
+    font-family: var(--atl-font-display-ar);
+}
+
+.atelier .atl-faq-item > summary::-webkit-details-marker {
+    display: none;
+}
+
+.atelier .atl-faq-item > summary::marker {
+    content: "";
+    font-size: 0;
+}
+
+.atelier .atl-faq-item > summary:hover {
+    color: var(--sun);
+}
+
+/* Keyboard focus indicator (native <summary> stays keyboard-toggleable) */
+.atelier .atl-faq-item > summary:focus-visible {
+    outline: 2px solid var(--sun);
+    outline-offset: 2px;
+    border-radius: 4px;
+    color: var(--sun);
+}
+
+/* Plus / minus indicator */
+.atelier .atl-faq-item > summary .atl-faq-mark {
+    flex: none;
+    font-family: var(--atl-font-mono);
+    font-size: 20px;
+    line-height: 1;
+    color: var(--ink-mute);
+    transition: transform 0.2s ease, color 0.15s ease;
+}
+
+.atelier .atl-faq-item[open] > summary .atl-faq-mark {
+    transform: rotate(45deg);
+    color: var(--sun);
+}
+
+.atelier .atl-faq-answer {
+    padding: 0 4px 22px;
+    max-width: 68ch;
+}
+
+.atelier .atl-faq-answer p {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    margin: 0 0 12px;
+}
+
+.atelier .atl-faq-answer p:last-child {
+    margin-bottom: 0;
+}
+
+.atelier .atl-faq-answer strong {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.atelier .atl-faq-answer a {
+    color: var(--sun);
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--sun) 35%, transparent);
+    transition: border-color 0.15s ease;
+}
+
+.atelier .atl-faq-answer a:hover {
+    border-bottom-color: var(--sun);
+}
+
+/* ── Contact channel cards ────────────────────────────────────────────────── */
+.atelier .atl-contact-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+@media (max-width: 640px) {
+    .atelier .atl-contact-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.atelier .atl-contact-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 22px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: var(--atl-radius-sm);
+    text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.atelier a.atl-contact-card:hover {
+    border-color: var(--sun);
+    background: color-mix(in srgb, var(--paper) 70%, var(--paper-2));
+}
+
+.atelier .atl-contact-card.is-wide {
+    grid-column: 1 / -1;
+}
+
+.atelier .atl-contact-label {
+    font-family: var(--atl-font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--sun);
+    margin: 0;
+}
+
+.atelier .atl-contact-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0;
+}
+
+.atelier .atl-contact-note {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink-mute);
+    margin: 4px 0 0;
+}
+
+/* Registered-company plate above the cards */
+.atelier .atl-org-plate {
+    margin: 0 0 24px;
+    padding: 16px 18px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: var(--atl-radius-sm);
+}
+
+.atelier .atl-org-plate .atl-org-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0;
+}
+
+.atelier .atl-org-plate .atl-org-meta {
+    font-size: 12.5px;
+    color: var(--ink-mute);
+    margin: 4px 0 0;
+}
+
+/* Section eyebrow inside a doc panel (FREQUENTLY ASKED / CONTACT) */
+.atelier .atl-section-eyebrow {
+    font-family: var(--atl-font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-mute);
+    margin: 40px 0 14px;
+}
+
+.atelier .atl-section-eyebrow:first-child {
+    margin-top: 0;
+}
