@@ -49,6 +49,61 @@ const C = {
 const SERIF = "var(--font-fraunces-landing), Georgia, serif";
 const MONO = "var(--font-mono), ui-monospace, monospace";
 
+/* Motion / interaction parity with the approved /design-preview prospectus
+   (Atelier source: src/components/landing/Hero.tsx + styles.css). All motion is
+   scoped under `.lpv2-root`, uses CSS/native React only (no new dependency), and
+   is disabled under prefers-reduced-motion — both here and via the global guard
+   in app/globals.css. Restored, verbatim to the reference:
+     · red-bullet kicker pulse            (atelier: animate-pulse)
+     · hero underline pen draw-in         (atelier-spark, stroke-dashoffset)
+     · ask-next composer blinking caret   (atelier-caret)
+     · interview dialog staggered fade-up (atelier-fade-up, +60ms/line)
+     · hover = color shift, not opacity fade (nav→ink; CTAs→sun; footer→sun-soft)
+   Intentionally NOT restored (scope): the rotating-slogan typewriter (changes
+   copy), interactive re-typing chips (keeps decorative chips inert), and the
+   hero background drift washes (adds visual elements beyond the approved plate). */
+const LANDING_MOTION_CSS = `
+.lpv2-root { --lpv2-ink:#1F1B15; --lpv2-sun:#C6492E; --lpv2-sun-soft:#E0895A; }
+
+.lpv2-root .lpv2-nav,
+.lpv2-root .lpv2-openrico,
+.lpv2-root .lpv2-secondary,
+.lpv2-root .lpv2-foot,
+.lpv2-root .lpv2-cta { transition: color .2s ease, border-color .2s ease, background-color .2s ease; }
+.lpv2-root .lpv2-nav:hover span { color: var(--lpv2-ink); }
+.lpv2-root .lpv2-openrico:hover { border-bottom-color: var(--lpv2-sun); }
+.lpv2-root .lpv2-openrico:hover span { color: var(--lpv2-sun); }
+.lpv2-root .lpv2-secondary:hover span { color: var(--lpv2-sun); }
+.lpv2-root .lpv2-foot:hover { color: var(--lpv2-sun-soft); text-decoration-line: underline; }
+.lpv2-root .lpv2-cta:hover { background-color: var(--lpv2-sun); }
+.lpv2-root .lpv2-arrow { display:inline-block; transition: transform .2s ease; }
+.lpv2-root .lpv2-cta:hover .lpv2-arrow { transform: translateX(2px); }
+
+/* keyboard focus — visible ring on every interactive element (was browser-default only) */
+.lpv2-root a:focus-visible,
+.lpv2-root button:focus-visible { outline: 2px solid var(--lpv2-sun); outline-offset: 3px; border-radius: 2px; }
+
+.lpv2-root .lpv2-pulse { animation: lpv2-pulse 2.4s cubic-bezier(0.4,0,0.6,1) infinite; }
+.lpv2-root .lpv2-underline { stroke-dasharray:300; stroke-dashoffset:300; animation: lpv2-spark 1.15s cubic-bezier(0.16,1,0.3,1) .2s forwards; }
+.lpv2-root .lpv2-caret { animation: lpv2-caret 1s steps(1,end) infinite; }
+.lpv2-root .lpv2-fade-up { animation: lpv2-fade-up .75s cubic-bezier(0.16,1,0.3,1) both; }
+
+@keyframes lpv2-pulse { 0%,100% { opacity:1 } 50% { opacity:.35 } }
+@keyframes lpv2-spark { to { stroke-dashoffset:0 } }
+@keyframes lpv2-caret { 0%,45% { opacity:1 } 50%,100% { opacity:0 } }
+@keyframes lpv2-fade-up { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lpv2-root .lpv2-pulse,
+  .lpv2-root .lpv2-underline,
+  .lpv2-root .lpv2-caret,
+  .lpv2-root .lpv2-fade-up { animation: none !important; }
+  .lpv2-root .lpv2-underline { stroke-dashoffset: 0 !important; }
+  .lpv2-root .lpv2-fade-up { opacity:1 !important; transform:none !important; }
+  .lpv2-root .lpv2-caret { opacity:1 !important; }
+}
+`;
+
 /* Mono uppercase editorial label. */
 function Mono({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
     return (
@@ -94,7 +149,7 @@ function Masthead() {
                     </div>
                     <nav className="hidden md:flex items-center gap-6">
                         {NAV.map((n) => (
-                            <Link key={n.label} href={n.href} className="transition-opacity hover:opacity-60">
+                            <Link key={n.label} href={n.href} className="lpv2-nav">
                                 <Mono style={{ color: C.ink70, letterSpacing: "0.16em" }}>{n.label}</Mono>
                             </Link>
                         ))}
@@ -105,7 +160,7 @@ function Masthead() {
                             <span style={{ fontFamily: MONO, fontSize: 10, padding: "3px 7px", background: C.ink, color: C.panel }}>EN</span>
                             <span aria-disabled="true" style={{ fontFamily: MONO, fontSize: 10, padding: "3px 7px", color: C.ink40, cursor: "default" }}>عر</span>
                         </span>
-                        <Link href="/command" className="whitespace-nowrap transition-opacity hover:opacity-60" style={{ borderBottom: `1px solid ${C.ink}` }}>
+                        <Link href="/command" className="lpv2-openrico whitespace-nowrap" style={{ borderBottom: `1px solid ${C.ink}` }}>
                             <span style={{ fontFamily: MONO, fontSize: 12, color: C.ink }}>Open Rico →</span>
                         </Link>
                         <button className="md:hidden p-1" aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)} style={{ color: C.ink70 }}>
@@ -140,7 +195,7 @@ function Hero() {
     return (
         <section className="max-w-6xl mx-auto px-5 sm:px-8 pt-16 sm:pt-24 pb-16">
             <p className="flex items-center gap-2.5 mb-10">
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: C.red }} aria-hidden="true" />
+                <span className="lpv2-pulse w-2 h-2 rounded-full flex-shrink-0" style={{ background: C.red }} aria-hidden="true" />
                 <Mono style={{ color: C.ink70, letterSpacing: "0.2em" }}>Prospectus — a quiet AI for a loud job market</Mono>
             </p>
             <h1 className="font-normal tracking-[-0.02em] text-[2.9rem] leading-[0.98] sm:text-[4.6rem] sm:leading-[0.95] max-w-4xl" style={{ fontFamily: SERIF, color: C.ink }}>
@@ -148,7 +203,7 @@ function Hero() {
                 <span className="relative inline-block italic font-medium">
                     in conversation.
                     <svg className="absolute left-0 w-full" style={{ bottom: "0.06em", height: "0.16em" }} viewBox="0 0 300 8" preserveAspectRatio="none" aria-hidden="true">
-                        <path d="M2 6 C 60 3, 120 5, 180 4 S 260 3, 298 5" fill="none" stroke={C.red} strokeWidth={4} strokeLinecap="round" />
+                        <path className="lpv2-underline" d="M2 6 C 60 3, 120 5, 180 4 S 260 3, 298 5" fill="none" stroke={C.red} strokeWidth={4} strokeLinecap="round" />
                     </svg>
                 </span>
             </h1>
@@ -156,10 +211,10 @@ function Hero() {
                 Rico is a small, patient intelligence for people looking for real work in the UAE. It reads your CV, watches the market, and only writes back when there is a job worth writing back about.
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-6">
-                <Link href="/command" className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full text-sm font-semibold transition-all hover:brightness-110" style={{ background: C.ink, color: C.panel }}>
-                    Begin with Rico <span aria-hidden="true">→</span>
+                <Link href="/command" className="lpv2-cta group inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full text-sm font-semibold" style={{ background: C.ink, color: C.panel }}>
+                    Begin with Rico <span className="lpv2-arrow" aria-hidden="true">→</span>
                 </Link>
-                <Link href="#system" className="underline underline-offset-4 decoration-1 transition-opacity hover:opacity-60" style={{ textDecorationColor: C.red }}>
+                <Link href="#system" className="lpv2-secondary underline underline-offset-4 decoration-1" style={{ textDecorationColor: C.red }}>
                     <Mono style={{ color: C.ink70 }}>Read the notebook</Mono>
                 </Link>
             </div>
@@ -179,17 +234,17 @@ function SystemSection() {
                         <Mono style={{ color: C.ink55 }}>Transcribed, in full</Mono>
                     </div>
                     <div className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-8">
-                        <Mono style={{ color: C.ink40 }}>You</Mono>
-                        <p className="text-[1.25rem] leading-snug" style={{ fontFamily: SERIF, color: C.ink }}>
+                        <Mono className="lpv2-fade-up" style={{ color: C.ink40 }}>You</Mono>
+                        <p className="lpv2-fade-up text-[1.25rem] leading-snug" style={{ fontFamily: SERIF, color: C.ink }}>
                             I want a senior product role in the UAE. Above thirty thousand. I don&apos;t want to read another job board.
                         </p>
-                        <div>
+                        <div className="lpv2-fade-up" style={{ animationDelay: "120ms" }}>
                             <Mono style={{ color: C.red }}>Rico</Mono>
                             <p className="mt-2 leading-relaxed" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", color: C.ink40, textTransform: "uppercase" }}>
                                 Reads CV · Scans 6 feeds · Scores fit
                             </p>
                         </div>
-                        <p className="text-[1.25rem] leading-snug italic" style={{ fontFamily: SERIF, color: C.ink }}>
+                        <p className="lpv2-fade-up text-[1.25rem] leading-snug italic" style={{ fontFamily: SERIF, color: C.ink, animationDelay: "120ms" }}>
                             Then don&apos;t. I&apos;ve read your CV. I&apos;ll watch the market for you and only speak when there&apos;s something worth your attention.
                         </p>
                     </div>
@@ -197,7 +252,8 @@ function SystemSection() {
                         <Mono style={{ color: C.ink55 }}>Ask the next question</Mono>
                         {/* illustrative, non-interactive (reference is a static prospectus) */}
                         <div className="mt-4 text-[1.4rem]" style={{ fontFamily: SERIF, color: C.ink }} aria-hidden="true">
-                            Product roles above AED 30k<span style={{ color: C.red }}>|</span>
+                            Product roles above AED 30k
+                            <span className="lpv2-caret inline-block align-baseline" style={{ width: 2, height: "0.9em", marginLeft: 3, transform: "translateY(3px)", background: C.red }} />
                         </div>
                         <div className="mt-5 flex flex-wrap gap-2.5" aria-hidden="true">
                             {["Product roles above AED 30k", "Fintech openings in Abu Dhabi", "What's missing from my CV"].map((c) => (
@@ -312,7 +368,7 @@ function Colophon() {
                             <span className="uppercase" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.18em", color: C.footerInk60 }}>Elsewhere</span>
                             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
                                 {elsewhere.map((e) => (
-                                    <Link key={e.label} href={e.href} className="text-sm underline underline-offset-4 decoration-1 transition-opacity hover:opacity-70" style={{ color: C.footerInk, textDecorationColor: C.footerHair }}>{e.label}</Link>
+                                    <Link key={e.label} href={e.href} className="lpv2-foot text-sm underline underline-offset-4 decoration-1" style={{ color: C.footerInk, textDecorationColor: C.footerHair }}>{e.label}</Link>
                                 ))}
                             </div>
                         </div>
@@ -329,7 +385,8 @@ function Colophon() {
 
 export default function LandingPageV2() {
     return (
-        <div className={`min-h-screen overflow-x-hidden ${fraunces.variable}`} style={{ background: C.bg, color: C.ink, fontFamily: "var(--font-body), ui-sans-serif, sans-serif" }}>
+        <div className={`lpv2-root min-h-screen overflow-x-hidden ${fraunces.variable}`} style={{ background: C.bg, color: C.ink, fontFamily: "var(--font-body), ui-sans-serif, sans-serif" }}>
+            <style dangerouslySetInnerHTML={{ __html: LANDING_MOTION_CSS }} />
             <Masthead />
             <main>
                 <Hero />
