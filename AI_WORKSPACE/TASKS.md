@@ -219,10 +219,12 @@ the documented auth smoke per release. Document the chosen path in OPERATING_RUL
 
 ### TASK-20260710-008 — Resolve residual frontend test failures before making vitest blocking
 
-Status: in_progress (8 of 12 resolved test-only via PR B1+B2; 4 YELLOW remain)
-Owner: unassigned (owner decision required on the remaining 4 items below)
-Branch: `claude/career-terminology-audit-ojq1xl` (B1+B2); B3/B4 not started
-Issue/PR: follow-up to #942; B1+B2 = `test(frontend): resolve green residual vitest failures`
+Status: done (B1–B5 all merged; suite 320/0 stable; vitest is now a required CI gate)
+Owner: Claude (with owner sign-off on the B3/B4 YELLOW decisions)
+Branch: `claude/career-terminology-audit-ojq1xl` (all five PRs)
+Issue/PR: follow-up to #942; B1+B2 `test(frontend): resolve green residual vitest failures`,
+B3 `fix(frontend): align chat action disabled reasons`, B4 `test(frontend): align sidebar routing
+with current IA`, B5 `ci(frontend): make vitest a blocking gate`
 
 #### Objective
 `npm run test` (vitest) is wired into CI as informational-only (`continue-on-error: true`) after
@@ -272,13 +274,18 @@ the obsolete nav-item test was removed, not "fixed"):
       `NAV_ITEM_KEYS[item.href]` lookups run only over `mainNavSections`, which no longer contains a
       `/queue` item). No sidebar UX/rendering change.
 
-#### KNOWN FLAKE — must fix before B5 (test-infra, NOT product)
-`chat-confirm-profile.test.tsx` intermittently fails in the *full-suite* run (passes deterministically
-in isolation) because jsdom has no `Element.prototype.scrollTo` and `vitest.setup.ts` mocks only
-`scrollIntoView`; the command page's `scrollMessagesPane` throws inside a requestAnimationFrame
-callback that leaks across files. Pre-existing, not introduced by B1–B4. Does not block PRs today
-(vitest is `continue-on-error`), but must be fixed (mock `scrollTo` in `vitest.setup.ts`) before B5
-flips vitest to a required gate.
+#### RESOLVED — PR B5 (Autonomous GREEN, merged via `ci(frontend): make vitest a blocking gate`)
+Fixed the pre-existing `scrollTo` full-suite flake and promoted vitest to a required CI gate:
+- [x] `vitest.setup.ts` — added `HTMLElement.prototype.scrollTo` + `window.scrollTo` mocks (jsdom
+      implements neither). The command page's `scrollMessagesPane` no longer throws inside a
+      requestAnimationFrame callback, which was the cross-file flake source. Stability proven by 6
+      consecutive clean full-suite runs (320/0 each).
+- [x] `.github/workflows/qa-tests.yml` — removed `continue-on-error: true` from the frontend `Vitest`
+      step; it is now a required/blocking gate alongside `npm run build`. `pytest`/`playwright`
+      unchanged.
+
+#### Status: DONE — frontend test-health arc complete
+`309/12 → 317/4 (B1+B2) → 320/1 (B3) → 320/0 (B4) → 320/0 stable + vitest blocking (B5)`.
 
 #### Constraints
 - Do not touch: backend/API, auth/session internals, billing, schema/migrations, dependencies,
@@ -289,9 +296,9 @@ flips vitest to a required gate.
 - [x] B3 (`chat-action-card`) resolved with owner sign-off (scoped product touch).
 - [x] B4 (`sidebar-nav-routing`) resolved with owner sign-off (obsolete test + orphaned metadata
       removed; `/queue` nav stays removed, `/queue` page untouched).
-- [ ] B5: fix the `scrollTo` full-suite flake in `vitest.setup.ts`, then promote `npm run test` from
-      informational (`continue-on-error: true`) to a required, green CI gate. Suite is 320/0 when
-      deterministic; the flake must be closed first.
+- [x] B5: fixed the `scrollTo` full-suite flake in `vitest.setup.ts`, then promoted `npm run test`
+      from informational (`continue-on-error: true`) to a required, green CI gate. Suite is 320/0,
+      stable across 6 consecutive runs.
 
 ### TASK-20260710-002 — #929 `/design-preview` consolidation hub (one preview entry point)
 

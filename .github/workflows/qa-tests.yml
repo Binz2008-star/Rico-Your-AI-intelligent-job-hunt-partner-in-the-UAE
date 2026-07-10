@@ -114,13 +114,11 @@ jobs:
           cd apps/web
           npm run build
 
-      # Vitest is informational only for now: 12 of 321 tests fail on a clean
-      # main (see AI_WORKSPACE/HANDOFFS/2026-07-10-fe-test-health-ci-gate.md)
-      # for reasons that need a product-code or product-copy decision, not a
-      # test-config fix. Flip this to a required (blocking) step once those
-      # residual failures are resolved.
-      - name: Vitest (informational — not yet a required gate)
-        continue-on-error: true
+      # Vitest is now a required (blocking) gate: the full frontend suite is
+      # green and stable (320/0) after the FE test-health work in
+      # TASK-20260710-008 (B1–B5). See
+      # AI_WORKSPACE/HANDOFFS/2026-07-10-fe-vitest-blocking-gate.md.
+      - name: Vitest (required)
         run: |
           cd apps/web
           npm run test

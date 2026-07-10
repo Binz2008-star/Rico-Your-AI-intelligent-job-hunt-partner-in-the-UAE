@@ -41,3 +41,17 @@ Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
   writable: true,
   value: vi.fn(),
 });
+
+// jsdom does not implement Element.prototype.scrollTo. Components that scroll a
+// container via a ref (e.g. the command page's scrollMessagesPane calling
+// pane.scrollTo(...)) otherwise throw "scrollTo is not a function" inside a
+// requestAnimationFrame callback, which surfaces as a cross-file flake in the
+// full-suite run. Stub it so those scroll calls are no-ops in tests.
+Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+  writable: true,
+  value: vi.fn(),
+});
+Object.defineProperty(window, "scrollTo", {
+  writable: true,
+  value: vi.fn(),
+});
