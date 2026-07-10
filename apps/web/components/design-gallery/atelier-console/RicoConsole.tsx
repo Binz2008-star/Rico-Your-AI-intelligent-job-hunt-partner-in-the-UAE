@@ -218,10 +218,17 @@ export function RicoChat() {
     return () => window.clearTimeout(t);
   }, [cursor, running, SCRIPT]);
 
+  // Auto-follow only when the user is near the bottom. If they've scrolled up
+  // to read earlier turns, new content must NOT yank them back down.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    const distanceFromBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distanceFromBottom < 120; // px threshold
+    if (nearBottom) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
   }, [items, live, pending]);
 
   useEffect(() => {
