@@ -1,0 +1,430 @@
+/* ============================================================================
+ * Atelier V2 — Auth island layer.
+ *
+ * Scoped auth primitives for the /login, /signup, /forgot-password,
+ * /reset-password and /verify-email surfaces. Consumes the shared `.atelier`
+ * token layer (app/_atelier/atelier-tokens.css) and follows the same HARD
+ * SAFETY RULES: every selector is scoped under `.atelier`; there are NO global
+ * html/body/:root selectors and NO global token overrides. Nothing in
+ * production carries the `.atelier` class except components that explicitly
+ * opt in, so this file cannot affect the global Nocturne theme.
+ *
+ * Visual target: the approved `/design-preview` auth screens — paper canvas,
+ * minimal header (serif Rico wordmark + language / theme toggles), serif
+ * display headline, mono uppercase field labels, ruled inputs, a single solid
+ * ink primary action, and one sun-red accent for links.
+ * ========================================================================== */
+
+.atelier.atl-auth {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    overflow-x: hidden;
+}
+
+/* ── Header (Shell B: minimal auth masthead) ──────────────────────────────── */
+.atelier .atl-auth-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px;
+    background: color-mix(in srgb, var(--paper) 90%, transparent);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--rule);
+}
+
+.atelier .atl-auth-brand {
+    font-family: var(--atl-font-display);
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    text-decoration: none;
+}
+
+.atelier[dir="rtl"] .atl-auth-brand {
+    font-family: var(--atl-font-display-ar);
+}
+
+.atelier .atl-auth-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Language segmented control (EN | عربي) */
+.atelier .atl-seg {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+    background: transparent;
+}
+
+.atelier .atl-seg-btn {
+    font-family: var(--atl-font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 6px 11px;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.atelier .atl-seg-btn[aria-pressed="true"] {
+    background: var(--ink);
+    color: var(--paper);
+}
+
+/* Theme toggle (sun / moon) */
+.atelier .atl-icon-toggle {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 32px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.atelier .atl-icon-toggle:hover {
+    border-color: var(--sun);
+    color: var(--sun);
+}
+
+/* ── Main / centered column ───────────────────────────────────────────────── */
+.atelier .atl-auth-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 40px 22px 64px;
+}
+
+.atelier .atl-auth-col {
+    width: 100%;
+    max-width: 420px;
+}
+
+.atelier .atl-auth-eyebrow {
+    font-family: var(--atl-font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-mute);
+    margin: 0 0 12px;
+}
+
+.atelier .atl-auth-title {
+    font-family: var(--atl-font-display);
+    font-weight: 400;
+    font-size: clamp(32px, 5vw, 44px);
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    margin: 0 0 10px;
+}
+
+.atelier[dir="rtl"] .atl-auth-title {
+    font-family: var(--atl-font-display-ar);
+}
+
+.atelier .atl-auth-sub {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0 0 28px;
+}
+
+/* ── Form ─────────────────────────────────────────────────────────────────── */
+.atelier .atl-auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.atelier .atl-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.atelier .atl-field-labelrow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.atelier .atl-field-label {
+    font-family: var(--atl-font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-mute);
+}
+
+.atelier .atl-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: var(--atl-font-body);
+    font-size: 15px;
+    color: var(--ink);
+    background: color-mix(in srgb, var(--paper) 60%, var(--paper-2));
+    border: 1px solid var(--rule);
+    border-radius: var(--atl-radius-sm);
+    padding: 13px 14px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.atelier[dir="rtl"] .atl-input {
+    font-family: var(--atl-font-body-ar);
+}
+
+.atelier .atl-input::placeholder {
+    color: var(--ink-mute);
+    opacity: 0.75;
+}
+
+.atelier .atl-input:focus {
+    outline: none;
+    border-color: var(--sun);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--sun) 16%, transparent);
+}
+
+/* Password field with reveal control */
+.atelier .atl-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.atelier .atl-input-wrap .atl-input {
+    padding-inline-end: 44px;
+}
+
+.atelier .atl-reveal {
+    position: absolute;
+    inset-inline-end: 6px;
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    border-radius: 7px;
+    transition: color 0.15s ease;
+}
+
+.atelier .atl-reveal:hover {
+    color: var(--sun);
+}
+
+.atelier .atl-hint {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink-mute);
+    margin: 2px 0 0;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.atelier .atl-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: var(--atl-font-body);
+    font-size: 15px;
+    font-weight: 500;
+    padding: 14px 18px;
+    border-radius: var(--atl-radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease;
+}
+
+.atelier[dir="rtl"] .atl-btn {
+    font-family: var(--atl-font-body-ar);
+}
+
+.atelier .atl-btn-primary {
+    background: var(--ink);
+    color: var(--paper);
+}
+
+.atelier .atl-btn-primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--ink) 88%, var(--sun));
+}
+
+.atelier .atl-btn:disabled {
+    cursor: not-allowed;
+    background: var(--ink-mute);
+    color: color-mix(in srgb, var(--paper) 80%, var(--ink-mute));
+    opacity: 0.85;
+}
+
+.atelier .atl-btn-ghost {
+    background: transparent;
+    color: var(--ink-soft);
+    border-color: var(--rule);
+}
+
+.atelier .atl-btn-ghost:hover:not(:disabled) {
+    border-color: var(--sun);
+    color: var(--sun);
+}
+
+/* Spinner for loading states */
+.atelier .atl-spin {
+    width: 15px;
+    height: 15px;
+    border: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: atl-spin 0.7s linear infinite;
+}
+
+@keyframes atl-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Links / footer / legal ───────────────────────────────────────────────── */
+.atelier .atl-link {
+    color: var(--sun);
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--sun) 35%, transparent);
+    transition: border-color 0.15s ease;
+    cursor: pointer;
+    background: none;
+    padding: 0;
+    font: inherit;
+}
+
+.atelier .atl-link:hover {
+    border-bottom-color: var(--sun);
+}
+
+.atelier .atl-link-quiet {
+    color: var(--ink-mute);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color 0.15s ease;
+    font-size: 13px;
+}
+
+.atelier .atl-link-quiet:hover {
+    color: var(--sun);
+}
+
+.atelier .atl-auth-legal {
+    text-align: center;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink-mute);
+    margin: 18px 0 0;
+}
+
+.atelier .atl-auth-legal a {
+    color: var(--ink-soft);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.atelier .atl-auth-legal a:hover {
+    color: var(--sun);
+}
+
+.atelier .atl-auth-divider {
+    height: 1px;
+    background: var(--rule);
+    margin: 26px 0;
+    border: none;
+}
+
+.atelier .atl-auth-foot {
+    text-align: center;
+}
+
+/* ── Feedback (error / success) ───────────────────────────────────────────── */
+.atelier .atl-alert {
+    font-size: 13.5px;
+    line-height: 1.5;
+    padding: 12px 14px;
+    border-radius: var(--atl-radius-sm);
+    border: 1px solid;
+}
+
+.atelier .atl-alert-error {
+    color: var(--destructive);
+    background: color-mix(in srgb, var(--destructive) 8%, transparent);
+    border-color: color-mix(in srgb, var(--destructive) 28%, transparent);
+}
+
+.atelier .atl-alert-inline {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid color-mix(in srgb, var(--destructive) 22%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.atelier .atl-note {
+    font-size: 13px;
+    color: var(--ink-mute);
+    text-align: center;
+    margin: 12px 0 0;
+}
+
+/* ── Status / message screens (verify, check-inbox) ───────────────────────── */
+.atelier .atl-status {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.atelier .atl-status-badge {
+    display: inline-grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    background: var(--paper-2);
+    color: var(--sun);
+    font-size: 26px;
+}
+
+.atelier .atl-status-badge.is-error {
+    color: var(--destructive);
+    border-color: color-mix(in srgb, var(--destructive) 30%, transparent);
+}
+
+.atelier .atl-emph {
+    color: var(--ink);
+    font-weight: 600;
+    word-break: break-word;
+}
+
+/* ── Motion respect (mirrors production globals policy) ───────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    .atelier .atl-spin {
+        animation-duration: 0.01ms;
+    }
+}

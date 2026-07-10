@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { resetPassword } from "@/lib/api";
+import { AtelierAuthShell } from "@/components/auth/AtelierAuthShell";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation } from "@/lib/translations";
 
@@ -33,7 +34,7 @@ function ResetPasswordForm() {
       setSuccess(true);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : t("resetLinkInvalid")
+        err instanceof Error ? err.message : t("atlResetLinkInvalid")
       );
     } finally {
       setLoading(false);
@@ -42,128 +43,102 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <div className="flex flex-col items-center gap-4 text-center">
-        <p className="text-sm text-red-400">
-          {t("missingResetToken")}
-        </p>
-        <Link
-          href="/forgot-password"
-          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-2"
-        >
-          {t("requestNewLink")}
-        </Link>
+      <div className="atl-status">
+        <h1 className="atl-auth-title">{t("atlForgotTitle")}</h1>
+        <p className="atl-auth-sub" style={{ marginBottom: 0 }}>{t("atlMissingResetToken")}</p>
+        <hr className="atl-auth-divider" />
+        <div className="atl-auth-foot">
+          <Link href="/forgot-password" className="atl-link">{t("atlRequestNewLink")}</Link>
+        </div>
       </div>
     );
   }
 
   if (success) {
     return (
-      <div className="flex flex-col items-center gap-4 text-center">
-        <div className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-400">
-          {t("passwordUpdated")}
+      <div className="atl-status">
+        <span className="atl-status-badge" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        </span>
+        <div>
+          <h1 className="atl-auth-title">{t("passwordUpdated")}</h1>
+          <p className="atl-auth-sub" style={{ marginBottom: 0 }}>{t("signInNewPassword")}</p>
         </div>
-        <p className="text-sm text-zinc-300">
-          {t("signInNewPassword")}
-        </p>
-        <button
-          onClick={() => router.push("/login")}
-          className="w-full rounded-lg bg-indigo-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
-        >
-          {t("signIn")}
+        <button onClick={() => router.push("/login")} className="atl-btn atl-btn-primary">
+          {t("atlSignInNow")}
         </button>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label htmlFor="password" className="mb-1.5 block text-sm text-zinc-400">
-          {t("newPassword")}
-        </label>
-        <input
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={8}
-          maxLength={128}
-          autoComplete="new-password"
-          placeholder={t("minChars8")}
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-        />
-        <p className="mt-1.5 text-xs text-zinc-500">
-          Min 8 characters · uppercase · lowercase · digit or symbol
-        </p>
-      </div>
+    <>
+      <h1 className="atl-auth-title">{t("atlResetTitle")}</h1>
+      <p className="atl-auth-sub">{t("atlResetSub")}</p>
 
-      <div>
-        <label htmlFor="confirm" className="mb-1.5 block text-sm text-zinc-400">
-          {t("confirmPassword")}
-        </label>
-        <input
-          id="confirm"
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          required
-          autoComplete="new-password"
-          placeholder={t("repeatNewPassword")}
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-        />
-      </div>
+      <form onSubmit={handleSubmit} className="atl-auth-form">
+        <div className="atl-field">
+          <label htmlFor="password" className="atl-field-label">{t("atlNewPassword")}</label>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            maxLength={128}
+            autoComplete="new-password"
+            placeholder="••••••••"
+            className="atl-input"
+          />
+          <p className="atl-hint">{t("atlPasswordRule")}</p>
+        </div>
 
-      {/* Error */}
-      {error && (
-        <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-          {error}
-        </p>
-      )}
+        <div className="atl-field">
+          <label htmlFor="confirm" className="atl-field-label">{t("atlConfirmNewPassword")}</label>
+          <input
+            id="confirm"
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            required
+            autoComplete="new-password"
+            placeholder="••••••••"
+            className="atl-input"
+          />
+        </div>
 
-      <button
-        type="submit"
-        disabled={loading || !password || !confirm}
-        className="w-full rounded-lg bg-indigo-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {loading ? t("updating") : t("setNewPassword")}
-      </button>
+        {error && <p className="atl-alert atl-alert-error">{error}</p>}
 
-      <p className="text-center text-xs">
-        <Link
-          href="/login"
-          className="text-zinc-400 hover:text-white transition-colors"
+        <button
+          type="submit"
+          disabled={loading || !password || !confirm}
+          className="atl-btn atl-btn-primary"
         >
-          {t("backToSignIn")}
-        </Link>
-      </p>
-    </form>
+          {loading ? (
+            <><span className="atl-spin" /><span>{t("atlUpdating")}</span></>
+          ) : (
+            <span>{t("atlUpdatePassword")}</span>
+          )}
+        </button>
+      </form>
+
+      <hr className="atl-auth-divider" />
+      <div className="atl-auth-foot">
+        <Link href="/login" className="atl-link">{t("atlBackToSignIn")}</Link>
+      </div>
+    </>
   );
 }
 
 export default function ResetPasswordPage() {
-  const { language } = useLanguage();
-  const t = useTranslation(language);
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-      <div className="w-full max-w-sm">
-        {/* Brand */}
-        <div className="mb-8 text-center">
-          <Link href="/" className="inline-flex items-center gap-2 text-lg font-bold text-white tracking-tight">
-            <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-[#f5a623] text-sm font-black text-[#0a0a1a] shadow-[0_4px_12px_rgba(245,166,35,0.35)]">R</span>
-            Rico <span className="text-[#f5a623]">Hunt</span>
-          </Link>
-          <p className="mt-1 text-sm text-zinc-400">{t("setANewPassword")}</p>
-        </div>
-
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
-          <Suspense
-            fallback={<p className="text-center text-sm text-zinc-500">{t("loading")}</p>}
-          >
-            <ResetPasswordForm />
-          </Suspense>
-        </div>
-      </div>
-    </main>
+    <AtelierAuthShell>
+      <Suspense fallback={<p className="atl-note">…</p>}>
+        <ResetPasswordForm />
+      </Suspense>
+    </AtelierAuthShell>
   );
 }
