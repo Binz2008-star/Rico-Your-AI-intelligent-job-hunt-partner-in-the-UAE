@@ -59,6 +59,27 @@ def enqueue_telegram_update(update: dict):
     return enqueue(rico_tasks.process_telegram_action_task, update)
 
 
+def enqueue_autonomous_loop(scored_jobs=None, dry_run: bool = False):
+    return enqueue(rico_tasks.run_autonomous_loop_task, scored_jobs, dry_run=dry_run)
+
+
+def enqueue_autonomous_loop_for_user(
+    user_id: str,
+    user_name: str = "",
+    telegram_chat_id: str = "",
+    scored_jobs=None,
+    dry_run: bool = False,
+):
+    return enqueue(
+        rico_tasks.run_autonomous_loop_for_user_task,
+        user_id,
+        user_name,
+        telegram_chat_id,
+        scored_jobs,
+        dry_run=dry_run,
+    )
+
+
 def start_worker() -> None:
     logger.info("rico_worker_starting")
     worker = Worker([QUEUE_NAME], connection=redis_connection())

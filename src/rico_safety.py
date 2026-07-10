@@ -206,3 +206,74 @@ class RicoSafetyGuard:
 
     def _matches_any(self, text: str, patterns: List[str]) -> bool:
         return any(re.search(pattern, text) for pattern in patterns)
+
+    # ── Autonomous mode safety ──────────────────────────────────────────────
+
+    AUTONOMOUS_ALLOWED_ACTIONS = frozenset({
+        "save",
+        "draft",
+        "skip",
+        "not_relevant",
+        "why",
+        "remind",
+        "trigger_pipeline",
+    })
+
+    AUTONOMOUS_BLOCKED_ACTIONS = frozenset({
+        "apply",
+        "block",
+    })
+
+    def check_autonomous_action(self, action: str) -> RicoSafetyResult:
+        """Check whether an action is safe to perform autonomously (without user approval).
+
+        Autonomous mode NEVER allows:
+          - apply (submitting applications)
+          - block (blocking companies — user preference change)
+          - send_recruiter_message
+          - share_cv / share_phone / share_email
+
+        Autonomous mode DOES allow:
+          - save (reversible)
+          - draft (not sent without approval)
+          - skip (reversible)
+          - why / remind (informational)
+        """
+        normalized = action.lower().strip().replace(" ", "_")
+
+        if normalized in self.HIGH_IMPACT_ACTIONS:
+            return RicoSafetyResult(
+                allowed=False,
+                category="autonomous_blocked_high_impact",
+                severity="high",
+                reason=f"Action '{action}' is high-impact and must never be performed autonomously.",
+                safe_response=(
+                    "This action requires your explicit approval. "
+                    "Rico cannot perform it automatically, even in autonomous mode."
+                ),
+            )
+
+        if normalized in self.AUTONOMOUS_BLOCKED_ACTIONS:
+            return RicoSafetyResult(
+                allowed=False,
+                category="autonomous_blocked",
+                severity="medium",
+                reason=f"Action '{action}' is blocked in autonomous mode.",
+                safe_response="This action requires your direct instruction.",
+            )
+
+        if normalized in self.AUTONOMOUS_ALLOWED_ACTIONS:
+            return RicoSafetyResult(
+                allowed=True,
+                category="autonomous_allowed",
+                severity="none",
+                reason=f"Action '{action}' is safe for autonomous execution.",
+            )
+
+        return RicoSafetyResult(
+            allowed=False,
+            category="autonomous_unknown_action",
+            severity="low",
+            reason=f"Action '{action}' is not in the autonomous allow-list.",
+            safe_response="Rico cannot perform this action autonomously.",
+        )

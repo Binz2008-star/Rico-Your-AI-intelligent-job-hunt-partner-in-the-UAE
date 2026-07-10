@@ -703,6 +703,32 @@ def _run_feedback_loop(
     return result
 
 
+def _run_autonomous_loop(matches: list) -> None:
+    """Run the autonomous loop for all opted-in users after pipeline scoring.
+
+    This is the integration point between the daily pipeline and the
+    proactive autonomous engine. It passes the scored matches to each
+    user's loop for auto-save, drafting, and notification.
+
+    Gated by RICO_AUTONOMOUS_MODE env var (default off). Non-fatal —
+    errors are logged but never abort the pipeline.
+    """
+    try:
+        from src.agent.autonomous_loop import is_autonomous_mode_enabled, run_for_all_users
+
+        if not is_autonomous_mode_enabled():
+            logger.info("autonomous_loop_skipped reason=mode_disabled")
+            return
+
+        results = run_for_all_users(scored_jobs=matches, dry_run=False)
+        logger.info(
+            "autonomous_loop_pipeline_integration users_processed=%d",
+            len(results),
+        )
+    except Exception:
+        logger.exception("autonomous_loop_integration_failed")
+
+
 def _sync_gmail() -> None:
     try:
         from src.gmail_importer import run_import
@@ -797,6 +823,12 @@ def run_pipeline() -> int:
         _auto_apply_naukrigulf(matches)
         _update_learning_repo(matches)
         _sync_gmail()
+
+        # Autonomous loop — proactive per-user actions (auto-save, draft, notify)
+        try:
+            _run_autonomous_loop(matches)
+        except Exception as e:
+            logger.exception("autonomous_loop_unhandled_error non_fatal", extra={"run_id": run_id})
 
         try:
             _run_feedback_loop(orchestrator)

@@ -149,3 +149,57 @@ def process_telegram_action_task(update: Dict[str, Any]) -> Dict[str, Any]:
         "result": result,
         "completed_at": datetime.utcnow().isoformat(),
     }
+
+
+def run_autonomous_loop_task(
+    scored_jobs: List[Dict[str, Any]] | None = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Run the autonomous loop for all opted-in users.
+
+    Can be called directly or enqueued via Redis. When scored_jobs is
+    provided, they are passed to each user's loop; otherwise the loop
+    operates on whatever jobs are already in the pipeline.
+    """
+    from src.agent.autonomous_loop import run_for_all_users
+
+    started = datetime.utcnow()
+    results = run_for_all_users(scored_jobs=scored_jobs, dry_run=dry_run)
+    return {
+        "task": "run_autonomous_loop",
+        "status": "completed",
+        "started_at": started.isoformat(),
+        "completed_at": datetime.utcnow().isoformat(),
+        "users_processed": len(results),
+        "total_saved": sum(len(r.saved_jobs) for r in results),
+        "total_drafts": sum(len(r.drafts) for r in results),
+        "total_followups": sum(len(r.followups_due) for r in results),
+        "errors": [e for r in results for e in r.errors],
+    }
+
+
+def run_autonomous_loop_for_user_task(
+    user_id: str,
+    user_name: str = "",
+    telegram_chat_id: str = "",
+    scored_jobs: List[Dict[str, Any]] | None = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Run the autonomous loop for a single user."""
+    from src.agent.autonomous_loop import run_for_user
+
+    started = datetime.utcnow()
+    result = run_for_user(
+        user_id=user_id,
+        user_name=user_name,
+        telegram_chat_id=telegram_chat_id,
+        scored_jobs=scored_jobs,
+        dry_run=dry_run,
+    )
+    return {
+        "task": "run_autonomous_loop_for_user",
+        "status": "completed",
+        "started_at": started.isoformat(),
+        "completed_at": datetime.utcnow().isoformat(),
+        "result": result.to_dict(),
+    }
