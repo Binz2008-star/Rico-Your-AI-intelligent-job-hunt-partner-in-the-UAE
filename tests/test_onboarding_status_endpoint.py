@@ -35,6 +35,7 @@ from src.models.onboarding import (
     ONBOARDING_PENDING,
     OnboardingState,
 )
+from src.repositories.onboarding_repo import OnboardingStateUnavailable
 from src.rico_agent import RicoProfile
 
 
@@ -74,6 +75,7 @@ class TestOnboardingStatusEndpoint:
         profile,
         user_id: str = "u@test.com",
         profile_raises: bool = False,
+        state_raises: bool = False,
         authed: bool = True,
     ):
         """Invoke onboarding_status with repo/profile dependencies mocked.
@@ -96,18 +98,23 @@ class TestOnboardingStatusEndpoint:
                 side_effect=HTTPException(status_code=401, detail="Not authenticated"),
             )
 
+        state_mock = (
+            MagicMock(side_effect=OnboardingStateUnavailable("boom: onboarding db down"))
+            if state_raises
+            else MagicMock(return_value=state)
+        )
         get_profile_mock = (
             MagicMock(side_effect=RuntimeError("boom: internal db failure"))
             if profile_raises
             else MagicMock(return_value=profile)
         )
 
-        # get_onboarding_state and get_profile are lazy-imported inside the
-        # handler from their source modules — patch at the source so the local
-        # import picks up the mock regardless of import order.
+        # get_onboarding_state_readonly and get_profile are lazy-imported inside
+        # the handler from their source modules — patch at the source so the
+        # local import picks up the mock regardless of import order.
         with user_patch, \
-             patch("src.repositories.onboarding_repo.get_onboarding_state",
-                   return_value=state), \
+             patch("src.repositories.onboarding_repo.get_onboarding_state_readonly",
+                   state_mock), \
              patch("src.repositories.profile_repo.get_profile", get_profile_mock):
             try:
                 return onboarding_status(mock_request)
@@ -204,8 +211,39 @@ class TestOnboardingStatusEndpoint:
         assert "boom" not in str(result.detail).lower()
         assert "db failure" not in str(result.detail).lower()
 
+    def test_state_read_failure_returns_generic_503(self):
+        """An onboarding-state read failure (DB down / query error) → sanitized 503."""
+        from fastapi import HTTPException
+        result = self._invoke(state=None, profile=_full_profile(), state_raises=True)
+        assert isinstance(result, HTTPException)
+        assert result.status_code == 503
+
+    def test_state_read_failure_does_not_fall_through_to_derived_legacy(self):
+        """A state-read failure must NOT be misclassified as derived_legacy.
+
+        The profile here would pass the gate — if the endpoint fell through it
+        would wrongly return complete/derived_legacy. It must 503 instead.
+        """
+        from fastapi import HTTPException
+        result = self._invoke(state=None, profile=_full_profile(), state_raises=True)
+        assert isinstance(result, HTTPException)
+        assert result.status_code == 503
+        # Definitely not a success payload.
+        assert not isinstance(result, dict)
+
+    def test_state_read_failure_hides_internals(self):
+        result = self._invoke(state=None, profile=_full_profile(), state_raises=True)
+        detail = str(getattr(result, "detail", "")).lower()
+        assert "boom" not in detail
+        assert "db down" not in detail
+
     def test_read_only_never_writes_status(self):
-        """A GET must not backfill / mutate onboarding status."""
+        """A GET must not backfill / mutate onboarding status.
+
+        (DDL/commit/mutation-free reads are proven at the repository level in
+        tests/test_onboarding_repo_readonly.py; here we assert the endpoint
+        never triggers a status write.)
+        """
         with patch("src.repositories.onboarding_repo.set_onboarding_status") as mock_set:
             self._invoke(state=None, profile=_full_profile())
         mock_set.assert_not_called()

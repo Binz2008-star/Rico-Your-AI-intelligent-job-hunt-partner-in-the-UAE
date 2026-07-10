@@ -114,7 +114,7 @@ def onboarding_status(request: Request) -> Dict[str, Any]:
     user_id: str = user["email"]
 
     try:
-        from src.repositories.onboarding_repo import get_onboarding_state
+        from src.repositories.onboarding_repo import get_onboarding_state_readonly
         from src.repositories.profile_repo import get_profile
         from src.services.profile_context_resolver import (
             evaluate_minimum_profile,
@@ -122,7 +122,11 @@ def onboarding_status(request: Request) -> Dict[str, Any]:
             resolve_profile_context,
         )
 
-        state = get_onboarding_state(user_id)
+        # Strict read-only: never creates the table, never writes/commits, and
+        # raises (→ sanitized 503 below) on DB/query failure rather than
+        # returning None — so an infra failure is never misread as "no row"
+        # and mis-routed to derived_legacy.
+        state = get_onboarding_state_readonly(user_id)
 
         merged = get_profile(user_id)
         ctx = resolve_profile_context(user_id, merged)
