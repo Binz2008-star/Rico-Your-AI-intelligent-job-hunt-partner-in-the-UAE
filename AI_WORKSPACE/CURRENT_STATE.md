@@ -1,6 +1,22 @@
 # Current State
 
-> **Reconciliation header — 2026-07-10 (latest; supersedes all headers below).** `main` is at
+> **Reconciliation header — 2026-07-10, later same day (latest; supersedes all headers below).**
+> `main` is at `9d47711961be58c767ef60271a0ab004e2f278ee`. **#929 merged (owner-approved
+> draft merge) and production verified — `/design-preview` internal consolidation hub.** One
+> noindex entry point to review the whole Atelier direction at once: live tiles
+> (`/rico-preview`, `/design-gallery`, `/privacy`, `/refund-policy`, terms) plus 53 labelled
+> EN/AR desktop/mobile reference screenshots covering landing, auth, onboarding, authenticated
+> workspace, support/legal, and empty/loading/error/mobile/RTL states, behind a sticky
+> INTERNAL PREVIEW · SAMPLE DATA · ACTIONS DISABLED header. Also: near-bottom-aware
+> auto-follow in the preview-only Atelier console (`RicoConsole.tsx`), used by
+> `/rico-preview` and `/design-gallery`. Post-merge production smoke PASS on ricohunt.com:
+> `/design-preview`, `/rico-preview`, `/design-gallery`, `/privacy`, `/refund-policy`, and
+> landing all return 200. Preview-only: no production route/nav change (`/command`, `/rico`,
+> `/` untouched); no backend/auth/billing/Neon/schema change; no new deps. Rollback: revert
+> #929 (squash `9d47711`) and let Vercel redeploy. Full task record:
+> `TASK-20260710-002` in `TASKS.md`.
+>
+> **Reconciliation header — 2026-07-10 (superseded by the header above).** `main` is at
 > `b3811ef6cd0aa598549a06c3a089536887e4c8e3`. Session outcomes (all merged unless noted):
 > - **#908 attachment / Active-CV bug — RESOLVED & CLOSED.** RC1 (attachment-follow-up regex,
 >   #914) and RC4 (prevent non-CV documents becoming the Active CV, #916) merged and confirmed

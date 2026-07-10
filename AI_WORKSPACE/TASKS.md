@@ -78,6 +78,47 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260710-002 — #929 `/design-preview` consolidation hub (one preview entry point)
+
+Status: done (merged + production verified)
+Owner: Claude
+Branch: `feat/design-preview-hub` (merged, squash `9d47711`); docs sync on `claude/design-preview-hub-6o2ev5`
+Issue/PR: #929 (merged)
+
+#### Objective
+Owner asked for one internal preview URL to review the whole Rico Atelier direction at once
+instead of piece by piece. Shipped `/design-preview`: a noindex hub with a sticky
+INTERNAL PREVIEW · SAMPLE DATA · ACTIONS DISABLED header, quick-jump nav, and six grouped
+sections — live tiles (`/rico-preview`, `/design-gallery`, `/privacy`, `/refund-policy`,
+terms) plus 53 labelled reference screenshots (EN/AR, desktop/mobile) covering landing,
+auth, onboarding, authenticated workspace, support/legal, and
+empty/loading/error/mobile/RTL states.
+
+#### Continuity Block
+- Scope: `apps/web/app/design-preview/{page,_client}.tsx` (new), 53 PNGs in
+  `apps/web/public/design-preview/`, near-bottom-aware auto-follow in
+  `apps/web/components/design-gallery/atelier-console/RicoConsole.tsx` (preview-only
+  component). 56 files, +470/−1, one commit.
+- Risk: low — additive noindex route + labelled static assets (~5.9 MB in `public/`) +
+  contained scroll tweak. No production route/nav change; no backend/auth/billing/Neon/
+  schema change; no new deps; no shadcn.
+- Validation run: CI green on head `2fc729c` (pytest, playwright, Vercel deploy). The 19
+  failing frontend tests are pre-existing `next/navigation` mock issues, confirmed
+  identical on clean `main`. Post-merge production smoke PASS: `/design-preview`,
+  `/rico-preview`, `/design-gallery`, `/privacy`, `/refund-policy`, landing all 200 on
+  ricohunt.com.
+- Rollback: revert #929 (squash `9d47711`) and let Vercel redeploy.
+
+#### Merge provenance
+Owner approved the draft merge in-chat; PR marked ready then squash-merged.
+
+#### Next (owner-gated)
+- Follow-up preview-only PRs by route group to turn the reference surfaces (landing, auth,
+  onboarding, dashboard/profile/settings/applications/upload/pricing, support) into live
+  interactive previews (shadcn-free rewrites of the Lovable screens).
+- Any real `/command` production migration needs its own DEC + approved PR
+  (`DEC-20260709-006`).
+
 ### TASK-20260710-001 — #908 RC1/RC4 fixes + Atelier Console direction (gallery, DEC, /rico-preview)
 
 Status: done
