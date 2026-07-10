@@ -12,11 +12,14 @@ Rico mode. Start from AI_WORKSPACE/START_HERE.md.
 
 Before starting new Rico work, read the latest rollout handoff:
 
-1. `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-test-health-ci-gate.md` (latest — `main` at `877b18b`; FE
-   vitest baseline established (302 passed/19 failed) and 7 shared `next/navigation`/`LanguageProvider`
-   test-crash failures fixed via test-config only (now 309 passed/12 failed); `npm run build` added as
-   a required CI gate, `npm run test` added as informational-only pending 12 residual failures that
-   need an owner product/copy decision; #941 terminology-lexicon audit merged read-only, no code)
+1. `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-test-health-ci-gate.md` (latest — `main` at `877b18b`; PR #942
+   "frontend build gate + frontend test visibility baseline" — **draft, held for owner review, not
+   auto-merged**. FE vitest baseline established (302 passed/19 failed) and 7 shared
+   `next/navigation`/`LanguageProvider` test-crash failures fixed via test-config only (now 309
+   passed/12 failed, zero product code changed). `npm run build` added as a required/blocking CI gate
+   (green); `npm run test` added as informational-only (`continue-on-error: true`) — **not** a blocking
+   gate — pending TASK-20260710-008 (12 residual, YELLOW, owner-decision failures); #941
+   terminology-lexicon audit merged read-only, no code)
 2. `AI_WORKSPACE/HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` (`main` at
    `ec06ef5`; #906 `profile_repo.py` connection-leak fix and #907 #758 job-key unification both
    merged and Vercel-production-READY; #812 in progress; #908 (attachment-first orchestration bug)

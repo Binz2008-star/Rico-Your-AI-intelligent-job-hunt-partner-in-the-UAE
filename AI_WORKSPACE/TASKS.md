@@ -168,24 +168,35 @@ resolved before the Phase 4 onboarding-shell work in `DEC-20260710-001`.
 - [ ] Route is in exactly one legal state per the No Dead UI rule.
 - [ ] CLAUDE.md "Key Frontend Files" entry for onboarding matches reality afterwards.
 
-### TASK-20260710-006 — P2: fix vitest `next/navigation` router-mock baseline (Phase 3 gate)
+### TASK-20260710-006 — P2: frontend build gate + frontend test visibility baseline (Phase 3 gate)
 
-Status: proposed (audit 2026-07-10; **blocks Phase 3**, not phases 1–2)
+Status: in_progress (was "fix vitest next/navigation router-mock baseline" — retitled
+2026-07-10 after PR #942; **not done** — vitest is still informational-only, not a
+blocking gate; see TASK-20260710-008 for the residual-failure follow-up that must land
+before this can close)
 Owner: unassigned
-Branch: TBD
-Issue/PR: none yet
+Branch: `claude/career-terminology-audit-ojq1xl`
+Issue/PR: #942 (draft, not merged — CI green, held for owner review per explicit
+instruction not to auto-merge)
 
 #### Objective
-19 pre-existing vitest failures across 9 files ("invariant expected app router to be
-mounted" — missing `useRouter` mock in test setup) sit in exactly the surfaces Phase 3
-reskins (signup/auth/chat/landing/profile/signals). They mask regressions where detection
-matters most. Single test-infra PR: proper `next/navigation` mock in the vitest setup;
-target 0 failed files on clean `main`. No component changes.
+19 pre-existing vitest failures across 9 files sit in exactly the surfaces Phase 3 reskins
+(signup/auth/chat/landing/profile/signals). PR #942 fixed the shared `next/navigation`/
+`LanguageProvider` test-crash class (test-config only, no component changes): baseline
+went from 302 passed/19 failed to 309 passed/12 failed. `npm run build` was added to CI as
+a **required/blocking** gate (passes). `npm run test` (vitest) was added to CI as
+**informational only** (`continue-on-error: true`) — it is **not** a blocking gate yet,
+because 12 tests still fail for reasons that need an owner product-code or product-copy
+decision (see TASK-20260710-008). Do not describe this task as "frontend tests gated" —
+only the build is gated so far.
 
 #### Acceptance criteria
-- [ ] `npm test` green (0 failures) on clean `main`, or any remaining failures are real
-      and individually justified.
-- [ ] No `apps/web` component/runtime changes — test setup only.
+- [x] Shared `next/navigation`/`LanguageProvider` test-crash class fixed via test-config
+      only — no `apps/web` component/runtime changes (verified: diff is
+      `vitest.setup.ts` + 2 test files + CI workflow + docs only).
+- [x] `npm run build` wired into CI as a required, currently-green gate.
+- [ ] `npm run test` (vitest) promoted from informational to a required/blocking gate —
+      blocked on TASK-20260710-008 (12 residual failures need owner decisions first).
 
 ### TASK-20260710-007 — P2: authenticated production smoke path for agent sessions (Phase 3 gate)
 
@@ -205,6 +216,61 @@ the documented auth smoke per release. Document the chosen path in OPERATING_RUL
 - [ ] Auth smoke runnable (by agent or documented owner procedure) before the Phase 3
       auth-shell PR merges.
 - [ ] No credentials in repo/docs; synthetic account only; never a real user account.
+
+### TASK-20260710-008 — Resolve 12 residual frontend test failures before making vitest blocking
+
+Status: proposed
+Owner: unassigned (owner decision required on each item below)
+Branch: TBD
+Issue/PR: follow-up to #942
+
+#### Classification: YELLOW
+
+Product/copy or test-vs-product decision work — not test-infra, not a docs/glossary/fixture-only
+change, and not backend/AI/routing/schema/billing/auth work either. Each item needs an owner call
+before any code changes; per the current operating rules this task may be opened as a draft PR for
+discussion but must not be merged without owner sign-off.
+
+#### Objective
+`npm run test` (vitest) is wired into CI as informational-only (`continue-on-error: true`) after
+PR #942 because 12 of 321 tests still fail on clean `main`, each needing a product-code or
+product-copy decision rather than a test-config fix. This task tracks resolving those 12 so
+`npm run test` can be promoted to a required/blocking CI gate (the actual completion of
+TASK-20260710-006). See `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-test-health-ci-gate.md` for full
+detail on each failure.
+
+#### Residual failures (grouped)
+
+**Stale assertion vs. current product copy/behavior — needs an explicit "test is wrong" or
+"component regressed" call:**
+- [ ] `chat-action-card.test.tsx` (3) — test expects `"Coming soon"`/`"Not available yet"`;
+      component renders `"Not available"`/`"No endpoint configured for this action"`.
+- [ ] `landing-page.test.tsx` (1) — hero-heading regex predates today's landing redesign.
+- [ ] `sidebar-nav-routing.test.ts` (1) — test expects a `/queue` ("Applications") sidebar nav
+      item that no longer exists in `components/layout/app-nav.ts` (the `/queue` page itself
+      still exists and builds).
+
+**Unmasked by the router-mount fix in #942, root cause not yet isolated:**
+- [ ] `chat-confirm-profile.test.tsx` (2) — fails on a `"Use this profile"` / `/chat/public` call
+      assertion deep in the command-page flow.
+- [ ] `command-auth-state.test.tsx` (2) — renders an error/retry state instead of the
+      authenticated `"Sign out"` state; could be `/me` mock timing or a real auth-state issue.
+- [ ] `profile-name-edit.test.tsx` (1) — name renders duplicated (`"Roben Nihad  Roben Nihad"`)
+      instead of `"Roben Nihad"`.
+- [ ] `signup-auth-edge-cases.test.tsx` (2 of original 6) — `400`/`422` cases expect
+      `/check your details/i`; component renders different copy for those status codes.
+
+#### Constraints
+- Do not touch: backend/API, auth/session internals, billing, schema/migrations, dependencies,
+  AI provider/prompt/routing, #920.
+- Each item requires an owner decision on which side (test vs. product) is correct before any
+  fix lands.
+
+#### Acceptance criteria
+- [ ] All 12 items resolved (either test updated to match an intentional product decision, or a
+      real product bug fixed) with owner sign-off per item.
+- [ ] `npm run test` promoted from informational (`continue-on-error: true`) to a required,
+      green CI gate.
 
 ### TASK-20260710-002 — #929 `/design-preview` consolidation hub (one preview entry point)
 

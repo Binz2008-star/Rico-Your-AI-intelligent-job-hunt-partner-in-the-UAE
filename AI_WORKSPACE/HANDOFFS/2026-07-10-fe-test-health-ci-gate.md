@@ -1,11 +1,18 @@
-# Handoff — FE test-health + CI gate (`ci(frontend): gate build and frontend tests`)
+# Handoff — Frontend build gate + frontend test visibility baseline (`ci(frontend): gate build and frontend tests`)
+
+**Status: NOT complete.** This PR (#942, draft, held for owner review, not auto-merged) gates the
+frontend **build** only. Frontend **tests are visibility-only, not gated** — `npm run test` runs in CI
+as informational output (`continue-on-error: true`), not a blocking check, because 12 of 321 tests
+still fail for reasons that need an owner product-code or product-copy decision. Do not read this
+handoff as "frontend tests are gated/blocking" — see TASK-20260710-008 in `AI_WORKSPACE/TASKS.md` for
+the follow-up that must land before that's true.
 
 ## Task
 
 Establish the current frontend (`apps/web`) test/build baseline on a clean `main`, fix the shared
-`next/navigation`/App-Router test-crash class via test-config only, and add `npm run build` +
-`npm run test` (vitest) to CI alongside the existing `pytest` and `playwright` jobs — without touching
-product code and without creating a new required gate that fails today.
+`next/navigation`/App-Router test-crash class via test-config only, and add `npm run build` (required)
++ `npm run test` (informational) to CI alongside the existing `pytest` and `playwright` jobs — without
+touching product code and without creating a new required gate that fails today.
 
 ## Context
 
@@ -147,3 +154,18 @@ before.
    inline-edit save path, or a test-fixture issue?
 4. Priority order for a follow-up PR to close out the remaining 12 residual failures, so `npm run test`
    can become a required CI gate.
+
+## Classification of the residual work
+
+The 12 residual failures are tracked as **TASK-20260710-008** in `AI_WORKSPACE/TASKS.md`, classified
+**YELLOW**: product/copy or test-vs-product decision work, not a docs/glossary/fixture-only change
+(GREEN) and not backend/AI/routing/schema/billing/auth work (RED-adjacent). Each item needs an owner
+call before any code change lands, and per the current operating rules that follow-up may be opened as
+a draft PR for discussion but must not be merged without owner sign-off.
+
+## Current status of this PR (#942)
+
+Held as **draft**, not auto-merged, per explicit owner instruction — even though all required CI
+checks (pytest, playwright, `frontend`/build) are green and the diff is test-config/CI/docs only. The
+PR is complete for "frontend build gate" but intentionally incomplete for "frontend test gate," so it
+stays open for owner review rather than being merged as if the full test-health task were done.
