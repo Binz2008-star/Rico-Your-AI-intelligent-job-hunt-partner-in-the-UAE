@@ -10,24 +10,26 @@
 | --- | --- |
 | **Current repository `main` head** | `241b85d4c5d74b6afd00f0d4e202e75c4f5a3f8b` (squash merge of PR `#975` / issue `#963`). |
 | **Frontend deployment** | Vercel production deployment for `241b85d…` is `READY` and aliased to `ricohunt.com`. |
-| **Backend deployment / authenticated smoke** | Render `/version` serves `241b85d…` and `/health` is OK. Migration 038 schema proof and authenticated smoke remain required before declaring the onboarding release production-verified. |
-| **Coordination control plane** | PR `#970` merged; `PROJECT_STATUS.md` + `START_HERE.md` + root agent rules are now the mandatory cold-start path. |
-| **Current execution phase** | Release verification for merged `#963`; no active implementation PR. |
-| **Single active runtime objective** | Verify the merged onboarding CV persistence release before opening another runtime/design objective. |
-| **Active PR branch/head** | None — `#975` merged as `241b85d…`. |
-| **Next exact action** | Confirm migration 038 schema, then run authenticated onboarding CV → My Files → logout/login smoke. |
-| **Owner gate after #963** | Record the authenticated production smoke; only then mark onboarding `VERIFIED` and release the design/workspace queue. |
-| **Last updated** | 2026-07-11 (post-#975 merge; Vercel READY, backend smoke pending) |
+| **Backend deployment / authenticated smoke** | Render `/version` serves the `#963` release and `/health` is OK. Migration 038 and the authenticated onboarding smoke are **owner-confirmed PASS (2026-07-11)**; the onboarding release is production-verified. |
+| **Coordination control plane** | PR `#970` merged; `PROJECT_STATUS.md` + `START_HERE.md` + root agent rules are now the mandatory cold-start path. Docs reconciled after #963 via #979; CI render-audit fix landed via #974. |
+| **Current execution phase** | `#963` release **VERIFIED**; onboarding is out of PARTIAL. No active implementation PR. `#962` is the next objective. |
+| **Single active runtime objective** | None in flight. `#962` (safe login return path) is the next implementation objective, not yet started. |
+| **Active PR branch/head** | None — `#963`/`#975` merged and verified; #979 and #974 merged after it. |
+| **Next exact action** | Open `#962` (safe login return path) on a fresh branch from updated `main`, after its design/audit gate. |
+| **Owner gate after #963** | Cleared — authenticated production smoke owner-confirmed PASS; the design/workspace queue is released. |
+| **Last updated** | 2026-07-11 (post-#963 VERIFIED; #979 + #974 merged; `main` at `feed8c4…`). |
 
 ## Execution lock
 
 ```text
 ACTIVE NOW
-Release verification for #963 / merged PR #975 (`241b85d…`).
-No implementation writer is active.
+(none — #963 / merged PR #975 is VERIFIED; onboarding is out of PARTIAL.
+No implementation writer is active.)
 
-NEXT, AFTER VERIFIED RELEASE
-#962 — safe login return path; then the approved per-route design migration.
+NEXT, NOT STARTED
+#962 — safe login return path
+(start on a fresh branch from updated `main`, after its design/audit gate);
+then the approved per-route design migration.
 
 LATER
 remaining auth-guard routes
@@ -46,7 +48,7 @@ REFERENCE ONLY / NOT FOR MERGE
 #873 — old Rico Alive design-gallery prototype
 ```
 
-`#969` is complete and production-smoke verified. `#963` is merged, CI-green, and Vercel-ready, but is not yet production-verified: Render migration/deploy and authenticated smoke remain the execution lock. Do not open a second runtime objective before that release gate is resolved.
+`#969` and `#963` are both complete and production-verified (owner-confirmed authenticated smoke, 2026-07-11). No runtime objective is in flight. `#962` is the next objective and must start on a fresh branch from updated `main` after its design/audit gate. Do not open a second concurrent runtime objective without an owner change to this lock.
 
 ## Mandatory multi-session coordination
 
@@ -105,7 +107,7 @@ Therefore `#967` is blocked. When it resumes, it must rebase from current `main`
 | PR | Track | Decision |
 | ---: | --- | --- |
 | `#969` | CV/file persistence foundation | **Completed, merged, deployed, and production-smoke verified**; migration 037 applied to production Neon |
-| `#963` / merged `#975` | Onboarding CV persistence + profile hydration | **Merged, CI-green, Vercel READY, Render version confirmed**; migration schema proof and authenticated smoke remain before `VERIFIED` |
+| `#963` / merged `#975` | Onboarding CV persistence + profile hydration | **Merged, deployed, and production-verified** (owner-confirmed authenticated smoke, 2026-07-11); onboarding out of PARTIAL |
 | `#968` | Workspace governance for `#965` | Hold; docs-only, not permission for more agentic work |
 | `#967` | Pre-launch gate/waitlist | Hold; blocked by separate scope and migration collision |
 | `#965` | Read-only journey-state seed | Hold draft; no follow-on without owner DEC |
@@ -118,16 +120,15 @@ Therefore `#967` is blocked. When it resumes, it must rebase from current `main`
 
 - `/onboarding` is restored as the real authenticated first-run route.
 - `/settings` and `/profile` have the shared authenticated-page guard.
-- Onboarding production smoke is **PARTIAL**: registration/verification, routing, steps, skip, and CV parsing/review passed.
+- Onboarding production smoke is **VERIFIED** (owner-confirmed, 2026-07-11): registration/verification, routing, steps, skip, CV parsing/review, and now confirmed-CV persistence + profile hydration all passed.
 - The merged #963 path uses server-side upload artifacts, hash-aware My Files persistence, required durable profile hydration, and retry-safe confirmation.
-- The remaining onboarding gate is release verification, not known implementation work.
-- The approved design package is sufficiently complete; design work resumes only after the release gate.
+- The onboarding release gate is cleared; the design/workspace queue is released.
 
 ## #963 implementation status
 
 - PR #975 was merged as `241b85d…` after final-head CI passed (`pytest`, frontend, Playwright, real-Postgres integration).
 - Authenticated confirmation rejects missing/expired/foreign upload artifacts, writes My Files through the canonical hash-aware path, requires the Neon profile write, and never marks onboarding complete after either persistence failure.
-- Retry is idempotent. The remaining proof is authenticated production smoke on the deployed backend.
+- Retry is idempotent. Authenticated production smoke is **owner-confirmed PASS (2026-07-11)**; the release is VERIFIED.
 
 ## Stop conditions
 
@@ -143,9 +144,11 @@ Stop and ask the owner instead of continuing when:
 ## Next exact action
 
 ```text
-1. Confirm migration 038 schema/startup success without mutating production.
-2. Run the authenticated onboarding flow: upload CV → confirm profile → verify My Files → logout/login → confirm persisted profile/onboarding state.
-3. Record PASS/FAIL. On PASS, mark onboarding `VERIFIED` and select the next single objective.
+1. #963 authenticated production smoke: owner-confirmed PASS (2026-07-11).
+   Onboarding is out of PARTIAL and marked VERIFIED.
+2. Next single objective: #962 (safe login return path). Start on a fresh
+   branch from updated `main` after its design/audit gate.
+3. Do not open a second concurrent runtime objective without an owner lock change.
 ```
 
 PR #969 production verification: PASS (recorded for reference).

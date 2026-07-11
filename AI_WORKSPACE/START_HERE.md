@@ -24,11 +24,12 @@ If any source disagrees, stop and report the conflict. Do not guess from chat hi
 ## Current execution lock
 
 ```text
-Only active runtime work: release verification for merged #963 / PR #975
-(`main` `241b85d…`).
+No active runtime implementation. #963 / PR #975 is merged and
+production-VERIFIED (owner-confirmed authenticated smoke, 2026-07-11);
+onboarding is out of PARTIAL. `main` is at `feed8c4…` (#979 + #974 merged).
 
-Before any new implementation: verify Render version + migration 038 and run
-the authenticated onboarding CV → My Files → logout/login smoke.
+Next objective, not started: #962 (safe login return path). Start on a fresh
+branch from updated `main` after its design/audit gate.
 
 All other runtime/design/agentic work is paused unless the owner changes
 AI_WORKSPACE/PROJECT_STATUS.md.

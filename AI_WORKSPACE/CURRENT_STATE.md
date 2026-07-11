@@ -1,6 +1,17 @@
 # Current State
 
-> **Reconciliation header — 2026-07-11, post-#975 merge (latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-11, #963 VERIFIED (latest; supersedes all headers below).**
+> `main` HEAD `feed8c4…` (post-#979 docs reconciliation + #974 CI render-audit fix).
+> The **#963 onboarding CV persistence release is production-VERIFIED**: the owner confirmed
+> the authenticated smoke (upload CV → confirm profile → My Files → logout/login → persisted
+> profile/onboarding state) PASSES, and migration 038 is confirmed. Onboarding is now out of
+> **PARTIAL** and marked **VERIFIED**. The release gate is cleared and the design/workspace queue
+> is released. **No runtime implementation is in flight.** Next single objective: **#962**
+> (safe login return path), to start on a fresh branch from updated `main` after its design/audit
+> gate. `#969`/`#960` remain complete and verified. This header records an owner-confirmed
+> verification and a docs-only sync; no `apps/web`/`src` runtime change.
+>
+> **Reconciliation header — 2026-07-11, post-#975 merge (superseded by the header above).**
 > `main` HEAD `241b85d4c5d74b6afd00f0d4e202e75c4f5a3f8b`: PR **#975** merged after final-head
 > CI passed (pytest, frontend, Playwright, real-Postgres integration). It completes the #963
 > implementation: onboarding confirmation uses a server-scoped, short-lived CV artifact, the
