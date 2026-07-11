@@ -254,6 +254,48 @@ increment under the current priority order.
   `lib/redirect.ts::resolveNextPath`) and returns the guest to the original page
 - [ ] no open-redirect; no change to onboarding-status-based routing when `next` is absent
 
+### TASK-20260711-005 — Read-only journey-state derivation + daily plan (agentic seed)
+
+Status: review (PR #965 open as **draft**, corrected + CI green; awaiting independent review — do not merge)
+Owner: Claude
+Branch: `feat/journey-state` (head `9d2c59f`)
+Issue/PR: #965
+
+#### Objective
+Pure, deterministic, read-only journey state machine: `derive_state()`,
+`is_valid_transition()`, `generate_daily_plan()`. Derives a user's job-hunt state
+(`discovery → searching → applying → interviewing → offer`) from canonical action counts and
+produces a proactive daily action plan. No I/O, no DB, no clock, no env flags, no mutations.
+Two files only: `src/agent/context/journey_state.py`, `tests/test_journey_state.py`.
+
+#### Contract corrections applied (owner review of the diff)
+- deterministic derivation (no `datetime.now()`; removed timestamp fields)
+- states aligned to the canonical taxonomy `src/applications.py::VALID_STATUSES`: `offer`
+  derives from the real `offer` status; the invented `negotiating` state was removed
+- identity from `state.user_id` (no duplicate `user_id` arg → no cross-user plans)
+- fail-fast validation (empty user id / negative counts / unknown state / inconsistent
+  state-vs-counts) instead of silent fallback
+- removed the test's duplicated `_VALID_TRANSITIONS_MAP` fixture + dead `logger`/`_STATE_ORDER`
+- tests: `tests/test_journey_state.py` 59 passed; regression
+  `tests/test_p0_mutation_trust_guard.py test_bug05_confirmation_loop.py` 51 passed
+
+#### ⚠️ Naming + governance notes
+- The PR originally labelled itself "**PR A**", which **collides** with the reserved "PR A =
+  Persist job context + apply links (operational memory, verify-first)" in
+  `DECISIONS.md` / `ENGINEERING_ROADMAP.md`. This journey-state work is a **separate agentic
+  seed** and must not reuse the "PR A" label; PR #965 title/body updated accordingly.
+- **Governance gate:** #965 is the seed of a broader agentic direction (journey-state →
+  daily plan → autonomous loop). Per Rico governance, product-direction features need an owner
+  **DEC** before the series continues. #965 itself is pure/read-only/harmless; **do NOT build
+  any follow-on (workers / `autonomous_loop.py` / mutations) until a DEC approves the
+  direction.**
+
+#### Acceptance criteria
+- [x] pure/deterministic; every state has a real derivation path; identity isolation; fail-fast
+- [x] scope limited to the two files; nothing else touched
+- [ ] independent review clean on head `9d2c59f`, then owner decision to merge
+- [ ] (blocked) owner DEC before any autonomous/worker follow-on
+
 ### TASK-20260710-006 — P2: frontend build gate + frontend test visibility baseline (Phase 3 gate)
 
 Status: in_progress (was "fix vitest next/navigation router-mock baseline" — retitled
