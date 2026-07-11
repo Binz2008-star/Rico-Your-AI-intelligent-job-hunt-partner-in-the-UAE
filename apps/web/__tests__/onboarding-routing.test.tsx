@@ -21,10 +21,11 @@ import { ApiError } from "@/lib/api";
  */
 
 const { push, replace } = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
-const { fetchOnboardingStatus, uploadCV, submitOnboarding } = vi.hoisted(() => ({
+const { fetchOnboardingStatus, uploadCV, submitOnboarding, confirmCVProfile } = vi.hoisted(() => ({
   fetchOnboardingStatus: vi.fn(),
   uploadCV: vi.fn(),
   submitOnboarding: vi.fn(),
+  confirmCVProfile: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -37,7 +38,7 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, fetchOnboardingStatus, uploadCV, submitOnboarding };
+  return { ...actual, fetchOnboardingStatus, uploadCV, submitOnboarding, confirmCVProfile };
 });
 
 import OnboardingPage from "@/app/onboarding/page";
@@ -52,9 +53,24 @@ const STATUS = {
 
 const CV_PARSED = {
   ok: true,
-  status: "parsed",
+  status: "preview_ready",
   document_type: "cv",
+  filename: "cv.pdf",
+  upload_id: "artifact-uuid-1",
   parsed: { text: "", emails: [], phones: [], skills: ["Python"], certifications: [], languages: [] },
+  preview: {
+    name: "Test User",
+    email: null,
+    phone: null,
+    current_role: "Engineer",
+    experience_years: 5,
+    target_roles: ["Backend Engineer"],
+    skills_detected: ["Python"],
+    existing_skills: [],
+    skills: ["Python"],
+    certifications: [],
+    languages: [],
+  },
 };
 
 async function renderIncompleteReachForm() {
@@ -147,11 +163,12 @@ describe("onboarding CV upload + form", () => {
     expect(screen.getByText("Start with your CV")).toBeInTheDocument();
   });
 
-  it("skip routes to /command WITHOUT persisting onboarding", async () => {
+  it("skip routes to /command WITHOUT persisting onboarding or confirming the CV", async () => {
     await renderIncompleteReachForm();
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     expect(push).toHaveBeenCalledWith("/command");
     expect(submitOnboarding).not.toHaveBeenCalled();
+    expect(confirmCVProfile).not.toHaveBeenCalled();
   });
 
   it("submit success routes to /command", async () => {
@@ -160,6 +177,29 @@ describe("onboarding CV upload + form", () => {
     fireEvent.click(screen.getByRole("button", { name: /Complete profile/i }));
     await waitFor(() => expect(submitOnboarding).toHaveBeenCalled());
     await waitFor(() => expect(push).toHaveBeenCalledWith("/command"));
+  });
+
+  it("'Complete My Profile' confirms the uploaded CV through the SAME canonical path /command uses, BEFORE submitOnboarding", async () => {
+    // #963: onboarding's explicit confirmation action must call
+    // confirm-cv-profile with the extracted preview/filename/upload_id, and
+    // it must run before submitOnboarding so a user-edited field (written by
+    // submitOnboarding) always overwrites the extracted one, never the
+    // reverse.
+    await renderIncompleteReachForm();
+    submitOnboarding.mockResolvedValue({ status: "completed", updated_fields: ["skills"] });
+    fireEvent.click(screen.getByRole("button", { name: /Complete profile/i }));
+    await waitFor(() => expect(confirmCVProfile).toHaveBeenCalled());
+    await waitFor(() => expect(submitOnboarding).toHaveBeenCalled());
+
+    expect(confirmCVProfile).toHaveBeenCalledWith({
+      preview: CV_PARSED.preview,
+      filename: CV_PARSED.filename,
+      doc_type: "cv",
+      upload_id: CV_PARSED.upload_id,
+    });
+    const confirmOrder = confirmCVProfile.mock.invocationCallOrder[0];
+    const submitOrder = submitOnboarding.mock.invocationCallOrder[0];
+    expect(confirmOrder).toBeLessThan(submitOrder);
   });
 
   it("submit failure keeps the form and shows no success state", async () => {

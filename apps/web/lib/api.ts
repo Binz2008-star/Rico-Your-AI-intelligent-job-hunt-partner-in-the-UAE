@@ -1006,6 +1006,11 @@ export interface UploadCVResponse {
   parsed?: ParsedCV;
   message?: string;
   user_id?: string;
+  // Opaque id for the matching confirm-cv-profile call (#963). Server-derived —
+  // never a hash, never client-computed. null/undefined when the artifact
+  // could not be created (e.g. guest session, DB unavailable); confirm still
+  // works without it, just without server-side hash dedupe/text recovery.
+  upload_id?: string | null;
   // Document Intelligence fields (status === "classified")
   confidence?: number;
   confidence_scores?: DocumentClassificationScore;
@@ -1018,6 +1023,10 @@ export interface ConfirmCVProfileRequest {
   preview: ProfilePreview;
   filename: string;
   doc_type?: string;
+  // Opaque id from the matching upload-cv response (#963) — resolved
+  // server-side against the caller's own identity. Omit only when no
+  // artifact was returned by upload-cv.
+  upload_id?: string | null;
 }
 
 export interface ConfirmCVProfileResponse {

@@ -193,15 +193,36 @@ class TestUploadCvPipelineEligibility:
 
 # ── /confirm-cv-profile: non-CV doc_type must never become the Active CV ────
 
-def _make_fake_ricodb(save_mock):
+def _make_fake_ricodb(get_or_create_mock, *, legacy_save_mock=None):
+    """Fake RicoDB exposing ONLY the canonical get_or_create_user_document
+    path (#963/#960). `legacy_save_mock` (unused by confirm-cv-profile since
+    #963) is still exposed so a regression back to the legacy path is
+    provable by asserting it was never called, not just by its absence."""
     class _FakeRicoDB:
         available = True
 
         def __init__(self, *args, **kwargs):
             pass
 
+        def get_or_create_user_document(self, **kwargs):
+            result = get_or_create_mock(**kwargs)
+            if result is not None:
+                return result
+            return {
+                "id": "fake-doc-id",
+                "filename": kwargs.get("filename"),
+                "doc_type": kwargs.get("doc_type"),
+                "is_primary": kwargs.get("is_primary", False),
+                "inserted": True,
+            }
+
         def save_user_document(self, **kwargs):
-            return save_mock(**kwargs)
+            if legacy_save_mock is not None:
+                return legacy_save_mock(**kwargs)
+            raise AssertionError(
+                "save_user_document (legacy) must never be called by "
+                "confirm-cv-profile after #963 -- use get_or_create_user_document"
+            )
 
     return _FakeRicoDB
 
@@ -224,50 +245,52 @@ def _confirm_payload(filename="upload.pdf", doc_type="cv"):
 
 class TestConfirmCvProfileDocTypeValidation:
     def _post_confirm(self, client, doc_type, filename="upload.pdf"):
-        save_mock = MagicMock()
+        get_or_create_mock = MagicMock(return_value=None)
         with (
             patch("src.api.routers.rico_chat.upsert_profile"),
-            patch("src.api.routers.rico_chat.mark_onboarding_complete"),
+            patch("src.api.routers.rico_chat.get_profile", return_value=None),
+            patch("src.services.profile_context_resolver.evaluate_minimum_profile", return_value=(True, [])),
+            patch("src.repositories.onboarding_repo.set_onboarding_status"),
             patch("src.services.subscription_gating.enforce_profile_optimization_allowed"),
             patch("src.services.subscription_gating.record_profile_optimization_usage"),
             patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value="alice@rico.ai"),
-            patch("src.rico_db.RicoDB", _make_fake_ricodb(save_mock)),
+            patch("src.rico_db.RicoDB", _make_fake_ricodb(get_or_create_mock)),
         ):
             r = client.post(
                 "/api/v1/rico/confirm-cv-profile?user_id=alice@rico.ai",
                 json=_confirm_payload(filename=filename, doc_type=doc_type),
             )
-        return r, save_mock
+        return r, get_or_create_mock
 
     def test_valid_cv_doc_type_happy_path_preserved(self, client):
         """Regression: a genuine CV confirm must still save doc_type='cv'
         with is_primary=True -- the existing happy path is unchanged."""
-        r, save_mock = self._post_confirm(client, doc_type="cv")
+        r, get_or_create_mock = self._post_confirm(client, doc_type="cv")
         assert r.status_code == 200, r.text
-        save_mock.assert_called_once()
-        kwargs = save_mock.call_args.kwargs
+        get_or_create_mock.assert_called_once()
+        kwargs = get_or_create_mock.call_args.kwargs
         assert kwargs["doc_type"] == "cv"
         assert kwargs["is_primary"] is True
 
     def test_unrecognized_doc_type_not_coerced_to_cv(self, client):
         """The exact #908 RC4 bug: confirming a mis-routed invoice must not
         silently write doc_type='cv' / is_primary=True."""
-        r, save_mock = self._post_confirm(client, doc_type="invoice", filename="Invoice-W7JSBCPT-0003.pdf")
+        r, get_or_create_mock = self._post_confirm(client, doc_type="invoice", filename="Invoice-W7JSBCPT-0003.pdf")
         assert r.status_code == 200, r.text
-        save_mock.assert_called_once()
-        kwargs = save_mock.call_args.kwargs
+        get_or_create_mock.assert_called_once()
+        kwargs = get_or_create_mock.call_args.kwargs
         assert kwargs["doc_type"] != "cv"
         assert kwargs["is_primary"] is False
 
     def test_identity_document_doc_type_not_coerced_to_cv(self, client):
-        r, save_mock = self._post_confirm(client, doc_type="identity_document")
-        kwargs = save_mock.call_args.kwargs
+        r, get_or_create_mock = self._post_confirm(client, doc_type="identity_document")
+        kwargs = get_or_create_mock.call_args.kwargs
         assert kwargs["doc_type"] != "cv"
         assert kwargs["is_primary"] is False
 
     def test_application_confirmation_doc_type_not_coerced_to_cv(self, client):
-        r, save_mock = self._post_confirm(client, doc_type="application_confirmation")
-        kwargs = save_mock.call_args.kwargs
+        r, get_or_create_mock = self._post_confirm(client, doc_type="application_confirmation")
+        kwargs = get_or_create_mock.call_args.kwargs
         assert kwargs["doc_type"] != "cv"
         assert kwargs["is_primary"] is False
 
@@ -275,7 +298,37 @@ class TestConfirmCvProfileDocTypeValidation:
         """cover_letter is a recognized, confirmable type but is not
         CV-family (per document_resolver._CV_DOC_TYPES) -- it must be saved
         under its own type and never marked as the Active CV."""
-        r, save_mock = self._post_confirm(client, doc_type="cover_letter")
-        kwargs = save_mock.call_args.kwargs
+        r, get_or_create_mock = self._post_confirm(client, doc_type="cover_letter")
+        kwargs = get_or_create_mock.call_args.kwargs
         assert kwargs["doc_type"] == "cover_letter"
         assert kwargs["is_primary"] is False
+
+    def test_legacy_save_user_document_never_called(self, client):
+        """#963 architecture requirement: confirm-cv-profile must never use
+        the legacy, non-hash-aware save_user_document for confirmed CV
+        persistence -- only the canonical get_or_create_user_document.
+
+        Asserted directly against a real MagicMock (not via a raise-if-called
+        fake) because the doc-save block runs inside a broad try/except that
+        would otherwise swallow the very AssertionError meant to catch a
+        regression back to the legacy path.
+        """
+        legacy_mock = MagicMock()
+        get_or_create_mock = MagicMock(return_value=None)
+        with (
+            patch("src.api.routers.rico_chat.upsert_profile"),
+            patch("src.api.routers.rico_chat.get_profile", return_value=None),
+            patch("src.services.profile_context_resolver.evaluate_minimum_profile", return_value=(True, [])),
+            patch("src.repositories.onboarding_repo.set_onboarding_status"),
+            patch("src.services.subscription_gating.enforce_profile_optimization_allowed"),
+            patch("src.services.subscription_gating.record_profile_optimization_usage"),
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value="alice@rico.ai"),
+            patch("src.rico_db.RicoDB", _make_fake_ricodb(get_or_create_mock, legacy_save_mock=legacy_mock)),
+        ):
+            r = client.post(
+                "/api/v1/rico/confirm-cv-profile?user_id=alice@rico.ai",
+                json=_confirm_payload(doc_type="cv"),
+            )
+        assert r.status_code == 200, r.text
+        get_or_create_mock.assert_called_once()
+        legacy_mock.assert_not_called()

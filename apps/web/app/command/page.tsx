@@ -81,6 +81,7 @@ interface Message {
     filename?: string;
     extractionQuality?: string;
     docType?: string;
+    uploadId?: string | null;
     search_query?: string;
     result_count?: number;
     broadened?: boolean;
@@ -1490,6 +1491,7 @@ export default function CommandPage() {
                     filename: result.filename,
                     extractionQuality: result.extraction_quality,
                     docType: result.document_type,
+                    uploadId: result.upload_id,
                 };
                 setMessages((prev) => [...prev, message]);
                 return;
@@ -1528,12 +1530,12 @@ export default function CommandPage() {
         }
     }
 
-    async function handleConfirmProfile(preview: ProfilePreview, filename: string, messageId: number, docType?: string) {
+    async function handleConfirmProfile(preview: ProfilePreview, filename: string, messageId: number, docType?: string, uploadId?: string | null) {
         setThinking(true);
         setOperationState({ state: "confirming", message: t("cmdWorkingSavingProfile") });
         try {
             const userId = `public:${getSessionId(sessionIdRef)}`;
-            await confirmCVProfile({ preview, filename, doc_type: docType ?? "cv" }, userId);
+            await confirmCVProfile({ preview, filename, doc_type: docType ?? "cv", upload_id: uploadId }, userId);
             // Detect the user's chat language from recent messages so that Arabic-speaking
             // users receive an Arabic confirmation even when the UI toggle is still on "EN".
             const recentUserText = messages
@@ -2037,7 +2039,7 @@ export default function CommandPage() {
                                         <div className="mt-3 flex gap-2">
                                             <button
                                                 type="button"
-                                                onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id, m.docType)}
+                                                onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id, m.docType, m.uploadId)}
                                                 disabled={thinking}
                                                 className="text-[12px] px-4 py-2 rounded-lg bg-gold text-[#0a0a1a] font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
                                             >
@@ -2095,7 +2097,7 @@ export default function CommandPage() {
                                                 <button
                                                     type="button"
                                                     onClick={() => {
-                                                        handleConfirmProfile(draftProfile, m.filename!, m.id, m.docType);
+                                                        handleConfirmProfile(draftProfile, m.filename!, m.id, m.docType, m.uploadId);
                                                         setEditingProfileId(null);
                                                         setDraftProfile(null);
                                                     }}

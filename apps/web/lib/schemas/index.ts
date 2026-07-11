@@ -556,6 +556,7 @@ export const UploadCVResponseSchema = z.object({
     parsed: ParsedCVSchema.optional(),
     message: z.string().optional(),
     user_id: z.string().optional(),
+    upload_id: z.string().nullable().optional(),
 }).passthrough();
 
 export const ConfirmCVProfileResponseSchema = z.object({

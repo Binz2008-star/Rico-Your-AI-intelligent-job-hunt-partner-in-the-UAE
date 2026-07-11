@@ -52,7 +52,7 @@ from src.repositories import onboarding_repo, profile_repo
 from src.repositories.learning_repo import get_learning_repository
 from src.agent.responses.schema import RicoResponse, build_error_response, _generate_debug_id
 from src.agent.runtime import agent_runtime
-from src.models.onboarding import ONBOARDING_IN_PROGRESS
+from src.models.onboarding import ONBOARDING_COMPLETED, ONBOARDING_IN_PROGRESS
 from src.rico_agent import RicoAgent
 from src.rico_chat_api import generate_error_ref
 from src.rico_env import get_ai_provider
@@ -217,6 +217,15 @@ class ConfirmCVProfileRequest(BaseModel):
     preview: dict[str, Any] = Field(..., description="Profile preview data to confirm")
     filename: str = Field(..., description="Original CV filename")
     doc_type: str = Field(default="cv", description="Detected document type from upload step")
+    upload_id: str | None = Field(
+        default=None,
+        description=(
+            "Opaque id from the matching upload-cv response. Resolved server-side "
+            "against the caller's own server-derived identity to recover the "
+            "server-computed content hash, byte count, and parsed text for this "
+            "exact upload — never trusted/recomputed from client-supplied values."
+        ),
+    )
 
 
 
@@ -1331,6 +1340,13 @@ async def rico_upload_cv(
         if not data:
             raise HTTPException(status_code=422, detail="Uploaded file is empty")
 
+        # Server-side hash of the ORIGINAL bytes actually received — never
+        # accepted from the client. Carried through the short-lived upload
+        # artifact (see cv_upload_artifact_repo) so confirm-cv-profile can
+        # later resolve it server-side by upload_id instead of trusting a
+        # client-echoed hash or re-parsing.
+        content_hash = hashlib.sha256(data).hexdigest()
+
         safe_name = _safe_filename(file.filename)
 
         # Per-kind size cap, enforced from the real magic-byte format BEFORE any
@@ -1633,6 +1649,7 @@ async def rico_upload_cv(
             request_ref,
         )
 
+        upload_id: str | None = None
         if not is_valid_public_user_id(resolved_user_id):
             try:
                 from src.rico_memory import RicoMemoryStore
@@ -1645,17 +1662,29 @@ async def rico_upload_cv(
                     "confidence": round(confidence, 3),
                     "suggested_actions": [],
                 }
-                # Stash the parsed CV text server-side so confirm-cv-profile can
-                # persist it to rico_profiles.cv_text without the frontend having
-                # to round-trip the full text. Capped to bound the context size.
-                if cv_text:
-                    _rctx["last_uploaded_cv_text"] = {
-                        "filename": safe_name,
-                        "text": cv_text[:100_000],
-                    }
                 _mem.set_context(resolved_user_id, "recent_context", _rctx)
             except Exception:
                 pass
+
+            # Durable, short-lived server-side artifact (#963) — carries the
+            # server-computed hash, byte count, and full parsed text from
+            # this upload to the matching confirm-cv-profile call. Replaces
+            # the RicoMemoryStore "last_uploaded_cv_text" stash, which is a
+            # no-op in production (RICO_MEMORY_BACKEND=postgres). The client
+            # receives only the opaque id — never the hash or text directly.
+            try:
+                from src.repositories.cv_upload_artifact_repo import create_cv_upload_artifact
+                upload_id = create_cv_upload_artifact(
+                    resolved_user_id,
+                    filename=safe_name,
+                    doc_type=doc_type or "cv",
+                    content_hash=content_hash,
+                    file_size=len(data),
+                    cv_text=cv_text,
+                )
+            except Exception:
+                upload_id = None
+
         return {
             "ok": True,
             "status": "preview_ready",
@@ -1666,6 +1695,7 @@ async def rico_upload_cv(
             "preview": preview,
             "parsed": parsed,
             "user_id": resolved_user_id,
+            "upload_id": upload_id,
             "warnings": cv_warnings,
         }
     except HTTPException:
@@ -1754,33 +1784,55 @@ async def confirm_cv_profile(
             filtered_updates["name"] = profile_updates["name"]
         profile_updates = filtered_updates
 
-        # Recover the parsed CV text stashed by the upload step so the raw text
-        # is persisted alongside the structured summary. Without this the chat
-        # layer can show extracted skills yet truthfully report "I don't have
-        # the parsed text from that file" — and apply-tailoring has no CV body.
-        confirmed_cv_text: str | None = None
-        if not is_valid_public_user_id(resolved_user_id):
-            try:
-                from src.rico_memory import RicoMemoryStore as _MemStore
-                _cv_ctx = (_MemStore().get_context(resolved_user_id, "recent_context") or {}).get(
-                    "last_uploaded_cv_text"
-                ) or {}
-                _stashed = str(_cv_ctx.get("text") or "")
-                # Only trust the stash when it belongs to the file being confirmed.
-                if _stashed and _cv_ctx.get("filename") == payload.filename:
-                    confirmed_cv_text = _stashed
-            except Exception:
-                confirmed_cv_text = None
+        # Resolve the short-lived upload artifact (#963) server-side, scoped to
+        # the caller's OWN server-derived identity (never a client-supplied
+        # user_id) and a freshness window — recovers the server-computed
+        # content hash, byte count, and full parsed text for this exact
+        # upload. Never trusted/recomputed from the client, and never routed
+        # through RicoMemoryStore (a no-op under RICO_MEMORY_BACKEND=postgres,
+        # the production backend). A miss (no upload_id, expired, wrong user,
+        # or DB unavailable) degrades gracefully — confirm still proceeds,
+        # just without a server-computed hash (no dedupe) or recovered raw
+        # text, matching this endpoint's behavior before #963 for that case.
+        artifact: dict[str, Any] | None = None
+        if payload.upload_id and not is_valid_public_user_id(resolved_user_id):
+            from src.repositories.cv_upload_artifact_repo import resolve_cv_upload_artifact
+            artifact = resolve_cv_upload_artifact(resolved_user_id, payload.upload_id)
+
+        confirmed_cv_text: str | None = (artifact or {}).get("cv_text") or None
 
         # Update permanent profile
         upsert_profile(user_id=resolved_user_id, updates=profile_updates, cv_text=confirmed_cv_text)
         record_profile_optimization_usage(resolved_user_id)
 
-        # Only mark onboarding complete for authenticated users (not public sessions)
+        # Onboarding completion must reflect the SAME minimum-profile gate
+        # onboarding/submit evaluates — never a blind side effect of
+        # confirming a CV. Confirming a CV alone (without target_roles /
+        # preferred_cities / years_experience) must not flip onboarding to
+        # "complete"; conversely this lets a CV-only confirm from /command
+        # complete onboarding when the gate already passes, exactly as
+        # onboarding/submit would. Public/guest sessions have no onboarding
+        # state to update.
         if not is_valid_public_user_id(resolved_user_id):
-            mark_onboarding_complete(resolved_user_id)
+            from src.services.profile_context_resolver import (
+                evaluate_minimum_profile,
+                resolve_profile_context,
+            )
+            _merged_profile = get_profile(resolved_user_id)
+            _ctx = resolve_profile_context(resolved_user_id, _merged_profile)
+            _gate_ok, _missing_fields = evaluate_minimum_profile(_ctx)
+            onboarding_repo.set_onboarding_status(
+                resolved_user_id,
+                ONBOARDING_COMPLETED if _gate_ok else ONBOARDING_IN_PROGRESS,
+            )
 
-        # Save document record for the file manager (authenticated users only)
+        # Save document record for the file manager (authenticated users only).
+        # Canonical, hash-aware, atomically-idempotent path (#960) — never the
+        # legacy unconditional-INSERT save_user_document, which created a new
+        # duplicate row on every retry/double-click and could never dedupe an
+        # exact re-confirm. content_hash is None when no artifact resolved
+        # (get_or_create_user_document already handles that: it simply always
+        # inserts, matching the pre-#963 no-dedupe behavior for that case).
         if not is_valid_public_user_id(resolved_user_id):
             try:
                 from src.rico_db import RicoDB as _RicoDB
@@ -1791,21 +1843,23 @@ async def confirm_cv_profile(
                     # silently coerced to "cv" -- that previously let a mis-routed
                     # non-CV upload (e.g. an invoice that slipped into the CV
                     # pipeline) be written as doc_type="cv" with is_primary=True,
-                    # becoming the user's permanent "Active CV". Server-side value,
-                    # never trust the client payload for anything outside the
-                    # known-safe set. is_primary is only ever set for an actual
-                    # "cv" document -- cover_letter/other are saved but never
-                    # marked primary from this confirm-CV endpoint.
+                    # becoming the user's permanent "Active CV". Prefer the
+                    # server-derived doc_type recorded on the artifact at
+                    # upload time over the client-echoed payload.doc_type when
+                    # available; either way, only ever the known-safe set.
                     _CONFIRMABLE_DOC_TYPES = ("cv", "cover_letter", "other")
+                    _candidate_doc_type = (artifact or {}).get("doc_type") or payload.doc_type
                     _resolved_doc_type = (
-                        payload.doc_type if payload.doc_type in _CONFIRMABLE_DOC_TYPES else "other"
+                        _candidate_doc_type if _candidate_doc_type in _CONFIRMABLE_DOC_TYPES else "other"
                     )
-                    _doc_db.save_user_document(
+                    _resolved_filename = (artifact or {}).get("filename") or payload.filename
+                    _doc_db.get_or_create_user_document(
                         user_id=resolved_user_id,
-                        filename=payload.filename,
-                        original_filename=payload.filename,
+                        filename=_resolved_filename,
+                        original_filename=_resolved_filename,
                         doc_type=_resolved_doc_type,
-                        file_size=0,
+                        file_size=(artifact or {}).get("file_size") or 0,
+                        content_hash=(artifact or {}).get("content_hash"),
                         skills_count=len(skills),
                         skills_json=list(skills),
                         years_experience=profile_updates.get("years_experience"),
