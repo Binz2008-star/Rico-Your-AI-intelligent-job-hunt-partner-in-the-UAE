@@ -1,6 +1,12 @@
--- 037_create_waitlist.sql
--- Owner-approved pre-launch waitlist intake.
+-- 039_create_waitlist.sql
+-- Owner-approved pre-launch waitlist intake (#966 / PR #967).
 -- Additive and idempotent. No destructive rollback is required.
+--
+-- Renumbered 037 -> 039 during the rebase onto main: migrations 037
+-- (user_documents content_hash) and 038 (cv_upload_artifacts) landed via
+-- #969/#975 while this branch was open. This is the manual-apply migration
+-- referenced by the staged-activation runbook (applied to Neon as part of
+-- activating the gate), NOT auto-applied at app startup.
 
 BEGIN;
 

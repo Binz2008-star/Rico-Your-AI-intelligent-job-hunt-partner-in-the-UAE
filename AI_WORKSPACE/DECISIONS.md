@@ -28,6 +28,48 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260712-001 — Pre-launch access gate (#966 / PR #967): revive-and-rebase, migration 039, default-live
+
+Status: accepted
+Date: 2026-07-12
+Owner: Roben (owner) / Claude
+Related task: TASK Pre-launch gate (PR #967, branch `feat/pre-launch-gate`)
+
+#### Context
+The product is publicly reachable while onboarding is still PARTIAL. The owner
+directed a reversible pre-launch/waitlist gate as PR 1 (blocking), with the CV
+quota/replacement fix as a separate later PR 2. The gate work already existed as
+open Draft PR #967, but stale (pre-#969/#975) and carrying a `037_create_waitlist.sql`
+migration that collided with the merged 037/038.
+
+#### Decision
+1. **Revive #967** (one PR per goal) rather than open a parallel branch: merged
+   `main` into `feat/pre-launch-gate` (single conflict, in `check_migration_drift.py`).
+2. **Renumber** the waitlist migration `037 → 039_create_waitlist.sql` (037 =
+   user_documents content_hash, 038 = cv_upload_artifacts). It stays
+   **manual-apply** (part of the staged-activation runbook), not startup auto-apply.
+3. **Env var `RICO_LAUNCH_MODE`** (repo `RICO_*` convention), **default `live`** —
+   deliberately overriding the "default waitlist" wording in the owner's command:
+   an unset/invalid value must keep production fully open, so merging the code can
+   never close the product. Activation is an explicit operator flip on Render + Vercel.
+4. **Backend-authoritative** gate (`is_request_allowed` in `src/services/launch_mode.py`)
+   in addition to Next.js middleware — never rely on URL secrecy.
+5. Owner/master account `robenedwan@gmail.com` added to `INTERNAL_ALLOWLIST_EMAILS`
+   in `.env.example` only (no production env change).
+6. **Gate-only scope**: CV quota/replacement (Free = active + archived, clear
+   messaging, paid 59/79 limits) is explicitly PR 2, not mixed in here.
+
+#### Consequences
+- Positive: single reviewable gate PR, current on `main`, migration collision
+  resolved, product cannot be closed by accident, defense-in-depth.
+- Negative/trade-off: env var name (`RICO_LAUNCH_MODE`) and default (`live`) differ
+  from the literal command wording (`PUBLIC_LAUNCH_MODE`, default `waitlist`) —
+  flagged here for the owner to override if a fail-closed default is truly wanted.
+
+#### Follow-up
+- [ ] Owner confirms env-var name/default choice (or requests fail-closed default).
+- [ ] Separate Draft PR 2: CV quota + replacement UX + paid-plan limits.
+
 ### DEC-20260710-004 — `/onboarding` is the real authenticated first-run setup flow (supersedes "chat is the app" routing for `/onboarding` only)
 
 Status: accepted

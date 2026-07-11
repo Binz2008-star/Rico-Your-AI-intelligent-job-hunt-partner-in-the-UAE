@@ -1,5 +1,14 @@
 Rico Hunt / Rico AI development rules
 
+MANDATORY SESSION BOOTSTRAP
+- Read AI_WORKSPACE/PROJECT_STATUS.md before planning, editing, testing, or creating a branch.
+- Then read AI_WORKSPACE/START_HERE.md, live GitHub main/open PRs, the active TASKS.md entry, and the latest handoff.
+- Declare exactly one role before acting: WRITER, REVIEWER, RELEASE, or IDLE.
+- One writer per branch. Never edit a Claude-owned branch concurrently.
+- If an active PR already exists for the objective, do not create a parallel branch or implementation.
+- If live state conflicts with workspace docs, stop and report the conflict.
+- Current execution lock is defined only in AI_WORKSPACE/PROJECT_STATUS.md; do not infer priorities from old chat summaries.
+
 Follow CLAUDE.md and AGENTS.md.
 
 Core rules:

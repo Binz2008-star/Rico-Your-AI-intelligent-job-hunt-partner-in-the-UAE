@@ -214,6 +214,19 @@ def _apply_uploaded_document_context() -> None:
     _apply_sql_migration("032_uploaded_document_context", sql)
 
 
+def _apply_cv_upload_artifacts() -> None:
+    sql_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "migrations", "038_cv_upload_artifacts.sql"
+    )
+    sql_path = os.path.normpath(sql_path)
+    if not os.path.exists(sql_path):
+        logger.warning("cv_upload_artifacts_migration not found at %s", sql_path)
+        return
+    with open(sql_path) as f:
+        sql = f.read()
+    _apply_sql_migration("038_cv_upload_artifacts", sql)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -234,6 +247,7 @@ async def lifespan(app: FastAPI):
     _apply_performance_indexes()
     _apply_audit_helper_tables()
     _apply_uploaded_document_context()
+    _apply_cv_upload_artifacts()
     yield
 
 

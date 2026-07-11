@@ -203,7 +203,15 @@ class TestFilesEndpointQuota:
                 )
             with patch("src.api.routers.files._db") as mock_db:
                 mock_db.available = db_available
-                mock_db.save_user_document.return_value = "new-uuid-123"
+                # New exact-dedupe pre-check (#960): a distinct file is not a duplicate.
+                mock_db.find_user_document_by_hash.return_value = None
+                mock_db.get_or_create_user_document.return_value = {
+                    "id": "new-uuid-123",
+                    "filename": "cv.pdf",
+                    "doc_type": "cv",
+                    "is_primary": False,
+                    "inserted": True,
+                }
                 return client.post(
                     "/api/v1/user/files?doc_type=cv",
                     files={"file": ("cv.pdf", fake_pdf, "application/pdf")},

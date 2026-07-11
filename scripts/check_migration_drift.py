@@ -58,7 +58,11 @@ CHECKS: list[tuple[str, str, object]] = [
     ("035", "constraint", "rico_job_recommendations_user_id_job_key_key"),
     ("036", "column", ("users", "signup_source")),
     ("036", "table", "admin_digest_log"),
-    ("037", "table", "waitlist_entries"),
+    ("037", "column", ("user_documents", "content_hash")),
+    ("037", "index", "uq_user_documents_user_type_hash"),
+    ("037", "index", "uq_user_documents_one_primary_per_type"),
+    ("038", "table", "cv_upload_artifacts"),
+    ("039", "table", "waitlist_entries"),
 ]
 
 

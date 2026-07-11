@@ -24,11 +24,13 @@
 
 import {
   ApiError,
+  confirmCVProfile,
   fetchOnboardingStatus,
   submitOnboarding,
   uploadCV,
   type OnboardingPayload,
   type ParsedCV,
+  type ProfilePreview,
 } from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -109,6 +111,15 @@ export default function OnboardingPage() {
   const [phase, setPhase] = useState<Phase>("checking");
   const [pageState, setPageState] = useState<PageState>("upload");
   const [parsed, setParsed] = useState<ParsedCV | null>(null);
+  // Held from the upload-cv response so "Complete My Profile" can confirm
+  // the SAME upload through the canonical confirm-cv-profile path /command
+  // uses — the explicit onboarding confirmation action (#963). uploadId is
+  // the opaque, server-derived artifact id; never a hash, never re-parsed.
+  const [cvArtifact, setCvArtifact] = useState<{
+    preview: ProfilePreview;
+    filename: string;
+    uploadId?: string | null;
+  } | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [errorMsg, setErrorMsg] = useState("");
   const cancelledRef = useRef(false);
@@ -183,13 +194,24 @@ export default function OnboardingPage() {
         return;
       }
       setParsed(res.parsed ?? null);
-      const skills = res.parsed?.skills ?? [];
-      if (skills.length > 0) {
-        setFieldValues((prev) => ({
-          ...prev,
-          skills: skills.join(", "),
-        }));
+      if (res.preview && res.filename) {
+        setCvArtifact({ preview: res.preview, filename: res.filename, uploadId: res.upload_id });
+      } else {
+        setCvArtifact(null);
       }
+      // Pre-fill from the extracted preview BEFORE the form renders (never
+      // after) so a field the user has not yet touched shows the extracted
+      // value, but any value the user types later always overwrites it —
+      // there is no post-render re-hydration that could clobber an edit.
+      const skills = res.parsed?.skills ?? [];
+      const targetRoles = res.preview?.target_roles ?? [];
+      const years = res.preview?.experience_years ?? res.parsed?.years_experience_hint ?? null;
+      setFieldValues((prev) => ({
+        ...prev,
+        ...(skills.length > 0 ? { skills: skills.join(", ") } : {}),
+        ...(targetRoles.length > 0 ? { target_roles: targetRoles.join(", ") } : {}),
+        ...(years != null ? { years_experience: String(years) } : {}),
+      }));
       setPageState("form");
     } catch (err) {
       if (isAuthFailure(err)) {
@@ -234,7 +256,26 @@ export default function OnboardingPage() {
     }
 
     try {
+      // "Complete My Profile" is onboarding's explicit CV-confirmation action
+      // (#963) — persists the uploaded CV through the SAME canonical
+      // confirm-cv-profile path /command uses. Must run BEFORE
+      // submitOnboarding: confirm writes the extracted preview values
+      // (target_roles/skills/years/current_role/...), and submitOnboarding
+      // below writes only the fields the user actually typed — so a
+      // user-edited field always overwrites the extracted one, never the
+      // reverse. A skipped/never-uploaded CV (cvArtifact null) submits with
+      // no confirm call at all.
+      if (cvArtifact) {
+        await confirmCVProfile({
+          preview: cvArtifact.preview,
+          filename: cvArtifact.filename,
+          doc_type: "cv",
+          upload_id: cvArtifact.uploadId,
+        });
+      }
       // Route to /command only after a successful, persisted submit response.
+      // Onboarding completion itself is decided by submitOnboarding's own
+      // minimum-profile gate, not by the confirm call above.
       await submitOnboarding(payload);
       router.push("/command");
     } catch (err) {
@@ -247,7 +288,7 @@ export default function OnboardingPage() {
       setPageState("form");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fieldValues, loginHref, router, t]);
+  }, [cvArtifact, fieldValues, loginHref, router, t]);
 
   // "Skip for now" — go to Rico WITHOUT marking onboarding complete.
   const handleSkip = useCallback(() => {

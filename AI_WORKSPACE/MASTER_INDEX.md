@@ -33,10 +33,12 @@
 | `OPERATING_RULES.md` | GitHub/Render/Vercel/Neon/test/verify guardrails | Active | Owner/Architect | — (source) | 2026-07-06 |
 | `AGENT_OPERATING_MODEL.md` | Owner/architect/Claude/Codex/Lovable/release roles | Active | Owner | — (source) | 2026-07-09 |
 | `PROMPT_CONTRACT.md` | Required task-brief inputs + output format | Active | Owner/Architect | OPERATING_RULES | 2026-07-06 |
-| `PR_CHECKLIST.md` | Checklist to paste into PRs | Active | Core | PR_QUALITY_GATE_RULES | 2026-07-06 |
-| `PR_QUALITY_GATE_RULES.md` | Agent-side PR quality gate | Active | Owner/Architect | OPERATING_RULES | 2026-07-06 |
-| `RICO_EXECUTION_PRINCIPLES.md` | Product constitution (v2.0) | Active | Owner | — (source) | 2026-07-06 |
+| `PR_CHECKLIST.md` | Checklist to paste into PRs | Active | Core | PR_QUALITY_GATE_RULES | 2026-07-11 |
+| `PR_QUALITY_GATE_RULES.md` | Agent-side PR quality gate | Active | Owner/Architect | OPERATING_RULES | 2026-07-11 |
+| `RICO_EXECUTION_PRINCIPLES.md` | Product constitution (v2.0) | Active | Owner | — (source) | 2026-07-11 |
 | `HANDOFFS/README_PR_QUALITY_GATE.md` | Pointer to the quality-gate rules | Active | Core | PR_QUALITY_GATE_RULES | 2026-07-06 |
+
+> **#909 governance:** the product-constitution / engineering-principles / PR-quality-gate content requested by issue #909 is addressed through `RICO_EXECUTION_PRINCIPLES.md` (constitution + attachment-context / source-provenance / tool-safety principles) + `PR_QUALITY_GATE_RULES.md` ("Rico Product Behavior Gate") + `PR_CHECKLIST.md` (paste-in product gate), and the ADR need is met by `DECISIONS.md` + the ADR index below — no `GOVERNANCE/` namespace. See the 2026-07-09 #908/#909 triage handoff. This partially addresses #909; the owner decides whether to adjust or close the issue.
 
 ## Vision & architecture — Active
 

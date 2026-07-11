@@ -226,13 +226,28 @@ def get_profile(user_id: str) -> RicoProfile | None:
     return profile
 
 
-def upsert_profile(user_id: str, updates: dict[str, Any], *, cv_text: str | None = None) -> RicoProfile:
+def upsert_profile(
+    user_id: str,
+    updates: dict[str, Any],
+    *,
+    cv_text: str | None = None,
+    require_db: bool = False,
+) -> RicoProfile:
     """Write profile to DB (primary) and JSON (fallback mirror) with transaction safety.
 
     ``cv_text`` (optional) is the raw parsed CV text. It is persisted to
     ``rico_profiles.cv_text`` with COALESCE semantics (a NULL never wipes an
     existing value) so chat and apply-tailoring flows can ground on the actual
     uploaded CV rather than only the structured summary.
+
+    ``require_db`` (default ``False`` — preserves every existing caller's
+    behavior) makes the DB write MANDATORY: if the primary Postgres/Neon write
+    is unavailable or fails, the exception is RAISED instead of being swallowed
+    behind the JSON mirror. Callers that must not report a false success when
+    Neon silently fails (e.g. confirm-cv-profile) pass ``require_db=True`` and
+    translate the raised error into a non-2xx response so the user retries
+    rather than believing their data was saved. With the default ``False`` the
+    long-standing JSON-fallback behavior is unchanged.
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -262,11 +277,15 @@ def upsert_profile(user_id: str, updates: dict[str, Any], *, cv_text: str | None
     # ── DB primary with transaction ───────────────────────────────────────────
     db = _db()
     if not db:
+        if require_db:
+            raise RuntimeError(f"profile DB unavailable (require_db) user={user_id}")
         return profile
 
     try:
         with _db_transaction() as conn:
             if not conn:
+                if require_db:
+                    raise RuntimeError(f"profile DB connection unavailable (require_db) user={user_id}")
                 return profile
 
             # 1. Resolve the DB user record.
@@ -350,6 +369,11 @@ def upsert_profile(user_id: str, updates: dict[str, Any], *, cv_text: str | None
 
     except Exception as e:
         logger.exception("profile_repo: upsert_profile DB failed user_id=%s", user_id)
+        # require_db callers must NOT get a false success masked by the JSON
+        # mirror — re-raise so they can return a non-2xx. Default callers keep
+        # the long-standing JSON-fallback behavior (swallow, return mirror).
+        if require_db:
+            raise
         # Don't re-raise - we have JSON fallback
 
     return profile

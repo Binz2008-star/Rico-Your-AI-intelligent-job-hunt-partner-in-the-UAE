@@ -50,6 +50,61 @@ jobs:
             tests/test_tc2_target_role_propagation.py \
             tests/test_tc2_tc8_wiring.py \
             tests/test_tc8_interview_prep_grounding.py \
+            tests/test_user_documents_dedup.py \
+            tests/test_908_rc4_prevent_noncv_active_cv.py \
+            tests/test_963_onboarding_cv_persistence.py \
+            -v --tb=short
+
+  # Real-Postgres coverage for the user_documents single-primary invariant
+  # (#960, migration 037). The `pytest` job above mocks every cursor/
+  # transaction, which cannot reproduce how a real, non-deferrable partial
+  # unique index (uq_user_documents_one_primary_per_type) rejects a write
+  # mid-transaction, or how pg_advisory_xact_lock actually serializes two
+  # concurrent connections. This job runs tests/integration/test_user_documents_postgres.py
+  # against a real, disposable postgres service container with migration 037
+  # applied. Independent of Neon — no production credentials involved.
+  postgres-integration:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rico_test
+          POSTGRES_PASSWORD: rico_test
+          POSTGRES_DB: rico_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run real-Postgres integration tests (user_documents #960 + cv_upload_artifacts #963)
+        env:
+          RICO_TEST_DATABASE_URL: "postgresql://rico_test:rico_test@localhost:5432/rico_test"
+          JWT_SECRET: "test-secret-ci-only"
+        run: |
+          PYTHONPATH=$GITHUB_WORKSPACE pytest \
+            tests/integration/test_user_documents_postgres.py \
+            tests/integration/test_cv_upload_artifacts_postgres.py \
             -v --tb=short
 
   playwright:

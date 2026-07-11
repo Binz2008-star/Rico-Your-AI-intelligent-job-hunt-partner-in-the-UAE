@@ -1,10 +1,18 @@
 # Handoff — Pre-launch access gate and waitlist intake
 
 **Status:** implementation draft; not activated; not merged  
-**Date:** 2026-07-11  
+**Date:** 2026-07-11 (rebased onto `main` @ `241b85d` on 2026-07-12)  
 **Owner decision:** approved for direct implementation with strict production isolation  
-**Issue:** #966  
+**Issue:** #966 · **PR:** #967  
 **Branch:** `feat/pre-launch-gate`
+
+> **Rebase reconciliation (2026-07-12):** brought current on `main` after #969/#975
+> merged. Waitlist migration renumbered **037 → 039** (037 = `user_documents`
+> content_hash, 038 = `cv_upload_artifacts` now occupy those slots). Owner
+> account `robenedwan@gmail.com` added to `INTERNAL_ALLOWLIST_EMAILS` in
+> `.env.example`. Env var stays `RICO_LAUNCH_MODE` (repo `RICO_*` convention) with
+> **default `live`** — deliberately safe: merging cannot close production;
+> activation is an explicit operator flip. See `AI_WORKSPACE/DECISIONS.md`.
 
 ## Why this exists
 
@@ -38,7 +46,7 @@ corrections:
 
 - auth cookie: `access_token`, not `rico_session`;
 - frontend backend path: `/proxy/api/v1/...`;
-- migration sequence: `037_create_waitlist.sql`, not `0011`;
+- migration sequence: `039_create_waitlist.sql`, not `0011`;
 - robots policy already lives in `apps/web/app/robots.ts` and already excludes private routes;
 - internal access is derived from server environment (`INTERNAL_ALLOWLIST_EMAILS` plus
   `ADMIN_EMAIL`), never from a client-controlled email or invitation cookie;
@@ -56,7 +64,7 @@ corrections:
 - `src/schemas/waitlist.py`
 - `src/api/app.py`
 - `src/api/rate_limit.py`
-- `migrations/037_create_waitlist.sql`
+- `migrations/039_create_waitlist.sql`
 - `apps/web/lib/launch-mode.ts`
 - `apps/web/lib/prelaunch-paths.ts`
 - `apps/web/middleware.ts`
@@ -73,7 +81,7 @@ corrections:
 ## Explicitly out of scope
 
 - changing any production environment variable;
-- applying migration 037 to production or preview Neon;
+- applying migration 039 to production or preview Neon;
 - auto-inviting users or sending confirmation/invitation emails;
 - admin waitlist UI;
 - invitation cookies;
@@ -104,7 +112,7 @@ Do not activate from the PR branch.
 
 1. Merge only after CI, review, screenshots, and owner approval.
 2. Keep `RICO_LAUNCH_MODE=live` or unset on both Vercel and Render.
-3. Apply `migrations/037_create_waitlist.sql` to the approved Neon environment.
+3. Apply `migrations/039_create_waitlist.sql` to the approved Neon environment.
 4. Verify the table, unique normalized-email constraint, and no existing-table mutation.
 5. Configure the same `INTERNAL_ALLOWLIST_EMAILS` value on Vercel and Render.
 6. In a non-production preview/staging environment, set `RICO_LAUNCH_MODE=waitlist` on both
@@ -131,7 +139,7 @@ Primary rollback:
 3. Verify `/`, `/command`, signup, public chat, and normal authenticated routes.
 
 Code rollback: revert the merge PR and redeploy.  
-Database: no destructive rollback is required; preserve waitlist rows. Migration 037 is additive.
+Database: no destructive rollback is required; preserve waitlist rows. Migration 039 is additive.
 
 ## Current evidence
 
