@@ -1,5 +1,26 @@
 # AGENTS.md
 
+## Mandatory Cross-Session Coordination Gate
+
+Before planning, editing, testing, creating a branch, or opening a PR:
+
+1. Read `AI_WORKSPACE/PROJECT_STATUS.md`.
+2. Read `AI_WORKSPACE/START_HERE.md`.
+3. Verify live GitHub `main`, open PRs, and the exact active PR head.
+4. Read the active `AI_WORKSPACE/TASKS.md` entry and latest handoff.
+5. Declare exactly one role: **WRITER**, **REVIEWER**, **RELEASE**, or **IDLE**.
+
+Rules:
+
+- `PROJECT_STATUS.md` contains the current execution lock.
+- One writer per branch.
+- If an active PR already exists for the objective, do not create a competing branch or implementation.
+- Other Claude sessions default to REVIEWER or IDLE.
+- Windsurf must not edit a Claude-owned branch unless ownership is explicitly handed over.
+- Codex reviews; it does not become a second implementation owner.
+- If live state conflicts with workspace docs, stop and report the conflict instead of guessing.
+- Old handoffs and chat summaries are historical context, not current permission to resume work.
+
 ## Rico Agent Rules
 
 This repository is Rico Hunt / Rico AI, a production UAE-focused AI career companion and job-search automation platform.
