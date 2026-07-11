@@ -6,8 +6,9 @@
 > implementation: onboarding confirmation uses a server-scoped, short-lived CV artifact, the
 > canonical hash-aware My Files path, and required durable profile hydration; persistence failure
 > is non-2xx and retry-safe. Vercel production for this exact commit is **READY**. The release is
-> **not yet VERIFIED**: Render version/migration 038 and the authenticated CV → My Files →
-> logout/login smoke still must pass. No new implementation task is active until that release gate
+> **not yet VERIFIED**: Render `/version` already confirms this commit and `/health` is OK, but
+> migration 038 schema proof plus the authenticated CV → My Files → logout/login smoke still must
+> pass. No new implementation task is active until that release gate
 > is recorded. #962 and the per-route Atelier design migration remain later work.
 >
 > **Reconciliation header — 2026-07-11 (latest; supersedes all headers below).**
