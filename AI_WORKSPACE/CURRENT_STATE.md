@@ -13,9 +13,11 @@
 > used; registration+verification, incomplete→`/onboarding`, the three steps, Skip→`/command`
 > (no completion persisted), and real CV upload/parsing/review all PASS. Remaining gap: the
 > onboarding CV is not persisted to My Files and extracted years/current-role/target-roles are
-> not fully hydrated, so final-submit persistence + logout→login completion cannot close yet —
-> tracked as **#963** (related: **#960** duplicate/idempotency, **#962** safe login return-path
-> `next`). NOT started (holds): the remaining auth-guard routes (`/applications`,`/upload`,
+> not fully hydrated, so final-submit persistence + logout→login completion cannot close yet.
+> **Binding sequence: #960 (exact-dedupe/idempotency foundation) → #963 (onboarding CV
+> persistence + hydration) → owner production smoke → onboarding PARTIAL becomes VERIFIED.**
+> **#962** (safe login return-path `next`) is a separate, later increment. NOT started (holds):
+> the remaining auth-guard routes (`/applications`,`/upload`,
 > `/flow`,`/queue`), #960/#962/#963, command i18n (finding #4, still open), and
 > workspace/dashboard migration. This header is a docs-only sync; no `apps/web`/`src` runtime
 > change. Full detail: `HANDOFFS/2026-07-10-fe-onboarding-restore-atelier.md`, `TASKS.md`

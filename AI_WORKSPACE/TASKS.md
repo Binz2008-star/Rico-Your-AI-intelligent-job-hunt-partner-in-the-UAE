@@ -168,6 +168,9 @@ resolved before the Phase 4 onboarding-shell work in `DEC-20260710-001`.
 - [x] Route is in exactly one legal state per the No Dead UI rule — `/onboarding` is now
   live/reachable (the `/onboarding → /command` redirect was removed; page rewritten to the
   Atelier island), routing on the backend `GET /api/v1/onboarding/status` signal.
+- [x] CLAUDE.md "Key Frontend Files" entry for onboarding matches reality afterwards —
+  verified: `apps/web/app/onboarding/page.tsx — guided onboarding / CV-first flow` is still
+  accurate for the live route.
 - [x] `/onboarding` is the real authenticated first-run flow per `DEC-20260710-004`.
 
 ### TASK-20260711-001 — Auth guard for authenticated account pages (/settings, /profile)
@@ -192,25 +195,64 @@ guest. No backend/JWT/cookie/logout change; `/command` stays public; `/onboardin
 - Follow-up (NOT started): apply the same guard to `/applications`, `/upload`, `/flow`,
   `/queue`; and the login-return-path `next` gap is tracked as **#962**.
 
-### TASK-20260711-002 — Onboarding persistence gap (lifts onboarding PARTIAL → VERIFIED)
+> **Binding sequence (recorded 2026-07-11; do not reorder):**
+> `#960` → `#963` → owner production smoke → onboarding PARTIAL becomes **VERIFIED**.
+> `#962` is a **separate, later** increment under the current priority order (not part of the
+> onboarding persistence work). None of #960/#962/#963 is started yet.
 
-Status: blocked/tracked (do not start yet; recorded for the ledger — issues already filed)
+### TASK-20260711-002 — Exact CV duplicate protection and idempotency
+
+Status: proposed/scoped (not started)
 Owner: unassigned
 Branch: TBD
-Issue/PR: #963 (onboarding CV persistence + extracted-field hydration); related #960
-(exact-duplicate protection + idempotency), #962 (safe consumption of login return path)
+Issue/PR: #960
 
 #### Objective
-Verified-account production smoke (2026-07-11) passed registration+email verification,
-incomplete→`/onboarding`, the three steps, Skip→`/command` (no completion persisted), and real
-CV upload/parsing/review. Remaining gap keeps onboarding **PARTIAL**: the onboarding CV is not
-persisted to My Files, extracted years/current-role/target-roles are not fully hydrated, and
-final-submit persistence + logout→login completion cannot be closed until this is fixed.
+Server-side exact-duplicate detection, atomic idempotency, quota safety, and primary-CV
+invariants for CV uploads. Foundation only — **no onboarding wiring in this task**.
 
 #### Acceptance criteria
-- [ ] onboarding CV persists to My Files; extracted fields hydrate into the profile (#963)
+- [ ] server-side exact-duplicate detection for CV uploads
+- [ ] atomic idempotency (safe under retries/concurrent submits)
+- [ ] quota safety and primary-CV invariants preserved
+- [ ] no onboarding-confirmation wiring here (that is TASK-20260711-003)
+
+### TASK-20260711-003 — Persist confirmed onboarding CV and hydrate extracted fields
+
+Status: blocked on #960 (not started)
+Owner: unassigned
+Branch: TBD
+Issue/PR: #963
+
+#### Objective
+Wire the final onboarding confirmation to the canonical persistence path **after** the exact
+dedupe/idempotency foundation (#960) exists: the confirmed onboarding CV persists to My Files
+and extracted years / current role / target roles hydrate into the profile. This is what lifts
+onboarding out of PARTIAL.
+
+#### Acceptance criteria
+- [ ] onboarding confirmation persists the CV via the canonical path (built on #960)
+- [ ] extracted years/current-role/target-roles hydrate into the profile
 - [ ] final-submit persistence + logout→login completion smoke pass with a verified account
-- [ ] then lift onboarding status PARTIAL → VERIFIED in the handoff
+- [ ] then owner production smoke → lift onboarding status PARTIAL → VERIFIED in the handoff
+
+### TASK-20260711-004 — Consume validated login return path (`next`)
+
+Status: proposed (not started)
+Owner: unassigned
+Branch: TBD
+Issue/PR: #962
+
+#### Objective
+Independent auth-UX follow-up: make the login success handler safely consume the validated
+`?next=<path>` return path (surfaced by the #958 guard, which sets `next` but the login flow
+does not yet honor it). **Not part of the onboarding persistence work** — a separate later
+increment under the current priority order.
+
+#### Acceptance criteria
+- [ ] login honors a validated internal `next` (rejects external/`//`/non-`/` per
+  `lib/redirect.ts::resolveNextPath`) and returns the guest to the original page
+- [ ] no open-redirect; no change to onboarding-status-based routing when `next` is absent
 
 ### TASK-20260710-006 — P2: frontend build gate + frontend test visibility baseline (Phase 3 gate)
 

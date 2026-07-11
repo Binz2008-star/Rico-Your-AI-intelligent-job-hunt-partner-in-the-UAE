@@ -67,8 +67,18 @@ tested by disrupting production.
 5. `/profile` guest connection error — **RESOLVED via PR #958** (guest → `/login?next=%2Fprofile`,
    no private request fired), **production-verified 2026-07-11**.
 
-**Next:** close the onboarding persistence gap (**#963**) with a verified account, then re-run
-final-submit + logout/login completion to lift PARTIAL → VERIFIED. **Do not start the
+**Next (binding order — do not skip to #963):**
+1. First implement the **smallest #960** exact-CV-duplicate / idempotency foundation
+   (server-side dedupe, atomic idempotency, quota + primary-CV invariants; no onboarding
+   wiring). — `TASK-20260711-002`.
+2. Then **#963** onboarding CV persistence + extracted-field hydration, wired on top of #960.
+   — `TASK-20260711-003`.
+3. Then an **owner production smoke** of final-submit persistence + logout→login completion
+   with a verified account.
+4. **Only then** mark onboarding status **PARTIAL → VERIFIED**.
+
+`#962` (safe consumption of the login return path — `TASK-20260711-004`) is a **separate,
+later** auth-UX increment, **not** part of this persistence work. **Do not start the
 workspace/dashboard migration** until onboarding is fully verified.
 
 ## ⚠️ Evidence correction (2026-07-10) — read before using the "completion signal" notes below
