@@ -239,10 +239,10 @@ onboarding out of PARTIAL.
 
 ### TASK-20260711-004 — Consume validated login return path (`next`)
 
-Status: proposed (not started)
-Owner: unassigned
-Branch: TBD
-Issue/PR: #962
+Status: done (merged as #981; CI green, Vercel READY)
+Owner: Claude
+Branch: merged as `c7aea42…`
+Issue/PR: #962 / #981
 
 #### Objective
 Independent auth-UX follow-up: make the login success handler safely consume the validated
@@ -251,9 +251,38 @@ does not yet honor it). **Not part of the onboarding persistence work** — a se
 increment under the current priority order.
 
 #### Acceptance criteria
-- [ ] login honors a validated internal `next` (rejects external/`//`/non-`/` per
+- [x] login honors a validated internal `next` (rejects external/`//`/non-`/` per
   `lib/redirect.ts::resolveNextPath`) and returns the guest to the original page
-- [ ] no open-redirect; no change to onboarding-status-based routing when `next` is absent
+- [x] no open-redirect; no change to onboarding-status-based routing when `next` is absent
+
+#### Verification
+- vitest `login-onboarding-routing.test.tsx`: 7 passed (valid `next` honored, open-redirect
+  ignored, onboarding-priority preserved for incomplete users)
+- `npm run build` green; CI green (pytest/frontend/Playwright/Postgres); Vercel READY
+
+### TASK-20260711-006 — Subscription gating identity-key invariant + audit follow-ups
+
+Status: partial (test locked via #982; two follow-ups open for owner triage)
+Owner: Claude / owner triage
+Branch: merged as `60978ae…`
+Issue/PR: #982
+
+#### Objective
+Harden the per-account subscription/plan gating surfaced by an owner question ("is plan
+activation per account, per package?"). Confirmed: gating is per-account, package-driven,
+active-and-not-expired gated, and not special-cased per account.
+
+#### Done
+- [x] Locked the identity-key invariant with tests: plan gating must key on the account email
+  (`resolve_effective_user_plan` looks up by the stored email verbatim; a non-email identity
+  silently degrades to FREE). Invariant holds at all current authenticated call sites.
+
+#### Open follow-ups (each its own scoped PR when picked up)
+- [ ] Per-user entitlement override columns (`monthly_ai_message_limit`, …) are read by
+  `get_subscription`/`upsert_subscription` but **ignored** by `resolve_effective_user_plan`
+  (documented as reserved). Either apply them or remove them to avoid a silent trap.
+- [ ] `count_saved_jobs` fallback counts rows with no `user_id` toward a specific user's quota
+  (data-isolation smell; only triggers when the primary repo read fails).
 
 ### TASK-20260710-006 — P2: frontend build gate + frontend test visibility baseline (Phase 3 gate)
 
