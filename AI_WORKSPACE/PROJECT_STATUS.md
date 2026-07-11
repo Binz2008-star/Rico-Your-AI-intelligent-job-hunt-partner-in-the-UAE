@@ -8,23 +8,24 @@
 
 | Field | Current value |
 | --- | --- |
-| **Last runtime baseline** | `50f73f04ecf078ae5993c2f805e5ea89351360d6` (`origin/main`). `origin/main` merged into `feat/user-documents-dedup` at `fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e`. Only documentation/control-plane files changed in the merge. |
+| **Last runtime baseline** | `e98fd59896bec492d770a09b0f6c2d03ad5e2f33` (`origin/main` post-#969 merge). `feat/user-documents-dedup` was squash-merged into `main` as `e98fd59896bec492d770a09b0f6c2d03ad5e2f33`. Only the user-documents dedupe runtime changes and docs updates were merged. |
 | **Coordination control plane** | PR `#970` merged; `PROJECT_STATUS.md` + `START_HERE.md` + root agent rules are now the mandatory cold-start path. |
-| **Current execution phase** | PR `#969` final merge readiness; migration 037 applied to production Neon |
-| **Single active runtime objective** | Exact CV/document duplicate protection and atomic idempotency: issue `#960`, draft PR `#969` |
-| **Active PR branch/head** | `feat/user-documents-dedup` @ `fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e` |
+| **Current execution phase** | PR `#969` merged, deployed to production, and smoke-verified; migration 037 applied to production Neon |
+| **Single active runtime objective** | `#963` — persist confirmed onboarding CV and hydrate extracted profile fields |
+| **Active PR branch/head** | `main` @ `e98fd59896bec492d770a09b0f6c2d03ad5e2f33` (next track is #963; do not start it in this session) |
 | **Next runtime objective** | `#963` — persist confirmed onboarding CV and hydrate extracted profile fields |
 | **Owner gate after #963** | Authenticated production smoke; only then mark onboarding `VERIFIED` |
-| **Last updated** | 2026-07-11 (release check) |
+| **Last updated** | 2026-07-11T04:10:00Z (release smoke complete) |
 
 ## Execution lock
 
 ```text
 ACTIVE NOW
-#969 / #960 — exact CV/document dedupe + atomic idempotency
+#963 — onboarding CV persistence + profile hydration
+(do not start in this session; start in a fresh #963 branch from `main`)
 
 NEXT, NOT STARTED
-#963 — onboarding CV persistence + profile hydration
+(none — #969 is complete and verified)
 
 LATER
 #962 — safe login return path
@@ -79,7 +80,7 @@ Before making any write:
 #969 independently reviewed READY + migration 037 applied to Neon
   -> final required CI green
   -> owner approves merge
-  -> deploy and smoke the canonical file-upload path
+  -> deploy and smoke the canonical file-upload path [DONE]
   -> start #963 on a fresh branch from updated main
   -> persist onboarding CV + hydrate profile
   -> authenticated owner smoke
@@ -102,7 +103,8 @@ Therefore `#967` is blocked. When it resumes, it must rebase from current `main`
 
 | PR | Track | Decision |
 | ---: | --- | --- |
-| `#969` | CV/file persistence foundation | **Only active implementation PR**; migration 037 applied to production Neon, final merge readiness pending required CI green |
+| `#969` | CV/file persistence foundation | **Merged, deployed, and smoke-verified**; migration 037 applied to production Neon |
+| `#963` | Onboarding CV persistence + profile hydration | **Next active implementation track**; do not start in this session |
 | `#968` | Workspace governance for `#965` | Hold; docs-only, not permission for more agentic work |
 | `#967` | Pre-launch gate/waitlist | Hold; blocked by separate scope and migration collision |
 | `#965` | Read-only journey-state seed | Hold draft; no follow-on without owner DEC |
@@ -133,7 +135,15 @@ Stop and ask the owner instead of continuing when:
 ## Next exact action
 
 ```text
-Run and verify required CI for PR #969 at fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e.
-Mark the PR ready for review once pytest, frontend, playwright, postgres-integration,
-and Vercel are green. Do not merge, deploy, start #963, or open new runtime work.
+PR #969 production verification PASS.
+- merged SHA: e98fd59896bec492d770a09b0f6c2d03ad5e2f33
+- deployed Render SHA: e98fd59896bec492d770a09b0f6c2d03ad5e2f33
+- Render /health: HTTP 200 status=ok
+- Vercel /proxy/health: HTTP 200 status=ok
+- exact-byte dedupe smoke: first upload duplicate=false; second upload duplicate=true; same id (0cb0b1d1-0037-408e-823f-c7eccb337582) and filename (rico-969-smoke-20260711040844.pdf)
+- document count: stored 4 -> 5 -> 5 -> 4 (baseline restored)
+- quota: other_documents 0 -> 1 -> 1 -> 0 (baseline restored)
+- primary CV invariant: 1 primary (profile-cv, legacy); synthetic not primary
+- cleanup: synthetic document deleted; baseline restored
+- next active track: #963 (do not start in this session)
 ```
