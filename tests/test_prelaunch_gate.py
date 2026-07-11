@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -150,10 +150,10 @@ class TestPrelaunchHTTPGate:
     def test_prelaunch_access_decision_reflects_authenticated_allowlist(self):
         from src.api.auth import create_access_token
 
-        client = TestClient(app, raise_server_exceptions=False)
-        token = create_access_token({"sub": "internal@example.com", "role": "user"})
-        client.cookies.set("access_token", token)
         with patch.dict(os.environ, WAITLIST_ENV, clear=False):
+            token = create_access_token({"sub": "internal@example.com", "role": "user"})
+            client = TestClient(app, raise_server_exceptions=False)
+            client.cookies.set("access_token", token)
             response = client.get("/api/v1/prelaunch/access")
 
         assert response.status_code == 200
