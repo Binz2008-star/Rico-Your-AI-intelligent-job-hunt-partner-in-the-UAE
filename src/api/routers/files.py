@@ -12,6 +12,7 @@ Routes:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from typing import Any, Optional
@@ -23,7 +24,7 @@ from src.api.deps import get_current_user
 from src.api.rate_limit import LIMIT_UPLOAD, limiter
 from src.repositories import profile_repo
 from src.repositories.profile_repo import upsert_profile
-from src.rico_db import RicoDB
+from src.rico_db import DocumentConflictError, RicoDB
 from src.services.subscription_gating import (
     check_document_quota,
     enforce_document_quota,
@@ -184,9 +185,6 @@ async def upload_file(
     if doc_type not in _ALLOWED_DOC_TYPES:
         raise HTTPException(status_code=422, detail=f"doc_type must be one of {sorted(_ALLOWED_DOC_TYPES)}")
 
-    # Enforce document storage quota before reading the file body
-    enforce_document_quota(user_id, doc_type)
-
     declared_size = getattr(file, "size", None)
     if isinstance(declared_size, int) and declared_size > _MAX_BYTES:
         raise HTTPException(
@@ -214,18 +212,60 @@ async def upload_file(
     if not _db.available:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
+    # Exact-duplicate protection (#960): SHA-256 of the original bytes. An exact
+    # re-upload returns the existing document and must NOT consume quota — so the
+    # dedupe check runs BEFORE quota enforcement (a re-upload of the only CV must
+    # not be blocked by the storage limit). This is a cheap pre-check, not the
+    # source of truth: the atomic get_or_create below is what actually decides
+    # `duplicate`, because a concurrent identical upload can still land between
+    # this check and the insert.
+    content_hash = hashlib.sha256(data).hexdigest()
+    existing = _db.find_user_document_by_hash(user_id, doc_type, content_hash)
+    if existing:
+        logger.info(
+            "file_upload_duplicate user=%s doc_type=%s id=%s", user_id, doc_type, existing["id"]
+        )
+        return {
+            "ok": True,
+            "id": existing["id"],
+            "filename": existing["filename"],
+            "doc_type": doc_type,
+            "duplicate": True,
+        }
+
+    # New (distinct) document — quota applies exactly as before. A quota check
+    # here that's immediately followed by a duplicate-after-all race (below) is
+    # harmless: enforce_document_quota only counts existing rows, and a raced
+    # duplicate creates no new row, so the count is unaffected either way.
+    enforce_document_quota(user_id, doc_type)
+
     safe_name = _safe_filename(file.filename)
-    doc_id = _db.save_user_document(
+    result = _db.get_or_create_user_document(
         user_id=user_id,
         filename=safe_name,
         original_filename=file.filename or safe_name,
         doc_type=doc_type,
         file_size=len(data),
         is_primary=False,
+        content_hash=content_hash,
     )
+    is_duplicate = not result["inserted"]
 
-    logger.info("file_uploaded user=%s filename=%s doc_type=%s id=%s", user_id, safe_name, doc_type, doc_id)
-    return {"ok": True, "id": doc_id, "filename": safe_name, "doc_type": doc_type}
+    logger.info(
+        "file_uploaded user=%s filename=%s doc_type=%s id=%s duplicate=%s",
+        user_id, result["filename"], doc_type, result["id"], is_duplicate,
+    )
+    # `filename` is always the canonical stored filename — the just-uploaded
+    # name on a real insert, or the EXISTING row's name when this request lost
+    # a concurrent duplicate-insert race (never the incoming filename in that
+    # case, since nothing of this upload was actually persisted).
+    return {
+        "ok": True,
+        "id": result["id"],
+        "filename": result["filename"],
+        "doc_type": result["doc_type"],
+        "duplicate": is_duplicate,
+    }
 
 
 # ── Delete file ────────────────────────────────────────────────────────────────
@@ -265,7 +305,10 @@ def update_file(file_id: str, body: FileUpdateRequest, request: Request) -> dict
     if not _db.available:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
-    updated = _db.update_user_document(user_id, file_id, label=body.label, doc_type=body.doc_type)
+    try:
+        updated = _db.update_user_document(user_id, file_id, label=body.label, doc_type=body.doc_type)
+    except DocumentConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not updated:
         raise HTTPException(status_code=404, detail="File not found")
 

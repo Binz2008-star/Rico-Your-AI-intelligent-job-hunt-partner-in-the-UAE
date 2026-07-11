@@ -221,7 +221,14 @@ class TestSecondUpload:
         with patch("src.api.routers.files.enforce_document_quota"), \
              patch("src.api.routers.files._db") as mock_db:
             mock_db.available = True
-            mock_db.save_user_document.return_value = "doc-other-2"
+            mock_db.find_user_document_by_hash.return_value = None
+            mock_db.get_or_create_user_document.return_value = {
+                "id": "doc-other-2",
+                "filename": "certificates.pdf",
+                "doc_type": "other",
+                "is_primary": False,
+                "inserted": True,
+            }
             r_up = auth_client.post(
                 "/api/v1/user/files?doc_type=other",
                 files={"file": ("certificates.pdf", fake_pdf, "application/pdf")},
@@ -243,6 +250,9 @@ class TestSecondUpload:
                    return_value=_resolved_plan("free", cv_limit=1)), \
              patch("src.api.routers.files._db") as mock_db:
             mock_db.available = True
+            # New exact-dedupe pre-check (#960): a distinct 2nd CV is not a duplicate,
+            # so quota enforcement still runs and returns 422.
+            mock_db.find_user_document_by_hash.return_value = None
             r = auth_client.post(
                 "/api/v1/user/files?doc_type=cv",
                 files={"file": ("second_cv.pdf", fake_pdf, "application/pdf")},
@@ -255,4 +265,4 @@ class TestSecondUpload:
         # Clear, actionable error — not a silent failure
         assert detail.get("message")
         assert "upgrade" in str(detail.get("upgrade_hint", "")).lower()
-        mock_db.save_user_document.assert_not_called()
+        mock_db.get_or_create_user_document.assert_not_called()
