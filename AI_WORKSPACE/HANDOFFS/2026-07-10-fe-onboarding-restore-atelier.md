@@ -1,4 +1,4 @@
-# Handoff — Onboarding restoration + Atelier migration (MERGED — production deploy confirmed; browser smoke PARTIAL)
+# Handoff — Onboarding restoration + Atelier migration (MERGED — production deploy confirmed; browser smoke PARTIAL: persistence gap)
 
 > **For the next Claude session (continuing on a different account).** Pick up from
 > branch `claude/onboarding-restore-atelier` (based on `origin/main` @ `c43bedc`). This
@@ -23,58 +23,53 @@ The work shipped as **PR #955** (`feat(onboarding): restore /onboarding + Atelie
     so success confirms the backend at `3cf5398` is live and carries the new read-only
     `GET /api/v1/onboarding/status` endpoint + strict reader.
 
-### Production verification — PARTIAL (owner-run browser smoke, 2026-07-10)
+### Production verification — PARTIAL: persistence gap (owner-run, verified account, 2026-07-11)
 
-Deployments are confirmed live via CI. The **owner ran a manual production browser smoke on
-2026-07-10** (the CI/agent container cannot reach production — the network policy denies
-`rico-job-automation-api.onrender.com` and `ricohunt.com` with `403 CONNECT`).
+Deployments are confirmed live via CI. **Correction to the 2026-07-10 note:** a verified
+production test account **was successfully created and used** — email verification worked and
+is expected behavior, so it is **not** the reason for PARTIAL. The remaining PARTIAL is due to
+an **onboarding persistence gap**, not account availability. (All production checks are
+owner-run: the CI/agent container cannot reach production — `403 CONNECT` to
+`rico-job-automation-api.onrender.com` / `ricohunt.com`.)
 
-**Status remains PARTIAL.** The new-account authenticated onboarding flows could not be
-exercised end-to-end because creating a new account requires **email verification** — this is
-**expected production security behavior** (this repo uses FastAPI + JWT + custom email
-verification). Email verification must **not** be disabled in production to make these checks
-easier.
-
-**PASS**
-- unauthenticated `/onboarding` → `/signup?next=%2Fonboarding`
-- completed authenticated user → `/command`
-- EN/AR and RTL on login / signup / settings / command
-- mobile layout
-- adjacent public pages
-- no observed cross-user data leakage
-- basic performance acceptable
-
-**BLOCKED / NOT VERIFIED** (gated by the required email verification for a new account)
+**PASS (owner-verified in production, 2026-07-11)**
+- registration and email verification
 - authenticated **incomplete** user → `/onboarding`
-- **Skip for now** does not persist completion
-- successful onboarding **submit** persists completion
-- CV upload / rejection / retry within onboarding
+- the three onboarding steps render and progress
+- **Skip for now** → `/command`, and **Skip does not persist completion** (approved contract —
+  no `onboarding_skipped` / schema change)
+- real CV upload, parsing, and extracted-data review
+- unauthenticated `/onboarding` → `/signup?next=%2Fonboarding`; completed user → `/command`
+- EN / AR / RTL / mobile; adjacent public pages; no observed cross-user data leakage; basic
+  performance acceptable
 
-**Backend `503` read-failure contract:** verified through **automated tests only**
-(`tests/test_onboarding_status_endpoint.py`, `tests/test_onboarding_repo_readonly.py`). It
-must **not** be tested by disrupting production, so it is deliberately excluded from the
-browser smoke.
+**Remaining gap (why status stays PARTIAL)**
+- the confirmed onboarding CV is **not persisted to My Files**
+- extracted **years / current role / target roles** are **not fully hydrated** into the profile
+- **final submit persistence** and the **logout → login completion** smoke **cannot be closed**
+  until the persistence gap is fixed
 
-**Findings (owner-observed, recorded as classified):**
-1. `/onboarding` redirect takes ~2–3s. **PASS with a low-priority latency note** — not a
-   functional failure.
-2. `/settings` renders the application shell for a guest after logout. **P2 protected-route /
-   auth-boundary UX bug.** The page showed **no private settings data**; cookie persistence
-   and data leakage are **not** claimed (neither is verified).
-3. `/command` public access is **intentional current behavior** — it supports guest/public
-   chat and stays public unless a separate product decision changes it.
-4. The initial Rico message remains **English while the Arabic UI is active** — **confirmed
-   i18n UX bug**.
-5. `/profile` showed a connection error for a guest/incomplete account. **Unconfirmed** —
-   retest with a completed authenticated account (likely related to missing protected-route
-   gating).
+Tracked as **#963** (onboarding CV persistence + extracted-field hydration). Related recorded
+follow-ups: **#960** (exact-duplicate protection + idempotency) and **#962** (safe consumption
+of the login return path — the `next` gap surfaced by #958).
 
-**Next:** the BLOCKED onboarding flows (incomplete→onboarding, skip non-persistence, submit
-persistence, CV upload/rejection/retry) still require an owner run with a **verified**
-account before this phase is called fully verified. Findings #2 (P2 auth-boundary) and #4
-(i18n) are follow-up bugs, and #5 needs a retest — track them separately; they are outside
-this onboarding PR's scope. **Do not start the workspace/dashboard migration** until the
-blocked flows pass.
+**Backend `503` read-failure contract:** verified via **automated tests only**
+(`tests/test_onboarding_status_endpoint.py`, `tests/test_onboarding_repo_readonly.py`); never
+tested by disrupting production.
+
+**Findings (from the 2026-07-10 smoke) — current disposition:**
+1. `/onboarding` redirect ~2–3s — **PASS** with a low-priority latency note.
+2. `/settings` rendered the app shell for a guest — **RESOLVED via PR #958** (shared auth
+   guard; guest → `/login?next=%2Fsettings`, no private API), **production-verified 2026-07-11**.
+3. `/command` public access — **intentional**, unchanged.
+4. Initial Rico message stays **English while the Arabic UI is active** — **confirmed i18n bug,
+   still open** (out of scope here; not addressed in #958).
+5. `/profile` guest connection error — **RESOLVED via PR #958** (guest → `/login?next=%2Fprofile`,
+   no private request fired), **production-verified 2026-07-11**.
+
+**Next:** close the onboarding persistence gap (**#963**) with a verified account, then re-run
+final-submit + logout/login completion to lift PARTIAL → VERIFIED. **Do not start the
+workspace/dashboard migration** until onboarding is fully verified.
 
 ## ⚠️ Evidence correction (2026-07-10) — read before using the "completion signal" notes below
 

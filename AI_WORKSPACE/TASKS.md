@@ -152,10 +152,10 @@ and unchanged (`RICO_ENABLE_AUTO_APPLY=false` in prod); do NOT weaken the trust 
 
 ### TASK-20260710-005 — P2: resolve `/onboarding` hybrid dead-UI state (Phase 4 gate)
 
-Status: proposed (audit 2026-07-10; **blocks Phase 4**, not phases 1–3)
-Owner: unassigned
-Branch: TBD
-Issue/PR: none yet
+Status: done (resolved via PR #955, merged + prod-deployed 2026-07-10; main `1238ff9` carries it)
+Owner: Claude
+Branch: `claude/onboarding-completion-signal-j8qmxz` (merged)
+Issue/PR: #955
 
 #### Objective
 `next.config.js` redirects `/onboarding` → `/command` while a real 466-line
@@ -165,8 +165,52 @@ route live (remove redirect) or strip `page.tsx` to nothing/thin passthrough. Mu
 resolved before the Phase 4 onboarding-shell work in `DEC-20260710-001`.
 
 #### Acceptance criteria
-- [ ] Route is in exactly one legal state per the No Dead UI rule.
-- [ ] CLAUDE.md "Key Frontend Files" entry for onboarding matches reality afterwards.
+- [x] Route is in exactly one legal state per the No Dead UI rule — `/onboarding` is now
+  live/reachable (the `/onboarding → /command` redirect was removed; page rewritten to the
+  Atelier island), routing on the backend `GET /api/v1/onboarding/status` signal.
+- [x] `/onboarding` is the real authenticated first-run flow per `DEC-20260710-004`.
+
+### TASK-20260711-001 — Auth guard for authenticated account pages (/settings, /profile)
+
+Status: done (merged PR #958 → main `1238ff9`; production-verified 2026-07-11)
+Owner: Claude
+Branch: `fix/guard-authenticated-account-pages` (merged)
+Issue/PR: #958
+
+#### Objective
+Guests could render the private AppShell (`/settings`) or fire a private request that showed
+a misleading connection error (`/profile`). Add a shared `useRequireAuth` + `AuthGate` guard
+so authenticated-only pages wait for auth readiness, redirect guests to
+`/login?next=<encoded path>`, never render the private shell, and fire no private API for a
+guest. No backend/JWT/cookie/logout change; `/command` stays public; `/onboarding` unchanged.
+
+#### Acceptance criteria
+- [x] guest `/settings` → `/login?next=%2Fsettings`, no shell, no private API — **prod-verified**
+- [x] guest `/profile` → `/login?next=%2Fprofile`, no shell, no private request — **prod-verified**
+- [x] authenticated users retain normal access; neutral `AuthGate` while resolving; no loop
+- [x] resolves smoke findings **#2** (`/settings` auth-boundary) and **#5** (`/profile` error)
+- Follow-up (NOT started): apply the same guard to `/applications`, `/upload`, `/flow`,
+  `/queue`; and the login-return-path `next` gap is tracked as **#962**.
+
+### TASK-20260711-002 — Onboarding persistence gap (lifts onboarding PARTIAL → VERIFIED)
+
+Status: blocked/tracked (do not start yet; recorded for the ledger — issues already filed)
+Owner: unassigned
+Branch: TBD
+Issue/PR: #963 (onboarding CV persistence + extracted-field hydration); related #960
+(exact-duplicate protection + idempotency), #962 (safe consumption of login return path)
+
+#### Objective
+Verified-account production smoke (2026-07-11) passed registration+email verification,
+incomplete→`/onboarding`, the three steps, Skip→`/command` (no completion persisted), and real
+CV upload/parsing/review. Remaining gap keeps onboarding **PARTIAL**: the onboarding CV is not
+persisted to My Files, extracted years/current-role/target-roles are not fully hydrated, and
+final-submit persistence + logout→login completion cannot be closed until this is fixed.
+
+#### Acceptance criteria
+- [ ] onboarding CV persists to My Files; extracted fields hydrate into the profile (#963)
+- [ ] final-submit persistence + logout→login completion smoke pass with a verified account
+- [ ] then lift onboarding status PARTIAL → VERIFIED in the handoff
 
 ### TASK-20260710-006 — P2: frontend build gate + frontend test visibility baseline (Phase 3 gate)
 
