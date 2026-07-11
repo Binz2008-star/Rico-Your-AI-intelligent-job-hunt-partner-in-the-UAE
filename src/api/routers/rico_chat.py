@@ -309,8 +309,10 @@ def get_profile(user_id: str):
     return profile_repo.get_profile(user_id)
 
 
-def upsert_profile(user_id: str, updates: dict[str, Any], cv_text: str | None = None):
-    return profile_repo.upsert_profile(user_id=user_id, updates=updates, cv_text=cv_text)
+def upsert_profile(user_id: str, updates: dict[str, Any], cv_text: str | None = None, require_db: bool = False):
+    return profile_repo.upsert_profile(
+        user_id=user_id, updates=updates, cv_text=cv_text, require_db=require_db
+    )
 
 
 def list_saved_searches(user_id: str, limit: int = 20):
@@ -1927,10 +1929,36 @@ async def confirm_cv_profile(
                     },
                 )
 
-        # Update permanent profile (best-effort: upsert_profile handles its own
-        # DB errors and never raises). Runs only after the My Files write above
-        # has already committed for authenticated users.
-        upsert_profile(user_id=resolved_user_id, updates=profile_updates, cv_text=confirmed_cv_text)
+        # Persist the profile fields to Neon. This is REQUIRED (require_db=True),
+        # NOT best-effort: without it upsert_profile would swallow a silent Neon
+        # failure and return the JSON memory mirror, and confirm would report
+        # success while target_roles/skills/years/cv_status never actually
+        # persisted (the same false-success class as the My Files write above).
+        # On failure we return a non-2xx BEFORE marking onboarding complete, so
+        # the user retries instead of believing their profile saved. The retry
+        # is safe: the My Files write above dedupes on content_hash, and this
+        # upsert is a keyed UPSERT.
+        try:
+            upsert_profile(
+                user_id=resolved_user_id,
+                updates=profile_updates,
+                cv_text=confirmed_cv_text,
+                require_db=True,
+            )
+        except Exception as _profile_exc:
+            logger.exception(
+                "cv_confirm_profile_persist_failed user=%s error=%s request_ref=%s",
+                resolved_user_id, str(_profile_exc), request_ref,
+            )
+            _metrics.record_request((time.time() - start_time) * 1000)
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "ok": False,
+                    "status": "profile_persistence_failed",
+                    "message": "We couldn't save your CV. Please try again.",
+                },
+            )
         record_profile_optimization_usage(resolved_user_id)
 
         # Onboarding completion must reflect the SAME minimum-profile gate

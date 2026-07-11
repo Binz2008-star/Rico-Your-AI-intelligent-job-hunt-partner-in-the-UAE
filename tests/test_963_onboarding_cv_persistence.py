@@ -654,6 +654,75 @@ class TestConfirmCvProfileDocumentPersistenceFailure:
         legacy_mark_mock.assert_not_called()
 
 
+class TestConfirmCvProfileProfilePersistenceFailure:
+    """#975 follow-up blocker: a silent Neon failure of the PROFILE-field write
+    must NOT be masked by the JSON memory mirror and reported as success. The
+    profile write is require_db=True, so on a DB failure confirm returns a
+    non-2xx and never marks onboarding complete — and a retry is safe."""
+
+    def _post(self, client, *, upsert_side_effect):
+        get_or_create_mock = MagicMock()
+        upsert_mock = MagicMock(side_effect=upsert_side_effect)
+        record_usage_mock = MagicMock()
+        with (
+            patch("src.api.routers.rico_chat.upsert_profile", upsert_mock),
+            patch("src.api.routers.rico_chat.get_profile", return_value=None),
+            patch("src.services.profile_context_resolver.evaluate_minimum_profile", return_value=(True, [])),
+            patch("src.repositories.onboarding_repo.set_onboarding_status") as set_status_mock,
+            patch("src.services.subscription_gating.enforce_profile_optimization_allowed"),
+            patch("src.services.subscription_gating.record_profile_optimization_usage", record_usage_mock),
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact",
+                return_value=_ARTIFACT,
+            ),
+            patch("src.rico_db.RicoDB", _make_fake_ricodb(get_or_create_mock)),
+        ):
+            r = client.post(
+                f"/api/v1/rico/confirm-cv-profile?user_id={_AUTH_UID}",
+                json=_confirm_payload(upload_id="artifact-1"),
+            )
+        return r, get_or_create_mock, upsert_mock, set_status_mock, record_usage_mock
+
+    def test_profile_db_failure_returns_non_2xx_no_completion(self, client):
+        """require_db=True: a raised profile-persist error must surface as a
+        non-2xx with no onboarding completion and no usage recorded — never a
+        false success from the JSON mirror."""
+        r, get_or_create_mock, upsert_mock, set_status_mock, record_usage_mock = self._post(
+            client, upsert_side_effect=RuntimeError("neon write failed"),
+        )
+        assert r.status_code == 500, r.text
+        body = r.json()
+        assert body["ok"] is False
+        assert body["status"] == "profile_persistence_failed"
+        assert body["status"] != "profile_updated"
+        # The My Files write ran first (and is idempotent), but nothing
+        # downstream of the failed profile write ran.
+        get_or_create_mock.assert_called_once()
+        record_usage_mock.assert_not_called()
+        set_status_mock.assert_not_called()
+
+    def test_confirm_is_retry_safe_after_profile_db_failure(self, client):
+        """A confirm that failed on a transient Neon error can be retried
+        safely: the retry re-runs the idempotent My Files write (dedupes on
+        content_hash) and the keyed profile UPSERT, and succeeds end-to-end."""
+        # Attempt 1: Neon down -> 500, no completion.
+        r1, goc1, _u1, set1, _r1 = self._post(client, upsert_side_effect=RuntimeError("neon down"))
+        assert r1.status_code == 500
+        assert r1.json()["status"] == "profile_persistence_failed"
+        set1.assert_not_called()
+        # Attempt 2: Neon recovered -> full success.
+        r2, goc2, _u2, set2, _r2 = self._post(client, upsert_side_effect=None)
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["status"] == "profile_updated"
+        set2.assert_called_once_with(_AUTH_UID, ONBOARDING_COMPLETED)
+        # The document write happened on BOTH attempts and is idempotent — a
+        # retry never creates a duplicate row (real dedupe proven in
+        # tests/integration + tests/test_user_documents_dedup.py).
+        goc1.assert_called_once()
+        goc2.assert_called_once()
+
+
 # ── repo: Blocker 2 — expired artifacts are actually deleted ─────────────────
 
 class TestCvUploadArtifactPurge:
@@ -686,3 +755,50 @@ class TestCvUploadArtifactPurge:
         with patch("src.db.get_db_connection", return_value=conn):
             assert purge_expired_cv_upload_artifacts() == 0
         conn.rollback.assert_called_once()
+
+
+# ── repo contract: upsert_profile(require_db=...) ────────────────────────────
+
+class TestProfileRepoRequireDb:
+    """Locks the require_db contract that confirm-cv-profile relies on: with
+    require_db=True a DB write failure RAISES (no false success masked by the
+    JSON mirror); with the default it stays swallowed (mirror returned)."""
+
+    def _patched(self, *, tx_raises: bool):
+        from contextlib import contextmanager
+        import src.repositories.profile_repo as pr
+
+        @contextmanager
+        def _tx():
+            if tx_raises:
+                raise RuntimeError("neon boom")
+            yield MagicMock()
+
+        mem = MagicMock()
+        mem.upsert_profile_from_dict.return_value = "MIRROR_PROFILE"
+        return patch.multiple(
+            pr,
+            _memory=MagicMock(return_value=mem),
+            _db=MagicMock(return_value=MagicMock()),   # truthy DB
+            _db_transaction=_tx,
+        )
+
+    def test_require_db_true_raises_on_db_failure(self):
+        import src.repositories.profile_repo as pr
+        with self._patched(tx_raises=True):
+            with pytest.raises(Exception):
+                pr.upsert_profile("alice@rico.ai", {"skills": ["x"]}, require_db=True)
+
+    def test_require_db_false_swallows_db_failure_and_returns_mirror(self):
+        import src.repositories.profile_repo as pr
+        with self._patched(tx_raises=True):
+            result = pr.upsert_profile("alice@rico.ai", {"skills": ["x"]}, require_db=False)
+        assert result == "MIRROR_PROFILE"
+
+    def test_require_db_true_no_db_configured_raises(self):
+        import src.repositories.profile_repo as pr
+        mem = MagicMock()
+        mem.upsert_profile_from_dict.return_value = "MIRROR_PROFILE"
+        with patch.multiple(pr, _memory=MagicMock(return_value=mem), _db=MagicMock(return_value=None)):
+            with pytest.raises(Exception):
+                pr.upsert_profile("alice@rico.ai", {"skills": ["x"]}, require_db=True)
