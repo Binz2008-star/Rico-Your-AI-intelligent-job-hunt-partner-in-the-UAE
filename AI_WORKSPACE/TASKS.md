@@ -106,12 +106,15 @@ supersedes it (revise-in-place if the owner unfreezes the hero and rules on #899
 #933 does not merge). Do NOT merge #933 as below-the-fold-only.
 
 #### Owner-gated decisions before implementation
-- [ ] Unfreeze the landing hero for PR 1 + decide #899's fate.
-- [ ] Canonical onboarding flow: reference intent-flow vs production CV-first.
-- [ ] Adopt the reference workspace left-sidebar (Shell C) in production?
+- [x] Unfreeze the landing hero for PR 1 + decide #899's fate — done: #899 closed as
+      superseded by #936/#937 (full public-landing parity, merged 2026-07-10).
+- [x] Canonical onboarding flow: reference intent-flow vs production CV-first — **reference
+      intent-flow** (`DEC-20260712-001`).
+- [x] Adopt the reference workspace left-sidebar (Shell C) in production? — **yes**
+      (`DEC-20260712-001`).
 - [ ] Support contact form + auth Google button: omit (recommended) or greenlight as separate
       backend projects.
-- [ ] Approve starting PR 0 (shared Atelier UI kit).
+- [ ] Approve starting PR 0 (shared Atelier UI kit) — approved in chat 2026-07-12; starting now.
 
 #### Constraints
 - Excluded/gated (DEC-20260710-002 §3): `/command` (own DEC); no backend/auth/billing/Neon/

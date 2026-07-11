@@ -28,6 +28,48 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260712-001 — Onboarding and workspace-shell targets for the `/design-preview` migration (owner decisions for `TASK-20260710-003` Phase 4/5/6)
+
+Status: accepted
+Date: 2026-07-12
+Owner: Roben (decision, given in chat) / Claude (recorded)
+Related task: TASK-20260710-003
+
+#### Context
+`DEC-20260710-002` set `/design-preview` as the approved production target and listed five
+owner-gated decisions blocking Phase 4 (onboarding) and Phase 5/6 (workspace) of the
+migration. Two of those five are resolved here. The landing-hero decision (#899's fate) is
+already resolved separately — #899 was closed as superseded by #936/#937 (see PR #936's
+description). The onboarding hybrid-dead-UI blocker (`TASK-20260710-005`) is also already
+resolved (merged #955) — `/onboarding` is live and reachable, so the technical prerequisite
+for Phase 4 is clear independent of this decision.
+
+#### Decision
+1. **Onboarding flow target: the reference intent-flow**, not the current production
+   CV-first flow. Phase 4 (`PR 4 — onboarding`) redesigns the flow itself to match the
+   `/design-preview` reference intent-flow — a flow/content change, not a skin-only restyle
+   of the existing CV-first steps.
+2. **Workspace shell: adopt the reference left-sidebar (Shell C)** for the authenticated
+   workspace (dashboard/profile/settings/applications/upload/pricing). Phase 5/6 rebuilds the
+   workspace chrome around Shell C, matching `/design-preview`.
+
+Both remain governed by every guardrail in `DEC-20260710-002` (one objective per PR, owner
+visual approval before merge, no backend/auth/billing/Neon/schema change without separate
+approval, no shadcn without its own DEC, `/command` excluded and requires its own DEC).
+
+#### Consequences
+- Positive: removes two of the five blockers on `TASK-20260710-003`'s owner-gated checklist;
+  Phase 4 and Phase 5/6 can now be scoped and drafted once PR 0/2/3 land.
+- Negative/trade-off: onboarding Phase 4 is now confirmed to be a real flow rebuild (bigger
+  than a restyle) — expect its own multi-step design/implementation pass, not a quick pass.
+
+#### Follow-up
+- [ ] Remaining open owner-gated items from `DEC-20260710-002`: support contact form + auth
+      Google button (omit vs. build as separate backend project); approve starting PR 0.
+- [ ] Scope Phase 4 (onboarding) against the `/design-preview` intent-flow reference screens
+      once PR 0–3 are merged.
+- [ ] Scope Phase 5/6 (workspace, Shell C) once PR 0–3 are merged.
+
 ### DEC-20260710-004 — `/onboarding` is the real authenticated first-run setup flow (supersedes "chat is the app" routing for `/onboarding` only)
 
 Status: accepted
