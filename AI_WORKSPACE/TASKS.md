@@ -197,32 +197,32 @@ guest. No backend/JWT/cookie/logout change; `/command` stays public; `/onboardin
 
 > **Binding sequence (recorded 2026-07-11; do not reorder):**
 > `#960` → `#963` → owner production smoke → onboarding PARTIAL becomes **VERIFIED**.
-> `#962` is a **separate, later** increment under the current priority order (not part of the
-> onboarding persistence work). None of #960/#962/#963 is started yet.
+> `#960` is merged and production-smoke verified via #969. `#963` is merged via #975 and awaits
+> authenticated production smoke. `#962` remains a separate later increment.
 
 ### TASK-20260711-002 — Exact CV duplicate protection and idempotency
 
-Status: proposed/scoped (not started)
-Owner: unassigned
-Branch: TBD
-Issue/PR: #960
+Status: done (merged as #969; production-smoke verified)
+Owner: Claude / owner release verification
+Branch: merged
+Issue/PR: #960 / #969
 
 #### Objective
 Server-side exact-duplicate detection, atomic idempotency, quota safety, and primary-CV
 invariants for CV uploads. Foundation only — **no onboarding wiring in this task**.
 
 #### Acceptance criteria
-- [ ] server-side exact-duplicate detection for CV uploads
-- [ ] atomic idempotency (safe under retries/concurrent submits)
-- [ ] quota safety and primary-CV invariants preserved
-- [ ] no onboarding-confirmation wiring here (that is TASK-20260711-003)
+- [x] server-side exact-duplicate detection for CV uploads
+- [x] atomic idempotency (safe under retries/concurrent submits)
+- [x] quota safety and primary-CV invariants preserved
+- [x] no onboarding-confirmation wiring here (implemented separately by TASK-20260711-003)
 
 ### TASK-20260711-003 — Persist confirmed onboarding CV and hydrate extracted fields
 
-Status: blocked on #960 (not started)
-Owner: unassigned
-Branch: TBD
-Issue/PR: #963
+Status: release verification (merged; authenticated production smoke pending)
+Owner: Release / owner authenticated smoke
+Branch: merged as `241b85d…`
+Issue/PR: #963 / #975
 
 #### Objective
 Wire the final onboarding confirmation to the canonical persistence path **after** the exact
@@ -231,8 +231,8 @@ and extracted years / current role / target roles hydrate into the profile. This
 onboarding out of PARTIAL.
 
 #### Acceptance criteria
-- [ ] onboarding confirmation persists the CV via the canonical path (built on #960)
-- [ ] extracted years/current-role/target-roles hydrate into the profile
+- [x] onboarding confirmation persists the CV via the canonical path (built on #960)
+- [x] extracted years/current-role/target-roles require durable Neon persistence; failures return non-2xx and retry is idempotent
 - [ ] final-submit persistence + logout→login completion smoke pass with a verified account
 - [ ] then owner production smoke → lift onboarding status PARTIAL → VERIFIED in the handoff
 
@@ -256,33 +256,26 @@ increment under the current priority order.
 
 ### TASK-20260710-006 — P2: frontend build gate + frontend test visibility baseline (Phase 3 gate)
 
-Status: in_progress (was "fix vitest next/navigation router-mock baseline" — retitled
-2026-07-10 after PR #942; **not done** — vitest is still informational-only, not a
-blocking gate; see TASK-20260710-008 for the residual-failure follow-up that must land
-before this can close)
-Owner: unassigned
-Branch: `claude/career-terminology-audit-ojq1xl`
-Issue/PR: #942 (draft, not merged — CI green, held for owner review per explicit
-instruction not to auto-merge)
+Status: done (completed by TASK-20260710-008 B1–B5)
+Owner: Claude / owner sign-off on B3/B4
+Branch: merged follow-up sequence
+Issue/PR: follow-up to #942; see TASK-20260710-008
 
 #### Objective
 19 pre-existing vitest failures across 9 files sit in exactly the surfaces Phase 3 reskins
 (signup/auth/chat/landing/profile/signals). PR #942 fixed the shared `next/navigation`/
 `LanguageProvider` test-crash class (test-config only, no component changes): baseline
-went from 302 passed/19 failed to 309 passed/12 failed. `npm run build` was added to CI as
-a **required/blocking** gate (passes). `npm run test` (vitest) was added to CI as
-**informational only** (`continue-on-error: true`) — it is **not** a blocking gate yet,
-because 12 tests still fail for reasons that need an owner product-code or product-copy
-decision (see TASK-20260710-008). Do not describe this task as "frontend tests gated" —
-only the build is gated so far.
+went from 302 passed/19 failed to 309 passed/12 failed. The residual sequence in
+TASK-20260710-008 then reached 320/0 and promoted both `npm run build` and `npm run test`
+(Vitest) to required CI gates.
 
 #### Acceptance criteria
 - [x] Shared `next/navigation`/`LanguageProvider` test-crash class fixed via test-config
       only — no `apps/web` component/runtime changes (verified: diff is
       `vitest.setup.ts` + 2 test files + CI workflow + docs only).
 - [x] `npm run build` wired into CI as a required, currently-green gate.
-- [ ] `npm run test` (vitest) promoted from informational to a required/blocking gate —
-      blocked on TASK-20260710-008 (12 residual failures need owner decisions first).
+- [x] `npm run test` (vitest) promoted from informational to a required/blocking gate via
+      TASK-20260710-008 B1–B5.
 
 ### TASK-20260710-007 — P2: authenticated production smoke path for agent sessions (Phase 3 gate)
 
