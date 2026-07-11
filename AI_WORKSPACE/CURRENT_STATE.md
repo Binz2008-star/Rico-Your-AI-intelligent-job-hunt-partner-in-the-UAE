@@ -1,5 +1,15 @@
 # Current State
 
+> **Reconciliation header — 2026-07-11, post-#975 merge (latest; supersedes all headers below).**
+> `main` HEAD `241b85d4c5d74b6afd00f0d4e202e75c4f5a3f8b`: PR **#975** merged after final-head
+> CI passed (pytest, frontend, Playwright, real-Postgres integration). It completes the #963
+> implementation: onboarding confirmation uses a server-scoped, short-lived CV artifact, the
+> canonical hash-aware My Files path, and required durable profile hydration; persistence failure
+> is non-2xx and retry-safe. Vercel production for this exact commit is **READY**. The release is
+> **not yet VERIFIED**: Render version/migration 038 and the authenticated CV → My Files →
+> logout/login smoke still must pass. No new implementation task is active until that release gate
+> is recorded. #962 and the per-route Atelier design migration remain later work.
+>
 > **Reconciliation header — 2026-07-11 (latest; supersedes all headers below).**
 > `main` HEAD `1238ff940b2b11e763f46f31b6f6ec865114cfc2`. Merged + production-deployed since the
 > header below: **#955** (onboarding restoration + Atelier migration + read-only
