@@ -76,4 +76,28 @@ describe("LoginForm post-login routing", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/onboarding"));
     expect(push).not.toHaveBeenCalledWith("/command");
   });
+
+  it("returns a completed user to a validated internal `next` instead of /command", async () => {
+    fetchOnboardingStatus.mockResolvedValue({ status: "completed", complete: true, source: "persisted", missing_fields: [], profile_exists: true, profile_completeness: 1 });
+    render(<LoginForm next="/settings" />);
+    submitLogin();
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/settings"));
+    expect(push).not.toHaveBeenCalledWith("/command");
+  });
+
+  it("ignores an external/open-redirect `next` and falls back to /command", async () => {
+    fetchOnboardingStatus.mockResolvedValue({ status: "completed", complete: true, source: "persisted", missing_fields: [], profile_exists: true, profile_completeness: 1 });
+    render(<LoginForm next="//evil.com" />);
+    submitLogin();
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/command"));
+    expect(push).not.toHaveBeenCalledWith("//evil.com");
+  });
+
+  it("keeps onboarding priority for an incomplete user even when `next` is present", async () => {
+    fetchOnboardingStatus.mockResolvedValue({ status: "in_progress", complete: false, source: "persisted", missing_fields: ["skills"], profile_exists: true, profile_completeness: 0.4 });
+    render(<LoginForm next="/settings" />);
+    submitLogin();
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/onboarding"));
+    expect(push).not.toHaveBeenCalledWith("/settings");
+  });
 });
