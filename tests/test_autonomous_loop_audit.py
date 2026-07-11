@@ -121,6 +121,24 @@ class TestGuestUserRejection:
         assert result.saved_count == 0
         assert "authenticated" in result.errors[0].lower()
 
+    def test_public_prefix_colon_rejected(self):
+        from src.services.auto_save_service import auto_save_jobs
+        result = auto_save_jobs("public:someuser@example.com", [{"title": "Test", "company": "Corp", "score": 90}])
+        assert result.saved_count == 0
+        assert "authenticated" in result.errors[0].lower()
+
+    def test_public_prefix_underscore_rejected(self):
+        from src.services.auto_save_service import auto_save_jobs
+        result = auto_save_jobs("public_someuser", [{"title": "Test", "company": "Corp", "score": 90}])
+        assert result.saved_count == 0
+        assert "authenticated" in result.errors[0].lower()
+
+    def test_none_user_id_rejected(self):
+        from src.services.auto_save_service import auto_save_jobs
+        result = auto_save_jobs(None, [{"title": "Test", "company": "Corp", "score": 90}])
+        assert result.saved_count == 0
+        assert len(result.errors) >= 1
+
 
 # ── 3. Complete and Incomplete Profiles ──────────────────────────────────────
 
@@ -629,3 +647,34 @@ class TestAuditLogging:
             with patch("src.repositories.audit_repo.log_action", side_effect=Exception("Audit DB down")):
                 result = auto_save_jobs("u1", [job], existing_job_keys=set())
         assert result.saved_count == 1  # save succeeded despite audit failure
+
+
+# ── Safety Fail-Closed ───────────────────────────────────────────────────────
+
+
+class TestSafetyFailClosed:
+    def test_safety_guard_load_failure_blocks_save(self):
+        """If the safety guard cannot load, NO mutation must occur."""
+        from src.services.auto_save_service import auto_save_jobs
+
+        job = {"title": "HSE Manager", "company": "ADNOC", "score": 85, "link": "https://example.com/1"}
+        with patch("src.rico_safety.RicoSafetyGuard", side_effect=ImportError("Module missing")):
+            with patch("src.repositories.applications_repo.create") as mock_create:
+                result = auto_save_jobs("u1", [job], existing_job_keys=set())
+        assert result.saved_count == 0
+        assert "fail-closed" in result.errors[0].lower()
+        mock_create.assert_not_called()
+
+    def test_safety_guard_exception_blocks_save(self):
+        """If check_autonomous_action raises, NO mutation must occur."""
+        from src.services.auto_save_service import auto_save_jobs
+
+        job = {"title": "HSE Manager", "company": "ADNOC", "score": 85, "link": "https://example.com/1"}
+        guard_mock = MagicMock()
+        guard_mock.check_autonomous_action.side_effect = RuntimeError("Guard crashed")
+        with patch("src.rico_safety.RicoSafetyGuard", return_value=guard_mock):
+            with patch("src.repositories.applications_repo.create") as mock_create:
+                result = auto_save_jobs("u1", [job], existing_job_keys=set())
+        assert result.saved_count == 0
+        assert "fail-closed" in result.errors[0].lower()
+        mock_create.assert_not_called()

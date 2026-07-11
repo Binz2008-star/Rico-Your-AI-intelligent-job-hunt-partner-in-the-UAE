@@ -173,13 +173,16 @@ def auto_save_jobs(
     """
     result = AutoSaveResult(user_id=user_id)
 
-    # Guest/public user rejection — autonomous mode requires authenticated user_id
-    if not user_id or user_id in {"anonymous", "guest", "public"}:
-        result.errors.append("Autonomous auto-save requires an authenticated user_id.")
+    # Guest/public user rejection — autonomous mode requires authenticated user_id.
+    # Reject all guest/public identity formats including public:*, public_*, anonymous, guest.
+    # Do not trust arbitrary worker task arguments as authenticated identity.
+    if not user_id or user_id in {"anonymous", "guest", "public"} or user_id.startswith(("public:", "public_")):
+        result.errors.append("Autonomous auto-save requires an authenticated canonical user_id.")
         logger.warning("auto_save_rejected reason=unauthenticated user=%s", user_id)
         return result
 
-    # Safety guard check
+    # Safety guard check — fail closed. If the guard cannot load or execute,
+    # perform NO mutation. This is a merge-blocking requirement.
     try:
         from src.rico_safety import RicoSafetyGuard
         guard = RicoSafetyGuard()
@@ -189,7 +192,9 @@ def auto_save_jobs(
             logger.warning("auto_save_blocked reason=safety_guard user=%s", user_id)
             return result
     except Exception:
-        logger.debug("auto_save: safety guard check failed, proceeding user=%s", user_id)
+        result.errors.append("Safety guard failed to load — autonomous save blocked (fail-closed).")
+        logger.error("auto_save_blocked reason=safety_guard_load_failure user=%s", user_id)
+        return result
 
     threshold = _get_score_threshold()
     max_saves = _get_max_saves_per_day()

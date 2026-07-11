@@ -152,7 +152,7 @@ def process_telegram_action_task(update: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def run_autonomous_loop_task(
-    scored_jobs: List[Dict[str, Any]] | None = None,
+    scored_jobs: List[tuple] | None = None,
     dry_run: bool = False,
     skip_telegram: bool = False,
 ) -> Dict[str, Any]:
@@ -161,6 +161,10 @@ def run_autonomous_loop_task(
     Can be called directly or enqueued via Redis. When scored_jobs is
     provided, they are passed to each user's loop; otherwise the loop
     operates on whatever jobs are already in the pipeline.
+
+    Args:
+        scored_jobs: List of (job_dict, score) tuples — same schema as
+                     run_for_user() and run_for_all_users().
     """
     from src.agent.autonomous_loop import run_for_all_users
 
@@ -183,11 +187,16 @@ def run_autonomous_loop_for_user_task(
     user_id: str,
     user_name: str = "",
     telegram_chat_id: str = "",
-    scored_jobs: List[Dict[str, Any]] | None = None,
+    scored_jobs: List[tuple] | None = None,
     dry_run: bool = False,
     skip_telegram: bool = False,
 ) -> Dict[str, Any]:
-    """Run the autonomous loop for a single user."""
+    """Run the autonomous loop for a single user.
+
+    Args:
+        scored_jobs: List of (job_dict, score) tuples — same schema as
+                     run_for_user().
+    """
     from src.agent.autonomous_loop import run_for_user
 
     started = datetime.utcnow()
