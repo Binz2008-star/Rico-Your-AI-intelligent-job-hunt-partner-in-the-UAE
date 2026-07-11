@@ -24,12 +24,14 @@ If any source disagrees, stop and report the conflict. Do not guess from chat hi
 ## Current execution lock
 
 ```text
-No active runtime implementation. #963 / PR #975 is merged and
-production-VERIFIED (owner-confirmed authenticated smoke, 2026-07-11);
-onboarding is out of PARTIAL. `main` is at `feed8c4…` (#979 + #974 merged).
+No active runtime implementation. #963 is merged and production-VERIFIED
+(owner-confirmed authenticated smoke, 2026-07-11); #962 (safe login return
+path) is merged as #981; the subscription gating identity-key invariant is
+locked by test #982. `main` is at `60978ae…`.
 
-Next objective, not started: #962 (safe login return path). Start on a fresh
-branch from updated `main` after its design/audit gate.
+Next objective, not started (owner selects one): the approved per-route design
+migration, or the remaining auth-guard routes. Start on a fresh branch from
+updated `main` after its design/audit gate.
 
 All other runtime/design/agentic work is paused unless the owner changes
 AI_WORKSPACE/PROJECT_STATUS.md.

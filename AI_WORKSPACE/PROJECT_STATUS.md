@@ -8,31 +8,29 @@
 
 | Field | Current value |
 | --- | --- |
-| **Current repository `main` head** | `241b85d4c5d74b6afd00f0d4e202e75c4f5a3f8b` (squash merge of PR `#975` / issue `#963`). |
-| **Frontend deployment** | Vercel production deployment for `241b85d…` is `READY` and aliased to `ricohunt.com`. |
+| **Current repository `main` head** | `60978aec00778d5b3aabd926ccfd2f9fc345eaab` (`#982` gating-invariant test). Runtime application state is `#962` / `c7aea42…`; `#982` after it is a backend test-only change with no runtime effect. |
+| **Frontend deployment** | Vercel production for the latest `main` is `READY` and aliased to `ricohunt.com`. |
 | **Backend deployment / authenticated smoke** | Render `/version` serves the `#963` release and `/health` is OK. Migration 038 and the authenticated onboarding smoke are **owner-confirmed PASS (2026-07-11)**; the onboarding release is production-verified. |
-| **Coordination control plane** | PR `#970` merged; `PROJECT_STATUS.md` + `START_HERE.md` + root agent rules are now the mandatory cold-start path. Docs reconciled after #963 via #979; CI render-audit fix landed via #974. |
-| **Current execution phase** | `#963` release **VERIFIED**; onboarding is out of PARTIAL. No active implementation PR. `#962` is the next objective. |
-| **Single active runtime objective** | None in flight. `#962` (safe login return path) is the next implementation objective, not yet started. |
-| **Active PR branch/head** | None — `#963`/`#975` merged and verified; #979 and #974 merged after it. |
-| **Next exact action** | Open `#962` (safe login return path) on a fresh branch from updated `main`, after its design/audit gate. |
+| **Coordination control plane** | PR `#970` merged; `PROJECT_STATUS.md` + `START_HERE.md` + root agent rules are the mandatory cold-start path. Docs reconciled after #963 via #979; CI render-audit fix via #974; #963 VERIFIED via #980; login return-path #962 via #981; gating-invariant test via #982. |
+| **Current execution phase** | `#963` **VERIFIED** and `#962` merged. No active implementation PR. Next objective not yet selected (per-route design migration or remaining auth-guard routes). |
+| **Single active runtime objective** | None in flight. Next candidate: the approved per-route design migration, or the remaining auth-guard routes — owner selects one. |
+| **Active PR branch/head** | None — `#981` (#962) and `#982` (gating test) merged. |
+| **Next exact action** | Owner selects the next single objective (per-route design migration or remaining auth-guard routes); start it on a fresh branch from updated `main` after its design/audit gate. |
 | **Owner gate after #963** | Cleared — authenticated production smoke owner-confirmed PASS; the design/workspace queue is released. |
-| **Last updated** | 2026-07-11 (post-#963 VERIFIED; #979 + #974 merged; `main` at `feed8c4…`). |
+| **Last updated** | 2026-07-11 (post-#962 + #982 merge; `main` at `60978ae…`). |
 
 ## Execution lock
 
 ```text
 ACTIVE NOW
-(none — #963 / merged PR #975 is VERIFIED; onboarding is out of PARTIAL.
-No implementation writer is active.)
+(none — #963 VERIFIED and #962 merged. No implementation writer is active.)
 
 NEXT, NOT STARTED
-#962 — safe login return path
-(start on a fresh branch from updated `main`, after its design/audit gate);
-then the approved per-route design migration.
+(owner selects one) the approved per-route design migration,
+or the remaining auth-guard routes.
+Start on a fresh branch from updated `main`, after its design/audit gate.
 
 LATER
-remaining auth-guard routes
 workspace/dashboard migration
 command i18n / command redesign
 
@@ -48,7 +46,7 @@ REFERENCE ONLY / NOT FOR MERGE
 #873 — old Rico Alive design-gallery prototype
 ```
 
-`#969` and `#963` are both complete and production-verified (owner-confirmed authenticated smoke, 2026-07-11). No runtime objective is in flight. `#962` is the next objective and must start on a fresh branch from updated `main` after its design/audit gate. Do not open a second concurrent runtime objective without an owner change to this lock.
+`#969` and `#963` are both complete and production-verified (owner-confirmed authenticated smoke, 2026-07-11). `#962` (safe login return path) is merged. No runtime objective is in flight. The next objective (per-route design migration or remaining auth-guard routes) is owner-selected and must start on a fresh branch from updated `main` after its design/audit gate. Do not open a second concurrent runtime objective without an owner change to this lock.
 
 ## Mandatory multi-session coordination
 
@@ -108,6 +106,8 @@ Therefore `#967` is blocked. When it resumes, it must rebase from current `main`
 | ---: | --- | --- |
 | `#969` | CV/file persistence foundation | **Completed, merged, deployed, and production-smoke verified**; migration 037 applied to production Neon |
 | `#963` / merged `#975` | Onboarding CV persistence + profile hydration | **Merged, deployed, and production-verified** (owner-confirmed authenticated smoke, 2026-07-11); onboarding out of PARTIAL |
+| `#962` / merged `#981` | Safe login return path (`next`) | **Merged** (`c7aea42…`); login honors a validated internal `next` via `resolveNextPath`; onboarding keeps priority; no open-redirect |
+| `#982` | Subscription gating identity-key invariant | **Merged** (test-only); pins that plan gating keys on the account email |
 | `#968` | Workspace governance for `#965` | Hold; docs-only, not permission for more agentic work |
 | `#967` | Pre-launch gate/waitlist | Hold; blocked by separate scope and migration collision |
 | `#965` | Read-only journey-state seed | Hold draft; no follow-on without owner DEC |
@@ -119,7 +119,7 @@ Therefore `#967` is blocked. When it resumes, it must rebase from current `main`
 ## What is already true
 
 - `/onboarding` is restored as the real authenticated first-run route.
-- `/settings` and `/profile` have the shared authenticated-page guard.
+- `/settings` and `/profile` have the shared authenticated-page guard, and login now returns a guest to a validated `next` after authenticating (#962).
 - Onboarding production smoke is **VERIFIED** (owner-confirmed, 2026-07-11): registration/verification, routing, steps, skip, CV parsing/review, and now confirmed-CV persistence + profile hydration all passed.
 - The merged #963 path uses server-side upload artifacts, hash-aware My Files persistence, required durable profile hydration, and retry-safe confirmation.
 - The onboarding release gate is cleared; the design/workspace queue is released.
@@ -144,10 +144,11 @@ Stop and ask the owner instead of continuing when:
 ## Next exact action
 
 ```text
-1. #963 authenticated production smoke: owner-confirmed PASS (2026-07-11).
-   Onboarding is out of PARTIAL and marked VERIFIED.
-2. Next single objective: #962 (safe login return path). Start on a fresh
-   branch from updated `main` after its design/audit gate.
+1. #963 VERIFIED (owner-confirmed smoke) and #962 (safe login return path)
+   merged as #981. Gating identity-key invariant locked by test #982.
+2. Owner selects the next single objective: the approved per-route design
+   migration, or the remaining auth-guard routes. Start on a fresh branch
+   from updated `main` after its design/audit gate.
 3. Do not open a second concurrent runtime objective without an owner lock change.
 ```
 

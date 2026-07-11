@@ -1,6 +1,20 @@
 # Current State
 
-> **Reconciliation header — 2026-07-11, #963 VERIFIED (latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-11, #962 merged (latest; supersedes all headers below).**
+> `main` HEAD `60978ae…`. Since the header below: **#962** (safe login return path) merged as
+> **#981** (`c7aea42…`) — login honors a validated internal `?next=` via `resolveNextPath`
+> (rejects external/`//`/non-`/`), returns a completed guest to the page they were bounced from,
+> keeps onboarding priority for incomplete users, and leaves routing unchanged when `next` is
+> absent; CI green (pytest/frontend/Playwright/Postgres) and Vercel READY. **#982** (test-only)
+> then locked the subscription **identity-key invariant** — plan gating must key on the account
+> email; the invariant holds at all current authenticated call sites and is now pinned by tests.
+> No runtime objective is in flight. Next objective (owner-selected): the approved per-route
+> design migration, or the remaining auth-guard routes (`/applications`,`/upload`,`/flow`,
+> `/queue`). Two subscription-audit follow-ups remain for owner triage (per-user entitlement
+> override columns are read but ignored; `count_saved_jobs` fallback counts user-less rows).
+> Docs-only sync; no `apps/web`/`src` runtime change in this header.
+>
+> **Reconciliation header — 2026-07-11, #963 VERIFIED (superseded by the header above).**
 > `main` HEAD `feed8c4…` (post-#979 docs reconciliation + #974 CI render-audit fix).
 > The **#963 onboarding CV persistence release is production-VERIFIED**: the owner confirmed
 > the authenticated smoke (upload CV → confirm profile → My Files → logout/login → persisted
