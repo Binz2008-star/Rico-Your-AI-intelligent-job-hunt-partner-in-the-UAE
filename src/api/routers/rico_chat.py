@@ -1852,7 +1852,84 @@ async def confirm_cv_profile(
 
         confirmed_cv_text: str | None = (artifact or {}).get("cv_text") or None
 
-        # Update permanent profile
+        # ── Write order & partial-state policy (#975 review) ──────────────────
+        # For authenticated users the durable My Files document write happens
+        # FIRST and its failure fails the whole confirm with a non-2xx — it is
+        # NEVER swallowed. Rationale: this is the one write whose silent failure
+        # reproduces the original #963 bug (the user is told "profile confirmed"
+        # while the CV never lands in My Files). Doing it first means a failure
+        # leaves NOTHING else changed — no profile mutation, no onboarding-status
+        # flip, no success claim. The later writes (upsert_profile, onboarding
+        # status) already handle their own DB errors and never raise, and are
+        # self-healing (onboarding status is re-derived on every /onboarding/
+        # status GET and re-evaluated on every submit), so ordering them after
+        # the hard document write is safe.
+        #
+        # Guest/public sessions have no My Files and were never issued an
+        # artifact, so they skip this block entirely (profile-only confirm).
+        if not is_valid_public_user_id(resolved_user_id):
+            from src.rico_db import RicoDB as _RicoDB
+            _doc_db = _RicoDB()
+            if not _doc_db.available:
+                # Cannot persist to My Files -> do not claim success, and fail
+                # BEFORE any profile/onboarding mutation.
+                logger.error(
+                    "cv_confirm_doc_db_unavailable user=%s request_ref=%s",
+                    resolved_user_id, request_ref,
+                )
+                _metrics.record_request((time.time() - start_time) * 1000)
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "ok": False,
+                        "status": "cv_persistence_unavailable",
+                        "message": "We couldn't save your CV right now. Please try again in a moment.",
+                    },
+                )
+            skills = profile_updates.get("skills") or []
+            # #908 RC4: doc_type is always the server-derived value recorded on
+            # the trusted artifact at upload time — payload.doc_type
+            # (client-echoed) is never used for persistence — and only ever the
+            # known-safe set. is_primary is only set for a real "cv".
+            _CONFIRMABLE_DOC_TYPES = ("cv", "cover_letter", "other")
+            _resolved_doc_type = (
+                artifact["doc_type"] if artifact["doc_type"] in _CONFIRMABLE_DOC_TYPES else "other"
+            )
+            try:
+                _doc_db.get_or_create_user_document(
+                    user_id=resolved_user_id,
+                    filename=artifact["filename"],
+                    original_filename=artifact["filename"],
+                    doc_type=_resolved_doc_type,
+                    file_size=artifact["file_size"],
+                    content_hash=artifact["content_hash"],
+                    skills_count=len(skills),
+                    skills_json=list(skills),
+                    years_experience=profile_updates.get("years_experience"),
+                    current_role=profile_updates.get("current_role"),
+                    is_primary=(_resolved_doc_type == "cv"),
+                )
+            except Exception as _doc_exc:
+                # NEVER swallowed (the #975 blocker): fail the confirm with a
+                # non-2xx BEFORE any profile/onboarding mutation. No false
+                # success, no "CV saved" claim, no onboarding completion.
+                logger.exception(
+                    "cv_confirm_doc_save_failed user=%s error=%s request_ref=%s",
+                    resolved_user_id, str(_doc_exc), request_ref,
+                )
+                _metrics.record_request((time.time() - start_time) * 1000)
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "ok": False,
+                        "status": "cv_persistence_failed",
+                        "message": "We couldn't save your CV. Please try again.",
+                    },
+                )
+
+        # Update permanent profile (best-effort: upsert_profile handles its own
+        # DB errors and never raises). Runs only after the My Files write above
+        # has already committed for authenticated users.
         upsert_profile(user_id=resolved_user_id, updates=profile_updates, cv_text=confirmed_cv_text)
         record_profile_optimization_usage(resolved_user_id)
 
@@ -1876,50 +1953,6 @@ async def confirm_cv_profile(
                 resolved_user_id,
                 ONBOARDING_COMPLETED if _gate_ok else ONBOARDING_IN_PROGRESS,
             )
-
-        # Save document record for the file manager (authenticated users only).
-        # Canonical, hash-aware, atomically-idempotent path (#960) — never the
-        # legacy unconditional-INSERT save_user_document, which created a new
-        # duplicate row on every retry/double-click and could never dedupe an
-        # exact re-confirm. `artifact` is guaranteed non-None and complete
-        # here (content_hash/file_size/filename/doc_type all present) — an
-        # untrusted/incomplete artifact already returned a 409 above, before
-        # any of this ran. No content_hash=None / file_size=0 fallback path
-        # exists anymore.
-        if not is_valid_public_user_id(resolved_user_id):
-            try:
-                from src.rico_db import RicoDB as _RicoDB
-                _doc_db = _RicoDB()
-                if _doc_db.available:
-                    skills = profile_updates.get("skills") or []
-                    # #908 RC4: an unrecognized/non-CV-family doc_type must never be
-                    # silently coerced to "cv" -- that previously let a mis-routed
-                    # non-CV upload (e.g. an invoice that slipped into the CV
-                    # pipeline) be written as doc_type="cv" with is_primary=True,
-                    # becoming the user's permanent "Active CV". Always the
-                    # server-derived doc_type recorded on the trusted artifact
-                    # at upload time — payload.doc_type (client-echoed) is
-                    # never used for persistence — and only ever the
-                    # known-safe set.
-                    _CONFIRMABLE_DOC_TYPES = ("cv", "cover_letter", "other")
-                    _resolved_doc_type = (
-                        artifact["doc_type"] if artifact["doc_type"] in _CONFIRMABLE_DOC_TYPES else "other"
-                    )
-                    _doc_db.get_or_create_user_document(
-                        user_id=resolved_user_id,
-                        filename=artifact["filename"],
-                        original_filename=artifact["filename"],
-                        doc_type=_resolved_doc_type,
-                        file_size=artifact["file_size"],
-                        content_hash=artifact["content_hash"],
-                        skills_count=len(skills),
-                        skills_json=list(skills),
-                        years_experience=profile_updates.get("years_experience"),
-                        current_role=profile_updates.get("current_role"),
-                        is_primary=(_resolved_doc_type == "cv"),
-                    )
-            except Exception as _doc_exc:
-                logger.warning("cv_confirm_doc_save_failed user=%s error=%s", resolved_user_id, str(_doc_exc))
 
         _metrics.record_request((time.time() - start_time) * 1000)
         logger.info(

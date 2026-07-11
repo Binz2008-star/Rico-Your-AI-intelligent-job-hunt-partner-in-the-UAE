@@ -114,6 +114,10 @@ def reset_rate_limiter():
 def _cursor_returning(row):
     cur = MagicMock()
     cur.fetchone.return_value = row
+    # Real psycopg2 cursors expose an int rowcount; the opportunistic purge in
+    # create_cv_upload_artifact reads it. Default 0 so a MagicMock rowcount
+    # never breaks the `> 0` comparison.
+    cur.rowcount = 0
     return cur
 
 
@@ -139,8 +143,12 @@ class TestCvUploadArtifactRepoCreate:
             )
         assert artifact_id == "11111111-1111-1111-1111-111111111111"
         conn.commit.assert_called_once()
-        sql = cur.execute.call_args.args[0].upper()
-        assert "INSERT INTO CV_UPLOAD_ARTIFACTS" in sql
+        all_sql = " ".join(str(c.args[0]).upper() for c in cur.execute.call_args_list)
+        assert "INSERT INTO CV_UPLOAD_ARTIFACTS" in all_sql
+        # The same transaction also opportunistically purges expired rows
+        # (Blocker 2: actual deletion, no background worker).
+        assert "DELETE FROM CV_UPLOAD_ARTIFACTS" in all_sql
+        assert "EXPIRES_AT < NOW()" in all_sql
 
     def test_create_returns_none_when_db_unavailable(self):
         with patch("src.db.get_db_connection", return_value=None):
@@ -557,3 +565,124 @@ class TestConfirmCvProfileOnboardingGate:
             )
         assert r.status_code == 200, r.text
         set_status_mock.assert_not_called()
+
+
+def _make_failing_ricodb(exc: Exception):
+    """Fake RicoDB whose canonical document write raises. `available` is True
+    so we exercise the write-then-fail path, not the DB-unavailable branch."""
+    class _FailingRicoDB:
+        available = True
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def get_or_create_user_document(self, **kwargs):
+            raise exc
+
+        def save_user_document(self, **kwargs):
+            raise AssertionError("legacy save_user_document must never be called")
+
+    return _FailingRicoDB
+
+
+class TestConfirmCvProfileDocumentPersistenceFailure:
+    """#975 blocker 1: a My Files document-write failure must FAIL the confirm
+    with a non-2xx and leave NO partial state — the document write runs first,
+    before any profile/onboarding mutation, and is never swallowed."""
+
+    def _post(self, client, *, ricodb_cls):
+        upsert_mock = MagicMock()
+        get_profile_mock = MagicMock(return_value=None)
+        with (
+            patch("src.api.routers.rico_chat.upsert_profile", upsert_mock),
+            patch("src.api.routers.rico_chat.get_profile", get_profile_mock),
+            patch("src.services.profile_context_resolver.evaluate_minimum_profile", return_value=(True, [])),
+            patch("src.repositories.onboarding_repo.set_onboarding_status") as set_status_mock,
+            patch("src.api.routers.rico_chat.mark_onboarding_complete") as legacy_mark_mock,
+            patch("src.services.subscription_gating.enforce_profile_optimization_allowed"),
+            patch("src.services.subscription_gating.record_profile_optimization_usage"),
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact",
+                return_value=_ARTIFACT,
+            ),
+            patch("src.rico_db.RicoDB", ricodb_cls),
+        ):
+            r = client.post(
+                f"/api/v1/rico/confirm-cv-profile?user_id={_AUTH_UID}",
+                json=_confirm_payload(upload_id="artifact-1"),
+            )
+        return r, upsert_mock, set_status_mock, legacy_mark_mock
+
+    def test_doc_write_exception_returns_non_2xx_no_partial_state(self, client):
+        r, upsert_mock, set_status_mock, legacy_mark_mock = self._post(
+            client, ricodb_cls=_make_failing_ricodb(RuntimeError("db exploded")),
+        )
+        # Non-2xx, and explicitly NOT a success claim.
+        assert r.status_code == 500, r.text
+        body = r.json()
+        assert body["ok"] is False
+        assert body["status"] == "cv_persistence_failed"
+        assert body["status"] != "profile_updated"
+        # No partial state: nothing after the failed doc write ran.
+        upsert_mock.assert_not_called()
+        set_status_mock.assert_not_called()
+        legacy_mark_mock.assert_not_called()
+
+    def test_doc_db_unavailable_returns_non_2xx_no_partial_state(self, client):
+        class _UnavailableRicoDB:
+            available = False
+
+            def __init__(self, *a, **kw):
+                pass
+
+            def get_or_create_user_document(self, **kwargs):
+                raise AssertionError("must not be called when DB unavailable")
+
+            def save_user_document(self, **kwargs):
+                raise AssertionError("legacy save_user_document must never be called")
+
+        r, upsert_mock, set_status_mock, legacy_mark_mock = self._post(
+            client, ricodb_cls=_UnavailableRicoDB,
+        )
+        assert r.status_code == 503, r.text
+        body = r.json()
+        assert body["ok"] is False
+        assert body["status"] == "cv_persistence_unavailable"
+        upsert_mock.assert_not_called()
+        set_status_mock.assert_not_called()
+        legacy_mark_mock.assert_not_called()
+
+
+# ── repo: Blocker 2 — expired artifacts are actually deleted ─────────────────
+
+class TestCvUploadArtifactPurge:
+    def test_purge_emits_bounded_delete_of_expired_rows(self):
+        cur = _cursor_returning(None)
+        cur.rowcount = 3
+        conn = _conn_with_cursor(cur)
+        from src.repositories.cv_upload_artifact_repo import purge_expired_cv_upload_artifacts
+        with patch("src.db.get_db_connection", return_value=conn):
+            deleted = purge_expired_cv_upload_artifacts(limit=50)
+        assert deleted == 3
+        conn.commit.assert_called_once()
+        sql = " ".join(str(c.args[0]).upper() for c in cur.execute.call_args_list)
+        assert "DELETE FROM CV_UPLOAD_ARTIFACTS" in sql
+        assert "EXPIRES_AT < NOW()" in sql
+        assert "LIMIT" in sql  # bounded, never an unbounded table-wide delete
+        # The bound is passed as a parameter, not string-formatted.
+        assert cur.execute.call_args_list[-1].args[1] == (50,)
+
+    def test_purge_returns_zero_when_db_unavailable(self):
+        from src.repositories.cv_upload_artifact_repo import purge_expired_cv_upload_artifacts
+        with patch("src.db.get_db_connection", return_value=None):
+            assert purge_expired_cv_upload_artifacts() == 0
+
+    def test_purge_never_raises_on_db_error(self):
+        cur = MagicMock()
+        cur.execute.side_effect = RuntimeError("boom")
+        conn = _conn_with_cursor(cur)
+        from src.repositories.cv_upload_artifact_repo import purge_expired_cv_upload_artifacts
+        with patch("src.db.get_db_connection", return_value=conn):
+            assert purge_expired_cv_upload_artifacts() == 0
+        conn.rollback.assert_called_once()

@@ -16,6 +16,18 @@ never collide and a confirm always resolves the exact upload it was issued
 for. Never raises — failures are logged and swallowed so upload/confirm is
 never blocked by this bridge; a resolve miss degrades to the caller's
 no-artifact path rather than an error.
+
+Retention / cleanup (why this is genuinely short-lived, not just
+un-readable-after-TTL): an artifact holds the full parsed CV text of an
+*unconfirmed* upload, so it must not accumulate. ``expires_at`` (default 3h)
+gates readability, and every ``create_cv_upload_artifact`` call ALSO deletes
+a bounded batch of already-expired rows in the same transaction
+(``purge_expired_cv_upload_artifacts``). There is no background worker on
+Render, so this opportunistic, amortized cleanup is the deletion mechanism:
+each create adds one row and removes up to ``_PURGE_BATCH`` expired rows, so
+the table converges to the live (unexpired) working set instead of growing
+without bound. ``purge_expired_cv_upload_artifacts`` is also exposed for a
+manual/cron sweep if one is ever added.
 """
 from __future__ import annotations
 
@@ -26,6 +38,60 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 _DEFAULT_TTL_MINUTES = 180
+# Max expired rows deleted per opportunistic purge. Bounded so a single
+# create call can never turn into an unbounded table-wide DELETE; amortized
+# across creates it still keeps the table near the live working set.
+_PURGE_BATCH = 200
+
+
+def _delete_expired_artifacts(cur, limit: int) -> int:
+    """Delete up to ``limit`` already-expired rows using ``cur``. Returns the
+    row count deleted. Uses an id-in-subquery-with-LIMIT so the DELETE is
+    bounded and index-friendly (``idx_cv_upload_artifacts_user_expires``)."""
+    cur.execute(
+        """
+        DELETE FROM cv_upload_artifacts
+         WHERE id IN (
+             SELECT id FROM cv_upload_artifacts
+              WHERE expires_at < NOW()
+              ORDER BY expires_at
+              LIMIT %s
+         )
+        """,
+        (limit,),
+    )
+    return cur.rowcount if (cur.rowcount and cur.rowcount > 0) else 0
+
+
+def purge_expired_cv_upload_artifacts(limit: int = _PURGE_BATCH) -> int:
+    """Delete up to ``limit`` expired artifacts. Best-effort, never raises.
+
+    Called opportunistically from ``create_cv_upload_artifact`` (there is no
+    background worker on Render) and usable standalone from a future
+    manual/cron sweep or a test. Returns the number of rows deleted (0 when
+    the DB is unavailable or on any error).
+    """
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return 0
+    try:
+        with conn.cursor() as cur:
+            deleted = _delete_expired_artifacts(cur, limit)
+        conn.commit()
+        if deleted:
+            logger.debug("cv_upload_artifact_repo: purged %d expired artifact(s)", deleted)
+        return deleted
+    except Exception:
+        logger.exception("cv_upload_artifact_repo_purge_failed")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return 0
+    finally:
+        conn.close()
 
 
 def create_cv_upload_artifact(
@@ -65,6 +131,18 @@ def create_cv_upload_artifact(
                 (user_id, filename, doc_type or "cv", content_hash, file_size or 0, cv_text, expires_at),
             )
             row = cur.fetchone()
+            # Opportunistic bounded cleanup of expired artifacts, in the SAME
+            # transaction — the deletion mechanism that keeps this table
+            # short-lived without a background worker (there is none on
+            # Render). Never let cleanup failure abort a valid insert: on any
+            # purge error, roll back to the successful insert via a SAVEPOINT.
+            try:
+                cur.execute("SAVEPOINT purge_expired")
+                _delete_expired_artifacts(cur, _PURGE_BATCH)
+                cur.execute("RELEASE SAVEPOINT purge_expired")
+            except Exception:
+                logger.exception("cv_upload_artifact_repo_inline_purge_failed user=%s", user_id)
+                cur.execute("ROLLBACK TO SAVEPOINT purge_expired")
         conn.commit()
         artifact_id = str(row[0]) if row else None
         logger.debug(

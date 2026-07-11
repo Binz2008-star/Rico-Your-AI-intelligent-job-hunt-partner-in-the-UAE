@@ -96,12 +96,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run real-Postgres user_documents integration tests
+      - name: Run real-Postgres integration tests (user_documents #960 + cv_upload_artifacts #963)
         env:
           RICO_TEST_DATABASE_URL: "postgresql://rico_test:rico_test@localhost:5432/rico_test"
           JWT_SECRET: "test-secret-ci-only"
         run: |
-          PYTHONPATH=$GITHUB_WORKSPACE pytest tests/integration/test_user_documents_postgres.py -v --tb=short
+          PYTHONPATH=$GITHUB_WORKSPACE pytest \
+            tests/integration/test_user_documents_postgres.py \
+            tests/integration/test_cv_upload_artifacts_postgres.py \
+            -v --tb=short
 
   playwright:
     runs-on: ubuntu-latest
