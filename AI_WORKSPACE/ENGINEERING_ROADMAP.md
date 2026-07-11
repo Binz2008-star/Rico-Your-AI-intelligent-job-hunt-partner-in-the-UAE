@@ -29,15 +29,15 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 ---
 
-## Where Rico is right now (2026-07-08)
+## Where Rico is right now (2026-07-11)
 
 | Question | Answer |
 | --- | --- |
-| **Where is Rico?** | Phase 3 — Chat Integration underway. Operational Memory foundation + first Hardening fix live. |
-| **Where is it going?** | Continue Phase 3 (wire remaining persisted lifecycle into chat), then Lifecycle Intelligence. |
-| **What is blocked?** | Nothing is blocked. UI facelift, notifications, and infra (Railway) are deferred by design, not blocked. |
-| **What is completed?** | Phases 0 and 1 (Architecture & Governance, Operational Memory Foundation). First Hardening PR live. Phase 3 first slice merged (#891). |
-| **What comes next?** | Continue Phase 3 chat slices as needed; continue Phase 2 hardening as gaps are proven (verify-first, synthetic data only). |
+| **Where is Rico?** | Release verification for #963: the onboarding CV persistence implementation is merged as `241b85d…`, CI-green, and Vercel-ready. |
+| **Where is it going?** | Verify the deployed backend/authenticated flow, then resume the approved per-route Atelier migration and separately scoped hardening. |
+| **What is blocked?** | No new runtime/design objective may start until the #963 release gate (migration 038 schema proof + authenticated smoke) passes. Render version already matches `241b85d…`. |
+| **What is completed?** | Phases 0–1, #969 document idempotency foundation, and #963 implementation. Production verification of #963 is pending. |
+| **What comes next?** | Complete release verification; then select one objective only: #962 or the next owner-approved design route. |
 
 Production is stable: Render backend healthy (`/health` ok, providers configured),
 Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
@@ -91,6 +91,8 @@ safety. Each finding becomes a small, scoped hardening PR — verify-first, and
 fix only proven gaps (synthetic data only).
 - Delivered: #887 — batch-row-isolation in `upsert_matches` (one malformed row
   no longer drops the whole apply-link batch); proven against real Postgres.
+- Delivered, awaiting release verification: #969/#960 exact document dedupe and #975/#963
+  onboarding confirmation persistence with real-Postgres coverage.
 - Next candidates: any gap surfaced by continued Audit Phase 2–9 verification.
 
 ### Phase 3 — Chat Integration 🔵 (current)
@@ -112,6 +114,8 @@ three times — want to apply?"
 ### Phase 5 — UX Facelift ⬜
 Only after the system is stable. Atelier, Rico Alive, Nocturne, and the new
 design language. (Corresponds to DEC-20260707-001 "UI redesign / PR G".)
+The approved target is `/design-preview` per DEC-20260710-002; migration remains
+per-route and owner-gated, and resumes after the #963 release gate.
 
 ### Phase 6 — Notifications ⬜
 After lifecycle exists: email, WhatsApp, reminders, weekly reports. Must honor
