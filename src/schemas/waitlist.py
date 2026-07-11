@@ -35,10 +35,10 @@ class WaitlistRegisterRequest(BaseModel):
     consent: bool
     source: Dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("email", mode="after")
+    @field_validator("email", mode="before")
     @classmethod
-    def normalise_email(cls, value: str) -> str:
-        return value.strip().lower()
+    def normalise_email(cls, value: object) -> str:
+        return str(value).strip().lower()
 
     @field_validator("first_name", "target_role", mode="before")
     @classmethod
