@@ -8,14 +8,14 @@
 
 | Field | Current value |
 | --- | --- |
-| **Last runtime baseline** | `9ceb87b1b6b4e112ffb5940b167408e8ef0cb16e` — `docs(workspace): sync onboarding and auth-guard status (#964)`. PR `#970` and this follow-up are docs-only; every session must fetch live `main` rather than treating a hardcoded SHA as permanently current. |
+| **Last runtime baseline** | `50f73f04ecf078ae5993c2f805e5ea89351360d6` (`origin/main`). `origin/main` merged into `feat/user-documents-dedup` at `fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e`. Only documentation/control-plane files changed in the merge. |
 | **Coordination control plane** | PR `#970` merged; `PROJECT_STATUS.md` + `START_HERE.md` + root agent rules are now the mandatory cold-start path. |
-| **Current execution phase** | Onboarding persistence hardening before further workspace/design rollout |
+| **Current execution phase** | PR `#969` final merge readiness; migration 037 applied to production Neon |
 | **Single active runtime objective** | Exact CV/document duplicate protection and atomic idempotency: issue `#960`, draft PR `#969` |
-| **Active PR branch/head** | `feat/user-documents-dedup` @ `4a0cf6cce3ef797a65f0b73a1259ccbefa12b1c6` |
+| **Active PR branch/head** | `feat/user-documents-dedup` @ `fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e` |
 | **Next runtime objective** | `#963` — persist confirmed onboarding CV and hydrate extracted profile fields |
 | **Owner gate after #963** | Authenticated production smoke; only then mark onboarding `VERIFIED` |
-| **Last updated** | 2026-07-11 |
+| **Last updated** | 2026-07-11 (release check) |
 
 ## Execution lock
 
@@ -76,9 +76,9 @@ Before making any write:
 ## Binding sequence
 
 ```text
-#969 reviewed + CI green
+#969 independently reviewed READY + migration 037 applied to Neon
+  -> final required CI green
   -> owner approves merge
-  -> apply migration 037 safely to Neon
   -> deploy and smoke the canonical file-upload path
   -> start #963 on a fresh branch from updated main
   -> persist onboarding CV + hydrate profile
@@ -102,7 +102,7 @@ Therefore `#967` is blocked. When it resumes, it must rebase from current `main`
 
 | PR | Track | Decision |
 | ---: | --- | --- |
-| `#969` | CV/file persistence foundation | **Only active implementation PR**; keep draft until review and required CI are complete |
+| `#969` | CV/file persistence foundation | **Only active implementation PR**; migration 037 applied to production Neon, final merge readiness pending required CI green |
 | `#968` | Workspace governance for `#965` | Hold; docs-only, not permission for more agentic work |
 | `#967` | Pre-launch gate/waitlist | Hold; blocked by separate scope and migration collision |
 | `#965` | Read-only journey-state seed | Hold draft; no follow-on without owner DEC |
@@ -133,10 +133,7 @@ Stop and ask the owner instead of continuing when:
 ## Next exact action
 
 ```text
-Independently review PR #969 at exact head
-4a0cf6cce3ef797a65f0b73a1259ccbefa12b1c6.
-
-Verify scope, migration drift registration, atomic conflict behavior,
-quota ordering, primary-CV invariants, changed files, required CI, and rollback.
-Do not merge, apply migration, start #963, or open new runtime work.
+Run and verify required CI for PR #969 at fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e.
+Mark the PR ready for review once pytest, frontend, playwright, postgres-integration,
+and Vercel are green. Do not merge, deploy, start #963, or open new runtime work.
 ```

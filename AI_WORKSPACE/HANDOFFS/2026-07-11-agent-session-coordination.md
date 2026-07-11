@@ -12,20 +12,21 @@ This handoff restores one cold-start path and one execution lock.
 
 ## Verified live state at the time of this handoff
 
-- `main`: `9ceb87b1b6b4e112ffb5940b167408e8ef0cb16e`
-- latest main commit: `docs(workspace): sync onboarding and auth-guard status (#964)`
+- `main`: `50f73f04ecf078ae5993c2f805e5ea89351360d6`
+- latest main commit: `docs(workspace): coordination handoff + agent rules update (#971)`
 - only active runtime PR: `#969`
 - active branch: `feat/user-documents-dedup`
-- active head: `4a0cf6cce3ef797a65f0b73a1259ccbefa12b1c6`
+- active head: `fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e` (reviewed `960f2d4` merged with `origin/main`)
 - active objective: issue `#960`, exact CV/document duplicate protection and atomic idempotency
+- migration 037: applied to production Neon (2026-07-11 03:26:00–03:26:29 UTC); STEP 0 violations = 0; `user_documents` count remained 12
 - next objective after merge/migration/deploy verification: `#963`, onboarding CV persistence and profile hydration
 
 ## Binding execution order
 
 ```text
-#969 review + CI
+#969 independently reviewed READY + migration 037 applied to Neon
+  -> final required CI green
   -> owner merge approval
-  -> migration 037 apply with Neon safety gate
   -> deploy/upload smoke
   -> #963 from updated main
   -> onboarding persistence + profile hydration
@@ -90,20 +91,10 @@ Do not create parallel work when an active PR already exists.
 
 ## Next exact action
 
-Independently review PR `#969` at exact head `4a0cf6cce3ef797a65f0b73a1259ccbefa12b1c6`.
+Run and verify required CI for PR `#969` at `fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e` (pytest, frontend, playwright, postgres-integration, Vercel). Mark the PR ready for review once all checks are green.
 
-Review only:
-
-- changed-file scope;
-- migration drift registration;
-- unique-index and concurrent conflict behavior;
-- dedupe-before-quota ordering;
-- primary-CV invariants;
-- focused and required CI;
-- rollback.
-
-Do not merge, apply migration, start `#963`, or open a new runtime branch.
+Do not merge, deploy, start `#963`, or open a new runtime branch.
 
 ## Rollback
 
-Revert this docs-only PR. No runtime or data rollback is required.
+Revert this docs-only PR. Migration 037 has been applied to production Neon and is additive/unique-index only; no application rows were changed. A code rollback does not require a database rollback.
