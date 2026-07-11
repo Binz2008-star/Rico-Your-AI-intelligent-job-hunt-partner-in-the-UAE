@@ -441,7 +441,14 @@ class TestUploadDedupRoute:
         with patch.object(files_mod, "_db", mock_db), \
              patch.object(files_mod, "enforce_document_quota", enforce), \
              patch.object(files_mod, "get_current_user", return_value={"email": "u@test.com", "role": "user"}):
-            result = asyncio.get_event_loop().run_until_complete(
+            # asyncio.run() (not get_event_loop().run_until_complete()) --
+            # get_event_loop() raises "there is no current event loop in
+            # thread 'MainThread'" when an earlier async test in the same
+            # pytest session has already torn down/unset the thread's loop
+            # (order-dependent, only reproduces in the full combined run).
+            # asyncio.run() always creates and cleans up its own loop, so
+            # it's independent of any prior test's event-loop state.
+            result = asyncio.run(
                 raw(req, file=_FakeUpload(data, filename=filename), doc_type=doc_type)
             )
         return result, mock_db, enforce

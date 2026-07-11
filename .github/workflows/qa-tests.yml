@@ -49,6 +49,9 @@ jobs:
             tests/test_tc2_target_role_propagation.py \
             tests/test_tc2_tc8_wiring.py \
             tests/test_tc8_interview_prep_grounding.py \
+            tests/test_user_documents_dedup.py \
+            tests/test_908_rc4_prevent_noncv_active_cv.py \
+            tests/test_963_onboarding_cv_persistence.py \
             -v --tb=short
 
   # Real-Postgres coverage for the user_documents single-primary invariant
@@ -93,12 +96,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run real-Postgres user_documents integration tests
+      - name: Run real-Postgres integration tests (user_documents #960 + cv_upload_artifacts #963)
         env:
           RICO_TEST_DATABASE_URL: "postgresql://rico_test:rico_test@localhost:5432/rico_test"
           JWT_SECRET: "test-secret-ci-only"
         run: |
-          PYTHONPATH=$GITHUB_WORKSPACE pytest tests/integration/test_user_documents_postgres.py -v --tb=short
+          PYTHONPATH=$GITHUB_WORKSPACE pytest \
+            tests/integration/test_user_documents_postgres.py \
+            tests/integration/test_cv_upload_artifacts_postgres.py \
+            -v --tb=short
 
   playwright:
     runs-on: ubuntu-latest
