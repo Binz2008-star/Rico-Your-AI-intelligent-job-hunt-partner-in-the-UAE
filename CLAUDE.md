@@ -200,7 +200,11 @@ The repo combines three layers:
 - Auth uses JWT in an `httpOnly` cookie.
 - Public signup uses `POST /api/v1/auth/register`.
 - Signup must force `role="user"` always.
-- Signup auto-logs in by setting the JWT cookie.
+- Signup creates an **unverified** normal user. It does **not** set an authenticated JWT
+  cookie; instead it **clears any stale auth cookie** (`register()` calls `delete_cookie`) and
+  returns `email_verification_required=true`.
+- **Email verification is required before login** — `POST /api/v1/auth/login` rejects an
+  unverified email; only a successful login sets the HTTP-only JWT cookie.
 - Admin accounts must not be creatable by public request body fields.
 - Protected routes must derive identity from JWT, not from request body `user_id`.
 

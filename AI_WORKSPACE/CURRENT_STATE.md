@@ -1,6 +1,29 @@
 # Current State
 
-> **Reconciliation header — 2026-07-10, night (latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-11 (latest; supersedes all headers below).**
+> `main` HEAD `1238ff940b2b11e763f46f31b6f6ec865114cfc2`. Merged + production-deployed since the
+> header below: **#955** (onboarding restoration + Atelier migration + read-only
+> `GET /api/v1/onboarding/status` with a strict, DDL/commit-free reader; `/onboarding` is now
+> the real authenticated first-run flow — `DEC-20260710-004`), **#956** (docs merge/verification
+> record), and **#958** (shared auth guard for `/settings` + `/profile`). **Auth-boundary smoke
+> findings #2 (`/settings`) and #5 (`/profile`) are RESOLVED via #958 and production-verified
+> 2026-07-11** (guest → `/login?next=<encoded path>`, no private shell, no private API;
+> `/command` stays public; `/onboarding` unchanged). **Onboarding status is PARTIAL for a
+> persistence reason, not account availability** — a verified production account was created and
+> used; registration+verification, incomplete→`/onboarding`, the three steps, Skip→`/command`
+> (no completion persisted), and real CV upload/parsing/review all PASS. Remaining gap: the
+> onboarding CV is not persisted to My Files and extracted years/current-role/target-roles are
+> not fully hydrated, so final-submit persistence + logout→login completion cannot close yet.
+> **Binding sequence: #960 (exact-dedupe/idempotency foundation) → #963 (onboarding CV
+> persistence + hydration) → owner production smoke → onboarding PARTIAL becomes VERIFIED.**
+> **#962** (safe login return-path `next`) is a separate, later increment. NOT started (holds):
+> the remaining auth-guard routes (`/applications`,`/upload`,
+> `/flow`,`/queue`), #960/#962/#963, command i18n (finding #4, still open), and
+> workspace/dashboard migration. This header is a docs-only sync; no `apps/web`/`src` runtime
+> change. Full detail: `HANDOFFS/2026-07-10-fe-onboarding-restore-atelier.md`, `TASKS.md`
+> (TASK-20260710-005 done, TASK-20260711-001 done, TASK-20260711-002 tracked).
+>
+> **Reconciliation header — 2026-07-10, night (supersedes all headers below).**
 > **Rollout scope corrected by the owner: `/design-preview` is the approved production target
 > for shape + content + flows** — not "visual polish" and not "landing below-the-fold only."
 > Recorded as `DEC-20260710-002` (expands `DEC-20260710-001`), with an evidence-based reference
