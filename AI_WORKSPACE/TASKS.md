@@ -219,10 +219,17 @@ invariants for CV uploads. Foundation only — **no onboarding wiring in this ta
 
 ### TASK-20260711-003 — Persist confirmed onboarding CV and hydrate extracted fields
 
-Status: blocked on #960 (not started)
-Owner: unassigned
-Branch: TBD
-Issue/PR: #963
+> **Continuity correction (2026-07-11, reviewer session):** this task WAS already started —
+> `PROJECT_STATUS.md`'s "Active PR branch/head: None" / "#963 not yet started" claims are
+> **stale**. An open draft PR already implements this task; see below. Do not open a second
+> parallel branch for #963. Full detail: `HANDOFFS/2026-07-11-963-ci-and-status-reconciliation.md`.
+
+Status: review (draft PR open; CI red on an apparently pre-existing, unrelated failure — see
+handoff)
+Owner: unattributed prior session (PR author is `Binz2008-star` via Claude Code; not this
+session)
+Branch: `fix/963-onboarding-cv-persistence-artifact`
+Issue/PR: #963 / **PR #975** (draft, "do not merge" per PR body, awaiting review)
 
 #### Objective
 Wire the final onboarding confirmation to the canonical persistence path **after** the exact
@@ -231,10 +238,16 @@ and extracted years / current role / target roles hydrate into the profile. This
 onboarding out of PARTIAL.
 
 #### Acceptance criteria
-- [ ] onboarding confirmation persists the CV via the canonical path (built on #960)
-- [ ] extracted years/current-role/target-roles hydrate into the profile
-- [ ] final-submit persistence + logout→login completion smoke pass with a verified account
+- [x] onboarding confirmation persists the CV via the canonical path (built on #960) — implemented
+  in PR #975, per its description (`get_or_create_user_document`, hard-reject on missing/expired/
+  foreign/mismatched artifact, migration `038_cv_upload_artifacts.sql`)
+- [x] extracted years/current-role/target-roles hydrate into the profile — per PR #975 description
+- [ ] final-submit persistence + logout→login completion smoke pass with a verified account — not
+  yet run (owner-gated, needs merge/deploy first)
 - [ ] then owner production smoke → lift onboarding status PARTIAL → VERIFIED in the handoff
+- [ ] **new, found this session:** resolve the CI `pytest` red on PR #975's head
+  (`ea7976d`) before merge — see handoff for root-cause evidence (looks pre-existing/suite-wide,
+  not caused by this PR's diff, but not yet proven root-cause, only proven not-isolated-to-this-file)
 
 ### TASK-20260711-004 — Consume validated login return path (`next`)
 
