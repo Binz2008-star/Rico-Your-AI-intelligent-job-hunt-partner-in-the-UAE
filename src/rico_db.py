@@ -413,6 +413,24 @@ class RicoDB:
             "is_primary": bool(row["is_primary"] if isinstance(row, dict) else row[3]),
         }
 
+    @staticmethod
+    def _lock_primary_slot(cur, user_id: str, doc_type: str) -> None:
+        """Serialize every write that can change the primary flag for this
+        (user_id, doc_type) pair, for the rest of the current transaction.
+
+        A transaction-scoped Postgres advisory lock, not a row lock — it
+        works even when the user has zero document rows yet (the first-ever
+        upload with is_primary=True), which `SELECT ... FOR UPDATE` cannot do
+        since there is no row to lock. Held until COMMIT/ROLLBACK
+        (pg_advisory_xact_lock), so two concurrent primary-changing calls for
+        the same (user_id, doc_type) are fully ordered: the second blocks
+        until the first's transaction ends, then sees its committed result.
+        """
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(hashtext(%s))",
+            (f"user_documents_primary:{user_id}:{doc_type}",),
+        )
+
     def save_user_document(
         self,
         *,
@@ -430,13 +448,21 @@ class RicoDB:
     ) -> Optional[str]:
         """Insert a new document record. Returns the new row's UUID id.
 
-        Clearing any prior primary flag and inserting the new row happen in a
-        single transaction — never two, so a crash/exception between the two
-        steps cannot leave the user with zero primary documents.
+        When ``is_primary``, the old primary is cleared BEFORE the new row is
+        inserted, inside one locked transaction. Clearing first (rather than
+        inserting the new primary first) matters under migration 037's
+        partial unique index `uq_user_documents_one_primary_per_type` —
+        that index is not deferrable, so it is checked immediately per
+        statement; inserting a second is_primary=TRUE row while the old one
+        still carries the flag would violate it right at the INSERT. The
+        advisory lock (see `_lock_primary_slot`) serializes concurrent
+        primary-setting calls so two of them can never both pass the clear
+        step before either has inserted.
         """
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 if is_primary:
+                    self._lock_primary_slot(cur, user_id, doc_type)
                     cur.execute(
                         """
                         UPDATE user_documents SET is_primary = FALSE, updated_at = now()
@@ -481,19 +507,69 @@ class RicoDB:
         Returns ``{"id", "filename", "doc_type", "is_primary", "inserted"}``.
 
         ``inserted=False`` means a row with this exact hash already existed —
-        either because a caller-side pre-check missed it, or because a
-        concurrent identical upload won the race between this call's own
-        pre-check and its INSERT. In both cases the response reflects the
+        either because a caller-side pre-check missed it, or because this
+        call itself found one. In both cases the response reflects the
         EXISTING row's canonical filename/id, never the just-uploaded
         filename, so the caller can't report metadata that doesn't match what
         is actually stored. No new row is created and no primary flag is
         touched on a duplicate.
 
-        Requires migration 037 (content_hash column + partial unique index)
+        When ``is_primary``, this whole check-then-act sequence runs under
+        the same advisory lock used by `save_user_document` /
+        `set_primary_document` (see `_lock_primary_slot`), keyed on
+        (user_id, doc_type). That serializes it against every other
+        primary-changing call for this user/doc_type — including a
+        concurrent identical upload — so the duplicate check below is safe to
+        trust: nothing else can insert a conflicting (user_id, doc_type,
+        content_hash) row, or touch is_primary, while this lock is held. That
+        is what makes it safe to clear the old primary BEFORE inserting the
+        new one (required by the non-deferrable partial unique index
+        `uq_user_documents_one_primary_per_type` — see `save_user_document`'s
+        docstring) without risking leaving zero primaries if the insert turns
+        out to be a duplicate after all: under the lock, it structurally
+        cannot be, because the duplicate check just above already confirmed
+        no such row exists, and nothing else can create one while we hold it.
+
+        Requires migration 037 (content_hash column + partial unique indexes)
         to already be applied — see migrations/037_user_documents_content_hash.sql.
         """
         with self._transaction() as conn:
             with conn.cursor() as cur:
+                if is_primary:
+                    self._lock_primary_slot(cur, user_id, doc_type)
+
+                # Validate/check the target WITHOUT mutating anything yet.
+                cur.execute(
+                    """
+                    SELECT id, filename, doc_type, is_primary
+                      FROM user_documents
+                     WHERE user_id = %s AND doc_type = %s AND content_hash = %s
+                     LIMIT 1
+                    """,
+                    (user_id, doc_type, content_hash),
+                )
+                existing = cur.fetchone()
+                if existing is not None:
+                    return {
+                        "id": str(existing["id"] if isinstance(existing, dict) else existing[0]),
+                        "filename": (existing["filename"] if isinstance(existing, dict) else existing[1]),
+                        "doc_type": (existing["doc_type"] if isinstance(existing, dict) else existing[2]),
+                        "is_primary": bool(existing["is_primary"] if isinstance(existing, dict) else existing[3]),
+                        "inserted": False,
+                    }
+
+                if is_primary:
+                    # Clear the old primary BEFORE inserting the new one — see
+                    # docstring. Safe under the lock: no concurrent writer can
+                    # have inserted a matching row since our check above.
+                    cur.execute(
+                        """
+                        UPDATE user_documents SET is_primary = FALSE, updated_at = now()
+                         WHERE user_id = %s AND doc_type = %s AND is_primary = TRUE
+                        """,
+                        (user_id, doc_type),
+                    )
+
                 cur.execute(
                     """
                     INSERT INTO user_documents
@@ -511,48 +587,25 @@ class RicoDB:
                      years_experience, current_role, content_hash),
                 )
                 row = cur.fetchone()
-                if row is not None:
-                    new_id = str(row["id"] if isinstance(row, dict) else row[0])
-                    # Only after a real insert do we (optionally) move the primary
-                    # flag — never on a duplicate, so the invariant is preserved.
-                    # Same transaction as the insert above → atomic.
-                    if is_primary:
-                        cur.execute(
-                            """
-                            UPDATE user_documents SET is_primary = FALSE, updated_at = now()
-                             WHERE user_id = %s AND doc_type = %s AND id <> %s AND is_primary = TRUE
-                            """,
-                            (user_id, doc_type, new_id),
-                        )
-                    return {
-                        "id": new_id,
-                        "filename": (row["filename"] if isinstance(row, dict) else row[1]),
-                        "doc_type": (row["doc_type"] if isinstance(row, dict) else row[2]),
-                        "is_primary": bool(row["is_primary"] if isinstance(row, dict) else row[3]),
-                        "inserted": True,
-                    }
-                # Exact duplicate already present (pre-check miss or a lost
-                # race) → return the EXISTING row's canonical metadata.
-                cur.execute(
-                    """
-                    SELECT id, filename, doc_type, is_primary
-                      FROM user_documents
-                     WHERE user_id = %s AND doc_type = %s AND content_hash = %s
-                     LIMIT 1
-                    """,
-                    (user_id, doc_type, content_hash),
-                )
-                erow = cur.fetchone()
-        if erow is None:
-            # Should not happen (DO NOTHING implies a conflicting row exists),
-            # but never fabricate a document that isn't there.
-            raise RuntimeError("get_or_create_user_document: conflict with no matching row")
+                if row is None:
+                    # Structurally unreachable under the lock (see docstring):
+                    # our own pre-check above just confirmed no conflicting
+                    # row exists, and nothing else can create one while we
+                    # hold pg_advisory_xact_lock for this (user_id, doc_type).
+                    # Treat it as a hard error and let the transaction roll
+                    # back — including undoing the primary-clear above —
+                    # rather than silently returning a duplicate response
+                    # that doesn't match a row we can find.
+                    raise RuntimeError(
+                        "get_or_create_user_document: unexpected insert conflict "
+                        "despite advisory-lock-protected pre-check"
+                    )
         return {
-            "id": str(erow["id"] if isinstance(erow, dict) else erow[0]),
-            "filename": (erow["filename"] if isinstance(erow, dict) else erow[1]),
-            "doc_type": (erow["doc_type"] if isinstance(erow, dict) else erow[2]),
-            "is_primary": bool(erow["is_primary"] if isinstance(erow, dict) else erow[3]),
-            "inserted": False,
+            "id": str(row["id"] if isinstance(row, dict) else row[0]),
+            "filename": (row["filename"] if isinstance(row, dict) else row[1]),
+            "doc_type": (row["doc_type"] if isinstance(row, dict) else row[2]),
+            "is_primary": bool(row["is_primary"] if isinstance(row, dict) else row[3]),
+            "inserted": True,
         }
 
     def list_user_documents(self, user_id: str) -> List[Dict[str, Any]]:
@@ -673,26 +726,29 @@ class RicoDB:
     def set_primary_document(self, user_id: str, doc_id: str) -> bool:
         """Set one CV document as primary, clearing is_primary on all others.
 
-        Both steps run in one transaction, and in an order that never leaves
-        the user with zero primary documents: the target is set TRUE first
-        (aborting the whole transaction if it doesn't exist/isn't owned by
-        this user/isn't a CV), and only then are the other rows cleared.
+        Runs under the same advisory lock as `save_user_document` /
+        `get_or_create_user_document` (see `_lock_primary_slot`), and in an
+        order that never leaves the user with zero primary documents AND
+        never trips migration 037's non-deferrable partial unique index
+        (`uq_user_documents_one_primary_per_type`): the target is validated
+        FIRST with a plain SELECT (no flags touched), the whole transaction
+        aborts with no side effects if it doesn't exist/isn't owned by this
+        user/isn't a CV, THEN the old primary is cleared, and only THEN is
+        the (already-validated) target set TRUE. That ordering means at no
+        point do two rows carry is_primary=TRUE at once — inserting/updating
+        a second TRUE row while the first still has it would violate the
+        index immediately, since the index isn't deferrable.
         """
         with self._transaction() as conn:
             with conn.cursor() as cur:
+                self._lock_primary_slot(cur, user_id, "cv")
                 cur.execute(
-                    """
-                    UPDATE user_documents
-                    SET is_primary = TRUE, updated_at = now()
-                    WHERE id = %s AND user_id = %s AND doc_type = 'cv'
-                    RETURNING id
-                    """,
+                    "SELECT id FROM user_documents WHERE id = %s AND user_id = %s AND doc_type = 'cv'",
                     (doc_id, user_id),
                 )
-                row = cur.fetchone()
-                if row is None:
-                    # Nothing matched — abort before touching any other row so
-                    # a bad doc_id can never wipe out the existing primary.
+                if cur.fetchone() is None:
+                    # Nothing matched — abort before touching any row so a
+                    # bad doc_id can never wipe out the existing primary.
                     return False
                 cur.execute(
                     """
@@ -700,6 +756,13 @@ class RicoDB:
                      WHERE user_id = %s AND doc_type = 'cv' AND id <> %s AND is_primary = TRUE
                     """,
                     (user_id, doc_id),
+                )
+                cur.execute(
+                    """
+                    UPDATE user_documents SET is_primary = TRUE, updated_at = now()
+                     WHERE id = %s AND user_id = %s AND doc_type = 'cv'
+                    """,
+                    (doc_id, user_id),
                 )
         return True
 

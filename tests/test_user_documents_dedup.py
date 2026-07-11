@@ -67,9 +67,12 @@ def _new_db() -> RicoDB:
 class TestGetOrCreateUserDocument:
     def test_new_insert_returns_inserted_true(self):
         cur = MagicMock()
-        cur.fetchone.return_value = {
-            "id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False,
-        }
+        # 1st fetchone: duplicate pre-check (SELECT) -> not found.
+        # 2nd fetchone: INSERT ... RETURNING.
+        cur.fetchone.side_effect = [
+            None,
+            {"id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False},
+        ]
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
             result = db.get_or_create_user_document(
@@ -82,18 +85,18 @@ class TestGetOrCreateUserDocument:
         }
         sql = " ".join(str(c.args[0]).upper() for c in cur.execute.call_args_list)
         assert "ON CONFLICT" in sql and "CONTENT_HASH" in sql
+        statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
+        assert statements == ["SELECT", "INSERT"]  # no advisory lock — is_primary not requested
 
     def test_exact_duplicate_returns_existing_canonical_metadata(self):
-        """A conflicting insert must surface the EXISTING row's own filename,
-        not the filename of the upload that lost the race — the response must
+        """A pre-existing row must surface its OWN filename, not the filename
+        of the upload that is being deduped against it — the response must
         never claim metadata that isn't actually what's stored."""
         cur = MagicMock()
-        # INSERT ... DO NOTHING returns no row; the follow-up SELECT finds the
-        # pre-existing row, whose filename differs from this call's incoming one.
-        cur.fetchone.side_effect = [
-            None,
-            {"id": "existing-uuid", "filename": "ORIGINAL-cv.pdf", "doc_type": "cv", "is_primary": True},
-        ]
+        # Duplicate pre-check SELECT finds it immediately — no INSERT attempted.
+        cur.fetchone.return_value = {
+            "id": "existing-uuid", "filename": "ORIGINAL-cv.pdf", "doc_type": "cv", "is_primary": True,
+        }
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
             result = db.get_or_create_user_document(
@@ -106,16 +109,15 @@ class TestGetOrCreateUserDocument:
         assert result["filename"] == "ORIGINAL-cv.pdf"  # canonical, not the incoming name
         assert result["is_primary"] is True
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        assert statements == ["INSERT", "SELECT"]  # no extra INSERT/UPDATE on a duplicate
+        assert statements == ["SELECT"]  # found on the pre-check — no INSERT, no UPDATE
 
     def test_different_filename_same_bytes_is_a_duplicate(self):
         """Same content_hash (same bytes) with a different filename is still
         an exact duplicate — dedup is content-keyed, not filename-keyed."""
         cur = MagicMock()
-        cur.fetchone.side_effect = [
-            None,
-            {"id": "existing-uuid", "filename": "first-name.pdf", "doc_type": "cv", "is_primary": False},
-        ]
+        cur.fetchone.return_value = {
+            "id": "existing-uuid", "filename": "first-name.pdf", "doc_type": "cv", "is_primary": False,
+        }
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
             result = db.get_or_create_user_document(
@@ -128,9 +130,10 @@ class TestGetOrCreateUserDocument:
     def test_same_filename_different_bytes_is_not_a_duplicate(self):
         """Two uploads sharing a filename but distinct content_hash both insert."""
         cur = MagicMock()
-        cur.fetchone.return_value = {
-            "id": "new-uuid-2", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False,
-        }
+        cur.fetchone.side_effect = [
+            None,
+            {"id": "new-uuid-2", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False},
+        ]
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
             result = db.get_or_create_user_document(
@@ -141,12 +144,13 @@ class TestGetOrCreateUserDocument:
         assert result["id"] == "new-uuid-2"
 
     def test_primary_flag_untouched_on_duplicate(self):
-        """No UPDATE clearing other primaries is ever issued on a duplicate."""
+        """No UPDATE clearing other primaries is ever issued on a duplicate,
+        even when is_primary=True was requested — the pre-check short-circuits
+        before either the clear or the insert."""
         cur = MagicMock()
-        cur.fetchone.side_effect = [
-            None,
-            {"id": "existing-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True},
-        ]
+        cur.fetchone.return_value = {
+            "id": "existing-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True,
+        }
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
             db.get_or_create_user_document(
@@ -154,25 +158,48 @@ class TestGetOrCreateUserDocument:
                 doc_type="cv", file_size=10, content_hash="abc123", is_primary=True,
             )
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        assert "UPDATE" not in statements  # only INSERT then SELECT
+        # advisory-lock SELECT, duplicate-check SELECT — no UPDATE, no INSERT.
+        assert statements == ["SELECT", "SELECT"]
 
     def test_primary_flag_moved_atomically_on_real_insert(self):
-        """A genuine insert with is_primary=True clears other primaries in the
-        SAME transaction (single _transaction() acquisition = atomic)."""
+        """A genuine insert with is_primary=True clears the OLD primary BEFORE
+        inserting the new one (required by the non-deferrable partial unique
+        index), all inside one locked transaction (single _transaction() call
+        = atomic)."""
         cur = MagicMock()
-        cur.fetchone.return_value = {
-            "id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True,
-        }
+        cur.fetchone.side_effect = [
+            None,  # duplicate pre-check: not found
+            {"id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True},  # INSERT RETURNING
+        ]
         db = _new_db()
         tx = _db_with_cursor(cur)
         with patch.object(RicoDB, "_transaction", return_value=tx) as mock_tx:
-            db.get_or_create_user_document(
+            result = db.get_or_create_user_document(
                 user_id="u@test.com", filename="cv.pdf", original_filename="cv.pdf",
                 doc_type="cv", file_size=10, content_hash="abc123", is_primary=True,
             )
-        mock_tx.assert_called_once()  # one transaction — insert + clear-others together
+        assert result["inserted"] is True
+        mock_tx.assert_called_once()  # one transaction — lock + check + clear + insert together
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        assert statements == ["INSERT", "UPDATE"]
+        # advisory lock, duplicate check, clear-old-primary, THEN insert —
+        # never insert-before-clear (that would violate the non-deferrable
+        # partial unique index the instant the INSERT ran).
+        assert statements == ["SELECT", "SELECT", "UPDATE", "INSERT"]
+
+    def test_unexpected_insert_conflict_raises_instead_of_silently_returning(self):
+        """If the INSERT still conflicts despite the lock-protected pre-check
+        (should be structurally unreachable), fail loudly and let the whole
+        transaction roll back — including undoing the primary-clear — rather
+        than fabricate a duplicate response for a row we can't find."""
+        cur = MagicMock()
+        cur.fetchone.side_effect = [None, None]  # pre-check: not found; INSERT: no row returned
+        db = _new_db()
+        with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
+            with pytest.raises(RuntimeError):
+                db.get_or_create_user_document(
+                    user_id="u@test.com", filename="cv.pdf", original_filename="cv.pdf",
+                    doc_type="cv", file_size=10, content_hash="abc123",
+                )
 
 
 # ── Repo-level: find_user_document_by_hash ─────────────────────────────────────
@@ -227,7 +254,8 @@ class TestSaveUserDocumentLegacy:
             )
         mock_tx.assert_called_once()
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        assert statements == ["UPDATE", "INSERT"]
+        # advisory lock, THEN clear-old-primary, THEN insert.
+        assert statements == ["SELECT", "UPDATE", "INSERT"]
 
     def test_no_primary_clear_when_not_primary(self):
         cur = MagicMock()
@@ -245,9 +273,9 @@ class TestSaveUserDocumentLegacy:
 # ── Repo-level: set_primary_document ──────────────────────────────────────────
 
 class TestSetPrimaryDocument:
-    def test_success_sets_target_then_clears_others_atomically(self):
+    def test_success_validates_then_clears_then_sets_atomically(self):
         cur = MagicMock()
-        cur.fetchone.return_value = {"id": "doc-1"}  # target UPDATE matched
+        cur.fetchone.return_value = {"id": "doc-1"}  # validate SELECT matched
         db = _new_db()
         tx = _db_with_cursor(cur)
         with patch.object(RicoDB, "_transaction", return_value=tx) as mock_tx:
@@ -255,20 +283,23 @@ class TestSetPrimaryDocument:
         assert ok is True
         mock_tx.assert_called_once()
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        assert statements == ["UPDATE", "UPDATE"]
+        # advisory lock, validate (no mutation), clear-old, set-new — never two
+        # TRUE rows visible to the non-deferrable partial unique index at once.
+        assert statements == ["SELECT", "SELECT", "UPDATE", "UPDATE"]
 
     def test_failure_target_not_found_never_touches_other_rows(self):
         """A bad/foreign doc_id must abort before clearing anything — the
         existing primary (if any) must survive an invalid set-primary call."""
         cur = MagicMock()
-        cur.fetchone.return_value = None  # target UPDATE matched nothing
+        cur.fetchone.return_value = None  # validate SELECT matched nothing
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
             ok = db.set_primary_document("u@test.com", "does-not-exist")
         assert ok is False
-        # Only the (no-op) target UPDATE ran — the clear-others UPDATE never fired.
+        # Only the advisory lock + the (no-op) validate SELECT ran — zero UPDATEs.
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        assert statements == ["UPDATE"]
+        assert statements == ["SELECT", "SELECT"]
+        assert "UPDATE" not in statements
 
 
 # ── Repo-level: update_user_document conflict handling ────────────────────────
