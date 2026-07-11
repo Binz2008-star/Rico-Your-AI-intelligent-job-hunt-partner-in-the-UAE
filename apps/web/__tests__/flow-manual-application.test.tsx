@@ -5,11 +5,12 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
-const { fetchApplicationsMock, createManualApplicationMock, updateApplicationStatusMock, getApplicationStatsMock } = vi.hoisted(() => ({
+const { fetchApplicationsMock, createManualApplicationMock, updateApplicationStatusMock, getApplicationStatsMock, fetchMeMock } = vi.hoisted(() => ({
     fetchApplicationsMock: vi.fn(),
     createManualApplicationMock: vi.fn(),
     updateApplicationStatusMock: vi.fn(),
     getApplicationStatsMock: vi.fn().mockResolvedValue({}),
+    fetchMeMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -43,12 +44,17 @@ vi.mock("@/components/ui/MaterialIcon", () => ({
     MaterialIcon: ({ icon }: { icon: string }) => <span data-icon={icon}>{icon}</span>,
 }));
 
-vi.mock("@/lib/api", () => ({
-    getApplications: fetchApplicationsMock,
-    createManualApplication: createManualApplicationMock,
-    updateApplicationStatus: updateApplicationStatusMock,
-    getApplicationStats: getApplicationStatsMock,
-}));
+vi.mock("@/lib/api", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/lib/api")>();
+    return {
+        ...actual,
+        fetchMe: fetchMeMock,
+        getApplications: fetchApplicationsMock,
+        createManualApplication: createManualApplicationMock,
+        updateApplicationStatus: updateApplicationStatusMock,
+        getApplicationStats: getApplicationStatsMock,
+    };
+});
 
 import FlowPage from "@/app/flow/page";
 
@@ -66,6 +72,7 @@ beforeEach(() => {
     fetchApplicationsMock.mockReset();
     createManualApplicationMock.mockReset();
     updateApplicationStatusMock.mockReset();
+    fetchMeMock.mockReset().mockResolvedValue({ authenticated: true, guest: false, email: "test@example.com", role: "user" });
     try {
         localStorage.removeItem("rico-language");
     } catch {
