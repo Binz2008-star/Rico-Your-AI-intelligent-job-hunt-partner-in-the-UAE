@@ -1,17 +1,4 @@
-"""
-src/api/app.py
-Main FastAPI application for the Job Automation Platform API.
-
-Startup:
-    uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
-
-All API endpoints live under /api/v1/.
-The legacy control_server.py is preserved separately for backward compat.
-
-Required env vars (see .env.example):
-    ADMIN_EMAIL, ADMIN_PASSWORD or ADMIN_PASSWORD_HASH, JWT_SECRET (optional but recommended)
-    DATABASE_URL (optional — JSON fallback active when absent)
-"""
+"""Main FastAPI application for Rico Hunt."""
 from __future__ import annotations
 
 import logging
@@ -26,6 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from src.api.auth import decode_access_token, router as auth_router
+from src.api.middleware.prelaunch_login import PrelaunchLoginGateMiddleware
 from src.api.rate_limit import limiter, rate_limit_exceeded_handler
 from src.api.routers.actions import router as actions_router
 from src.api.routers.agent import router as agent_router
@@ -64,16 +52,11 @@ def _first_env(*names: str, default: str = "") -> str:
     return default
 
 
-# Captured at import time — every deploy restarts the process, so this is a
-# trustworthy "this build went live no earlier than" signal. The env-driven
-# deployed_at below is a static var that operators rarely update; verifying a
-# deploy against it alone is misleading (it once lagged main by six weeks).
 from datetime import datetime, timezone as _tz
 _PROCESS_STARTED_AT = datetime.now(_tz.utc).isoformat()
 
 
 def version_metadata() -> Dict[str, Any]:
-    """Deployment metadata shared by legacy and versioned routes."""
     return {
         "app": "ricohunt",
         "version": app.version,
@@ -92,10 +75,7 @@ def version_metadata() -> Dict[str, Any]:
             "VERCEL_ENV",
             default="production" if os.getenv("RENDER") else "development",
         ),
-        # Static env metadata — may be stale; prefer started_at + commit when
-        # verifying that a deploy is actually live.
         "deployed_at": _first_env("DEPLOYED_AT", "BUILD_TIME", "BUILD_TIMESTAMP"),
-        # Runtime-computed: when this process booted (resets on every deploy).
         "started_at": _PROCESS_STARTED_AT,
     }
 
@@ -104,11 +84,9 @@ def init_sentry() -> None:
     dsn = os.getenv("SENTRY_DSN", "").strip()
     if not dsn:
         return
-
     try:
         import sentry_sdk
         from sentry_sdk.integrations.fastapi import FastApiIntegration
-
         sentry_sdk.init(
             dsn=dsn,
             environment=os.getenv("SENTRY_ENVIRONMENT", os.getenv("RICO_ENV", "production")),
@@ -163,7 +141,6 @@ def _check_critical_tables() -> None:
 
 
 def _apply_sql_migration(label: str, sql: str) -> None:
-    """Run a raw SQL migration idempotently (IF NOT EXISTS guards in each statement)."""
     from src.db import get_db_connection
     conn = get_db_connection()
     if not conn:
@@ -182,9 +159,7 @@ def _apply_sql_migration(label: str, sql: str) -> None:
 
 
 def _apply_performance_indexes() -> None:
-    sql_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "migrations", "028_performance_indexes.sql"
-    )
+    sql_path = os.path.join(os.path.dirname(__file__), "..", "..", "migrations", "028_performance_indexes.sql")
     sql_path = os.path.normpath(sql_path)
     if not os.path.exists(sql_path):
         logger.warning("performance_indexes_migration not found at %s", sql_path)
@@ -195,9 +170,7 @@ def _apply_performance_indexes() -> None:
 
 
 def _apply_audit_helper_tables() -> None:
-    sql_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "migrations", "031_audit_helper_tables.sql"
-    )
+    sql_path = os.path.join(os.path.dirname(__file__), "..", "..", "migrations", "031_audit_helper_tables.sql")
     sql_path = os.path.normpath(sql_path)
     if not os.path.exists(sql_path):
         logger.warning("audit_helper_tables_migration not found at %s", sql_path)
@@ -208,9 +181,7 @@ def _apply_audit_helper_tables() -> None:
 
 
 def _apply_uploaded_document_context() -> None:
-    sql_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "migrations", "032_uploaded_document_context.sql"
-    )
+    sql_path = os.path.join(os.path.dirname(__file__), "..", "..", "migrations", "032_uploaded_document_context.sql")
     sql_path = os.path.normpath(sql_path)
     if not os.path.exists(sql_path):
         logger.warning("uploaded_document_context_migration not found at %s", sql_path)
@@ -228,14 +199,12 @@ async def lifespan(app: FastAPI):
         logger.info("rico_db_init OK")
     except Exception:
         logger.warning("rico_db_init skipped (DB unavailable or tables already exist)")
-
     try:
         from src.db import init_db
         init_db()
         logger.info("settings_migration OK")
     except Exception as exc:
         logger.warning("settings_migration failed: %s", exc)
-
     _check_critical_tables()
     _apply_performance_indexes()
     _apply_audit_helper_tables()
@@ -261,13 +230,11 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-_DEFAULT_CORS_ORIGINS = ",".join(
-    [
-        "http://localhost:3000",
-        "https://ricohunt.com",
-        "https://www.ricohunt.com",
-    ]
-)
+_DEFAULT_CORS_ORIGINS = ",".join([
+    "http://localhost:3000",
+    "https://ricohunt.com",
+    "https://www.ricohunt.com",
+])
 _origins_raw = os.getenv("CORS_ORIGINS", _DEFAULT_CORS_ORIGINS)
 _origins_list = [o.strip() for o in _origins_raw.split(",") if o.strip()]
 _wildcard = _origins_list == ["*"]
@@ -279,6 +246,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
+app.add_middleware(PrelaunchLoginGateMiddleware)
 
 
 @app.middleware("http")
@@ -287,21 +255,16 @@ async def hydrate_request_auth_context(request: Request, call_next):
     request.state.user_id = None
     request.state.access_token_present = False
     request.state.auth_cookie_invalid = False
-
     token = request.cookies.get("access_token")
     if token:
         request.state.access_token_present = True
         payload = decode_access_token(token)
         if payload and payload.get("sub"):
-            user = {
-                "email": payload["sub"],
-                "role": payload.get("role", "user"),
-            }
+            user = {"email": payload["sub"], "role": payload.get("role", "user")}
             request.state.current_user = user
             request.state.user_id = user["email"]
         else:
             request.state.auth_cookie_invalid = True
-
     if not is_request_allowed(request):
         return JSONResponse(
             status_code=403,
@@ -310,7 +273,6 @@ async def hydrate_request_auth_context(request: Request, call_next):
                 "code": "prelaunch_access_required",
             },
         )
-
     return await call_next(request)
 
 
@@ -340,35 +302,26 @@ app.include_router(mission_router)
 @app.get("/health")
 @app.head("/health")
 def health_check() -> Dict[str, Any]:
-    """Health check endpoint for load balancers and monitoring.
-
-    Includes a job-provider health indicator (configured/degraded only — never
-    secret values) so quota/rate-limit issues are observable without log diving.
-    """
     payload: Dict[str, Any] = {"status": "ok", "service": "Job Automation Platform API"}
     try:
         from src import job_providers
         payload["job_providers"] = job_providers.provider_health()
     except Exception:
-        # Health must never fail because of the provider indicator.
         pass
     return payload
 
 
 @app.get("/version")
 def version() -> Dict[str, Any]:
-    """Version endpoint for deployment tracking."""
     return version_metadata()
 
 
 @app.get("/api/v1/version")
 def api_version() -> Dict[str, Any]:
-    """Versioned deployment metadata endpoint."""
     return version_metadata()
 
 
 @app.get("/")
 @app.head("/")
 def root() -> Dict[str, str]:
-    """Root endpoint — confirms the API is reachable."""
     return {"status": "ok", "service": "Job Automation Platform API", "docs": "/api/docs"}
