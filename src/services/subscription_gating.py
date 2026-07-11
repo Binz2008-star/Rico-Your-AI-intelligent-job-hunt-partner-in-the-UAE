@@ -170,9 +170,13 @@ def count_saved_jobs(user_id: str) -> int:
     except Exception:
         from src.applications import get_applied_jobs
 
+        # Fallback path: count only rows that belong to *this* user. Rows with a
+        # missing/empty user_id are NOT this user's and must not inflate their
+        # saved-jobs quota (a multi-user product must never charge one account
+        # for unowned legacy rows).
         apps = [
             app for app in get_applied_jobs()
-            if not app.get("user_id") or app.get("user_id") == user_id
+            if app.get("user_id") == user_id
         ]
     return sum(1 for app in apps if isinstance(app, dict) and app.get("status") == "saved")
 

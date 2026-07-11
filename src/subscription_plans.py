@@ -147,7 +147,12 @@ def resolve_effective_user_plan(user_id: str) -> SubscriptionResponse:
     if current_period_end and current_period_end < now:
         is_active = False
 
-    # Entitlements come from plan definitions; DB columns are reserved for future per-user overrides.
+    # Entitlements are derived ONLY from the plan definition for the resolved tier.
+    # The per-user override columns on user_subscriptions (monthly_ai_message_limit,
+    # saved_jobs_limit, profile_optimization_limit, premium_recommendations_enabled,
+    # application_automation_enabled) are intentionally NOT read here — they are
+    # reserved for a future per-user-override feature and have no effect today.
+    # Setting them (via upsert_subscription) does not change a user's limits.
     entitlements = plan_obj.entitlements if (plan_obj and is_active) else FREE_ENTITLEMENTS
 
     sub = UserSubscription(
