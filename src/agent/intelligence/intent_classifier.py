@@ -1289,6 +1289,11 @@ _ARABIC_JOB_TERMS = frozenset([
 _ARABIC_REQUEST_TERMS = frozenset([
     # Gulf / Levantine
     "ابحث", "بحث", "دور", "اريد", "ابي", "ابغي",
+    # Colloquial "I want" verbs — بدي (Levantine), عايز/عاوز (Egyptian).
+    # Their absence classified "بدي شغل جديد" as unknown, routing the request
+    # to the conversational-AI path (which can fabricate listings) instead of
+    # a real, grounded job search. Only fire alongside a job noun (has_ar_job).
+    "بدي", "عايز", "عاوز",
     "احتاج", "محتاج", "شوف", "طلع", "جيب",
     "ساعدني", "ايجاد", "طلب",
     # Display / show request verbs — e.g. "اعرضلي" (show me), "احدث" (latest)
@@ -1367,6 +1372,11 @@ _ARABIC_ROLE_LEAD_STOPWORDS = frozenset({
     "مسمي", "عمل", "شغل", "عن", "لي", "لك", "في",
     # Profile-reference suffixes — mean "in my field/domain", not a job title
     "بمجالي", "بمجال", "مجالي", "تخصصي", "في مجالي",
+    # "new" is an adjective on the job noun ("a new job", "وظيفة جديدة"), never a role title. Without this it survives
+    # extraction as the role, producing the misleading "I do not recognize
+    # 'جديد' as a job role" reply for a plain "find me a new job"
+    # request. Normalised forms (ة→ه) plus the definite article.
+    "جديد", "جديده", "الجديد", "الجديده",
 })
 
 # Deterministic Arabic→English role synonyms for UAE job titles.

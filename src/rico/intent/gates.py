@@ -115,18 +115,38 @@ _LISTING_REQUEST_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
+_JOB_SEARCH_INTENTS: Final[frozenset[str]] = frozenset({
+    "job_search_explicit",
+    "job_search_multi_role",
+    "job_search_profile_match",
+})
+
+
 def is_explicit_job_listing_request(message: str) -> bool:
     """Return True when message is asking to be shown actual job listings.
 
     Catches both imperative commands and broader conversational requests so that
-    public/no-profile sessions can be intercepted before the AI fabricates listings.
+    any session — public OR authenticated — can be intercepted before an AI path
+    fabricates listings. The anchored regexes handle the fast common cases; for
+    everything else (colloquial Gulf/Egyptian phrasing the regexes miss, e.g.
+    "أبغى شغل جديد", "بدي وظيفة", "دورلي على شغل") we defer to the same
+    ``classify_intent`` used by the real search router, so this predicate never
+    drifts from the actual job-search classification.
     """
     lowered = (message or "").lower()
-    return (
-        bool(_DIRECT_JOB_REQUEST_RE.search(lowered))
-        or bool(_LISTING_REQUEST_RE.search(lowered))
-        or bool(_ARABIC_JOB_REQUEST_RE.search(message or ""))
-    )
+    if (
+        _DIRECT_JOB_REQUEST_RE.search(lowered)
+        or _LISTING_REQUEST_RE.search(lowered)
+        or _ARABIC_JOB_REQUEST_RE.search(message or "")
+    ):
+        return True
+    # Lazy import keeps this lightweight module free of a load-time dependency on
+    # the classifier (and avoids any import cycle).
+    try:
+        from src.agent.intelligence.intent_classifier import classify_intent
+        return classify_intent(message or "").intent in _JOB_SEARCH_INTENTS
+    except Exception:
+        return False
 
 
 def is_open_ended_question(message: str) -> tuple[bool, str]:

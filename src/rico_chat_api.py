@@ -19780,16 +19780,23 @@ class RicoChatAPI:
             )
 
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-        suggestion = ""
-        if target_roles:
-            suggestion = f" Based on your CV, I can search for: {', '.join(str(r) for r in target_roles[:3])}."
-        response = {
-            "type": "clarification",
-            "message": (
-                f"I do not recognize '{role_text}' as a job role.{suggestion} "
-                "Try a specific role title, or say 'help' for options."
-            ),
-        }
+        # Warm, non-jarring clarification instead of a blunt "I do not recognize
+        # '<x>'". Reply in the user's language: an Arabic query gets an Arabic
+        # message so the tone matches the rest of the conversation.
+        _roles_preview = ", ".join(str(r) for r in target_roles[:3])
+        if self._is_arabic_text(role_text):
+            suggestion = f" بناءً على سيرتك، يمكنني البحث عن: {_roles_preview}." if target_roles else ""
+            message = (
+                f"فهمت أنك تبحث عن وظيفة، لكن لم أتعرّف على «{role_text}» كمسمى وظيفي محدّد."
+                f"{suggestion} قل لي المسمى أو المجال الذي تريده، أو اكتب «مساعدة» لعرض الخيارات."
+            )
+        else:
+            suggestion = f" Based on your CV, I can search for: {_roles_preview}." if target_roles else ""
+            message = (
+                f"I understood you want a new job, but I didn't catch '{role_text}' as a specific role."
+                f"{suggestion} Tell me the role or field you're after, or say 'help' for options."
+            )
+        response = {"type": "clarification", "message": message}
         self._append_chat(user_id, "assistant", response["message"])
         return response
 
