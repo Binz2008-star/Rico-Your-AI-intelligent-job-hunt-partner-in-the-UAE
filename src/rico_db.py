@@ -212,13 +212,18 @@ CREATE INDEX IF NOT EXISTS idx_user_documents_user_created
     ON user_documents(user_id, created_at DESC);
 -- Idempotent column migration for existing installations (migration 026).
 ALTER TABLE user_documents ADD COLUMN IF NOT EXISTS skills_json JSONB DEFAULT '[]'::jsonb;
--- Exact-duplicate protection (migration 037, #960): nullable content hash +
--- PARTIAL unique index so historical NULL-hash rows are excluded.
-ALTER TABLE user_documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_user_documents_user_type_hash
-    ON user_documents (user_id, doc_type, content_hash)
-    WHERE content_hash IS NOT NULL;
 """
+# NOTE: migration 037 (content_hash column + uq_user_documents_user_type_hash +
+# uq_user_documents_one_primary_per_type) is intentionally NOT included here.
+# _USER_DOCUMENTS_DDL runs automatically on every process's first DB connect
+# (_ensure_schema) and on every app startup (RicoDB.init() via app.py's
+# lifespan) — an implicit, untested production schema mutation is exactly the
+# failure mode that caused the duplicate-DDL production 500 documented in
+# tests/test_user_documents_ddl.py. Migration 037 must be applied explicitly,
+# before deploy, per the sequence documented in
+# migrations/037_user_documents_content_hash.sql. A fresh/local/test database
+# gets the same explicit treatment — run migrations/*.sql in order — rather
+# than relying on this auto-applied DDL string.
 
 _APPLY_DRAFTS_DDL = """
 CREATE TABLE IF NOT EXISTS application_drafts (
@@ -240,6 +245,29 @@ CREATE INDEX IF NOT EXISTS idx_application_drafts_user_status
     ON application_drafts(user_id, status);
 ALTER TABLE application_drafts ADD COLUMN IF NOT EXISTS follow_up_at TIMESTAMPTZ;
 """
+
+
+class DocumentConflictError(Exception):
+    """A user_documents write would violate a uniqueness invariant.
+
+    Raised instead of letting the underlying unique-violation propagate as an
+    unhandled 500 (e.g. a doc_type rename colliding with an existing row that
+    has the same content_hash, or a primary-flag collision). Callers should
+    catch this and return a controlled conflict response.
+    """
+
+
+_UNIQUE_VIOLATION_PGCODE = "23505"
+
+
+def _is_unique_violation(exc: BaseException) -> bool:
+    """True when *exc* is a Postgres unique-violation (SQLSTATE 23505).
+
+    Checked via ``pgcode`` rather than ``isinstance(exc, psycopg2.errors.UniqueViolation)``
+    so this also works against plain mocked exceptions in tests, not only a
+    real psycopg2 driver error.
+    """
+    return getattr(exc, "pgcode", None) == _UNIQUE_VIOLATION_PGCODE
 
 
 class RicoDB:
@@ -399,40 +427,71 @@ class RicoDB:
         years_experience: Optional[float] = None,
         current_role: Optional[str] = None,
         is_primary: bool = False,
-        content_hash: Optional[str] = None,
     ) -> Optional[str]:
-        """Insert a new document record. Returns the row's UUID id.
+        """Insert a new document record. Returns the new row's UUID id.
 
-        When ``content_hash`` is provided, insertion is atomic against the
-        partial unique index ``(user_id, doc_type, content_hash)``: an exact
-        duplicate returns the EXISTING row's id (no new row, primary-CV flag
-        untouched) instead of creating another. ``content_hash=None`` preserves
-        the original insert behavior for legacy callers.
+        Clearing any prior primary flag and inserting the new row happen in a
+        single transaction — never two, so a crash/exception between the two
+        steps cannot leave the user with zero primary documents.
         """
-        if content_hash is None:
-            if is_primary:
-                self._clear_primary_flag(user_id=user_id, doc_type=doc_type)
-            with self._transaction() as conn:
-                with conn.cursor() as cur:
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                if is_primary:
                     cur.execute(
                         """
-                        INSERT INTO user_documents
-                            (user_id, filename, original_filename, doc_type, file_size,
-                             label, is_primary, skills_count, skills_json,
-                             years_experience, "current_role")
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        RETURNING id
+                        UPDATE user_documents SET is_primary = FALSE, updated_at = now()
+                         WHERE user_id = %s AND doc_type = %s AND is_primary = TRUE
                         """,
-                        (user_id, filename, original_filename, doc_type, file_size,
-                         label, is_primary, skills_count, Json(skills_json or []),
-                         years_experience, current_role),
+                        (user_id, doc_type),
                     )
-                    row = cur.fetchone()
-            return str(row["id"] if isinstance(row, dict) else row[0]) if row else None
+                cur.execute(
+                    """
+                    INSERT INTO user_documents
+                        (user_id, filename, original_filename, doc_type, file_size,
+                         label, is_primary, skills_count, skills_json,
+                         years_experience, "current_role")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (user_id, filename, original_filename, doc_type, file_size,
+                     label, is_primary, skills_count, Json(skills_json or []),
+                     years_experience, current_role),
+                )
+                row = cur.fetchone()
+        return str(row["id"] if isinstance(row, dict) else row[0]) if row else None
 
-        # Exact-dedup path: the partial unique index makes this atomic even under
-        # concurrent identical uploads. DO NOTHING → no new row on a duplicate;
-        # we then return the existing row's id and leave its is_primary intact.
+    def get_or_create_user_document(
+        self,
+        *,
+        user_id: str,
+        filename: str,
+        original_filename: str,
+        content_hash: str,
+        doc_type: str = "cv",
+        file_size: int = 0,
+        label: Optional[str] = None,
+        skills_count: int = 0,
+        skills_json: Optional[List[str]] = None,
+        years_experience: Optional[float] = None,
+        current_role: Optional[str] = None,
+        is_primary: bool = False,
+    ) -> Dict[str, Any]:
+        """Atomic get-or-create keyed by (user_id, doc_type, content_hash).
+
+        Returns ``{"id", "filename", "doc_type", "is_primary", "inserted"}``.
+
+        ``inserted=False`` means a row with this exact hash already existed —
+        either because a caller-side pre-check missed it, or because a
+        concurrent identical upload won the race between this call's own
+        pre-check and its INSERT. In both cases the response reflects the
+        EXISTING row's canonical filename/id, never the just-uploaded
+        filename, so the caller can't report metadata that doesn't match what
+        is actually stored. No new row is created and no primary flag is
+        touched on a duplicate.
+
+        Requires migration 037 (content_hash column + partial unique index)
+        to already be applied — see migrations/037_user_documents_content_hash.sql.
+        """
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -445,7 +504,7 @@ class RicoDB:
                     ON CONFLICT (user_id, doc_type, content_hash)
                         WHERE content_hash IS NOT NULL
                         DO NOTHING
-                    RETURNING id
+                    RETURNING id, filename, doc_type, is_primary
                     """,
                     (user_id, filename, original_filename, doc_type, file_size,
                      label, is_primary, skills_count, Json(skills_json or []),
@@ -456,26 +515,45 @@ class RicoDB:
                     new_id = str(row["id"] if isinstance(row, dict) else row[0])
                     # Only after a real insert do we (optionally) move the primary
                     # flag — never on a duplicate, so the invariant is preserved.
+                    # Same transaction as the insert above → atomic.
                     if is_primary:
                         cur.execute(
                             """
                             UPDATE user_documents SET is_primary = FALSE, updated_at = now()
-                             WHERE user_id = %s AND doc_type = %s AND id <> %s
+                             WHERE user_id = %s AND doc_type = %s AND id <> %s AND is_primary = TRUE
                             """,
                             (user_id, doc_type, new_id),
                         )
-                    return new_id
-                # Exact duplicate already present → return its id (no new row).
+                    return {
+                        "id": new_id,
+                        "filename": (row["filename"] if isinstance(row, dict) else row[1]),
+                        "doc_type": (row["doc_type"] if isinstance(row, dict) else row[2]),
+                        "is_primary": bool(row["is_primary"] if isinstance(row, dict) else row[3]),
+                        "inserted": True,
+                    }
+                # Exact duplicate already present (pre-check miss or a lost
+                # race) → return the EXISTING row's canonical metadata.
                 cur.execute(
                     """
-                    SELECT id FROM user_documents
+                    SELECT id, filename, doc_type, is_primary
+                      FROM user_documents
                      WHERE user_id = %s AND doc_type = %s AND content_hash = %s
                      LIMIT 1
                     """,
                     (user_id, doc_type, content_hash),
                 )
                 erow = cur.fetchone()
-        return str(erow["id"] if isinstance(erow, dict) else erow[0]) if erow else None
+        if erow is None:
+            # Should not happen (DO NOTHING implies a conflicting row exists),
+            # but never fabricate a document that isn't there.
+            raise RuntimeError("get_or_create_user_document: conflict with no matching row")
+        return {
+            "id": str(erow["id"] if isinstance(erow, dict) else erow[0]),
+            "filename": (erow["filename"] if isinstance(erow, dict) else erow[1]),
+            "doc_type": (erow["doc_type"] if isinstance(erow, dict) else erow[2]),
+            "is_primary": bool(erow["is_primary"] if isinstance(erow, dict) else erow[3]),
+            "inserted": False,
+        }
 
     def list_user_documents(self, user_id: str) -> List[Dict[str, Any]]:
         """Return all documents for a user, newest first."""
@@ -556,7 +634,14 @@ class RicoDB:
         label: Optional[str] = None,
         doc_type: Optional[str] = None,
     ) -> bool:
-        """Update label and/or doc_type. Returns True if updated."""
+        """Update label and/or doc_type. Returns True if updated.
+
+        Raises ``DocumentConflictError`` instead of letting an unhandled
+        unique-violation surface as a 500 — e.g. retyping a document to a
+        doc_type where a row with the same content_hash already exists for
+        this user (uq_user_documents_user_type_hash), or a primary-flag
+        collision (uq_user_documents_one_primary_per_type, migration 037).
+        """
         updates: list[str] = ["updated_at = now()"]
         params: list[Any] = []
         if label is not None:
@@ -570,17 +655,29 @@ class RicoDB:
         params.extend([doc_id, user_id])
         with self._transaction() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"UPDATE user_documents SET {', '.join(updates)} "
-                    "WHERE id = %s AND user_id = %s RETURNING id",
-                    params,
-                )
+                try:
+                    cur.execute(
+                        f"UPDATE user_documents SET {', '.join(updates)} "
+                        "WHERE id = %s AND user_id = %s RETURNING id",
+                        params,
+                    )
+                except Exception as exc:
+                    if _is_unique_violation(exc):
+                        raise DocumentConflictError(
+                            "A document of this type with identical content already exists."
+                        ) from exc
+                    raise
                 row = cur.fetchone()
         return row is not None
 
     def set_primary_document(self, user_id: str, doc_id: str) -> bool:
-        """Set one CV document as primary, clearing is_primary on all others."""
-        self._clear_primary_flag(user_id=user_id, doc_type="cv")
+        """Set one CV document as primary, clearing is_primary on all others.
+
+        Both steps run in one transaction, and in an order that never leaves
+        the user with zero primary documents: the target is set TRUE first
+        (aborting the whole transaction if it doesn't exist/isn't owned by
+        this user/isn't a CV), and only then are the other rows cleared.
+        """
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -593,15 +690,18 @@ class RicoDB:
                     (doc_id, user_id),
                 )
                 row = cur.fetchone()
-        return row is not None
-
-    def _clear_primary_flag(self, *, user_id: str, doc_type: str) -> None:
-        with self._transaction() as conn:
-            with conn.cursor() as cur:
+                if row is None:
+                    # Nothing matched — abort before touching any other row so
+                    # a bad doc_id can never wipe out the existing primary.
+                    return False
                 cur.execute(
-                    "UPDATE user_documents SET is_primary = FALSE WHERE user_id = %s AND doc_type = %s",
-                    (user_id, doc_type),
+                    """
+                    UPDATE user_documents SET is_primary = FALSE, updated_at = now()
+                     WHERE user_id = %s AND doc_type = 'cv' AND id <> %s AND is_primary = TRUE
+                    """,
+                    (user_id, doc_id),
                 )
+        return True
 
     def register_webhook_event(
         self,

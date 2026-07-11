@@ -179,7 +179,6 @@ class TestSaveUserDocumentSkillsJson:
 
         with (
             patch.object(type(db), "available", new_callable=PropertyMock, return_value=True),
-            patch.object(db, "_clear_primary_flag"),
             patch.object(db, "_transaction", return_value=conn_mock),
         ):
             db.save_user_document(
@@ -196,10 +195,19 @@ class TestSaveUserDocumentSkillsJson:
 
         return execute_calls
 
+    def _insert_call(self, calls):
+        """Return the (sql, params) of the INSERT — is_primary=True also issues
+        a clear-old-primary UPDATE first (same transaction), so the INSERT is
+        no longer necessarily calls[0]."""
+        for sql, params in calls:
+            if sql.strip().upper().startswith("INSERT"):
+                return sql, params
+        raise AssertionError(f"no INSERT among captured calls: {calls}")
+
     def test_skills_json_included_in_insert_sql(self):
         calls = self._capture_execute(["Python", "SQL", "IFRS 9"])
         assert calls, "execute was never called"
-        sql, _ = calls[0]
+        sql, _ = self._insert_call(calls)
         assert "skills_json" in sql
 
     def test_skills_values_passed_to_cursor(self):
@@ -207,7 +215,7 @@ class TestSaveUserDocumentSkillsJson:
         skills = ["Python", "SQL"]
         calls = self._capture_execute(skills)
         assert calls
-        _, params = calls[0]
+        _, params = self._insert_call(calls)
         # Find the psycopg2 Json-wrapped param and verify it holds the skills list.
         # Json objects expose their content via .adapted (psycopg2 internal).
         found = False
@@ -228,5 +236,5 @@ class TestSaveUserDocumentSkillsJson:
         """Omitting skills_json must not raise; INSERT must include skills_json column."""
         calls = self._capture_execute(None)
         assert calls
-        sql, _ = calls[0]
+        sql, _ = self._insert_call(calls)
         assert "skills_json" in sql
