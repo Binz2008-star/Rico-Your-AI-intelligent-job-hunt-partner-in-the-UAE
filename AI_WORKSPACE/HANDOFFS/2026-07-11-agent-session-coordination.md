@@ -1,6 +1,6 @@
 # Handoff — Multi-session agent coordination
 
-Date: 2026-07-11
+Date: 2026-07-11 (updated after release smoke)
 Type: docs-only governance/continuity correction
 Runtime impact: none
 
@@ -8,18 +8,17 @@ Runtime impact: none
 
 The repository already had `START_HERE.md`, `PROJECT_STATUS.md`, `TASKS.md`, `AGENT_OPERATING_MODEL.md`, `AGENTS.md`, `CLAUDE.md`, and `.windsurfrules`, but the live project state had drifted across them. Multiple Claude sessions and Windsurf could therefore resume different historical tracks and create parallel work.
 
-This handoff restores one cold-start path and one execution lock.
+This handoff restores one cold-start path and one execution lock and records the PR #969 production smoke verification results.
 
 ## Verified live state at the time of this handoff
 
-- `main`: `50f73f04ecf078ae5993c2f805e5ea89351360d6`
-- latest main commit: `docs(workspace): coordination handoff + agent rules update (#971)`
-- only active runtime PR: `#969`
-- active branch: `feat/user-documents-dedup`
-- active head: `fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e` (reviewed `960f2d4` merged with `origin/main`)
-- active objective: issue `#960`, exact CV/document duplicate protection and atomic idempotency
+- current repository `main` head: `c51837ce81337ecf1caf766011eaba429d8e64cc` (later commits are generated `docs/index.html` dashboard build output only — no application runtime change)
+- last runtime / deployed application SHA: `e98fd59896bec492d770a09b0f6c2d03ad5e2f33` (`#969`; live on Render/Vercel)
+- latest application commit: `feat(files): exact CV/document duplicate protection + atomic idempotency (#960) (#969)`
+- PR `#969`: completed, merged, deployed, and production-smoke verified; **no active runtime PR currently exists**
+- next implementation objective: issue `#963`, onboarding CV persistence and profile hydration
 - migration 037: applied to production Neon (2026-07-11 03:26:00–03:26:29 UTC); STEP 0 violations = 0; `user_documents` count remained 12
-- next objective after merge/migration/deploy verification: `#963`, onboarding CV persistence and profile hydration
+- production smoke: exact-byte dedupe smoke passed with synthetic `other` PDF; counts and quota restored to baseline
 
 ## Binding execution order
 
@@ -27,7 +26,7 @@ This handoff restores one cold-start path and one execution lock.
 #969 independently reviewed READY + migration 037 applied to Neon
   -> final required CI green
   -> owner merge approval
-  -> deploy/upload smoke
+  -> deploy/upload smoke [DONE]
   -> #963 from updated main
   -> onboarding persistence + profile hydration
   -> authenticated owner smoke
@@ -63,7 +62,7 @@ Every session must declare exactly one role:
 
 Current safe allocation:
 
-- the session already driving `feat/user-documents-dedup` is the only WRITER for `#969`;
+- `#969` is complete; no active runtime PR currently exists. The next WRITER opens `#963` on a fresh branch from updated `main`, after the `#963` design/audit gate;
 - other Claude sessions are REVIEWER or IDLE;
 - Windsurf is read-only/local verification or IDLE unless branch ownership is explicitly handed over;
 - Codex is review-only;
@@ -72,9 +71,6 @@ Current safe allocation:
 ## Files updated by this coordination PR
 
 - `AI_WORKSPACE/PROJECT_STATUS.md`
-- `AI_WORKSPACE/START_HERE.md`
-- `AGENTS.md`
-- `.windsurfrules`
 - this handoff
 
 No application code, migrations, tests, CI, environment configuration, or production data is changed.
@@ -91,10 +87,29 @@ Do not create parallel work when an active PR already exists.
 
 ## Next exact action
 
-Run and verify required CI for PR `#969` at `fdccbe5b2b39ea26d023b4efa228b91f21e8ed5e` (pytest, frontend, playwright, postgres-integration, Vercel). Mark the PR ready for review once all checks are green.
+1. Merge PR #972 (docs-only) using Squash and merge.
+2. Create a fresh `#963` branch from updated `main` (`feat/963-onboarding-cv-persistence`).
+3. Perform the `#963` design/audit gate (read-only implementation audit) before writing any code.
 
-Do not merge, deploy, start `#963`, or open a new runtime branch.
+### #963 completeness blocker (verified)
+
+- `POST /api/v1/rico/confirm-cv-profile` currently calls the legacy `save_user_document(...)` path.
+- That call does not participate in the canonical content-hash get-or-create path (`get_or_create_user_document`).
+- Onboarding must not be wired to that endpoint unchanged.
+- `#963` must first make confirmation persistence hash-aware and idempotent, shared by onboarding and the existing command confirmation behavior.
+
+### PR #969 production verification: PASS (recorded for reference)
+
+- merged / deployed application SHA: e98fd59896bec492d770a09b0f6c2d03ad5e2f33
+- Render /health: HTTP 200 status=ok
+- Vercel /proxy/health: HTTP 200 status=ok
+- exact-byte dedupe smoke: first upload duplicate=false; second upload duplicate=true; same id (0cb0b1d1-0037-408e-823f-c7eccb337582) and filename (rico-969-smoke-20260711040844.pdf)
+- document count: stored 4 -> 5 -> 5 -> 4 (baseline restored)
+- quota: other_documents 0 -> 1 -> 1 -> 0 (baseline restored)
+- primary CV invariant: 1 primary (profile-cv, legacy); synthetic not primary
+- cleanup: synthetic document deleted; baseline restored
+- next implementation objective: #963
 
 ## Rollback
 
-Revert this docs-only PR. Migration 037 has been applied to production Neon and is additive/unique-index only; no application rows were changed. A code rollback does not require a database rollback.
+Revert this docs-only PR. The smoke test created and deleted one synthetic `other` document; the account has returned to baseline. Migration 037 remains applied to production Neon and is additive/unique-index only. A code rollback does not require a database rollback.
