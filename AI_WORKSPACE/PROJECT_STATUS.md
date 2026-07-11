@@ -8,29 +8,28 @@
 
 | Field | Current value |
 | --- | --- |
-| **Current repository `main` head** | `c51837ce81337ecf1caf766011eaba429d8e64cc` (`origin/main`). The two commits after the `#969` merge (`1454477…`, `c51837c…`) are generated `docs/index.html` dashboard build output only — no application runtime change. |
-| **Last runtime / deployed application SHA** | `e98fd59896bec492d770a09b0f6c2d03ad5e2f33` (`#969`). This is the live application code SHA deployed to Render/Vercel; the later `main` commits are dashboard output and do not change deployed behavior. |
+| **Current repository `main` head** | `241b85d4c5d74b6afd00f0d4e202e75c4f5a3f8b` (squash merge of PR `#975` / issue `#963`). |
+| **Frontend deployment** | Vercel production deployment for `241b85d…` is `READY` and aliased to `ricohunt.com`. |
+| **Backend deployment / authenticated smoke** | Not yet verified for `241b85d…`; do not claim the onboarding release is production-verified until Render version/migration 038 and the authenticated smoke pass are recorded. |
 | **Coordination control plane** | PR `#970` merged; `PROJECT_STATUS.md` + `START_HERE.md` + root agent rules are now the mandatory cold-start path. |
-| **Current execution phase** | `#969` completed, merged, deployed, and production-smoke verified. No active runtime PR currently exists. `#963` is the next implementation objective. |
-| **Single active runtime objective** | None in flight. `#963` (onboarding CV persistence + profile hydration) is the next implementation objective, not yet started. |
-| **Active PR branch/head** | None — `#969` is merged. `#963` starts on a fresh branch from updated `main`. |
-| **Next runtime objective** | `#963` — persist confirmed onboarding CV and hydrate extracted profile fields |
-| **Owner gate after #963** | Authenticated production smoke; only then mark onboarding `VERIFIED` |
-| **Last updated** | 2026-07-11 (post-#969 release; docs merge PR #972) |
+| **Current execution phase** | Release verification for merged `#963`; no active implementation PR. |
+| **Single active runtime objective** | Verify the merged onboarding CV persistence release before opening another runtime/design objective. |
+| **Active PR branch/head** | None — `#975` merged as `241b85d…`. |
+| **Next exact action** | Confirm Render serves `241b85d…`, migration 038 succeeds, then run authenticated onboarding CV → My Files → logout/login smoke. |
+| **Owner gate after #963** | Record the authenticated production smoke; only then mark onboarding `VERIFIED` and release the design/workspace queue. |
+| **Last updated** | 2026-07-11 (post-#975 merge; Vercel READY, backend smoke pending) |
 
 ## Execution lock
 
 ```text
 ACTIVE NOW
-(none — #969 is complete, merged, deployed, and production-smoke verified;
-no active runtime PR currently exists)
+Release verification for #963 / merged PR #975 (`241b85d…`).
+No implementation writer is active.
 
-NEXT, NOT STARTED
-#963 — onboarding CV persistence + profile hydration
-(start in a fresh #963 branch from updated `main`)
+NEXT, AFTER VERIFIED RELEASE
+#962 — safe login return path; then the approved per-route design migration.
 
 LATER
-#962 — safe login return path
 remaining auth-guard routes
 workspace/dashboard migration
 command i18n / command redesign
@@ -47,7 +46,7 @@ REFERENCE ONLY / NOT FOR MERGE
 #873 — old Rico Alive design-gallery prototype
 ```
 
-`#969` is complete, merged, deployed, and production-smoke verified; no active runtime PR currently exists. `#963` is the next implementation objective and must start on a fresh branch from updated `main` after the `#963` design/audit gate. Do not open a second concurrent runtime objective without an owner change to this lock.
+`#969` is complete and production-smoke verified. `#963` is merged, CI-green, and Vercel-ready, but is not yet production-verified: Render migration/deploy and authenticated smoke remain the execution lock. Do not open a second runtime objective before that release gate is resolved.
 
 ## Mandatory multi-session coordination
 
@@ -70,7 +69,7 @@ Before making any write:
 
 | Agent/session | Allowed role now |
 | --- | --- |
-| Next writer session (when `#963` opens) | **WRITER for #963 only**, on a fresh branch from updated `main`, after the `#963` design/audit gate |
+| Release session | **RELEASE only** for #963: verify Render version/migration and authenticated smoke; no product-code write |
 | Other Claude sessions | **REVIEWER or IDLE** |
 | Windsurf | Local/read-only verification or **IDLE**; no write to the `#963` branch unless explicitly handed ownership |
 | Codex | Review signal only |
@@ -83,8 +82,8 @@ Before making any write:
   -> final required CI green
   -> owner approves merge
   -> deploy and smoke the canonical file-upload path [DONE]
-  -> start #963 on a fresh branch from updated main
-  -> persist onboarding CV + hydrate profile
+  -> #963 merged as #975 (`241b85d…`); PR CI green and Vercel READY
+  -> verify Render version + migration 038
   -> authenticated owner smoke
   -> onboarding PARTIAL becomes VERIFIED
   -> resume workspace/design migration
@@ -106,7 +105,7 @@ Therefore `#967` is blocked. When it resumes, it must rebase from current `main`
 | PR | Track | Decision |
 | ---: | --- | --- |
 | `#969` | CV/file persistence foundation | **Completed, merged, deployed, and production-smoke verified**; migration 037 applied to production Neon |
-| `#963` | Onboarding CV persistence + profile hydration | **Next active implementation track**; start on a fresh branch from updated `main` after the `#963` design/audit gate |
+| `#963` / merged `#975` | Onboarding CV persistence + profile hydration | **Merged, CI-green, Vercel READY**; backend deployment and authenticated smoke remain before `VERIFIED` |
 | `#968` | Workspace governance for `#965` | Hold; docs-only, not permission for more agentic work |
 | `#967` | Pre-launch gate/waitlist | Hold; blocked by separate scope and migration collision |
 | `#965` | Read-only journey-state seed | Hold draft; no follow-on without owner DEC |
@@ -120,15 +119,15 @@ Therefore `#967` is blocked. When it resumes, it must rebase from current `main`
 - `/onboarding` is restored as the real authenticated first-run route.
 - `/settings` and `/profile` have the shared authenticated-page guard.
 - Onboarding production smoke is **PARTIAL**: registration/verification, routing, steps, skip, and CV parsing/review passed.
-- The remaining onboarding gap is persistence: the confirmed CV is not yet saved through the canonical My Files path and extracted profile fields are not fully hydrated.
-- The approved design package is sufficiently complete; design work is not the current blocker.
+- The merged #963 path uses server-side upload artifacts, hash-aware My Files persistence, required durable profile hydration, and retry-safe confirmation.
+- The remaining onboarding gate is release verification, not known implementation work.
+- The approved design package is sufficiently complete; design work resumes only after the release gate.
 
-## #963 completeness blocker (verified)
+## #963 implementation status
 
-- `POST /api/v1/rico/confirm-cv-profile` currently calls the legacy `save_user_document(...)` path (`src/api/routers/rico_chat.py` → `src/rico_db.py`).
-- That call does **not** participate in the canonical content-hash get-or-create path (`get_or_create_user_document`) shipped with `#969`.
-- Onboarding must **not** be wired to that endpoint unchanged.
-- `#963` must first make confirmation persistence **hash-aware and idempotent**, shared by onboarding and the existing command confirmation behavior, before any onboarding persistence work builds on it.
+- PR #975 was merged as `241b85d…` after final-head CI passed (`pytest`, frontend, Playwright, real-Postgres integration).
+- Authenticated confirmation rejects missing/expired/foreign upload artifacts, writes My Files through the canonical hash-aware path, requires the Neon profile write, and never marks onboarding complete after either persistence failure.
+- Retry is idempotent. The remaining proof is authenticated production smoke on the deployed backend.
 
 ## Stop conditions
 
@@ -144,9 +143,9 @@ Stop and ask the owner instead of continuing when:
 ## Next exact action
 
 ```text
-1. Merge PR #972 (docs-only: PROJECT_STATUS.md + coordination handoff) using Squash and merge.
-2. Create a fresh #963 branch from updated `main` (feat/963-onboarding-cv-persistence).
-3. Perform the #963 design/audit gate (read-only implementation audit) before writing any code.
+1. Confirm Render `/version` serves `241b85d…` and startup logs show migration 038 succeeded.
+2. Run the authenticated onboarding flow: upload CV → confirm profile → verify My Files → logout/login → confirm persisted profile/onboarding state.
+3. Record PASS/FAIL. On PASS, mark onboarding `VERIFIED` and select the next single objective.
 ```
 
 PR #969 production verification: PASS (recorded for reference).
