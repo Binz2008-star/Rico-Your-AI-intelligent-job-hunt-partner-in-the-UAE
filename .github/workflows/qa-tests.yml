@@ -44,6 +44,7 @@ jobs:
             tests/test_cv_profile_extraction.py \
             tests/test_rico_routes.py \
             tests/test_security_audit.py \
+            tests/test_prelaunch_gate.py \
             tests/test_rico_memory_safety.py \
             tests/test_rico_hardening.py \
             tests/test_tc2_target_role_propagation.py \
