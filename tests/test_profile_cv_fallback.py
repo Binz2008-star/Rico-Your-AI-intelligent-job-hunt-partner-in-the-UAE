@@ -243,6 +243,9 @@ class TestSecondUpload:
                    return_value=_resolved_plan("free", cv_limit=1)), \
              patch("src.api.routers.files._db") as mock_db:
             mock_db.available = True
+            # New exact-dedupe pre-check (#960): a distinct 2nd CV is not a duplicate,
+            # so quota enforcement still runs and returns 422.
+            mock_db.find_user_document_by_hash.return_value = None
             r = auth_client.post(
                 "/api/v1/user/files?doc_type=cv",
                 files={"file": ("second_cv.pdf", fake_pdf, "application/pdf")},

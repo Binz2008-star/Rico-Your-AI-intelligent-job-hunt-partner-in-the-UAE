@@ -12,6 +12,7 @@ Routes:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from typing import Any, Optional
@@ -184,9 +185,6 @@ async def upload_file(
     if doc_type not in _ALLOWED_DOC_TYPES:
         raise HTTPException(status_code=422, detail=f"doc_type must be one of {sorted(_ALLOWED_DOC_TYPES)}")
 
-    # Enforce document storage quota before reading the file body
-    enforce_document_quota(user_id, doc_type)
-
     declared_size = getattr(file, "size", None)
     if isinstance(declared_size, int) and declared_size > _MAX_BYTES:
         raise HTTPException(
@@ -214,6 +212,27 @@ async def upload_file(
     if not _db.available:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
+    # Exact-duplicate protection (#960): SHA-256 of the original bytes. An exact
+    # re-upload returns the existing document and must NOT consume quota — so the
+    # dedupe check runs BEFORE quota enforcement (a re-upload of the only CV must
+    # not be blocked by the storage limit).
+    content_hash = hashlib.sha256(data).hexdigest()
+    existing = _db.find_user_document_by_hash(user_id, doc_type, content_hash)
+    if existing:
+        logger.info(
+            "file_upload_duplicate user=%s doc_type=%s id=%s", user_id, doc_type, existing["id"]
+        )
+        return {
+            "ok": True,
+            "id": existing["id"],
+            "filename": existing["filename"],
+            "doc_type": doc_type,
+            "duplicate": True,
+        }
+
+    # New (distinct) document — quota applies exactly as before.
+    enforce_document_quota(user_id, doc_type)
+
     safe_name = _safe_filename(file.filename)
     doc_id = _db.save_user_document(
         user_id=user_id,
@@ -222,10 +241,11 @@ async def upload_file(
         doc_type=doc_type,
         file_size=len(data),
         is_primary=False,
+        content_hash=content_hash,
     )
 
     logger.info("file_uploaded user=%s filename=%s doc_type=%s id=%s", user_id, safe_name, doc_type, doc_id)
-    return {"ok": True, "id": doc_id, "filename": safe_name, "doc_type": doc_type}
+    return {"ok": True, "id": doc_id, "filename": safe_name, "doc_type": doc_type, "duplicate": False}
 
 
 # ── Delete file ────────────────────────────────────────────────────────────────

@@ -85,6 +85,9 @@ def _make_db_mock(docs: list[dict], update_returns: bool = True) -> MagicMock:
     mock_db.list_user_documents.return_value = docs
     mock_db.update_user_document.return_value = update_returns
     mock_db.save_user_document.return_value = "new-doc-999"
+    # New exact-dedupe pre-check (#960): default to "not a duplicate" so upload
+    # tests exercise the normal (distinct-file) quota + save path.
+    mock_db.find_user_document_by_hash.return_value = None
     return mock_db
 
 

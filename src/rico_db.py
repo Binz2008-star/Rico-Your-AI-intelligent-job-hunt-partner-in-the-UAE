@@ -212,6 +212,12 @@ CREATE INDEX IF NOT EXISTS idx_user_documents_user_created
     ON user_documents(user_id, created_at DESC);
 -- Idempotent column migration for existing installations (migration 026).
 ALTER TABLE user_documents ADD COLUMN IF NOT EXISTS skills_json JSONB DEFAULT '[]'::jsonb;
+-- Exact-duplicate protection (migration 037, #960): nullable content hash +
+-- PARTIAL unique index so historical NULL-hash rows are excluded.
+ALTER TABLE user_documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_documents_user_type_hash
+    ON user_documents (user_id, doc_type, content_hash)
+    WHERE content_hash IS NOT NULL;
 """
 
 _APPLY_DRAFTS_DDL = """
@@ -347,6 +353,38 @@ class RicoDB:
         return int(row["cnt"] if isinstance(row, dict) else row[0])
 
 
+    def find_user_document_by_hash(
+        self, user_id: str, doc_type: str, content_hash: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return the existing document with this exact content hash, or None.
+
+        Used by the upload path to detect an exact re-upload BEFORE enforcing
+        quota, so a duplicate re-upload is never blocked by the storage limit
+        (it consumes nothing).
+        """
+        if not (user_id and doc_type and content_hash):
+            return None
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, filename, doc_type, is_primary
+                      FROM user_documents
+                     WHERE user_id = %s AND doc_type = %s AND content_hash = %s
+                     LIMIT 1
+                    """,
+                    (user_id, doc_type, content_hash),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": str(row["id"] if isinstance(row, dict) else row[0]),
+            "filename": (row["filename"] if isinstance(row, dict) else row[1]),
+            "doc_type": (row["doc_type"] if isinstance(row, dict) else row[2]),
+            "is_primary": bool(row["is_primary"] if isinstance(row, dict) else row[3]),
+        }
+
     def save_user_document(
         self,
         *,
@@ -361,10 +399,40 @@ class RicoDB:
         years_experience: Optional[float] = None,
         current_role: Optional[str] = None,
         is_primary: bool = False,
+        content_hash: Optional[str] = None,
     ) -> Optional[str]:
-        """Insert a new document record. Returns the new UUID id."""
-        if is_primary:
-            self._clear_primary_flag(user_id=user_id, doc_type=doc_type)
+        """Insert a new document record. Returns the row's UUID id.
+
+        When ``content_hash`` is provided, insertion is atomic against the
+        partial unique index ``(user_id, doc_type, content_hash)``: an exact
+        duplicate returns the EXISTING row's id (no new row, primary-CV flag
+        untouched) instead of creating another. ``content_hash=None`` preserves
+        the original insert behavior for legacy callers.
+        """
+        if content_hash is None:
+            if is_primary:
+                self._clear_primary_flag(user_id=user_id, doc_type=doc_type)
+            with self._transaction() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO user_documents
+                            (user_id, filename, original_filename, doc_type, file_size,
+                             label, is_primary, skills_count, skills_json,
+                             years_experience, "current_role")
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        (user_id, filename, original_filename, doc_type, file_size,
+                         label, is_primary, skills_count, Json(skills_json or []),
+                         years_experience, current_role),
+                    )
+                    row = cur.fetchone()
+            return str(row["id"] if isinstance(row, dict) else row[0]) if row else None
+
+        # Exact-dedup path: the partial unique index makes this atomic even under
+        # concurrent identical uploads. DO NOTHING → no new row on a duplicate;
+        # we then return the existing row's id and leave its is_primary intact.
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -372,16 +440,42 @@ class RicoDB:
                     INSERT INTO user_documents
                         (user_id, filename, original_filename, doc_type, file_size,
                          label, is_primary, skills_count, skills_json,
-                         years_experience, "current_role")
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         years_experience, "current_role", content_hash)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id, doc_type, content_hash)
+                        WHERE content_hash IS NOT NULL
+                        DO NOTHING
                     RETURNING id
                     """,
                     (user_id, filename, original_filename, doc_type, file_size,
                      label, is_primary, skills_count, Json(skills_json or []),
-                     years_experience, current_role),
+                     years_experience, current_role, content_hash),
                 )
                 row = cur.fetchone()
-        return str(row["id"]) if row else None
+                if row is not None:
+                    new_id = str(row["id"] if isinstance(row, dict) else row[0])
+                    # Only after a real insert do we (optionally) move the primary
+                    # flag — never on a duplicate, so the invariant is preserved.
+                    if is_primary:
+                        cur.execute(
+                            """
+                            UPDATE user_documents SET is_primary = FALSE, updated_at = now()
+                             WHERE user_id = %s AND doc_type = %s AND id <> %s
+                            """,
+                            (user_id, doc_type, new_id),
+                        )
+                    return new_id
+                # Exact duplicate already present → return its id (no new row).
+                cur.execute(
+                    """
+                    SELECT id FROM user_documents
+                     WHERE user_id = %s AND doc_type = %s AND content_hash = %s
+                     LIMIT 1
+                    """,
+                    (user_id, doc_type, content_hash),
+                )
+                erow = cur.fetchone()
+        return str(erow["id"] if isinstance(erow, dict) else erow[0]) if erow else None
 
     def list_user_documents(self, user_id: str) -> List[Dict[str, Any]]:
         """Return all documents for a user, newest first."""
