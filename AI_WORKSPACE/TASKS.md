@@ -197,8 +197,9 @@ guest. No backend/JWT/cookie/logout change; `/command` stays public; `/onboardin
 
 > **Binding sequence (recorded 2026-07-11; do not reorder):**
 > `#960` → `#963` → owner production smoke → onboarding PARTIAL becomes **VERIFIED**.
-> `#960` is merged and production-smoke verified via #969. `#963` is merged via #975 and awaits
-> authenticated production smoke. `#962` remains a separate later increment.
+> `#960` is merged and production-smoke verified via #969. `#963` is merged via #975 and its
+> authenticated production smoke is **owner-confirmed PASS (2026-07-11)** — onboarding is now
+> **VERIFIED**. `#962` remains a separate later increment and is the next objective.
 
 ### TASK-20260711-002 — Exact CV duplicate protection and idempotency
 
@@ -219,8 +220,8 @@ invariants for CV uploads. Foundation only — **no onboarding wiring in this ta
 
 ### TASK-20260711-003 — Persist confirmed onboarding CV and hydrate extracted fields
 
-Status: release verification (merged; authenticated production smoke pending)
-Owner: Release / owner authenticated smoke
+Status: done (merged as #975; authenticated production smoke owner-confirmed PASS 2026-07-11)
+Owner: Claude / owner authenticated smoke
 Branch: merged as `241b85d…`
 Issue/PR: #963 / #975
 
@@ -233,8 +234,8 @@ onboarding out of PARTIAL.
 #### Acceptance criteria
 - [x] onboarding confirmation persists the CV via the canonical path (built on #960)
 - [x] extracted years/current-role/target-roles require durable Neon persistence; failures return non-2xx and retry is idempotent
-- [ ] final-submit persistence + logout→login completion smoke pass with a verified account
-- [ ] then owner production smoke → lift onboarding status PARTIAL → VERIFIED in the handoff
+- [x] final-submit persistence + logout→login completion smoke pass with a verified account (owner-confirmed 2026-07-11)
+- [x] owner production smoke → onboarding status lifted PARTIAL → VERIFIED
 
 ### TASK-20260711-004 — Consume validated login return path (`next`)
 
