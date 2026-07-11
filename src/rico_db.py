@@ -431,6 +431,84 @@ class RicoDB:
             (f"user_documents_primary:{user_id}:{doc_type}",),
         )
 
+    @staticmethod
+    def _lock_content_slot(cur, user_id: str, doc_type: str, content_hash: str) -> None:
+        """Serialize get_or_create_user_document calls for this exact
+        (user_id, doc_type, content_hash) tuple, for the rest of the current
+        transaction.
+
+        Without this, only is_primary=True uploads were protected (via
+        `_lock_primary_slot`) — an ordinary is_primary=False upload had no
+        lock at all, so two concurrent identical uploads (double-click,
+        client retry) could both pass the duplicate pre-check, both attempt
+        the INSERT, and the losing one's `ON CONFLICT DO NOTHING` returned no
+        row. This lock makes that pre-check-then-insert sequence safe for
+        EVERY call, not only primary ones.
+
+        Always acquired BEFORE `_lock_primary_slot` in
+        `get_or_create_user_document` — one consistent lock order across the
+        whole class, since the two lock keys are different
+        (`content:{hash}` vs `primary:{doc_type}`), so two transactions can
+        never deadlock by acquiring them in opposite order.
+        """
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(hashtext(%s))",
+            (f"user_documents_content:{user_id}:{doc_type}:{content_hash}",),
+        )
+
+    @staticmethod
+    def _document_row_to_dict(row, *, inserted: bool) -> Dict[str, Any]:
+        """Normalize a user_documents row (dict-cursor or tuple) into the
+        get_or_create_user_document response shape."""
+        return {
+            "id": str(row["id"] if isinstance(row, dict) else row[0]),
+            "filename": (row["filename"] if isinstance(row, dict) else row[1]),
+            "doc_type": (row["doc_type"] if isinstance(row, dict) else row[2]),
+            "is_primary": bool(row["is_primary"] if isinstance(row, dict) else row[3]),
+            "inserted": inserted,
+        }
+
+    @staticmethod
+    def _promote_if_requested(cur, existing_row, *, user_id: str, doc_type: str, is_primary: bool) -> Dict[str, Any]:
+        """Return the get_or_create_user_document response for a found
+        pre-existing row, honoring `is_primary=True` even for a deduped
+        reupload — promotes the row (clearing any other primary first) if
+        it isn't already primary. Requires `_lock_primary_slot` to already
+        be held by the caller whenever `is_primary` is True.
+
+        Used by BOTH the fast "found on the upfront pre-check" path and the
+        "found after an ON CONFLICT DO NOTHING" fallback — a request for
+        `is_primary=True` must be honored the same way regardless of which
+        one happened to find the row, or the outcome would depend on lock
+        race timing (exactly the class of bug this method exists to avoid).
+        """
+        existing_id = existing_row["id"] if isinstance(existing_row, dict) else existing_row[0]
+        existing_is_primary = bool(existing_row["is_primary"] if isinstance(existing_row, dict) else existing_row[3])
+        if is_primary and not existing_is_primary:
+            # Clear any other primary first — a redundant no-op if the
+            # is_primary=True flow already cleared it earlier in this same
+            # transaction; never skip it, since the fast pre-check path
+            # reaches here without having cleared anything yet.
+            cur.execute(
+                """
+                UPDATE user_documents SET is_primary = FALSE, updated_at = now()
+                 WHERE user_id = %s AND doc_type = %s AND id <> %s AND is_primary = TRUE
+                """,
+                (user_id, doc_type, existing_id),
+            )
+            cur.execute(
+                "UPDATE user_documents SET is_primary = TRUE, updated_at = now() WHERE id = %s",
+                (existing_id,),
+            )
+            existing_is_primary = True
+        return {
+            "id": str(existing_id),
+            "filename": (existing_row["filename"] if isinstance(existing_row, dict) else existing_row[1]),
+            "doc_type": (existing_row["doc_type"] if isinstance(existing_row, dict) else existing_row[2]),
+            "is_primary": existing_is_primary,
+            "inserted": False,
+        }
+
     def save_user_document(
         self,
         *,
@@ -511,30 +589,41 @@ class RicoDB:
         call itself found one. In both cases the response reflects the
         EXISTING row's canonical filename/id, never the just-uploaded
         filename, so the caller can't report metadata that doesn't match what
-        is actually stored. No new row is created and no primary flag is
-        touched on a duplicate.
+        is actually stored. No new row is created on a duplicate.
 
-        When ``is_primary``, this whole check-then-act sequence runs under
-        the same advisory lock used by `save_user_document` /
-        `set_primary_document` (see `_lock_primary_slot`), keyed on
-        (user_id, doc_type). That serializes it against every other
-        primary-changing call for this user/doc_type — including a
-        concurrent identical upload — so the duplicate check below is safe to
-        trust: nothing else can insert a conflicting (user_id, doc_type,
-        content_hash) row, or touch is_primary, while this lock is held. That
-        is what makes it safe to clear the old primary BEFORE inserting the
-        new one (required by the non-deferrable partial unique index
+        A concurrent identical upload — TWO calls with the exact same
+        (user_id, doc_type, content_hash), is_primary or not — is a NORMAL,
+        expected outcome (double-click, client retry), never an error: this
+        method never raises for it. Every call acquires
+        `_lock_content_slot(user_id, doc_type, content_hash)` first, so the
+        duplicate check-then-insert sequence below is race-free for ALL
+        uploads, not only primary ones. When ``is_primary``,
+        `_lock_primary_slot(user_id, doc_type)` is acquired SECOND — this
+        fixed order (content lock, then primary lock) is used everywhere in
+        this class so two transactions can never deadlock by acquiring the
+        two different lock keys in opposite order. Holding both means it's
+        safe to clear the old primary BEFORE inserting the new one (required
+        by the non-deferrable partial unique index
         `uq_user_documents_one_primary_per_type` — see `save_user_document`'s
-        docstring) without risking leaving zero primaries if the insert turns
-        out to be a duplicate after all: under the lock, it structurally
-        cannot be, because the duplicate check just above already confirmed
-        no such row exists, and nothing else can create one while we hold it.
+        docstring): nothing else can insert a conflicting content_hash row or
+        touch is_primary for this (user_id, doc_type) while we hold both.
+
+        The `ON CONFLICT DO NOTHING` insert is still handled gracefully even
+        though the lock above should make it unreachable for a genuine race —
+        defense in depth for the same class of edge case `save_user_document`
+        already guards (e.g. a legacy pre-lock duplicate). On that path, if
+        is_primary was requested and the row we find isn't already primary,
+        it's promoted in the same transaction — never let this method commit
+        having cleared the old primary with nothing to replace it.
 
         Requires migration 037 (content_hash column + partial unique indexes)
         to already be applied — see migrations/037_user_documents_content_hash.sql.
         """
         with self._transaction() as conn:
             with conn.cursor() as cur:
+                # Fixed lock order everywhere: content lock, then (if
+                # requested) primary lock — see docstring.
+                self._lock_content_slot(cur, user_id, doc_type, content_hash)
                 if is_primary:
                     self._lock_primary_slot(cur, user_id, doc_type)
 
@@ -550,13 +639,9 @@ class RicoDB:
                 )
                 existing = cur.fetchone()
                 if existing is not None:
-                    return {
-                        "id": str(existing["id"] if isinstance(existing, dict) else existing[0]),
-                        "filename": (existing["filename"] if isinstance(existing, dict) else existing[1]),
-                        "doc_type": (existing["doc_type"] if isinstance(existing, dict) else existing[2]),
-                        "is_primary": bool(existing["is_primary"] if isinstance(existing, dict) else existing[3]),
-                        "inserted": False,
-                    }
+                    return self._promote_if_requested(
+                        cur, existing, user_id=user_id, doc_type=doc_type, is_primary=is_primary
+                    )
 
                 if is_primary:
                     # Clear the old primary BEFORE inserting the new one — see
@@ -587,26 +672,34 @@ class RicoDB:
                      years_experience, current_role, content_hash),
                 )
                 row = cur.fetchone()
-                if row is None:
-                    # Structurally unreachable under the lock (see docstring):
-                    # our own pre-check above just confirmed no conflicting
-                    # row exists, and nothing else can create one while we
-                    # hold pg_advisory_xact_lock for this (user_id, doc_type).
-                    # Treat it as a hard error and let the transaction roll
-                    # back — including undoing the primary-clear above —
-                    # rather than silently returning a duplicate response
-                    # that doesn't match a row we can find.
+                if row is not None:
+                    return self._document_row_to_dict(row, inserted=True)
+
+                # A duplicate race even under the content lock — treat it as
+                # the normal outcome it is, never an error. Re-fetch the
+                # winner's canonical row.
+                cur.execute(
+                    """
+                    SELECT id, filename, doc_type, is_primary
+                      FROM user_documents
+                     WHERE user_id = %s AND doc_type = %s AND content_hash = %s
+                     LIMIT 1
+                    """,
+                    (user_id, doc_type, content_hash),
+                )
+                erow = cur.fetchone()
+                if erow is None:
+                    # Not a normal duplicate race (ON CONFLICT DO NOTHING
+                    # implies a conflicting row exists) — genuinely anomalous.
+                    # Let the transaction roll back rather than fabricate a
+                    # document that isn't there.
                     raise RuntimeError(
-                        "get_or_create_user_document: unexpected insert conflict "
-                        "despite advisory-lock-protected pre-check"
+                        "get_or_create_user_document: insert conflicted but no "
+                        "matching row could be found"
                     )
-        return {
-            "id": str(row["id"] if isinstance(row, dict) else row[0]),
-            "filename": (row["filename"] if isinstance(row, dict) else row[1]),
-            "doc_type": (row["doc_type"] if isinstance(row, dict) else row[2]),
-            "is_primary": bool(row["is_primary"] if isinstance(row, dict) else row[3]),
-            "inserted": True,
-        }
+                return self._promote_if_requested(
+                    cur, erow, user_id=user_id, doc_type=doc_type, is_primary=is_primary
+                )
 
     def list_user_documents(self, user_id: str) -> List[Dict[str, Any]]:
         """Return all documents for a user, newest first."""

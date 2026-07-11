@@ -86,7 +86,10 @@ class TestGetOrCreateUserDocument:
         sql = " ".join(str(c.args[0]).upper() for c in cur.execute.call_args_list)
         assert "ON CONFLICT" in sql and "CONTENT_HASH" in sql
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        assert statements == ["SELECT", "INSERT"]  # no advisory lock — is_primary not requested
+        # content-lock SELECT is acquired on EVERY call, even is_primary=False
+        # — this is the fix for the concurrency gap: two identical
+        # non-primary uploads used to race the INSERT with no lock at all.
+        assert statements == ["SELECT", "SELECT", "INSERT"]
 
     def test_exact_duplicate_returns_existing_canonical_metadata(self):
         """A pre-existing row must surface its OWN filename, not the filename
@@ -109,7 +112,8 @@ class TestGetOrCreateUserDocument:
         assert result["filename"] == "ORIGINAL-cv.pdf"  # canonical, not the incoming name
         assert result["is_primary"] is True
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        assert statements == ["SELECT"]  # found on the pre-check — no INSERT, no UPDATE
+        # content-lock, THEN duplicate check finds it — no INSERT, no UPDATE.
+        assert statements == ["SELECT", "SELECT"]
 
     def test_different_filename_same_bytes_is_a_duplicate(self):
         """Same content_hash (same bytes) with a different filename is still
@@ -143,10 +147,9 @@ class TestGetOrCreateUserDocument:
         assert result["inserted"] is True
         assert result["id"] == "new-uuid-2"
 
-    def test_primary_flag_untouched_on_duplicate(self):
-        """No UPDATE clearing other primaries is ever issued on a duplicate,
-        even when is_primary=True was requested — the pre-check short-circuits
-        before either the clear or the insert."""
+    def test_primary_flag_untouched_when_duplicate_already_primary(self):
+        """No promotion UPDATE is issued when the found duplicate is already
+        primary — nothing to do."""
         cur = MagicMock()
         cur.fetchone.return_value = {
             "id": "existing-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True,
@@ -158,8 +161,34 @@ class TestGetOrCreateUserDocument:
                 doc_type="cv", file_size=10, content_hash="abc123", is_primary=True,
             )
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        # advisory-lock SELECT, duplicate-check SELECT — no UPDATE, no INSERT.
-        assert statements == ["SELECT", "SELECT"]
+        # content-lock, primary-lock, duplicate-check — no UPDATE, no INSERT.
+        assert statements == ["SELECT", "SELECT", "SELECT"]
+
+    def test_primary_requested_promotes_existing_nonprimary_duplicate(self):
+        """The scenario a non-primary upload racing a primary one for the
+        SAME content_hash relies on: is_primary=True finds an existing
+        duplicate that is NOT primary (a concurrent non-primary call won the
+        content-lock race and inserted it first) via the fast pre-check —
+        it must be promoted, or the caller would get inserted=false with
+        is_primary=false, silently dropping the is_primary=True request and
+        leaving zero primary documents for this doc_type."""
+        cur = MagicMock()
+        cur.fetchone.return_value = {
+            "id": "existing-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False,
+        }
+        db = _new_db()
+        with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
+            result = db.get_or_create_user_document(
+                user_id="u@test.com", filename="cv.pdf", original_filename="cv.pdf",
+                doc_type="cv", file_size=10, content_hash="abc123", is_primary=True,
+            )
+        assert result["inserted"] is False
+        assert result["id"] == "existing-uuid"
+        assert result["is_primary"] is True  # promoted, never silently dropped
+        statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
+        # content-lock, primary-lock, duplicate-check (found, not primary),
+        # then _promote_if_requested's clear-others + set-primary.
+        assert statements == ["SELECT", "SELECT", "SELECT", "UPDATE", "UPDATE"]
 
     def test_primary_flag_moved_atomically_on_real_insert(self):
         """A genuine insert with is_primary=True clears the OLD primary BEFORE
@@ -179,20 +208,72 @@ class TestGetOrCreateUserDocument:
                 doc_type="cv", file_size=10, content_hash="abc123", is_primary=True,
             )
         assert result["inserted"] is True
-        mock_tx.assert_called_once()  # one transaction — lock + check + clear + insert together
+        mock_tx.assert_called_once()  # one transaction — locks + check + clear + insert together
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
-        # advisory lock, duplicate check, clear-old-primary, THEN insert —
-        # never insert-before-clear (that would violate the non-deferrable
-        # partial unique index the instant the INSERT ran).
-        assert statements == ["SELECT", "SELECT", "UPDATE", "INSERT"]
+        # content-lock, primary-lock, duplicate check, clear-old-primary, THEN
+        # insert — never insert-before-clear (that would violate the
+        # non-deferrable partial unique index the instant the INSERT ran).
+        assert statements == ["SELECT", "SELECT", "SELECT", "UPDATE", "INSERT"]
 
-    def test_unexpected_insert_conflict_raises_instead_of_silently_returning(self):
-        """If the INSERT still conflicts despite the lock-protected pre-check
-        (should be structurally unreachable), fail loudly and let the whole
-        transaction roll back — including undoing the primary-clear — rather
-        than fabricate a duplicate response for a row we can't find."""
+    def test_non_primary_conflict_under_content_lock_returns_gracefully(self):
+        """The bug this round fixes: a non-primary upload used to have NO
+        lock at all, so a concurrent identical upload could make its own
+        INSERT ... ON CONFLICT DO NOTHING return no row, and the old code
+        raised RuntimeError -> a 500 for a completely normal double-click /
+        client-retry race. It must now return inserted=False with the
+        winner's canonical row instead, same as any other duplicate."""
         cur = MagicMock()
-        cur.fetchone.side_effect = [None, None]  # pre-check: not found; INSERT: no row returned
+        cur.fetchone.side_effect = [
+            None,  # duplicate pre-check: not found (raced)
+            None,  # INSERT ... ON CONFLICT DO NOTHING: lost the race, no row
+            {"id": "winner-uuid", "filename": "winner.pdf", "doc_type": "cv", "is_primary": False},  # fallback SELECT
+        ]
+        db = _new_db()
+        with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
+            result = db.get_or_create_user_document(
+                user_id="u@test.com", filename="loser.pdf", original_filename="loser.pdf",
+                doc_type="cv", file_size=10, content_hash="abc123",
+            )
+        assert result == {
+            "id": "winner-uuid", "filename": "winner.pdf", "doc_type": "cv",
+            "is_primary": False, "inserted": False,
+        }
+        statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
+        assert statements == ["SELECT", "SELECT", "INSERT", "SELECT"]
+        assert "RAISE" not in " ".join(statements)  # sanity: no exception path taken
+
+    def test_primary_conflict_under_lock_promotes_found_row_never_zero_primary(self):
+        """Same race as above but is_primary=True was requested and we'd
+        already cleared the old primary — the found existing row must be
+        promoted so the transaction never commits with zero primaries."""
+        cur = MagicMock()
+        cur.fetchone.side_effect = [
+            None,  # duplicate pre-check: not found (raced)
+            None,  # INSERT ... ON CONFLICT DO NOTHING: lost the race
+            {"id": "winner-uuid", "filename": "winner.pdf", "doc_type": "cv", "is_primary": False},  # fallback SELECT
+        ]
+        db = _new_db()
+        with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
+            result = db.get_or_create_user_document(
+                user_id="u@test.com", filename="loser.pdf", original_filename="loser.pdf",
+                doc_type="cv", file_size=10, content_hash="abc123", is_primary=True,
+            )
+        assert result["inserted"] is False
+        assert result["id"] == "winner-uuid"
+        assert result["is_primary"] is True  # promoted, not left False
+        statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
+        # content-lock, primary-lock, dup-check, clear-old (pre-insert),
+        # INSERT(conflict), fallback SELECT, then _promote_if_requested's
+        # own clear-others (redundant no-op here) + set-primary UPDATE.
+        assert statements == ["SELECT", "SELECT", "SELECT", "UPDATE", "INSERT", "SELECT", "UPDATE", "UPDATE"]
+
+    def test_conflict_with_no_matching_row_at_all_still_raises(self):
+        """The one remaining raise: not a normal duplicate race (ON CONFLICT
+        DO NOTHING implies a conflicting row exists) but genuinely nothing is
+        found afterward — real anomaly, not a race, so the transaction must
+        roll back rather than fabricate a document."""
+        cur = MagicMock()
+        cur.fetchone.side_effect = [None, None, None]  # pre-check, INSERT, fallback SELECT — all empty
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
             with pytest.raises(RuntimeError):

@@ -31,12 +31,24 @@ Scenarios covered:
   * a failure partway through a hand-rolled primary-swap transaction rolls
     back and restores the previous primary (proves the underlying Postgres
     rollback semantics the RicoDB methods rely on)
+  * two concurrent NON-primary get_or_create_user_document calls with the
+    same content_hash — the gap the content-lock fix closes: previously only
+    is_primary=True calls were locked, so two identical ordinary uploads
+    could both miss the pre-check and race the INSERT, and the loser raised
+    RuntimeError -> a 500 for a normal double-click/retry
+  * the same race at the route level (POST /api/v1/user/files), real DB,
+    real threads — never 500, exactly one duplicate=false + one duplicate=true
+  * a primary and a non-primary get_or_create_user_document call racing on
+    the SAME content_hash — exactly one document row, exactly one valid
+    primary state, never zero primaries regardless of which call wins
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 import uuid
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -280,4 +292,156 @@ class TestTransactionFailureRestoresPreviousPrimary:
 
         # The clear from the failed transaction was rolled back entirely.
         assert _is_primary(db, doc_a) is True
+        assert _primary_row_count(db, user_id) == 1
+
+
+def _doc_count_for_hash(user_id: str, doc_type: str, content_hash: str) -> int:
+    conn = psycopg2.connect(TEST_DATABASE_URL)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM user_documents WHERE user_id = %s AND doc_type = %s AND content_hash = %s",
+                (user_id, doc_type, content_hash),
+            )
+            row = cur.fetchone()
+    finally:
+        conn.close()
+    return int(row[0])
+
+
+class TestConcurrentNonPrimaryGetOrCreate:
+    """The exact gap flagged in review: an ordinary (is_primary=False)
+    upload had NO advisory lock at all before this fix, so two identical
+    concurrent uploads could both miss the pre-check and race the INSERT —
+    the loser's ON CONFLICT DO NOTHING returned no row, and the old code
+    raised RuntimeError instead of returning duplicate=true."""
+
+    def test_two_concurrent_non_primary_uploads_same_hash(self, db: RicoDB):
+        user_id = _user_id()
+        content_hash = "shared-content-hash-nonprimary"
+
+        db_thread_1 = RicoDB(database_url=TEST_DATABASE_URL)
+        db_thread_2 = RicoDB(database_url=TEST_DATABASE_URL)
+        barrier = threading.Barrier(2)
+        results: dict[str, dict] = {}
+        errors: list[BaseException] = []
+
+        def _run(db_instance: RicoDB, key: str) -> None:
+            try:
+                barrier.wait(timeout=5)
+                results[key] = db_instance.get_or_create_user_document(
+                    user_id=user_id, filename=f"{key}.pdf", original_filename=f"{key}.pdf",
+                    doc_type="cv", content_hash=content_hash, is_primary=False,
+                )
+            except BaseException as exc:  # noqa: BLE001 — surface any thread failure
+                errors.append(exc)
+
+        t1 = threading.Thread(target=_run, args=(db_thread_1, "one"))
+        t2 = threading.Thread(target=_run, args=(db_thread_2, "two"))
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        assert not errors, f"concurrent get_or_create_user_document raised: {errors}"
+        inserted_flags = sorted(r["inserted"] for r in results.values())
+        assert inserted_flags == [False, True]  # exactly one of each, never both True
+        # Both calls must agree on the SAME row id (the winner's).
+        assert results["one"]["id"] == results["two"]["id"]
+        assert _doc_count_for_hash(user_id, "cv", content_hash) == 1
+
+
+class TestConcurrentRouteUpload:
+    """Same race, but through the actual POST /api/v1/user/files handler —
+    real DB, real threads, quota/auth mocked out (that plumbing is already
+    covered elsewhere; this test is specifically about the DB race)."""
+
+    class _FakeUpload:
+        def __init__(self, data: bytes, filename: str = "cv.pdf"):
+            self._data = data
+            self.filename = filename
+            self.size = None
+
+        async def read(self) -> bytes:
+            return self._data
+
+    def test_concurrent_upload_route_never_500s_on_duplicate_race(self, db: RicoDB):
+        from src.api.routers import files as files_mod
+
+        user_id = _user_id()
+        pdf_bytes = b"%PDF-1.4\n%route-level concurrency race bytes\n"
+
+        results: dict[str, dict] = {}
+        errors: list[BaseException] = []
+        barrier = threading.Barrier(2)
+
+        def _run(key: str) -> None:
+            try:
+                barrier.wait(timeout=5)
+                raw = getattr(files_mod.upload_file, "__wrapped__", files_mod.upload_file)
+                req = MagicMock()
+                with patch.object(files_mod, "_db", db), \
+                     patch.object(files_mod, "enforce_document_quota", MagicMock()), \
+                     patch.object(files_mod, "get_current_user", return_value={"email": user_id, "role": "user"}):
+                    results[key] = asyncio.run(
+                        raw(req, file=self._FakeUpload(pdf_bytes, filename=f"{key}.pdf"), doc_type="cv")
+                    )
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        t1 = threading.Thread(target=_run, args=("one",))
+        t2 = threading.Thread(target=_run, args=("two",))
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        assert not errors, f"concurrent upload route raised (would surface as a 500): {errors}"
+        duplicate_flags = sorted(r["duplicate"] for r in results.values())
+        assert duplicate_flags == [False, True]
+        assert results["one"]["id"] == results["two"]["id"]
+
+
+class TestConcurrentPrimaryAndNonPrimaryGetOrCreate:
+    """A primary and a non-primary get_or_create_user_document call racing
+    on the SAME content_hash — regardless of which one wins the lock, there
+    must be exactly one document row and exactly one valid primary state,
+    never zero primaries."""
+
+    def test_concurrent_primary_and_nonprimary_same_hash(self, db: RicoDB):
+        user_id = _user_id()
+        content_hash = "shared-content-hash-mixed-primary"
+
+        db_thread_1 = RicoDB(database_url=TEST_DATABASE_URL)
+        db_thread_2 = RicoDB(database_url=TEST_DATABASE_URL)
+        barrier = threading.Barrier(2)
+        results: dict[str, dict] = {}
+        errors: list[BaseException] = []
+
+        def _run(db_instance: RicoDB, key: str, is_primary: bool) -> None:
+            try:
+                barrier.wait(timeout=5)
+                results[key] = db_instance.get_or_create_user_document(
+                    user_id=user_id, filename=f"{key}.pdf", original_filename=f"{key}.pdf",
+                    doc_type="cv", content_hash=content_hash, is_primary=is_primary,
+                )
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        t1 = threading.Thread(target=_run, args=(db_thread_1, "primary", True))
+        t2 = threading.Thread(target=_run, args=(db_thread_2, "nonprimary", False))
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        assert not errors, f"concurrent primary/non-primary get_or_create raised: {errors}"
+        # Exactly one document row for this hash, regardless of who won.
+        assert _doc_count_for_hash(user_id, "cv", content_hash) == 1
+        assert results["primary"]["id"] == results["nonprimary"]["id"]
+        # The is_primary=True request must be honored regardless of whether
+        # it was the one that actually inserted the row, or found the other
+        # thread's row already there — never a silently-dropped primary
+        # request, never zero primaries.
+        assert results["primary"]["is_primary"] is True
         assert _primary_row_count(db, user_id) == 1
