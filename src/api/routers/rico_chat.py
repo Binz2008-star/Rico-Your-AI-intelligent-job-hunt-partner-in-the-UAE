@@ -37,7 +37,7 @@ from typing import Any, Optional
 from functools import wraps
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.api.admin_guard import require_admin_user
@@ -1715,6 +1715,37 @@ async def rico_upload_cv(
         )
 
 
+def _resolve_trusted_cv_artifact(
+    resolved_user_id: str, payload: ConfirmCVProfileRequest
+) -> dict[str, Any] | None:
+    """Resolve and strictly validate the upload-cv artifact for a confirm call.
+
+    Returns the artifact dict ONLY when it is complete and trustworthy:
+    present, unexpired, scoped to this exact server-derived user_id, and its
+    filename matches what the client is confirming. Returns ``None`` for
+    every failure mode (missing upload_id, an expired/foreign/unresolvable
+    artifact, a filename mismatch, or a resolved row missing content_hash /
+    file_size / filename / doc_type) -- the caller must treat ``None`` as
+    "reject the confirm outright", never as "proceed without a hash".
+    """
+    if not payload.upload_id:
+        return None
+    from src.repositories.cv_upload_artifact_repo import resolve_cv_upload_artifact
+    artifact = resolve_cv_upload_artifact(resolved_user_id, payload.upload_id)
+    if not artifact:
+        return None
+    if (
+        not artifact.get("content_hash")
+        or artifact.get("file_size") is None
+        or not artifact.get("filename")
+        or not artifact.get("doc_type")
+    ):
+        return None
+    if artifact.get("filename") != payload.filename:
+        return None
+    return artifact
+
+
 @router.post("/confirm-cv-profile")
 @limiter.limit(LIMIT_UPLOAD)
 async def confirm_cv_profile(
@@ -1784,20 +1815,40 @@ async def confirm_cv_profile(
             filtered_updates["name"] = profile_updates["name"]
         profile_updates = filtered_updates
 
-        # Resolve the short-lived upload artifact (#963) server-side, scoped to
-        # the caller's OWN server-derived identity (never a client-supplied
-        # user_id) and a freshness window — recovers the server-computed
-        # content hash, byte count, and full parsed text for this exact
-        # upload. Never trusted/recomputed from the client, and never routed
-        # through RicoMemoryStore (a no-op under RICO_MEMORY_BACKEND=postgres,
-        # the production backend). A miss (no upload_id, expired, wrong user,
-        # or DB unavailable) degrades gracefully — confirm still proceeds,
-        # just without a server-computed hash (no dedupe) or recovered raw
-        # text, matching this endpoint's behavior before #963 for that case.
+        # Resolve and STRICTLY validate the short-lived upload artifact (#963)
+        # server-side, scoped to the caller's OWN server-derived identity
+        # (never a client-supplied user_id) and a freshness window. A missing
+        # upload_id, an expired/foreign artifact (resolve returns None), a
+        # filename mismatch against payload.filename, or an artifact missing
+        # any of content_hash/file_size/filename/doc_type means this confirm
+        # cannot be trusted -- reject outright with NO side effects (no
+        # profile write, no document, no onboarding-status change) rather
+        # than silently degrading to an unhashed/untracked document. Never
+        # routed through RicoMemoryStore (a no-op under
+        # RICO_MEMORY_BACKEND=postgres, the production backend).
+        #
+        # Public/guest sessions never persist a document at all (see the
+        # `is_valid_public_user_id` guard on the document-save block below,
+        # unchanged since before #963) and were never issued an artifact by
+        # upload-cv in the first place (also gated the same way) -- so this
+        # requirement does not apply to them; a guest confirm still proceeds
+        # profile-only, exactly as before.
         artifact: dict[str, Any] | None = None
-        if payload.upload_id and not is_valid_public_user_id(resolved_user_id):
-            from src.repositories.cv_upload_artifact_repo import resolve_cv_upload_artifact
-            artifact = resolve_cv_upload_artifact(resolved_user_id, payload.upload_id)
+        if not is_valid_public_user_id(resolved_user_id):
+            artifact = _resolve_trusted_cv_artifact(resolved_user_id, payload)
+            if artifact is None:
+                logger.warning(
+                    "cv_confirm_artifact_rejected user=%s upload_id=%s filename=%s request_ref=%s",
+                    resolved_user_id, payload.upload_id, payload.filename, request_ref,
+                )
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "ok": False,
+                        "status": "cv_confirmation_required",
+                        "message": "Please upload the CV again before confirming.",
+                    },
+                )
 
         confirmed_cv_text: str | None = (artifact or {}).get("cv_text") or None
 
@@ -1830,9 +1881,11 @@ async def confirm_cv_profile(
         # Canonical, hash-aware, atomically-idempotent path (#960) — never the
         # legacy unconditional-INSERT save_user_document, which created a new
         # duplicate row on every retry/double-click and could never dedupe an
-        # exact re-confirm. content_hash is None when no artifact resolved
-        # (get_or_create_user_document already handles that: it simply always
-        # inserts, matching the pre-#963 no-dedupe behavior for that case).
+        # exact re-confirm. `artifact` is guaranteed non-None and complete
+        # here (content_hash/file_size/filename/doc_type all present) — an
+        # untrusted/incomplete artifact already returned a 409 above, before
+        # any of this ran. No content_hash=None / file_size=0 fallback path
+        # exists anymore.
         if not is_valid_public_user_id(resolved_user_id):
             try:
                 from src.rico_db import RicoDB as _RicoDB
@@ -1843,23 +1896,22 @@ async def confirm_cv_profile(
                     # silently coerced to "cv" -- that previously let a mis-routed
                     # non-CV upload (e.g. an invoice that slipped into the CV
                     # pipeline) be written as doc_type="cv" with is_primary=True,
-                    # becoming the user's permanent "Active CV". Prefer the
-                    # server-derived doc_type recorded on the artifact at
-                    # upload time over the client-echoed payload.doc_type when
-                    # available; either way, only ever the known-safe set.
+                    # becoming the user's permanent "Active CV". Always the
+                    # server-derived doc_type recorded on the trusted artifact
+                    # at upload time — payload.doc_type (client-echoed) is
+                    # never used for persistence — and only ever the
+                    # known-safe set.
                     _CONFIRMABLE_DOC_TYPES = ("cv", "cover_letter", "other")
-                    _candidate_doc_type = (artifact or {}).get("doc_type") or payload.doc_type
                     _resolved_doc_type = (
-                        _candidate_doc_type if _candidate_doc_type in _CONFIRMABLE_DOC_TYPES else "other"
+                        artifact["doc_type"] if artifact["doc_type"] in _CONFIRMABLE_DOC_TYPES else "other"
                     )
-                    _resolved_filename = (artifact or {}).get("filename") or payload.filename
                     _doc_db.get_or_create_user_document(
                         user_id=resolved_user_id,
-                        filename=_resolved_filename,
-                        original_filename=_resolved_filename,
+                        filename=artifact["filename"],
+                        original_filename=artifact["filename"],
                         doc_type=_resolved_doc_type,
-                        file_size=(artifact or {}).get("file_size") or 0,
-                        content_hash=(artifact or {}).get("content_hash"),
+                        file_size=artifact["file_size"],
+                        content_hash=artifact["content_hash"],
                         skills_count=len(skills),
                         skills_json=list(skills),
                         years_experience=profile_updates.get("years_experience"),

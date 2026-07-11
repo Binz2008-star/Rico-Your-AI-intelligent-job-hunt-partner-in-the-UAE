@@ -227,8 +227,8 @@ def _make_fake_ricodb(get_or_create_mock, *, legacy_save_mock=None):
     return _FakeRicoDB
 
 
-def _confirm_payload(filename="upload.pdf", doc_type="cv"):
-    return {
+def _confirm_payload(filename="upload.pdf", doc_type="cv", upload_id="artifact-1"):
+    payload = {
         "preview": {
             "name": "Test User",
             "current_role": "HSE Manager",
@@ -240,6 +240,20 @@ def _confirm_payload(filename="upload.pdf", doc_type="cv"):
         },
         "filename": filename,
         "doc_type": doc_type,
+    }
+    if upload_id is not None:
+        payload["upload_id"] = upload_id
+    return payload
+
+
+def _artifact_for(*, filename, doc_type, content_hash="deadbeef" * 4, file_size=2048):
+    """A complete, trustworthy artifact matching the given filename/doc_type --
+    the doc_type here is the SERVER-DERIVED value (set by upload-cv's
+    classifier at upload time), which is what #963's strict-reject confirm
+    now persists from -- payload.doc_type (client-echoed) is never used."""
+    return {
+        "filename": filename, "doc_type": doc_type,
+        "content_hash": content_hash, "file_size": file_size, "cv_text": "",
     }
 
 
@@ -254,6 +268,10 @@ class TestConfirmCvProfileDocTypeValidation:
             patch("src.services.subscription_gating.enforce_profile_optimization_allowed"),
             patch("src.services.subscription_gating.record_profile_optimization_usage"),
             patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value="alice@rico.ai"),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact",
+                return_value=_artifact_for(filename=filename, doc_type=doc_type),
+            ),
             patch("src.rico_db.RicoDB", _make_fake_ricodb(get_or_create_mock)),
         ):
             r = client.post(
@@ -323,6 +341,10 @@ class TestConfirmCvProfileDocTypeValidation:
             patch("src.services.subscription_gating.enforce_profile_optimization_allowed"),
             patch("src.services.subscription_gating.record_profile_optimization_usage"),
             patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value="alice@rico.ai"),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact",
+                return_value=_artifact_for(filename="upload.pdf", doc_type="cv"),
+            ),
             patch("src.rico_db.RicoDB", _make_fake_ricodb(get_or_create_mock, legacy_save_mock=legacy_mock)),
         ):
             r = client.post(

@@ -202,6 +202,23 @@ describe("onboarding CV upload + form", () => {
     expect(confirmOrder).toBeLessThan(submitOrder);
   });
 
+  it("onboarding submit fails safely if confirmCVProfile fails (e.g. rejected artifact)", async () => {
+    // #975 blocker 1: confirm-cv-profile now rejects an untrusted artifact
+    // with a non-200. The onboarding handler must fail safely: no
+    // submitOnboarding call, no /command navigation, no false completion --
+    // the user stays on the form with the error surfaced, exactly like any
+    // other confirm failure.
+    await renderIncompleteReachForm();
+    confirmCVProfile.mockRejectedValueOnce(
+      new ApiError("Please upload the CV again before confirming.", 409),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Complete profile/i }));
+    await waitFor(() => expect(confirmCVProfile).toHaveBeenCalled());
+    expect(submitOnboarding).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalledWith("/command");
+    expect(screen.getByText("Please upload the CV again before confirming.")).toBeInTheDocument();
+  });
+
   it("submit failure keeps the form and shows no success state", async () => {
     await renderIncompleteReachForm();
     submitOnboarding.mockRejectedValue(new Error("save failed"));

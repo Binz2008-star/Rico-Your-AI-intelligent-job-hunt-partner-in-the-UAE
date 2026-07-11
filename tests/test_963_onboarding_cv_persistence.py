@@ -308,7 +308,7 @@ class TestUploadCvArtifactCreation:
 # ── route: /confirm-cv-profile — artifact resolution + canonical write ───────
 
 _ARTIFACT = {
-    "filename": "jane_cv.pdf",
+    "filename": "upload.pdf",
     "doc_type": "cv",
     "content_hash": "deadbeef" * 8,
     "file_size": 54321,
@@ -380,7 +380,10 @@ class TestConfirmCvProfileArtifactResolution:
             )
         return r, get_or_create_mock, upsert_mock, resolve_mock, set_status_mock
 
-    def test_resolved_artifact_supplies_hash_size_and_text(self, client):
+    def test_valid_upload_id_confirms_and_dedupes(self, client):
+        """A complete, matching, unexpired artifact confirms normally and
+        supplies the server-computed hash/size/text -- the ONLY path that
+        creates a user_documents row."""
         r, get_or_create_mock, upsert_mock, resolve_mock, _ = self._post_confirm(client, upload_id="artifact-1")
         assert r.status_code == 200, r.text
         resolve_mock.assert_called_once_with(_AUTH_UID, "artifact-1")
@@ -390,28 +393,88 @@ class TestConfirmCvProfileArtifactResolution:
         assert kwargs["file_size"] == _ARTIFACT["file_size"]
         assert upsert_mock.call_args.kwargs["cv_text"] == _ARTIFACT["cv_text"]
 
-    def test_missing_upload_id_falls_back_gracefully(self, client):
-        """A caller that never sends upload_id (e.g. a not-yet-updated
-        client) still succeeds through the SAME canonical path — no fork,
-        no error — just without server-side hash dedupe/text recovery."""
-        r, get_or_create_mock, upsert_mock, resolve_mock, _ = self._post_confirm(client, upload_id=None)
-        assert r.status_code == 200, r.text
-        resolve_mock.assert_not_called()
-        get_or_create_mock.assert_called_once()
-        assert get_or_create_mock.call_args.kwargs["content_hash"] is None
-        assert upsert_mock.call_args.kwargs["cv_text"] is None
+    def _assert_rejected_no_side_effects(self, r, get_or_create_mock, upsert_mock, set_status_mock):
+        assert r.status_code == 409, r.text
+        body = r.json()
+        assert body == {
+            "ok": False,
+            "status": "cv_confirmation_required",
+            "message": "Please upload the CV again before confirming.",
+        }
+        # No side effects at all -- not even a profile write or onboarding
+        # status change, let alone a document row.
+        upsert_mock.assert_not_called()
+        get_or_create_mock.assert_not_called()
+        set_status_mock.assert_not_called()
 
-    def test_unresolvable_upload_id_falls_back_gracefully(self, client):
-        """Expired / wrong-user / unknown upload_id resolves to None —
-        confirm still succeeds via the canonical path, never leaks another
-        user's artifact and never errors."""
-        r, get_or_create_mock, upsert_mock, resolve_mock, _ = self._post_confirm(
-            client, upload_id="stale-or-foreign-id", resolve_return=None,
+    def test_missing_upload_id_is_rejected(self, client):
+        """#975 blocker 1: a caller that never sends upload_id must be
+        rejected outright (409), never silently degrade to an unhashed
+        document."""
+        r, get_or_create_mock, upsert_mock, resolve_mock, set_status_mock = self._post_confirm(
+            client, upload_id=None,
         )
-        assert r.status_code == 200, r.text
-        resolve_mock.assert_called_once_with(_AUTH_UID, "stale-or-foreign-id")
-        assert get_or_create_mock.call_args.kwargs["content_hash"] is None
-        assert upsert_mock.call_args.kwargs["cv_text"] is None
+        resolve_mock.assert_not_called()
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
+
+    def test_expired_upload_id_is_rejected(self, client):
+        """An expired artifact resolves to None (resolve_cv_upload_artifact's
+        own SQL filters `expires_at > NOW()`) -- confirm must reject, not
+        fall back to an unhashed document."""
+        r, get_or_create_mock, upsert_mock, resolve_mock, set_status_mock = self._post_confirm(
+            client, upload_id="expired-artifact", resolve_return=None,
+        )
+        resolve_mock.assert_called_once_with(_AUTH_UID, "expired-artifact")
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
+
+    def test_foreign_upload_id_is_rejected(self, client):
+        """An upload_id that belongs to a different user never resolves
+        (resolve_cv_upload_artifact scopes by id AND user_id) -- confirm must
+        reject, never leak or persist using another user's artifact."""
+        r, get_or_create_mock, upsert_mock, resolve_mock, set_status_mock = self._post_confirm(
+            client, upload_id="belongs-to-mallory", resolve_return=None,
+        )
+        resolve_mock.assert_called_once_with(_AUTH_UID, "belongs-to-mallory")
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
+
+    def test_artifact_missing_content_hash_is_rejected(self, client):
+        incomplete = {**_ARTIFACT, "content_hash": None}
+        r, get_or_create_mock, upsert_mock, resolve_mock, set_status_mock = self._post_confirm(
+            client, upload_id="incomplete-artifact", resolve_return=incomplete,
+        )
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
+
+    def test_artifact_missing_file_size_is_rejected(self, client):
+        incomplete = {**_ARTIFACT, "file_size": None}
+        r, get_or_create_mock, upsert_mock, resolve_mock, set_status_mock = self._post_confirm(
+            client, upload_id="incomplete-artifact", resolve_return=incomplete,
+        )
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
+
+    def test_artifact_missing_filename_is_rejected(self, client):
+        incomplete = {**_ARTIFACT, "filename": None}
+        r, get_or_create_mock, upsert_mock, resolve_mock, set_status_mock = self._post_confirm(
+            client, upload_id="incomplete-artifact", resolve_return=incomplete,
+        )
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
+
+    def test_artifact_missing_doc_type_is_rejected(self, client):
+        incomplete = {**_ARTIFACT, "doc_type": None}
+        r, get_or_create_mock, upsert_mock, resolve_mock, set_status_mock = self._post_confirm(
+            client, upload_id="incomplete-artifact", resolve_return=incomplete,
+        )
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
+
+    def test_mismatched_artifact_filename_is_rejected(self, client):
+        """The artifact resolved (right user, unexpired) but records a
+        DIFFERENT filename than the one being confirmed -- a stale preview
+        confirmed against a since-changed upload. Must reject, never
+        silently attach the wrong artifact's hash/text to this confirm."""
+        mismatched = {**_ARTIFACT, "filename": "a-different-file.pdf"}
+        r, get_or_create_mock, upsert_mock, resolve_mock, set_status_mock = self._post_confirm(
+            client, upload_id="artifact-1", resolve_return=mismatched,
+        )
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
 
     def test_double_submit_same_upload_id_feeds_same_content_hash_twice(self, client):
         """Idempotency precondition: a retried/duplicated confirm for the
@@ -440,6 +503,9 @@ class TestConfirmCvProfileArtifactResolution:
 
 class TestConfirmCvProfileOnboardingGate:
     def _post_confirm(self, client, *, gate_ok: bool):
+        # A valid, complete, matching artifact -- these tests exercise the
+        # onboarding-completion gate, which (since #975 blocker 1) is only
+        # reached once the artifact passes strict validation.
         get_or_create_mock = MagicMock()
         with (
             patch("src.api.routers.rico_chat.upsert_profile"),
@@ -450,12 +516,15 @@ class TestConfirmCvProfileOnboardingGate:
             patch("src.services.subscription_gating.enforce_profile_optimization_allowed"),
             patch("src.services.subscription_gating.record_profile_optimization_usage"),
             patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
-            patch("src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact", return_value=None),
-            patch("src.rico_db.RicoDB", _make_fake_ricodb(MagicMock())),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact",
+                return_value=_ARTIFACT,
+            ),
+            patch("src.rico_db.RicoDB", _make_fake_ricodb(get_or_create_mock)),
         ):
             r = client.post(
                 f"/api/v1/rico/confirm-cv-profile?user_id={_AUTH_UID}",
-                json=_confirm_payload(),
+                json=_confirm_payload(upload_id="artifact-1"),
             )
         return r, set_status_mock, legacy_mark_mock
 
