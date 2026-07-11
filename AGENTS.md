@@ -9,6 +9,7 @@ Before planning, editing, testing, creating a branch, or opening a PR:
 3. Verify live GitHub `main`, open PRs, and the exact active PR head.
 4. Read the active `AI_WORKSPACE/TASKS.md` entry and latest handoff.
 5. Declare exactly one role: **WRITER**, **REVIEWER**, **RELEASE**, or **IDLE**.
+6. For the full read order and per-agent-name responsibilities this gate summarizes, see `AI_WORKSPACE/OPERATING_RULES.md` ("Session Boot Sequence") and `AI_WORKSPACE/AGENT_OPERATING_MODEL.md` (per-agent role and scope boundaries, including Devin and Lovable). If those documents and this gate ever disagree on read order, `OPERATING_RULES.md` is canonical — report the drift instead of silently picking one.
 
 Rules:
 
@@ -18,8 +19,20 @@ Rules:
 - Other Claude sessions default to REVIEWER or IDLE.
 - Windsurf must not edit a Claude-owned branch unless ownership is explicitly handed over.
 - Codex reviews; it does not become a second implementation owner.
+- Devin and Lovable follow the role and scope boundaries in `AI_WORKSPACE/AGENT_OPERATING_MODEL.md`. Production-scoped work requires explicit owner assignment and an approved branch.
 - If live state conflicts with workspace docs, stop and report the conflict instead of guessing.
 - Old handoffs and chat summaries are historical context, not current permission to resume work.
+
+## Continuity and Handoff Gate
+
+Mandatory for every agent, every session, regardless of tool. If you notice you may hit a token, context, tool-call, usage, or time limit before the current task is done, stop expanding scope immediately and record state before doing anything else — documenting the handoff outranks continuing implementation once this triggers.
+
+- The handoff format is the existing Continuity Block in `AI_WORKSPACE/TASKS.md` — do not invent a parallel format or document type.
+- Update the task's existing Continuity Block in place; never duplicate the task entry.
+- If the task is not `done`/`verified`, also add or update a dated `AI_WORKSPACE/HANDOFFS/<date>-<topic>.md` carrying the same block.
+- Record: objective, branch, PR number, head SHA, files inspected/changed, tests run and results, exact status, what remains unfinished, risks/blockers, the exact next recommended step, what must not be touched, whether there are uncommitted changes, and any deploy/CI/Neon/Vercel state still to check.
+- A handoff must be understandable from repository files alone — never write one that only makes sense with this conversation's hidden context.
+- This does not replace `START_HERE.md`'s end-of-task Continuity Gate; it adds an explicit "stop and record now" trigger for approaching a limit mid-task. Full detail: `AI_WORKSPACE/AGENT_OPERATING_MODEL.md` → "Session continuity / limit-approach handoff".
 
 ## Rico Agent Rules
 
@@ -41,6 +54,8 @@ Follow `CLAUDE.md` for the full project architecture, routes, auth rules, safety
 10. Never expose secrets, cookies, tokens, passwords, or private environment values.
 
 ## Cost and Token Governance
+
+This expands CLAUDE.md's Cost Optimization Rules with agent-coordination specifics below. CLAUDE.md mirrors and summarizes the canonical `AI_WORKSPACE` rules; if they conflict, `AI_WORKSPACE` is authoritative and the drift must be reported.
 
 Optimize for the owner's cost, time, and review control. Use the cheapest safe path that produces enough evidence to make a decision.
 
@@ -84,6 +99,8 @@ Stop and ask the owner before continuing when:
 - the same files are being re-read repeatedly by multiple agents
 
 ## Product Generalization Rule
+
+This mirrors `CLAUDE.md`'s Product Generalization Rule and `AI_WORKSPACE/OPERATING_RULES.md`'s copy. CLAUDE.md mirrors and summarizes the canonical `AI_WORKSPACE` rules; if they conflict, `AI_WORKSPACE/OPERATING_RULES.md` is authoritative and the drift must be reported.
 
 Rico is a global SaaS product for all users. Smoke-test findings are evidence of product behavior; they are not product logic.
 
@@ -160,6 +177,8 @@ Before coding risky work, report:
 
 Wait for approval before coding if the change is risky.
 
+This applies whenever you hold the WRITER role. REVIEWER, RELEASE, and IDLE sessions do not write code, so this gate does not trigger for them.
+
 ## Direct Execution Allowed
 
 Direct execution is allowed only for small, low-risk work such as:
@@ -198,6 +217,8 @@ Every PR report must also include:
 - product-generalization confirmation (the fix is global and user-agnostic)
 - whether synthetic users were used
 - confirmation of no owner-account special-casing
+
+Every PR must also carry the `AI_WORKSPACE/PR_CHECKLIST.md` checklist filled in. For changes touching Rico's behavior, intent routing, tools, attachments, or job search, fill in its "Rico product gate" section too (see `AI_WORKSPACE/PR_QUALITY_GATE_RULES.md` → "Rico Product Behavior Gate" and `AI_WORKSPACE/RICO_EXECUTION_PRINCIPLES.md`).
 
 ## Production Safety
 
@@ -246,3 +267,5 @@ If the agent fails twice on the same task:
 3. Clear context or start a new clean session.
 4. Rewrite the task prompt.
 5. Restart from a clean branch/worktree.
+
+Before restarting, follow the Continuity and Handoff Gate above and record what was tried and why it failed — a clean restart without a handoff is how the next session repeats the same failed attempt.
