@@ -2,6 +2,7 @@
 
 import { AtelierAuthShell } from '@/components/auth/AtelierAuthShell';
 import { ApiError, fetchOnboardingStatus, resendVerification } from '@/lib/api';
+import { resolveNextPath } from '@/lib/redirect';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation } from '@/lib/translations';
@@ -9,7 +10,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
-export function LoginForm({ initialEmail = '' }: { initialEmail?: string }) {
+export function LoginForm({ initialEmail = '', next = null }: { initialEmail?: string; next?: string | null }) {
     const [email, setEmail] = useState(initialEmail);
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -37,10 +38,18 @@ export function LoginForm({ initialEmail = '' }: { initialEmail?: string }) {
             // Never assume completion — a status failure routes to /onboarding,
             // whose own guard recovers (and bounces already-complete users to
             // /command) rather than skipping setup here.
+            //
+            // A validated internal `next` (set by the auth guard when a guest is
+            // bounced from a protected page) returns a completed user to that
+            // page instead of /command. resolveNextPath rejects external/`//`/
+            // non-`/` targets, so there is no open-redirect. Onboarding still
+            // takes priority for incomplete users, and an absent/invalid `next`
+            // leaves the existing routing unchanged.
+            const safeNext = resolveNextPath(next, '');
             let destination = '/onboarding';
             try {
                 const status = await fetchOnboardingStatus();
-                destination = status.complete ? '/command' : '/onboarding';
+                destination = status.complete ? (safeNext || '/command') : '/onboarding';
             } catch {
                 destination = '/onboarding';
             }
