@@ -1,0 +1,308 @@
+/* Pre-launch waitlist island. Every selector is scoped beneath .atelier. */
+.atelier.atl-waitlist {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+.atelier .atl-waitlist-header,
+.atelier .atl-waitlist-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  padding: 18px clamp(20px, 4vw, 56px);
+  border-color: var(--rule);
+}
+
+.atelier .atl-waitlist-header {
+  border-bottom: 1px solid var(--rule);
+}
+
+.atelier .atl-waitlist-footer {
+  border-top: 1px solid var(--rule);
+  color: var(--ink-mute);
+  font-family: var(--atl-font-mono);
+  font-size: 12px;
+}
+
+.atelier .atl-waitlist-footer div,
+.atelier .atl-waitlist-header nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.atelier .atl-waitlist-header a,
+.atelier .atl-waitlist-footer a {
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.atelier .atl-waitlist-header a:hover,
+.atelier .atl-waitlist-footer a:hover {
+  color: var(--sun);
+}
+
+.atelier .atl-waitlist-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--atl-font-display);
+  font-size: 20px;
+}
+
+.atelier .atl-waitlist-mark {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: var(--atl-radius-sm);
+  background: var(--sun);
+  color: var(--paper);
+  font-family: var(--atl-font-mono);
+  font-weight: 600;
+}
+
+.atelier .atl-waitlist-lang {
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 6px 12px;
+  font-family: var(--atl-font-mono);
+  cursor: pointer;
+}
+
+.atelier .atl-waitlist-lang:hover,
+.atelier .atl-waitlist-lang:focus-visible {
+  border-color: var(--sun);
+  color: var(--sun);
+  outline: none;
+}
+
+.atelier .atl-waitlist-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: clamp(36px, 7vw, 96px);
+  align-items: center;
+  width: min(1180px, calc(100% - 40px));
+  margin: auto;
+  padding: clamp(56px, 9vw, 112px) 0;
+}
+
+.atelier .atl-waitlist-copy {
+  max-width: 700px;
+}
+
+.atelier .atl-waitlist-eyebrow {
+  margin: 0 0 20px;
+  color: var(--sun);
+  font-family: var(--atl-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.atelier .atl-waitlist-copy h1 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--atl-font-display);
+  font-size: clamp(42px, 7vw, 76px);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+}
+
+.atelier[dir="rtl"] .atl-waitlist-copy h1,
+.atelier[dir="rtl"] .atl-waitlist-brand {
+  font-family: var(--atl-font-display-ar);
+}
+
+.atelier .atl-waitlist-lead {
+  max-width: 650px;
+  margin: 28px 0 0;
+  color: var(--ink-soft);
+  font-size: clamp(18px, 2vw, 23px);
+  line-height: 1.65;
+}
+
+.atelier .atl-waitlist-copy ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin: 34px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-mute);
+  font-size: 14px;
+}
+
+.atelier .atl-waitlist-copy li {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.atelier .atl-waitlist-copy li span {
+  color: var(--sun);
+  font-size: 9px;
+}
+
+.atelier .atl-waitlist-panel {
+  border: 1px solid var(--rule);
+  border-radius: var(--atl-radius);
+  background: var(--paper-2);
+  padding: clamp(24px, 4vw, 38px);
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.atelier .atl-waitlist-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.atelier .atl-waitlist-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.atelier .atl-waitlist-form input[type="email"],
+.atelier .atl-waitlist-form input[type="text"],
+.atelier .atl-waitlist-form select {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--rule);
+  border-radius: var(--atl-radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 11px 13px;
+  font: inherit;
+}
+
+.atelier .atl-waitlist-form input::placeholder {
+  color: var(--ink-mute);
+}
+
+.atelier .atl-waitlist-form input:focus-visible,
+.atelier .atl-waitlist-form select:focus-visible {
+  border-color: var(--sun);
+  outline: 2px solid color-mix(in srgb, var(--sun) 28%, transparent);
+  outline-offset: 1px;
+}
+
+.atelier .atl-waitlist-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--ink-mute);
+  font-size: 12px;
+  line-height: 1.55;
+  cursor: pointer;
+}
+
+.atelier .atl-waitlist-consent input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--sun);
+}
+
+.atelier .atl-waitlist-form button[type="submit"] {
+  min-height: 50px;
+  border: 0;
+  border-radius: var(--atl-radius-sm);
+  background: var(--sun);
+  color: var(--paper);
+  padding: 12px 18px;
+  font-family: var(--atl-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.atelier .atl-waitlist-form button[type="submit"]:hover:not(:disabled) {
+  background: var(--ink);
+}
+
+.atelier .atl-waitlist-form button[type="submit"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.atelier .atl-waitlist-error {
+  margin: 0;
+  color: var(--destructive);
+  font-size: 13px;
+}
+
+.atelier .atl-waitlist-success {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--ink-soft);
+}
+
+.atelier .atl-waitlist-success strong {
+  color: var(--ink);
+  font-family: var(--atl-font-display);
+  font-size: 28px;
+  font-weight: 400;
+}
+
+.atelier .atl-waitlist-note {
+  margin: 18px 0 0;
+  color: var(--ink-mute);
+  font-family: var(--atl-font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.atelier .atl-waitlist-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 820px) {
+  .atelier .atl-waitlist-main {
+    grid-template-columns: 1fr;
+    width: min(680px, calc(100% - 32px));
+  }
+
+  .atelier .atl-waitlist-copy ul {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .atelier .atl-waitlist-header,
+  .atelier .atl-waitlist-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .atelier .atl-waitlist-header nav {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .atelier .atl-waitlist-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .atelier .atl-waitlist-copy h1 {
+    font-size: clamp(38px, 13vw, 58px);
+  }
+}
