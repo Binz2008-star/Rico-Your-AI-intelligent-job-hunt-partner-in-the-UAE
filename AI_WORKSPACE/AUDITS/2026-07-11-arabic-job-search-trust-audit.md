@@ -60,27 +60,42 @@ replies in the user's language and leads with what was understood.
 
 ---
 
-## 3. Architectural gap identified — NOT fixed (needs a product decision)
+## 3. Architectural gap — FIXED in Phase 2 (this PR)
 
-**The anti-hallucination short-circuit only protects public/no-profile
-sessions.** `chat_service.py:157` gates on `profile is None and not
+**The anti-hallucination short-circuit previously only protected public/no-profile
+sessions.** `chat_service.py` gated on `profile is None and not
 ctx.can_persist_profile`. A **profiled/authenticated** user whose job-listing
-request reaches the conversational-AI path (`should_use_ai`) is **not** caught
-by `_public_job_search_cta` and can receive AI-fabricated job cards. Because
+request reached the conversational-AI path (`should_use_ai`) was **not** caught
+by `_public_job_search_cta` and could receive AI-fabricated job cards. Because
 those cards are never written to `recent_search_matches`, a later "apply to that
-one" cannot be resolved — reproducing transcript symptoms #2 (offered → asks for
+one" could not resolve — reproducing transcript symptoms #2 (offered → asks for
 details again) and #3 (generic company, unverifiable link).
 
-The §2 NLP fixes close the specific transcript path (the request now classifies
-as a real search). But the underlying guard asymmetry remains: **any** future
-job-listing request that slips to the AI path for a profiled user is unprotected.
+### Phase-2 decision (owner-approved 2026-07-11)
 
-**Recommendation (Phase 2 candidate, needs owner approval):** extend the
-deterministic `is_explicit_job_listing_request` interception to authenticated
-users too — when an explicit job-listing request would otherwise hit the AI
-path, route it to the real structured search (or the safe CTA) instead of
-letting the model free-text listings. This is a routing/behavioral change, so it
-is scoped separately, not bundled here.
+Extend the guard to **all** sessions:
+
+1. `src/rico/intent/gates.py` — `is_explicit_job_listing_request` now defers to
+   `classify_intent` for anything the anchored regexes miss, so colloquial
+   Gulf/Egyptian phrasing ("أبغى شغل جديد", "بدي وظيفة", "دورلي على شغل") is
+   recognised as a job-listing request. This keeps the predicate in lock-step
+   with the real search router (no drift).
+2. `src/services/chat_service.py` — for an **authenticated** user, an explicit
+   job-listing request now forces the real search path
+   (`_force_real_search = _explicit_job_listing and ctx.auth_type ==
+   "authenticated"`) even when the open-ended-question gate chose AI. Public/
+   no-profile users keep the deterministic sign-up/upload CTA.
+
+Net effect: **no session can receive AI-fabricated job listings**. Authenticated
+users get grounded JSearch results (persisted to `recent_search_matches`, so
+follow-up apply/save resolves); public users get the CTA. **Response contract is
+unchanged** — the legacy path emits the same `type/message/options/matches`
+shape the command surface already consumes; no frontend files touched.
+
+Tests: `tests/test_public_chat_no_profile_loop.py::TestAuthenticatedJobListingForcedToRealSearch`
+asserts the three required Arabic phrasings (and an English conversational one)
+route to legacy/real-search with the AI path never called, and that the response
+dict is passed through unchanged.
 
 ---
 
@@ -130,8 +145,8 @@ land alongside a parallel frontend theme session:
 
 ## 7. Open items for owner
 
-1. Approve/deny Phase 2 (extend anti-hallucination guard to authenticated users).
-2. Confirm production is running code that includes the §1 guards (deploy
+1. ~~Approve/deny Phase 2~~ — **DONE** (owner-approved; implemented in §3).
+2. Confirm production is running code that includes the §1/§3 guards (deploy
    freshness) — use the read-only `deploy-rico` check.
 3. Continuous-learning ("Rico as an entity") remains a separate roadmap
    initiative requiring a scoped plan + cost estimate before any build.

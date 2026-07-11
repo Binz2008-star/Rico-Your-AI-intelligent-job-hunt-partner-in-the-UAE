@@ -187,3 +187,69 @@ class TestAuthenticatedChatRoutingUnchanged:
         mock_ai.assert_called_once()
         mock_legacy.assert_not_called()
         assert result == ai_result
+
+
+class TestAuthenticatedJobListingForcedToRealSearch:
+    """Phase 2 — an explicit job-listing request from an AUTHENTICATED user must
+    go to the real, grounded search path (legacy → JSearch), never the free AI
+    path, even when the open-ended-question gate chose AI. This closes the guard
+    asymmetry where only public/no-profile sessions were protected from
+    AI-fabricated listings.
+    """
+
+    # A realistic legacy (real-search) response with the fields the command
+    # surface consumes — used to assert the response contract is preserved.
+    _REAL_SEARCH_RESULT = {
+        "type": "job_matches",
+        "intent": "job_search_explicit",
+        "message": "Found 5 ESG roles in the UAE.",
+        "matches": [{"title": "ESG Manager", "company": "Real Co", "apply_url": "https://x"}],
+        "options": [],
+    }
+
+    @pytest.mark.parametrize("msg", [
+        "أبغى شغل جديد",        # Gulf: I want a new job
+        "بدي وظيفة",            # Levantine: I want a job
+        "دورلي على شغل",        # Gulf: find me a job
+        "بدي شغل جديد وظيفه جديده",
+    ])
+    def test_arabic_job_request_with_ai_decision_forced_to_legacy(self, msg):
+        """AI routing decision is overridden → real search, AI never called."""
+        ctx = _auth_ctx()
+        ps = _patches(
+            _make_ai_decision(),
+            profile_return_value={"target_roles": ["ESG Manager"]},
+            legacy_result=self._REAL_SEARCH_RESULT,
+        )
+        with ps[0], ps[1], ps[2], ps[3], ps[4] as mock_ai, ps[5] as mock_legacy, ps[6], ps[7]:
+            result = chat_service.send_message(ctx=ctx, message=msg)
+
+        # Grounded path used; the fabricating AI path is never reached.
+        mock_legacy.assert_called_once()
+        mock_ai.assert_not_called()
+        # Response contract preserved — passed through unchanged.
+        assert result == self._REAL_SEARCH_RESULT
+        assert set(result).issuperset({"type", "message", "matches", "options"})
+
+    def test_non_job_ai_message_still_uses_ai(self):
+        """A non-job request with an AI decision is unaffected (no over-trigger)."""
+        ctx = _auth_ctx()
+        ai_result = {"type": "conversational", "message": "To negotiate salary…"}
+        ps = _patches(_make_ai_decision(), profile_return_value={"target_roles": ["ESG Manager"]},
+                      ai_result=ai_result)
+        with ps[0], ps[1], ps[2], ps[3], ps[4] as mock_ai, ps[5] as mock_legacy, ps[6], ps[7]:
+            result = chat_service.send_message(ctx=ctx, message="كيف أتفاوض على الراتب؟")
+
+        mock_ai.assert_called_once()
+        mock_legacy.assert_not_called()
+
+    def test_english_listing_question_forced_to_legacy(self):
+        """English conversational listing request ('find me some ESG jobs') → real search."""
+        ctx = _auth_ctx()
+        ps = _patches(_make_ai_decision(), profile_return_value={"target_roles": ["ESG Manager"]},
+                      legacy_result=self._REAL_SEARCH_RESULT)
+        with ps[0], ps[1], ps[2], ps[3], ps[4] as mock_ai, ps[5] as mock_legacy, ps[6], ps[7]:
+            chat_service.send_message(ctx=ctx, message="can you find me some ESG jobs?")
+
+        mock_legacy.assert_called_once()
+        mock_ai.assert_not_called()
