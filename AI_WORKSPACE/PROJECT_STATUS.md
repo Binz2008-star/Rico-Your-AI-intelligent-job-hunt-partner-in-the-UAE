@@ -8,7 +8,8 @@
 
 | Field | Current value |
 | --- | --- |
-| **Main SHA** | `9ceb87b1b6b4e112ffb5940b167408e8ef0cb16e` — `docs(workspace): sync onboarding and auth-guard status (#964)` |
+| **Last runtime baseline** | `9ceb87b1b6b4e112ffb5940b167408e8ef0cb16e` — `docs(workspace): sync onboarding and auth-guard status (#964)`. PR `#970` and this follow-up are docs-only; every session must fetch live `main` rather than treating a hardcoded SHA as permanently current. |
+| **Coordination control plane** | PR `#970` merged; `PROJECT_STATUS.md` + `START_HERE.md` + root agent rules are now the mandatory cold-start path. |
 | **Current execution phase** | Onboarding persistence hardening before further workspace/design rollout |
 | **Single active runtime objective** | Exact CV/document duplicate protection and atomic idempotency: issue `#960`, draft PR `#969` |
 | **Active PR branch/head** | `feat/user-documents-dedup` @ `4a0cf6cce3ef797a65f0b73a1259ccbefa12b1c6` |
