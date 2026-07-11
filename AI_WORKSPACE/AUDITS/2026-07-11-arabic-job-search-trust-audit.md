@@ -110,7 +110,25 @@ it, but the fix is global and already in `main`.)
 
 ---
 
-## 6. Open items for owner
+## 6. Theme-transition compatibility (for the parallel command-redesign session)
+
+This backend work is foundational to the `command` i18n / redesign and is safe to
+land alongside a parallel frontend theme session:
+
+- **No frontend files touched.** The branch changes only
+  `src/agent/intelligence/intent_classifier.py`, `src/rico_chat_api.py`, tests,
+  and this doc — `apps/web` diff is empty. No merge conflict with the theme work.
+- **Response contract preserved.** The command surface consumes `type`,
+  `message`, `options`, `matches`, `apply_url`, `next_action`, `display_label`,
+  `suggested_actions`. The clarification change stays `{type, message}` (no field
+  added or removed) and the intent-routing changes dispatch to existing handlers
+  that already emit these same fields. The new theme changes presentation, not the
+  contract — it will receive the same response shape, now backed by real search
+  results instead of fabricated ones.
+- **Session role:** WRITER on `claude/esg-manager-job-search-k7f8eh` only; the
+  theme session remains sole writer on its own branch.
+
+## 7. Open items for owner
 
 1. Approve/deny Phase 2 (extend anti-hallucination guard to authenticated users).
 2. Confirm production is running code that includes the §1 guards (deploy
