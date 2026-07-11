@@ -24,11 +24,11 @@ If any source disagrees, stop and report the conflict. Do not guess from chat hi
 ## Current execution lock
 
 ```text
-Only active runtime implementation: #969 / #960
-Exact CV/document duplicate protection + atomic idempotency.
+Only active runtime work: release verification for merged #963 / PR #975
+(`main` `241b85d…`).
 
-Next after merge/deploy/migration verification: #963
-Persist confirmed onboarding CV + hydrate profile.
+Before any new implementation: verify Render version + migration 038 and run
+the authenticated onboarding CV → My Files → logout/login smoke.
 
 All other runtime/design/agentic work is paused unless the owner changes
 AI_WORKSPACE/PROJECT_STATUS.md.
