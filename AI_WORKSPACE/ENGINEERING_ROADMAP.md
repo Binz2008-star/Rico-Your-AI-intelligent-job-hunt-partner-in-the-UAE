@@ -35,7 +35,7 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 | --- | --- |
 | **Where is Rico?** | Release verification for #963: the onboarding CV persistence implementation is merged as `241b85d…`, CI-green, and Vercel-ready. |
 | **Where is it going?** | Verify the deployed backend/authenticated flow, then resume the approved per-route Atelier migration and separately scoped hardening. |
-| **What is blocked?** | No new runtime/design objective may start until the #963 release gate (Render version/migration 038 + authenticated smoke) passes. |
+| **What is blocked?** | No new runtime/design objective may start until the #963 release gate (migration 038 schema proof + authenticated smoke) passes. Render version already matches `241b85d…`. |
 | **What is completed?** | Phases 0–1, #969 document idempotency foundation, and #963 implementation. Production verification of #963 is pending. |
 | **What comes next?** | Complete release verification; then select one objective only: #962 or the next owner-approved design route. |
 
