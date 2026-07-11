@@ -1367,6 +1367,11 @@ _ARABIC_ROLE_LEAD_STOPWORDS = frozenset({
     "مسمي", "عمل", "شغل", "عن", "لي", "لك", "في",
     # Profile-reference suffixes — mean "in my field/domain", not a job title
     "بمجالي", "بمجال", "مجالي", "تخصصي", "في مجالي",
+    # "new" is an adjective on the job noun ("a new job", "وظيفة جديدة"), never a role title. Without this it survives
+    # extraction as the role, producing the misleading "I do not recognize
+    # 'جديد' as a job role" reply for a plain "find me a new job"
+    # request. Normalised forms (ة→ه) plus the definite article.
+    "جديد", "جديده", "الجديد", "الجديده",
 })
 
 # Deterministic Arabic→English role synonyms for UAE job titles.
