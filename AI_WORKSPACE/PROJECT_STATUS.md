@@ -10,12 +10,12 @@
 | --- | --- |
 | **Current repository `main` head** | `241b85d4c5d74b6afd00f0d4e202e75c4f5a3f8b` (squash merge of PR `#975` / issue `#963`). |
 | **Frontend deployment** | Vercel production deployment for `241b85d…` is `READY` and aliased to `ricohunt.com`. |
-| **Backend deployment / authenticated smoke** | Not yet verified for `241b85d…`; do not claim the onboarding release is production-verified until Render version/migration 038 and the authenticated smoke pass are recorded. |
+| **Backend deployment / authenticated smoke** | Render `/version` serves `241b85d…` and `/health` is OK. Migration 038 schema proof and authenticated smoke remain required before declaring the onboarding release production-verified. |
 | **Coordination control plane** | PR `#970` merged; `PROJECT_STATUS.md` + `START_HERE.md` + root agent rules are now the mandatory cold-start path. |
 | **Current execution phase** | Release verification for merged `#963`; no active implementation PR. |
 | **Single active runtime objective** | Verify the merged onboarding CV persistence release before opening another runtime/design objective. |
 | **Active PR branch/head** | None — `#975` merged as `241b85d…`. |
-| **Next exact action** | Confirm Render serves `241b85d…`, migration 038 succeeds, then run authenticated onboarding CV → My Files → logout/login smoke. |
+| **Next exact action** | Confirm migration 038 schema, then run authenticated onboarding CV → My Files → logout/login smoke. |
 | **Owner gate after #963** | Record the authenticated production smoke; only then mark onboarding `VERIFIED` and release the design/workspace queue. |
 | **Last updated** | 2026-07-11 (post-#975 merge; Vercel READY, backend smoke pending) |
 
@@ -83,7 +83,7 @@ Before making any write:
   -> owner approves merge
   -> deploy and smoke the canonical file-upload path [DONE]
   -> #963 merged as #975 (`241b85d…`); PR CI green and Vercel READY
-  -> verify Render version + migration 038
+  -> Render `/version` confirmed `241b85d…`; verify migration 038 schema
   -> authenticated owner smoke
   -> onboarding PARTIAL becomes VERIFIED
   -> resume workspace/design migration
@@ -105,7 +105,7 @@ Therefore `#967` is blocked. When it resumes, it must rebase from current `main`
 | PR | Track | Decision |
 | ---: | --- | --- |
 | `#969` | CV/file persistence foundation | **Completed, merged, deployed, and production-smoke verified**; migration 037 applied to production Neon |
-| `#963` / merged `#975` | Onboarding CV persistence + profile hydration | **Merged, CI-green, Vercel READY**; backend deployment and authenticated smoke remain before `VERIFIED` |
+| `#963` / merged `#975` | Onboarding CV persistence + profile hydration | **Merged, CI-green, Vercel READY, Render version confirmed**; migration schema proof and authenticated smoke remain before `VERIFIED` |
 | `#968` | Workspace governance for `#965` | Hold; docs-only, not permission for more agentic work |
 | `#967` | Pre-launch gate/waitlist | Hold; blocked by separate scope and migration collision |
 | `#965` | Read-only journey-state seed | Hold draft; no follow-on without owner DEC |
@@ -143,7 +143,7 @@ Stop and ask the owner instead of continuing when:
 ## Next exact action
 
 ```text
-1. Confirm Render `/version` serves `241b85d…` and startup logs show migration 038 succeeded.
+1. Confirm migration 038 schema/startup success without mutating production.
 2. Run the authenticated onboarding flow: upload CV → confirm profile → verify My Files → logout/login → confirm persisted profile/onboarding state.
 3. Record PASS/FAIL. On PASS, mark onboarding `VERIFIED` and select the next single objective.
 ```
