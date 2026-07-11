@@ -99,6 +99,18 @@ vi.mock("next/navigation", () => ({
     redirect: vi.fn(),
 }));
 
+// FlowPage guards via useRequireAuth (→ useAuth → fetchMe). This suite renders
+// FlowPage as an already-authenticated user, so stub the guard to authorized
+// and avoid pulling the real session/fetchMe path into the api mock.
+vi.mock("@/hooks/useRequireAuth", () => ({
+    useRequireAuth: () => ({
+        user: { user_id: "u@test.com", email: "u@test.com" },
+        ready: true,
+        authorized: true,
+        logout: vi.fn(),
+    }),
+}));
+
 vi.mock("next/link", () => ({
     default: ({ children, href, ...props }: { children: ReactNode; href: string }) => (
         <a href={href} {...props}>
