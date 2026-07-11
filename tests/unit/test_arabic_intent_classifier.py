@@ -93,6 +93,35 @@ class TestArabicNewJobIsNotARole:
         assert result.extracted_role == "Accountant"
 
 
+class TestColloquialWantVerbsRouteToRealSearch:
+    """Colloquial 'I want' verbs (بدي / عايز / عاوز) + a job noun must classify as
+    job_search_explicit so the request reaches the real, grounded search path
+    instead of falling through to the conversational-AI path, which can fabricate
+    job listings for a profiled user.
+    """
+
+    @pytest.mark.parametrize("msg", [
+        "بدي شغل جديد وظيفه جديده",   # Levantine: I want a new job
+        "بدي وظيفة",                   # I want a job
+        "عايز شغل",                    # Egyptian: I want work
+        "عاوز وظيفه في دبي",           # Egyptian: I want a job in Dubai
+    ])
+    def test_colloquial_want_plus_job_noun_is_job_search(self, msg):
+        result = classify_intent(msg, has_cv_profile=True)
+        assert result.intent == "job_search_explicit", (
+            f"'{msg}' should route to real job search, got {result.intent!r}"
+        )
+
+    @pytest.mark.parametrize("msg", [
+        "بدي اسالك سؤال",     # I want to ask you a question — not a job search
+    ])
+    def test_colloquial_want_without_job_noun_does_not_trigger_search(self, msg):
+        result = classify_intent(msg, has_cv_profile=True)
+        assert result.intent != "job_search_explicit", (
+            f"'{msg}' has no job noun and must not become a job search, got {result.intent!r}"
+        )
+
+
 class TestMixedArabicEnglishJobSearch:
     """Mixed Arabic+English messages should yield job_search_explicit with extracted_role."""
 

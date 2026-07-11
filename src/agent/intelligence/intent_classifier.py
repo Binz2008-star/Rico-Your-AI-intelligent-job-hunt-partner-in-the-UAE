@@ -1289,6 +1289,11 @@ _ARABIC_JOB_TERMS = frozenset([
 _ARABIC_REQUEST_TERMS = frozenset([
     # Gulf / Levantine
     "ابحث", "بحث", "دور", "اريد", "ابي", "ابغي",
+    # Colloquial "I want" verbs — بدي (Levantine), عايز/عاوز (Egyptian).
+    # Their absence classified "بدي شغل جديد" as unknown, routing the request
+    # to the conversational-AI path (which can fabricate listings) instead of
+    # a real, grounded job search. Only fire alongside a job noun (has_ar_job).
+    "بدي", "عايز", "عاوز",
     "احتاج", "محتاج", "شوف", "طلع", "جيب",
     "ساعدني", "ايجاد", "طلب",
     # Display / show request verbs — e.g. "اعرضلي" (show me), "احدث" (latest)
