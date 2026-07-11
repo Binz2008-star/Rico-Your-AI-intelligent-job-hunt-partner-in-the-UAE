@@ -258,12 +258,13 @@ increment under the current priority order.
 
 Status: review (PR #965 open as **draft**, corrected + CI green; awaiting independent review — do not merge)
 Owner: Claude
-Branch: `feat/journey-state` (head `9d2c59f`)
+Branch: `feat/journey-state` (head `dee0ccf`)
 Issue/PR: #965
 
 #### Objective
-Pure, deterministic, read-only journey state machine: `derive_state()`,
-`is_valid_transition()`, `generate_daily_plan()`. Derives a user's job-hunt state
+Pure, deterministic, read-only journey snapshot: `derive_state()` (aggregate
+snapshot from canonical status-counts) + `generate_daily_plan()` + fail-fast validation.
+Derives a user's job-hunt state
 (`discovery → searching → applying → interviewing → offer`) from canonical action counts and
 produces a proactive daily action plan. No I/O, no DB, no clock, no env flags, no mutations.
 Two files only: `src/agent/context/journey_state.py`, `tests/test_journey_state.py`.
@@ -276,6 +277,10 @@ Two files only: `src/agent/context/journey_state.py`, `tests/test_journey_state.
 - fail-fast validation (empty user id / negative counts / unknown state / inconsistent
   state-vs-counts) instead of silent fallback
 - removed the test's duplicated `_VALID_TRANSITIONS_MAP` fixture + dead `logger`/`_STATE_ORDER`
+- **Final correction (owner, head `dee0ccf`):** removed the non-canonical transition-policy
+  API (`is_valid_transition` / `_VALID_TRANSITIONS`) and its transition-specific tests — scope
+  is now only deterministic aggregate-snapshot derivation + status-count mapping + daily plan
+  + fail-fast validation (38 journey tests pass; owner reports pytest/frontend/Playwright/Vercel green)
 - tests: `tests/test_journey_state.py` 59 passed; regression
   `tests/test_p0_mutation_trust_guard.py test_bug05_confirmation_loop.py` 51 passed
 
