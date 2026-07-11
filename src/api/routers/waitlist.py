@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from src.api.rate_limit import LIMIT_WAITLIST, limiter
 from src.repositories.waitlist_repo import WaitlistUnavailable, upsert_waitlist_entry
 from src.schemas.waitlist import WaitlistRegisterRequest, WaitlistRegisterResponse
+from src.services.launch_mode import is_waitlist_mode
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,9 @@ def register_waitlist(
     request: Request,
     payload: WaitlistRegisterRequest,
 ) -> WaitlistRegisterResponse:
+    if not is_waitlist_mode():
+        raise HTTPException(status_code=404, detail="Not found")
+
     try:
         upsert_waitlist_entry(
             email=payload.email,
