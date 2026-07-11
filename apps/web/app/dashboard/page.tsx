@@ -1,5 +1,5 @@
-import { DashboardShell } from "@/components/DashboardShell";
-import { MissionControl } from "@/components/mission/MissionControl";
+import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
+import { DashboardAtelier } from "@/components/workspace/DashboardAtelier";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -41,8 +41,8 @@ export default async function DashboardPage({
   }
 
   return (
-    <DashboardShell title="Mission Control">
-      <MissionControl />
-    </DashboardShell>
+    <WorkspaceShell>
+      <DashboardAtelier />
+    </WorkspaceShell>
   );
 }
