@@ -35,6 +35,7 @@ from src.api.routers.rico_chat import router as rico_chat_router
 from src.api.routers.jobs import router as jobs_router
 from src.api.routers.onboarding import router as onboarding_router
 from src.api.routers.pipeline import router as pipeline_router
+from src.api.routers.prelaunch import router as prelaunch_router
 from src.api.routers.settings import router as settings_router
 from src.api.routers.email_alerts import router as email_alerts_router
 from src.api.routers.stats import router as stats_router
@@ -45,6 +46,8 @@ from src.api.routers.apply_queue import router as apply_queue_router
 from src.api.routers.mission import router as mission_router
 from src.api.routers.user import router as user_router
 from src.api.routers.files import router as files_router
+from src.api.routers.waitlist import router as waitlist_router
+from src.services.launch_mode import is_request_allowed
 
 logging.basicConfig(
     level=logging.INFO,
@@ -299,10 +302,21 @@ async def hydrate_request_auth_context(request: Request, call_next):
         else:
             request.state.auth_cookie_invalid = True
 
+    if not is_request_allowed(request):
+        return JSONResponse(
+            status_code=403,
+            content={
+                "detail": "Rico is currently available by private invitation.",
+                "code": "prelaunch_access_required",
+            },
+        )
+
     return await call_next(request)
 
 
 app.include_router(auth_router)
+app.include_router(prelaunch_router)
+app.include_router(waitlist_router)
 app.include_router(user_router)
 app.include_router(files_router)
 app.include_router(actions_router)
