@@ -1,6 +1,7 @@
 'use client';
 
 import { AppShell } from '@/components/layout/AppShell';
+import { AuthGate } from '@/components/auth/AuthGate';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -20,6 +21,7 @@ import type { Application, ApplicationStatus } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation, type TranslationKey } from '@/lib/translations';
 import { APPLICATION_STATUSES, STAGE_DEFS, type StageKey } from '@/lib/applicationStatus';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -145,6 +147,10 @@ function DateProvenance({
 }
 
 export default function FlowPage() {
+    // Authenticated-only: guests are redirected to /login?next=/flow and see a
+    // neutral loader (never the private AppShell); no private API (getApplications)
+    // fires until an authenticated identity is confirmed.
+    const { authorized } = useRequireAuth();
     const { language } = useLanguage();
     const t = useTranslation(language);
     const router = useRouter();
@@ -241,9 +247,10 @@ export default function FlowPage() {
     }, [formData, loadApplications, t]);
 
     useEffect(() => {
+        if (!authorized) return;
         const id = window.setTimeout(() => { void loadApplications(); }, 0);
         return () => window.clearTimeout(id);
-    }, [loadApplications]);
+    }, [authorized, loadApplications]);
 
     const handleLogout = useCallback(async () => {
         try {
@@ -263,6 +270,8 @@ export default function FlowPage() {
         }
         return counts;
     }, [applications]);
+
+    if (!authorized) return <AuthGate />;
 
     return (
         <AppShell

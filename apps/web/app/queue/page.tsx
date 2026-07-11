@@ -10,15 +10,17 @@ import {
     rejectApplication,
     type ApplicationDraft,
 } from "@/lib/api";
-import { useAuth } from "@/hooks/useAuth";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
+import { AuthGate } from "@/components/auth/AuthGate";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation } from "@/lib/translations";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 export default function QueuePage() {
-    const { user, ready, logout: doLogout } = useAuth();
-    const router = useRouter();
+    // Authenticated-only: guests are redirected to /login?next=/queue and see a
+    // neutral loader (never the private AppShell); no private API fires until an
+    // authenticated identity is confirmed.
+    const { user, authorized, logout: doLogout } = useRequireAuth();
     const { language } = useLanguage();
     const t = useTranslation(language);
     const [drafts, setDrafts] = useState<ApplicationDraft[]>([]);
@@ -27,11 +29,7 @@ export default function QueuePage() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!ready) return;
-        if (!user) {
-            router.push("/login");
-            return;
-        }
+        if (!authorized) return;
         const ctrl = new AbortController();
         setLoading(true);
         Promise.all([
@@ -48,7 +46,7 @@ export default function QueuePage() {
             })
             .finally(() => setLoading(false));
         return () => ctrl.abort();
-    }, [ready, user, router, t]);
+    }, [authorized, t]);
 
     const handleApprove = useCallback(async (id: string) => {
         await approveApplication(id);
@@ -63,6 +61,8 @@ export default function QueuePage() {
     const handleLogout = useCallback(async () => {
         await doLogout();
     }, [doLogout]);
+
+    if (!authorized) return <AuthGate />;
 
     return (
         <AppShell
