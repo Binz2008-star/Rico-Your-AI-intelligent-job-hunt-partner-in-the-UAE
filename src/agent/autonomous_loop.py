@@ -150,6 +150,7 @@ def run_for_user(
     telegram_chat_id: str = "",
     scored_jobs: Optional[List[tuple]] = None,
     dry_run: bool = False,
+    skip_telegram: bool = False,
 ) -> AutonomousLoopResult:
     """Run the autonomous loop for a single user.
 
@@ -160,6 +161,9 @@ def run_for_user(
         scored_jobs: Pre-scored jobs from the pipeline (list of (job_dict, score) tuples).
                      If None, the loop skips job search (assumes pipeline already ran).
         dry_run: When True, no actual saves/drafts/notifications are performed.
+        skip_telegram: When True, skip Telegram notifications. Use this when the
+                       caller (e.g. run_daily.py _notify_users_via_telegram) already
+                       sends Telegram messages to avoid duplicate notifications.
 
     Returns:
         AutonomousLoopResult with all actions taken.
@@ -172,8 +176,12 @@ def run_for_user(
         logger.info("autonomous_loop_skipped user=%s reason=mode_disabled", user_id)
         return result
 
-    # 1. Load user profile
-    profile = _load_user_profile(user_id)
+    # 1. Load user profile (non-fatal if DB unavailable)
+    try:
+        profile = _load_user_profile(user_id)
+    except Exception:
+        logger.debug("autonomous_loop: profile load failed, continuing user=%s", user_id)
+        profile = None
 
     # 2. Process scored jobs from pipeline
     jobs_list: List[Dict[str, Any]] = []
@@ -185,7 +193,11 @@ def run_for_user(
     result.new_matches_count = len(jobs_list)
 
     # 3. Auto-save high-match jobs
-    existing_keys = _get_user_recommendation_keys(user_id)
+    try:
+        existing_keys = _get_user_recommendation_keys(user_id)
+    except Exception:
+        logger.debug("autonomous_loop: recommendation keys fetch failed, continuing user=%s", user_id)
+        existing_keys = set()
     if jobs_list and not dry_run:
         try:
             from src.services.auto_save_service import auto_save_jobs
@@ -253,8 +265,8 @@ def run_for_user(
         logger.debug("autonomous_loop: journey state failed user=%s", user_id)
         result.errors.append(f"Journey state failed: {exc}")
 
-    # 7. Send Telegram notification
-    if telegram_chat_id and not dry_run:
+    # 7. Send Telegram notification (skip if caller already handles Telegram)
+    if telegram_chat_id and not dry_run and not skip_telegram:
         try:
             from src.agent.responses.autonomous_notifications import (
                 format_daily_digest,
@@ -300,12 +312,15 @@ def run_for_user(
 def run_for_all_users(
     scored_jobs: Optional[List[tuple]] = None,
     dry_run: bool = False,
+    skip_telegram: bool = False,
 ) -> List[AutonomousLoopResult]:
     """Run the autonomous loop for all users with Telegram alerts enabled.
 
     Args:
         scored_jobs: Pre-scored jobs from the pipeline.
         dry_run: When True, no actual actions are performed.
+        skip_telegram: When True, skip Telegram notifications. Use when the caller
+                       already sends Telegram messages to avoid duplicates.
 
     Returns:
         List of AutonomousLoopResult, one per user.
@@ -340,6 +355,7 @@ def run_for_all_users(
                 telegram_chat_id=chat_id,
                 scored_jobs=scored_jobs,
                 dry_run=dry_run,
+                skip_telegram=skip_telegram,
             )
             results.append(result)
         except Exception:

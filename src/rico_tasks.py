@@ -154,6 +154,7 @@ def process_telegram_action_task(update: Dict[str, Any]) -> Dict[str, Any]:
 def run_autonomous_loop_task(
     scored_jobs: List[Dict[str, Any]] | None = None,
     dry_run: bool = False,
+    skip_telegram: bool = False,
 ) -> Dict[str, Any]:
     """Run the autonomous loop for all opted-in users.
 
@@ -164,7 +165,7 @@ def run_autonomous_loop_task(
     from src.agent.autonomous_loop import run_for_all_users
 
     started = datetime.utcnow()
-    results = run_for_all_users(scored_jobs=scored_jobs, dry_run=dry_run)
+    results = run_for_all_users(scored_jobs=scored_jobs, dry_run=dry_run, skip_telegram=skip_telegram)
     return {
         "task": "run_autonomous_loop",
         "status": "completed",
@@ -184,6 +185,7 @@ def run_autonomous_loop_for_user_task(
     telegram_chat_id: str = "",
     scored_jobs: List[Dict[str, Any]] | None = None,
     dry_run: bool = False,
+    skip_telegram: bool = False,
 ) -> Dict[str, Any]:
     """Run the autonomous loop for a single user."""
     from src.agent.autonomous_loop import run_for_user
@@ -195,6 +197,7 @@ def run_autonomous_loop_for_user_task(
         telegram_chat_id=telegram_chat_id,
         scored_jobs=scored_jobs,
         dry_run=dry_run,
+        skip_telegram=skip_telegram,
     )
     return {
         "task": "run_autonomous_loop_for_user",

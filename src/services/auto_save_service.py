@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -31,6 +32,10 @@ _UTC = timezone.utc
 DEFAULT_SCORE_THRESHOLD = 75
 DEFAULT_MAX_SAVES_PER_DAY = 10
 MINIMUM_SCORE_THRESHOLD = 70
+
+# Thread-local lock for concurrent auto-save dedup within a single process.
+# DB-level ON CONFLICT in upsert_recommendation provides cross-process idempotency.
+_SAVE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -104,6 +109,40 @@ def _is_already_saved(job: Dict[str, Any], existing_keys: set[str]) -> bool:
     return job_key in existing_keys
 
 
+def _audit_log(
+    user_id: str,
+    action: str,
+    job_key: str,
+    job_title: str,
+    job_company: str,
+    result_status: str,
+    message: str = "",
+) -> None:
+    """Write an audit log entry for an autonomous action."""
+    try:
+        from src.models.action_log import ActionLog
+        from src.repositories.audit_repo import log_action
+
+        action_id = hashlib.md5(
+            f"{user_id}:{action}:{job_key}".encode(), usedforsecurity=False
+        ).hexdigest()[:16]
+        log_action(ActionLog(
+            action_id=action_id,
+            action_type=action,
+            user_email=user_id,
+            job_id=job_key,
+            job_title=job_title,
+            job_company=job_company,
+            timestamp=datetime.now(_UTC).isoformat(),
+            result_status=result_status,
+            result_message=message,
+            duration_ms=0,
+            failure_reason=message if result_status == "failure" else None,
+        ))
+    except Exception:
+        logger.debug("auto_save: audit log failed user=%s job=%s", user_id, job_key)
+
+
 def auto_save_jobs(
     user_id: str,
     jobs: List[Dict[str, Any]],
@@ -114,7 +153,7 @@ def auto_save_jobs(
     """Auto-save high-match jobs for a user.
 
     Args:
-        user_id: The user's external ID.
+        user_id: The user's external ID. Must be a non-empty authenticated user ID.
         jobs: List of job dicts with at least title, company, score, link.
         existing_job_keys: Set of job keys already in the user's pipeline.
         daily_save_count: How many auto-saves have been done today for this user.
@@ -122,12 +161,40 @@ def auto_save_jobs(
 
     Returns:
         AutoSaveResult with saved and skipped job lists.
+
+    Write path: src/repositories/applications_repo.create() →
+        RicoDB.upsert_recommendation() → Neon rico_job_recommendations table.
+        Subscription gating via enforce_saved_job_allowed() is called inside create().
+        No legacy JSON or Render-disk persistence when user_id is present.
+    Idempotency: DB-level ON CONFLICT (user_id, job_key) DO UPDATE in upsert_recommendation.
+        In-process _SAVE_LOCK prevents concurrent duplicate saves within one process.
+    Audit: Every save, skip (duplicate), and failure is logged to action_audit_log.
+    Safety: apply is never called. Only status='saved' is written.
     """
     result = AutoSaveResult(user_id=user_id)
+
+    # Guest/public user rejection — autonomous mode requires authenticated user_id
+    if not user_id or user_id in {"anonymous", "guest", "public"}:
+        result.errors.append("Autonomous auto-save requires an authenticated user_id.")
+        logger.warning("auto_save_rejected reason=unauthenticated user=%s", user_id)
+        return result
+
+    # Safety guard check
+    try:
+        from src.rico_safety import RicoSafetyGuard
+        guard = RicoSafetyGuard()
+        safety = guard.check_autonomous_action("save")
+        if not safety.allowed:
+            result.errors.append(f"Safety guard blocked autonomous save: {safety.reason}")
+            logger.warning("auto_save_blocked reason=safety_guard user=%s", user_id)
+            return result
+    except Exception:
+        logger.debug("auto_save: safety guard check failed, proceeding user=%s", user_id)
+
     threshold = _get_score_threshold()
     max_saves = _get_max_saves_per_day()
     exclusions = _get_exclusion_keywords()
-    existing = existing_job_keys or set()
+    existing = existing_job_keys if existing_job_keys is not None else set()
 
     remaining_budget = max_saves - daily_save_count
     if remaining_budget <= 0:
@@ -147,8 +214,13 @@ def auto_save_jobs(
             result.skipped.append({"job": job, "reason": f"score_below_threshold:{score}<{threshold}"})
             continue
 
+        job_key = _get_job_key(job)
+        job_title = job.get("title", "Unknown Role")
+        job_company = job.get("company", "Unknown Company")
+
         if _is_already_saved(job, existing):
             result.skipped.append({"job": job, "reason": "already_in_pipeline"})
+            _audit_log(user_id, "save", job_key, job_title, job_company, "duplicate", "Job already in pipeline")
             continue
 
         if _is_excluded(job, exclusions):
@@ -162,26 +234,35 @@ def auto_save_jobs(
         try:
             from src.repositories.applications_repo import create as create_application
 
-            job_key = _get_job_key(job)
-            create_application(
-                job_id=job_key,
-                title=job.get("title", "Unknown Role"),
-                company=job.get("company", "Unknown Company"),
-                location=job.get("location", job.get("city", "")),
-                url=job.get("link", job.get("url", "")),
-                status="saved",
-                source="autonomous",
-                user_id=user_id,
-            )
+            with _SAVE_LOCK:
+                # Double-check under lock to prevent concurrent duplicate
+                if job_key in existing:
+                    result.skipped.append({"job": job, "reason": "concurrent_duplicate"})
+                    _audit_log(user_id, "save", job_key, job_title, job_company, "duplicate", "Concurrent duplicate prevented")
+                    continue
+
+                create_application(
+                    job_id=job_key,
+                    title=job_title,
+                    company=job_company,
+                    location=job.get("location", job.get("city", "")),
+                    url=job.get("link", job.get("url", "")),
+                    status="saved",
+                    source="autonomous",
+                    user_id=user_id,
+                )
+                existing.add(job_key)
+
             result.saved.append({"job": job, "score": score, "job_key": job_key})
-            existing.add(job_key)
+            _audit_log(user_id, "save", job_key, job_title, job_company, "success", "Auto-saved by autonomous loop")
             logger.info(
                 "auto_save_success user=%s job_key=%s score=%d title=%s",
-                user_id, job_key, score, job.get("title", "?")[:60],
+                user_id, job_key, score, job_title[:60],
             )
         except Exception as exc:
-            logger.exception("auto_save_error user=%s job=%s", user_id, job.get("title", "?"))
-            result.errors.append(f"Failed to save '{job.get('title', '?')}': {exc}")
+            logger.exception("auto_save_error user=%s job=%s", user_id, job_title)
+            result.errors.append(f"Failed to save '{job_title}': {exc}")
+            _audit_log(user_id, "save", job_key, job_title, job_company, "failure", str(exc))
 
     logger.info(
         "auto_save_complete user=%s saved=%d skipped=%d errors=%d",

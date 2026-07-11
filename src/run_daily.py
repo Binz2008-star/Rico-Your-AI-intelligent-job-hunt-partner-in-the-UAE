@@ -720,7 +720,7 @@ def _run_autonomous_loop(matches: list) -> None:
             logger.info("autonomous_loop_skipped reason=mode_disabled")
             return
 
-        results = run_for_all_users(scored_jobs=matches, dry_run=False)
+        results = run_for_all_users(scored_jobs=matches, dry_run=False, skip_telegram=True)
         logger.info(
             "autonomous_loop_pipeline_integration users_processed=%d",
             len(results),
