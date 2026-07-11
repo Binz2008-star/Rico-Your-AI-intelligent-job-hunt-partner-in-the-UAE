@@ -54,6 +54,46 @@ If the owner says `review it`, `check it`, `is it ready`, or `what next`, the ag
 
 Do not respond with a checklist for the owner to perform. Execute the checklist and return the result.
 
+## Rico Product Behavior Gate
+
+The review above is the engineering gate. For any change that touches Rico's conversational behavior, intent routing, tool selection, attachments/documents, profile/memory use, or job search, a **Rico PR is not complete until this product gate also passes**, in addition to the engineering gate above. It verifies the change against `RICO_EXECUTION_PRINCIPLES.md` (the product constitution).
+
+### Intent discipline
+
+- Does Rico answer exactly what the user asked, and avoid unrelated actions?
+- Does it avoid triggering a job search the user did not ask for?
+
+### Context priority
+
+- Does the response respect the current attachment and the current request first (per "Attachment and Conversation Context Order")?
+- Does it avoid injecting profile/memory context that is not relevant?
+
+### Source truth
+
+- Does Rico know where each important claim came from (per "Source Provenance")?
+- Does it avoid guessing, and treat inference as the weakest source?
+
+### Tool safety
+
+- Is intent/context reasoned about before a tool is invoked (per "Tool Safety")?
+- Is `search_jobs` invoked only on explicit search intent or a valid, clearly-scoped prior authorization?
+
+### Document safety
+
+- Are document types kept distinct — a CV, cover letter, invoice, bank letter, rejection email, offer, or screenshot must not be confused for one another?
+
+### Low-confidence behavior
+
+- On low confidence, does Rico state uncertainty rather than assert a hard label from a weak classification?
+
+### Regression coverage
+
+- Does the PR add or update tests for intended behavior, wrong-context prevention, no unwanted tool calls, Arabic/English (or mixed) behavior where relevant, and attachment handling where relevant?
+
+### Trust check
+
+- Before marking the PR complete, ask: **would this change make the user trust Rico more, or less?** If less, the PR is not complete.
+
 ## Required PR quality-gate report
 
 Every PR quality-gate report must include:
