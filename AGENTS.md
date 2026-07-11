@@ -9,7 +9,7 @@ Before planning, editing, testing, creating a branch, or opening a PR:
 3. Verify live GitHub `main`, open PRs, and the exact active PR head.
 4. Read the active `AI_WORKSPACE/TASKS.md` entry and latest handoff.
 5. Declare exactly one role: **WRITER**, **REVIEWER**, **RELEASE**, or **IDLE**.
-6. For the full read order and per-agent-name responsibilities this gate summarizes, see `AI_WORKSPACE/OPERATING_RULES.md` ("Session Boot Sequence") and `AI_WORKSPACE/AGENT_OPERATING_MODEL.md` (Owner / Architect / Claude / Codex / Lovable / Release Captain roles). If those documents and this gate ever disagree on read order, `OPERATING_RULES.md` is canonical — report the drift instead of silently picking one.
+6. For the full read order and per-agent-name responsibilities this gate summarizes, see `AI_WORKSPACE/OPERATING_RULES.md` ("Session Boot Sequence") and `AI_WORKSPACE/AGENT_OPERATING_MODEL.md` (per-agent role and scope boundaries, including Devin and Lovable). If those documents and this gate ever disagree on read order, `OPERATING_RULES.md` is canonical — report the drift instead of silently picking one.
 
 Rules:
 
@@ -19,7 +19,7 @@ Rules:
 - Other Claude sessions default to REVIEWER or IDLE.
 - Windsurf must not edit a Claude-owned branch unless ownership is explicitly handed over.
 - Codex reviews; it does not become a second implementation owner.
-- Devin and Lovable work in prototype/reference branches only (`design-gallery`, `design-handoffs`) unless explicitly approved for a production-scoped PR — see `AGENT_OPERATING_MODEL.md` for what each may and may not touch.
+- Devin and Lovable follow the role and scope boundaries in `AI_WORKSPACE/AGENT_OPERATING_MODEL.md`. Production-scoped work requires explicit owner assignment and an approved branch.
 - If live state conflicts with workspace docs, stop and report the conflict instead of guessing.
 - Old handoffs and chat summaries are historical context, not current permission to resume work.
 
@@ -55,7 +55,7 @@ Follow `CLAUDE.md` for the full project architecture, routes, auth rules, safety
 
 ## Cost and Token Governance
 
-This expands `CLAUDE.md`'s base Cost Optimization Rules (always in force) with agent-coordination specifics below. Keep both in sync; `CLAUDE.md` is the source for the core directive.
+This expands CLAUDE.md's Cost Optimization Rules with agent-coordination specifics below. CLAUDE.md mirrors and summarizes the canonical `AI_WORKSPACE` rules; if they conflict, `AI_WORKSPACE` is authoritative and the drift must be reported.
 
 Optimize for the owner's cost, time, and review control. Use the cheapest safe path that produces enough evidence to make a decision.
 
@@ -100,7 +100,7 @@ Stop and ask the owner before continuing when:
 
 ## Product Generalization Rule
 
-This mirrors `CLAUDE.md`'s Product Generalization Rule and `AI_WORKSPACE/OPERATING_RULES.md`'s copy — all three must stay in sync; `CLAUDE.md` is the base directive.
+This mirrors `CLAUDE.md`'s Product Generalization Rule and `AI_WORKSPACE/OPERATING_RULES.md`'s copy. CLAUDE.md mirrors and summarizes the canonical `AI_WORKSPACE` rules; if they conflict, `AI_WORKSPACE/OPERATING_RULES.md` is authoritative and the drift must be reported.
 
 Rico is a global SaaS product for all users. Smoke-test findings are evidence of product behavior; they are not product logic.
 
