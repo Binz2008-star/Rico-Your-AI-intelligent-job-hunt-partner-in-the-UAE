@@ -35,6 +35,7 @@
 | `PROMPT_CONTRACT.md` | Required task-brief inputs + output format | Active | Owner/Architect | OPERATING_RULES | 2026-07-06 |
 | `PR_CHECKLIST.md` | Checklist to paste into PRs | Active | Core | PR_QUALITY_GATE_RULES | 2026-07-11 |
 | `PR_QUALITY_GATE_RULES.md` | Agent-side PR quality gate | Active | Owner/Architect | OPERATING_RULES | 2026-07-11 |
+| `AGENT_SKILLS.md` | Canonical index and usage guide for Rico agent skills | Active | Owner/Architect | AGENT_OPERATING_MODEL, OPERATING_RULES | 2026-07-11 |
 | `RICO_EXECUTION_PRINCIPLES.md` | Product constitution (v2.0) | Active | Owner | — (source) | 2026-07-11 |
 | `HANDOFFS/README_PR_QUALITY_GATE.md` | Pointer to the quality-gate rules | Active | Core | PR_QUALITY_GATE_RULES | 2026-07-06 |
 
