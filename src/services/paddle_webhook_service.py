@@ -204,21 +204,26 @@ def _extract_subscription_data(
         else None
     )
 
-    # Identity: DB is authoritative — custom_data is bootstrap only
+    # Identity resolution order (most authoritative first):
+    #   1. DB lookup by subscription_id
+    #   2. DB lookup by customer_id
+    #   3. Server-owned checkout_session DB record (custom_data.checkout_session_id)
+    #   custom_data.user_id is NOT used — it is browser-supplied and untrusted.
     user_id = (
         _user_id_from_sub_id(db_module, sub_id)
         or _user_id_from_customer(db_module, customer_id)
     )
     if not user_id:
-        # Last resort: use custom_data.user_id from checkout (untrusted but
-        # acceptable for subscription.created when no DB record exists yet)
         custom_data = data.get("custom_data") or {}
-        user_id = custom_data.get("user_id") or None
-        if user_id:
-            logger.info(
-                "paddle_identity_bootstrap sub_id=%s customer_id=%s user_id=%s",
-                sub_id, customer_id, user_id,
-            )
+        session_token = custom_data.get("checkout_session_id")
+        if session_token:
+            user_id = _user_id_from_checkout_session(db_module, session_token)
+            if user_id:
+                logger.info(
+                    "paddle_identity_via_checkout_session sub_id=%s session_token=%s user_id=%s",
+                    sub_id, session_token, user_id,
+                )
+                _consume_checkout_session(db_module, session_token)
 
     return {
         "unmapped": False,
@@ -252,6 +257,7 @@ def _handle_subscription_created(
         logger.warning("paddle_subscription_created_no_user_id sub_id=%s", fields["sub_id"])
         return {"sub_id": fields["sub_id"], "warning": "no_user_id"}
 
+    occurred_at = _parse_occurred_at(payload)
     _ensure_paddle_customer(db_module, user_id, fields["customer_id"], paddle_repo)
     paddle_repo.upsert_paddle_subscription(
         db_module,
@@ -264,6 +270,7 @@ def _handle_subscription_created(
         price_id=fields["price_id"],
         current_period_start=fields["period_start"],
         current_period_end=fields["period_end"],
+        occurred_at=occurred_at,
     )
     logger.info("paddle_subscription_created user_id=%s plan=%s status=%s",
                 user_id, fields["plan"], fields["rico_status"])
@@ -287,6 +294,7 @@ def _handle_subscription_updated(
         logger.warning("paddle_subscription_updated_no_user_id sub_id=%s", fields["sub_id"])
         return {"sub_id": fields["sub_id"], "warning": "no_user_id"}
 
+    occurred_at = _parse_occurred_at(payload)
     _ensure_paddle_customer(db_module, user_id, fields["customer_id"], paddle_repo)
     paddle_repo.upsert_paddle_subscription(
         db_module,
@@ -300,6 +308,7 @@ def _handle_subscription_updated(
         current_period_start=fields["period_start"],
         current_period_end=fields["period_end"],
         cancel_at=fields["cancel_at"],
+        occurred_at=occurred_at,
     )
     logger.info("paddle_subscription_updated user_id=%s plan=%s status=%s",
                 user_id, fields["plan"], fields["rico_status"])
@@ -340,6 +349,7 @@ def _handle_subscription_canceled(
         logger.warning("paddle_subscription_canceled_no_user_id sub_id=%s", sub_id)
         return {"sub_id": sub_id, "warning": "no_user_id"}
 
+    occurred_at = _parse_occurred_at(payload)
     paddle_repo.upsert_paddle_subscription(
         db_module,
         user_id=user_id,
@@ -348,6 +358,7 @@ def _handle_subscription_canceled(
         plan="free",
         status="canceled",
         canceled_at=canceled_at,
+        occurred_at=occurred_at,
     )
     logger.info("paddle_subscription_canceled user_id=%s sub_id=%s", user_id, sub_id)
     return {"user_id": user_id, "subscription_status": "canceled"}
@@ -423,6 +434,25 @@ def _user_id_from_sub_id(db_module: Any, paddle_subscription_id: Optional[str]) 
         return row["user_id"] if row else None
     except Exception:
         return None
+
+
+def _user_id_from_checkout_session(db_module: Any, session_token: Optional[str]) -> Optional[str]:
+    if not session_token:
+        return None
+    try:
+        from src.repositories import paddle_repo
+        row = paddle_repo.get_checkout_session(db_module, session_token)
+        return row["user_id"] if row else None
+    except Exception:
+        return None
+
+
+def _consume_checkout_session(db_module: Any, session_token: str) -> None:
+    try:
+        from src.repositories import paddle_repo
+        paddle_repo.mark_checkout_session_used(db_module, session_token)
+    except Exception as exc:
+        logger.warning("paddle_checkout_session_consume_failed token=%s: %s", session_token, exc)
 
 
 def _ensure_paddle_customer(db_module: Any, user_id: str, paddle_customer_id: str, paddle_repo) -> None:

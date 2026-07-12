@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS paddle_subscriptions (
     current_period_end      TIMESTAMPTZ,
     cancel_at               TIMESTAMPTZ,
     canceled_at             TIMESTAMPTZ,
+    last_event_occurred_at  TIMESTAMPTZ,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -101,3 +102,26 @@ CREATE TRIGGER trg_paddle_subscriptions_updated_at
     BEFORE UPDATE ON paddle_subscriptions
     FOR EACH ROW
     EXECUTE FUNCTION update_paddle_subscriptions_updated_at();
+
+-- ── paddle_checkout_sessions: server-owned checkout attribution ────────────
+-- Created by the authenticated /billing/paddle/checkout-session endpoint.
+-- The session_token is passed as custom_data.checkout_session_id in the
+-- Paddle checkout; the webhook resolves the Rico user via this record.
+-- custom_data.user_id is no longer used as authoritative identity.
+
+CREATE TABLE IF NOT EXISTS paddle_checkout_sessions (
+    id              BIGSERIAL   PRIMARY KEY,
+    session_token   TEXT        NOT NULL UNIQUE,
+    user_id         TEXT        NOT NULL,
+    plan            TEXT        NOT NULL,
+    billing_cycle   TEXT        NOT NULL DEFAULT 'monthly',
+    used            BOOLEAN     NOT NULL DEFAULT FALSE,
+    expires_at      TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '2 hours'),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_paddle_checkout_sessions_token
+    ON paddle_checkout_sessions (session_token);
+
+CREATE INDEX IF NOT EXISTS idx_paddle_checkout_sessions_user_id
+    ON paddle_checkout_sessions (user_id);

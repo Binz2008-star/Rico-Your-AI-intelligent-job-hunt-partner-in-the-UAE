@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 from typing import Any, Dict, Optional
 
@@ -152,10 +153,20 @@ async def paddle_webhook(request: Request) -> JSONResponse:
         db_module=db_module,
     )
 
+    processing_status = result.get("status")
     logger.info(
         "paddle_webhook_done event_id=%s type=%s result=%s",
-        event_id, event_type, result.get("status"),
+        event_id, event_type, processing_status,
     )
+
+    if processing_status == "failed":
+        # Return 500 so Paddle retries the event — the event row is already
+        # recorded in paddle_webhook_events with status='failed' for replay.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Webhook processing failed; Paddle should retry",
+        )
+
     return JSONResponse({"ok": True, **result}, status_code=200)
 
 
@@ -223,6 +234,82 @@ def _isoformat(value) -> Optional[str]:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return str(value)
+
+
+# ---------------------------------------------------------------------------
+# Checkout session endpoint (server-owned checkout attribution)
+# ---------------------------------------------------------------------------
+
+@router.post("/paddle/checkout-session")
+async def create_checkout_session(
+    request: Request,
+    user_id: str = Depends(get_current_user_id),
+) -> Dict[str, Any]:
+    """Create a server-owned checkout session correlation record.
+
+    Returns a ``session_token`` that the frontend passes as
+    ``custom_data.checkout_session_id`` in the Paddle.js checkout overlay.
+    The webhook resolves the Rico user via this DB record — never via
+    browser-supplied ``custom_data.user_id``.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid JSON body",
+        )
+
+    plan = body.get("plan", "").strip()
+    billing_cycle = body.get("billing_cycle", "monthly").strip()
+
+    if plan not in ("pro",):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported plan: {plan!r}. Allowed: pro",
+        )
+    if billing_cycle not in ("monthly", "yearly"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported billing_cycle: {billing_cycle!r}. Allowed: monthly, yearly",
+        )
+
+    session_token = secrets.token_urlsafe(32)
+
+    try:
+        import sys
+        db_module = sys.modules.get("src.db") or __import__("src.db", fromlist=["get_db_connection"])
+        from src.repositories.paddle_repo import create_checkout_session as _create
+        _create(
+            db_module,
+            user_id=user_id,
+            plan=plan,
+            billing_cycle=billing_cycle,
+            session_token=session_token,
+        )
+    except Exception as exc:
+        logger.error("checkout_session_create_error user_id=%s: %s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not create checkout session",
+        )
+
+    price_id = _resolve_price_id(plan, billing_cycle)
+    return {
+        "session_token": session_token,
+        "price_id": price_id,
+        "plan": plan,
+        "billing_cycle": billing_cycle,
+    }
+
+
+def _resolve_price_id(plan: str, billing_cycle: str) -> Optional[str]:
+    """Return the Paddle price_id for the given plan/cycle, or None."""
+    if plan == "pro" and billing_cycle == "yearly":
+        return os.getenv("PADDLE_PRO_YEARLY_PRICE_ID", "").strip() or None
+    if plan == "pro":
+        return os.getenv("PADDLE_PRO_MONTHLY_PRICE_ID", "").strip() or None
+    return None
 
 
 # ---------------------------------------------------------------------------

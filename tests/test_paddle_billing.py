@@ -71,28 +71,26 @@ def _clear_price_cache():
 # ---------------------------------------------------------------------------
 
 class TestPaddleRouteRegistration(unittest.TestCase):
-    def test_three_routes_on_router(self):
-        """paddle_billing_router must define exactly the three required routes."""
+    def test_four_routes_on_router(self):
+        """paddle_billing_router must define the four required routes."""
         from fastapi.routing import APIRoute
         from src.api.routers.paddle_billing import paddle_billing_router
         paths = {r.path for r in paddle_billing_router.routes if isinstance(r, APIRoute)}
-        self.assertIn("/api/v1/billing/paddle/webhook", paths,
-                      "POST /api/v1/billing/paddle/webhook missing from paddle_billing_router")
-        self.assertIn("/api/v1/billing/status", paths,
-                      "GET /api/v1/billing/status missing from paddle_billing_router")
-        self.assertIn("/api/v1/billing/customer-portal", paths,
-                      "POST /api/v1/billing/customer-portal missing from paddle_billing_router")
+        self.assertIn("/api/v1/billing/paddle/webhook", paths)
+        self.assertIn("/api/v1/billing/status", paths)
+        self.assertIn("/api/v1/billing/customer-portal", paths)
+        self.assertIn("/api/v1/billing/paddle/checkout-session", paths,
+                      "POST /api/v1/billing/paddle/checkout-session missing")
 
     def test_router_included_in_app(self):
         """paddle_billing_router must be included in the FastAPI app (via openapi schema)."""
         from src.api.app import app
         schema = app.openapi()
         app_paths = set(schema.get("paths", {}).keys())
-        # These two are in-schema; webhook has include_in_schema=False but still routes correctly
-        self.assertIn("/api/v1/billing/status", app_paths,
-                      "GET /api/v1/billing/status not in app OpenAPI schema")
-        self.assertIn("/api/v1/billing/customer-portal", app_paths,
-                      "POST /api/v1/billing/customer-portal not in app OpenAPI schema")
+        self.assertIn("/api/v1/billing/status", app_paths)
+        self.assertIn("/api/v1/billing/customer-portal", app_paths)
+        self.assertIn("/api/v1/billing/paddle/checkout-session", app_paths,
+                      "POST /api/v1/billing/paddle/checkout-session not in app OpenAPI schema")
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +219,9 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
              patch("src.repositories.paddle_repo.upsert_paddle_customer"), \
              patch("src.repositories.paddle_repo.upsert_paddle_subscription", return_value={}), \
              patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id", return_value=None), \
-             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id",
+                   return_value={"user_id": "user@example.com"}), \
+             patch("src.repositories.paddle_repo.get_checkout_session", return_value=None), \
              patch.dict(os.environ, env, clear=False):
             return process_paddle_webhook(
                 event_id=payload["event_id"],
@@ -314,7 +314,9 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
              patch("src.repositories.paddle_repo.mark_paddle_event_processed"), \
              patch("src.repositories.paddle_repo.upsert_paddle_customer"), \
              patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id", return_value=None), \
-             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id",
+                   return_value={"user_id": "user@example.com"}), \
+             patch("src.repositories.paddle_repo.get_checkout_session", return_value=None), \
              patch("src.repositories.paddle_repo.upsert_paddle_subscription",
                    side_effect=lambda db, **kw: captured.update(kw) or {}), \
              patch.dict(os.environ, _PRO_ENV, clear=False):
@@ -334,7 +336,8 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
         self.assertEqual(result["reason"], "unhandled_event_type")
 
     def test_no_user_id_returns_warning(self):
-        """Finding #9: when DB lookup finds no user and custom_data is empty, warn."""
+        """When DB lookup + checkout_session both find no user, emit warning.
+        custom_data.user_id is NOT used as identity."""
         payload = {
             "event_id": "evt_nouid",
             "event_type": "subscription.created",
@@ -353,6 +356,7 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
              patch("src.repositories.paddle_repo.mark_paddle_event_processed"), \
              patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id", return_value=None), \
              patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_checkout_session", return_value=None), \
              patch.dict(os.environ, _PRO_ENV, clear=False):
             from src.services.paddle_webhook_service import process_paddle_webhook
             result = process_paddle_webhook(
@@ -363,8 +367,36 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
             )
         self.assertIn("warning", result)
 
-    def test_db_identity_takes_priority_over_custom_data(self):
-        """Finding #9: DB lookup by customer_id must override custom_data.user_id."""
+    def test_custom_data_user_id_not_used_as_identity(self):
+        """custom_data.user_id must NOT be used as identity fallback.
+        Only DB records and server-owned checkout_session_id are trusted."""
+        payload = _build_sub_payload(
+            event_id="evt_cuid_reject",
+            event_type="subscription.created",
+            user_id="untrusted_browser_user",  # custom_data.user_id
+        )
+        # No checkout_session_id in custom_data — only user_id (untrusted)
+        _clear_price_cache()
+        with patch("src.repositories.paddle_repo.paddle_event_already_processed", return_value=False), \
+             patch("src.repositories.paddle_repo.record_paddle_webhook_event", return_value=True), \
+             patch("src.repositories.paddle_repo.mark_paddle_event_processed"), \
+             patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_checkout_session", return_value=None), \
+             patch.dict(os.environ, _PRO_ENV, clear=False):
+            from src.services.paddle_webhook_service import process_paddle_webhook
+            result = process_paddle_webhook(
+                event_id="evt_cuid_reject",
+                event_type="subscription.created",
+                payload=payload,
+                db_module=MagicMock(),
+            )
+        # Must not resolve user from browser-supplied custom_data.user_id
+        self.assertIn("warning", result,
+                      "Must warn (no_user_id) when only custom_data.user_id exists — not use it")
+
+    def test_db_identity_takes_priority_over_checkout_session(self):
+        """DB lookup by customer_id must win over checkout_session_id."""
         payload = _build_sub_payload(
             event_id="evt_id9",
             event_type="subscription.created",
@@ -393,7 +425,221 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
             )
         self.assertEqual(result["status"], "processed")
         self.assertEqual(captured_upsert.get("user_id"), db_user,
-                         "DB-resolved user_id must be used, not untrusted custom_data")
+                         "DB-resolved user_id must be used")
+
+    def test_checkout_session_resolves_user(self):
+        """Identity via server-owned checkout_session_id must be accepted."""
+        session_token = "tok_abc123"
+        payload = {
+            "event_id": "evt_sess1",
+            "event_type": "subscription.created",
+            "data": {
+                "id": "sub_sess1",
+                "customer_id": "ctm_sess1",
+                "status": "active",
+                "custom_data": {"checkout_session_id": session_token},
+                "items": [{"price": {"id": "pri_pro_monthly"}}],
+                "current_billing_period": {
+                    "starts_at": "2026-07-01T00:00:00Z",
+                    "ends_at": "2026-08-01T00:00:00Z",
+                },
+            },
+        }
+        session_user = "session_resolved_user"
+        captured_upsert = {}
+        _clear_price_cache()
+
+        with patch("src.repositories.paddle_repo.paddle_event_already_processed", return_value=False), \
+             patch("src.repositories.paddle_repo.record_paddle_webhook_event", return_value=True), \
+             patch("src.repositories.paddle_repo.mark_paddle_event_processed"), \
+             patch("src.repositories.paddle_repo.upsert_paddle_customer"), \
+             patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_checkout_session",
+                   return_value={"user_id": session_user, "session_token": session_token}), \
+             patch("src.repositories.paddle_repo.mark_checkout_session_used"), \
+             patch("src.repositories.paddle_repo.upsert_paddle_subscription",
+                   side_effect=lambda db, **kw: captured_upsert.update(kw) or {}), \
+             patch.dict(os.environ, _PRO_ENV, clear=False):
+            from src.services.paddle_webhook_service import process_paddle_webhook
+            result = process_paddle_webhook(
+                event_id="evt_sess1",
+                event_type="subscription.created",
+                payload=payload,
+                db_module=MagicMock(),
+            )
+        self.assertEqual(result["status"], "processed")
+        self.assertEqual(captured_upsert.get("user_id"), session_user,
+                         "checkout_session_id must resolve to server-owned user_id")
+
+
+# ---------------------------------------------------------------------------
+# Non-2xx failure semantics + stale-event guard
+# ---------------------------------------------------------------------------
+
+class TestPaddleWebhookFailureSemantics(unittest.TestCase):
+    def test_failed_processing_returns_500(self):
+        """process_paddle_webhook returning 'failed' must trigger a 500 from the router."""
+        import asyncio
+        from fastapi import HTTPException
+        from src.api.routers.paddle_billing import paddle_webhook
+
+        mock_request = MagicMock()
+        body = json.dumps({"event_id": "evt_fail", "event_type": "subscription.created"}).encode()
+
+        async def _fake_body():
+            return body
+
+        mock_request.body = _fake_body
+        mock_request.headers = {"Paddle-Signature": "ts=1;h1=x"}
+
+        # process_paddle_webhook is imported inside the function with:
+        #   from src.services.paddle_webhook_service import process_paddle_webhook
+        # so we patch at the source module level.
+        with patch("src.api.routers.paddle_billing._verify_paddle_signature", return_value=True), \
+             patch("src.services.paddle_webhook_service.process_paddle_webhook",
+                   return_value={"status": "failed", "error": "db down"}), \
+             patch("src.services.paddle_webhook_service",
+                   **{"process_paddle_webhook": MagicMock(
+                       return_value={"status": "failed", "error": "db down"})}):
+            pass  # pre-import to set up module
+
+        # Simpler approach: patch the module attribute directly after import
+        import src.services.paddle_webhook_service as _pws
+        original = _pws.process_paddle_webhook if hasattr(_pws, "process_paddle_webhook") else None
+        import asyncio as _asyncio
+        with patch("src.api.routers.paddle_billing._verify_paddle_signature", return_value=True), \
+             patch("src.repositories.paddle_repo.paddle_event_already_processed", return_value=False), \
+             patch("src.repositories.paddle_repo.record_paddle_webhook_event", return_value=True), \
+             patch("src.repositories.paddle_repo.mark_paddle_event_failed"), \
+             patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_checkout_session", return_value=None), \
+             patch("src.repositories.paddle_repo.upsert_paddle_subscription",
+                   side_effect=Exception("db down")), \
+             patch("src.repositories.paddle_repo.upsert_paddle_customer"), \
+             patch.dict(os.environ, {**_PRO_ENV, "PADDLE_WEBHOOK_SECRET": "",
+                                     "ENVIRONMENT": "test"}):
+            _clear_price_cache()
+            with self.assertRaises(HTTPException) as ctx:
+                _asyncio.get_event_loop().run_until_complete(paddle_webhook(mock_request))
+        self.assertEqual(ctx.exception.status_code, 500,
+                         "failed processing must return HTTP 500 so Paddle retries")
+
+    def test_stale_event_guard_passes_occurred_at(self):
+        """upsert_paddle_subscription must receive occurred_at from _parse_occurred_at."""
+        from datetime import datetime, timezone
+        occurred_str = "2026-07-01T10:00:00Z"
+        payload = {
+            "event_id": "evt_occ1",
+            "event_type": "subscription.updated",
+            "occurred_at": occurred_str,
+            "data": {
+                "id": "sub_occ1",
+                "customer_id": "ctm_occ1",
+                "status": "active",
+                "custom_data": {},
+                "items": [{"price": {"id": "pri_pro_monthly"}}],
+                "current_billing_period": {
+                    "starts_at": "2026-07-01T00:00:00Z",
+                    "ends_at": "2026-08-01T00:00:00Z",
+                },
+            },
+        }
+        captured = {}
+        _clear_price_cache()
+        with patch("src.repositories.paddle_repo.paddle_event_already_processed", return_value=False), \
+             patch("src.repositories.paddle_repo.record_paddle_webhook_event", return_value=True), \
+             patch("src.repositories.paddle_repo.mark_paddle_event_processed"), \
+             patch("src.repositories.paddle_repo.upsert_paddle_customer"), \
+             patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id",
+                   return_value={"user_id": "user_occ1"}), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.upsert_paddle_subscription",
+                   side_effect=lambda db, **kw: captured.update(kw) or {}), \
+             patch.dict(os.environ, _PRO_ENV, clear=False):
+            from src.services.paddle_webhook_service import process_paddle_webhook
+            process_paddle_webhook(
+                event_id="evt_occ1",
+                event_type="subscription.updated",
+                payload=payload,
+                db_module=MagicMock(),
+            )
+        expected_dt = datetime(2026, 7, 1, 10, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(captured.get("occurred_at"), expected_dt,
+                         "occurred_at must be passed to upsert for stale-event guard")
+
+    def test_failed_events_recorded_in_db_for_retry(self):
+        """Failed events must be recorded in DB (status=failed) so they can be replayed."""
+        from src.services.paddle_webhook_service import process_paddle_webhook
+        mark_failed = MagicMock()
+
+        with patch("src.repositories.paddle_repo.paddle_event_already_processed", return_value=False), \
+             patch("src.repositories.paddle_repo.record_paddle_webhook_event", return_value=True), \
+             patch("src.repositories.paddle_repo.mark_paddle_event_processed"), \
+             patch("src.repositories.paddle_repo.mark_paddle_event_failed", mark_failed), \
+             patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id",
+                   return_value={"user_id": "user_retry"}), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.upsert_paddle_customer"), \
+             patch("src.repositories.paddle_repo.upsert_paddle_subscription",
+                   side_effect=Exception("db exploded on upsert")), \
+             patch.dict(os.environ, _PRO_ENV, clear=False):
+            _clear_price_cache()
+            result = process_paddle_webhook(
+                event_id="evt_retry1",
+                event_type="subscription.created",
+                payload=_build_sub_payload(event_id="evt_retry1"),
+                db_module=MagicMock(),
+            )
+        self.assertEqual(result["status"], "failed",
+                         "unhandled exception during processing must return failed status")
+        self.assertTrue(mark_failed.called,
+                        "mark_paddle_event_failed must be called so the event can be replayed")
+
+    def test_checkout_session_endpoint_returns_token_and_price_id(self):
+        """POST /billing/paddle/checkout-session must return session_token + price_id."""
+        import asyncio
+        from src.api.routers.paddle_billing import create_checkout_session
+
+        mock_request = MagicMock()
+
+        async def _fake_json():
+            return {"plan": "pro", "billing_cycle": "monthly"}
+
+        mock_request.json = _fake_json
+
+        with patch("src.repositories.paddle_repo.create_checkout_session"), \
+             patch("sys.modules", {**__import__('sys').modules, "src.db": MagicMock()}), \
+             patch.dict(os.environ, {"PADDLE_PRO_MONTHLY_PRICE_ID": "pri_pro_monthly"}):
+            import asyncio as _asyncio
+            resp = _asyncio.get_event_loop().run_until_complete(
+                create_checkout_session(mock_request, user_id="user_cs1")
+            )
+        self.assertIn("session_token", resp)
+        self.assertNotEqual(resp["session_token"], "",
+                            "session_token must be non-empty")
+        self.assertEqual(resp["plan"], "pro")
+        self.assertEqual(resp["price_id"], "pri_pro_monthly")
+
+    def test_checkout_session_rejects_invalid_plan(self):
+        """POST /billing/paddle/checkout-session must reject unknown plans."""
+        import asyncio
+        from fastapi import HTTPException
+        from src.api.routers.paddle_billing import create_checkout_session
+
+        mock_request = MagicMock()
+
+        async def _fake_json():
+            return {"plan": "premium", "billing_cycle": "monthly"}
+
+        mock_request.json = _fake_json
+
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.get_event_loop().run_until_complete(
+                create_checkout_session(mock_request, user_id="user_bad")
+            )
+        self.assertEqual(ctx.exception.status_code, 400)
 
 
 # ---------------------------------------------------------------------------
