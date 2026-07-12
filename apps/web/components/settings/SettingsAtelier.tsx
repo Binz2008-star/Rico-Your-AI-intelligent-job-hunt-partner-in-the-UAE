@@ -115,6 +115,38 @@ function Hint({ children, palette }: { children: React.ReactNode; palette: Works
     );
 }
 
+/* Rico-voice intro line at the top of each control-center panel. */
+function TabIntro({ children, palette }: { children: React.ReactNode; palette: WorkspacePalette }) {
+    return (
+        <p className="mb-6 text-[13px]" style={{ color: palette.ink55 }}>
+            {children}
+        </p>
+    );
+}
+
+/**
+ * "Ask Rico" affordance — the conversational path to the same capability the
+ * manual control writes. Deep-links to /command with a one-shot ?q= prompt
+ * (the established production pattern used by profile/signals/mission/sidebar);
+ * Rico's own chat + safety layer handles any actual change. This never mutates
+ * state itself and never bypasses approval — it only opens the conversation.
+ */
+function AskRico({ q, label, palette }: { q: string; label: string; palette: WorkspacePalette }) {
+    return (
+        <Link
+            href={`/command?q=${encodeURIComponent(q)}`}
+            className="sx-askrico inline-flex items-center gap-1.5 text-[12px]"
+            style={{ color: palette.red, textDecoration: "none" }}
+        >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.6-.8L3 21l1.9-5.9a8.5 8.5 0 0 1-.8-3.6A8.38 8.38 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" />
+            </svg>
+            <span>{label}</span>
+            <span className="sx-askrico-arrow" aria-hidden="true">→</span>
+        </Link>
+    );
+}
+
 export function SettingsAtelier({ user }: { user: StoredUser }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
@@ -308,6 +340,9 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                 .sx-root .sx-primary:hover { opacity: .9; }
                 .sx-root .sx-link { color: ${palette.red}; text-decoration: none; }
                 .sx-root .sx-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+                .sx-root .sx-askrico { transition: opacity .15s ease; }
+                .sx-root .sx-askrico:hover { text-decoration: underline; text-underline-offset: 3px; }
+                .sx-root[dir="rtl"] .sx-askrico-arrow { display: inline-block; transform: scaleX(-1); }
                 .sx-root a:focus-visible, .sx-root button:focus-visible, .sx-root input:focus-visible {
                     outline: 2px solid ${palette.red}; outline-offset: 2px; border-radius: 4px;
                 }
@@ -364,6 +399,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                 {/* ── Account ── */}
                 {tab === "account" && (
                     <Panel palette={palette} id="sx-panel-account" labelledBy="sx-tab-account">
+                        <TabIntro palette={palette}>{t("settingsAccountIntro")}</TabIntro>
                         <div className="flex flex-col gap-6">
                             <div>
                                 <FieldLabel palette={palette} htmlFor="sx-name">{t("displayName")}</FieldLabel>
@@ -422,6 +458,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                 <Link href="/forgot-password" className="sx-link text-[13px]">
                                     {t("changePassword")}
                                 </Link>
+                                <AskRico q={t("settingsAskAccountPrompt")} label={t("settingsAskAccount")} palette={palette} />
                             </div>
 
                             <div className="flex flex-wrap gap-4 pt-4" style={{ borderTop: `1px solid ${palette.hair}` }}>
@@ -436,6 +473,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                 {/* ── Preferences (job filters) ── */}
                 {tab === "preferences" && (
                     <Panel palette={palette} id="sx-panel-preferences" labelledBy="sx-tab-preferences">
+                        <TabIntro palette={palette}>{t("settingsPreferencesIntro")}</TabIntro>
                         {loading ? (
                             <div className="flex flex-col gap-4">
                                 {Array.from({ length: 4 }).map((_, i) => (
@@ -482,7 +520,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
 
                                 <div>
                                     <div className="mb-2 flex items-center justify-between">
-                                        <FieldLabel palette={palette} htmlFor="sx-minscore">{t("minimumFitScore")}</FieldLabel>
+                                        <FieldLabel palette={palette} htmlFor="sx-minscore">{t("settingsMatchSelectivity")}</FieldLabel>
                                         <span style={{ fontFamily: SERIF, fontSize: "1.15rem", color: palette.red }}>{settings.min_score}%</span>
                                     </div>
                                     <input
@@ -492,7 +530,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                         max={95}
                                         step={5}
                                         value={settings.min_score}
-                                        aria-label={t("minimumFitScore")}
+                                        aria-label={t("settingsMatchSelectivity")}
                                         onChange={(e) => setSettings({ ...settings, min_score: Number(e.target.value) })}
                                         className="h-1.5 w-full cursor-pointer appearance-none rounded-full"
                                         style={{ background: palette.track, accentColor: palette.red }}
@@ -500,6 +538,10 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                     <div className="mt-1.5 flex justify-between">
                                         <Mono style={{ color: palette.ink40 }}>{t("general")}</Mono>
                                         <Mono style={{ color: palette.ink40 }}>{t("highMatchOnly")}</Mono>
+                                    </div>
+                                    <Hint palette={palette}>{t("settingsMatchContext").replace("{score}", String(settings.min_score))}</Hint>
+                                    <div className="mt-2">
+                                        <AskRico q={t("settingsAskStricterPrompt")} label={t("settingsAskStricter")} palette={palette} />
                                     </div>
                                 </div>
 
@@ -526,6 +568,10 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                         <Mono style={{ color: palette.ink40 }}>{t("safety")}</Mono>
                                         <Mono style={{ color: palette.ink40 }}>{t("aggressive")}</Mono>
                                     </div>
+                                    <Hint palette={palette}>{t("settingsDailyContext")}</Hint>
+                                    <div className="mt-2">
+                                        <AskRico q={t("settingsAskDailyPrompt")} label={t("settingsAskDaily")} palette={palette} />
+                                    </div>
                                 </div>
 
                                 <button
@@ -548,6 +594,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                 {/* ── Notifications ── */}
                 {tab === "notifications" && (
                     <Panel palette={palette} id="sx-panel-notifications" labelledBy="sx-tab-notifications">
+                        <TabIntro palette={palette}>{t("settingsNotificationsIntro")}</TabIntro>
                         <div className="flex flex-col gap-6">
                             <div className="flex items-center justify-between gap-4">
                                 <div className="min-w-0">
@@ -593,18 +640,21 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                         />
                                         <Hint palette={palette}>{t("telegramChatIdHint")}</Hint>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleSaveSettings}
-                                        disabled={saving}
-                                        className="sx-primary inline-flex items-center gap-2 self-start rounded-[6px] px-4 py-2.5 text-[13px] font-semibold"
-                                        style={primaryBtn(saving)}
-                                    >
-                                        {saving && (
-                                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:hidden" style={{ opacity: 0.6 }} />
-                                        )}
-                                        {saving ? t("saving") : t("saveSettings")}
-                                    </button>
+                                    <div className="flex flex-wrap items-center gap-4">
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveSettings}
+                                            disabled={saving}
+                                            className="sx-primary inline-flex items-center gap-2 rounded-[6px] px-4 py-2.5 text-[13px] font-semibold"
+                                            style={primaryBtn(saving)}
+                                        >
+                                            {saving && (
+                                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:hidden" style={{ opacity: 0.6 }} />
+                                            )}
+                                            {saving ? t("saving") : t("saveSettings")}
+                                        </button>
+                                        <AskRico q={t("settingsAskNotifyPrompt")} label={t("settingsAskNotify")} palette={palette} />
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -614,6 +664,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                 {/* ── Danger zone ── */}
                 {tab === "danger" && (
                     <Panel palette={palette} id="sx-panel-danger" labelledBy="sx-tab-danger">
+                        <TabIntro palette={palette}>{t("settingsDangerIntro")}</TabIntro>
                         <div className="flex flex-col gap-4">
                             <p className="text-[14px] font-semibold" style={{ color: palette.ink }}>{t("logout")}</p>
                             <p className="text-[13px]" style={{ color: palette.ink55 }}>{t("dangerZoneDescription")}</p>
