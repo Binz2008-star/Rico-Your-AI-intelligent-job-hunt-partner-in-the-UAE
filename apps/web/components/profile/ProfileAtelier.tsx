@@ -3,61 +3,105 @@
 /**
  * ProfileAtelier — read-only "portrait" view of the authenticated profile.
  *
- * Uses the shared Atelier prospectus tokens (PR 0) and real ProfileResponse
- * fields only. No fabricated education, experience-timeline, or language
- * sections. The portrait is the default /profile view; an explicit Edit button
- * switches the page into the existing production inline editor.
+ * Uses the shared Atelier typography and the active application theme while
+ * rendering only real ProfileResponse fields. No fabricated education,
+ * experience-timeline, or language sections. The portrait is the default
+ * /profile view; an explicit Edit button switches to the existing production
+ * inline editor.
  */
 
-import { Mono, Plate } from "@/components/atelier-kit/primitives";
-import { ATELIER, ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { Mono } from "@/components/atelier-kit/primitives";
+import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
+import { WORKSPACE_THEME, type WorkspacePalette } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { type ProfileResponse } from "@/lib/api";
 import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
 
 const SERIF = ATELIER_FONT.serif;
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function ThemedPlate({
+    children,
+    className = "",
+    palette,
+}: {
+    children: React.ReactNode;
+    className?: string;
+    palette: WorkspacePalette;
+}) {
+    const tick = "absolute h-2 w-2 pointer-events-none";
+    const border = `1px solid ${palette.hair}`;
+
     return (
-        <Mono className="block mb-3" style={{ color: ATELIER.ink55 }}>
+        <div
+            className={`relative rounded-[4px] ${className}`}
+            style={{ background: palette.panel, border: `1px solid ${palette.hair}` }}
+        >
+            <span className={`${tick} left-1.5 top-1.5`} style={{ borderLeft: border, borderTop: border }} aria-hidden="true" />
+            <span className={`${tick} right-1.5 top-1.5`} style={{ borderRight: border, borderTop: border }} aria-hidden="true" />
+            <span className={`${tick} bottom-1.5 left-1.5`} style={{ borderBottom: border, borderLeft: border }} aria-hidden="true" />
+            <span className={`${tick} bottom-1.5 right-1.5`} style={{ borderBottom: border, borderRight: border }} aria-hidden="true" />
+            {children}
+        </div>
+    );
+}
+
+function SectionTitle({ children, palette }: { children: React.ReactNode; palette: WorkspacePalette }) {
+    return (
+        <Mono className="mb-3 block" style={{ color: palette.ink55 }}>
             {children}
         </Mono>
     );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+    label,
+    children,
+    palette,
+    isAr,
+}: {
+    label: string;
+    children: React.ReactNode;
+    palette: WorkspacePalette;
+    isAr: boolean;
+}) {
     return (
         <div className="min-w-0">
-            <dt className="text-[11px] font-medium uppercase tracking-wider" style={{ color: ATELIER.ink55 }}>
+            <dt
+                className={`text-[11px] font-medium uppercase ${isAr ? "tracking-normal" : "tracking-wider"}`}
+                style={{ color: palette.ink55 }}
+            >
                 {label}
             </dt>
-            <dd className="mt-1 text-sm break-words" style={{ color: ATELIER.ink }}>
+            <dd className="mt-1 break-words text-sm" style={{ color: palette.ink }}>
                 {children}
             </dd>
         </div>
     );
 }
 
-function TagPill({ children }: { children: React.ReactNode }) {
+function TagPill({ children, palette }: { children: React.ReactNode; palette: WorkspacePalette }) {
     return (
         <span
             className="inline-block rounded-[3px] px-2 py-0.5 text-xs"
-            style={{ background: ATELIER.inset, color: ATELIER.ink70 }}
+            style={{ background: palette.inset, color: palette.ink70 }}
         >
             {children}
         </span>
     );
 }
 
-function EmptyValue() {
-    return <span style={{ color: ATELIER.ink40 }}>—</span>;
+function EmptyValue({ palette }: { palette: WorkspacePalette }) {
+    return <span style={{ color: palette.ink40 }}>—</span>;
 }
 
-function formatAed(value: number | null | undefined) {
+function formatAed(value: number | null | undefined, language: "en" | "ar") {
     if (value == null) return null;
-    return `${value.toLocaleString("en-US")} AED`;
+    const locale = language === "ar" ? "ar-AE" : "en-AE";
+    const unit = language === "ar" ? "د.إ" : "AED";
+    return `${new Intl.NumberFormat(locale).format(value)} ${unit}`;
 }
 
 function clampPct(value: number | null | undefined): number {
@@ -66,28 +110,36 @@ function clampPct(value: number | null | undefined): number {
     return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function CompletenessBar({ profile }: { profile: ProfileResponse }) {
+function CompletenessBar({ profile, palette }: { profile: ProfileResponse; palette: WorkspacePalette }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
     const pct = clampPct(profile.completeness_score);
 
     return (
-        <Plate className="p-5">
+        <ThemedPlate className="p-5" palette={palette}>
             <div className="flex items-center justify-between gap-3">
-                <SectionTitle>{t("profileCompleteness")}</SectionTitle>
-                <span style={{ fontFamily: SERIF, fontSize: "1.75rem", lineHeight: 1, color: ATELIER.ink }}>
+                <SectionTitle palette={palette}>{t("profileCompleteness")}</SectionTitle>
+                <span style={{ fontFamily: SERIF, fontSize: "1.75rem", lineHeight: 1, color: palette.ink }}>
                     {pct}%
                 </span>
             </div>
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full" style={{ background: ATELIER.inset }}>
-                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: ATELIER.red }} />
+            <div
+                className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
+                style={{ background: palette.track }}
+                role="progressbar"
+                aria-label={t("profileCompleteness")}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={pct}
+            >
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: palette.red }} />
             </div>
             {pct === 100 && (
-                <p className="mt-3 text-xs" style={{ color: ATELIER.red }}>
+                <p className="mt-3 text-xs" style={{ color: palette.red }}>
                     {t("profileCompletenessTip")}
                 </p>
             )}
-        </Plate>
+        </ThemedPlate>
     );
 }
 
@@ -99,8 +151,10 @@ export function ProfileAtelier({
     onEdit: () => void;
 }) {
     const { language } = useLanguage();
+    const { resolvedTheme } = useTheme();
     const t = useTranslation(language);
     const isAr = language === "ar";
+    const palette = WORKSPACE_THEME[resolvedTheme];
 
     const displayName = profile.name?.trim() || t("profileNoProfileTitle");
     const subtitle = [profile.current_role, profile.current_company]
@@ -111,27 +165,53 @@ export function ProfileAtelier({
     const hasCities = (profile.preferred_cities?.length ?? 0) > 0;
     const hasSkills = (profile.skills?.length ?? 0) > 0;
 
+    const fieldProps = { palette, isAr };
+
     return (
         <div
-            className="space-y-4"
+            className="profile-atelier-portrait space-y-4"
             dir={isAr ? "rtl" : "ltr"}
             lang={language}
+            style={{ color: palette.ink }}
         >
+            <style dangerouslySetInnerHTML={{ __html: `
+                .profile-atelier-portrait .profile-atelier-action {
+                    transition: border-color .15s ease, color .15s ease, transform .15s ease;
+                }
+                .profile-atelier-portrait .profile-atelier-action:hover {
+                    border-color: ${palette.red} !important;
+                    color: ${palette.red} !important;
+                }
+                .profile-atelier-portrait .profile-atelier-action:focus-visible {
+                    outline: 2px solid ${palette.red};
+                    outline-offset: 3px;
+                }
+                .profile-atelier-portrait [role="alert"] {
+                    border-color: ${palette.hair};
+                    background: ${palette.inset};
+                }
+                .profile-atelier-portrait [role="alert"] p {
+                    color: ${palette.ink};
+                }
+                .profile-atelier-portrait [role="alert"] li p + p {
+                    color: ${palette.ink70};
+                }
+            ` }} />
+
             <GuardrailWarnings warnings={profile.warnings} language={language} />
 
-            {/* Header */}
-            <Plate className="p-5 sm:p-6">
+            <ThemedPlate className="p-5 sm:p-6" palette={palette}>
                 <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                        <Mono style={{ color: ATELIER.ink55 }}>{t("profileTitle")}</Mono>
+                        <Mono style={{ color: palette.ink55 }}>{t("profileTitle")}</Mono>
                         <h1
-                            className="mt-2 text-[2.2rem] sm:text-[2.8rem] leading-[0.98] font-normal"
-                            style={{ fontFamily: SERIF, color: ATELIER.ink }}
+                            className={`mt-2 text-[2.2rem] font-normal sm:text-[2.8rem] ${isAr ? "leading-[1.15]" : "leading-[0.98]"}`}
+                            style={{ fontFamily: SERIF, color: palette.ink }}
                         >
                             {displayName}
                         </h1>
                         {subtitle && (
-                            <p className="mt-2 text-[1rem]" style={{ color: ATELIER.ink70 }}>
+                            <p className="mt-2 text-[1rem]" style={{ color: palette.ink70 }}>
                                 {subtitle}
                             </p>
                         )}
@@ -139,103 +219,104 @@ export function ProfileAtelier({
                     <button
                         type="button"
                         onClick={onEdit}
-                        aria-label="Edit profile"
-                        className="wsx-action shrink-0 rounded-[4px] px-4 py-2 text-sm font-semibold"
+                        aria-label={isAr ? "تعديل الملف الشخصي" : "Edit profile"}
+                        className="profile-atelier-action shrink-0 rounded-[4px] px-4 py-2 text-sm font-semibold"
                         style={{
-                            color: ATELIER.ink,
-                            background: ATELIER.panel,
-                            border: `1px solid ${ATELIER.hair}`,
+                            color: palette.ink,
+                            background: palette.panel,
+                            border: `1px solid ${palette.hair}`,
                             cursor: "pointer",
                         }}
                     >
                         {t("edit")}
                     </button>
                 </div>
-            </Plate>
+            </ThemedPlate>
 
-            <CompletenessBar profile={profile} />
+            <CompletenessBar profile={profile} palette={palette} />
 
-            {/* Identity */}
-            <Plate className="p-5 sm:p-6">
-                <SectionTitle>{t("profileIdentity")}</SectionTitle>
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <Field label={t("name")}>{profile.name?.trim() || <EmptyValue />}</Field>
-                    <Field label={t("email")}>{profile.email ?? <EmptyValue />}</Field>
-                    <Field label={t("profilePhone")}>{profile.phone?.trim() || <EmptyValue />}</Field>
-                    <Field label={t("telegram")}>{profile.telegram_username?.trim() || <EmptyValue />}</Field>
-                    <Field label={t("profileCurrentRole")}>{profile.current_role?.trim() || <EmptyValue />}</Field>
-                    <Field label={t("profileCurrentCompany")}>{profile.current_company?.trim() || <EmptyValue />}</Field>
-                    <Field label={t("profileLinkedin")}>
+            <ThemedPlate className="p-5 sm:p-6" palette={palette}>
+                <SectionTitle palette={palette}>{t("profileIdentity")}</SectionTitle>
+                <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <Field label={t("name")} {...fieldProps}>{profile.name?.trim() || <EmptyValue palette={palette} />}</Field>
+                    <Field label={t("email")} {...fieldProps}>{profile.email ?? <EmptyValue palette={palette} />}</Field>
+                    <Field label={t("profilePhone")} {...fieldProps}>{profile.phone?.trim() || <EmptyValue palette={palette} />}</Field>
+                    <Field label={t("telegram")} {...fieldProps}>{profile.telegram_username?.trim() || <EmptyValue palette={palette} />}</Field>
+                    <Field label={t("profileCurrentRole")} {...fieldProps}>{profile.current_role?.trim() || <EmptyValue palette={palette} />}</Field>
+                    <Field label={t("profileCurrentCompany")} {...fieldProps}>{profile.current_company?.trim() || <EmptyValue palette={palette} />}</Field>
+                    <Field label={t("profileLinkedin")} {...fieldProps}>
                         {profile.linkedin_url?.trim() ? (
                             <Link
                                 href={profile.linkedin_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="underline underline-offset-2 break-all"
-                                style={{ color: ATELIER.red }}
+                                className="break-all underline underline-offset-2"
+                                style={{ color: palette.red }}
                             >
                                 {profile.linkedin_url}
                             </Link>
                         ) : (
-                            <EmptyValue />
+                            <EmptyValue palette={palette} />
                         )}
                     </Field>
-                    <Field label={t("profileVisa")}>{profile.visa_status?.trim() || <EmptyValue />}</Field>
-                    <Field label={t("profileNotice")}>{profile.notice_period?.trim() || <EmptyValue />}</Field>
+                    <Field label={t("profileVisa")} {...fieldProps}>{profile.visa_status?.trim() || <EmptyValue palette={palette} />}</Field>
+                    <Field label={t("profileNotice")} {...fieldProps}>{profile.notice_period?.trim() || <EmptyValue palette={palette} />}</Field>
                 </dl>
-            </Plate>
+            </ThemedPlate>
 
-            {/* Job preferences */}
-            <Plate className="p-5 sm:p-6">
-                <SectionTitle>{t("profileJobPreferences")}</SectionTitle>
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <Field label={t("profileTargetRoles")}>
+            <ThemedPlate className="p-5 sm:p-6" palette={palette}>
+                <SectionTitle palette={palette}>{t("profileJobPreferences")}</SectionTitle>
+                <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <Field label={t("profileTargetRoles")} {...fieldProps}>
                         {hasTargetRoles ? (
                             <div className="flex flex-wrap gap-1.5">
                                 {profile.target_roles!.map((role) => (
-                                    <TagPill key={role}>{role}</TagPill>
+                                    <TagPill key={role} palette={palette}>{role}</TagPill>
                                 ))}
                             </div>
                         ) : (
-                            <EmptyValue />
+                            <EmptyValue palette={palette} />
                         )}
                     </Field>
-                    <Field label={t("profileCities")}>
+                    <Field label={t("profileCities")} {...fieldProps}>
                         {hasCities ? (
                             <div className="flex flex-wrap gap-1.5">
                                 {profile.preferred_cities!.map((city) => (
-                                    <TagPill key={city}>{city}</TagPill>
+                                    <TagPill key={city} palette={palette}>{city}</TagPill>
                                 ))}
                             </div>
                         ) : (
-                            <EmptyValue />
+                            <EmptyValue palette={palette} />
                         )}
                     </Field>
-                    <Field label={t("profileSalaryTarget")}>{formatAed(profile.salary_expectation_aed) || <EmptyValue />}</Field>
-                    <Field label={t("profileMinimumSalary")}>{formatAed(profile.minimum_salary_aed) || <EmptyValue />}</Field>
-                    <Field label={t("profileExperience")}>
+                    <Field label={t("profileSalaryTarget")} {...fieldProps}>
+                        {formatAed(profile.salary_expectation_aed, language) || <EmptyValue palette={palette} />}
+                    </Field>
+                    <Field label={t("profileMinimumSalary")} {...fieldProps}>
+                        {formatAed(profile.minimum_salary_aed, language) || <EmptyValue palette={palette} />}
+                    </Field>
+                    <Field label={t("profileExperience")} {...fieldProps}>
                         {profile.years_experience != null ? (
-                            <span>{Math.round(profile.years_experience)}</span>
+                            <span>{new Intl.NumberFormat(isAr ? "ar-AE" : "en-AE").format(Math.round(profile.years_experience))}</span>
                         ) : (
-                            <EmptyValue />
+                            <EmptyValue palette={palette} />
                         )}
                     </Field>
                 </dl>
-            </Plate>
+            </ThemedPlate>
 
-            {/* Skills */}
-            <Plate className="p-5 sm:p-6">
-                <SectionTitle>{t("profileSkills")}</SectionTitle>
+            <ThemedPlate className="p-5 sm:p-6" palette={palette}>
+                <SectionTitle palette={palette}>{t("profileSkills")}</SectionTitle>
                 {hasSkills ? (
                     <div className="flex flex-wrap gap-1.5">
                         {profile.skills!.map((skill) => (
-                            <TagPill key={skill}>{skill}</TagPill>
+                            <TagPill key={skill} palette={palette}>{skill}</TagPill>
                         ))}
                     </div>
                 ) : (
-                    <EmptyValue />
+                    <EmptyValue palette={palette} />
                 )}
-            </Plate>
+            </ThemedPlate>
         </div>
     );
 }
