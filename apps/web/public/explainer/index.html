@@ -199,6 +199,20 @@ body{font-family:var(--ui);color:var(--white);
   font-family:var(--ui);font-weight:600;font-size:.66rem;letter-spacing:.3em;
   text-transform:uppercase;color:var(--faint)}
 
+/* ── Sound toggle ────────────────────────────────────────────────── */
+.sound{position:fixed;left:clamp(1.2rem,4vw,3rem);bottom:1.3rem;z-index:11;display:inline-flex;align-items:center;gap:.5rem;
+  background:rgba(20,20,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid var(--hair);border-radius:999px;padding:.4rem .85rem .4rem .55rem;cursor:pointer;
+  color:var(--muted);font-family:var(--ui);font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  transition:color .2s,border-color .2s}
+.sound:hover{color:var(--white);border-color:var(--gold)}
+.sound.on{color:var(--gold);border-color:rgba(201,168,76,.4)}
+.sound svg{width:15px;height:15px;flex-shrink:0}
+.sound .wave{opacity:0;transition:opacity .3s}
+.sound.on .wave{opacity:1}
+.sound.hint{animation:soundhint 2.2s ease-in-out 4}
+@keyframes soundhint{0%,100%{transform:none;border-color:var(--hair)}50%{transform:scale(1.05);border-color:rgba(201,168,76,.5)}}
+
 /* ── Creative cuts — choose a treatment, same 10 clips ───────────── */
 .cuts{position:fixed;top:1.15rem;right:clamp(1.2rem,4vw,3rem);z-index:11;display:flex;gap:.25rem;
   background:rgba(20,20,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
@@ -239,6 +253,13 @@ body.cut-c .sub{font-size:clamp(1.1rem,2vw,1.6rem)} body.cut-c .kicker::before{d
     <button data-cut="b">Footage</button>
     <button data-cut="c">Bold</button>
   </div>
+  <button class="sound hint" id="sound" aria-label="Toggle sound">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 9v6h3.5L13 19V5L7.5 9H4z" fill="currentColor" stroke="none"/>
+      <path class="wave" d="M16 8.6a5 5 0 0 1 0 6.8"/><path class="wave" d="M18.6 6a8.5 8.5 0 0 1 0 12"/>
+    </svg>
+    <span id="soundlbl">Sound off</span>
+  </button>
 
   <!-- SCENE 1 · shot_1 -->
   <section class="scene" data-src="shot_1.mp4">
@@ -479,6 +500,7 @@ body.cut-c .sub{font-size:clamp(1.1rem,2vw,1.6rem)} body.cut-c .kicker::before{d
     var v=sc.querySelector('video'); if(v){ try{ v.currentTime=0; v.play().catch(function(){}); }catch(e){} }
     ring(sc); counter(sc);
     if(sc.querySelector('#particles')) startParticles();
+    audioScene(i);
     sceneStart = performance.now();
   }
 
@@ -519,6 +541,47 @@ body.cut-c .sub{font-size:clamp(1.1rem,2vw,1.6rem)} body.cut-c .kicker::before{d
       requestAnimationFrame(loop);
     })();
   }
+
+  // ── Procedural cinematic score (Web Audio; starts on user gesture) ──
+  var AC, master, lpNode, aBuilt=false, aPlaying=false;
+  var soundBtn=document.getElementById('sound'), soundLbl=document.getElementById('soundlbl');
+  function buildAudio(){
+    var Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx) return false;
+    AC=new Ctx();
+    master=AC.createGain(); master.gain.value=0; master.connect(AC.destination);
+    lpNode=AC.createBiquadFilter(); lpNode.type='lowpass'; lpNode.frequency.value=680; lpNode.Q.value=0.7; lpNode.connect(master);
+    // Warm pad — a low, calm chord (A / E / A / C#) with gentle detune shimmer
+    [55,110,164.81,220,277.18].forEach(function(f,i){
+      var g=AC.createGain(); g.gain.value = i===0?0.5:(i<2?0.30:0.13); g.connect(lpNode);
+      var o=AC.createOscillator(); o.type=i<2?'sine':'triangle'; o.frequency.value=f; o.connect(g); o.start();
+      var o2=AC.createOscillator(); o2.type='sine'; o2.frequency.value=f; o2.detune.value=7;
+      var g2=AC.createGain(); g2.gain.value=g.gain.value*0.45; o2.connect(g2); g2.connect(lpNode); o2.start();
+    });
+    // Slow breathing on filter cutoff + amplitude
+    var lfo=AC.createOscillator(); lfo.frequency.value=0.05; var lg=AC.createGain(); lg.gain.value=240;
+    lfo.connect(lg); lg.connect(lpNode.frequency); lfo.start();
+    var alfo=AC.createOscillator(); alfo.frequency.value=0.07; var alg=AC.createGain(); alg.gain.value=0.02;
+    alfo.connect(alg); alg.connect(master.gain); alfo.start();
+    aBuilt=true; return true;
+  }
+  function audioScene(i){
+    if(!aBuilt||!aPlaying) return;
+    // gentle lift into the cityscape + CTA (scenes 9–10, index 8–9)
+    var cutoff = i>=8 ? 1250 : (i>=2 ? 760 : 620);
+    lpNode.frequency.setTargetAtTime(cutoff, AC.currentTime, 1.4);
+    master.gain.setTargetAtTime(i>=8?0.13:0.10, AC.currentTime, 1.4);
+  }
+  function toggleSound(){
+    if(!aBuilt){ if(!buildAudio()){ return; } }
+    if(AC.state==='suspended') AC.resume();
+    aPlaying=!aPlaying;
+    var t=AC.currentTime; master.gain.cancelScheduledValues(t);
+    master.gain.setTargetAtTime(aPlaying?0.10:0.0001, t, 0.7);
+    soundBtn.classList.toggle('on',aPlaying); soundBtn.classList.remove('hint');
+    soundLbl.textContent = aPlaying?'Sound on':'Sound off';
+    if(aPlaying) audioScene(idx);
+  }
+  soundBtn.addEventListener('click', toggleSound);
 
   // Creative cut switcher (same clips, different treatment).
   var cutsEl=document.getElementById('cuts');
