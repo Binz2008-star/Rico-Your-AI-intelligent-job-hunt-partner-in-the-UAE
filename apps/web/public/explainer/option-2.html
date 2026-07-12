@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rico — Launch Film</title>
+<meta name="description" content="Rico — UAE AI job-search automation. 60-second self-playing launch film. English & العربية.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   RICO — 60s launch film · self-playing assembler · bilingual EN / عربي
+   Brand: near-black · gold #C9A84C · teal #01696f · warm white
+   Type:  Instrument Serif + Inter (EN) · Amiri + Noto Sans Arabic (AR)
+   Clips: Higgsfield (kling3_0_turbo). Drop shot_1..shot_10.mp4 to self-host.
+   ═══════════════════════════════════════════════════════════════════ */
+:root{
+  --ink:#08080a; --ink-2:#101014; --surface:#141418;
+  --gold:#C9A84C; --gold-hi:#e7d193; --gold-deep:#9a7f31;
+  --teal:#01696f; --teal-hi:#12a3ab;
+  --white:#f4efe6; --muted:rgba(244,239,230,.60); --faint:rgba(244,239,230,.34);
+  --hair:rgba(201,168,76,.16);
+  --serif:"Instrument Serif",Georgia,serif;
+  --ui:"Inter",system-ui,sans-serif;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--ink);overflow:hidden}
+body{font-family:var(--ui);color:var(--white);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+/* Arabic typography: elegant serif headlines + clean Arabic UI; no italic, no
+   letter-spacing (breaks Arabic joining), numerals stay as authored. */
+body.lang-ar{font-family:"Noto Sans Arabic","Inter",sans-serif}
+body.lang-ar .headline,body.lang-ar .name,body.lang-ar .big,body.lang-ar .plabel b,
+body.lang-ar .metric,body.lang-ar .col h4,body.lang-ar .plate h3{font-family:"Amiri",var(--serif),serif}
+body.lang-ar em,body.lang-ar .it{font-style:normal}
+body.lang-ar .kicker,body.lang-ar .brandtag,body.lang-ar .cuts button,body.lang-ar .sound,
+body.lang-ar .skip,body.lang-ar .lang,body.lang-ar .fig-sub,body.lang-ar .plabel,
+body.lang-ar .pill,body.lang-ar .col h4{letter-spacing:normal}
+
+.stage{position:fixed;inset:0;overflow:hidden;background:var(--ink)}
+
+/* ── Scene layers ────────────────────────────────────────────────── */
+.scene{position:absolute;inset:0;opacity:0;visibility:hidden;transform:scale(1.04);
+  transition:opacity .6s ease, transform 1.2s ease, visibility 0s .6s;will-change:opacity,transform}
+.scene.active{opacity:1;visibility:visible;transform:scale(1);transition:opacity .6s ease, transform 6s linear}
+
+.media{position:absolute;inset:0;overflow:hidden}
+.media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .8s ease;will-change:opacity}
+.media video.ready{opacity:1}
+.placeholder{position:absolute;inset:0;background:radial-gradient(120% 120% at 30% 20%, #1a1712 0%, #0b0b0e 55%, #060608 100%)}
+.placeholder .plabel{position:absolute;top:9%;left:0;right:0;text-align:center;font-family:var(--ui);
+  font-size:.62rem;letter-spacing:.34em;text-transform:uppercase;color:var(--faint);line-height:1.9;opacity:.7}
+.placeholder .plabel b{display:block;font-family:var(--serif);font-size:1.5rem;letter-spacing:.02em;
+  color:rgba(201,168,76,.4);text-transform:none;margin-bottom:.15rem}
+
+/* ── Depth: drifting gradient mesh blobs ─────────────────────────── */
+.fx{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+.blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.10;will-change:transform;animation:drift 22s ease-in-out infinite}
+.blob.g{background:radial-gradient(circle,var(--gold),transparent 68%)}
+.blob.t{background:radial-gradient(circle,var(--teal-hi),transparent 68%);animation-duration:28s;animation-direction:reverse}
+.blob.w{background:radial-gradient(circle,#ffe9c2,transparent 70%);opacity:.06;animation-duration:34s}
+@keyframes drift{0%{transform:translate(0,0) scale(1)}33%{transform:translate(6vw,-5vh) scale(1.12)}66%{transform:translate(-4vw,4vh) scale(.92)}100%{transform:translate(0,0) scale(1)}}
+
+.stage::before{content:'';position:absolute;inset:0;z-index:6;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity:.03;mix-blend-mode:overlay}
+.stage::after{content:'';position:absolute;inset:0;z-index:6;pointer-events:none;background:radial-gradient(ellipse at center, transparent 42%, rgba(0,0,0,.72) 100%)}
+
+/* ── Captions ────────────────────────────────────────────────────── */
+.caption{position:absolute;z-index:4;left:0;right:0;bottom:11%;padding:0 clamp(1.6rem,7vw,7rem);pointer-events:none}
+.caption.center{top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.kicker{font-family:var(--ui);font-size:clamp(.62rem,1vw,.74rem);font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);margin-bottom:1rem;display:inline-flex;align-items:center;gap:.7rem}
+.kicker::before{content:'';width:2.2rem;height:1px;background:var(--gold);opacity:.7}
+.caption.center .kicker::before{display:none}
+.headline{font-family:var(--serif);font-weight:400;line-height:1.02;letter-spacing:.005em;font-size:clamp(2.4rem,6.4vw,5.6rem);max-width:18ch}
+.caption.center .headline{max-width:20ch}
+.headline .it{font-style:italic} .headline .gold{color:var(--gold)}
+.sub{font-family:var(--ui);font-weight:400;font-size:clamp(1rem,1.7vw,1.4rem);color:var(--muted);margin-top:1.1rem;max-width:42ch;line-height:1.5}
+.caption.center .sub{margin-left:auto;margin-right:auto}
+body.lang-ar .headline{line-height:1.25}
+
+.w{display:inline-block;opacity:0;transform:translateY(20px);will-change:transform,opacity}
+.scene.active .w{animation:wordin .5s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes wordin{to{opacity:1;transform:none}}
+
+/* ── UI mockup overlays (scenes 3–6) ─────────────────────────────── */
+.ui{position:absolute;z-index:3;inset:0;pointer-events:none}
+.ui .panel{opacity:0;transform:translateY(26px) scale(.98);will-change:transform,opacity}
+.scene.active .ui .panel{animation:springin .7s cubic-bezier(.18,.9,.24,1.05) forwards}
+@keyframes springin{to{opacity:1;transform:none}}
+.card{background:rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(201,168,76,.15);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06)}
+.pill{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--ui);font-weight:600;font-size:.72rem;letter-spacing:.02em;padding:.3rem .7rem;border-radius:999px}
+.pill.teal{background:rgba(1,105,111,.22);color:#7fe3e8;border:1px solid rgba(18,163,171,.4)}
+.pill.gold{background:rgba(201,168,76,.14);color:var(--gold-hi);border:1px solid rgba(201,168,76,.4)}
+.metric{font-family:var(--serif);color:var(--gold);letter-spacing:.01em}
+.jt{font-family:var(--ui);font-weight:600;font-size:.92rem;color:var(--white)}
+.jm{font-family:var(--ui);font-weight:400;font-size:.74rem;color:var(--muted);margin-top:.15rem}
+body.lang-ar .jt,body.lang-ar .jm,body.lang-ar .pill{font-family:"Noto Sans Arabic",var(--ui)}
+
+.orbit{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(70vw,560px);height:min(70vw,560px)}
+.orbit .hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(40vw,260px);padding:1.3rem 1.5rem;text-align:center}
+.orbit .hub .metric{font-size:1.7rem;display:block}
+.tag{position:absolute;top:50%;left:50%;font-family:var(--ui);font-weight:600;font-size:.8rem;padding:.4rem .85rem;border-radius:999px;white-space:nowrap;background:rgba(20,20,24,.7);backdrop-filter:blur(8px);border:1px solid var(--hair);color:var(--white);opacity:0;will-change:transform,opacity}
+.scene.active .tag{animation:tagin .6s cubic-bezier(.2,.7,.2,1) forwards, floaty 7s ease-in-out infinite}
+@keyframes tagin{to{opacity:1}}
+@keyframes floaty{0%,100%{margin-top:0}50%{margin-top:-8px}}
+
+.grid{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;width:min(86vw,680px)}
+.grid .card{padding:1rem 1.15rem;display:flex;flex-direction:column;gap:.5rem}
+.ring{--p:0;position:relative;width:52px;height:52px;flex-shrink:0;border-radius:50%;background:conic-gradient(var(--gold) calc(var(--p)*1%), rgba(255,255,255,.08) 0);display:grid;place-items:center}
+.ring::before{content:'';position:absolute;inset:5px;border-radius:50%;background:#0e0e12}
+.ring span{position:relative;font-family:var(--ui);font-weight:700;font-size:.72rem;color:var(--gold-hi)}
+.grid .row{display:flex;align-items:center;gap:.8rem}
+
+.letter{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(84vw,560px);padding:1.6rem 1.8rem}
+.line{height:9px;border-radius:5px;background:linear-gradient(90deg,rgba(244,239,230,.5),rgba(244,239,230,.12));margin:.7rem 0;width:0;will-change:width}
+.scene.active .letter .line{animation:type .5s steps(24) forwards}
+@keyframes type{to{width:var(--w,90%)}}
+.timerbar{margin-top:1.4rem}
+.timerbar .track{height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
+.timerbar .fill{height:100%;width:0;background:linear-gradient(90deg,var(--gold-deep),var(--gold),var(--gold-hi));box-shadow:0 0 16px rgba(201,168,76,.5);will-change:width}
+.scene.active .timerbar .fill{animation:fillbar 4.4s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes fillbar{to{width:100%}}
+
+.pipe{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:min(90vw,780px)}
+.col{padding:1rem;min-height:190px}
+.col h4{font-family:var(--ui);font-weight:600;font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:.9rem}
+.col .pill{margin-bottom:.55rem;width:100%}
+
+/* ── CTA (scene 7) ───────────────────────────────────────────────── */
+.cta{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:1.1rem;pointer-events:none}
+.wordmark{display:flex;align-items:center;gap:.7rem;opacity:0;transform:translateY(16px)}
+.scene.active .wordmark{animation:wordin .8s cubic-bezier(.2,.7,.2,1) .2s forwards}
+.wordmark svg{width:clamp(46px,7vw,74px);height:auto;filter:drop-shadow(0 0 22px rgba(201,168,76,.4));animation:glowpulse 3.4s ease-in-out infinite}
+@keyframes glowpulse{0%,100%{filter:drop-shadow(0 0 18px rgba(201,168,76,.32))}50%{filter:drop-shadow(0 0 34px rgba(201,168,76,.62))}}
+.wordmark .name{font-family:var(--serif);font-size:clamp(2.6rem,7vw,4.6rem);background:linear-gradient(120deg,var(--gold),#fff5e0,var(--gold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:.01em}
+.cta .big{font-family:var(--serif);font-size:clamp(1.8rem,4.6vw,3.4rem);background:linear-gradient(100deg,var(--gold-hi),#fbf3df 60%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.cta .muted{font-family:var(--ui);font-weight:400;font-size:clamp(.85rem,1.5vw,1.1rem);color:var(--muted);letter-spacing:.02em}
+.cta .big,.cta .muted{opacity:0;transform:translateY(14px);will-change:transform,opacity}
+.scene.active .cta .big{animation:wordin .8s cubic-bezier(.2,.7,.2,1) .5s forwards}
+.scene.active .cta .muted{animation:wordin .8s cubic-bezier(.2,.7,.2,1) .85s forwards}
+.cta .joinbtn{pointer-events:auto;margin-top:.4rem;opacity:0;transform:translateY(14px);
+  display:inline-flex;align-items:center;gap:.5rem;font-family:var(--ui);font-weight:600;font-size:.9rem;
+  background:linear-gradient(135deg,var(--gold-deep),var(--gold));color:#0a0a0a;text-decoration:none;
+  padding:.75rem 1.6rem;border-radius:999px;box-shadow:0 10px 30px rgba(201,168,76,.28)}
+.scene.active .cta .joinbtn{animation:wordin .8s cubic-bezier(.2,.7,.2,1) 1.05s forwards}
+.cta .joinbtn:hover{filter:brightness(1.08)}
+#particles{position:absolute;inset:0;z-index:2;pointer-events:none}
+
+/* ── Progress bar ────────────────────────────────────────────────── */
+.progress{position:fixed;left:0;bottom:0;height:2px;width:0;z-index:10;background:linear-gradient(90deg,var(--gold-deep),var(--gold),var(--gold-hi));box-shadow:0 0 10px rgba(201,168,76,.6);will-change:width}
+
+/* ── Chrome: brandtag, top-right bar (lang + skip), cuts, sound ──── */
+.brandtag{position:fixed;top:1.4rem;left:clamp(1.2rem,4vw,3rem);z-index:9;font-family:var(--ui);font-weight:600;font-size:.66rem;letter-spacing:.3em;text-transform:uppercase;color:var(--faint)}
+body.lang-ar .brandtag{letter-spacing:normal}
+
+.topbar{position:fixed;top:1.1rem;right:clamp(1.2rem,4vw,3rem);z-index:12;display:flex;align-items:center;gap:.5rem}
+.lang{display:inline-flex;background:rgba(20,20,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--hair);border-radius:999px;overflow:hidden}
+.lang button{font-family:var(--ui);font-size:.66rem;font-weight:700;letter-spacing:.04em;color:var(--muted);background:transparent;border:0;padding:.4rem .7rem;cursor:pointer;transition:color .2s,background .2s}
+.lang button.on{background:var(--gold);color:#0a0a0a}
+.lang button:hover:not(.on){color:var(--white)}
+.skip{display:inline-flex;align-items:center;gap:.45rem;font-family:var(--ui);font-weight:600;font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;color:var(--white);background:rgba(20,20,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--hair);border-radius:999px;padding:.45rem .9rem;cursor:pointer;text-decoration:none;transition:color .2s,border-color .2s,background .2s}
+.skip:hover{border-color:var(--gold);color:var(--gold)}
+.skip .arw{font-size:.9em}
+body[dir="rtl"] .skip .arw{transform:scaleX(-1)}
+
+.cuts{position:fixed;bottom:1.3rem;left:50%;transform:translateX(-50%);z-index:11;display:flex;gap:.25rem;background:rgba(20,20,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--hair);border-radius:999px;padding:.25rem}
+.cuts button{font-family:var(--ui);font-size:.6rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);background:transparent;border:0;border-radius:999px;padding:.34rem .7rem;cursor:pointer;transition:color .2s,background .2s}
+.cuts button.on{background:var(--gold);color:#0a0a0a}
+.cuts button:hover:not(.on){color:var(--white)}
+body.cut-b .ui{display:none}
+body.cut-b .caption{top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+body.cut-b .caption .headline{max-width:22ch} body.cut-b .kicker::before{display:none}
+body.cut-c .media::after{content:'';position:absolute;inset:0;background:rgba(6,6,8,.55)}
+body.cut-c .ui{display:none}
+body.cut-c .caption{top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+body.cut-c .headline{font-size:clamp(3rem,9vw,7.5rem);max-width:16ch}
+body.cut-c .sub{font-size:clamp(1.1rem,2vw,1.6rem)} body.cut-c .kicker::before{display:none}
+
+.sound{position:fixed;left:clamp(1.2rem,4vw,3rem);bottom:1.3rem;z-index:11;display:inline-flex;align-items:center;gap:.5rem;background:rgba(20,20,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--hair);border-radius:999px;padding:.4rem .85rem .4rem .55rem;cursor:pointer;color:var(--muted);font-family:var(--ui);font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;transition:color .2s,border-color .2s}
+.sound:hover{color:var(--white);border-color:var(--gold)}
+.sound.on{color:var(--gold);border-color:rgba(201,168,76,.4)}
+.sound svg{width:15px;height:15px;flex-shrink:0}
+.sound .wave{opacity:0;transition:opacity .3s} .sound.on .wave{opacity:1}
+.sound.hint{animation:soundhint 2.2s ease-in-out 4}
+@keyframes soundhint{0%,100%{transform:none;border-color:var(--hair)}50%{transform:scale(1.05);border-color:rgba(201,168,76,.5)}}
+
+@media (max-width:640px){
+  .grid{grid-template-columns:1fr} .pipe{grid-template-columns:1fr;gap:8px}
+  .cuts{bottom:3.4rem}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;transition-duration:.2s!important}
+  .blob{animation:none}
+}
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="brandtag" data-en="Rico — Launch Film · Option 2 (draft)" data-ar="ريكو — الفيلم التعريفي · الخيار ٢ (مسودة)">Rico — Launch Film · Option 2 (draft)</div>
+
+  <div class="topbar">
+    <div class="lang" id="lang" aria-label="Language">
+      <button data-lang="en" class="on">EN</button>
+      <button data-lang="ar">ع</button>
+    </div>
+    <a class="skip" id="skip" href="#" data-en="Skip" data-ar="تخطّي">Skip <span class="arw">↦</span></a>
+  </div>
+
+  <!-- SCENE 1 · shot_1 -->
+  <section class="scene" data-src="shot_1.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 01 · shot_1.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:46vw;height:46vw;top:-12%;left:-8%"></span><span class="blob w" style="width:30vw;height:30vw;bottom:-10%;right:0"></span></div>
+    <div class="caption">
+      <span class="kicker" data-en="01 — Late in Dubai" data-ar="٠١ — ليلٌ في دبي"></span>
+      <h2 class="headline" data-en="Another night. No callbacks." data-ar="ليلةٌ أخرى. ولا ردّ."></h2>
+      <p class="sub" data-en="Hundreds of tabs. A search that never sleeps." data-ar="مئات النوافذ. وبحثٌ لا ينام."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 1b · shot_2 -->
+  <section class="scene" data-src="shot_2.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 01 · shot_2.mp4</div></div></div>
+    <div class="fx"><span class="blob t" style="width:40vw;height:40vw;top:20%;right:-10%"></span></div>
+    <div class="caption">
+      <h2 class="headline" data-en="The search runs your life." data-ar="البحث يسيطر على حياتك."></h2>
+      <p class="sub" data-en="It should be the other way around." data-ar="والأجدر أن يكون العكس."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 2 · shot_3 -->
+  <section class="scene" data-src="shot_3.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 02 · shot_3.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:44vw;height:44vw;top:-14%;right:-6%"></span><span class="blob t" style="width:34vw;height:34vw;bottom:-12%;left:-8%"></span></div>
+    <div class="caption center">
+      <span class="kicker" data-en="02 — Meet Rico" data-ar="٠٢ — تعرّف على ريكو"></span>
+      <h2 class="headline gold" data-en="Meet Rico." data-ar="تعرّف على ريكو."></h2>
+      <p class="sub" data-en="Your AI career partner, built for the UAE." data-ar="شريكك المهنيّ الذكيّ، صُنع لأجل الإمارات."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 3 · shot_4 · CV upload -->
+  <section class="scene" data-src="shot_4.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 03 · shot_4.mp4</div></div></div>
+    <div class="fx"><span class="blob t" style="width:42vw;height:42vw;top:-10%;left:-6%"></span><span class="blob g" style="width:30vw;height:30vw;bottom:-8%;right:-6%"></span></div>
+    <div class="ui">
+      <div class="orbit">
+        <div class="panel card hub" style="animation-delay:.05s"><span class="metric" data-en="CV read" data-ar="تمّت قراءة سيرتك"></span><span class="jm" style="margin-top:.3rem" data-en="Skills · languages · experience" data-ar="المهارات · اللغات · الخبرة"></span></div>
+        <span class="tag" style="transform:translate(-190%,-260%);animation-delay:.30s" data-en="Finance" data-ar="تمويل"></span>
+        <span class="tag" style="transform:translate(120%,-230%);animation-delay:.42s" data-en="Arabic" data-ar="العربية"></span>
+        <span class="tag" style="transform:translate(-250%,60%);animation-delay:.54s" data-en="React" data-ar="React"></span>
+        <span class="tag" style="transform:translate(215%,150%);animation-delay:.66s" data-en="5 years exp" data-ar="٥ سنوات خبرة"></span>
+        <span class="tag" style="transform:translate(-70%,260%);animation-delay:.78s" data-en="DIFC-ready" data-ar="جاهز لِـ DIFC"></span>
+      </div>
+    </div>
+    <div class="caption">
+      <span class="kicker" data-en="03 — Understands you" data-ar="٠٣ — يفهمك"></span>
+      <h2 class="headline" data-en="It reads your CV." data-ar="يقرأ سيرتك الذاتية."></h2>
+      <p class="sub" data-en="Every skill, language, and year — understood." data-ar="كلّ مهارة ولغة وسنة خبرة — يفهمها."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 4 · shot_5 · job match grid -->
+  <section class="scene" data-src="shot_5.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 04 · shot_5.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:40vw;height:40vw;top:-12%;right:-8%"></span></div>
+    <div class="ui">
+      <div class="grid">
+        <div class="panel card" style="animation-delay:.15s"><div class="row"><div class="ring" data-p="87"><span>87%</span></div><div><div class="jt" data-en="Senior Financial Analyst" data-ar="محلّل ماليّ أوّل"></div><div class="jm" data-en="Dubai · Banking" data-ar="دبي · مصارف"></div></div></div><span class="pill teal" data-en="Strong match" data-ar="مطابقة قويّة"></span></div>
+        <div class="panel card" style="animation-delay:.28s"><div class="row"><div class="ring" data-p="81"><span>81%</span></div><div><div class="jt" data-en="Product Manager" data-ar="مدير منتَج"></div><div class="jm" data-en="Abu Dhabi · Fintech" data-ar="أبوظبي · تقنية ماليّة"></div></div></div><span class="pill teal" data-en="Strong match" data-ar="مطابقة قويّة"></span></div>
+        <div class="panel card" style="animation-delay:.41s"><div class="row"><div class="ring" data-p="74"><span>74%</span></div><div><div class="jt" data-en="UX Designer" data-ar="مصمّم تجربة مستخدم"></div><div class="jm" data-en="DIFC · Product" data-ar="مركز دبي المالي · منتجات"></div></div></div><span class="pill gold" data-en="Worth a look" data-ar="يستحقّ النظر"></span></div>
+        <div class="panel card" style="animation-delay:.54s"><div class="row"><div class="ring" data-p="69"><span>69%</span></div><div><div class="jt" data-en="Data Analyst" data-ar="محلّل بيانات"></div><div class="jm" data-en="Sharjah · Retail" data-ar="الشارقة · تجزئة"></div></div></div><span class="pill gold" data-en="Worth a look" data-ar="يستحقّ النظر"></span></div>
+      </div>
+    </div>
+    <div class="caption">
+      <span class="kicker" data-en="04 — Finds your fit" data-ar="٠٤ — يجد ما يناسبك"></span>
+      <h2 class="headline" data-en="Then finds your fit." data-ar="ثمّ يجد ما يناسبك."></h2>
+      <p class="sub" data-en="Only strong matches ever surface." data-ar="لا يظهر إلّا ما يناسبك بحقّ."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 5 · shot_6 · auto-apply -->
+  <section class="scene" data-src="shot_6.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 05 · shot_6.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:38vw;height:38vw;top:-8%;left:-6%"></span><span class="blob t" style="width:30vw;height:30vw;bottom:-10%;right:-4%"></span></div>
+    <div class="ui">
+      <div class="panel card letter" style="animation-delay:.1s">
+        <span class="pill gold" style="margin-bottom:1rem" data-en="Drafting cover letter" data-ar="يكتب خطاب التقديم"></span>
+        <div class="line" style="--w:96%;animation-delay:.30s"></div>
+        <div class="line" style="--w:88%;animation-delay:.55s"></div>
+        <div class="line" style="--w:92%;animation-delay:.80s"></div>
+        <div class="line" style="--w:70%;animation-delay:1.05s"></div>
+      </div>
+    </div>
+    <div class="caption">
+      <span class="kicker" data-en="05 — Applies for you" data-ar="٠٥ — يتقدّم بالطلبات عنك"></span>
+      <h2 class="headline" data-en="It applies for you." data-ar="يتقدّم بالطلبات عنك."></h2>
+      <p class="sub" data-en="Honest, tailored — never invented." data-ar="بصدقٍ، ومُخصّص — دون أيّ تلفيق."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 5b · shot_7 · timer -->
+  <section class="scene" data-src="shot_7.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 05 · shot_7.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:42vw;height:42vw;top:10%;left:50%"></span></div>
+    <div class="ui">
+      <div class="panel card letter" style="text-align:center;animation-delay:.1s">
+        <div class="metric" style="font-size:clamp(2.6rem,7vw,4.4rem);line-height:1"><span id="count">0</span> <span data-en="applications" data-ar="طلبًا"></span></div>
+        <div class="jm" style="font-size:1rem;margin-top:.4rem" data-en="sent in 4 min 17 sec" data-ar="أُرسلت في ٤ دقائق و١٧ ثانية"></div>
+        <div class="timerbar"><div class="track"><div class="fill"></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 6 · shot_8 · pipeline -->
+  <section class="scene" data-src="shot_8.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 06 · shot_8.mp4</div></div></div>
+    <div class="fx"><span class="blob t" style="width:44vw;height:44vw;top:-12%;left:-8%"></span></div>
+    <div class="ui">
+      <div class="pipe">
+        <div class="panel card col" style="animation-delay:.15s"><h4 data-en="Applied" data-ar="تم التقديم"></h4>
+          <span class="pill teal" data-en="Senior Financial Analyst" data-ar="محلّل ماليّ أوّل"></span><span class="pill teal" data-en="Data Analyst" data-ar="محلّل بيانات"></span><span class="pill teal" data-en="UX Designer" data-ar="مصمّم تجربة"></span></div>
+        <div class="panel card col" style="animation-delay:.30s"><h4 data-en="Viewed" data-ar="تمّت المشاهدة"></h4>
+          <span class="pill teal" data-en="Product Manager" data-ar="مدير منتَج"></span><span class="pill teal" data-en="Growth Lead" data-ar="قائد نموّ"></span></div>
+        <div class="panel card col" style="animation-delay:.45s"><h4 data-en="Interview" data-ar="مقابلة"></h4>
+          <span class="pill gold" data-en="Senior Financial Analyst" data-ar="محلّل ماليّ أوّل"></span></div>
+      </div>
+    </div>
+    <div class="caption center" style="bottom:auto;top:12%;justify-content:flex-start">
+      <span class="kicker" data-en="06 — Tracks everything" data-ar="٠٦ — يتابع كلّ شيء"></span>
+      <h2 class="headline" data-en="Your career, on autopilot." data-ar="مسيرتك المهنيّة، على الطيّار الآليّ."></h2>
+    </div>
+  </section>
+
+  <!-- SCENE 7 · shot_9 · cityscape -->
+  <section class="scene" data-src="shot_9.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 07 · shot_9.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:60vw;height:40vw;bottom:-14%;left:-6%;opacity:.14"></span><span class="blob t" style="width:40vw;height:30vw;top:-10%;right:-6%"></span></div>
+    <div class="caption center">
+      <h2 class="headline" data-en="A whole market, ~ quietly working for you." data-ar="سوقٌ بأكمله، ~ يعمل بهدوءٍ لأجلك."></h2>
+    </div>
+  </section>
+
+  <!-- SCENE 7b · shot_10 · CTA -->
+  <section class="scene" data-src="shot_10.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 07 · shot_10.mp4</div></div></div>
+    <canvas id="particles"></canvas>
+    <div class="cta">
+      <div class="wordmark">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e7d193"/><stop offset=".5" stop-color="#C9A84C"/><stop offset="1" stop-color="#9a7f31"/></linearGradient></defs>
+          <path fill="url(#rg)" d="M11 8h13.5C31 8 35.4 11.7 35.4 17.4c0 4.4-2.5 7.6-6.7 9l7 11.6h-7.6l-6-10.4H16.6V38H11Zm5.6 6.2v8.1h6.7c2.6 0 4.3-1.6 4.3-4.1 0-2.5-1.7-4-4.3-4Z"/>
+        </svg>
+        <span class="name">Rico</span>
+      </div>
+      <div class="big" data-en="Be first in the UAE." data-ar="كن أوّل من يبدأ في الإمارات."></div>
+      <div class="muted" data-en="Join the waitlist — launching soon." data-ar="انضمّ إلى قائمة الانتظار — قريبًا."></div>
+      <a class="joinbtn" id="join" href="#" data-en="Join the waitlist" data-ar="سجّل الآن"></a>
+    </div>
+  </section>
+
+</div>
+<div class="progress" id="progress"></div>
+<button class="sound hint" id="sound" aria-label="Toggle sound">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 9v6h3.5L13 19V5L7.5 9H4z" fill="currentColor" stroke="none"/>
+    <path class="wave" d="M16 8.6a5 5 0 0 1 0 6.8"/><path class="wave" d="M18.6 6a8.5 8.5 0 0 1 0 12"/>
+  </svg>
+  <span id="soundlbl" data-en="Sound off" data-ar="الصوت مغلق">Sound off</span>
+</button>
+<div class="cuts" id="cuts" aria-label="Choose a cut">
+  <button data-cut="a" class="on" data-en="Cinematic" data-ar="سينمائي"></button>
+  <button data-cut="b" data-en="Footage" data-ar="لقطات"></button>
+  <button data-cut="c" data-en="Bold" data-ar="جريء"></button>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* Where Skip and the CTA send people — the live registration/waitlist.
+     Change this one line to point at /signup (or any route) when the site
+     switches from waitlist to open registration. */
+  var REGISTER_URL = 'https://form.jotform.com/261278237812056';
+
+  /* Higgsfield-generated clips (kling3_0_turbo, 16:9). To self-host, download
+     each mp4 into /explainer/ and clear this map (loader falls back to data-src). */
+  var HF = 'https://d8j0ntlcm91z4.cloudfront.net/user_3GOb8y64tsMZUlHSHxmAMNWu7Lg/';
+  var CLIPS = {
+    'shot_1.mp4': HF+'hf_20260712_091201_b5aa2ee8-887c-4e13-a154-12a2d38ffeb5.mp4',
+    'shot_2.mp4': HF+'hf_20260712_091541_68a6e004-0062-45fc-8c35-6e8b211a67e1.mp4',
+    'shot_3.mp4': HF+'hf_20260712_091216_df0753b5-366e-4ed7-b73f-a110d1f55d52.mp4',
+    'shot_4.mp4': HF+'hf_20260712_091542_b3019043-aced-456f-b91f-cf74a479cfbb.mp4',
+    'shot_5.mp4': HF+'hf_20260712_091544_3056b801-cf32-4465-ae57-85710d672fc4.mp4',
+    'shot_6.mp4': HF+'hf_20260712_091545_0181f6cd-a4d6-4937-913b-9a401b642d85.mp4',
+    'shot_7.mp4': HF+'hf_20260712_091547_cb3eecc0-d303-4e96-8393-60dc78bd7208.mp4',
+    'shot_8.mp4': HF+'hf_20260712_091549_2b56ff8f-5210-456d-a3bb-a45582828f46.mp4',
+    'shot_9.mp4': HF+'hf_20260712_091205_33edf128-c833-4628-8465-f77c7f3ca14b.mp4',
+    'shot_10.mp4':HF+'hf_20260712_091551_bac304b6-7409-43ae-9e80-44513b971962.mp4'
+  };
+
+  var scenes = Array.prototype.slice.call(document.querySelectorAll('.scene'));
+  var DUR = [5000,4000,9000,9000,9000,5000,4000,7000,4000,4000];
+  var TOTAL = DUR.reduce(function(a,b){return a+b;},0);
+  var OFFSET = []; (function(){var s=0;for(var i=0;i<DUR.length;i++){OFFSET.push(s);s+=DUR[i];}})();
+  var idx = -1, sceneStart = 0, hop = null, lang = 'en';
+  var progressEl = document.getElementById('progress');
+
+  // ── i18n ──────────────────────────────────────────────────────────
+  function tstr(el){ return el.getAttribute('data-'+lang) || el.getAttribute('data-en') || ''; }
+  function isStagger(el){ return el.classList.contains('headline')||el.classList.contains('kicker')||el.classList.contains('sub'); }
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function buildWords(el){
+    var words = tstr(el).split(' '), out='', wi=0;
+    words.forEach(function(tok){
+      if(tok==='') return;
+      if(tok==='~'){ out+='<br>'; return; }
+      out += '<span class="w" style="animation-delay:'+(wi*0.08)+'s">'+esc(tok)+'</span> '; wi++;
+    });
+    el.innerHTML = out.trim();
+  }
+  function applyLang(l){
+    lang = l;
+    document.documentElement.setAttribute('lang', l);
+    document.body.classList.toggle('lang-ar', l==='ar');
+    document.body.dir = (l==='ar') ? 'rtl' : 'ltr';
+    document.querySelectorAll('[data-en]').forEach(function(el){
+      if(isStagger(el)) buildWords(el); else el.textContent = tstr(el);
+    });
+    [].forEach.call(document.querySelectorAll('#lang button'),function(b){b.classList.toggle('on', b.dataset.lang===l);});
+    var sc = scenes[idx];
+    if(sc) sc.querySelectorAll('.w').forEach(function(w){w.style.animation='none';w.offsetHeight;w.style.animation='';});
+  }
+  document.getElementById('lang').addEventListener('click',function(e){
+    var b=e.target.closest('button'); if(b) applyLang(b.dataset.lang);
+  });
+
+  // ── Skip / CTA → registration ────────────────────────────────────
+  function goRegister(e){ if(e)e.preventDefault(); try{ clearTimeout(hop); }catch(_){} window.location.href = REGISTER_URL; }
+  document.getElementById('skip').addEventListener('click', goRegister);
+  document.getElementById('join').addEventListener('click', goRegister);
+
+  // ── Clips ─────────────────────────────────────────────────────────
+  function ensureVideo(sc){
+    if(sc.dataset.vtried) return; sc.dataset.vtried='1';
+    var key = sc.getAttribute('data-src'); if(!key) return;
+    var src = CLIPS[key] || key;
+    var v = document.createElement('video');
+    v.muted=true; v.playsInline=true; v.setAttribute('playsinline',''); v.loop=true; v.preload='auto'; v.src=src;
+    v.addEventListener('loadeddata', function(){ v.classList.add('ready'); });
+    v.addEventListener('error', function(){});
+    sc.querySelector('.media').appendChild(v);
+  }
+  function ring(sc){ sc.querySelectorAll('.ring').forEach(function(r){ var p=+r.getAttribute('data-p')||0; r.style.setProperty('--p','0'); setTimeout(function(){ r.style.transition='background .9s ease'; r.style.setProperty('--p',p); },300); }); }
+  function counter(sc){ var el=sc.querySelector('#count'); if(!el) return; var target=12,n=0; el.textContent='0'; var t=setInterval(function(){ n++; if(n>=target){n=target;clearInterval(t);} el.textContent=n; },300); }
+
+  function show(i){
+    if(idx>=0) scenes[idx].classList.remove('active');
+    idx=i; var sc=scenes[i];
+    ensureVideo(sc);
+    sc.querySelectorAll('.w').forEach(function(w){ w.style.animation='none'; w.offsetHeight; w.style.animation=''; });
+    sc.classList.add('active');
+    var v=sc.querySelector('video'); if(v){ try{ v.currentTime=0; v.play().catch(function(){}); }catch(e){} }
+    ring(sc); counter(sc);
+    if(sc.querySelector('#particles')) startParticles();
+    audioScene(i);
+    sceneStart = performance.now();
+  }
+  function advance(){ var n=idx+1; if(n>=scenes.length) n=0; show(n); hop=setTimeout(advance, DUR[n]); }
+  function tick(){ var within=performance.now()-sceneStart; var elapsed=OFFSET[idx]+Math.min(within,DUR[idx]); progressEl.style.width=(100*elapsed/TOTAL).toFixed(2)+'%'; requestAnimationFrame(tick); }
+
+  // ── Particles (CTA) ──────────────────────────────────────────────
+  var pStarted=false;
+  function startParticles(){
+    if(pStarted||reduce) return; pStarted=true;
+    var c=document.getElementById('particles'), ctx=c.getContext('2d');
+    function size(){ c.width=c.offsetWidth; c.height=c.offsetHeight; } size(); window.addEventListener('resize',size);
+    var P=Array.from({length:40},function(){return{x:Math.random()*c.width,y:Math.random()*c.height,vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25-.08,r:Math.random()*1.8+.5,a:Math.random()*.4+.1};});
+    (function loop(){ ctx.clearRect(0,0,c.width,c.height); P.forEach(function(p){ p.x+=p.vx; p.y+=p.vy; if(p.y<-5)p.y=c.height+5; if(p.x<0)p.x=c.width; if(p.x>c.width)p.x=0; if(p.y>c.height+5)p.y=-5; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.283); ctx.fillStyle='rgba(201,168,76,'+p.a+')'; ctx.fill(); }); requestAnimationFrame(loop); })();
+  }
+
+  // ── Procedural score (Web Audio; starts on user gesture) ─────────
+  var AC, master, lpNode, aBuilt=false, aPlaying=false;
+  var soundBtn=document.getElementById('sound'), soundLbl=document.getElementById('soundlbl');
+  function buildAudio(){
+    var Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx) return false;
+    AC=new Ctx();
+    master=AC.createGain(); master.gain.value=0; master.connect(AC.destination);
+    lpNode=AC.createBiquadFilter(); lpNode.type='lowpass'; lpNode.frequency.value=680; lpNode.Q.value=0.7; lpNode.connect(master);
+    [55,110,164.81,220,277.18].forEach(function(f,i){
+      var g=AC.createGain(); g.gain.value=i===0?0.5:(i<2?0.30:0.13); g.connect(lpNode);
+      var o=AC.createOscillator(); o.type=i<2?'sine':'triangle'; o.frequency.value=f; o.connect(g); o.start();
+      var o2=AC.createOscillator(); o2.type='sine'; o2.frequency.value=f; o2.detune.value=7;
+      var g2=AC.createGain(); g2.gain.value=g.gain.value*0.45; o2.connect(g2); g2.connect(lpNode); o2.start();
+    });
+    var lfo=AC.createOscillator(); lfo.frequency.value=0.05; var lg=AC.createGain(); lg.gain.value=240; lfo.connect(lg); lg.connect(lpNode.frequency); lfo.start();
+    var alfo=AC.createOscillator(); alfo.frequency.value=0.07; var alg=AC.createGain(); alg.gain.value=0.02; alfo.connect(alg); alg.connect(master.gain); alfo.start();
+    aBuilt=true; return true;
+  }
+  function audioScene(i){ if(!aBuilt||!aPlaying) return; var cutoff=i>=8?1250:(i>=2?760:620); lpNode.frequency.setTargetAtTime(cutoff,AC.currentTime,1.4); master.gain.setTargetAtTime(i>=8?0.13:0.10,AC.currentTime,1.4); }
+  function toggleSound(){
+    if(!aBuilt){ if(!buildAudio()) return; }
+    if(AC.state==='suspended') AC.resume();
+    aPlaying=!aPlaying; var t=AC.currentTime; master.gain.cancelScheduledValues(t);
+    master.gain.setTargetAtTime(aPlaying?0.10:0.0001, t, 0.7);
+    soundBtn.classList.toggle('on',aPlaying); soundBtn.classList.remove('hint');
+    soundLbl.setAttribute('data-en', aPlaying?'Sound on':'Sound off');
+    soundLbl.setAttribute('data-ar', aPlaying?'الصوت مفتوح':'الصوت مغلق');
+    soundLbl.textContent = tstr(soundLbl);
+    if(aPlaying) audioScene(idx);
+  }
+  soundBtn.addEventListener('click', toggleSound);
+
+  // ── Cut switcher ─────────────────────────────────────────────────
+  var cutsEl=document.getElementById('cuts');
+  document.body.classList.add('cut-a');
+  cutsEl.addEventListener('click',function(e){ var btn=e.target.closest('button'); if(!btn)return; document.body.className='cut-'+btn.dataset.cut+(lang==='ar'?' lang-ar':''); [].forEach.call(cutsEl.children,function(x){x.classList.toggle('on',x===btn);}); });
+
+  // ── Go ───────────────────────────────────────────────────────────
+  applyLang('en');
+  sceneStart=performance.now();
+  show(0);
+  hop=setTimeout(advance, DUR[0]);
+  requestAnimationFrame(tick);
+
+  // keyboard: →/← scrub, S sound, arrows skip nothing dangerous
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'){ clearTimeout(hop); advance(); }
+    if(e.key==='ArrowLeft'){ clearTimeout(hop); var n=idx-1; if(n<0)n=scenes.length-1; show(n); hop=setTimeout(advance,DUR[n]); }
+  });
+  document.addEventListener('visibilitychange', function(){ var v=scenes[idx]&&scenes[idx].querySelector('video'); if(document.hidden){ if(v)v.pause(); } else if(v){ v.play().catch(function(){}); } });
+})();
+</script>
+</body>
+</html>
