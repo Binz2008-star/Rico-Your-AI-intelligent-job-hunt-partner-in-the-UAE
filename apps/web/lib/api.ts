@@ -1,3 +1,10 @@
+import type {
+  AgentChatRequest,
+  AgentUIResponse,
+  ExecutePermissionActionRequest,
+  ExecutePermissionActionResponse,
+  OnboardingStatusResponse,
+} from "@/lib/schemas";
 import {
   AgentChatRequestSchema,
   AgentUIResponseSchema,
@@ -11,13 +18,6 @@ import {
   RicoProfileResponseSchema,
   SavedSearchesResponseSchema,
   UploadCVResponseSchema,
-} from "@/lib/schemas";
-import type {
-  AgentChatRequest,
-  AgentUIResponse,
-  ExecutePermissionActionRequest,
-  ExecutePermissionActionResponse,
-  OnboardingStatusResponse,
 } from "@/lib/schemas";
 import { getSignupAttribution } from "@/lib/signupAttribution";
 import type {
@@ -437,9 +437,9 @@ const MOCK_JOBS: Job[] = [
 function normalizeStringArray(value: unknown, fallback: string[]): string[] {
   const items = Array.isArray(value)
     ? value
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean)
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)
     : [];
 
   return items.length > 0 ? items : fallback;
@@ -455,8 +455,8 @@ function normalizeMatchExplanation(raw: unknown): Job["match_explanation"] {
   return {
     verdict:
       verdict === "strong_fit" ||
-      verdict === "worth_checking" ||
-      verdict === "weak_fit"
+        verdict === "worth_checking" ||
+        verdict === "weak_fit"
         ? verdict
         : "worth_checking",
     summary: String(item.summary ?? ""),
@@ -901,14 +901,14 @@ export interface JobMatch {
    *  Never used as an apply link — only surfaced in the company-site fallback CTA. */
   employer_url?: string;
   verification_status?:
-    | "live"
-    | "live_verified"
-    | "lead_needs_verification"
-    | "needs_source_verification"
-    | "login_required"
-    | "rate_limited"
-    | "aggregator_untrusted"
-    | "google_intermediary";
+  | "live"
+  | "live_verified"
+  | "lead_needs_verification"
+  | "needs_source_verification"
+  | "login_required"
+  | "rate_limited"
+  | "aggregator_untrusted"
+  | "google_intermediary";
 }
 
 export interface RicoOption {
@@ -1511,12 +1511,12 @@ export async function sendAgentChat(
 
 export interface LinkVerificationResult {
   status:
-    | "live"
-    | "expired"
-    | "blocked"
-    | "redirect"
-    | "source_only"
-    | "needs_review";
+  | "live"
+  | "expired"
+  | "blocked"
+  | "redirect"
+  | "source_only"
+  | "needs_review";
   http_status: number | null;
   error_message: string | null;
   verified_at: string;
@@ -1819,4 +1819,34 @@ export async function executePermissionAction(
     },
   );
   return validateShape(ExecutePermissionActionResponseSchema, raw, "executePermissionAction");
+}
+
+// ── Paddle Billing ────────────────────────────────────────────────────────────
+
+export interface PaddleBillingStatus {
+  user_id: string;
+  plan: string;
+  status: string;
+  billing_cycle: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at: string | null;
+  canceled_at: string | null;
+  paddle_subscription_id: string | null;
+  provider: string;
+}
+
+export async function getPaddleBillingStatus(
+  signal?: AbortSignal,
+): Promise<PaddleBillingStatus> {
+  return requestJson<PaddleBillingStatus>("/api/v1/billing/status", {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function createPaddleCustomerPortalSession(): Promise<{ portal_url: string }> {
+  return requestJson<{ portal_url: string }>("/api/v1/billing/customer-portal", {
+    method: "POST",
+  });
 }

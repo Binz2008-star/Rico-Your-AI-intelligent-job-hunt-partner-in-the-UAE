@@ -34,13 +34,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Mono } from "@/components/atelier-kit/primitives";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { PaddleBillingSection } from "@/components/billing/PaddleBillingSection";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useWorkspaceTheme, type WorkspacePalette } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/useToast";
-import type { StoredUser } from "@/lib/auth";
 import {
     ApiError,
     fetchProfile,
@@ -53,6 +53,8 @@ import {
     updateSettings,
     type ProfileResponse,
 } from "@/lib/api";
+import type { StoredUser } from "@/lib/auth";
+import { isPaddleBillingMode } from "@/lib/billing";
 import { useTranslation } from "@/lib/translations";
 import type { SettingsResponse, TelegramStatusResponse } from "@/types";
 
@@ -330,7 +332,8 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
             lang={language}
             style={{ color: palette.ink }}
         >
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .sx-root .sx-input { transition: border-color .15s ease; outline: none; }
                 .sx-root .sx-input:focus { border-color: ${palette.red}; }
                 .sx-root .sx-input::placeholder { color: ${palette.ink40}; }
@@ -466,6 +469,21 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                 <Link href="/privacy" className="text-[12px]" style={{ color: palette.ink40 }}>{t("privacyPolicy")}</Link>
                                 <Link href="/refund-policy" className="text-[12px]" style={{ color: palette.ink40 }}>{t("refundPolicy")}</Link>
                             </div>
+
+                            {isPaddleBillingMode() && (
+                                <PaddleBillingSection
+                                    userId={user.email}
+                                    userEmail={user.email}
+                                    colors={{
+                                        ink: palette.ink,
+                                        ink70: palette.ink70,
+                                        ink40: palette.ink40,
+                                        surface: palette.panel,
+                                        red: palette.red,
+                                        borderDefault: palette.hair,
+                                    }}
+                                />
+                            )}
                         </div>
                     </Panel>
                 )}

@@ -3,10 +3,21 @@
  *
  * NEXT_PUBLIC_BILLING_MODE=manual  → WhatsApp-assisted activation (default)
  * NEXT_PUBLIC_BILLING_MODE=stripe  → Stripe checkout
+ * NEXT_PUBLIC_BILLING_MODE=paddle  → Paddle Billing overlay checkout
+ *
+ * SECURITY: PADDLE_API_KEY must NEVER appear in NEXT_PUBLIC_* variables or
+ * any client-side code. All Paddle server-side API calls go through the
+ * backend proxy. The only public Paddle key is NEXT_PUBLIC_PADDLE_CLIENT_TOKEN
+ * (a read-only Paddle.js token used solely to initialize the checkout widget).
  */
 
 export function isManualBillingMode(): boolean {
-    return (process.env.NEXT_PUBLIC_BILLING_MODE ?? "manual").trim().toLowerCase() !== "stripe";
+    const mode = (process.env.NEXT_PUBLIC_BILLING_MODE ?? "manual").trim().toLowerCase();
+    return mode !== "stripe" && mode !== "paddle";
+}
+
+export function isPaddleBillingMode(): boolean {
+    return (process.env.NEXT_PUBLIC_BILLING_MODE ?? "manual").trim().toLowerCase() === "paddle";
 }
 
 /**
