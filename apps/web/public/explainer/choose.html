@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<script>
+/* Owner-only page. Any public visit is bounced to a random film so the manual
+   chooser never appears on the official site. Owner: add #all to the URL to view. */
+(function(){
+  if(location.hash!=='#all' && location.search.indexOf('all')===-1){
+    var F=['option-2.html','option-3.html','option-3b.html'];
+    location.replace(F[Math.floor(Math.random()*F.length)]);
+  }
+})();
+</script>
+<title>Rico — Launch Film</title>
+<meta name="description" content="Rico — UAE AI job-search automation. Launch film — choose a cut.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=Amiri&family=Noto+Sans+Arabic:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#08080a;--gold:#C9A84C;--gold-hi:#e7d193;--teal:#01696f;--teal-hi:#12a3ab;
+  --white:#f4efe6;--muted:rgba(244,239,230,.58);--faint:rgba(244,239,230,.34);--hair:rgba(201,168,76,.16);
+  --serif:"Instrument Serif",Georgia,serif;--ui:"Inter",system-ui,sans-serif}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{min-height:100%}
+body{background:var(--ink);color:var(--white);font-family:var(--ui);-webkit-font-smoothing:antialiased;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:clamp(1.5rem,5vw,4rem);overflow-x:hidden;position:relative}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(60% 50% at 50% 0%,rgba(201,168,76,.10),transparent 70%),
+             radial-gradient(50% 40% at 50% 100%,rgba(1,105,111,.10),transparent 70%)}
+body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.03;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.wrap{position:relative;z-index:1;width:100%;max-width:920px;text-align:center}
+.eyebrow{font-family:var(--ui);font-size:.68rem;font-weight:600;letter-spacing:.34em;text-transform:uppercase;color:var(--gold);margin-bottom:1.1rem}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.6rem,7vw,5rem);line-height:1;letter-spacing:.01em;
+  background:linear-gradient(120deg,var(--gold),#fff5e0,var(--gold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.tag{color:var(--muted);font-size:clamp(.95rem,1.6vw,1.15rem);margin-top:1rem;line-height:1.6}
+.tag .ar{font-family:"Amiri",var(--serif);opacity:.85}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:clamp(.9rem,2vw,1.4rem);margin-top:clamp(2rem,5vw,3.4rem)}
+.card{position:relative;display:flex;flex-direction:column;text-align:left;text-decoration:none;color:inherit;
+  background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
+  border:1px solid var(--hair);border-radius:20px;padding:clamp(1.3rem,2.6vw,1.9rem);
+  transition:transform .3s ease,border-color .3s ease,box-shadow .3s ease;overflow:hidden}
+.card:hover{transform:translateY(-4px);border-color:rgba(201,168,76,.45);box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 40px rgba(201,168,76,.08)}
+.card .num{font-family:var(--serif);font-size:2.4rem;line-height:1;color:var(--gold)}
+.card .lab{font-family:var(--ui);font-size:.62rem;font-weight:600;letter-spacing:.28em;text-transform:uppercase;color:var(--faint);margin:.8rem 0 .4rem}
+.card h2{font-family:var(--serif);font-weight:400;font-size:1.5rem;letter-spacing:.01em;margin-bottom:.5rem}
+.card p{font-size:.85rem;color:var(--muted);line-height:1.55;flex:1}
+.card .go{display:inline-flex;align-items:center;gap:.5rem;margin-top:1.2rem;font-size:.8rem;font-weight:600;
+  letter-spacing:.05em;color:var(--gold)}
+.card .go .arw{transition:transform .3s ease}
+.card:hover .go .arw{transform:translateX(4px)}
+.card .status{position:absolute;top:1.1rem;right:1.1rem;font-family:var(--ui);font-size:.56rem;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;padding:.28rem .6rem;border-radius:999px}
+.card .status.live{background:rgba(1,105,111,.22);color:#7fe3e8;border:1px solid rgba(18,163,171,.4)}
+.card .status.draft{background:rgba(201,168,76,.14);color:var(--gold-hi);border:1px solid rgba(201,168,76,.4)}
+.card .status.new{background:linear-gradient(135deg,rgba(201,168,76,.2),rgba(18,163,171,.2));color:var(--gold-hi);border:1px solid rgba(201,168,76,.5)}
+.card.two{border-style:dashed}
+.foot{margin-top:clamp(1.6rem,4vw,2.6rem);font-family:var(--ui);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+@media (max-width:540px){.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Rico · UAE AI Career Companion</p>
+  <h1>Launch Film</h1>
+  <p class="tag">Choose a cut to watch. <span class="ar"> · اختر نسخةً لمشاهدتها</span></p>
+
+  <div class="cards">
+    <a class="card one" href="option-1.html">
+      <span class="status live">Locked</span>
+      <span class="num">01</span>
+      <span class="lab">Option 1 · الخيار ١</span>
+      <h2>The signature cut</h2>
+      <p>The full 60-second film — bilingual EN/عربي, cinematic footage, live UI, score, and three treatments. Approved and locked.</p>
+      <span class="go">Watch <span class="arw">→</span></span>
+    </a>
+    <a class="card two" href="option-2.html">
+      <span class="status draft">In progress</span>
+      <span class="num">02</span>
+      <span class="lab">Option 2 · الخيار ٢</span>
+      <h2>The next revision</h2>
+      <p>A twin of Option 1, held open for the next round of changes. This is where new slogans, text, and ideas land before they're locked.</p>
+      <span class="go">Preview <span class="arw">→</span></span>
+    </a>
+    <a class="card two" href="option-3.html">
+      <span class="status new">New</span>
+      <span class="num">03</span>
+      <span class="lab">Option 3 · الخيار ٣</span>
+      <h2>The dimensional cut</h2>
+      <p>A pure 3D take — now with cinematic Higgsfield plates behind the holograms. Rico as a living model: an orbiting constellation, text that flies out of depth, a cursor-driven camera. From Claude, to Rico.</p>
+      <span class="go">Preview <span class="arw">→</span></span>
+    </a>
+    <a class="card two" href="option-3b.html">
+      <span class="status new">Remix</span>
+      <span class="num">3B</span>
+      <span class="lab">Option 3B · ريمكس</span>
+      <h2>The remix</h2>
+      <p>Same 3D system, footage-forward: the Higgsfield plates pushed up front, faster cuts, bolder type, the model as a signature accent. A punchier sibling of Option 3.</p>
+      <span class="go">Preview <span class="arw">→</span></span>
+    </a>
+  </div>
+
+  <p class="foot">Built with Rico · 2026</p>
+</div>
+</body>
+</html>
