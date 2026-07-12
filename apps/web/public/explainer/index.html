@@ -199,7 +199,27 @@ body{font-family:var(--ui);color:var(--white);
   font-family:var(--ui);font-weight:600;font-size:.66rem;letter-spacing:.3em;
   text-transform:uppercase;color:var(--faint)}
 
+/* ── Creative cuts — choose a treatment, same 10 clips ───────────── */
+.cuts{position:fixed;top:1.15rem;right:clamp(1.2rem,4vw,3rem);z-index:11;display:flex;gap:.25rem;
+  background:rgba(20,20,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid var(--hair);border-radius:999px;padding:.25rem}
+.cuts button{font-family:var(--ui);font-size:.6rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);background:transparent;border:0;border-radius:999px;padding:.34rem .7rem;cursor:pointer;transition:color .2s,background .2s}
+.cuts button.on{background:var(--gold);color:#0a0a0a}
+.cuts button:hover:not(.on){color:var(--white)}
+/* Cut B — Footage: hide UI mockups, let the film breathe, centre captions */
+body.cut-b .ui{display:none}
+body.cut-b .caption{top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+body.cut-b .caption .headline{max-width:22ch} body.cut-b .kicker::before{display:none}
+/* Cut C — Bold type: dim the footage, huge centred statements */
+body.cut-c .media::after{content:'';position:absolute;inset:0;background:rgba(6,6,8,.55)}
+body.cut-c .ui{display:none}
+body.cut-c .caption{top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+body.cut-c .headline{font-size:clamp(3rem,9vw,7.5rem);max-width:16ch}
+body.cut-c .sub{font-size:clamp(1.1rem,2vw,1.6rem)} body.cut-c .kicker::before{display:none}
+
 @media (max-width:640px){
+  .cuts{top:auto;bottom:3.4rem;right:50%;transform:translateX(50%)}
   .grid{grid-template-columns:1fr} .pipe{grid-template-columns:1fr;gap:8px}
   .col{min-height:0} .caption{bottom:14%}
 }
@@ -214,6 +234,11 @@ body{font-family:var(--ui);color:var(--white);
 <body>
 <div class="stage" id="stage">
   <div class="brandtag">Rico — Launch Film</div>
+  <div class="cuts" id="cuts" aria-label="Choose a cut">
+    <button data-cut="a" class="on">Cinematic</button>
+    <button data-cut="b">Footage</button>
+    <button data-cut="c">Bold</button>
+  </div>
 
   <!-- SCENE 1 · shot_1 -->
   <section class="scene" data-src="shot_1.mp4">
@@ -375,6 +400,24 @@ body{font-family:var(--ui);color:var(--white);
 (function(){
   "use strict";
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* Higgsfield-generated clips (Wan/Kling · kling3_0_turbo, 16:9 720p).
+     Keyed by the scene's data-src. To self-host for production, download each
+     mp4 into /explainer/ and set the value back to e.g. 'shot_1.mp4' (or clear
+     the map entirely — the loader falls back to the data-src filename). */
+  var HF = 'https://d8j0ntlcm91z4.cloudfront.net/user_3GOb8y64tsMZUlHSHxmAMNWu7Lg/';
+  var CLIPS = {
+    'shot_1.mp4': HF+'hf_20260712_091201_b5aa2ee8-887c-4e13-a154-12a2d38ffeb5.mp4',
+    'shot_2.mp4': HF+'hf_20260712_091541_68a6e004-0062-45fc-8c35-6e8b211a67e1.mp4',
+    'shot_3.mp4': HF+'hf_20260712_091216_df0753b5-366e-4ed7-b73f-a110d1f55d52.mp4',
+    'shot_4.mp4': HF+'hf_20260712_091542_b3019043-aced-456f-b91f-cf74a479cfbb.mp4',
+    'shot_5.mp4': HF+'hf_20260712_091544_3056b801-cf32-4465-ae57-85710d672fc4.mp4',
+    'shot_6.mp4': HF+'hf_20260712_091545_0181f6cd-a4d6-4937-913b-9a401b642d85.mp4',
+    'shot_7.mp4': HF+'hf_20260712_091547_cb3eecc0-d303-4e96-8393-60dc78bd7208.mp4',
+    'shot_8.mp4': HF+'hf_20260712_091549_2b56ff8f-5210-456d-a3bb-a45582828f46.mp4',
+    'shot_9.mp4': HF+'hf_20260712_091205_33edf128-c833-4628-8465-f77c7f3ca14b.mp4',
+    'shot_10.mp4':HF+'hf_20260712_091551_bac304b6-7409-43ae-9e80-44513b971962.mp4'
+  };
   var scenes = Array.prototype.slice.call(document.querySelectorAll('.scene'));
   // durations (ms) — sum to 60s
   var DUR = [5000,4000,9000,9000,9000,5000,4000,7000,4000,4000];
@@ -403,7 +446,8 @@ body{font-family:var(--ui);color:var(--white);
   // Attach a video lazily to a scene's media (only when it becomes active)
   function ensureVideo(sc){
     if(sc.dataset.vtried) return; sc.dataset.vtried='1';
-    var src = sc.getAttribute('data-src'); if(!src) return;
+    var key = sc.getAttribute('data-src'); if(!key) return;
+    var src = CLIPS[key] || key;
     var v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.setAttribute('playsinline',''); v.loop = true; v.preload='auto';
     v.src = src;
@@ -475,6 +519,15 @@ body{font-family:var(--ui);color:var(--white);
       requestAnimationFrame(loop);
     })();
   }
+
+  // Creative cut switcher (same clips, different treatment).
+  var cutsEl=document.getElementById('cuts');
+  document.body.classList.add('cut-a');
+  cutsEl.addEventListener('click',function(e){
+    var btn=e.target.closest('button'); if(!btn)return;
+    document.body.className='cut-'+btn.dataset.cut;
+    [].forEach.call(cutsEl.children,function(x){x.classList.toggle('on',x===btn);});
+  });
 
   // Go.
   sceneStart=performance.now();
