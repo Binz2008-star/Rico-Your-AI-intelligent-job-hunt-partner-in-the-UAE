@@ -87,14 +87,35 @@
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
   gap: clamp(36px, 7vw, 96px);
-  align-items: center;
+  align-items: start;
   width: min(1180px, calc(100% - 40px));
   margin: auto;
-  padding: clamp(56px, 9vw, 112px) 0;
+  padding: clamp(40px, 6vw, 84px) 0;
 }
 
 .atelier .atl-waitlist-copy {
   max-width: 700px;
+}
+
+/* Launch film embedded inside the hero — capped so the copy and the form
+   both stay in the first screen on desktop (no giant empty banner). */
+.atelier .atl-waitlist-film {
+  width: 100%;
+  max-width: 560px;
+  aspect-ratio: 16 / 9;
+  margin: 0 0 30px;
+  border: 1px solid var(--rule);
+  border-radius: var(--atl-radius);
+  overflow: hidden;
+  background: #070709;
+  box-shadow: 0 20px 60px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.atelier .atl-waitlist-film iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 .atelier .atl-waitlist-eyebrow {
@@ -283,6 +304,12 @@
 
   .atelier .atl-waitlist-copy ul {
     grid-template-columns: 1fr;
+  }
+
+  /* Stacked layout: film goes full width above the copy and form. */
+  .atelier .atl-waitlist-film {
+    max-width: 100%;
+    margin-inline: auto;
   }
 }
 

@@ -12,7 +12,10 @@ const backendUrl =
 // inline scripts that vary per build; full enforcement requires nonce-based CSP
 // via Next.js middleware — flip to Content-Security-Policy once that is wired up.
 // To update hashes: python3 -c "import hashlib,base64; print('sha256-' + base64.b64encode(hashlib.sha256('<script content>'.encode()).digest()).decode())"
-const csp = [
+// frameAncestors: 'none' for the app (it is never framed); 'self' for
+// /explainer/* so the launch film can be embedded same-origin inside the
+// waitlist landing. Everything else in the policy is identical.
+const buildCsp = (frameAncestors) => [
     "default-src 'self'",
     // theme-init hash: sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=
     // lang-init hash:  sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=
@@ -21,10 +24,12 @@ const csp = [
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
     "connect-src 'self' https://rico-job-automation-api.onrender.com https://vitals.vercel-insights.com",
-    "frame-ancestors 'none'",
+    `frame-ancestors ${frameAncestors}`,
     "object-src 'none'",
     "base-uri 'self'",
 ].join("; ");
+const csp = buildCsp("'none'");
+const cspExplainer = buildCsp("'self'");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -43,19 +48,35 @@ const nextConfig = {
     },
 
     async headers() {
+        // Shared protections applied to every route (framing headers added per-scope below).
+        const sharedHeaders = [
+            { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+            { key: "X-Content-Type-Options", value: "nosniff" },
+            { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+            { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+            // Explicit scoped ACAO overrides any platform-level wildcard; same-origin BFF calls don't need CORS.
+            { key: "Access-Control-Allow-Origin", value: "https://ricohunt.com" },
+            { key: "Vary", value: "Origin" },
+        ];
         return [
             {
-                source: "/(.*)",
+                // The whole app EXCEPT the launch-film static files → deny all framing.
+                source: "/((?!explainer/).*)",
                 headers: [
-                    { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+                    ...sharedHeaders,
                     { key: "X-Frame-Options", value: "DENY" },
-                    { key: "X-Content-Type-Options", value: "nosniff" },
-                    { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-                    { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
-                    // Explicit scoped ACAO overrides any platform-level wildcard; same-origin BFF calls don't need CORS.
-                    { key: "Access-Control-Allow-Origin", value: "https://ricohunt.com" },
-                    { key: "Vary", value: "Origin" },
                     { key: "Content-Security-Policy-Report-Only", value: csp },
+                ],
+            },
+            {
+                // Launch-film files are embedded same-origin inside the waitlist
+                // landing (<iframe>). Allow ONLY same-origin framing; every other
+                // protection stays identical. Does not weaken the rest of the site.
+                source: "/explainer/:path*",
+                headers: [
+                    ...sharedHeaders,
+                    { key: "X-Frame-Options", value: "SAMEORIGIN" },
+                    { key: "Content-Security-Policy-Report-Only", value: cspExplainer },
                 ],
             },
         ];

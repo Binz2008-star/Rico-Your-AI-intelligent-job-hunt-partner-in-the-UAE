@@ -440,7 +440,7 @@ body.cut-c .sub{font-size:clamp(1.1rem,2vw,1.6rem)} body.cut-c .kicker::before{d
   });
 
   // ── Skip / CTA → registration ────────────────────────────────────
-  function goRegister(e){ if(e)e.preventDefault(); try{ clearTimeout(hop); }catch(_){} window.location.href = REGISTER_URL; }
+  function goRegister(e){ if(e)e.preventDefault(); try{ clearTimeout(hop); }catch(_){} if(window.top!==window.self){ try{ window.parent.postMessage('rico:waitlist','*'); }catch(_){} return; } window.location.href = REGISTER_URL; }
   document.getElementById('skip').addEventListener('click', goRegister);
   document.getElementById('join').addEventListener('click', goRegister);
 

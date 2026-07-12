@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import Link from "next/link";
 import { WaitlistForm } from "./WaitlistForm";
@@ -45,6 +46,22 @@ const COPY = {
 export function WaitlistLanding() {
   const { language, setLanguage } = useLanguage();
   const copy = COPY[language];
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  // The embedded launch film posts "rico:waitlist" (its CTA/Skip) instead of
+  // navigating away to /signup; bring the on-page waitlist form into view.
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.data !== "rico:waitlist") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      panel.scrollIntoView({ behavior: "smooth", block: "center" });
+      const email = panel.querySelector<HTMLInputElement>('input[type="email"]');
+      if (email) window.setTimeout(() => email.focus(), 400);
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   return (
     <main className="atelier atl-waitlist" dir={language === "ar" ? "rtl" : "ltr"}>
@@ -65,25 +82,16 @@ export function WaitlistLanding() {
         </nav>
       </header>
 
-      <section className="atl-waitlist-film" aria-label="Rico launch film">
-        <iframe
-          src="/explainer/index.html"
-          title="Rico — Launch Film"
-          loading="lazy"
-          allow="autoplay; fullscreen"
-          style={{
-            width: "100%",
-            aspectRatio: "16 / 9",
-            border: 0,
-            borderRadius: "14px",
-            display: "block",
-            background: "#070709",
-          }}
-        />
-      </section>
-
       <section className="atl-waitlist-main">
         <div className="atl-waitlist-copy">
+          <div className="atl-waitlist-film" aria-label="Rico launch film">
+            <iframe
+              src="/explainer/index.html"
+              title="Rico — Launch Film"
+              loading="lazy"
+              allow="autoplay; fullscreen"
+            />
+          </div>
           <p className="atl-waitlist-eyebrow">{copy.eyebrow}</p>
           <h1>{copy.title}</h1>
           <p className="atl-waitlist-lead">{copy.body}</p>
@@ -97,7 +105,7 @@ export function WaitlistLanding() {
           </ul>
         </div>
 
-        <aside className="atl-waitlist-panel" aria-label="Early access">
+        <aside className="atl-waitlist-panel" aria-label="Early access" ref={panelRef}>
           <WaitlistForm />
           <p className="atl-waitlist-note">{copy.note}</p>
         </aside>
