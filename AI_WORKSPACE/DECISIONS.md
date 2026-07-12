@@ -28,6 +28,41 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260712-001 — Launch film: 3D cuts, random entry, /signup CTA
+
+Status: accepted
+Date: 2026-07-12
+Owner: Roben Edwan (Binz2008-star) / Claude
+Related: PR #996, branch `claude/design-refinement-theming-6889tz`
+
+#### Context
+Rico needs a public launch film to drive signups from LinkedIn. Options 1/2
+(footage) existed; the owner wanted a richer, premium "3D" alternative and a
+single entry that showcases variety on every visit.
+
+#### Decision
+- Added two self-contained cuts in `apps/web/public/explainer/`: **option-3**
+  ("Dimensional", pure-CSS 3D holographic) and **option-3b** ("Remix",
+  footage-forward), both with 4 Higgsfield plates composited behind the 3D.
+- Refined + linguistically reviewed the bilingual EN/عربي copy ("a model of
+  you / conclusions not suggestions / certainty takes time") in option-2/3/3b.
+- **CTA "Start the conversation" → `https://ricohunt.com/signup`** on
+  option-2/3/3b. **Option 1 stays frozen** (old copy + Jotform waitlist).
+- Logo lockup fixed (R is a gold badge, not a bare "R Rico").
+- `/explainer/` entry now **redirects to a random cut** (option-2/3/3b) on each
+  visit; manual chooser preserved at `/explainer/choose.html`.
+- Device pass: lazy-loaded video plates, responsive constellation/tags/stack.
+
+#### Consequences
+- Positive: premium, on-brand, self-contained films; consistent messaging +
+  signup funnel; variety per visit for social sharing.
+- Trade-off: plates point at the Higgsfield CDN (public but not permanent) —
+  should be self-hosted before heavy traffic.
+
+#### Follow-up
+- [ ] Self-host the 4 Higgsfield plates into `/explainer/` and swap URLs.
+- [ ] Merge PR #996 so the film is live at `ricohunt.com/explainer/`.
+
 ### DEC-20260710-004 — `/onboarding` is the real authenticated first-run setup flow (supersedes "chat is the app" routing for `/onboarding` only)
 
 Status: accepted
