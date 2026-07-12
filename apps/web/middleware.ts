@@ -7,7 +7,8 @@ import type { NextRequest } from 'next/server'
  * While the product is still under development, the public should see ONLY the
  * launch film (teaser) at /explainer — not the unfinished app. This middleware
  * redirects every page route to the teaser, while keeping the doors people need
- * (the film itself, sign-up / sign-in, password reset) open.
+ * (the film itself, sign-up / sign-in, email verification, password reset, and
+ * legal pages) open.
  *
  * Teaser mode is ON by default. To open the full site to the public later, set
  *   NEXT_PUBLIC_SITE_LIVE=true
@@ -25,8 +26,11 @@ const ALLOW = [
   '/explainer',        // the teaser film itself
   '/signup',           // capture new users
   '/login',
+  '/verify-email',     // verification links from signup emails must remain usable
   '/forgot-password',
   '/reset-password',
+  '/privacy',
+  '/terms',
 ]
 
 export function middleware(req: NextRequest) {
