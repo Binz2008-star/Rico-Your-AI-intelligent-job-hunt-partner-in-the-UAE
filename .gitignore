@@ -133,3 +133,6 @@ test_results.json
 qa_destruction_report.txt
 bandit_out.json
 .env.locust
+
+CHATGPT_SKILLS.md
+rico-ai-pitch-deck.pptx
