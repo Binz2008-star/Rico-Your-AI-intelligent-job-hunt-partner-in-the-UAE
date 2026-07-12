@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rico — 60-Second Launch Explainer</title>
+<meta name="description" content="Rico — UAE AI job-search automation. 60-second self-playing launch explainer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   RICO — 60s launch explainer · self-playing assembler
+   Brand: near-black · gold #C9A84C · teal #01696f · warm white
+   Type:  Instrument Serif (display) · Inter (UI)
+   Drops in: shot_1.mp4 … shot_10.mp4 beside this file.
+   Renders a testable animated placeholder until the clips exist.
+   Pure vanilla — no libraries. Animates transform/opacity only.
+   ═══════════════════════════════════════════════════════════════════ */
+:root{
+  --ink:#08080a; --ink-2:#101014; --surface:#141418;
+  --gold:#C9A84C; --gold-hi:#e7d193; --gold-deep:#9a7f31;
+  --teal:#01696f; --teal-hi:#12a3ab;
+  --white:#f4efe6; --muted:rgba(244,239,230,.60); --faint:rgba(244,239,230,.34);
+  --hair:rgba(201,168,76,.16);
+  --serif:"Instrument Serif",Georgia,serif;
+  --ui:"Inter",system-ui,sans-serif;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--ink);overflow:hidden}
+body{font-family:var(--ui);color:var(--white);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+.stage{position:fixed;inset:0;overflow:hidden;background:var(--ink)}
+
+/* ── Scene layers ────────────────────────────────────────────────── */
+.scene{position:absolute;inset:0;opacity:0;visibility:hidden;
+  transform:scale(1.04);
+  transition:opacity .6s ease, transform 1.2s ease, visibility 0s .6s;
+  will-change:opacity,transform}
+.scene.active{opacity:1;visibility:visible;transform:scale(1);
+  transition:opacity .6s ease, transform 6s linear}
+
+/* media: placeholder behind, video fades in on top when it loads */
+.media{position:absolute;inset:0;overflow:hidden}
+.media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  opacity:0;transition:opacity .8s ease;will-change:opacity}
+.media video.ready{opacity:1}
+.placeholder{position:absolute;inset:0;
+  background:radial-gradient(120% 120% at 30% 20%, #1a1712 0%, #0b0b0e 55%, #060608 100%)}
+/* label parked near the top so it never collides with centred UI/captions */
+.placeholder .plabel{position:absolute;top:9%;left:0;right:0;text-align:center;
+  font-family:var(--ui);font-size:.62rem;letter-spacing:.34em;
+  text-transform:uppercase;color:var(--faint);line-height:1.9;opacity:.7}
+.placeholder .plabel b{display:block;font-family:var(--serif);font-size:1.5rem;
+  letter-spacing:.02em;color:rgba(201,168,76,.4);text-transform:none;margin-bottom:.15rem}
+
+/* ── Cinematic depth: drifting gradient mesh blobs ───────────────── */
+.fx{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+.blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.10;
+  will-change:transform;animation:drift 22s ease-in-out infinite}
+.blob.g{background:radial-gradient(circle,var(--gold),transparent 68%)}
+.blob.t{background:radial-gradient(circle,var(--teal-hi),transparent 68%);animation-duration:28s;animation-direction:reverse}
+.blob.w{background:radial-gradient(circle,#ffe9c2,transparent 70%);opacity:.06;animation-duration:34s}
+@keyframes drift{
+  0%{transform:translate(0,0) scale(1)}
+  33%{transform:translate(6vw,-5vh) scale(1.12)}
+  66%{transform:translate(-4vw,4vh) scale(.92)}
+  100%{transform:translate(0,0) scale(1)}
+}
+
+/* grain + vignette shared over everything */
+.stage::before{content:'';position:absolute;inset:0;z-index:6;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity:.03;mix-blend-mode:overlay}
+.stage::after{content:'';position:absolute;inset:0;z-index:6;pointer-events:none;
+  background:radial-gradient(ellipse at center, transparent 42%, rgba(0,0,0,.72) 100%)}
+
+/* ── Captions ────────────────────────────────────────────────────── */
+.caption{position:absolute;z-index:4;left:0;right:0;bottom:11%;
+  padding:0 clamp(1.6rem,7vw,7rem);pointer-events:none}
+.caption.center{top:0;bottom:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center}
+.kicker{font-family:var(--ui);font-size:clamp(.62rem,1vw,.74rem);font-weight:600;
+  letter-spacing:.32em;text-transform:uppercase;color:var(--gold);margin-bottom:1rem;
+  display:inline-flex;align-items:center;gap:.7rem}
+.kicker::before{content:'';width:2.2rem;height:1px;background:var(--gold);opacity:.7}
+.caption.center .kicker::before{display:none}
+.headline{font-family:var(--serif);font-weight:400;line-height:1.02;letter-spacing:.005em;
+  font-size:clamp(2.4rem,6.4vw,5.6rem);max-width:18ch}
+.caption.center .headline{max-width:20ch}
+.headline .it{font-style:italic}
+.headline .gold{color:var(--gold)}
+.sub{font-family:var(--ui);font-weight:400;font-size:clamp(1rem,1.7vw,1.4rem);
+  color:var(--muted);margin-top:1.1rem;max-width:42ch;line-height:1.5}
+.caption.center .sub{margin-left:auto;margin-right:auto}
+
+/* word-stagger reveal */
+.w{display:inline-block;opacity:0;transform:translateY(20px);will-change:transform,opacity}
+.scene.active .w{animation:wordin .5s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes wordin{to{opacity:1;transform:none}}
+
+/* ── UI mockup overlays (scenes 3–6) ─────────────────────────────── */
+.ui{position:absolute;z-index:3;inset:0;pointer-events:none}
+/* base panel = grid/flex item (in-flow); hub & letter opt into absolute below */
+.ui .panel{opacity:0;transform:translateY(26px) scale(.98);
+  will-change:transform,opacity}
+.scene.active .ui .panel{animation:springin .7s cubic-bezier(.18,.9,.24,1.05) forwards}
+@keyframes springin{to{opacity:1;transform:none}}
+.card{background:rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(201,168,76,.15);border-radius:16px;
+  box-shadow:0 24px 60px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06)}
+.pill{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--ui);font-weight:600;
+  font-size:.72rem;letter-spacing:.02em;padding:.3rem .7rem;border-radius:999px}
+.pill.teal{background:rgba(1,105,111,.22);color:#7fe3e8;border:1px solid rgba(18,163,171,.4)}
+.pill.gold{background:rgba(201,168,76,.14);color:var(--gold-hi);border:1px solid rgba(201,168,76,.4)}
+.metric{font-family:var(--serif);color:var(--gold);letter-spacing:.01em}
+.jt{font-family:var(--ui);font-weight:600;font-size:.92rem;color:var(--white)}
+.jm{font-family:var(--ui);font-weight:400;font-size:.74rem;color:var(--muted);margin-top:.15rem}
+
+/* scene 3 — orbiting skill tags */
+.orbit{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(70vw,560px);height:min(70vw,560px)}
+.orbit .hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(40vw,260px);padding:1.3rem 1.5rem;text-align:center}
+.orbit .hub .metric{font-size:1.7rem;display:block}
+.tag{position:absolute;top:50%;left:50%;font-family:var(--ui);font-weight:600;font-size:.8rem;
+  padding:.4rem .85rem;border-radius:999px;white-space:nowrap;
+  background:rgba(20,20,24,.7);backdrop-filter:blur(8px);
+  border:1px solid var(--hair);color:var(--white);
+  opacity:0;will-change:transform,opacity}
+.scene.active .tag{animation:tagin .6s cubic-bezier(.2,.7,.2,1) forwards, floaty 7s ease-in-out infinite}
+@keyframes tagin{to{opacity:1}}
+@keyframes floaty{0%,100%{margin-top:0}50%{margin-top:-8px}}
+
+/* scene 4 — match grid */
+.grid{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;
+  width:min(86vw,680px)}
+.grid .card{padding:1rem 1.15rem;display:flex;flex-direction:column;gap:.5rem}
+.ring{--p:0;position:relative;width:52px;height:52px;flex-shrink:0;border-radius:50%;
+  background:conic-gradient(var(--gold) calc(var(--p)*1%), rgba(255,255,255,.08) 0);
+  display:grid;place-items:center}
+.ring::before{content:'';position:absolute;inset:5px;border-radius:50%;background:#0e0e12}
+.ring span{position:relative;font-family:var(--ui);font-weight:700;font-size:.72rem;color:var(--gold-hi)}
+.grid .row{display:flex;align-items:center;gap:.8rem}
+
+/* scene 5 — cover letter writing */
+.letter{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(84vw,560px);padding:1.6rem 1.8rem}
+.line{height:9px;border-radius:5px;background:linear-gradient(90deg,rgba(244,239,230,.5),rgba(244,239,230,.12));
+  margin:.7rem 0;width:0;will-change:width}
+.scene.active .letter .line{animation:type .5s steps(24) forwards}
+@keyframes type{to{width:var(--w,90%)}}
+.timerbar{margin-top:1.4rem}
+.timerbar .track{height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
+.timerbar .fill{height:100%;width:0;background:linear-gradient(90deg,var(--gold-deep),var(--gold),var(--gold-hi));
+  box-shadow:0 0 16px rgba(201,168,76,.5);will-change:width}
+.scene.active .timerbar .fill{animation:fillbar 4.4s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes fillbar{to{width:100%}}
+
+/* scene 6 — pipeline columns */
+.pipe{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:min(90vw,780px)}
+.col{padding:1rem;min-height:190px}
+.col h4{font-family:var(--ui);font-weight:600;font-size:.7rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--gold);margin-bottom:.9rem}
+.col .pill{margin-bottom:.55rem;width:100%}
+
+/* ── CTA (scene 7) ───────────────────────────────────────────────── */
+.cta{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;gap:1.1rem;pointer-events:none}
+.wordmark{display:flex;align-items:center;gap:.7rem;opacity:0;transform:translateY(16px)}
+.scene.active .wordmark{animation:wordin .8s cubic-bezier(.2,.7,.2,1) .2s forwards}
+.wordmark svg{width:clamp(46px,7vw,74px);height:auto;filter:drop-shadow(0 0 22px rgba(201,168,76,.4));
+  animation:glowpulse 3.4s ease-in-out infinite}
+@keyframes glowpulse{0%,100%{filter:drop-shadow(0 0 18px rgba(201,168,76,.32))}
+  50%{filter:drop-shadow(0 0 34px rgba(201,168,76,.62))}}
+.wordmark .name{font-family:var(--serif);font-size:clamp(2.6rem,7vw,4.6rem);
+  background:linear-gradient(120deg,var(--gold),#fff5e0,var(--gold));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:.01em}
+.cta .big{font-family:var(--serif);font-size:clamp(1.8rem,4.6vw,3.4rem);
+  background:linear-gradient(100deg,var(--gold-hi),#fbf3df 60%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.cta .muted{font-family:var(--ui);font-weight:400;font-size:clamp(.85rem,1.5vw,1.1rem);
+  color:var(--muted);letter-spacing:.02em}
+.cta .big,.cta .muted{opacity:0;transform:translateY(14px);will-change:transform,opacity}
+.scene.active .cta .big{animation:wordin .8s cubic-bezier(.2,.7,.2,1) .5s forwards}
+.scene.active .cta .muted{animation:wordin .8s cubic-bezier(.2,.7,.2,1) .85s forwards}
+#particles{position:absolute;inset:0;z-index:2;pointer-events:none}
+
+/* ── Global progress bar ─────────────────────────────────────────── */
+.progress{position:fixed;left:0;bottom:0;height:2px;width:0;z-index:10;
+  background:linear-gradient(90deg,var(--gold-deep),var(--gold),var(--gold-hi));
+  box-shadow:0 0 10px rgba(201,168,76,.6);will-change:width}
+
+/* replay affordance (appears when finished if not looping) */
+.brandtag{position:fixed;top:1.4rem;left:clamp(1.2rem,4vw,3rem);z-index:9;
+  font-family:var(--ui);font-weight:600;font-size:.66rem;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--faint)}
+
+@media (max-width:640px){
+  .grid{grid-template-columns:1fr} .pipe{grid-template-columns:1fr;gap:8px}
+  .col{min-height:0} .caption{bottom:14%}
+}
+@media (prefers-reduced-motion:reduce){
+  .blob{animation:none} .tag{animation:tagin .3s forwards!important}
+  .scene.active .w{animation-duration:.2s}
+  .scene.active{transition:opacity .4s ease}
+  .headline .w,.sub .w{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="brandtag">Rico — Launch Film</div>
+
+  <!-- SCENE 1 · shot_1 -->
+  <section class="scene" data-src="shot_1.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 01 · shot_1.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:46vw;height:46vw;top:-12%;left:-8%"></span><span class="blob w" style="width:30vw;height:30vw;bottom:-10%;right:0"></span></div>
+    <div class="caption">
+      <span class="kicker" data-txt="01 — Late in Dubai"></span>
+      <h2 class="headline" data-txt="Another night. No callbacks."></h2>
+      <p class="sub" data-txt="Hundreds of tabs. A search that never sleeps."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 1b · shot_2 -->
+  <section class="scene" data-src="shot_2.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 01 · shot_2.mp4</div></div></div>
+    <div class="fx"><span class="blob t" style="width:40vw;height:40vw;top:20%;right:-10%"></span></div>
+    <div class="caption">
+      <h2 class="headline" data-txt="The search runs your life."></h2>
+      <p class="sub" data-txt="It should be the other way around."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 2 · shot_3 -->
+  <section class="scene" data-src="shot_3.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 02 · shot_3.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:44vw;height:44vw;top:-14%;right:-6%"></span><span class="blob t" style="width:34vw;height:34vw;bottom:-12%;left:-8%"></span></div>
+    <div class="caption center">
+      <span class="kicker" data-txt="02 — Meet Rico"></span>
+      <h2 class="headline gold" data-txt="Meet Rico."></h2>
+      <p class="sub" data-txt="Your AI career partner, built for the UAE."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 3 · shot_4 · CV upload + orbiting skill tags -->
+  <section class="scene" data-src="shot_4.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 03 · shot_4.mp4</div></div></div>
+    <div class="fx"><span class="blob t" style="width:42vw;height:42vw;top:-10%;left:-6%"></span><span class="blob g" style="width:30vw;height:30vw;bottom:-8%;right:-6%"></span></div>
+    <div class="ui">
+      <div class="orbit">
+        <div class="panel card hub" style="animation-delay:.05s"><span class="metric">CV read</span><span class="jm" style="margin-top:.3rem">Skills · languages · experience</span></div>
+        <span class="tag" style="transform:translate(-190%,-260%);animation-delay:.30s">Finance</span>
+        <span class="tag" style="transform:translate(120%,-230%);animation-delay:.42s">Arabic</span>
+        <span class="tag" style="transform:translate(-250%,60%);animation-delay:.54s">React</span>
+        <span class="tag" style="transform:translate(215%,150%);animation-delay:.66s">5 years exp</span>
+        <span class="tag" style="transform:translate(-70%,260%);animation-delay:.78s">DIFC-ready</span>
+      </div>
+    </div>
+    <div class="caption">
+      <span class="kicker" data-txt="03 — Understands you"></span>
+      <h2 class="headline" data-txt="It reads your CV."></h2>
+      <p class="sub" data-txt="Every skill, language, and year — understood."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 4 · shot_5 · job match grid -->
+  <section class="scene" data-src="shot_5.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 04 · shot_5.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:40vw;height:40vw;top:-12%;right:-8%"></span></div>
+    <div class="ui">
+      <div class="grid">
+        <div class="panel card" style="animation-delay:.15s"><div class="row"><div class="ring" data-p="87"><span>87%</span></div><div><div class="jt">Senior Financial Analyst</div><div class="jm">Dubai · Banking</div></div></div><span class="pill teal">Strong match</span></div>
+        <div class="panel card" style="animation-delay:.28s"><div class="row"><div class="ring" data-p="81"><span>81%</span></div><div><div class="jt">Product Manager</div><div class="jm">Abu Dhabi · Fintech</div></div></div><span class="pill teal">Strong match</span></div>
+        <div class="panel card" style="animation-delay:.41s"><div class="row"><div class="ring" data-p="74"><span>74%</span></div><div><div class="jt">UX Designer</div><div class="jm">DIFC · Product</div></div></div><span class="pill gold">Worth a look</span></div>
+        <div class="panel card" style="animation-delay:.54s"><div class="row"><div class="ring" data-p="69"><span>69%</span></div><div><div class="jt">Data Analyst</div><div class="jm">Sharjah · Retail</div></div></div><span class="pill gold">Worth a look</span></div>
+      </div>
+    </div>
+    <div class="caption">
+      <span class="kicker" data-txt="04 — Finds your fit"></span>
+      <h2 class="headline" data-txt="Then finds your fit."></h2>
+      <p class="sub" data-txt="Only strong matches ever surface."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 5 · shot_6 · auto-apply, letter writing -->
+  <section class="scene" data-src="shot_6.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 05 · shot_6.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:38vw;height:38vw;top:-8%;left:-6%"></span><span class="blob t" style="width:30vw;height:30vw;bottom:-10%;right:-4%"></span></div>
+    <div class="ui">
+      <div class="panel card letter" style="animation-delay:.1s">
+        <span class="pill gold" style="margin-bottom:1rem">Drafting cover letter</span>
+        <div class="line" style="--w:96%;animation-delay:.30s"></div>
+        <div class="line" style="--w:88%;animation-delay:.55s"></div>
+        <div class="line" style="--w:92%;animation-delay:.80s"></div>
+        <div class="line" style="--w:70%;animation-delay:1.05s"></div>
+      </div>
+    </div>
+    <div class="caption">
+      <span class="kicker" data-txt="05 — Applies for you"></span>
+      <h2 class="headline" data-txt="It applies for you."></h2>
+      <p class="sub" data-txt="Honest, tailored — never invented."></p>
+    </div>
+  </section>
+
+  <!-- SCENE 5b · shot_7 · timer / tally -->
+  <section class="scene" data-src="shot_7.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 05 · shot_7.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:42vw;height:42vw;top:10%;left:50%"></span></div>
+    <div class="ui">
+      <div class="panel card letter" style="text-align:center;animation-delay:.1s">
+        <div class="metric" style="font-size:clamp(2.6rem,7vw,4.4rem);line-height:1"><span id="count">0</span> applications</div>
+        <div class="jm" style="font-size:1rem;margin-top:.4rem">sent in <span style="color:var(--gold-hi)">4 min 17 sec</span></div>
+        <div class="timerbar"><div class="track"><div class="fill"></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 6 · shot_8 · pipeline -->
+  <section class="scene" data-src="shot_8.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 06 · shot_8.mp4</div></div></div>
+    <div class="fx"><span class="blob t" style="width:44vw;height:44vw;top:-12%;left:-8%"></span></div>
+    <div class="ui">
+      <div class="pipe">
+        <div class="panel card col" style="animation-delay:.15s"><h4>Applied</h4>
+          <span class="pill teal">Senior Financial Analyst</span><span class="pill teal">Data Analyst</span><span class="pill teal">UX Designer</span></div>
+        <div class="panel card col" style="animation-delay:.30s"><h4>Viewed</h4>
+          <span class="pill teal">Product Manager</span><span class="pill teal">Growth Lead</span></div>
+        <div class="panel card col" style="animation-delay:.45s"><h4>Interview</h4>
+          <span class="pill gold">Senior Financial Analyst</span></div>
+      </div>
+    </div>
+    <div class="caption center" style="bottom:auto;top:12%;justify-content:flex-start">
+      <span class="kicker" data-txt="06 — Tracks everything"></span>
+      <h2 class="headline" data-txt="Your career, on autopilot."></h2>
+    </div>
+  </section>
+
+  <!-- SCENE 7 · shot_9 · cityscape -->
+  <section class="scene" data-src="shot_9.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 07 · shot_9.mp4</div></div></div>
+    <div class="fx"><span class="blob g" style="width:60vw;height:40vw;bottom:-14%;left:-6%;opacity:.14"></span><span class="blob t" style="width:40vw;height:30vw;top:-10%;right:-6%"></span></div>
+    <div class="caption center">
+      <h2 class="headline" data-txt="A whole market, ~ quietly working for you."></h2>
+    </div>
+  </section>
+
+  <!-- SCENE 7b · shot_10 · CTA / wordmark -->
+  <section class="scene" data-src="shot_10.mp4">
+    <div class="media"><div class="placeholder"><div class="plabel"><b>Rico</b>Scene 07 · shot_10.mp4</div></div></div>
+    <canvas id="particles"></canvas>
+    <div class="cta">
+      <div class="wordmark">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#e7d193"/><stop offset=".5" stop-color="#C9A84C"/><stop offset="1" stop-color="#9a7f31"/>
+          </linearGradient></defs>
+          <path fill="url(#rg)" d="M11 8h13.5C31 8 35.4 11.7 35.4 17.4c0 4.4-2.5 7.6-6.7 9l7 11.6h-7.6l-6-10.4H16.6V38H11Zm5.6 6.2v8.1h6.7c2.6 0 4.3-1.6 4.3-4.1 0-2.5-1.7-4-4.3-4Z"/>
+        </svg>
+        <span class="name">Rico</span>
+      </div>
+      <div class="big">Be first in the UAE.</div>
+      <div class="muted">Join the waitlist — launching soon.</div>
+    </div>
+  </section>
+
+</div>
+<div class="progress" id="progress"></div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var scenes = Array.prototype.slice.call(document.querySelectorAll('.scene'));
+  // durations (ms) — sum to 60s
+  var DUR = [5000,4000,9000,9000,9000,5000,4000,7000,4000,4000];
+  var TOTAL = DUR.reduce(function(a,b){return a+b;},0);
+  var OFFSET = []; (function(){var s=0;for(var i=0;i<DUR.length;i++){OFFSET.push(s);s+=DUR[i];}})();
+  var idx = -1, sceneStart = 0, hop = null;
+  var progressEl = document.getElementById('progress');
+
+  // Split [data-txt] into staggered word spans (80ms each).
+  // Plain text only. Token "~" becomes a line break (kept out of the stagger).
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function buildWords(el){
+    if(el.dataset.built) return; el.dataset.built = '1';
+    var words = (el.getAttribute('data-txt') || '').split(' ');
+    var out = '', wi = 0;
+    words.forEach(function(tok){
+      if(tok === '') return;
+      if(tok === '~'){ out += '<br>'; return; }
+      out += '<span class="w" style="animation-delay:'+(wi*0.08)+'s">'+esc(tok)+'</span> ';
+      wi++;
+    });
+    el.innerHTML = out.trim();
+  }
+  scenes.forEach(function(sc){ sc.querySelectorAll('[data-txt]').forEach(buildWords); });
+
+  // Attach a video lazily to a scene's media (only when it becomes active)
+  function ensureVideo(sc){
+    if(sc.dataset.vtried) return; sc.dataset.vtried='1';
+    var src = sc.getAttribute('data-src'); if(!src) return;
+    var v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.setAttribute('playsinline',''); v.loop = true; v.preload='auto';
+    v.src = src;
+    v.addEventListener('loadeddata', function(){ v.classList.add('ready'); });
+    v.addEventListener('error', function(){ /* keep placeholder */ });
+    sc.querySelector('.media').appendChild(v);
+  }
+
+  function ring(sc){
+    sc.querySelectorAll('.ring').forEach(function(r){
+      var p = +r.getAttribute('data-p')||0;
+      r.style.setProperty('--p','0');
+      setTimeout(function(){ r.style.transition='background .9s ease'; r.style.setProperty('--p',p); }, 300);
+    });
+  }
+  function counter(sc){
+    var el = sc.querySelector('#count'); if(!el) return;
+    var target=12,n=0; el.textContent='0';
+    var t=setInterval(function(){ n++; if(n>=target){n=target;clearInterval(t);} el.textContent=n; }, 300);
+  }
+
+  function show(i){
+    if(idx>=0) scenes[idx].classList.remove('active');
+    idx=i; var sc=scenes[i];
+    ensureVideo(sc);
+    // restart word animations by reflow
+    sc.querySelectorAll('.w').forEach(function(w){ w.style.animation='none'; w.offsetHeight; w.style.animation=''; });
+    sc.classList.add('active');
+    var v=sc.querySelector('video'); if(v){ try{ v.currentTime=0; v.play().catch(function(){}); }catch(e){} }
+    ring(sc); counter(sc);
+    if(sc.querySelector('#particles')) startParticles();
+    sceneStart = performance.now();
+  }
+
+  function advance(){
+    var next = idx+1;
+    if(next>=scenes.length){ next=0; } // loop the film
+    show(next);
+    hop = setTimeout(advance, DUR[next]);
+  }
+
+  // progress bar driven by rAF (robust across loops)
+  function tick(){
+    var within = performance.now()-sceneStart;
+    var elapsed = OFFSET[idx] + Math.min(within, DUR[idx]);
+    progressEl.style.width = (100*elapsed/TOTAL).toFixed(2)+'%';
+    requestAnimationFrame(tick);
+  }
+
+  // Particle canvas (CTA scene only)
+  var pStarted=false;
+  function startParticles(){
+    if(pStarted||reduce) return; pStarted=true;
+    var c=document.getElementById('particles'), ctx=c.getContext('2d');
+    function size(){ c.width=c.offsetWidth; c.height=c.offsetHeight; }
+    size(); window.addEventListener('resize', size);
+    var P=Array.from({length:40},function(){return{
+      x:Math.random()*c.width, y:Math.random()*c.height,
+      vx:(Math.random()-.5)*.25, vy:(Math.random()-.5)*.25 - .08,
+      r:Math.random()*1.8+.5, a:Math.random()*.4+.1 };});
+    (function loop(){
+      ctx.clearRect(0,0,c.width,c.height);
+      P.forEach(function(p){
+        p.x+=p.vx; p.y+=p.vy;
+        if(p.y< -5)p.y=c.height+5; if(p.x<0)p.x=c.width; if(p.x>c.width)p.x=0; if(p.y>c.height+5)p.y=-5;
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.283);
+        ctx.fillStyle='rgba(201,168,76,'+p.a+')'; ctx.fill();
+      });
+      requestAnimationFrame(loop);
+    })();
+  }
+
+  // Go.
+  sceneStart=performance.now();
+  show(0);
+  hop=setTimeout(advance, DUR[0]);
+  requestAnimationFrame(tick);
+
+  // Pause/resume when tab hidden (kiosk friendliness)
+  document.addEventListener('visibilitychange', function(){
+    var v=scenes[idx] && scenes[idx].querySelector('video');
+    if(document.hidden){ if(v) v.pause(); }
+    else if(v){ v.play().catch(function(){}); }
+  });
+})();
+</script>
+</body>
+</html>

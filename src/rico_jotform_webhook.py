@@ -129,7 +129,16 @@ def map_jotform_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             "external_user_id": user_id,
             "name": answers.get("full_name") or answers.get("name"),
             "email": answers.get("email"),
-            "phone": answers.get("phone"),
+            # Accept the phone number under any of the field names the Jotform
+            # intake may use. The "Rico AI Quick Start" mobile field is named
+            # `mobileNumber` by the Jotform builder; older/other forms may send
+            # `phone` or `mobile`. Read them all so the number is never dropped.
+            "phone": (
+                answers.get("phone")
+                or answers.get("mobileNumber")
+                or answers.get("mobile_number")
+                or answers.get("mobile")
+            ),
             "telegram_username": answers.get("telegram_username"),
         },
         "profile": {

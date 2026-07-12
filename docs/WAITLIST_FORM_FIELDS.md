@@ -50,23 +50,25 @@ required.
 Confirm/adjust these unique names in the Jotform builder (Field → Properties →
 Advanced → "Unique Name"):
 
-| Question | Webhook key expected | Notes |
-|----------|----------------------|-------|
+| Question | Webhook key expected | Status |
+|----------|----------------------|--------|
 | Email | `email` | ✔ matches |
-| Mobile number (WhatsApp) | `phone` | new field auto-named `mobileNumber` — **rename to `phone`** so it reaches the backend |
+| Mobile number (WhatsApp) | `phone` | ✔ **resolved in backend** — the Jotform builder kept the internal name `mobileNumber`; `rico_jotform_webhook.py` now reads `phone` / `mobileNumber` / `mobile_number` / `mobile`, so the number is captured regardless. A later manual rename to `phone` is optional, not required. |
 | First name | `full_name` (or `name`) | verify |
 | Dream job | `target_roles` | verify |
 | Preferred UAE city | `preferred_cities` | verify |
 
-No backend code was changed in this pass — the alignment above is a small,
-reviewed follow-up (rename one field, verify the rest).
+The phone-number path is complete (41/41 webhook tests pass). The remaining
+rows are a quick verification in the Jotform builder — no code change needed.
 
-## Note on delivery channel
+## Delivery channel — decision (confirmed)
 
-The deck and current backend deliver matches over **Telegram**
-(`notification_router.py`). Collecting a WhatsApp mobile number as first contact
-does **not** change that — Rico can send a Telegram start-link via WhatsApp/email
-during onboarding. If the product intends to move delivery itself to
-WhatsApp/SMS, that is an architectural change (touches the whole notification
-layer) and should be its own reviewed decision — flag it before updating the
-deck's "on Telegram" language.
+- **WhatsApp = first contact only.** The mobile number is how Rico first
+  reaches a person.
+- **Telegram = Rico's operating / delivery channel** (unchanged;
+  `notification_router.py`). Rico sends a Telegram start-link during onboarding.
+
+The deck's "on Telegram" language is therefore **kept as-is**. Moving delivery
+itself to WhatsApp/SMS would be a separate architectural decision touching the
+whole notification layer, and is intentionally *not* done here to avoid implying
+a capability the backend does not yet have.
