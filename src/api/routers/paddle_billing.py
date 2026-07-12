@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -25,23 +26,39 @@ from src.api.deps import get_current_user_id
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/billing", tags=["paddle-billing"])
+payload_router = router  # alias used by tests
+paddle_billing_router = router  # canonical name imported by app.py
+
+_PADDLE_TIMESTAMP_TOLERANCE_SECONDS = 300  # 5 minutes
 
 
 # ---------------------------------------------------------------------------
 # Signature verification
 # ---------------------------------------------------------------------------
 
-def _verify_paddle_signature(raw_body: bytes, signature_header: Optional[str]) -> bool:
-    """Verify Paddle-Signature header against raw request body.
+def _verify_paddle_signature(
+    raw_body: bytes,
+    signature_header: Optional[str],
+    *,
+    _test_mode: bool = False,
+) -> bool:
+    """Verify Paddle-Signature header against the exact raw request body.
 
-    Header format: ts=<timestamp>;h1=<hex-hmac>
-    PADDLE_WEBHOOK_SECRET must be set; if absent, verification is skipped
-    (dev/test only — never skip in production).
+    Header format: ts=<unix_seconds>;h1=<hex-hmac-sha256>
+
+    Security guarantees:
+    - PADDLE_WEBHOOK_SECRET missing → FAIL CLOSED (returns False).
+      Exception: _test_mode=True skips the check (unit tests only).
+    - Timestamp must be within _PADDLE_TIMESTAMP_TOLERANCE_SECONDS of now.
+    - HMAC is computed over "<ts>:<raw_body>" as specified by Paddle.
+    - Comparison uses hmac.compare_digest to prevent timing attacks.
     """
     secret = os.getenv("PADDLE_WEBHOOK_SECRET", "").strip()
     if not secret:
-        logger.warning("paddle_sig_skip: PADDLE_WEBHOOK_SECRET not set — skipping verification")
-        return True
+        if _test_mode:
+            return True
+        logger.error("paddle_sig_fail: PADDLE_WEBHOOK_SECRET not configured — rejecting webhook")
+        return False
 
     if not signature_header:
         return False
@@ -51,13 +68,24 @@ def _verify_paddle_signature(raw_body: bytes, signature_header: Optional[str]) -
     if not ts_match or not h1_match:
         return False
 
-    ts = ts_match.group(1)
+    ts_str = ts_match.group(1)
     received_hmac = h1_match.group(1)
 
-    signed_payload = f"{ts}:{raw_body.decode('utf-8', errors='replace')}"
+    # Timestamp freshness check — prevents replay attacks
+    try:
+        ts_int = int(ts_str)
+    except ValueError:
+        return False
+    age = abs(int(time.time()) - ts_int)
+    if age > _PADDLE_TIMESTAMP_TOLERANCE_SECONDS:
+        logger.warning("paddle_sig_stale ts=%s age=%ds", ts_str, age)
+        return False
+
+    # HMAC is over "<ts>:<raw_body>" — use raw bytes, not decoded string
+    signed_payload = ts_str.encode("utf-8") + b":" + raw_body
     expected = hmac.new(
         secret.encode("utf-8"),
-        signed_payload.encode("utf-8"),
+        signed_payload,
         hashlib.sha256,
     ).hexdigest()
 
@@ -102,15 +130,18 @@ async def paddle_webhook(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "reason": "missing_event_id_or_type"}, status_code=200)
 
     try:
-        from src.db import get_db_connection as _get_conn
         import sys
         db_module = sys.modules.get("src.db") or __import__("src.db", fromlist=["get_db_connection"])
     except Exception:
         db_module = None
 
     if db_module is None:
-        logger.error("paddle_webhook_no_db event_id=%s", event_id)
-        return JSONResponse({"ok": False, "reason": "db_unavailable"}, status_code=200)
+        logger.error("paddle_webhook_no_db event_id=%s — returning 503 so Paddle will retry", event_id)
+        # Return 503 (not 200) — Paddle will retry, preserving durability
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        )
 
     from src.services.paddle_webhook_service import process_paddle_webhook
 
@@ -227,7 +258,15 @@ async def customer_portal(user_id: str = Depends(get_current_user_id)) -> Dict[s
             detail="No active Paddle subscription found",
         )
 
+    paddle_customer_id = row.get("paddle_customer_id")
     sub_id = row["paddle_subscription_id"]
+
+    if not paddle_customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No Paddle customer record found",
+        )
+
     sandbox = os.getenv("PADDLE_SANDBOX", "true").strip().lower() != "false"
     base_url = (
         "https://sandbox-api.paddle.com"
@@ -238,9 +277,11 @@ async def customer_portal(user_id: str = Depends(get_current_user_id)) -> Dict[s
     try:
         import urllib.request
 
-        req_body = json.dumps({"subscription_id": sub_id}).encode("utf-8")
+        # Correct Paddle API: POST /customers/{customer_id}/portal-sessions
+        # body: {"subscription_ids": ["sub_..."]}
+        req_body = json.dumps({"subscription_ids": [sub_id]}).encode("utf-8")
         req = urllib.request.Request(
-            f"{base_url}/customers/portal-sessions",
+            f"{base_url}/customers/{paddle_customer_id}/portal-sessions",
             data=req_body,
             headers={
                 "Authorization": f"Bearer {api_key}",
