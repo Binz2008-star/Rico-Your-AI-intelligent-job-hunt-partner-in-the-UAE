@@ -28,7 +28,7 @@ h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.6rem,7vw,5rem);lin
   background:linear-gradient(120deg,var(--gold),#fff5e0,var(--gold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .tag{color:var(--muted);font-size:clamp(.95rem,1.6vw,1.15rem);margin-top:1rem;line-height:1.6}
 .tag .ar{font-family:"Amiri",var(--serif);opacity:.85}
-.cards{display:grid;grid-template-columns:1fr 1fr;gap:clamp(.9rem,2vw,1.4rem);margin-top:clamp(2rem,5vw,3.4rem)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:clamp(.9rem,2vw,1.4rem);margin-top:clamp(2rem,5vw,3.4rem)}
 .card{position:relative;display:flex;flex-direction:column;text-align:left;text-decoration:none;color:inherit;
   background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
   border:1px solid var(--hair);border-radius:20px;padding:clamp(1.3rem,2.6vw,1.9rem);
@@ -46,9 +46,10 @@ h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.6rem,7vw,5rem);lin
   letter-spacing:.16em;text-transform:uppercase;padding:.28rem .6rem;border-radius:999px}
 .card .status.live{background:rgba(1,105,111,.22);color:#7fe3e8;border:1px solid rgba(18,163,171,.4)}
 .card .status.draft{background:rgba(201,168,76,.14);color:var(--gold-hi);border:1px solid rgba(201,168,76,.4)}
+.card .status.new{background:linear-gradient(135deg,rgba(201,168,76,.2),rgba(18,163,171,.2));color:var(--gold-hi);border:1px solid rgba(201,168,76,.5)}
 .card.two{border-style:dashed}
 .foot{margin-top:clamp(1.6rem,4vw,2.6rem);font-family:var(--ui);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
-@media (max-width:620px){.cards{grid-template-columns:1fr}}
+@media (max-width:540px){.cards{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -72,6 +73,22 @@ h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.6rem,7vw,5rem);lin
       <span class="lab">Option 2 · الخيار ٢</span>
       <h2>The next revision</h2>
       <p>A twin of Option 1, held open for the next round of changes. This is where new slogans, text, and ideas land before they're locked.</p>
+      <span class="go">Preview <span class="arw">→</span></span>
+    </a>
+    <a class="card two" href="option-3.html">
+      <span class="status new">New</span>
+      <span class="num">03</span>
+      <span class="lab">Option 3 · الخيار ٣</span>
+      <h2>The dimensional cut</h2>
+      <p>A pure 3D take — now with cinematic Higgsfield plates behind the holograms. Rico as a living model: an orbiting constellation, text that flies out of depth, a cursor-driven camera. From Claude, to Rico.</p>
+      <span class="go">Preview <span class="arw">→</span></span>
+    </a>
+    <a class="card two" href="option-3b.html">
+      <span class="status new">Remix</span>
+      <span class="num">3B</span>
+      <span class="lab">Option 3B · ريمكس</span>
+      <h2>The remix</h2>
+      <p>Same 3D system, footage-forward: the Higgsfield plates pushed up front, faster cuts, bolder type, the model as a signature accent. A punchier sibling of Option 3.</p>
       <span class="go">Preview <span class="arw">→</span></span>
     </a>
   </div>
