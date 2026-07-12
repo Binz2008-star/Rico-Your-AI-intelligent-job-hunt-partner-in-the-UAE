@@ -9,8 +9,13 @@ import os
 
 
 def is_manual_billing_mode() -> bool:
-    return os.getenv("BILLING_MODE", "manual").strip().lower() != "stripe"
+    mode = os.getenv("BILLING_MODE", "manual").strip().lower()
+    return mode not in ("stripe", "paddle")
 
 
 def is_stripe_billing_mode() -> bool:
     return os.getenv("BILLING_MODE", "manual").strip().lower() == "stripe"
+
+
+def is_paddle_billing_mode() -> bool:
+    return os.getenv("BILLING_MODE", "manual").strip().lower() == "paddle"

@@ -158,6 +158,8 @@ class TestPaddleWebhookIdempotency(unittest.TestCase):
 class TestPaddleSubscriptionLifecycle(unittest.TestCase):
     def _run(self, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         from src.services.paddle_webhook_service import process_paddle_webhook
+        import src.services.paddle_webhook_service as pws
+        pws._PRICE_TO_PLAN.clear()
 
         with patch("src.repositories.paddle_repo.paddle_event_already_processed", return_value=False), \
              patch("src.repositories.paddle_repo.record_paddle_webhook_event", return_value=True), \
@@ -182,7 +184,7 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
         payload = _build_sub_payload(event_type="subscription.created")
         result = self._run("subscription.created", payload)
         self.assertEqual(result["status"], "processed")
-        self.assertEqual(result["plan"], "pro")
+        self.assertEqual(result.get("plan"), "pro")
 
     def test_subscription_updated_processed(self):
         payload = _build_sub_payload(event_id="evt_u1", event_type="subscription.updated")
@@ -201,7 +203,8 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
             price_id="pri_prem_monthly",
         )
         result = self._run("subscription.created", payload)
-        self.assertEqual(result["plan"], "premium")
+        self.assertEqual(result["status"], "processed")
+        self.assertEqual(result.get("plan"), "premium")
 
     def test_yearly_billing_cycle(self):
         payload = _build_sub_payload(

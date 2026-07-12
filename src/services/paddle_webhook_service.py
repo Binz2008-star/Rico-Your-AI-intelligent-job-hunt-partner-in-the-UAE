@@ -181,7 +181,7 @@ def _handle_subscription_created(
         "paddle_subscription_created user_id=%s plan=%s status=%s",
         user_id, plan, rico_status,
     )
-    return {"user_id": user_id, "plan": plan, "status": rico_status}
+    return {"user_id": user_id, "plan": plan, "subscription_status": rico_status}
 
 
 def _handle_subscription_updated(
@@ -243,7 +243,7 @@ def _handle_subscription_updated(
         "paddle_subscription_updated user_id=%s plan=%s status=%s",
         user_id, plan, rico_status,
     )
-    return {"user_id": user_id, "plan": plan, "status": rico_status}
+    return {"user_id": user_id, "plan": plan, "subscription_status": rico_status}
 
 
 def _handle_subscription_canceled(
@@ -282,7 +282,7 @@ def _handle_subscription_canceled(
         canceled_at=canceled_at,
     )
     logger.info("paddle_subscription_canceled user_id=%s sub_id=%s", user_id, sub_id)
-    return {"user_id": user_id, "status": "canceled"}
+    return {"user_id": user_id, "subscription_status": "canceled"}
 
 
 def _handle_transaction_completed(
