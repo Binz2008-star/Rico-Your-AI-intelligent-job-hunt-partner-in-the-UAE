@@ -36,11 +36,5 @@ export default defineConfig({
     command: "npm run dev",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
-    // E2E exercises the real application, so the dev server must run with the
-    // pre-launch teaser gate OFF. Otherwise `/` redirects to `/explainer`
-    // (which 404s under `next dev`), the webServer readiness probe on `/` never
-    // succeeds, and Playwright times out before a single test runs.
-    timeout: 120_000,
-    env: { NEXT_PUBLIC_SITE_LIVE: "true" },
   },
 });
