@@ -85,7 +85,9 @@ describe("/settings auth guard", () => {
     asGuest();
     render(<SettingsPage />);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fsettings"));
-    expect(screen.queryByTestId("app-shell")).toBeNull();
+    // /settings uses the WorkspaceShell (Shell C); its <main> landmark stands in
+    // for "private shell rendered". The neutral loader renders no <main>.
+    expect(screen.queryByRole("main")).toBeNull();
     expect(getSettings).not.toHaveBeenCalled();
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
@@ -94,7 +96,7 @@ describe("/settings auth guard", () => {
     asChecking();
     render(<SettingsPage />);
     expect(screen.getByRole("status")).toBeInTheDocument();
-    expect(screen.queryByTestId("app-shell")).toBeNull();
+    expect(screen.queryByRole("main")).toBeNull();
     expect(getSettings).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
   });
@@ -102,7 +104,7 @@ describe("/settings auth guard", () => {
   it("renders the page and loads settings for an authenticated user", async () => {
     asAuthed();
     render(<SettingsPage />);
-    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    expect(screen.getByRole("main")).toBeInTheDocument();
     await waitFor(() => expect(getSettings).toHaveBeenCalled());
     expect(replace).not.toHaveBeenCalled();
   });

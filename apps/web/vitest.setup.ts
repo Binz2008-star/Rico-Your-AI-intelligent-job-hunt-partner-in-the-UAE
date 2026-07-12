@@ -1,6 +1,30 @@
 import "@testing-library/jest-dom";
 import { vi } from "vitest";
 
+// next/font/google is a build-time transform Next applies; under vitest the
+// font factories (Fraunces, Inter, …) are undefined and calling them throws
+// "X is not a function". Any component in the tree that loads a font — e.g.
+// WorkspaceShell via atelier-kit/fonts, reached by the /settings and
+// /dashboard pages — would crash at import. Stub every named font export with
+// a factory returning the shape next/font produces (className / variable /
+// style).
+vi.mock("next/font/google", () => {
+  const font = () => ({
+    className: "font-mock",
+    variable: "--font-mock",
+    style: { fontFamily: "mock" },
+  });
+  return {
+    Amiri: font,
+    Fraunces: font,
+    IBM_Plex_Mono: font,
+    IBM_Plex_Sans: font,
+    IBM_Plex_Sans_Arabic: font,
+    Inter: font,
+    Space_Grotesk: font,
+  };
+});
+
 // Default next/navigation mock so any component under test that calls
 // useRouter/usePathname/useSearchParams/useParams doesn't crash with
 // "invariant expected app router to be mounted" when a test doesn't render

@@ -23,6 +23,11 @@ export const translations = {
     // Settings
     settings: "Settings",
     settingsSubtitle: "Account, preferences, and integrations",
+    preferencesTitle: "Preferences.",
+    settingsTabPreferences: "Preferences",
+    settingsTabDanger: "Danger zone",
+    displayName: "Display name",
+    dangerZoneDescription: "Sign out of your Rico session on this device.",
     appearance: "Appearance",
     theme: "Theme",
     themeDescription: "Choose your preferred color scheme",
@@ -1180,6 +1185,11 @@ export const translations = {
     // Settings
     settings: "الإعدادات",
     settingsSubtitle: "الحساب، التفضيلات، والتكاملات",
+    preferencesTitle: "التفضيلات.",
+    settingsTabPreferences: "التفضيلات",
+    settingsTabDanger: "منطقة الخطر",
+    displayName: "الاسم المعروض",
+    dangerZoneDescription: "تسجيل الخروج من جلسة ريكو على هذا الجهاز.",
     appearance: "المظهر",
     theme: "السمة",
     themeDescription: "اختر نظام الألوان المفضل لديك",
