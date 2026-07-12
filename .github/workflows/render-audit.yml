@@ -29,7 +29,9 @@ jobs:
           print("Total services:", len(data))
           for item in data:
               s = item.get("service", item)
-              print(" ", s.get("id"), "|", s.get("name"), "| type=" + str(s.get("type")), "| plan=" + str(s.get("plan")), "| suspended=" + str(s.get("suspended")))
+              sd = s.get("serviceDetails", {}) or {}
+              is_suspended = s.get("suspended") == "suspended"
+              print(" ", s.get("id"), "|", s.get("name"), "| type=" + str(s.get("type")), "| plan=" + str(sd.get("plan")), "| suspended=" + str(is_suspended))
           PYEOF
 
       - name: 2. Service details -- rico-job-automation-api
@@ -70,20 +72,21 @@ jobs:
               print("Raw response:", raw[:500])
               sys.exit(0)
           s = data.get("service", data)
-          sd = s.get("serviceDetails", {})
+          sd = s.get("serviceDetails", {}) or {}
           print("Name:        ", s.get("name"))
           print("Type:        ", s.get("type"))
-          print("Plan:        ", s.get("plan"))
-          status_str = "suspended (idle — wakes on request)" if s.get("suspended") else "active"
+          print("Plan:        ", sd.get("plan", "N/A"))
+          is_suspended = s.get("suspended") == "suspended"
+          status_str = "suspended (idle — wakes on request)" if is_suspended else "active"
           print("Status:      ", status_str)
           with open("/tmp/svc_status.txt", "w") as sf:
               sf.write(status_str)
           print("Service URL: ", sd.get("url", "N/A"))
           print("PR previews: ", sd.get("pullRequestPreviewsEnabled", "N/A"))
-          print("Branch:      ", sd.get("branch", "N/A"))
-          repo = s.get("repo", {})
-          print("Repo:        ", repo.get("name", "N/A") if isinstance(repo, dict) else str(repo))
-          print("Region:      ", s.get("region", "N/A"))
+          print("Branch:      ", s.get("branch", "N/A"))
+          repo = s.get("repo", "N/A")
+          print("Repo:        ", repo if isinstance(repo, str) else repo.get("name", "N/A"))
+          print("Region:      ", sd.get("region", "N/A"))
           print("Created:     ", s.get("createdAt", "N/A"))
           print("Updated:     ", s.get("updatedAt", "N/A"))
           PYEOF
@@ -126,8 +129,6 @@ jobs:
           for k in critical:
               status = "PRESENT" if k in keys else "MISSING"
               print(" ", k + ":", status)
-          print("")
-          print("All keys:", keys)
           PYEOF
 
       - name: 4. Recent deploys (last 5)
@@ -262,7 +263,7 @@ jobs:
                   data = json.load(f)
               for item in data:
                   o = item.get("owner", item)
-                  print("Owner:", o.get("name"), "| type=" + str(o.get("type")), "| email=" + str(o.get("email", "N/A")), "| id=" + str(o.get("id")))
+                  print("Owner:", o.get("name"), "| type=" + str(o.get("type")), "| id=" + str(o.get("id")))
           except Exception as e:
               print("Could not parse owners response:", e)
           PYEOF

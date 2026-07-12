@@ -24,11 +24,14 @@ If any source disagrees, stop and report the conflict. Do not guess from chat hi
 ## Current execution lock
 
 ```text
-Only active runtime implementation: #969 / #960
-Exact CV/document duplicate protection + atomic idempotency.
+No active runtime implementation. #963 is merged and production-VERIFIED
+(owner-confirmed authenticated smoke, 2026-07-11); #962 (safe login return
+path) is merged as #981; the subscription gating identity-key invariant is
+locked by test #982. `main` is at `60978ae…`.
 
-Next after merge/deploy/migration verification: #963
-Persist confirmed onboarding CV + hydrate profile.
+Next objective, not started (owner selects one): the approved per-route design
+migration, or the remaining auth-guard routes. Start on a fresh branch from
+updated `main` after its design/audit gate.
 
 All other runtime/design/agentic work is paused unless the owner changes
 AI_WORKSPACE/PROJECT_STATUS.md.

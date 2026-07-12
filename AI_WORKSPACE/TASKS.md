@@ -197,32 +197,33 @@ guest. No backend/JWT/cookie/logout change; `/command` stays public; `/onboardin
 
 > **Binding sequence (recorded 2026-07-11; do not reorder):**
 > `#960` → `#963` → owner production smoke → onboarding PARTIAL becomes **VERIFIED**.
-> `#962` is a **separate, later** increment under the current priority order (not part of the
-> onboarding persistence work). None of #960/#962/#963 is started yet.
+> `#960` is merged and production-smoke verified via #969. `#963` is merged via #975 and its
+> authenticated production smoke is **owner-confirmed PASS (2026-07-11)** — onboarding is now
+> **VERIFIED**. `#962` remains a separate later increment and is the next objective.
 
 ### TASK-20260711-002 — Exact CV duplicate protection and idempotency
 
-Status: proposed/scoped (not started)
-Owner: unassigned
-Branch: TBD
-Issue/PR: #960
+Status: done (merged as #969; production-smoke verified)
+Owner: Claude / owner release verification
+Branch: merged
+Issue/PR: #960 / #969
 
 #### Objective
 Server-side exact-duplicate detection, atomic idempotency, quota safety, and primary-CV
 invariants for CV uploads. Foundation only — **no onboarding wiring in this task**.
 
 #### Acceptance criteria
-- [ ] server-side exact-duplicate detection for CV uploads
-- [ ] atomic idempotency (safe under retries/concurrent submits)
-- [ ] quota safety and primary-CV invariants preserved
-- [ ] no onboarding-confirmation wiring here (that is TASK-20260711-003)
+- [x] server-side exact-duplicate detection for CV uploads
+- [x] atomic idempotency (safe under retries/concurrent submits)
+- [x] quota safety and primary-CV invariants preserved
+- [x] no onboarding-confirmation wiring here (implemented separately by TASK-20260711-003)
 
 ### TASK-20260711-003 — Persist confirmed onboarding CV and hydrate extracted fields
 
-Status: blocked on #960 (not started)
-Owner: unassigned
-Branch: TBD
-Issue/PR: #963
+Status: done (merged as #975; authenticated production smoke owner-confirmed PASS 2026-07-11)
+Owner: Claude / owner authenticated smoke
+Branch: merged as `241b85d…`
+Issue/PR: #963 / #975
 
 #### Objective
 Wire the final onboarding confirmation to the canonical persistence path **after** the exact
@@ -231,17 +232,17 @@ and extracted years / current role / target roles hydrate into the profile. This
 onboarding out of PARTIAL.
 
 #### Acceptance criteria
-- [ ] onboarding confirmation persists the CV via the canonical path (built on #960)
-- [ ] extracted years/current-role/target-roles hydrate into the profile
-- [ ] final-submit persistence + logout→login completion smoke pass with a verified account
-- [ ] then owner production smoke → lift onboarding status PARTIAL → VERIFIED in the handoff
+- [x] onboarding confirmation persists the CV via the canonical path (built on #960)
+- [x] extracted years/current-role/target-roles require durable Neon persistence; failures return non-2xx and retry is idempotent
+- [x] final-submit persistence + logout→login completion smoke pass with a verified account (owner-confirmed 2026-07-11)
+- [x] owner production smoke → onboarding status lifted PARTIAL → VERIFIED
 
 ### TASK-20260711-004 — Consume validated login return path (`next`)
 
-Status: proposed (not started)
-Owner: unassigned
-Branch: TBD
-Issue/PR: #962
+Status: done (merged as #981; CI green, Vercel READY)
+Owner: Claude
+Branch: merged as `c7aea42…`
+Issue/PR: #962 / #981
 
 #### Objective
 Independent auth-UX follow-up: make the login success handler safely consume the validated
@@ -250,39 +251,61 @@ does not yet honor it). **Not part of the onboarding persistence work** — a se
 increment under the current priority order.
 
 #### Acceptance criteria
-- [ ] login honors a validated internal `next` (rejects external/`//`/non-`/` per
+- [x] login honors a validated internal `next` (rejects external/`//`/non-`/` per
   `lib/redirect.ts::resolveNextPath`) and returns the guest to the original page
-- [ ] no open-redirect; no change to onboarding-status-based routing when `next` is absent
+- [x] no open-redirect; no change to onboarding-status-based routing when `next` is absent
+
+#### Verification
+- vitest `login-onboarding-routing.test.tsx`: 7 passed (valid `next` honored, open-redirect
+  ignored, onboarding-priority preserved for incomplete users)
+- `npm run build` green; CI green (pytest/frontend/Playwright/Postgres); Vercel READY
+
+### TASK-20260711-006 — Subscription gating identity-key invariant + audit follow-ups
+
+Status: partial (test locked via #982; two follow-ups open for owner triage)
+Owner: Claude / owner triage
+Branch: merged as `60978ae…`
+Issue/PR: #982
+
+#### Objective
+Harden the per-account subscription/plan gating surfaced by an owner question ("is plan
+activation per account, per package?"). Confirmed: gating is per-account, package-driven,
+active-and-not-expired gated, and not special-cased per account.
+
+#### Done
+- [x] Locked the identity-key invariant with tests: plan gating must key on the account email
+  (`resolve_effective_user_plan` looks up by the stored email verbatim; a non-email identity
+  silently degrades to FREE). Invariant holds at all current authenticated call sites.
+
+#### Open follow-ups (each its own scoped PR when picked up)
+- [ ] Per-user entitlement override columns (`monthly_ai_message_limit`, …) are read by
+  `get_subscription`/`upsert_subscription` but **ignored** by `resolve_effective_user_plan`
+  (documented as reserved). Either apply them or remove them to avoid a silent trap.
+- [ ] `count_saved_jobs` fallback counts rows with no `user_id` toward a specific user's quota
+  (data-isolation smell; only triggers when the primary repo read fails).
 
 ### TASK-20260710-006 — P2: frontend build gate + frontend test visibility baseline (Phase 3 gate)
 
-Status: in_progress (was "fix vitest next/navigation router-mock baseline" — retitled
-2026-07-10 after PR #942; **not done** — vitest is still informational-only, not a
-blocking gate; see TASK-20260710-008 for the residual-failure follow-up that must land
-before this can close)
-Owner: unassigned
-Branch: `claude/career-terminology-audit-ojq1xl`
-Issue/PR: #942 (draft, not merged — CI green, held for owner review per explicit
-instruction not to auto-merge)
+Status: done (completed by TASK-20260710-008 B1–B5)
+Owner: Claude / owner sign-off on B3/B4
+Branch: merged follow-up sequence
+Issue/PR: follow-up to #942; see TASK-20260710-008
 
 #### Objective
 19 pre-existing vitest failures across 9 files sit in exactly the surfaces Phase 3 reskins
 (signup/auth/chat/landing/profile/signals). PR #942 fixed the shared `next/navigation`/
 `LanguageProvider` test-crash class (test-config only, no component changes): baseline
-went from 302 passed/19 failed to 309 passed/12 failed. `npm run build` was added to CI as
-a **required/blocking** gate (passes). `npm run test` (vitest) was added to CI as
-**informational only** (`continue-on-error: true`) — it is **not** a blocking gate yet,
-because 12 tests still fail for reasons that need an owner product-code or product-copy
-decision (see TASK-20260710-008). Do not describe this task as "frontend tests gated" —
-only the build is gated so far.
+went from 302 passed/19 failed to 309 passed/12 failed. The residual sequence in
+TASK-20260710-008 then reached 320/0 and promoted both `npm run build` and `npm run test`
+(Vitest) to required CI gates.
 
 #### Acceptance criteria
 - [x] Shared `next/navigation`/`LanguageProvider` test-crash class fixed via test-config
       only — no `apps/web` component/runtime changes (verified: diff is
       `vitest.setup.ts` + 2 test files + CI workflow + docs only).
 - [x] `npm run build` wired into CI as a required, currently-green gate.
-- [ ] `npm run test` (vitest) promoted from informational to a required/blocking gate —
-      blocked on TASK-20260710-008 (12 residual failures need owner decisions first).
+- [x] `npm run test` (vitest) promoted from informational to a required/blocking gate via
+      TASK-20260710-008 B1–B5.
 
 ### TASK-20260710-007 — P2: authenticated production smoke path for agent sessions (Phase 3 gate)
 

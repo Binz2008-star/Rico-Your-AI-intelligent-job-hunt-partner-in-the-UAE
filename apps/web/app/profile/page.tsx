@@ -1,7 +1,8 @@
 "use client";
 
-import { AppShell } from "@/components/layout/AppShell";
 import { AuthGate } from "@/components/auth/AuthGate";
+import { AppShell } from "@/components/layout/AppShell";
+import { ProfileAtelier } from "@/components/profile/ProfileAtelier";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
@@ -421,19 +422,19 @@ type ProfileField = {
 
 function buildFields(profile: ProfileResponse): ProfileField[] {
     return [
-        { key: "name",                 labelKey: "name",               filled: !!profile.name?.trim() },
-        { key: "phone",                labelKey: "profilePhone",        filled: !!profile.phone?.trim() },
-        { key: "current_role",         labelKey: "profileCurrentRole",  filled: !!profile.current_role?.trim() },
-        { key: "current_company",      labelKey: "profileCurrentCompany", filled: !!profile.current_company?.trim() },
-        { key: "linkedin_url",         labelKey: "profileLinkedin",     filled: !!profile.linkedin_url?.trim() },
-        { key: "visa_status",          labelKey: "profileVisa",         filled: !!profile.visa_status?.trim() },
-        { key: "notice_period",        labelKey: "profileNotice",       filled: !!profile.notice_period?.trim() },
-        { key: "telegram_username",    labelKey: "telegram",            filled: !!profile.telegram_username?.trim() },
-        { key: "target_roles",         labelKey: "profileTargetRoles",  filled: (profile.target_roles?.length ?? 0) > 0 },
-        { key: "preferred_cities",     labelKey: "profileCities",       filled: (profile.preferred_cities?.length ?? 0) > 0 },
+        { key: "name", labelKey: "name", filled: !!profile.name?.trim() },
+        { key: "phone", labelKey: "profilePhone", filled: !!profile.phone?.trim() },
+        { key: "current_role", labelKey: "profileCurrentRole", filled: !!profile.current_role?.trim() },
+        { key: "current_company", labelKey: "profileCurrentCompany", filled: !!profile.current_company?.trim() },
+        { key: "linkedin_url", labelKey: "profileLinkedin", filled: !!profile.linkedin_url?.trim() },
+        { key: "visa_status", labelKey: "profileVisa", filled: !!profile.visa_status?.trim() },
+        { key: "notice_period", labelKey: "profileNotice", filled: !!profile.notice_period?.trim() },
+        { key: "telegram_username", labelKey: "telegram", filled: !!profile.telegram_username?.trim() },
+        { key: "target_roles", labelKey: "profileTargetRoles", filled: (profile.target_roles?.length ?? 0) > 0 },
+        { key: "preferred_cities", labelKey: "profileCities", filled: (profile.preferred_cities?.length ?? 0) > 0 },
         { key: "salary_expectation_aed", labelKey: "profileSalaryTarget", filled: profile.salary_expectation_aed != null },
-        { key: "years_experience",     labelKey: "profileExperience",   filled: profile.years_experience != null },
-        { key: "skills",               labelKey: "profileSkills",       filled: (profile.skills?.length ?? 0) >= 3 },
+        { key: "years_experience", labelKey: "profileExperience", filled: profile.years_experience != null },
+        { key: "skills", labelKey: "profileSkills", filled: (profile.skills?.length ?? 0) >= 3 },
     ];
 }
 
@@ -512,6 +513,7 @@ function ProfileDetail({
     onSaveSalaryTarget,
     onSaveExperience,
     onSaveSkills,
+    onCancel,
 }: {
     profile: ProfileResponse;
     onSaveName: (nextName: string) => Promise<void>;
@@ -528,6 +530,7 @@ function ProfileDetail({
     onSaveSalaryTarget: (nextSalary: string) => Promise<void>;
     onSaveExperience: (nextExperience: string) => Promise<void>;
     onSaveSkills: (nextSkills: string[]) => Promise<void>;
+    onCancel?: () => void;
 }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
@@ -541,6 +544,22 @@ function ProfileDetail({
 
     return (
         <div className="flex w-full flex-col gap-5">
+            {/* Edit-mode header */}
+            {onCancel && (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-overlay/8 bg-surface-elevated/50 p-4 backdrop-blur-sm">
+                    <h1 className="text-lg font-semibold text-text-primary">{t("profileTitle")}</h1>
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        aria-label="Cancel editing"
+                        className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
+                        style={{ cursor: "pointer" }}
+                    >
+                        {t("cancel")}
+                    </button>
+                </div>
+            )}
+
             {/* Profile conflict warnings — shown at top so they're visible without scrolling */}
             <GuardrailWarnings warnings={profile.warnings} language={language} />
 
@@ -714,6 +733,7 @@ export default function ProfilePage() {
     const [profile, setProfile] = useState<ProfileResponse | null>(null);
     const [error, setError] = useState<"auth" | "other" | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isEditing, setIsEditing] = useState(false);
 
     const warnRefreshFail = useCallback(() => {
         toast(t("profileRefreshFailed"), "error");
@@ -989,23 +1009,28 @@ export default function ProfilePage() {
                 )}
 
                 {!loading && !error && profile?.profile_exists && (
-                    <ProfileDetail
-                        profile={profile}
-                        onSaveName={handleSaveName}
-                        onSavePhone={handleSavePhone}
-                        onSaveTelegram={handleSaveTelegram}
-                        onSaveVisa={handleSaveVisa}
-                        onSaveNotice={handleSaveNotice}
-                        onSaveMinSalary={handleSaveMinSalary}
-                        onSaveCurrentCompany={handleSaveCurrentCompany}
-                        onSaveCurrentRole={handleSaveCurrentRole}
-                        onSaveLinkedin={handleSaveLinkedin}
-                        onSaveTargetRoles={handleSaveTargetRoles}
-                        onSaveCities={handleSaveCities}
-                        onSaveSalaryTarget={handleSaveSalaryTarget}
-                        onSaveExperience={handleSaveExperience}
-                        onSaveSkills={handleSaveSkills}
-                    />
+                    isEditing ? (
+                        <ProfileDetail
+                            profile={profile}
+                            onSaveName={handleSaveName}
+                            onSavePhone={handleSavePhone}
+                            onSaveTelegram={handleSaveTelegram}
+                            onSaveVisa={handleSaveVisa}
+                            onSaveNotice={handleSaveNotice}
+                            onSaveMinSalary={handleSaveMinSalary}
+                            onSaveCurrentCompany={handleSaveCurrentCompany}
+                            onSaveCurrentRole={handleSaveCurrentRole}
+                            onSaveLinkedin={handleSaveLinkedin}
+                            onSaveTargetRoles={handleSaveTargetRoles}
+                            onSaveCities={handleSaveCities}
+                            onSaveSalaryTarget={handleSaveSalaryTarget}
+                            onSaveExperience={handleSaveExperience}
+                            onSaveSkills={handleSaveSkills}
+                            onCancel={() => setIsEditing(false)}
+                        />
+                    ) : (
+                        <ProfileAtelier profile={profile} onEdit={() => setIsEditing(true)} />
+                    )
                 )}
             </div>
             <ToastContainer toasts={toasts} />

@@ -12,7 +12,7 @@ import { ApiError } from "@/lib/api";
  * it never re-implements completion rules. These tests pin:
  *   - completed / legacy-complete → /command
  *   - incomplete (even with profile_exists=true) → onboarding UI
- *   - unauthenticated → signup with return path
+ *   - unauthenticated → login (sign-in) with return path
  *   - status failure → recoverable UI (Retry / Continue to Rico), no loop
  *   - skip → /command without a completion mutation
  *   - submit success → /command; submit failure → no success, stays on form
@@ -116,10 +116,12 @@ describe("onboarding completion guard", () => {
     expect(push).not.toHaveBeenCalledWith("/command");
   });
 
-  it("redirects an unauthenticated user to signup with the return path", async () => {
+  it("redirects an unauthenticated user to login (not signup) with the return path", async () => {
     fetchOnboardingStatus.mockRejectedValue(new ApiError("Not authenticated", 401));
     render(<OnboardingPage />);
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/signup?next=%2Fonboarding"));
+    // An already-registered user whose session is missing/expired must land on
+    // sign-IN, not create-account. Matches the upload/submit auth-failure paths.
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fonboarding"));
   });
 
   it("shows a recoverable state on status failure without looping, then Retry recovers", async () => {

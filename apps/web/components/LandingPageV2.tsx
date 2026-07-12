@@ -18,40 +18,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Fraunces } from "next/font/google";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { atelierFraunces as fraunces } from "@/components/atelier-kit/fonts";
+import { ATELIER as C, ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { Mono, Plate } from "@/components/atelier-kit/primitives";
 
-/* Fraunces = the reference serif display, loaded landing-scoped (Inter +
-   IBM Plex Mono are already global via app/layout). No new npm dependency. */
-const fraunces = Fraunces({
-    subsets: ["latin"],
-    weight: ["400", "500", "600"],
-    style: ["normal", "italic"],
-    display: "swap",
-    variable: "--font-fraunces-landing",
-});
-
-/* Reference palette: warm cream paper, near-black ink, one sun-red signal. */
-const C = {
-    bg: "#F1EADD",
-    panel: "#F7F1E6",
-    inset: "#EAE1D0",
-    ink: "#1F1B15",
-    ink70: "rgba(31,27,21,0.70)",
-    ink55: "rgba(31,27,21,0.52)",
-    ink40: "rgba(31,27,21,0.38)",
-    hair: "rgba(31,27,21,0.16)",
-    red: "#C6492E",
-    footer: "#1A1712",
-    footerInk: "#EFE7D6",
-    footerInk60: "rgba(239,231,214,0.60)",
-    footerHair: "rgba(239,231,214,0.20)",
-} as const;
-
-const SERIF = "var(--font-fraunces-landing), Georgia, serif";
-const MONO = "var(--font-mono), ui-monospace, monospace";
-/* Arabic mono/eyebrow fallback: system Arabic via the body stack (no new dep). */
-const BODY = "var(--font-body), ui-sans-serif, system-ui, sans-serif";
+/* Local aliases — kept so the rest of this file (and its inline styles)
+   reads identically to before the PR 0 extraction; values are unchanged. */
+const SERIF = ATELIER_FONT.serif;
+const MONO = ATELIER_FONT.mono;
+const BODY = ATELIER_FONT.body;
 
 /* -------------------------------------------------------------------------- */
 /*  Bilingual content. EN is byte-for-byte the shipped #936/#937/#938 copy;    */
@@ -303,37 +279,6 @@ const LANDING_MOTION_CSS = `
   .lpv2-root .lpv2-caret { opacity:1 !important; }
 }
 `;
-
-/* Mono uppercase editorial label. In Arabic, wide letter-spacing shreds the
-   connected script and the mono face lacks Arabic — so AR labels drop
-   letter-spacing and use the system Arabic (body) fallback. */
-function Mono({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
-    const { language } = useLanguage();
-    const isAr = language === "ar";
-    const base: React.CSSProperties = isAr
-        ? { fontFamily: BODY, fontSize: 11, ...style, letterSpacing: "0" }
-        : { fontFamily: MONO, fontSize: 11, letterSpacing: "0.2em", ...style };
-    return (
-        <span className={`uppercase ${className}`} style={base}>
-            {children}
-        </span>
-    );
-}
-
-/* Corner-tick plate (reference "PLATE 01" frame). */
-function Plate({ className = "", style, children }: { className?: string; style?: React.CSSProperties; children: React.ReactNode }) {
-    const t = "absolute w-2 h-2 pointer-events-none";
-    const b = `1px solid ${C.hair}`;
-    return (
-        <div className={`relative rounded-[4px] ${className}`} style={{ background: C.panel, border: `1px solid ${C.hair}`, ...style }}>
-            <span className={`${t} top-1.5 left-1.5`} style={{ borderTop: b, borderLeft: b }} aria-hidden="true" />
-            <span className={`${t} top-1.5 right-1.5`} style={{ borderTop: b, borderRight: b }} aria-hidden="true" />
-            <span className={`${t} bottom-1.5 left-1.5`} style={{ borderBottom: b, borderLeft: b }} aria-hidden="true" />
-            <span className={`${t} bottom-1.5 right-1.5`} style={{ borderBottom: b, borderRight: b }} aria-hidden="true" />
-            {children}
-        </div>
-    );
-}
 
 function Masthead() {
     const [open, setOpen] = useState(false);

@@ -151,12 +151,22 @@ def send_message(
             _doc_reply.setdefault("response_source", "document_context")
             return _doc_reply
 
-    # ── Guard: public/no-profile sessions must never reach the AI for job-listing
-    # requests — the AI has no search tools in this context and will hallucinate
-    # company names, roles, and requirements from training data.
+    # ── Guard: job-listing requests must never reach a free AI path ───────────
+    # The conversational-AI path has no search tools here and will hallucinate
+    # company names, roles, salaries, and links from training data.
+    #   * Public/no-profile sessions → deterministic sign-up/upload CTA.
+    #   * Authenticated sessions → the real, grounded search path (legacy
+    #     classifier → JSearch), NEVER the AI path. Without this, an explicit job
+    #     request that the open-ended-question gate routes to AI (e.g. a
+    #     question-form request, or one the legacy classifier would treat as
+    #     unknown) could return fabricated listings that are never persisted to
+    #     recent_search_matches — so a later "apply to that one" cannot resolve.
+    # Response contract is unchanged: the legacy path emits the same
+    # type/message/options/matches shape the command surface already consumes.
+    from src.rico.intent.gates import is_explicit_job_listing_request
+    _explicit_job_listing = is_explicit_job_listing_request(message)
     if profile is None and not ctx.can_persist_profile:
-        from src.rico.intent.gates import is_explicit_job_listing_request
-        if is_explicit_job_listing_request(message):
+        if _explicit_job_listing:
             return _public_job_search_cta()
 
     # ── Existing routing unchanged ────────────────────────────────────────────
@@ -166,12 +176,16 @@ def send_message(
         profile_context_present=profile_present,
     )
 
+    # Authenticated users: force an explicit job-listing request onto the real
+    # search path even when the open-ended-question gate would have chosen AI.
+    _force_real_search = _explicit_job_listing and ctx.auth_type == "authenticated"
+
     # When the legacy path is chosen but there is no profile and profile writes are
     # disabled (public/guest session), the legacy classifier loops back to the
     # onboarding welcome on every turn because it can never persist state.
     # Route to conversational AI instead so public users get real responses.
     _force_ai = not decision.should_use_ai and profile is None and not ctx.can_persist_profile
-    if decision.should_use_ai or _force_ai:
+    if (decision.should_use_ai or _force_ai) and not _force_real_search:
         result = _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
     else:
         result = _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)

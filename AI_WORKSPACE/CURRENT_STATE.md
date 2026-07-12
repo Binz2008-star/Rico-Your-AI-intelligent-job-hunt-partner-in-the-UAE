@@ -1,5 +1,41 @@
 # Current State
 
+> **Reconciliation header — 2026-07-11, #962 merged (latest; supersedes all headers below).**
+> `main` HEAD `60978ae…`. Since the header below: **#962** (safe login return path) merged as
+> **#981** (`c7aea42…`) — login honors a validated internal `?next=` via `resolveNextPath`
+> (rejects external/`//`/non-`/`), returns a completed guest to the page they were bounced from,
+> keeps onboarding priority for incomplete users, and leaves routing unchanged when `next` is
+> absent; CI green (pytest/frontend/Playwright/Postgres) and Vercel READY. **#982** (test-only)
+> then locked the subscription **identity-key invariant** — plan gating must key on the account
+> email; the invariant holds at all current authenticated call sites and is now pinned by tests.
+> No runtime objective is in flight. Next objective (owner-selected): the approved per-route
+> design migration, or the remaining auth-guard routes (`/applications`,`/upload`,`/flow`,
+> `/queue`). Two subscription-audit follow-ups remain for owner triage (per-user entitlement
+> override columns are read but ignored; `count_saved_jobs` fallback counts user-less rows).
+> Docs-only sync; no `apps/web`/`src` runtime change in this header.
+>
+> **Reconciliation header — 2026-07-11, #963 VERIFIED (superseded by the header above).**
+> `main` HEAD `feed8c4…` (post-#979 docs reconciliation + #974 CI render-audit fix).
+> The **#963 onboarding CV persistence release is production-VERIFIED**: the owner confirmed
+> the authenticated smoke (upload CV → confirm profile → My Files → logout/login → persisted
+> profile/onboarding state) PASSES, and migration 038 is confirmed. Onboarding is now out of
+> **PARTIAL** and marked **VERIFIED**. The release gate is cleared and the design/workspace queue
+> is released. **No runtime implementation is in flight.** Next single objective: **#962**
+> (safe login return path), to start on a fresh branch from updated `main` after its design/audit
+> gate. `#969`/`#960` remain complete and verified. This header records an owner-confirmed
+> verification and a docs-only sync; no `apps/web`/`src` runtime change.
+>
+> **Reconciliation header — 2026-07-11, post-#975 merge (superseded by the header above).**
+> `main` HEAD `241b85d4c5d74b6afd00f0d4e202e75c4f5a3f8b`: PR **#975** merged after final-head
+> CI passed (pytest, frontend, Playwright, real-Postgres integration). It completes the #963
+> implementation: onboarding confirmation uses a server-scoped, short-lived CV artifact, the
+> canonical hash-aware My Files path, and required durable profile hydration; persistence failure
+> is non-2xx and retry-safe. Vercel production for this exact commit is **READY**. The release is
+> **not yet VERIFIED**: Render `/version` already confirms this commit and `/health` is OK, but
+> migration 038 schema proof plus the authenticated CV → My Files → logout/login smoke still must
+> pass. No new implementation task is active until that release gate
+> is recorded. #962 and the per-route Atelier design migration remain later work.
+>
 > **Reconciliation header — 2026-07-11 (latest; supersedes all headers below).**
 > `main` HEAD `1238ff940b2b11e763f46f31b6f6ec865114cfc2`. Merged + production-deployed since the
 > header below: **#955** (onboarding restoration + Atelier migration + read-only

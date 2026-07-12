@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rico — Launch Film</title>
+<meta name="description" content="Rico — UAE AI career companion. A cinematic launch film.">
+<style>
+  html,body{margin:0;height:100%;background:#070709;color:#C9A84C;
+    font-family:"Instrument Serif",Georgia,serif}
+  .load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:1.4rem;letter-spacing:.02em;opacity:.7}
+  .load span{animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:.9}}
+  a{color:#C9A84C}
+</style>
+<script>
+(function(){
+  /* Use absolute paths because Vercel may serve /explainer without a trailing
+     slash. Relative paths would then resolve to /option-*.html and return 404. */
+  var FILMS = [
+    '/explainer/option-2.html',
+    '/explainer/option-3.html',
+    '/explainer/option-3b.html'
+  ];
+  var pick = FILMS[Math.floor(Math.random()*FILMS.length)];
+  location.replace(pick + location.search + location.hash);
+})();
+</script>
+</head>
+<body>
+  <div class="load"><span>Rico</span></div>
+  <noscript>
+    <div class="load" style="flex-direction:column;gap:1rem">
+      <div>Rico — Launch Film</div>
+      <div style="font-size:1rem">
+        <a href="/explainer/option-2.html">Cut 1</a> ·
+        <a href="/explainer/option-3.html">Cut 2</a> ·
+        <a href="/explainer/option-3b.html">Cut 3</a> ·
+        <a href="/explainer/choose.html">Choose</a>
+      </div>
+    </div>
+  </noscript>
+</body>
+</html>

@@ -5,7 +5,7 @@
 > **Proposed** (not yet built), or **Template**. When you add, rename, retire, or
 > supersede a workspace file, update this index in the same PR.
 >
-> **Last reviewed:** 2026-07-08. "Updated" = last commit date of the file.
+> **Last reviewed:** 2026-07-11. "Updated" = last commit date of the file.
 
 ## Start order (fastest path in)
 
@@ -18,12 +18,12 @@
 
 | Document | Purpose | Status | Owner | Depends on | Updated |
 | --- | --- | --- | --- | --- | --- |
-| `PROJECT_STATUS.md` | One-page dashboard; read first | Active | Release/last-merger | ROADMAP, CURRENT_STATE | 2026-07-08 |
-| `MASTER_INDEX.md` | This index | Active | Whoever adds/retires a doc | all workspace docs | 2026-07-08 |
-| `START_HERE.md` | Session entrypoint + read order | Active | Core | PROJECT_STATUS, MASTER_INDEX, ROADMAP | 2026-07-09 |
-| `ENGINEERING_ROADMAP.md` | Vision→…→releases; phase status (canonical "now") | Active | Owner/Architect | DECISIONS, AUDIT gate | 2026-07-08 |
-| `CURRENT_STATE.md` | Dated state log (newest at top; see reconciliation header) | Active (log) | Release/last-merger | ROADMAP, handoffs | 2026-07-08 |
-| `TASKS.md` | Task ledger | Active | Assignee per task | DECISIONS, EVALS | 2026-07-08 |
+| `PROJECT_STATUS.md` | One-page dashboard; read first | Active | Release/last-merger | ROADMAP, CURRENT_STATE | 2026-07-11 |
+| `MASTER_INDEX.md` | This index | Active | Whoever adds/retires a doc | all workspace docs | 2026-07-11 |
+| `START_HERE.md` | Session entrypoint + read order | Active | Core | PROJECT_STATUS, MASTER_INDEX, ROADMAP | 2026-07-11 |
+| `ENGINEERING_ROADMAP.md` | Vision→…→releases; phase status (canonical "now") | Active | Owner/Architect | DECISIONS, AUDIT gate | 2026-07-11 |
+| `CURRENT_STATE.md` | Dated state log (newest at top; see reconciliation header) | Active (log) | Release/last-merger | ROADMAP, handoffs | 2026-07-11 |
+| `TASKS.md` | Task ledger | Active | Assignee per task | DECISIONS, EVALS | 2026-07-11 |
 | `DECISIONS.md` | Decision log (ADRs — see ADR index below) | Active | Owner/Architect | — (source) | 2026-07-08 |
 
 ## Governance & process — Active
@@ -59,14 +59,16 @@
 | `AUDITS/VERCEL_BUILD_FAILURE_2026_06_28.md` | Root-cause report (resolved) | Historical | 2026-07-08 |
 | `RICO_CODEBASE_INVENTORY_2026_06_21.md` | Point-in-time codebase inventory snapshot | Historical | 2026-07-06 |
 
-## Handoffs (dated records — Historical; newest is the live pointer)
+## Handoffs (dated records — Historical)
 
-Latest first; `START_HERE.md` names the current one. All are Historical (do not
-edit for content); the newest doubles as the current status pointer.
+All handoffs are historical evidence; do not use a dated handoff as the live
+execution lock. `PROJECT_STATUS.md`, then live GitHub/deployment state, own that role.
 
 | Handoff | Status |
 | --- | --- |
-| `HANDOFFS/2026-07-10-fe-vitest-blocking-gate.md` | Latest (current pointer) |
+| `HANDOFFS/2026-07-11-agent-session-coordination.md` | Historical coordination record |
+| `HANDOFFS/2026-07-11-pwa-icon-assets.md` | Historical |
+| `HANDOFFS/2026-07-10-fe-vitest-blocking-gate.md` | Historical |
 | `HANDOFFS/2026-07-10-fe-sidebar-routing-ia.md` | Historical |
 | `HANDOFFS/2026-07-10-fe-chat-action-disabled-reasons.md` | Historical |
 | `HANDOFFS/2026-07-10-fe-green-residual-fixes.md` | Historical |

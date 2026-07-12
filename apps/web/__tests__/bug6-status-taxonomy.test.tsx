@@ -14,13 +14,8 @@
  * status belongs to. Every consumer derives from it instead of redefining
  * its own list.
  */
-import "@testing-library/jest-dom/vitest";
-import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LanguageProvider } from "@/contexts/LanguageContext";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import {
     APPLICATION_STATUSES,
     STAGE_DEFS,
@@ -29,6 +24,11 @@ import {
     type StageKey,
 } from "@/lib/applicationStatus";
 import type { ApplicationStatus } from "@/types";
+import "@testing-library/jest-dom/vitest";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("BUG-6: canonical status taxonomy", () => {
     it("every status belongs to exactly one stage", () => {
@@ -87,9 +87,10 @@ describe("BUG-6: StatusBadge default labels match the canonical taxonomy", () =>
 // per canonical status, then assert list-view labels and board-view column
 // placement agree for every single one.
 
-const { fetchApplicationsMock, getApplicationStatsMock } = vi.hoisted(() => ({
+const { fetchApplicationsMock, getApplicationStatsMock, fetchMeMock } = vi.hoisted(() => ({
     fetchApplicationsMock: vi.fn(),
     getApplicationStatsMock: vi.fn().mockResolvedValue({}),
+    fetchMeMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -123,12 +124,17 @@ vi.mock("@/components/ui/MaterialIcon", () => ({
     MaterialIcon: ({ icon }: { icon: string }) => <span data-icon={icon}>{icon}</span>,
 }));
 
-vi.mock("@/lib/api", () => ({
-    getApplications: fetchApplicationsMock,
-    createManualApplication: vi.fn(),
-    updateApplicationStatus: vi.fn(),
-    getApplicationStats: getApplicationStatsMock,
-}));
+vi.mock("@/lib/api", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/lib/api")>();
+    return {
+        ...actual,
+        fetchMe: fetchMeMock,
+        getApplications: fetchApplicationsMock,
+        createManualApplication: vi.fn(),
+        updateApplicationStatus: vi.fn(),
+        getApplicationStats: getApplicationStatsMock,
+    };
+});
 
 import FlowPage from "@/app/flow/page";
 
@@ -155,6 +161,7 @@ describe("BUG-6: /flow list view and board view classify the same records identi
     beforeEach(() => {
         fetchApplicationsMock.mockReset();
         getApplicationStatsMock.mockReset().mockResolvedValue({});
+        fetchMeMock.mockReset().mockResolvedValue({ authenticated: true, guest: false, email: "test@example.com", role: "user" });
     });
 
     it("every status's list-view badge and board-view column agree on its stage, for all 10 statuses", async () => {

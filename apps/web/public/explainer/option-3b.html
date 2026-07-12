@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rico — Launch Film · Dimensional Remix</title>
+<meta name="description" content="Rico — UAE AI job-search. A 3D holographic launch film. English & العربية.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=Amiri:wght@400;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   RICO — OPTION 3 · "DIMENSIONAL"  ·  a 3D holographic launch film
+   From Claude, to Rico. Self-contained. No build, no deps, no framework.
+   Real CSS 3D: perspective world · cursor-parallax camera · orbiting
+   node-model · text that flies out of depth · receding role stack.
+   Brand: near-black · gold #C9A84C · teal #01696f · warm white.
+   Type:  Instrument Serif + Inter (EN) · Amiri + Noto Sans Arabic (AR).
+   ═══════════════════════════════════════════════════════════════════ */
+:root{
+  --ink:#070709; --ink-2:#0d0d11; --surface:#141419;
+  --gold:#C9A84C; --gold-hi:#e7d193; --gold-deep:#9a7f31;
+  --teal:#01696f; --teal-hi:#12a3ab;
+  --white:#f4efe6; --muted:rgba(244,239,230,.62); --faint:rgba(244,239,230,.32);
+  --hair:rgba(201,168,76,.16);
+  --serif:"Instrument Serif",Georgia,serif;
+  --ui:"Inter",system-ui,sans-serif;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--ink);overflow:hidden}
+body{font-family:var(--ui);color:var(--white);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+/* Arabic typography */
+body.lang-ar{font-family:"Noto Sans Arabic","Inter",sans-serif}
+body.lang-ar .headline,body.lang-ar .big,body.lang-ar .name,body.lang-ar .tag{font-family:"Amiri",var(--serif),serif}
+body.lang-ar em,body.lang-ar .it{font-style:normal}
+body.lang-ar .kicker,body.lang-ar .brandtag,body.lang-ar .sound,body.lang-ar .skip,
+body.lang-ar .lang,body.lang-ar .tag{letter-spacing:normal}
+body.lang-ar .headline{line-height:1.28}
+
+/* ── Starfield (true depth, behind everything) ───────────────────── */
+/* Higgsfield cinematic plates — rendered behind the 3D world */
+.plates{position:fixed;inset:0;z-index:0;overflow:hidden;background:var(--ink)}
+.plate{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;
+  transition:opacity 1.3s ease;will-change:opacity;transform:scale(1.06)}
+.plate.on{opacity:.85}
+.plates::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(7,7,9,.58),rgba(7,7,9,.26) 42%,rgba(7,7,9,.82))}
+#stars{position:fixed;inset:0;z-index:1;display:block}
+.nebula{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:
+    radial-gradient(60% 50% at 26% 24%, rgba(201,168,76,.13), transparent 60%),
+    radial-gradient(55% 55% at 78% 74%, rgba(18,163,171,.12), transparent 62%),
+    radial-gradient(120% 100% at 50% 50%, transparent 42%, rgba(0,0,0,.78) 100%);
+  mix-blend-mode:screen;opacity:.9}
+.grain{position:fixed;inset:0;z-index:7;pointer-events:none;opacity:.035;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.vignette{position:fixed;inset:0;z-index:6;pointer-events:none;
+  background:radial-gradient(ellipse at center, transparent 46%, rgba(0,0,0,.72) 100%)}
+
+/* ── The 3D world ────────────────────────────────────────────────── */
+.world{position:fixed;inset:0;z-index:2;perspective:1300px;perspective-origin:50% 46%}
+.tilt{position:absolute;inset:0;transform-style:preserve-3d;
+  transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+  transition:transform .5s cubic-bezier(.2,.7,.2,1);will-change:transform}
+
+/* ── The model: an orbiting node-constellation (Rico's "mind") ───── */
+.core{position:absolute;top:40%;left:50%;width:0;height:0;transform-style:preserve-3d;
+  opacity:0;transition:opacity 1s ease;will-change:transform,opacity;transform:scale(1)}
+.core.show{opacity:1}
+.core .spin{position:absolute;transform-style:preserve-3d;animation:orbit 30s linear infinite}
+@keyframes orbit{from{transform:rotateX(11deg) rotateY(0)}to{transform:rotateX(11deg) rotateY(360deg)}}
+.node{position:absolute;border-radius:50%;transform:translate3d(var(--x),var(--y),var(--z));
+  background:var(--nc,var(--gold));box-shadow:0 0 10px 1px var(--ng,rgba(201,168,76,.7));will-change:transform}
+.core .glow{position:absolute;top:50%;left:50%;width:220px;height:220px;transform:translate(-50%,-50%);
+  border-radius:50%;background:radial-gradient(circle,rgba(201,168,76,.34),rgba(18,163,171,.10) 45%,transparent 70%);
+  filter:blur(6px);animation:breathe 6s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.9}50%{transform:translate(-50%,-50%) scale(1.14);opacity:1}}
+.core .ring{position:absolute;top:50%;left:50%;border-radius:50%;border:1px solid rgba(201,168,76,.22);
+  transform:translate(-50%,-50%) rotateX(78deg);}
+.core.calm .spin{animation-duration:60s}
+.core.calm .glow{background:radial-gradient(circle,rgba(18,163,171,.30),rgba(201,168,76,.08) 50%,transparent 72%)}
+
+/* ── Scenes ──────────────────────────────────────────────────────── */
+.scene{position:absolute;inset:0;transform-style:preserve-3d;opacity:0;visibility:hidden;
+  transition:opacity .7s ease, visibility 0s .7s;will-change:opacity}
+.scene.active{opacity:1;visibility:visible;transition:opacity .7s ease}
+
+.caption{position:absolute;z-index:4;left:0;right:0;bottom:12%;padding:0 clamp(1.6rem,7vw,8rem);
+  transform-style:preserve-3d;pointer-events:none}
+.caption.center{top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.kicker{font-family:var(--ui);font-size:clamp(.6rem,1vw,.72rem);font-weight:600;letter-spacing:.34em;
+  text-transform:uppercase;color:var(--gold);margin-bottom:1.1rem;display:inline-flex;align-items:center;gap:.7rem}
+.kicker::before{content:'';width:2.2rem;height:1px;background:var(--gold);opacity:.7}
+.caption.center .kicker::before{display:none}
+.headline{font-family:var(--serif);font-weight:400;line-height:1.0;letter-spacing:.003em;
+  font-size:clamp(2.7rem,7.6vw,6.7rem);max-width:17ch}
+.caption.center .headline{max-width:20ch;margin:0 auto}
+.headline.gold{color:var(--gold)}
+.sub{font-family:var(--ui);font-weight:400;font-size:clamp(1rem,1.7vw,1.4rem);color:var(--muted);
+  margin-top:1.15rem;max-width:44ch;line-height:1.5}
+.caption.center .sub{margin-left:auto;margin-right:auto}
+/* keep 3D depth through the text containers so per-word translateZ reads */
+.kicker,.headline,.sub{transform-style:preserve-3d}
+
+/* words fly out of depth toward the camera */
+.w{display:inline-block;opacity:0;transform:translateZ(-460px) translateY(26px) rotateX(-34deg);
+  transform-origin:50% 100%;will-change:transform,opacity}
+.scene.active .w{animation:fly .72s cubic-bezier(.16,.9,.24,1) forwards}
+@keyframes fly{60%{opacity:1}to{opacity:1;transform:none}}
+
+/* ── Scene 5 · receding 3D stack of ranked roles ─────────────────── */
+.stack{position:absolute;top:44%;left:50%;width:min(84vw,420px);transform-style:preserve-3d;
+  transform:translate(-50%,-50%) rotateX(6deg) rotateY(-16deg)}
+.role{position:absolute;left:0;right:0;transform-style:preserve-3d;
+  background:rgba(20,20,26,.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(201,168,76,.18);border-radius:16px;padding:1rem 1.2rem;
+  display:flex;align-items:center;gap:.9rem;box-shadow:0 30px 70px rgba(0,0,0,.55);
+  opacity:0;will-change:transform,opacity}
+.scene.active .role{animation:cardin .8s cubic-bezier(.18,.9,.24,1.02) forwards}
+@keyframes cardin{to{opacity:1}}
+.role .pct{font-family:var(--serif);font-size:1.5rem;color:var(--gold-hi);min-width:3.2ch}
+.role .rt{font-family:var(--ui);font-weight:600;font-size:.98rem;color:var(--white)}
+.role .rm{font-family:var(--ui);font-weight:400;font-size:.76rem;color:var(--muted);margin-top:.15rem}
+.role .dot{margin-inline-start:auto;width:9px;height:9px;border-radius:50%;box-shadow:0 0 10px currentColor}
+body.lang-ar .role .rt,body.lang-ar .role .rm{font-family:"Noto Sans Arabic",var(--ui)}
+
+/* ── Scene 4 · skill tags popping in 3D ──────────────────────────── */
+.tags{position:absolute;inset:0;transform-style:preserve-3d;pointer-events:none}
+.tag{position:absolute;top:50%;left:50%;font-family:var(--ui);font-weight:600;font-size:.8rem;
+  padding:.42rem .9rem;border-radius:999px;white-space:nowrap;color:var(--white);
+  background:rgba(18,18,24,.66);backdrop-filter:blur(8px);border:1px solid var(--hair);
+  opacity:0;transform:translate(-50%,-50%) translate3d(var(--tx),var(--ty),-260px);will-change:transform,opacity}
+.scene.active .tag{animation:tagpop .9s cubic-bezier(.16,.84,.24,1) forwards, floaty 7s ease-in-out infinite}
+@keyframes tagpop{to{opacity:1;transform:translate(-50%,-50%) translate3d(var(--tx),var(--ty),var(--tz))}}
+@keyframes floaty{0%,100%{margin-top:0}50%{margin-top:-9px}}
+
+/* ── CTA ─────────────────────────────────────────────────────────── */
+.cta{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;gap:1.15rem;transform-style:preserve-3d;pointer-events:none}
+.wordmark{display:flex;align-items:center;gap:.75rem;opacity:0;transform:translateZ(-300px);will-change:transform,opacity}
+.scene.active .wordmark{animation:fly 1s cubic-bezier(.16,.84,.24,1) .15s forwards}
+.wordmark svg{width:clamp(48px,7.5vw,80px);height:auto;filter:drop-shadow(0 0 24px rgba(201,168,76,.45));animation:glowpulse 3.6s ease-in-out infinite}
+@keyframes glowpulse{0%,100%{filter:drop-shadow(0 0 18px rgba(201,168,76,.32))}50%{filter:drop-shadow(0 0 38px rgba(201,168,76,.66))}}
+.wordmark .name{font-family:var(--serif);font-size:clamp(2.8rem,7.5vw,5rem);letter-spacing:.01em;
+  background:linear-gradient(120deg,var(--gold),#fff5e0,var(--gold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.cta .big{font-family:var(--serif);font-size:clamp(1.9rem,4.8vw,3.5rem);
+  background:linear-gradient(100deg,var(--gold-hi),#fbf3df 60%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.cta .muted{font-family:var(--ui);font-weight:400;font-size:clamp(.85rem,1.5vw,1.1rem);color:var(--muted);letter-spacing:.02em}
+.cta .big,.cta .muted{opacity:0;transform:translateY(14px);will-change:transform,opacity}
+.scene.active .cta .big{animation:rise .9s cubic-bezier(.2,.7,.2,1) .55s forwards}
+.scene.active .cta .muted{animation:rise .9s cubic-bezier(.2,.7,.2,1) .9s forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+.cta .joinbtn{pointer-events:auto;margin-top:.5rem;opacity:0;transform:translateY(14px);
+  display:inline-flex;align-items:center;gap:.5rem;font-family:var(--ui);font-weight:600;font-size:.92rem;
+  background:linear-gradient(135deg,var(--gold-deep),var(--gold));color:#0a0a0a;text-decoration:none;
+  padding:.8rem 1.7rem;border-radius:999px;box-shadow:0 12px 34px rgba(201,168,76,.3)}
+.scene.active .cta .joinbtn{animation:rise .9s cubic-bezier(.2,.7,.2,1) 1.15s forwards}
+.cta .joinbtn:hover{filter:brightness(1.09)}
+
+/* ── Progress + chrome ───────────────────────────────────────────── */
+.progress{position:fixed;left:0;bottom:0;height:2px;width:0;z-index:10;
+  background:linear-gradient(90deg,var(--gold-deep),var(--gold),var(--gold-hi));box-shadow:0 0 10px rgba(201,168,76,.6);will-change:width}
+.brandtag{position:fixed;top:1.4rem;left:clamp(1.2rem,4vw,3rem);z-index:9;font-family:var(--ui);
+  font-weight:600;font-size:.64rem;letter-spacing:.3em;text-transform:uppercase;color:var(--faint)}
+body.lang-ar .brandtag{letter-spacing:normal}
+.topbar{position:fixed;top:1.1rem;right:clamp(1.2rem,4vw,3rem);z-index:12;display:flex;align-items:center;gap:.5rem}
+.lang{display:inline-flex;background:rgba(18,18,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--hair);border-radius:999px;overflow:hidden}
+.lang button{font-family:var(--ui);font-size:.66rem;font-weight:700;letter-spacing:.04em;color:var(--muted);background:transparent;border:0;padding:.4rem .7rem;cursor:pointer;transition:color .2s,background .2s}
+.lang button.on{background:var(--gold);color:#0a0a0a}
+.lang button:hover:not(.on){color:var(--white)}
+.skip{display:inline-flex;align-items:center;gap:.45rem;font-family:var(--ui);font-weight:600;font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;color:var(--white);background:rgba(18,18,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--hair);border-radius:999px;padding:.45rem .9rem;cursor:pointer;text-decoration:none;transition:color .2s,border-color .2s}
+.skip:hover{border-color:var(--gold);color:var(--gold)}
+body[dir="rtl"] .skip .arw{transform:scaleX(-1)}
+.sound{position:fixed;left:clamp(1.2rem,4vw,3rem);bottom:1.3rem;z-index:11;display:inline-flex;align-items:center;gap:.5rem;background:rgba(18,18,24,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--hair);border-radius:999px;padding:.4rem .85rem .4rem .55rem;cursor:pointer;color:var(--muted);font-family:var(--ui);font-size:.6rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;transition:color .2s,border-color .2s}
+.sound:hover{color:var(--white);border-color:var(--gold)}
+.sound.on{color:var(--gold);border-color:rgba(201,168,76,.4)}
+.sound svg{width:15px;height:15px;flex-shrink:0}
+.sound .wave{opacity:0;transition:opacity .3s}.sound.on .wave{opacity:1}
+.sound.hint{animation:soundhint 2.2s ease-in-out 4}
+@keyframes soundhint{0%,100%{transform:none;border-color:var(--hair)}50%{transform:scale(1.05);border-color:rgba(201,168,76,.5)}}
+.hintline{position:fixed;left:50%;bottom:1.5rem;transform:translateX(-50%);z-index:11;font-family:var(--ui);
+  font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);pointer-events:none;
+  opacity:0;animation:hintcycle 7.5s ease forwards}
+@keyframes hintcycle{0%{opacity:0}14%{opacity:1}72%{opacity:1}100%{opacity:0}}
+@media (pointer:coarse){.hintline{display:none}}
+
+@media (max-width:640px){
+  .stack{width:88vw;transform:translate(-50%,-50%) rotateX(4deg) rotateY(-9deg) scale(.9)}
+  .headline{font-size:clamp(2.1rem,8.5vw,3rem)}
+  .tags{transform:scale(.58)}
+}
+@media (prefers-reduced-motion:reduce),(pointer:coarse){
+  .tilt{transition:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.2s!important}
+  .core .spin{animation:none}
+}
+</style>
+</head>
+<body>
+<div class="plates" id="plates"></div>
+<canvas id="stars"></canvas>
+<div class="nebula"></div>
+
+<div class="world">
+  <div class="tilt" id="tilt">
+
+    <!-- The model — one shared 3D constellation, shown on select scenes -->
+    <div class="core" id="core">
+      <div class="glow"></div>
+      <div class="ring" style="width:360px;height:360px"></div>
+      <div class="ring" style="width:250px;height:250px"></div>
+      <div class="spin" id="spin"></div>
+    </div>
+
+    <!-- SCENE 1 -->
+    <section class="scene center-cap" data-core="off">
+      <div class="caption center">
+        <span class="kicker" data-en="01 — Not a search" data-ar="٠١ — ليس بحثًا"></span>
+        <h2 class="headline" data-en="Rico isn't running a search. ~ It's running a model of you." data-ar="ريكو لا يبحث. ~ بل يبني نموذجًا يُمثّلك."></h2>
+        <p class="sub" data-en="Deeper than your CV. Sharper than your memory of what you've built." data-ar="أعمق من سيرتك الذاتية. أحدّ من ذاكرتك عمّا أنجزت."></p>
+      </div>
+    </section>
+
+    <!-- SCENE 2 -->
+    <section class="scene" data-core="off">
+      <div class="caption">
+        <h2 class="headline" data-en="Most platforms wait for you to search. ~ Rico already did." data-ar="معظم المنصّات تنتظر أن تبحث. ~ ريكو سبقك بالفعل."></h2>
+        <p class="sub" data-en="It reads the market — not against your words, but against what they reveal." data-ar="يقرأ السوق لا وفق كلماتك، بل وفق ما تكشفه كلماتك."></p>
+      </div>
+    </section>
+
+    <!-- SCENE 3 · the model appears -->
+    <section class="scene" data-core="on">
+      <div class="caption center">
+        <span class="kicker" data-en="02 — Meet Rico" data-ar="٠٢ — تعرّف على ريكو"></span>
+        <h2 class="headline gold" data-en="Meet Rico." data-ar="تعرّف على ريكو."></h2>
+        <p class="sub" data-en="Built for the UAE market. It knows your next move before you do." data-ar="صُنع لأجل السوق الإماراتي. يعرف خطوتك القادمة قبل أن تعرفها."></p>
+      </div>
+    </section>
+
+    <!-- SCENE 4 · reads you · skill tags in 3D -->
+    <section class="scene" data-core="on">
+      <div class="tags" id="tags"></div>
+      <div class="caption">
+        <span class="kicker" data-en="03 — It reads you" data-ar="٠٣ — يقرأك"></span>
+        <h2 class="headline" data-en="Feed it your CV. ~ From there, it thinks." data-ar="امنحه سيرتك الذاتية. ~ ومن هناك، يبدأ بالتفكير."></h2>
+        <p class="sub" data-en="Every skill, language, and year — not just read, but understood." data-ar="كلّ مهارة ولغة وسنة خبرة — لا يقرأها فحسب، بل يفهمها."></p>
+      </div>
+    </section>
+
+    <!-- SCENE 5 · receding stack of conclusions -->
+    <section class="scene" data-core="off">
+      <div class="stack">
+        <div class="role" style="transform:translateZ(0) translateY(-96px);animation-delay:.15s">
+          <span class="pct">87%</span><div><div class="rt" data-en="Senior Financial Analyst" data-ar="محلّل ماليّ أوّل"></div><div class="rm" data-en="Dubai · Banking" data-ar="دبي · مصارف"></div></div><span class="dot" style="color:#12a3ab"></span>
+        </div>
+        <div class="role" style="transform:translateZ(-70px) translateY(-24px) scale(.94);animation-delay:.3s">
+          <span class="pct">81%</span><div><div class="rt" data-en="Product Manager" data-ar="مدير منتَج"></div><div class="rm" data-en="Abu Dhabi · Fintech" data-ar="أبوظبي · تقنية ماليّة"></div></div><span class="dot" style="color:#12a3ab"></span>
+        </div>
+        <div class="role" style="transform:translateZ(-140px) translateY(48px) scale(.88);animation-delay:.45s">
+          <span class="pct">74%</span><div><div class="rt" data-en="UX Designer" data-ar="مصمّم تجربة مستخدم"></div><div class="rm" data-en="DIFC · Product" data-ar="مركز دبي المالي · منتجات"></div></div><span class="dot" style="color:var(--gold)"></span>
+        </div>
+        <div class="role" style="transform:translateZ(-210px) translateY(120px) scale(.82);animation-delay:.6s">
+          <span class="pct">69%</span><div><div class="rt" data-en="Data Analyst" data-ar="محلّل بيانات"></div><div class="rm" data-en="Sharjah · Retail" data-ar="الشارقة · تجزئة"></div></div><span class="dot" style="color:var(--gold)"></span>
+        </div>
+      </div>
+      <div class="caption">
+        <span class="kicker" data-en="04 — Conclusions, not guesses" data-ar="٠٤ — استنتاجات لا تخمينات"></span>
+        <h2 class="headline" data-en="These aren't suggestions. ~ They're conclusions." data-ar="هذه ليست اقتراحات. ~ بل استنتاجات."></h2>
+        <p class="sub" data-en="Only what truly fits ever reaches you." data-ar="لا يصلك إلّا ما يناسبك بحقّ."></p>
+      </div>
+    </section>
+
+    <!-- SCENE 6 · it acts -->
+    <section class="scene" data-core="off">
+      <div class="caption">
+        <span class="kicker" data-en="05 — It acts for you" data-ar="٠٥ — يتصرّف عنك"></span>
+        <h2 class="headline" data-en="Then it applies — ~ in your voice." data-ar="ثمّ يتقدّم — ~ بصوتك أنت."></h2>
+        <p class="sub" data-en="Honest, tailored — never invented." data-ar="بصدقٍ، ومُخصّص — دون أيّ تلفيق."></p>
+      </div>
+    </section>
+
+    <!-- SCENE 7 · certainty · calm core -->
+    <section class="scene" data-core="calm">
+      <div class="caption center">
+        <h2 class="headline" data-en="It speaks only when it's certain." data-ar="لا ينطق إلّا حين يتيقّن."></h2>
+        <p class="sub" data-en="Certainty takes time. Rico has nothing but time." data-ar="اليقين يحتاج وقتًا. وريكو لا يملك سوى الوقت."></p>
+      </div>
+    </section>
+
+    <!-- SCENE 8 · CTA -->
+    <section class="scene" data-core="calm">
+      <div class="cta">
+        <div class="wordmark">
+          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e7d193"/><stop offset=".5" stop-color="#C9A84C"/><stop offset="1" stop-color="#9a7f31"/></linearGradient></defs>
+            <rect x="3" y="3" width="42" height="42" rx="13" fill="url(#rg)"/>
+            <g transform="translate(0.5 -1.4)"><path fill="#0a0a0a" d="M11 8h13.5C31 8 35.4 11.7 35.4 17.4c0 4.4-2.5 7.6-6.7 9l7 11.6h-7.6l-6-10.4H16.6V38H11Zm5.6 6.2v8.1h6.7c2.6 0 4.3-1.6 4.3-4.1 0-2.5-1.7-4-4.3-4Z"/></g>
+          </svg>
+          <span class="name">Rico</span>
+        </div>
+        <div class="big" data-en="Not a search engine. A model of you." data-ar="ليس محرّك بحث. بل نموذجٌ يُمثّلك."></div>
+        <div class="muted" data-en="Tell it a little. From there, it thinks." data-ar="أخبره بالقليل، ومن هناك يبدأ بالتفكير."></div>
+        <a class="joinbtn" id="join" href="#" data-en="Start the conversation" data-ar="ابدأ المحادثة"></a>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<div class="vignette"></div>
+<div class="grain"></div>
+
+<div class="brandtag" data-en="Rico — Dimensional · Remix" data-ar="ريكو — البُعد الثالث · ريمكس">Rico — Dimensional · Remix</div>
+<div class="topbar">
+  <div class="lang" id="lang" aria-label="Language">
+    <button data-lang="en" class="on">EN</button>
+    <button data-lang="ar">ع</button>
+  </div>
+  <a class="skip" id="skip" href="#" data-en="Skip" data-ar="تخطّي">Skip <span class="arw">↦</span></a>
+</div>
+<div class="progress" id="progress"></div>
+<button class="sound hint" id="sound" aria-label="Toggle sound">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 9v6h3.5L13 19V5L7.5 9H4z" fill="currentColor" stroke="none"/>
+    <path class="wave" d="M16 8.6a5 5 0 0 1 0 6.8"/><path class="wave" d="M18.6 6a8.5 8.5 0 0 1 0 12"/>
+  </svg>
+  <span id="soundlbl" data-en="Sound off" data-ar="الصوت مغلق">Sound off</span>
+</button>
+<div class="hintline" data-en="Move your cursor" data-ar="حرّك المؤشّر"></div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var coarse = window.matchMedia('(pointer: coarse)').matches;
+
+  /* Where Skip and the CTA send people — the live registration/waitlist.
+     Change this one line to /signup when open registration launches. */
+  var REGISTER_URL = 'https://ricohunt.com/signup';
+
+  var scenes = Array.prototype.slice.call(document.querySelectorAll('.scene'));
+  var DUR = [4000,4000,5000,5800,5800,4000,5000,7000];
+  var TOTAL = DUR.reduce(function(a,b){return a+b;},0);
+  var OFFSET = []; (function(){var s=0;for(var i=0;i<DUR.length;i++){OFFSET.push(s);s+=DUR[i];}})();
+  var idx=-1, sceneStart=0, hop=null, lang='en';
+  var progressEl=document.getElementById('progress');
+  var core=document.getElementById('core');
+
+  // ── Build the constellation (fibonacci sphere of glowing nodes) ───
+  (function buildCore(){
+    var spin=document.getElementById('spin'), N=26, R=168, gold=true;
+    for(var i=0;i<N;i++){
+      var y=1-(i/(N-1))*2, r=Math.sqrt(1-y*y), th=i*2.399963;
+      var x=Math.cos(th)*r, z=Math.sin(th)*r;
+      var teal=(i%3===0);
+      var d=document.createElement('span'); d.className='node';
+      var sz=teal?5:(i%4===0?7:4);
+      d.style.width=sz+'px'; d.style.height=sz+'px';
+      d.style.setProperty('--x',(x*R).toFixed(1)+'px');
+      d.style.setProperty('--y',(y*R).toFixed(1)+'px');
+      d.style.setProperty('--z',(z*R).toFixed(1)+'px');
+      if(teal){ d.style.setProperty('--nc','#12a3ab'); d.style.setProperty('--ng','rgba(18,163,171,.7)'); }
+      spin.appendChild(d);
+    }
+  })();
+
+  // ── Build scene-4 skill tags (3D pop) ─────────────────────────────
+  var TAGDATA=[
+    {en:'Finance',ar:'تمويل',x:-190,y:-150,z:60},
+    {en:'العربية',ar:'العربية',x:170,y:-170,z:120},
+    {en:'React',ar:'React',x:-240,y:40,z:-40},
+    {en:'5 years',ar:'٥ سنوات',x:210,y:70,z:90},
+    {en:'DIFC-ready',ar:'جاهز لِـ DIFC',x:-90,y:170,z:30},
+    {en:'Leadership',ar:'قيادة',x:120,y:180,z:-30}
+  ];
+  (function buildTags(){
+    var host=document.getElementById('tags');
+    TAGDATA.forEach(function(t,i){
+      var s=document.createElement('span'); s.className='tag';
+      s.setAttribute('data-en',t.en); s.setAttribute('data-ar',t.ar);
+      s.style.setProperty('--tx',t.x+'px'); s.style.setProperty('--ty',t.y+'px'); s.style.setProperty('--tz',t.z+'px');
+      s.style.animationDelay=(0.2+i*0.11)+'s, '+(0.2+i*0.11)+'s';
+      host.appendChild(s);
+    });
+  })();
+
+  // ── Higgsfield cinematic plates (kling3_0_turbo · nano_banana) ────
+  // To self-host: download each asset into /explainer/ and swap the URL
+  // for the local filename. The loader falls back to the ink background.
+  var PLATE_HF='https://d8j0ntlcm91z4.cloudfront.net/user_3GOb8y64tsMZUlHSHxmAMNWu7Lg/';
+  var PLATE_SRC={
+    A:{type:'video',src:PLATE_HF+'hf_20260712_124928_c111475a-4450-4fa6-a45a-9c4ec9e98cce.mp4'}, // deep space
+    B:{type:'video',src:PLATE_HF+'hf_20260712_124911_3de76fab-7a56-4c99-81c9-fe70495271f8.mp4'}, // the core
+    D:{type:'video',src:PLATE_HF+'hf_20260712_124913_f2cef411-c9a2-4d76-8a3e-a9211ea9b889.mp4'}, // gold convergence
+    C:{type:'image',src:PLATE_HF+'hf_20260712_124915_baf6ac3c-30b5-4641-9ab6-ea8727361c4f.png'}  // Dubai at night
+  };
+  var PLATE_FOR=['A','A','B','B','D','A','C','D']; // per scene index (remix)
+  var plateEls={};
+  (function buildPlates(){
+    var host=document.getElementById('plates');
+    Object.keys(PLATE_SRC).forEach(function(k){
+      var m=PLATE_SRC[k], el;
+      if(m.type==='video'){ el=document.createElement('video'); el.muted=true; el.loop=true;
+        el.playsInline=true; el.setAttribute('playsinline',''); el.preload='auto'; }
+      else { el=document.createElement('img'); el.alt=''; }
+      el.className='plate'; el.setAttribute('data-k',k); el.setAttribute('data-src',m.src);
+      if(m.type==='image') el.src=m.src; // image is light — eager; videos lazy-load on first use
+      host.appendChild(el); plateEls[k]=el;
+    });
+  })();
+  function setPlate(i){
+    var k=PLATE_FOR[i]||'A';
+    Object.keys(plateEls).forEach(function(kk){
+      var el=plateEls[kk], on=(kk===k);
+      el.classList.toggle('on',on);
+      if(el.tagName==='VIDEO'){
+        if(on){ if(!el.src) el.src=el.getAttribute('data-src'); // lazy-load on first use (saves mobile data)
+          try{ el.currentTime=0; if(!reduce) el.play().catch(function(){}); }catch(e){} }
+        else { try{ el.pause(); }catch(e){} }
+      }
+    });
+  }
+
+  // ── i18n ──────────────────────────────────────────────────────────
+  function tstr(el){ return el.getAttribute('data-'+lang) || el.getAttribute('data-en') || ''; }
+  function isStagger(el){ return el.classList.contains('headline')||el.classList.contains('kicker')||el.classList.contains('sub'); }
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function buildWords(el){
+    var words=tstr(el).split(' '), out='', wi=0;
+    words.forEach(function(tok){
+      if(tok==='') return;
+      if(tok==='~'){ out+='<br>'; return; }
+      out+='<span class="w" style="animation-delay:'+(wi*0.045)+'s">'+esc(tok)+'</span> '; wi++;
+    });
+    el.innerHTML=out.trim();
+  }
+  function applyLang(l){
+    lang=l;
+    document.documentElement.setAttribute('lang',l);
+    document.body.classList.toggle('lang-ar',l==='ar');
+    document.body.dir=(l==='ar')?'rtl':'ltr';
+    document.querySelectorAll('[data-en]').forEach(function(el){
+      if(isStagger(el)) buildWords(el); else el.textContent=tstr(el);
+    });
+    [].forEach.call(document.querySelectorAll('#lang button'),function(b){b.classList.toggle('on',b.dataset.lang===l);});
+    var sc=scenes[idx];
+    if(sc) sc.querySelectorAll('.w,.tag').forEach(function(w){w.style.animation='none';w.offsetHeight;w.style.animation='';});
+  }
+  document.getElementById('lang').addEventListener('click',function(e){
+    var b=e.target.closest('button'); if(b) applyLang(b.dataset.lang);
+  });
+
+  // ── Skip / CTA → registration ────────────────────────────────────
+  function goRegister(e){ if(e)e.preventDefault(); try{clearTimeout(hop);}catch(_){} window.location.href=REGISTER_URL; }
+  document.getElementById('skip').addEventListener('click',goRegister);
+  document.getElementById('join').addEventListener('click',goRegister);
+
+  // ── Cursor-parallax camera ───────────────────────────────────────
+  var tilt=document.getElementById('tilt');
+  if(!reduce && !coarse){
+    var tx=0,ty=0,cx=0,cy=0;
+    window.addEventListener('pointermove',function(e){
+      tx=(e.clientX/window.innerWidth-.5); ty=(e.clientY/window.innerHeight-.5);
+    },{passive:true});
+    (function cam(){ cx+=(tx-cx)*.06; cy+=(ty-cy)*.06;
+      tilt.style.setProperty('--ry',(cx*10).toFixed(2)+'deg');
+      tilt.style.setProperty('--rx',(-cy*7).toFixed(2)+'deg');
+      requestAnimationFrame(cam);
+    })();
+  }
+
+  // ── Core visibility per scene ────────────────────────────────────
+  function setCore(sc){
+    var mode=sc.getAttribute('data-core');
+    core.classList.toggle('show', mode==='on'||mode==='calm');
+    core.classList.toggle('calm', mode==='calm');
+    // scale the model bigger when it's the hero, smaller behind CTA text
+    var s = mode==='calm' ? 1.15 : 0.82;
+    if(window.innerWidth<680) s *= 0.62; // scale the model down on phones
+    core.querySelector('.spin').style.transform='';
+    core.style.setProperty('--cs',s);
+    core.style.transform='translate(-50%,-50%) scale('+s+')';
+  }
+
+  // ── Scene driver ─────────────────────────────────────────────────
+  function show(i){
+    if(idx>=0) scenes[idx].classList.remove('active');
+    idx=i; var sc=scenes[i];
+    sc.querySelectorAll('.w,.tag,.role').forEach(function(w){w.style.animation='none';w.offsetHeight;w.style.animation='';});
+    sc.classList.add('active');
+    setCore(sc);
+    setPlate(i);
+    audioScene(i);
+    sceneStart=performance.now();
+  }
+  function advance(){ var n=idx+1; if(n>=scenes.length) n=0; show(n); hop=setTimeout(advance,DUR[n]); }
+  function tick(){ var within=performance.now()-sceneStart; var elapsed=OFFSET[idx]+Math.min(within,DUR[idx]);
+    progressEl.style.width=(100*elapsed/TOTAL).toFixed(2)+'%'; requestAnimationFrame(tick); }
+
+  // ── Starfield (true 3D projection) ───────────────────────────────
+  (function stars(){
+    var c=document.getElementById('stars'), ctx=c.getContext('2d'), W,H,CX,CY;
+    function size(){ W=c.width=window.innerWidth; H=c.height=window.innerHeight; CX=W/2; CY=H*0.46; }
+    size(); window.addEventListener('resize',size);
+    var N=reduce?60:120, S=[];
+    for(var i=0;i<N;i++) S.push({x:(Math.random()*2-1),y:(Math.random()*2-1),z:Math.random()});
+    function loop(){
+      ctx.clearRect(0,0,W,H);
+      for(var i=0;i<N;i++){
+        var s=S[i]; s.z-=0.0016; if(s.z<=0.02){ s.z=1; s.x=(Math.random()*2-1); s.y=(Math.random()*2-1); }
+        var k=0.9/s.z, px=CX+s.x*k*CX, py=CY+s.y*k*CY;
+        if(px<0||px>W||py<0||py>H) continue;
+        var r=(1-s.z)*1.9+.2, a=(1-s.z)*.7+.05;
+        var gold=(i%5===0);
+        ctx.beginPath(); ctx.arc(px,py,r,0,6.283);
+        ctx.fillStyle=gold?'rgba(201,168,76,'+a.toFixed(2)+')':'rgba(244,239,230,'+(a*0.8).toFixed(2)+')';
+        ctx.fill();
+      }
+      requestAnimationFrame(loop);
+    }
+    if(!reduce) loop(); else { // static frame
+      for(var i=0;i<N;i++){ var s=S[i],k=0.9/s.z,px=CX+s.x*k*CX,py=CY+s.y*k*CY,r=(1-s.z)*1.9+.2;
+        ctx.beginPath();ctx.arc(px,py,r,0,6.283);ctx.fillStyle='rgba(244,239,230,.4)';ctx.fill(); }
+    }
+  })();
+
+  // ── Procedural score (Web Audio; starts on user gesture) ─────────
+  var AC,master,lpNode,aBuilt=false,aPlaying=false;
+  var soundBtn=document.getElementById('sound'),soundLbl=document.getElementById('soundlbl');
+  function buildAudio(){
+    var Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx) return false;
+    AC=new Ctx();
+    master=AC.createGain(); master.gain.value=0; master.connect(AC.destination);
+    lpNode=AC.createBiquadFilter(); lpNode.type='lowpass'; lpNode.frequency.value=640; lpNode.Q.value=0.7; lpNode.connect(master);
+    // Dmin9-ish drone for a colder, more "dimensional" pad
+    [55,110,146.83,220,329.63].forEach(function(f,i){
+      var g=AC.createGain(); g.gain.value=i===0?0.5:(i<2?0.28:0.12); g.connect(lpNode);
+      var o=AC.createOscillator(); o.type=i<2?'sine':'triangle'; o.frequency.value=f; o.connect(g); o.start();
+      var o2=AC.createOscillator(); o2.type='sine'; o2.frequency.value=f; o2.detune.value=6;
+      var g2=AC.createGain(); g2.gain.value=g.gain.value*0.45; o2.connect(g2); g2.connect(lpNode); o2.start();
+    });
+    var lfo=AC.createOscillator(); lfo.frequency.value=0.045; var lg=AC.createGain(); lg.gain.value=260; lfo.connect(lg); lg.connect(lpNode.frequency); lfo.start();
+    aBuilt=true; return true;
+  }
+  function audioScene(i){ if(!aBuilt||!aPlaying) return; var cutoff=i>=6?1300:(i>=2?780:600);
+    lpNode.frequency.setTargetAtTime(cutoff,AC.currentTime,1.6); master.gain.setTargetAtTime(i>=6?0.13:0.10,AC.currentTime,1.6); }
+  function toggleSound(){
+    if(!aBuilt){ if(!buildAudio()) return; }
+    if(AC.state==='suspended') AC.resume();
+    aPlaying=!aPlaying; var t=AC.currentTime; master.gain.cancelScheduledValues(t);
+    master.gain.setTargetAtTime(aPlaying?0.10:0.0001,t,0.7);
+    soundBtn.classList.toggle('on',aPlaying); soundBtn.classList.remove('hint');
+    soundLbl.setAttribute('data-en',aPlaying?'Sound on':'Sound off');
+    soundLbl.setAttribute('data-ar',aPlaying?'الصوت مفتوح':'الصوت مغلق');
+    soundLbl.textContent=tstr(soundLbl);
+    if(aPlaying) audioScene(idx);
+  }
+  soundBtn.addEventListener('click',toggleSound);
+
+  // ── Go ───────────────────────────────────────────────────────────
+  applyLang('en');
+  sceneStart=performance.now();
+  show(0);
+  hop=setTimeout(advance,DUR[0]);
+  requestAnimationFrame(tick);
+
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'){ clearTimeout(hop); advance(); }
+    if(e.key==='ArrowLeft'){ clearTimeout(hop); var n=idx-1; if(n<0)n=scenes.length-1; show(n); hop=setTimeout(advance,DUR[n]); }
+  });
+})();
+</script>
+</body>
+</html>

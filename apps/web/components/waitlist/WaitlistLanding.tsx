@@ -65,6 +65,23 @@ export function WaitlistLanding() {
         </nav>
       </header>
 
+      <section className="atl-waitlist-film" aria-label="Rico launch film">
+        <iframe
+          src="/explainer/"
+          title="Rico — Launch Film"
+          loading="lazy"
+          allow="autoplay; fullscreen"
+          style={{
+            width: "100%",
+            aspectRatio: "16 / 9",
+            border: 0,
+            borderRadius: "14px",
+            display: "block",
+            background: "#070709",
+          }}
+        />
+      </section>
+
       <section className="atl-waitlist-main">
         <div className="atl-waitlist-copy">
           <p className="atl-waitlist-eyebrow">{copy.eyebrow}</p>

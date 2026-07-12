@@ -99,3 +99,85 @@ def test_profile_optimization_gate_raises_402_when_free_limit_reached():
     assert exc.value.status_code == 402
     assert exc.value.detail["type"] == "subscription_limit"
     assert exc.value.detail["feature"] == "profile_optimization_limit"
+
+
+# ── Identity-key invariant ──────────────────────────────────────────────────────
+#
+# Subscriptions are stored keyed by the account email (admin activation writes
+# ``upsert_subscription(user_id=email, ...)``) and ``resolve_effective_user_plan``
+# looks the row up by that same key with no transformation. Every gating call site
+# therefore MUST pass the account email — the same identity ``deps`` derives from the
+# JWT (``request.state.user_id = user["email"]``). Passing any other identity (e.g. a
+# UUID) silently returns FREE and would treat a paying user as unpaid. These tests
+# lock that contract so a future identity/storage-key change fails loudly here.
+
+_PAID_EMAIL = "paid@rico.ai"
+
+
+def _active_pro_row(user_id: str = _PAID_EMAIL) -> dict:
+    now = datetime.now(timezone.utc)
+    return {
+        "user_id": user_id,
+        "plan": "pro",
+        "status": "active",
+        "stripe_customer_id": None,
+        "stripe_subscription_id": None,
+        "current_period_start": now - timedelta(days=1),
+        "current_period_end": now + timedelta(days=29),
+        "cancel_at": None,
+        "canceled_at": None,
+    }
+
+
+def test_resolve_uses_the_email_key_verbatim_and_pays_out_pro():
+    """A subscription stored under the email resolves to PRO when queried by that email."""
+    from src.subscription_plans import resolve_effective_user_plan
+
+    def fake_get_subscription(key):
+        return _active_pro_row() if key == _PAID_EMAIL else None
+
+    with patch("src.repositories.subscription_repo.get_subscription", side_effect=fake_get_subscription) as gs:
+        resolved = resolve_effective_user_plan(_PAID_EMAIL)
+
+    gs.assert_called_once_with(_PAID_EMAIL)  # queried by the exact key, untransformed
+    assert resolved.is_active is True
+    assert resolved.subscription.plan.value == "pro"
+    assert resolved.subscription.entitlements.monthly_ai_message_limit == 300
+
+
+def test_resolve_falls_back_to_free_for_a_non_email_identity():
+    """Guard the fragility: a non-matching identity (UUID) silently degrades to FREE.
+
+    This is the exact failure a mis-keyed gating call would produce, so the test
+    documents and pins the contract that gating must key on the account email.
+    """
+    from src.subscription_plans import resolve_effective_user_plan
+
+    uuid_identity = "0cb0b1d1-0037-408e-823f-c7eccb337582"
+
+    def fake_get_subscription(key):
+        return _active_pro_row() if key == _PAID_EMAIL else None
+
+    with patch("src.repositories.subscription_repo.get_subscription", side_effect=fake_get_subscription):
+        resolved = resolve_effective_user_plan(uuid_identity)
+
+    assert resolved.is_active is False
+    assert resolved.subscription.plan.value == "free"
+    assert resolved.subscription.entitlements.monthly_ai_message_limit == 50
+
+
+def test_gating_passes_identity_through_to_plan_resolution_unchanged():
+    """The document-quota gate must forward its identity to the resolver verbatim."""
+    from src.services.subscription_gating import enforce_document_quota
+
+    seen: dict[str, str] = {}
+
+    def spy_resolve(user_id):
+        seen["user_id"] = user_id
+        return _resolved_free()
+
+    with patch("src.services.subscription_gating.resolve_effective_user_plan", side_effect=spy_resolve), \
+         patch("src.services.subscription_gating.count_user_documents", return_value=0):
+        enforce_document_quota(_PAID_EMAIL, "cv")
+
+    assert seen["user_id"] == _PAID_EMAIL

@@ -17,11 +17,13 @@ const PUBLIC_EXACT_PATHS = new Set([
   "/icon.svg",
   "/apple-touch-icon.png",
   "/opengraph-image",
+  "/explainer",
 ]);
 
 const PUBLIC_PREFIXES = [
   "/_next/",
   "/icons/",
+  "/explainer/",
   "/api/waitlist/",
   "/proxy/api/v1/waitlist/",
   "/proxy/api/v1/prelaunch/",
