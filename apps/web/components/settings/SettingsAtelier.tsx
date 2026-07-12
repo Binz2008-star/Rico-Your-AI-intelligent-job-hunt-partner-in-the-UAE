@@ -125,13 +125,15 @@ function TabIntro({ children, palette }: { children: React.ReactNode; palette: W
 }
 
 /**
- * "Ask Rico" affordance — the conversational path to the same capability the
- * manual control writes. Deep-links to /command with a one-shot ?q= prompt
- * (the established production pattern used by profile/signals/mission/sidebar);
- * Rico's own chat + safety layer handles any actual change. This never mutates
- * state itself and never bypasses approval — it only opens the conversation.
+ * "Discuss with Rico" link — opens a guidance conversation about this control.
+ * Deep-links to /command with a one-shot ?q= prompt (the established production
+ * pattern used by profile/signals/mission/sidebar). It does NOT execute the
+ * setting and makes no such claim: chat has no mutation path for match
+ * selectivity / daily limit / keywords (verified — see the 2026-07-12 handoff),
+ * so the manual controls remain the real, same-state mutation. Never bypasses
+ * Rico's approval/safety layer — it only starts the conversation.
  */
-function AskRico({ q, label, palette }: { q: string; label: string; palette: WorkspacePalette }) {
+function RicoChatLink({ q, label, palette }: { q: string; label: string; palette: WorkspacePalette }) {
     return (
         <Link
             href={`/command?q=${encodeURIComponent(q)}`}
@@ -458,7 +460,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                 <Link href="/forgot-password" className="sx-link text-[13px]">
                                     {t("changePassword")}
                                 </Link>
-                                <AskRico q={t("settingsAskAccountPrompt")} label={t("settingsAskAccount")} palette={palette} />
+                                <RicoChatLink q={t("settingsAskAccountPrompt")} label={t("settingsAskAccount")} palette={palette} />
                             </div>
 
                             <div className="flex flex-wrap gap-4 pt-4" style={{ borderTop: `1px solid ${palette.hair}` }}>
@@ -541,7 +543,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                     </div>
                                     <Hint palette={palette}>{t("settingsMatchContext").replace("{score}", String(settings.min_score))}</Hint>
                                     <div className="mt-2">
-                                        <AskRico q={t("settingsAskStricterPrompt")} label={t("settingsAskStricter")} palette={palette} />
+                                        <RicoChatLink q={t("settingsAskStricterPrompt")} label={t("settingsAskStricter")} palette={palette} />
                                     </div>
                                 </div>
 
@@ -570,7 +572,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                     </div>
                                     <Hint palette={palette}>{t("settingsDailyContext")}</Hint>
                                     <div className="mt-2">
-                                        <AskRico q={t("settingsAskDailyPrompt")} label={t("settingsAskDaily")} palette={palette} />
+                                        <RicoChatLink q={t("settingsAskDailyPrompt")} label={t("settingsAskDaily")} palette={palette} />
                                     </div>
                                 </div>
 
@@ -653,7 +655,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                             )}
                                             {saving ? t("saving") : t("saveSettings")}
                                         </button>
-                                        <AskRico q={t("settingsAskNotifyPrompt")} label={t("settingsAskNotify")} palette={palette} />
+                                        <RicoChatLink q={t("settingsAskNotifyPrompt")} label={t("settingsAskNotify")} palette={palette} />
                                     </div>
                                 </div>
                             )}
