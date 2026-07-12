@@ -67,7 +67,7 @@ export function WaitlistLanding() {
 
       <section className="atl-waitlist-film" aria-label="Rico launch film">
         <iframe
-          src="/explainer/"
+          src="/explainer/index.html"
           title="Rico — Launch Film"
           loading="lazy"
           allow="autoplay; fullscreen"
