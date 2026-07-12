@@ -355,7 +355,7 @@ export function FlowAtelier() {
                                     return (
                                         <div key={col.labelKey} className="flex min-w-[220px] flex-1 flex-col rounded-[6px] p-3" style={{ border: `1px solid ${palette.hair}`, background: palette.rail }}>
                                             <div className="mb-3 flex items-center justify-between">
-                                                <Mono style={{ color: palette.ink55 }}>{t(col.labelKey)}</Mono>
+                                                <h3><Mono style={{ color: palette.ink55 }}>{t(col.labelKey)}</Mono></h3>
                                                 <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ background: palette.inset, color: palette.ink55 }}>{colApps.length}</span>
                                             </div>
                                             <div className="flex flex-col gap-2">

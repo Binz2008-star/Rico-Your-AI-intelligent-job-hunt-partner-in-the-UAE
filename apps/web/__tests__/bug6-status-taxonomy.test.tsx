@@ -178,12 +178,13 @@ describe("BUG-6: /flow list view and board view classify the same records identi
         const user = userEvent.setup();
         renderFlow();
 
-        // List view (default): every item must render its own exact status
-        // label in its badge. Each card's status <select> also contains an
-        // <option> with the same text for every status, so we can't just
-        // grep the page for the label — scope the lookup to the badge slot
-        // that sits next to this item's title (sibling of the title block,
-        // not the <select>).
+        // The board is the default view; switch to the list for the per-item
+        // badge checks. Every item must render its own exact status label in
+        // its badge. Each card's status <select> also contains an <option> with
+        // the same text for every status, so we can't just grep the page for
+        // the label — scope the lookup to the badge slot that sits next to this
+        // item's title (sibling of the title block, not the <select>).
+        await user.click(await screen.findByRole("button", { name: /List/i }));
         for (const status of APPLICATION_STATUSES) {
             const titleEl = await screen.findByText(titleFor(status));
             const headerRow = titleEl.parentElement!.parentElement as HTMLElement;

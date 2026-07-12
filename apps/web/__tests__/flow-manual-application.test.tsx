@@ -267,8 +267,8 @@ describe("Flow Arabic / RTL localization", () => {
 
         renderFlow();
 
-        // Title = مسار الطلبات, Track application = تتبع طلب
-        expect(await screen.findByText("مسار الطلبات")).toBeInTheDocument();
+        // Title = خط أنابيبك., Track application = تتبع طلب
+        expect(await screen.findByText("خط أنابيبك.")).toBeInTheDocument();
         expect(
             await screen.findByRole("button", { name: /تتبع طلب/ }),
         ).toBeInTheDocument();
@@ -279,7 +279,7 @@ describe("Flow Arabic / RTL localization", () => {
 
         renderFlow();
 
-        await screen.findByText("مسار الطلبات");
+        await screen.findByText("خط أنابيبك.");
         await waitFor(() => {
             expect(document.documentElement.dir).toBe("rtl");
         });
@@ -300,11 +300,14 @@ describe("Flow Arabic / RTL localization", () => {
             total: 1,
         });
 
+        const user = userEvent.setup();
         renderFlow();
 
         // Applied = تم التقديم (status badge + count strip + dropdown option)
         expect((await screen.findAllByText("تم التقديم")).length).toBeGreaterThan(0);
-        // Next-action for applied = follow-up reminder in Arabic
+        // Next-action renders in the list view; the board is the default view,
+        // so switch to the list ("قائمة") before asserting the follow-up line.
+        await user.click(screen.getByRole("button", { name: "قائمة" }));
         expect(
             screen.getByText("لم يصلك رد خلال 5–7 أيام؟ أرسل متابعة."),
         ).toBeInTheDocument();
