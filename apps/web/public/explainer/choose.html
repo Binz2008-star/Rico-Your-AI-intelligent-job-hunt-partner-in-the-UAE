@@ -3,6 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<script>
+/* Owner-only page. Any public visit is bounced to a random film so the manual
+   chooser never appears on the official site. Owner: add #all to the URL to view. */
+(function(){
+  if(location.hash!=='#all' && location.search.indexOf('all')===-1){
+    var F=['option-2.html','option-3.html','option-3b.html'];
+    location.replace(F[Math.floor(Math.random()*F.length)]);
+  }
+})();
+</script>
 <title>Rico — Launch Film</title>
 <meta name="description" content="Rico — UAE AI job-search automation. Launch film — choose a cut.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
