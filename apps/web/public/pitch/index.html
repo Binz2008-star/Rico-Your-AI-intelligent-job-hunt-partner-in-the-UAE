@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rico AI — Investor Prospectus</title>
+<meta name="description" content="Rico Hunt — an editorial-grade AI career partner for the UAE. Investor & stakeholder prospectus.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ───────────────────────────────────────────────────────────────────
+   Rico AI — Investor Prospectus
+   Set in the house "Atelier" system: paper, ink, and one hot signal.
+   Fraunces · Inter · IBM Plex Mono. No frameworks — hand-set.
+   Palette lifted verbatim from apps/web/components/atelier-kit/tokens.ts
+   ─────────────────────────────────────────────────────────────────── */
+:root{
+  --paper:#F1EADD; --panel:#F7F1E6; --inset:#EAE1D0;
+  --ink:#1F1B15; --ink70:rgba(31,27,21,.70); --ink55:rgba(31,27,21,.52);
+  --ink40:rgba(31,27,21,.38); --ink22:rgba(31,27,21,.22);
+  --hair:rgba(31,27,21,.16); --hair-soft:rgba(31,27,21,.09);
+  --sun:#C6492E; --sun-soft:#E0895A; --sun-dim:rgba(198,73,46,.10);
+  --footer:#1A1712; --footer-ink:#EFE7D6; --footer-ink60:rgba(239,231,214,.60);
+  --footer-hair:rgba(239,231,214,.18);
+  --serif:"Fraunces",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --body:"Inter",system-ui,sans-serif;
+  --edge:clamp(1.6rem,4.2vw,4.5rem);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--paper);color:var(--ink)}
+body{font-family:var(--body);font-weight:400;overflow:hidden;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+/* Paper: warm base + faint printed grain + hairline margin rules */
+.paper{position:fixed;inset:0;z-index:0;pointer-events:none;background:var(--paper)}
+.paper::before{content:'';position:absolute;inset:0;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.32'/%3E%3C/svg%3E")}
+.paper::after{content:'';position:absolute;inset:0;
+  background:radial-gradient(120% 90% at 50% 0%,transparent 60%,rgba(31,27,21,.05) 100%)}
+/* Faint left/right margin rules, like a folio */
+.margins{position:fixed;inset:0;z-index:0;pointer-events:none}
+.margins span{position:absolute;top:0;bottom:0;width:1px;background:var(--hair-soft)}
+.margins span:nth-child(1){left:var(--edge)} .margins span:nth-child(2){right:var(--edge)}
+
+/* Deck + folios */
+.deck{position:fixed;inset:0;z-index:2}
+.folio{position:absolute;inset:0;display:flex;flex-direction:column;
+  padding:clamp(1.1rem,2.4vh,1.9rem) var(--edge) clamp(3.6rem,7vh,4.4rem);
+  opacity:0;visibility:hidden;transform:translateY(10px);
+  transition:opacity .6s ease,transform .6s ease,visibility 0s .6s}
+.folio.active{opacity:1;visibility:visible;transform:none;transition:opacity .7s ease,transform .7s ease}
+
+/* Running head — every folio carries the edition line */
+.runhead{display:flex;justify-content:space-between;align-items:baseline;
+  font-family:var(--mono);font-size:.62rem;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink40);padding-bottom:.7rem;border-bottom:1px solid var(--hair);flex-shrink:0}
+.runhead .fol{color:var(--sun)}
+.runhead b{font-weight:500;color:var(--ink55)}
+
+/* Body of a folio, vertically centred */
+.stage{flex:1;display:flex;flex-direction:column;justify-content:center;
+  max-width:1120px;width:100%;margin:0 auto;padding:clamp(.8rem,3vh,2rem) 0}
+
+/* Eyebrow / section mark */
+.eyebrow{font-family:var(--mono);font-size:.68rem;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--sun);display:flex;align-items:center;gap:.7rem}
+.eyebrow::before{content:'';width:1.7rem;height:1px;background:var(--sun);opacity:.7}
+
+/* Display headline */
+h1,h2{font-family:var(--serif);font-weight:400;line-height:1.02;letter-spacing:-.015em}
+.h-xl{font-size:clamp(2.9rem,7vw,6rem)}
+.h-lg{font-size:clamp(2rem,4.6vw,3.5rem)}
+.h-md{font-size:clamp(1.6rem,3.4vw,2.5rem)}
+em,.it{font-style:italic}
+.sun{color:var(--sun)}
+.lede{font-size:clamp(1rem,1.5vw,1.18rem);line-height:1.6;color:var(--ink70);max-width:60ch;font-weight:400}
+.small{font-size:.9rem;line-height:1.55;color:var(--ink70)}
+.kx{font-family:var(--mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ink40)}
+
+/* Hand-drawn pen underline under a serif word */
+.pen{position:relative;display:inline-block}
+.pen svg{position:absolute;left:-2%;bottom:-.14em;width:104%;height:.34em;overflow:visible}
+.pen path{fill:none;stroke:var(--sun);stroke-width:3.4;stroke-linecap:round;
+  stroke-dasharray:340;stroke-dashoffset:340}
+.active .pen path{animation:draw 1s cubic-bezier(.6,.02,.28,1) .5s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* Rules + hairlines */
+.rule{height:1px;background:var(--hair);border:0;width:100%}
+.rule-sun{height:2px;width:2.6rem;background:var(--sun);border:0;border-radius:2px}
+
+/* Grids */
+.grid{display:grid;gap:clamp(.7rem,1.4vw,1.1rem)}
+.g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+
+/* Plate / card — recessed paper with hairline, no glow */
+.plate{background:linear-gradient(180deg,var(--panel),var(--inset));
+  border:1px solid var(--hair);border-radius:2px;padding:clamp(1rem,1.6vw,1.35rem);
+  position:relative;transition:border-color .3s ease,transform .3s ease}
+.plate:hover{border-color:var(--ink22);transform:translateY(-2px)}
+.plate .idx{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;color:var(--sun)}
+.plate h3{font-family:var(--serif);font-weight:500;font-size:1.08rem;letter-spacing:-.01em;margin:.5rem 0 .35rem}
+.plate p{font-size:.82rem;line-height:1.5;color:var(--ink70)}
+.plate .glyph{color:var(--ink);opacity:.82}
+
+/* Ledger rows (stack, comparison, meta) */
+.ledger{display:flex;flex-direction:column}
+.ledger .row{display:flex;justify-content:space-between;align-items:center;gap:1rem;
+  padding:.62rem 0;border-bottom:1px solid var(--hair-soft)}
+.ledger .row:last-child{border-bottom:0}
+.ledger .k{font-size:.86rem;color:var(--ink70)}
+.ledger .v{font-family:var(--mono);font-size:.78rem;color:var(--ink);letter-spacing:.02em;text-align:right}
+
+/* Numbered editorial sequence (user flow) */
+.seq{display:flex;flex-direction:column;gap:.15rem}
+.seq .step{display:flex;gap:.9rem;align-items:flex-start;padding:.5rem 0}
+.seq .n{font-family:var(--mono);font-size:.7rem;color:var(--sun);padding-top:.15rem;min-width:1.4rem}
+.seq .t{font-size:.88rem;color:var(--ink);line-height:1.4}
+.seq .t small{display:block;color:var(--ink55);font-size:.76rem;margin-top:.1rem}
+.seq .tick{width:1px;height:.8rem;background:var(--hair);margin:0 0 0 .65rem}
+
+/* Big figures (market) */
+.fig{font-family:var(--serif);font-weight:400;font-size:clamp(2.4rem,4vw,3.4rem);line-height:1;letter-spacing:-.02em}
+.fig-sub{font-family:var(--mono);font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink55);margin-top:.5rem}
+
+/* Bar as ink rule (no gradient/glow) */
+.bar{display:flex;flex-direction:column;gap:.3rem}
+.bar .lab{display:flex;justify-content:space-between;font-size:.82rem;color:var(--ink70)}
+.bar .lab b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+.bar .track{height:3px;background:var(--hair);border-radius:2px;overflow:hidden}
+.bar .fill{height:100%;background:var(--ink);width:0;transition:width 1s cubic-bezier(.5,0,.2,1)}
+.bar .fill.sun{background:var(--sun)}
+
+/* Comparison ledger table */
+.cmp{width:100%;border-collapse:collapse;font-size:.85rem}
+.cmp th,.cmp td{padding:.62rem .7rem;text-align:left;border-bottom:1px solid var(--hair-soft)}
+.cmp thead th{font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink40);font-weight:400;border-bottom:1px solid var(--hair)}
+.cmp thead th.us{color:var(--sun)}
+.cmp td.c,.cmp th.c{text-align:center}
+.cmp td.k{color:var(--ink70)}
+.cmp .yes{color:var(--sun);font-family:var(--serif);font-style:italic;font-size:1rem}
+.cmp .no{color:var(--ink40);font-family:var(--mono);font-size:.72rem}
+.cmp .par{color:var(--ink55);font-family:var(--mono);font-size:.68rem}
+.cmp tbody tr.us-row{background:var(--sun-dim)}
+
+/* Price plates */
+.price{display:flex;flex-direction:column;gap:.55rem;height:100%}
+.price .tier{font-family:var(--mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ink55)}
+.price .amt{font-family:var(--serif);font-size:2rem;line-height:1;letter-spacing:-.02em}
+.price ul{list-style:none;display:flex;flex-direction:column;gap:.3rem;margin-top:.2rem}
+.price li{font-size:.8rem;color:var(--ink70);display:flex;gap:.5rem;line-height:1.35}
+.price li::before{content:'—';color:var(--sun);flex-shrink:0}
+.price .foot{margin-top:auto;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink40);padding-top:.5rem}
+.plate.feature{border-color:var(--sun);background:linear-gradient(180deg,#F8EFE1,#F3E6D2)}
+
+/* Timeline */
+.timeline{display:flex;flex-direction:column;gap:.55rem}
+.tl{display:flex;gap:1.1rem;align-items:baseline;padding:.7rem 0;border-top:1px solid var(--hair)}
+.tl:first-child{border-top:0}
+.tl .when{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink55);min-width:8.5rem;flex-shrink:0}
+.tl.now .when{color:var(--sun)}
+.tl .what h4{font-family:var(--serif);font-weight:500;font-size:1.05rem;letter-spacing:-.01em}
+.tl .what p{font-size:.8rem;color:var(--ink70);margin-top:.15rem;line-height:1.45}
+
+/* Cover / close ornament: a printer's registration mark */
+.mark{width:44px;height:44px;color:var(--sun)}
+.dateline{font-family:var(--mono);font-size:.66rem;letter-spacing:.2em;text-transform:uppercase;color:var(--ink55)}
+
+/* Footer folio (dark, like the landing colophon) */
+.folio.dark{background:var(--footer);color:var(--footer-ink)}
+.folio.dark .runhead{color:var(--footer-ink60);border-color:var(--footer-hair)}
+.folio.dark .runhead b{color:var(--footer-ink60)} .folio.dark .runhead .fol{color:var(--sun-soft)}
+.folio.dark .lede{color:var(--footer-ink60)} .folio.dark .kx{color:var(--footer-ink60)}
+.folio.dark .ledger .row{border-color:var(--footer-hair)} .folio.dark .ledger .k{color:var(--footer-ink60)}
+.folio.dark .ledger .v{color:var(--footer-ink)}
+.cta{display:inline-flex;align-items:center;gap:.55rem;font-family:var(--body);font-weight:500;
+  font-size:.86rem;padding:.7rem 1.4rem;border-radius:999px;text-decoration:none;transition:all .25s ease}
+.cta.solid{background:var(--sun);color:#fff} .cta.solid:hover{background:#a83a22}
+.cta.ghost{border:1px solid var(--footer-hair);color:var(--footer-ink)} .cta.ghost:hover{border-color:var(--sun-soft);color:#fff}
+.folio:not(.dark) .cta.solid{background:var(--ink);color:var(--paper)} .folio:not(.dark) .cta.solid:hover{background:#000}
+
+/* Reveal animation for stage children */
+.active .rv{animation:rise .6s cubic-bezier(.2,.7,.2,1) backwards}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* Navigation dock */
+.dock{position:fixed;bottom:0;left:0;right:0;z-index:20;
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  padding:.7rem var(--edge);border-top:1px solid var(--hair);
+  background:linear-gradient(180deg,transparent,var(--paper) 55%)}
+.dock .nn{font-family:var(--mono);font-size:.66rem;letter-spacing:.18em;color:var(--ink55)}
+.dock .nn b{color:var(--ink)}
+.ticks{display:flex;gap:5px;flex:1;justify-content:center;flex-wrap:wrap}
+.tick-dot{width:15px;height:2px;background:var(--ink22);cursor:pointer;transition:background .3s,transform .3s}
+.tick-dot.on{background:var(--sun);transform:scaleY(2.2)}
+.arrows{display:flex;gap:.4rem}
+.arrows button{width:34px;height:26px;border:1px solid var(--hair);background:transparent;color:var(--ink70);
+  font-size:.9rem;cursor:pointer;border-radius:2px;transition:all .2s;line-height:1}
+.arrows button:hover{border-color:var(--ink);color:var(--ink)}
+.dock.on-dark{background:linear-gradient(180deg,transparent,var(--footer) 55%);border-color:var(--footer-hair)}
+.dock.on-dark .nn{color:var(--footer-ink60)} .dock.on-dark .nn b{color:var(--footer-ink)}
+.dock.on-dark .tick-dot{background:rgba(239,231,214,.25)} .dock.on-dark .tick-dot.on{background:var(--sun-soft)}
+.dock.on-dark .arrows button{border-color:var(--footer-hair);color:var(--footer-ink60)}
+.dock.on-dark .arrows button:hover{border-color:var(--footer-ink);color:var(--footer-ink)}
+
+@media (max-width:720px){
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .cmp{font-size:.74rem} .cmp th,.cmp td{padding:.45rem .4rem}
+  .stage{padding:.6rem 0}
+  .hide-sm{display:none}
+  .tl{flex-direction:column;gap:.15rem} .tl .when{min-width:0}
+  .scroll-sm{overflow-x:auto}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;transition-duration:.2s!important}
+  .pen path{stroke-dashoffset:0!important}
+}
+
+/* Print — lay every folio out as pages for PDF export */
+@media print{
+  body{overflow:visible;background:#fff}
+  .dock,.paper,.margins{display:none}
+  .folio{position:relative;opacity:1!important;visibility:visible!important;transform:none!important;
+    page-break-after:always;height:100vh;border-bottom:1px solid #ccc}
+  .folio.dark{background:var(--footer);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<div class="paper"></div>
+<div class="margins"><span></span><span></span></div>
+
+<div class="deck" id="deck">
+
+<!-- FOLIO 01 · COVER ─────────────────────────────────────────────── -->
+<section class="folio active" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 01</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>Volume I · Issue 03</span></div>
+  <div class="stage">
+    <svg class="mark rv" viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="1.4" style="animation-delay:.05s">
+      <circle cx="22" cy="22" r="13"/><path d="M22 3v11M22 30v11M3 22h11M30 22h11"/><circle cx="22" cy="22" r="2.4" fill="currentColor" stroke="none"/>
+    </svg>
+    <p class="eyebrow rv" style="margin:1.4rem 0 1.2rem;animation-delay:.1s">Prospectus — a quiet AI for a loud job market</p>
+    <h1 class="h-xl rv" style="animation-delay:.15s">A career,<br><span class="it pen">in conversation.<svg viewBox="0 0 300 8" preserveAspectRatio="none"><path d="M2 6 C 70 2, 150 5, 220 4 S 285 3, 298 5"/></svg></span></h1>
+    <p class="lede rv" style="margin-top:1.6rem;animation-delay:.3s">Rico is a small, patient intelligence for people looking for real work in the UAE. It reads your CV, watches the market, and only writes back when there is a job worth writing back about.</p>
+    <div class="rv" style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center;margin-top:2rem;animation-delay:.4s">
+      <span class="dateline">Investor &amp; Stakeholder Edition</span>
+      <span class="rule-sun"></span>
+      <span class="dateline">Dubai · Abu Dhabi · Sharjah · 2026</span>
+    </div>
+  </div>
+</section>
+
+<!-- FOLIO 02 · THE PROBLEM ───────────────────────────────────────── -->
+<section class="folio" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 02</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>The Problem</span></div>
+  <div class="stage">
+    <p class="eyebrow rv">§ The problem</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 1rem;animation-delay:.05s">The market is loud.<br>The tools are <em class="sun">louder.</em></h2>
+    <p class="lede rv" style="animation-delay:.1s">The UAE runs on newcomers — an expat-majority workforce for whom finding work is the path to residency, stability, and a life. Yet the search itself is impersonal, noisy, and built for volume, not for people.</p>
+    <div class="grid g2 rv" style="margin-top:1.6rem;animation-delay:.2s">
+      <div class="plate"><span class="idx">01</span>
+        <svg class="glyph" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 6h16M4 12h16M4 18h10"/><path d="M20 16l2 2-2 2" stroke="var(--sun)"/></svg>
+        <h3>Noise, no guidance</h3>
+        <p>Hundreds of near-identical listings and no one to make sense of them. People apply to role after role before a single reply — and never learn why.</p></div>
+      <div class="plate"><span class="idx">02</span>
+        <svg class="glyph" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6" /><path d="M15 15l2.5 2.5" stroke="var(--sun)"/></svg>
+        <h3>Generic help doesn't fit</h3>
+        <p>The big AI tools are built for the whole world. They don't know UAE visa rules, real salary ranges, or how a Dubai recruiter actually reads a CV.</p></div>
+      <div class="plate"><span class="idx">03</span>
+        <svg class="glyph" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13l2 2 4-4" stroke="var(--sun)"/></svg>
+        <h3>Rejected before a human reads it</h3>
+        <p>UAE hiring runs on locally-formatted CVs, and screening software turns most people away before a person ever sees their name.</p></div>
+      <div class="plate"><span class="idx">04</span>
+        <svg class="glyph" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /><path d="M12 3c2 2 2 6 0 8" stroke="var(--sun)"/></svg>
+        <h3>One language, many people</h3>
+        <p>200+ nationalities, two working languages. Almost every tool speaks English only — leaving people who live in Arabic, or a mix of both, unserved.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOLIO 03 · MARKET ────────────────────────────────────────────── -->
+<section class="folio" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 03</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>Market</span></div>
+  <div class="stage">
+    <p class="eyebrow rv">§ The opportunity</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 1.4rem;animation-delay:.05s">An underserved market,<br>in the world's <em class="sun">fastest-moving hub.</em></h2>
+    <div class="grid g3 rv" style="animation-delay:.15s">
+      <div class="plate" style="text-align:center"><div class="fig" data-count="9.2" data-suffix="M">9.2M</div><div class="fig-sub">Expat workers in the UAE</div></div>
+      <div class="plate" style="text-align:center"><div class="fig sun" data-count="2.4" data-prefix="$" data-suffix="B">$2.4B</div><div class="fig-sub">Regional career-tech market</div></div>
+      <div class="plate" style="text-align:center"><div class="fig" data-count="38" data-suffix="%">38%</div><div class="fig-sub">Growth a year in regional AI</div></div>
+    </div>
+    <div class="grid g2 rv" style="margin-top:1.1rem;animation-delay:.3s">
+      <div class="plate"><span class="kx">Who we serve first</span><h3 style="font-family:var(--serif);font-weight:500;font-size:1.25rem;margin:.4rem 0 .3rem">≈ 1.2M UAE job seekers a year</h3><p style="font-size:.82rem;color:var(--ink70)">English and Arabic speakers, comfortable online, aged 22–45 — the people Rico is built for today.</p></div>
+      <div class="plate"><span class="kx" style="color:var(--sun)">Where we grow next</span><h3 style="font-family:var(--serif);font-weight:500;font-size:1.25rem;margin:.4rem 0 .3rem">Saudi · Qatar · Bahrain</h3><p style="font-size:.82rem;color:var(--ink70)">A neighbouring market of roughly 28M expats who share the UAE's visa and cultural realities.</p></div>
+    </div>
+    <p class="kx rv" style="margin-top:1rem;animation-delay:.4s">Market figures are directional estimates, 2026.</p>
+  </div>
+</section>
+
+<!-- FOLIO 04 · THE SOLUTION ──────────────────────────────────────── -->
+<section class="folio" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 04</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>The Product</span></div>
+  <div class="stage">
+    <p class="eyebrow rv">§ The product</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 .8rem;animation-delay:.05s">Not a job board.<br>A <em class="sun">career partner.</em></h2>
+    <p class="lede rv" style="animation-delay:.1s">One quiet voice that learns you, watches the market, and speaks only with reason — delivered where the UAE workforce already lives: Telegram and the web.</p>
+    <div class="grid g3 rv" style="margin-top:1.5rem;animation-delay:.2s">
+      <div class="plate"><span class="idx">A</span><h3>Learns you</h3><p>It reads your CV, then learns more as you chat — your goals, your no-gos, the salary you need, the city you want.</p></div>
+      <div class="plate"><span class="idx">B</span><h3>Watches the market</h3><p>Rico follows UAE job sources around the clock and ranks how well each one fits you. Only the strong matches ever reach you.</p></div>
+      <div class="plate"><span class="idx">C</span><h3>Explains itself</h3><p>Every match opens up: how well it fits, why it fits in plain words, and the one thing worth knowing before you apply.</p></div>
+      <div class="plate"><span class="idx">D</span><h3>Drafts, never fakes</h3><p>Honest, UAE-localized cover letters and CV tailoring. Rico strengthens the truth — it never invents experience.</p></div>
+      <div class="plate"><span class="idx">E</span><h3>Keeps the thread</h3><p>An application ledger, follow-up reminders, and status tracking so nothing you started quietly disappears.</p></div>
+      <div class="plate"><span class="idx">F</span><h3>Speaks both tongues</h3><p>English, Arabic, and the code-switched middle. Built first for the UAE's polyglot reality, not retrofitted for it.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOLIO 05 · CONVICTIONS ───────────────────────────────────────── -->
+<section class="folio" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 05</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>Convictions</span></div>
+  <div class="stage">
+    <p class="eyebrow rv">§ Why Rico is different</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 1.4rem;animation-delay:.05s">Three quiet convictions,<br>held <em class="sun">stubbornly.</em></h2>
+    <div class="grid g3 rv" style="animation-delay:.15s">
+      <div class="plate"><div class="idx" style="font-family:var(--serif);font-style:italic;font-size:1.5rem;color:var(--sun)">01</div>
+        <h3 style="margin-top:.6rem">The conversation is the product</h3>
+        <p>Rico is not a dashboard with a chatbot bolted on. It is one quiet voice that reads you, reads the market, and interrupts only with reason.</p></div>
+      <div class="plate"><div class="idx" style="font-family:var(--serif);font-style:italic;font-size:1.5rem;color:var(--sun)">02</div>
+        <h3 style="margin-top:.6rem">Reasons, not just scores</h3>
+        <p>Every match opens up — why this role fits, what is missing, and what to do about it. No mystery numbers you can't question.</p></div>
+      <div class="plate"><div class="idx" style="font-family:var(--serif);font-style:italic;font-size:1.5rem;color:var(--sun)">03</div>
+        <h3 style="margin-top:.6rem">Approval before action</h3>
+        <p>Rico can draft, tailor, and prepare. It never presses submit. The safety gate is not a setting — it is the shape of the thing.</p></div>
+    </div>
+    <p class="lede rv" style="margin-top:1.4rem;font-style:italic;font-family:var(--serif);color:var(--ink);animation-delay:.35s">“I am not doing this job search alone anymore.”</p>
+  </div>
+</section>
+
+<!-- FOLIO 06 · ARCHITECTURE ──────────────────────────────────────── -->
+<section class="folio" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 06</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>How it works</span></div>
+  <div class="stage">
+    <p class="eyebrow rv">§ How it works</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 1.2rem;animation-delay:.05s">Five quiet steps. <em class="sun">Already built.</em></h2>
+    <div class="grid g2 rv" style="align-items:start;gap:clamp(1.4rem,3vw,3rem);animation-delay:.15s">
+      <div>
+        <p class="kx" style="margin-bottom:.7rem">What a person experiences</p>
+        <div class="seq">
+          <div class="step"><span class="n">01</span><span class="t">You share your CV<small>Or answer a few short questions to begin</small></span></div>
+          <div class="tick"></div>
+          <div class="step"><span class="n">02</span><span class="t">Rico reads and understands it<small>In English, Arabic, or a mix of both</small></span></div>
+          <div class="tick"></div>
+          <div class="step"><span class="n">03</span><span class="t">It searches and ranks the market for you<small>Quietly, in the background, day and night</small></span></div>
+          <div class="tick"></div>
+          <div class="step"><span class="n">04</span><span class="t">The best matches come to you<small>On Telegram — save, apply, or skip. Your call.</small></span></div>
+          <div class="tick"></div>
+          <div class="step"><span class="n">05</span><span class="t" style="color:var(--sun)">Rico remembers what you chose<small>And gets sharper every time you reply</small></span></div>
+        </div>
+      </div>
+      <div>
+        <p class="kx" style="margin-bottom:.7rem">Built on proven technology</p>
+        <div class="ledger plate" style="padding:.4rem 1.1rem">
+          <div class="row"><span class="k">Where it runs</span><span class="v">Secure cloud · always on</span></div>
+          <div class="row"><span class="k">The intelligence</span><span class="v">Leading AI, with backups</span></div>
+          <div class="row"><span class="k">How it reaches you</span><span class="v">Telegram &amp; the web</span></div>
+          <div class="row"><span class="k">Languages</span><span class="v">English · العربية</span></div>
+          <div class="row"><span class="k">Your data</span><span class="v">Private, per person</span></div>
+          <div class="row"><span class="k">Approval</span><span class="v">Nothing sent without you</span></div>
+        </div>
+        <p class="kx" style="margin-top:.7rem">Live today at ricohunt.com</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOLIO 07 · TRACTION ──────────────────────────────────────────── -->
+<section class="folio" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 07</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>Build Status</span></div>
+  <div class="stage">
+    <p class="eyebrow rv">§ Traction</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 1rem;animation-delay:.05s">Not a deck.<br>A <em class="sun">running system.</em></h2>
+    <p class="lede rv" style="animation-delay:.1s">Rico is deployed, tested, and under continuous integration today — a working product, not a promise.</p>
+    <div class="grid g2 rv" style="margin-top:1.4rem;animation-delay:.2s">
+      <div class="plate">
+        <span class="kx">Care in how it's built</span>
+        <div class="bar" style="margin-top:.9rem"><div class="lab"><span>Every feature, automatically tested</span><b>passing</b></div><div class="track"><div class="fill" data-w="100"></div></div></div>
+        <div class="bar" style="margin-top:.7rem"><div class="lab"><span>The app, checked end to end</span><b>passing</b></div><div class="track"><div class="fill sun" data-w="100"></div></div></div>
+        <div class="bar" style="margin-top:.7rem"><div class="lab"><span>Builds cleanly, ships reliably</span><b>stable</b></div><div class="track"><div class="fill" data-w="100"></div></div></div>
+      </div>
+      <div class="grid g2" style="gap:.7rem">
+        <div class="plate" style="text-align:center;display:flex;flex-direction:column;justify-content:center"><div class="fig" style="font-size:2rem">100%</div><div class="fig-sub">Quality checks passing</div></div>
+        <div class="plate" style="text-align:center;display:flex;flex-direction:column;justify-content:center"><div class="fig sun" style="font-size:2rem">39</div><div class="fig-sub">Careful database updates</div></div>
+        <div class="plate" style="text-align:center;display:flex;flex-direction:column;justify-content:center"><div class="fig" style="font-size:1.5rem;font-style:italic">EN · ع</div><div class="fig-sub">Live in two languages</div></div>
+        <div class="plate" style="text-align:center;display:flex;flex-direction:column;justify-content:center"><div class="fig" style="font-size:1.5rem;font-style:italic">You</div><div class="fig-sub">Never applies without you</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOLIO 08 · MOAT ──────────────────────────────────────────────── -->
+<section class="folio" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 08</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>Moat</span></div>
+  <div class="stage">
+    <p class="eyebrow rv">§ Competitive position</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 1.2rem;animation-delay:.05s">Where others <em class="sun">can't follow.</em></h2>
+    <div class="rv scroll-sm" style="animation-delay:.15s">
+      <table class="cmp">
+        <thead><tr><th>Capability</th><th class="c us">Rico AI</th><th class="c">LinkedIn</th><th class="c">Bayt</th><th class="c">ChatGPT</th></tr></thead>
+        <tbody>
+          <tr class="us-row"><td class="k">Understands the UAE job market</td><td class="c yes">✓</td><td class="c par">partial</td><td class="c par">partial</td><td class="c no">—</td></tr>
+          <tr><td class="k">Understands Arabic &amp; mixed language</td><td class="c yes">✓</td><td class="c no">—</td><td class="c par">basic</td><td class="c par">basic</td></tr>
+          <tr class="us-row"><td class="k">Comes to you on Telegram</td><td class="c yes">✓</td><td class="c no">—</td><td class="c no">—</td><td class="c no">—</td></tr>
+          <tr><td class="k">Searches for you in the background</td><td class="c yes">✓</td><td class="c no">—</td><td class="c no">—</td><td class="c no">—</td></tr>
+          <tr class="us-row"><td class="k">Explains why each job fits</td><td class="c yes">✓</td><td class="c no">—</td><td class="c no">—</td><td class="c par">partial</td></tr>
+          <tr><td class="k">Never applies without your say</td><td class="c yes">✓</td><td class="c no">—</td><td class="c no">—</td><td class="c no">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="kx rv" style="margin-top:1rem;animation-delay:.3s">It isn't one feature — it's true UAE fluency, a private loop that learns from every choice, and a channel the big players don't own.</p>
+  </div>
+</section>
+
+<!-- FOLIO 09 · BUSINESS MODEL ────────────────────────────────────── -->
+<section class="folio" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 09</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>Business Model</span></div>
+  <div class="stage">
+    <p class="eyebrow rv">§ How it earns</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 1.3rem;animation-delay:.05s">Free, to Pro, to <em class="sun">organisations.</em></h2>
+    <div class="grid g3 rv" style="align-items:stretch;animation-delay:.15s">
+      <div class="plate"><div class="price">
+        <span class="tier">Free</span><div class="amt">AED 0<span style="font-family:var(--mono);font-size:.7rem;color:var(--ink40)"> /mo</span></div>
+        <ul><li>5 matches a week</li><li>Basic CV review</li><li>Telegram alerts</li><li>Track your applications</li></ul>
+        <span class="foot">Builds the habit</span>
+      </div></div>
+      <div class="plate feature"><div class="price">
+        <span class="tier" style="color:var(--sun)">Rico Pro</span><div class="amt sun">AED 69<span style="font-family:var(--mono);font-size:.7rem;color:var(--ink40)"> /mo</span></div>
+        <ul><li>Unlimited matches</li><li>Cover letters &amp; CV tailoring</li><li>Interview preparation</li><li>Real UAE salary guidance</li><li>Priority support</li></ul>
+        <span class="foot" style="color:var(--sun)">Main source of revenue</span>
+      </div></div>
+      <div class="plate"><div class="price">
+        <span class="tier">For organisations</span><div class="amt">Custom</div>
+        <ul><li>Talent access for recruiters</li><li>Portals for HR teams</li><li>Universities &amp; training colleges</li><li>Government job placement</li></ul>
+        <span class="foot">The next phase of growth</span>
+      </div></div>
+    </div>
+    <p class="kx rv" style="margin-top:1rem;animation-delay:.3s">Priced in dirhams — Pro costs less than one coffee a week, and far less than staying stuck.</p>
+  </div>
+</section>
+
+<!-- FOLIO 10 · ROADMAP ───────────────────────────────────────────── -->
+<section class="folio" data-dark="0">
+  <div class="runhead"><span class="fol">Folio 10</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>Roadmap</span></div>
+  <div class="stage">
+    <p class="eyebrow rv">§ The path</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 1rem;animation-delay:.05s">From waitlist to <em class="sun">GCC.</em></h2>
+    <div class="timeline rv" style="animation-delay:.15s">
+      <div class="tl now"><span class="when">Q3 2026 — now</span><div class="what"><h4>Invite-only &amp; waitlist</h4><p>Open early access, grow to 500 first users, complete final launch preparations, and test every part end to end.</p></div></div>
+      <div class="tl"><span class="when">Q4 2026</span><div class="what"><h4>Public launch &amp; paid plans</h4><p>Rico Pro goes live, responses get faster, and Rico takes on more of the work for you from start to finish.</p></div></div>
+      <div class="tl"><span class="when">Q1 2027</span><div class="what"><h4>10K users &amp; first B2B pilots</h4><p>Recruiter API, enterprise HR portals, first university partnership. Target AED 500K ARR.</p></div></div>
+      <div class="tl"><span class="when">H2 2027</span><div class="what"><h4>GCC expansion — KSA &amp; Qatar</h4><p>Localize for Saudi Vision 2030 and the Qatari expat market. Target $2M ARR, Series A positioning.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOLIO 11 · THE ASK / COLOPHON ────────────────────────────────── -->
+<section class="folio dark" data-dark="1">
+  <div class="runhead"><span class="fol">Folio 11</span><span><b>Rico&nbsp;AI</b> — Investor Prospectus</span><span>Colophon</span></div>
+  <div class="stage">
+    <p class="eyebrow rv" style="color:var(--sun-soft)"><span style="background:var(--sun-soft)"></span>§ The ask</p>
+    <h2 class="h-lg rv" style="margin:.8rem 0 1.3rem;color:var(--footer-ink);animation-delay:.05s">Seeking <em class="sun" style="color:var(--sun-soft)">$350K seed</em><br>to launch and reach 10K users.</h2>
+    <div class="grid g2 rv" style="animation-delay:.15s">
+      <div>
+        <p class="kx" style="margin-bottom:.8rem">Use of funds</p>
+        <div class="bar" style="margin-bottom:.7rem"><div class="lab" style="color:var(--footer-ink60)"><span>Product &amp; engineering</span><b style="color:var(--footer-ink)">45%</b></div><div class="track" style="background:var(--footer-hair)"><div class="fill sun" data-w="45"></div></div></div>
+        <div class="bar" style="margin-bottom:.7rem"><div class="lab" style="color:var(--footer-ink60)"><span>Growth &amp; marketing</span><b style="color:var(--footer-ink)">30%</b></div><div class="track" style="background:var(--footer-hair)"><div class="fill" data-w="30" style="background:var(--footer-ink)"></div></div></div>
+        <div class="bar" style="margin-bottom:.7rem"><div class="lab" style="color:var(--footer-ink60)"><span>Infrastructure &amp; AI</span><b style="color:var(--footer-ink)">15%</b></div><div class="track" style="background:var(--footer-hair)"><div class="fill" data-w="15" style="background:var(--footer-ink)"></div></div></div>
+        <div class="bar"><div class="lab" style="color:var(--footer-ink60)"><span>Legal &amp; operations</span><b style="color:var(--footer-ink)">10%</b></div><div class="track" style="background:var(--footer-hair)"><div class="fill" data-w="10" style="background:var(--footer-ink)"></div></div></div>
+      </div>
+      <div>
+        <p class="kx" style="margin-bottom:.8rem">Twelve-month milestones</p>
+        <div class="ledger">
+          <div class="row"><span class="k">500 beta users</span><span class="v">Aug 2026</span></div>
+          <div class="row"><span class="k">2,000 active users</span><span class="v">Q4 2026</span></div>
+          <div class="row"><span class="k">10,000 users</span><span class="v">Q1 2027</span></div>
+          <div class="row"><span class="k">AED 500K ARR</span><span class="v" style="color:var(--sun-soft)">target</span></div>
+          <div class="row"><span class="k">3 enterprise B2B pilots</span><span class="v" style="color:var(--sun-soft)">signed</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="rv" style="margin-top:1.6rem;display:flex;flex-wrap:wrap;gap:1rem;align-items:center;animation-delay:.3s">
+      <a class="cta solid" href="https://form.jotform.com/261278237812056" target="_blank" rel="noopener">Join the waitlist →</a>
+      <a class="cta ghost" href="https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE" target="_blank" rel="noopener">Read the repository</a>
+      <span class="kx" style="margin-left:auto">Roben Edwan · robenedwan@gmail.com</span>
+    </div>
+    <p class="kx rv" style="margin-top:1.4rem;animation-delay:.4s">Filed quietly from the desert · Set in Fraunces · Inter · IBM Plex Mono · Paper, ink, and one hot signal · © 2026 Rico Hunt</p>
+  </div>
+</section>
+
+</div>
+
+<!-- NAVIGATION DOCK -->
+<div class="dock" id="dock">
+  <span class="nn"><b id="cur">01</b> / 11</span>
+  <div class="ticks" id="ticks"></div>
+  <div class="arrows">
+    <button id="prev" aria-label="Previous folio">‹</button>
+    <button id="next" aria-label="Next folio">›</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var folios=[].slice.call(document.querySelectorAll('.folio'));
+  var total=folios.length, cur=0;
+  var dock=document.getElementById('dock');
+  var curEl=document.getElementById('cur');
+  var ticksEl=document.getElementById('ticks');
+
+  folios.forEach(function(_,i){
+    var d=document.createElement('span'); d.className='tick-dot'+(i===0?' on':'');
+    d.addEventListener('click',function(){go(i)}); ticksEl.appendChild(d);
+  });
+  var dots=[].slice.call(ticksEl.children);
+
+  function play(f){
+    // re-trigger reveal + counters + bars
+    f.querySelectorAll('.rv').forEach(function(el){el.style.animation='none';el.offsetHeight;el.style.animation='';});
+    f.querySelectorAll('[data-count]').forEach(function(el){
+      if(el.dataset.done)return; el.dataset.done='1';
+      var t=parseFloat(el.dataset.count), pre=el.dataset.prefix||'', suf=el.dataset.suffix||'';
+      var dec=(t%1!==0)?1:0, n=0, steps=38, inc=t/steps;
+      var id=setInterval(function(){n+=inc; if(n>=t){n=t;clearInterval(id);} el.textContent=pre+n.toFixed(dec)+suf;},22);
+    });
+    f.querySelectorAll('.fill[data-w]').forEach(function(b,i){
+      b.style.width='0'; setTimeout(function(){b.style.width=b.dataset.w+'%';},120+i*90);
+    });
+  }
+  function go(n){
+    if(n<0)n=total-1; if(n>=total)n=0;
+    folios[cur].classList.remove('active');
+    cur=n; var f=folios[cur]; f.classList.add('active');
+    dots.forEach(function(d,i){d.classList.toggle('on',i===cur)});
+    curEl.textContent=('0'+(cur+1)).slice(-2);
+    dock.classList.toggle('on-dark', f.dataset.dark==='1');
+    play(f);
+  }
+  document.getElementById('next').addEventListener('click',function(){go(cur+1)});
+  document.getElementById('prev').addEventListener('click',function(){go(cur-1)});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();go(cur+1);}
+    if(e.key==='ArrowLeft'){e.preventDefault();go(cur-1);}
+    if(e.key==='Home'){go(0);} if(e.key==='End'){go(total-1);}
+  });
+  var sx=0;
+  document.addEventListener('touchstart',function(e){sx=e.touches[0].clientX},{passive:true});
+  document.addEventListener('touchend',function(e){
+    var d=sx-e.changedTouches[0].clientX; if(Math.abs(d)>50)go(cur+(d>0?1:-1));
+  },{passive:true});
+  play(folios[0]);
+})();
+</script>
+</body>
+</html>
