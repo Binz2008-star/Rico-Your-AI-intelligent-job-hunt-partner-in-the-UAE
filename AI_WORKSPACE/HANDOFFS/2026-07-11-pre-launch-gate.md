@@ -146,3 +146,32 @@ Database: no destructive rollback is required; preserve waitlist rows. Migration
 - Main/base at branch creation: `9ceb87b1b6b4e112ffb5940b167408e8ef0cb16e`.
 - Production configuration, Vercel, Render, and Neon have not been mutated.
 - Automated CI has not yet completed; do not describe the branch as merge-ready.
+
+---
+
+## Continuity Block — 2026-07-12 (WRITER: Claude, sole writer on #967)
+
+**Active goal:** one Pre-launch page on ricohunt.com = launch film + Atelier EN/AR + waitlist form + app/API gate + internal login for `robenedwan@gmail.com`.
+
+**Branch/PR:** `feat/pre-launch-gate` / **PR #967** (NO parallel branch/PR). HEAD `2ca3d1f8`.
+
+**Done this session (code, not activated):**
+- Merged latest `main` into the branch (teaser gate, `/explainer/*` film, PR #1004 abs-path fix, recent app changes preserved).
+- Unified `apps/web/middleware.ts` to a SINGLE gate: the `RICO_LAUNCH_MODE` backend-authoritative pre-launch middleware. Removed the `NEXT_PUBLIC_SITE_LIVE` teaser variant (no refs remain).
+- `apps/web/lib/prelaunch-paths.ts`: allow `/explainer` + `/explainer/*` public during waitlist.
+- `apps/web/components/waitlist/WaitlistLanding.tsx`: embedded the film in-page via `<iframe src="/explainer/">` (not only a separate route).
+- Waitlist form unchanged → `POST /proxy/api/v1/waitlist/register`. Migration stays `039_create_waitlist.sql`.
+- Kept all `apps/web/public/explainer/*`; dropped stray local files from the PR.
+
+**PENDING verification (NOT run — token-limited session; browser/preview tools disconnected):**
+`cd apps/web && npm run build` · `npm run test -- prelaunch` (Vitest `__tests__/prelaunch-mode.test.tsx`) · backend `python -m pytest tests/test_prelaunch_gate.py -q` · Vercel preview READY on `web-git-feat-pre-launch-gate-robens-projects.vercel.app` · EN/AR + RTL + desktop/mobile visual · film plays inside waitlist page · `/dashboard`,`/command` → `/` in waitlist mode · `/login` works · waitlist form success.
+
+**Activation plan (owner decision required — DO NOT do yet):**
+1. Neon: apply `migrations/039_create_waitlist.sql` (creates `waitlist`).
+2. Render (backend): set `RICO_LAUNCH_MODE=waitlist`, `INTERNAL_ALLOWLIST_EMAILS=robenedwan@gmail.com` (+ `ADMIN_EMAIL`). Redeploy.
+3. Vercel (frontend): set `RICO_LAUNCH_MODE=waitlist` (+ ensure `NEXT_PUBLIC_RICO_API`/backend base URL present). Redeploy `main` AFTER PR #967 merges.
+4. Merge PR #967 → main. Smoke: `/` = waitlist+film, `/dashboard`→`/`, `/login` OK, register writes a row, owner email can enter.
+
+**Rollback:** set `RICO_LAUNCH_MODE=live` (or unset) on Render+Vercel → instant full site. Default is `live`; merging alone cannot close production. Migration 039 is additive (a new table) — safe to leave.
+
+**Risks:** (1) frontend gate is UX-only; backend `prelaunch_login`/`prelaunch/access` is the real authority — both env vars must be `waitlist`. (2) film iframe CTA/Skip target `/signup` which is blocked in waitlist → bounces to `/` (acceptable; primary CTA is the waitlist form). (3) verify `BACKEND_API_BASE_URL`/`NEXT_PUBLIC_RICO_API` set on Vercel so middleware's `/prelaunch/access` fetch resolves, else it fails-closed to `/`.

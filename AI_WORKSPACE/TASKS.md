@@ -1482,3 +1482,5 @@ Three compounding issues:
 - Open: #653 sidebar retry still draft; unrelated to BUG-05.
 
 ---
+
+- [ ] **ACTIVE** PR #967 pre-launch gate: verify (build/vitest/pytest/preview EN-AR-mobile) then owner-activate (Neon 039 + RICO_LAUNCH_MODE=waitlist on Render+Vercel + merge). Writer: Claude. Branch `feat/pre-launch-gate` @ 2ca3d1f8.

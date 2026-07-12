@@ -165,3 +165,5 @@ PR #969 production verification: PASS (recorded for reference).
 - cleanup: synthetic document deleted; baseline restored
 - next implementation objective: #963
 ```
+
+- 2026-07-12: PR #967 (pre-launch gate + film + waitlist) is the ACTIVE goal. Code ready on `feat/pre-launch-gate` @ 2ca3d1f8; pending verification + owner activation. See HANDOFFS/2026-07-11-pre-launch-gate.md Continuity Block.
