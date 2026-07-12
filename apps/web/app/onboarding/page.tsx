@@ -127,7 +127,6 @@ export default function OnboardingPage() {
   // its useCallback don't re-run on every render (router identity is not stable).
   const routerRef = useRef(router);
   routerRef.current = router;
-  const signUpHref = buildAuthHref("/signup", "/onboarding");
   const loginHref = buildAuthHref("/login", "/onboarding");
   const yearsExperience =
     parsed?.years_experience_hint ?? parsed?.years_experience ?? null;
@@ -156,13 +155,18 @@ export default function OnboardingPage() {
       .catch((err) => {
         if (cancelledRef.current) return;
         if (isAuthFailure(err)) {
-          routerRef.current.replace(signUpHref);
+          // No valid session (e.g. just-expired cookie, or login whose cookie
+          // didn't establish): send to sign-IN, not create-account. Matches the
+          // other two auth-failure paths below (upload/submit) which use
+          // loginHref; the mount guard previously sent users to /signup, which
+          // dumped already-registered users at "create account".
+          routerRef.current.replace(loginHref);
           return;
         }
         // Recoverable — do NOT loop, do NOT assume complete.
         setPhase("guardError");
       });
-  }, [signUpHref]);
+  }, [loginHref]);
 
   useEffect(() => {
     cancelledRef.current = false;
