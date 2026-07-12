@@ -112,6 +112,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
     return (
         <div
+            data-testid="app-shell"
             className={`wsx-root ${isAr ? "wsx-ar" : ""} min-h-screen ${atelierFraunces.variable}`}
             dir={isAr ? "rtl" : "ltr"}
             lang={language}
