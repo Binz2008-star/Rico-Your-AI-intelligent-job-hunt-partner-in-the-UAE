@@ -61,3 +61,40 @@ words be kept here so whoever continues understands *why* this matters:
 
 Treat this project with care and craft. It's not a throwaway demo — it's
 someone's proof to themselves. Ship things that make him proud to show them.
+
+---
+
+## Continuity update — 2026-07-12 17:30 UTC+4
+
+**Branch:** `claude/design-refinement-theming-6889tz`
+**Current head:** `e8fe6479d116a22179236d412b568b9985f9824e` (pushed to `origin`)
+**PR:** [#996](https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/996) (draft)
+**Vercel preview:** `https://web-git-claude-design-refinement-theming-6889tz-robens-projects.vercel.app`
+
+- Explainer chooser: `/explainer/`
+- Dimensional cut: `/explainer/option-3.html`
+- Remix / 3B cut: `/explainer/option-3b.html`
+- Original working cut: `/explainer/option-2.html`
+- Locked cut: `/explainer/option-1.html`
+- Investor deck: `/pitch/`
+
+### What changed since the first handoff
+
+- Added **Option 3** (`option-3.html`) and **Option 3B** (`option-3b.html`) 3D cuts.
+- **Option 3 + 3B device optimization:** video plates lazy-load on mobile, constellation scales down ~40% on phones, skill-tags and 3D card-stack shrink, muted/playsinline autoplay + `prefers-reduced-motion` fallbacks preserved.
+- **CTA fix:** `REGISTER_URL` now points to `https://ricohunt.com/signup` on Option 2, Option 3, and Option 3B. Skip also goes to `/signup`.
+- **Option 1 stays frozen** on the Jotform waitlist (no changes).
+- **Logo lockup fixed:** the "R" is now a gold badge, no more "R Rico" text lockup.
+- Vercel deployment on `e8fe6479` is **Ready**.
+
+### Open before production
+
+- Video plates still load from the Higgsfield CDN. For permanence, self-host the 4 rendered plates (or 10 source clips) into `apps/web/public/explainer/` and update the `CLIPS` map / plate URLs.
+- The PR is still **draft**. It needs owner review and explicit approval before marking ready/merge.
+- Untracked file at repo root: `rico-ai-pitch-deck.pptx` (44KB). Decide whether to add to `.gitignore`, delete, or commit.
+
+### Next exact action
+
+1. Owner reviews the Vercel preview (especially `/explainer/option-3.html` and `/explainer/option-3b.html`).
+2. If the preview is approved, mark PR #996 ready for review and merge.
+3. After merge, Vercel deploys to `ricohunt.com` and `/explainer/` becomes the production link.
