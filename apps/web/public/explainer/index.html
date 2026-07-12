@@ -16,14 +16,14 @@
 </style>
 <script>
 (function(){
-  /* ── Random film on every visit ──────────────────────────────────
-     The site entry (/explainer/) shows one of these cuts at random each
-     time it loads. All three carry the approved bilingual copy and the
-     /signup CTA. Edit this list to add/remove cuts (e.g. 'option-1.html').
-     Manual chooser still lives at /explainer/choose.html.               */
-  var FILMS = ['option-2.html','option-3.html','option-3b.html'];
+  /* Use absolute paths because Vercel may serve /explainer without a trailing
+     slash. Relative paths would then resolve to /option-*.html and return 404. */
+  var FILMS = [
+    '/explainer/option-2.html',
+    '/explainer/option-3.html',
+    '/explainer/option-3b.html'
+  ];
   var pick = FILMS[Math.floor(Math.random()*FILMS.length)];
-  // preserve any ?query / #hash, then swap without adding a history entry
   location.replace(pick + location.search + location.hash);
 })();
 </script>
@@ -34,10 +34,10 @@
     <div class="load" style="flex-direction:column;gap:1rem">
       <div>Rico — Launch Film</div>
       <div style="font-size:1rem">
-        <a href="option-2.html">Cut 1</a> ·
-        <a href="option-3.html">Cut 2</a> ·
-        <a href="option-3b.html">Cut 3</a> ·
-        <a href="choose.html">Choose</a>
+        <a href="/explainer/option-2.html">Cut 1</a> ·
+        <a href="/explainer/option-3.html">Cut 2</a> ·
+        <a href="/explainer/option-3b.html">Cut 3</a> ·
+        <a href="/explainer/choose.html">Choose</a>
       </div>
     </div>
   </noscript>
