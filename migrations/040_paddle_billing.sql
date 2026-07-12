@@ -1,6 +1,6 @@
--- migrations/039_paddle_billing.sql
+-- migrations/040_paddle_billing.sql
 -- Paddle Billing: customers, subscriptions, and processed webhook events.
--- Run once: psql $DATABASE_URL -f migrations/039_paddle_billing.sql
+-- Run once: psql $DATABASE_URL -f migrations/040_paddle_billing.sql
 
 -- ── paddle_customers: map Rico user_id → Paddle customer_id ───────────────
 
