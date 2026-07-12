@@ -1,9 +1,9 @@
 import "@testing-library/jest-dom/vitest";
 import { screen, waitFor } from "@testing-library/react";
-import { renderWithProviders as render } from "./test-utils";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithProviders as render } from "./test-utils";
 
 const { fetchProfileMock, updateProfileMock } = vi.hoisted(() => ({
     fetchProfileMock: vi.fn(),
@@ -94,6 +94,8 @@ describe("Profile inline edit for identity/contact fields", () => {
         const user = userEvent.setup();
         render(<ProfilePage />);
 
+        await user.click(await screen.findByRole("button", { name: "Edit profile" }));
+
         // Find phone field and click edit
         const phoneEditButton = await screen.findByLabelText("Edit phone");
         await user.click(phoneEditButton);
@@ -131,6 +133,8 @@ describe("Profile inline edit for identity/contact fields", () => {
         const user = userEvent.setup();
         render(<ProfilePage />);
 
+        await user.click(await screen.findByRole("button", { name: "Edit profile" }));
+
         const salaryEditButton = await screen.findByLabelText("Edit min-salary");
         await user.click(salaryEditButton);
 
@@ -158,6 +162,8 @@ describe("Profile inline edit for identity/contact fields", () => {
         const user = userEvent.setup();
         render(<ProfilePage />);
 
+        await user.click(await screen.findByRole("button", { name: "Edit profile" }));
+
         const salaryEditButton = await screen.findByLabelText("Edit min-salary");
         await user.click(salaryEditButton);
 
@@ -184,6 +190,8 @@ describe("Profile inline edit for identity/contact fields", () => {
 
         const user = userEvent.setup();
         render(<ProfilePage />);
+
+        await user.click(await screen.findByRole("button", { name: "Edit profile" }));
 
         await user.click(await screen.findByLabelText("Edit phone"));
         await user.type(screen.getByLabelText("phone"), "+971501234567");

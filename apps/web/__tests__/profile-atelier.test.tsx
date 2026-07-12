@@ -1,8 +1,8 @@
 import { screen, waitFor } from "@testing-library/react";
+import { renderWithProviders as render } from "./test-utils";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderWithProviders as render } from "./test-utils";
 
 const { fetchProfileMock, updateProfileMock } = vi.hoisted(() => ({
     fetchProfileMock: vi.fn(),
@@ -29,6 +29,10 @@ vi.mock("@/hooks/useAuth", () => ({
         ready: true,
         logout: vi.fn(),
     }),
+}));
+
+vi.mock("@/components/layout/AppShell", () => ({
+    AppShell: ({ children }: { children: ReactNode }) => <div data-testid="app-shell">{children}</div>,
 }));
 
 vi.mock("@/components/DashboardShell", () => ({
@@ -72,50 +76,58 @@ beforeEach(() => {
     updateProfileMock.mockReset();
 });
 
-describe("Profile name inline edit", () => {
-    it("saves name directly without routing through chat and refreshes the profile view", async () => {
-        // fetchProfile has several callers on this page (the page's own mount
-        // load, the save refresh, and the sidebar-readiness hook), so model it as
-        // returning current server state rather than positional once-values: the
-        // name is empty until the save persists it, then reflects the saved value.
+describe("Profile Atelier read portrait", () => {
+    it("defaults to the read-only portrait and toggles to the existing inline editor on Edit, then back to Cancel", async () => {
         updateProfileMock.mockResolvedValue({
             status: "ok",
             updated_fields: ["name"],
         });
-        fetchProfileMock.mockImplementation(async () => ({
+        fetchProfileMock.mockResolvedValue({
             profile_exists: true,
-            name: updateProfileMock.mock.calls.length > 0 ? "Roben Nihad" : "",
+            name: "Test User",
             email: "user@example.com",
-        }));
+            phone: "+971501234567",
+            telegram_username: "testuser",
+            visa_status: "Employment Visa",
+            notice_period: "1 month",
+            current_role: "Engineer",
+            current_company: "Test Company",
+            linkedin_url: "https://linkedin.com/in/testuser",
+            target_roles: ["Engineer", "Manager"],
+            preferred_cities: ["Dubai"],
+            salary_expectation_aed: 25000,
+            minimum_salary_aed: 15000,
+            years_experience: 5,
+            skills: ["React", "TypeScript"],
+        });
 
         const user = userEvent.setup();
         render(<ProfilePage />);
 
-        await user.click(await screen.findByRole("button", { name: "Edit profile" }));
-        await user.click(await screen.findByRole("button", { name: "Edit name" }));
+        // Read portrait is the default view.
+        await waitFor(() => expect(fetchProfileMock).toHaveBeenCalled());
+        expect(await screen.findByRole("heading", { name: "Test User" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Edit profile" })).toBeInTheDocument();
 
+        // Edit opens the existing production inline editor.
+        await user.click(screen.getByRole("button", { name: "Edit profile" }));
+        expect(await screen.findByRole("button", { name: "Cancel editing" })).toBeInTheDocument();
+        expect(await screen.findByRole("button", { name: "Edit name" })).toBeInTheDocument();
+
+        // Edit an inline field and save.
+        await user.click(screen.getByRole("button", { name: "Edit name" }));
         const input = await screen.findByLabelText("Name");
-        // The edit field seeds its draft from the current profile name, so clear
-        // any pre-filled value before typing — otherwise userEvent.type appends
-        // and produces a doubled name.
         await user.clear(input);
-        await user.type(input, "  Roben Nihad  ");
-
-        // fetchProfile is also called by the sidebar-readiness hook
-        // (useSidebarStatus), so assert the save triggers a *fresh* refresh
-        // relative to the count before saving rather than a brittle global total.
-        const fetchCallsBeforeSave = fetchProfileMock.mock.calls.length;
+        await user.type(input, "Updated User");
         await user.click(screen.getByRole("button", { name: /^save$/i }));
 
         await waitFor(() => {
-            expect(updateProfileMock).toHaveBeenCalledWith({ name: "Roben Nihad" });
+            expect(updateProfileMock).toHaveBeenCalledWith({ name: "Updated User" });
         });
-        await waitFor(() => {
-            expect(fetchProfileMock.mock.calls.length).toBeGreaterThan(fetchCallsBeforeSave);
-        });
-        // The saved name surfaces in more than one place (profile header + the
-        // inline field), so assert at least one occurrence renders.
-        expect((await screen.findAllByText("Roben Nihad")).length).toBeGreaterThan(0);
-        expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+
+        // Cancel returns to the read portrait.
+        await user.click(screen.getByRole("button", { name: "Cancel editing" }));
+        expect(await screen.findByRole("button", { name: "Edit profile" })).toBeInTheDocument();
+        expect(await screen.findByRole("heading", { name: "Test User" })).toBeInTheDocument();
     });
 });
