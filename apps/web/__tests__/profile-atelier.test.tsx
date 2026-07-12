@@ -77,7 +77,7 @@ beforeEach(() => {
 });
 
 describe("Profile Atelier read portrait", () => {
-    it("defaults to the read-only portrait and toggles to the existing inline editor on Edit, then back to Cancel", async () => {
+    it("defaults to the accessible read portrait and toggles to the existing inline editor on Edit, then back to Cancel", async () => {
         updateProfileMock.mockResolvedValue({
             status: "ok",
             updated_fields: ["name"],
@@ -98,6 +98,7 @@ describe("Profile Atelier read portrait", () => {
             salary_expectation_aed: 25000,
             minimum_salary_aed: 15000,
             years_experience: 5,
+            completeness_score: 0.72,
             skills: ["React", "TypeScript"],
         });
 
@@ -108,6 +109,9 @@ describe("Profile Atelier read portrait", () => {
         await waitFor(() => expect(fetchProfileMock).toHaveBeenCalled());
         expect(await screen.findByRole("heading", { name: "Test User" })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Edit profile" })).toBeInTheDocument();
+        expect(screen.getByRole("progressbar", { name: /profile completeness/i })).toHaveAttribute("aria-valuenow", "72");
+        expect(screen.getByText("25,000 AED")).toBeInTheDocument();
+        expect(screen.getByText("15,000 AED")).toBeInTheDocument();
 
         // Edit opens the existing production inline editor.
         await user.click(screen.getByRole("button", { name: "Edit profile" }));
