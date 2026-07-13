@@ -1,6 +1,8 @@
 /**
- * Regression tests for BUG-6: status taxonomy mismatch between the /flow
- * list view and the Kanban board (and the chat pipeline summary).
+ * Regression tests for BUG-6: status taxonomy mismatch between the
+ * applications list view and the Kanban board (and the chat pipeline
+ * summary). The pipeline page now lives at /applications (Atelier); it was
+ * /flow when this bug was fixed.
  *
  * Root cause: each surface (list view badges, board columns, the chat
  * pipeline summary card, and StatusBadge's internal default labels) defined
@@ -78,14 +80,15 @@ describe("BUG-6: StatusBadge default labels match the canonical taxonomy", () =>
     });
 });
 
-// ── Cross-view consistency: /flow list view vs. board view ──
+// ── Cross-view consistency: /applications list view vs. board view ──
 //
 // The acceptance criterion is "no item appears as Applied in list but Lead
 // in board" — i.e. the same application record must classify into the same
 // stage no matter which view renders it. These tests render the real
-// FlowPage (mocking only the network layer) with one synthetic application
-// per canonical status, then assert list-view labels and board-view column
-// placement agree for every single one.
+// ApplicationsPage (the Atelier route that replaced legacy /flow; mocking
+// only the network layer) with one synthetic application per canonical
+// status, then assert list-view labels and board-view column placement
+// agree for every single one.
 
 const { fetchApplicationsMock, getApplicationStatsMock, fetchMeMock } = vi.hoisted(() => ({
     fetchApplicationsMock: vi.fn(),
@@ -93,9 +96,15 @@ const { fetchApplicationsMock, getApplicationStatsMock, fetchMeMock } = vi.hoist
     fetchMeMock: vi.fn(),
 }));
 
+// The real Next router has a stable identity across renders. Returning a
+// fresh object from every useRouter() call re-fires any effect that lists the
+// router in its deps (useAuth re-calls fetchMe forever → unbounded render
+// loop / OOM), so the mock must hand back one shared object.
+const routerMock = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-    usePathname: () => "/flow",
+    useRouter: () => routerMock,
+    usePathname: () => "/applications",
     useSearchParams: () => new URLSearchParams(),
     redirect: vi.fn(),
 }));
@@ -136,12 +145,12 @@ vi.mock("@/lib/api", async (importOriginal) => {
     };
 });
 
-import FlowPage from "@/app/flow/page";
+import ApplicationsPage from "@/app/applications/page";
 
 function renderFlow() {
     return render(
         <LanguageProvider>
-            <FlowPage />
+            <ApplicationsPage />
         </LanguageProvider>,
     );
 }
@@ -157,7 +166,7 @@ function titleFor(status: ApplicationStatus) {
     return `Role for ${status}`;
 }
 
-describe("BUG-6: /flow list view and board view classify the same records identically", () => {
+describe("BUG-6: /applications list view and board view classify the same records identically", () => {
     beforeEach(() => {
         fetchApplicationsMock.mockReset();
         getApplicationStatsMock.mockReset().mockResolvedValue({});

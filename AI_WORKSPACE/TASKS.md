@@ -78,6 +78,90 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260713-002 — Atelier migration program: parity matrix + first route PR (/applications)
+
+Status: review
+Owner: Claude (WRITER; activity pass: Planner → Coder)
+Branch: `claude/atelier-migration-planning-mq6bt6`
+Issue/PR: #1012 (draft; owner execution order 2026-07-13)
+
+#### Objective
+
+Own the Atelier Migration Program: publish the route parity matrix, migration order,
+and component reuse report (`AI_WORKSPACE/ATELIER_MIGRATION_PROGRAM.md`), and land the
+first implementation PR — migrate `/applications` off the legacy dark `/flow` page into
+Workspace Shell C with an `ApplicationsAtelier` component.
+
+#### Context
+
+- Relevant files: `apps/web/app/applications/page.tsx`, `apps/web/app/flow/page.tsx`,
+  `apps/web/components/applications/ApplicationsAtelier.tsx` (new),
+  `apps/web/components/workspace/*`, `apps/web/components/atelier-kit/*`,
+  `apps/web/lib/applicationStatus.ts`, `apps/web/lib/translations.ts`
+- Relevant docs: `AI_WORKSPACE/ATELIER_MIGRATION_PROGRAM.md`, `DEC-20260710-002`,
+  `DEC-20260712-001`, `AI_WORKSPACE/HANDOFFS/2026-07-10-design-preview-target-inventory.md`
+- Existing behavior: `/applications` redirects to legacy Nocturne `/flow` (list/board,
+  manual tracking, status updates) while Shell C's sidebar already links `/applications`.
+
+#### Constraints
+
+- Do not touch: Paddle/billing (`/subscription` logic, #1008 files), auth logic,
+  backend/API contracts, legacy `app-nav.ts` `/flow` contract (redirect covers it).
+- No migrations required.
+- Keep scope limited to: the `/applications` route group + its tests + program docs.
+
+#### Acceptance criteria
+
+- [x] Parity matrix, migration order, and reuse report published.
+- [x] `/applications` renders in Shell C with real data; `/flow` redirects to it.
+- [x] Same API calls, translation keys, and status taxonomy (`STAGE_DEFS`) as before.
+- [x] Existing flow behavior tests pass against the new page (import swap only).
+
+#### Required verification
+
+- [x] Unit tests: `npx vitest run __tests__/flow-manual-application.test.tsx __tests__/bug6-status-taxonomy.test.tsx`
+- [ ] Integration tests: n/a (frontend-only)
+- [x] Frontend build: `npm run build` in `apps/web`
+- [ ] Local smoke: owner visual approval on the draft PR preview
+- [ ] Production/deploy smoke if applicable: none — no deployment in this program step
+
+#### Continuity Block
+
+- Task ID: TASK-20260713-002
+- GitHub issue/PR: #1012 (draft)
+- Branch: `claude/atelier-migration-planning-mq6bt6`
+- Base branch: main
+- Last safe commit SHA: b753885 (main after #1010 merge)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: flow/upload/subscription/command/profile/settings/dashboard pages,
+  workspace + atelier-kit components, applicationStatus lib, flow tests, PR triage docs
+- Files changed: `AI_WORKSPACE/ATELIER_MIGRATION_PROGRAM.md` (new program doc);
+  `AI_WORKSPACE/TASKS.md` (this entry);
+  `apps/web/components/applications/ApplicationsAtelier.tsx` (new Atelier content);
+  `apps/web/app/applications/page.tsx` (redirect → real Shell C page);
+  `apps/web/app/flow/page.tsx` (legacy page → redirect);
+  `apps/web/__tests__/flow-manual-application.test.tsx`,
+  `apps/web/__tests__/bug6-status-taxonomy.test.tsx` (import/pathname re-point +
+  stable useRouter mock — the fresh-object mock re-fired useAuth's effect
+  forever once the page tree used useAuth, OOMing the vitest fork);
+  `apps/web/__tests__/auth-guard.test.tsx` (new /applications guard block)
+- Files intentionally not touched: `apps/web/components/layout/app-nav.ts` and
+  `apps/web/__tests__/sidebar-nav-routing.test.ts` (legacy `/flow` nav contract; M4),
+  `/subscription` + Paddle files (#1008 HOLD), `/command`, auth files
+- What is complete: program docs; /applications migration; tests + build green
+- What is incomplete: owner visual approval; M2–M6 (see program doc §2)
+- Known blockers: none for M1; M5 blocked on #1008 + owner shell decision
+- Validation already run: vitest (flow + bug6 + full suite) → pass; `npm run build` → pass
+- Validation still required: owner visual review of draft PR; CI on PR head
+- Deployment/CI/Neon/Vercel state to check next: PR CI checks after push
+- Next exact action: owner review of draft PR; then claim M2 (/profile shell unification)
+- Stop condition: any request to merge/deploy, touch billing/auth, or expand beyond the
+  /applications route group → stop and ask the owner
+- Rollback plan: revert the PR's commits (docs + route migration are self-contained;
+  `/flow` redirect flip reverses cleanly)
+
 ### TASK-20260713-001 — Reconcile Rico control plane and record governed follow-up direction
 
 Status: review
