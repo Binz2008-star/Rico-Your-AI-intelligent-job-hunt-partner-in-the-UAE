@@ -15,9 +15,9 @@ This inventory is a control-plane snapshot, not permission to merge. Live GitHub
 | PR | Subject | Classification | Required action |
 | ---: | --- | --- | --- |
 | #1010 | control-plane reconciliation and launch execution | ACTIVE | Docs/control only; independently review, add canonical TASKS Continuity Block, verify final-head checks, then seek owner merge approval. |
-| #1009 | Playwright cold-start diagnostics/timeout | REVIEW | Focused review; merge only if still needed against current main and CI evidence supports it. |
-| #1008 | Paddle billing implementation (`feat/paddle-billing`) | HOLD | Large security-sensitive change: 17 files and roughly 2.9k additions. Deep-audit checkout, webhook verification, identity mapping, entitlement lifecycle, secrets, migration/config, tests, and overlap with #989 before any merge decision. Do not extend the branch meanwhile. |
-| #1007 | favicon/icon system correction | REVIEW | Verify changed assets, build, metadata/PWA behavior, and visual approval. |
+| #1009 | Playwright cold-start diagnostics/timeout | MERGED | Merged to main (`fd49129b`). No further action required. |
+| #1008 | Paddle billing implementation (`feat/paddle-billing`) | HOLD | CI green (pytest ✅ playwright ✅ frontend ✅ postgres-integration ✅ on `36536396`). Scope-audited and out-of-scope files reverted. #1011 closed without merge; its server-owned checkout-attribution pattern was ported into #1008. HOLD: do NOT merge or activate (`BILLING_MODE=paddle`) until Paddle Sandbox smoke, entitlement lifecycle, migration gates, and independent review are satisfied. Migrations 040+041 have NOT been applied to Neon production. |
+| #1007 | favicon/icon system correction | MERGED | Merged to main (`67758854fa692e292ab7cce479805736222b749d`); Vercel production deploy confirmed. No further action required. |
 | #1002 | truthful “Discuss with Rico” settings affordances | REVIEW | Rebase/reconcile with merged #1000/#1001; confirm no false execution claim and no settings regression. |
 | #997 | earlier `/settings` Atelier migration | STALE/CLOSE | Superseded by merged #1000/#1001; do not rebase or resume. |
 | #996 | pitch/explainer/waitlist bundle | HOLD | Mixed scope; split any still-needed deliverable into separate tasks/PRs. |
@@ -42,19 +42,24 @@ This inventory is a control-plane snapshot, not permission to merge. Live GitHub
 - Public teaser gate and launch film merged.
 - Root-level explainer film path fix merged.
 - Verification/legal routes made reachable through teaser middleware.
+- #1007 favicon/icon system merged (`67758854`) — Vercel production confirmed.
+- #1009 Playwright webServer timeout fix merged (`fd49129b`).
+- #1011 closed without merge; server-owned checkout-attribution pattern ported into #1008.
+- Live main as of this update: `5a03035a` (includes two dashboard [skip ci] commits on top of `67758854`).
 
 ## Immediate cleanup order
 
 1. Complete review and merge decision for #1010.
-2. Review and decide #1009.
-3. Review and decide #1007.
+2. ~~Review and decide #1009.~~ Done — merged.
+3. ~~Review and decide #1007.~~ Done — merged.
 4. Reconcile #1002 against current `/settings` main state.
 5. Close #997 as superseded.
-6. Deep-audit #1008 together with #989 before billing resumes.
-7. Keep #988 outside the launch-critical sequence.
-8. Keep #996, #967, #965, and #968 on hold.
-9. Preserve #961, #935, #873, and #872 as reference only.
-10. Re-audit #987 against the final route inventory.
+6. Satisfy all remaining #1008 gates (Sandbox smoke, entitlement lifecycle verification, migration approval, independent review) before billing resumes.
+7. #989 (subscription-gating audit) remains open REVIEW — assess independently before or alongside #1008 merge decision.
+8. Keep #988 outside the launch-critical sequence.
+9. Keep #996, #967, #965, and #968 on hold.
+10. Preserve #961, #935, #873, and #872 as reference only.
+11. Re-audit #987 against the final route inventory.
 
 ## Safety rule
 

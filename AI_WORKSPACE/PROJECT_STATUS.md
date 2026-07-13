@@ -10,7 +10,7 @@
 | --- | --- |
 | Repository | `Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE` |
 | Snapshot date | 2026-07-13 |
-| Live-main baseline audited | main included `b66eb46fe16f826bdbb9ef5466d2d0d60472c2a9` (`#1005`) before this control-plane branch; agents must fetch and report the exact current SHA at session start |
+| Live-main baseline audited | `5a03035a` as of 2026-07-13 reconciliation merge (includes #1005, #1003, #1004, #1009 playwright fix `fd49129b`, #1007 icons `67758854`, and two dashboard-only [skip ci] commits); agents must fetch and report the exact current SHA at session start |
 | Active control-plane PR | `#1010` on `chore/agent-control-plane-reconciliation` |
 | Active objective | Reconcile coordination, classify open PRs, and establish the launch execution sequence before more runtime work |
 | Runtime writer | None authorized until #1010 is independently reviewed/merged and the first launch task is claimed |
@@ -62,9 +62,11 @@ The initial self-review found and corrected a real governance conflict:
 - `START_HERE.md` and `DAILY_AUTOPILOT.md` now preserve the canonical read order and perform live-state verification before action.
 - Branch-authority roles (`WRITER`/`REVIEWER`/`RELEASE`/`IDLE`) are now distinguished from activity-pass roles (`Planner`/`Coder`/`Reviewer`/`Tester`/`Deploy verifier`).
 
-Remaining merge blocker:
+Remaining merge blockers (updated after truth-reconciliation pass):
 
-- `AI_WORKSPACE/TASKS.md` still needs the canonical `TASK-20260713-001` Continuity Block. The dated handoff exists, but it does not replace the task-ledger requirement.
+- Final-head CI must be re-confirmed after the origin/main merge commit.
+- Independent review sign-off required.
+- Owner explicit merge approval required.
 
 ## Recent main reality
 
@@ -86,8 +88,11 @@ Read `AI_WORKSPACE/OPEN_PR_TRIAGE_2026-07-13.md` before touching any open PR.
 
 Key rules:
 
-- #1009, #1007, #1002, #989, and possibly #987 require focused current-main review.
-- #1008 is a large Paddle implementation and remains HOLD pending deep review.
+- #1009 MERGED (`fd49129b`). #1007 MERGED (`67758854`). Remove from REVIEW queue.
+- #1011 CLOSED without merge — pattern ported into #1008.
+- #1008 HOLD: CI green on `36536396`, scope-audited, out-of-scope files reverted; still requires Sandbox smoke, entitlement/lifecycle verification, migration approval, and independent review before merge/activation.
+- #989 remains open REVIEW — subscription-gating audit; assess before or alongside #1008.
+- #1002, and possibly #987 still require focused current-main review.
 - #988 is non-launch CI housekeeping and remains HOLD.
 - #997 is superseded and must not be resumed.
 - #996 is mixed scope and stays on hold.

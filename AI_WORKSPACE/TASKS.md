@@ -86,12 +86,14 @@ Branch: `chore/agent-control-plane-reconciliation`
 Issue/PR: #1010
 
 #### Objective
+
 Reconcile Rico's stale coordination layer with live GitHub state, establish the binding
 execution sequence for interface completion, the one AED 79/month plan, invitations, and
 controlled launch, and record (without expanding runtime scope) the governed long-term
 direction for the Agent Operating System and the Rico-entity vision.
 
 #### Context
+
 - Relevant files: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/START_HERE.md`,
   `AI_WORKSPACE/DAILY_AUTOPILOT.md`, `AI_WORKSPACE/OPEN_PR_TRIAGE_2026-07-13.md`,
   `AI_WORKSPACE/LAUNCH_EXECUTION_PLAN.md`,
@@ -104,12 +106,14 @@ direction for the Agent Operating System and the Rico-entity vision.
   settings, teaser/film, and verification-route fixes.
 
 #### Constraints
+
 - Do not touch: runtime application code, database migrations, environment configuration,
   deployment configuration, billing provider configuration, production data.
 - No migrations: none required (docs-only PR).
 - Keep scope limited to: control-plane/coordination documentation only.
 
 #### Acceptance criteria
+
 - [x] Open PRs classified (incl. Paddle PR #1008 held for #989 joint review; CI-housekeeping
       PR #988 held as non-launch).
 - [x] `START_HERE.md`/`DAILY_AUTOPILOT.md` aligned with `OPERATING_RULES.md` canonical boot
@@ -119,10 +123,11 @@ direction for the Agent Operating System and the Rico-entity vision.
 - [x] Agent OS roadmap and Rico-entity vision recorded as governed follow-up only (no runtime
       scope expansion; explicit "do not implement on ambition alone" gate).
 - [x] This Continuity Block present in `AI_WORKSPACE/TASKS.md` before merge.
-- [ ] Final PR head/CI re-confirmed after latest docs commits.
+- [ ] Final PR head/CI re-confirmed after origin/main merge + truth-reconciliation commit.
 - [ ] Independent review + explicit owner merge approval obtained.
 
 #### Required verification
+
 - [ ] Unit tests: n/a (docs-only)
 - [ ] Integration tests: n/a (docs-only)
 - [ ] Frontend build: n/a (no `apps/web` files touched)
@@ -130,14 +135,15 @@ direction for the Agent Operating System and the Rico-entity vision.
 - [ ] Production/deploy smoke if applicable: n/a — no runtime/production files in diff
 
 #### Continuity Block
+
 - Task ID: TASK-20260713-001
 - GitHub issue/PR: #1010
 - Branch: `chore/agent-control-plane-reconciliation`
 - Base branch: `main`
 - Last safe commit SHA: `7aa81aef1bb4ecd717372a40e3e571e96ae070b6` (base at branch creation)
-- Current head SHA: `0eb7cd40a74b80a0409262291f3bae1ddc71d085` (head immediately prior to this
-  update commit; a commit cannot state its own resulting SHA in advance — verify the live PR
-  head via `git log -1` or the GitHub PR page rather than treating this field as always-current)
+- Current head SHA: `c56fa89e150e98e443f563a01abce6eeaca4b5f1` was the head before the origin/main
+  merge; a commit cannot state its own resulting SHA in advance — verify the live PR head
+  via `git log -1` or the GitHub PR page rather than treating this field as always-current
 - Uncommitted changes present: no
 - Status: review
 - Files inspected: `AGENTS.md`, `CLAUDE.md` entry references, `AI_WORKSPACE/PROJECT_STATUS.md`,
@@ -157,8 +163,11 @@ direction for the Agent Operating System and the Rico-entity vision.
 - Known blockers: do not merge while PR remains draft; do not merge without independent review
   and explicit owner merge approval
 - Validation already run: branch-compare vs `main` (docs/control files only); GitHub QA
-  Tests / Create-Delete Branch / Vercel Preview all green on head `0eb7cd40a7`
-- Validation still required: final-head CI/diff re-verification after this commit;
+  Tests / Create-Delete Branch / Vercel Preview all green on head `c56fa89e`; origin/main
+  merged (no conflicts, 21 files: runtime assets from main, docs unchanged); truth corrections
+  applied: #1009 MERGED, #1007 MERGED, #1011 CLOSED/ported into #1008, TASK-20260713-001
+  blocker removed, #989 confirmed open/active, main baseline updated to `5a03035a`
+- Validation still required: final-head CI re-confirmation after origin/main merge commit;
   independent reviewer sign-off against live main/open PRs; owner merge approval
 - Deployment/CI/Neon/Vercel state to check next: none — docs-only, no Neon/Render action
 - Next exact action: re-verify final-head CI/diff for #1010, obtain independent review, then
@@ -177,6 +186,7 @@ Issue/PR: #933 (landing below-the-fold, **paused draft** — see below); governe
 `DEC-20260710-002` (expands `DEC-20260710-001`)
 
 #### Objective
+
 Reproduce the approved `/design-preview` package in production — same visual language,
 sections, content structure, page flows, desktop/mobile behavior, and EN/AR coverage — via
 small per-route PRs with an owner visual-approval gate before each merge. Authoritative
@@ -185,16 +195,19 @@ reference inventory: `HANDOFFS/2026-07-10-design-preview-target-inventory.md` (5
 not present in the agent environment; the in-repo `/design-preview` source is authoritative.
 
 #### Recommended PR sequence (safest first, per DEC-20260710-002 §4)
+
 PR 0 shared Atelier UI kit → PR 1 public landing (full parity) → PR 2 auth → PR 3 support/legal
 → PR 4 onboarding (after hybrid-state fix, TASK-20260710-005) → PR 5 workspace read surfaces →
 PR 6 workspace action surfaces (billing-gated) → PR 7 command/chat (own DEC).
 
 #### #933 decision
+
 Recommend: keep #933 as a draft reference and make PR 1 the full public-landing parity that
 supersedes it (revise-in-place if the owner unfreezes the hero and rules on #899; otherwise
-#933 does not merge). Do NOT merge #933 as below-the-fold-only.
+# 933 does not merge). Do NOT merge #933 as below-the-fold-only.
 
 #### Owner-gated decisions before implementation
+
 - [ ] Unfreeze the landing hero for PR 1 + decide #899's fate.
 - [ ] Canonical onboarding flow: reference intent-flow vs production CV-first.
 - [ ] Adopt the reference workspace left-sidebar (Shell C) in production?
@@ -203,6 +216,7 @@ supersedes it (revise-in-place if the owner unfreezes the hero and rules on #899
 - [ ] Approve starting PR 0 (shared Atelier UI kit).
 
 #### Constraints
+
 - Excluded/gated (DEC-20260710-002 §3): `/command` (own DEC); no backend/auth/billing/Neon/
   schema without approval; legal copy preserved verbatim; no shadcn without its own DEC;
   no fake live actions; preview/sample data wired to existing endpoints or clearly labelled.
@@ -211,11 +225,13 @@ supersedes it (revise-in-place if the owner unfreezes the hero and rules on #899
   hero parity work must reconcile with it.
 
 #### Acceptance criteria
+
 - [ ] Per-phase uniform acceptance in `DEC-20260710-001` §5 (build, no new test failures,
       EN/AR RTL, mobile, owner preview approval pre-merge, post-merge smoke).
 - [ ] Lighthouse/CLS not worse than current landing; sitemap/robots/meta unchanged.
 
 #### Rollback
+
 Revert the PR → Vercel auto-redeploy → re-smoke landing.
 
 ### TASK-20260710-004 — P2: stale apply-link tests + `test_agent.py` absent from CI
@@ -226,6 +242,7 @@ Branch: TBD
 Issue/PR: none yet
 
 #### Objective
+
 Three `tests/test_agent.py::TestApplyServiceIndeedMethod` tests encode the pre-trust-gate
 link contract and fail on clean `main` (expect `success`/`manual_required`, get
 `error: Job is missing a link` because the Phase-0 trust gate in
@@ -236,6 +253,7 @@ consider adding `tests/test_agent.py` to the CI selection. Production behavior i
 and unchanged (`RICO_ENABLE_AUTO_APPLY=false` in prod); do NOT weaken the trust gate.
 
 #### Acceptance criteria
+
 - [ ] `python -m pytest tests/test_agent.py -q` green on clean `main`.
 - [ ] No `src/` behavior change.
 
@@ -247,6 +265,7 @@ Branch: `claude/onboarding-completion-signal-j8qmxz` (merged)
 Issue/PR: #955
 
 #### Objective
+
 `next.config.js` redirects `/onboarding` → `/command` while a real 466-line
 `apps/web/app/onboarding/page.tsx` still exists — the hybrid state prohibited by
 `DEC-20260628-001` (No Dead UI rule). Owner decision then one small PR: either make the
@@ -254,6 +273,7 @@ route live (remove redirect) or strip `page.tsx` to nothing/thin passthrough. Mu
 resolved before the Phase 4 onboarding-shell work in `DEC-20260710-001`.
 
 #### Acceptance criteria
+
 - [x] Route is in exactly one legal state per the No Dead UI rule — `/onboarding` is now
   live/reachable (the `/onboarding → /command` redirect was removed; page rewritten to the
   Atelier island), routing on the backend `GET /api/v1/onboarding/status` signal.
@@ -270,6 +290,7 @@ Branch: `fix/guard-authenticated-account-pages` (merged)
 Issue/PR: #958
 
 #### Objective
+
 Guests could render the private AppShell (`/settings`) or fire a private request that showed
 a misleading connection error (`/profile`). Add a shared `useRequireAuth` + `AuthGate` guard
 so authenticated-only pages wait for auth readiness, redirect guests to
@@ -277,6 +298,7 @@ so authenticated-only pages wait for auth readiness, redirect guests to
 guest. No backend/JWT/cookie/logout change; `/command` stays public; `/onboarding` unchanged.
 
 #### Acceptance criteria
+
 - [x] guest `/settings` → `/login?next=%2Fsettings`, no shell, no private API — **prod-verified**
 - [x] guest `/profile` → `/login?next=%2Fprofile`, no shell, no private request — **prod-verified**
 - [x] authenticated users retain normal access; neutral `AuthGate` while resolving; no loop
@@ -298,10 +320,12 @@ Branch: merged
 Issue/PR: #960 / #969
 
 #### Objective
+
 Server-side exact-duplicate detection, atomic idempotency, quota safety, and primary-CV
 invariants for CV uploads. Foundation only — **no onboarding wiring in this task**.
 
 #### Acceptance criteria
+
 - [x] server-side exact-duplicate detection for CV uploads
 - [x] atomic idempotency (safe under retries/concurrent submits)
 - [x] quota safety and primary-CV invariants preserved
@@ -315,12 +339,14 @@ Branch: merged as `241b85d…`
 Issue/PR: #963 / #975
 
 #### Objective
+
 Wire the final onboarding confirmation to the canonical persistence path **after** the exact
 dedupe/idempotency foundation (#960) exists: the confirmed onboarding CV persists to My Files
 and extracted years / current role / target roles hydrate into the profile. This is what lifts
 onboarding out of PARTIAL.
 
 #### Acceptance criteria
+
 - [x] onboarding confirmation persists the CV via the canonical path (built on #960)
 - [x] extracted years/current-role/target-roles require durable Neon persistence; failures return non-2xx and retry is idempotent
 - [x] final-submit persistence + logout→login completion smoke pass with a verified account (owner-confirmed 2026-07-11)
@@ -334,17 +360,20 @@ Branch: merged as `c7aea42…`
 Issue/PR: #962 / #981
 
 #### Objective
+
 Independent auth-UX follow-up: make the login success handler safely consume the validated
 `?next=<path>` return path (surfaced by the #958 guard, which sets `next` but the login flow
 does not yet honor it). **Not part of the onboarding persistence work** — a separate later
 increment under the current priority order.
 
 #### Acceptance criteria
+
 - [x] login honors a validated internal `next` (rejects external/`//`/non-`/` per
   `lib/redirect.ts::resolveNextPath`) and returns the guest to the original page
 - [x] no open-redirect; no change to onboarding-status-based routing when `next` is absent
 
 #### Verification
+
 - vitest `login-onboarding-routing.test.tsx`: 7 passed (valid `next` honored, open-redirect
   ignored, onboarding-priority preserved for incomplete users)
 - `npm run build` green; CI green (pytest/frontend/Playwright/Postgres); Vercel READY
@@ -357,16 +386,19 @@ Branch: merged as `60978ae…`
 Issue/PR: #982
 
 #### Objective
+
 Harden the per-account subscription/plan gating surfaced by an owner question ("is plan
 activation per account, per package?"). Confirmed: gating is per-account, package-driven,
 active-and-not-expired gated, and not special-cased per account.
 
 #### Done
+
 - [x] Locked the identity-key invariant with tests: plan gating must key on the account email
   (`resolve_effective_user_plan` looks up by the stored email verbatim; a non-email identity
   silently degrades to FREE). Invariant holds at all current authenticated call sites.
 
 #### Open follow-ups (each its own scoped PR when picked up)
+
 - [ ] Per-user entitlement override columns (`monthly_ai_message_limit`, …) are read by
   `get_subscription`/`upsert_subscription` but **ignored** by `resolve_effective_user_plan`
   (documented as reserved). Either apply them or remove them to avoid a silent trap.
@@ -381,6 +413,7 @@ Branch: merged follow-up sequence
 Issue/PR: follow-up to #942; see TASK-20260710-008
 
 #### Objective
+
 19 pre-existing vitest failures across 9 files sit in exactly the surfaces Phase 3 reskins
 (signup/auth/chat/landing/profile/signals). PR #942 fixed the shared `next/navigation`/
 `LanguageProvider` test-crash class (test-config only, no component changes): baseline
@@ -389,6 +422,7 @@ TASK-20260710-008 then reached 320/0 and promoted both `npm run build` and `npm 
 (Vitest) to required CI gates.
 
 #### Acceptance criteria
+
 - [x] Shared `next/navigation`/`LanguageProvider` test-crash class fixed via test-config
       only — no `apps/web` component/runtime changes (verified: diff is
       `vitest.setup.ts` + 2 test files + CI workflow + docs only).
@@ -404,6 +438,7 @@ Branch: n/a (process/credential task, not a code PR)
 Issue/PR: none yet
 
 #### Objective
+
 Agent sessions have no approved smoke credentials, so login → `/me` → profile/settings →
 authenticated `/command` (incl. auth-flash and "Sign in while logged in" checks) cannot be
 verified without the owner. Owner decides: (a) provision a synthetic smoke account and
@@ -411,6 +446,7 @@ expose its credentials to agent sessions as env/secrets (never in repo), or (b) 
 the documented auth smoke per release. Document the chosen path in OPERATING_RULES.
 
 #### Acceptance criteria
+
 - [ ] Auth smoke runnable (by agent or documented owner procedure) before the Phase 3
       auth-shell PR merges.
 - [ ] No credentials in repo/docs; synthetic account only; never a real user account.
@@ -425,6 +461,7 @@ B3 `fix(frontend): align chat action disabled reasons`, B4 `test(frontend): alig
 with current IA`, B5 `ci(frontend): make vitest a blocking gate`
 
 #### Objective
+
 `npm run test` (vitest) is wired into CI as informational-only (`continue-on-error: true`) after
 PR #942 because residual tests still fail on clean `main`. This task tracks resolving them so
 `npm run test` can be promoted to a required/blocking CI gate (the actual completion of
@@ -432,7 +469,9 @@ TASK-20260710-006). See `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-test-health-ci-gate
 `AI_WORKSPACE/HANDOFFS/2026-07-10-fe-green-residual-fixes.md` for full detail.
 
 #### RESOLVED — PR B1+B2 (GREEN, test-only, merged/queued via `test(frontend): resolve green residual vitest failures`)
+
 Baseline moved 309/12 → 317/4. All fixes were test-only (no product code):
+
 - [x] `signup-auth-edge-cases.test.tsx` (2) — fixture bug: the 400/422 cases passed a non-empty
       `ApiError` message, so `mapSignupError`'s `err.message || checkDetails` rendered the message
       verbatim and never reached the generic fallback the test asserts. Fixed by using an empty
@@ -454,16 +493,20 @@ Baseline moved 309/12 → 317/4. All fixes were test-only (no product code):
       `findAllByText`.
 
 #### RESOLVED — PR B3 (owner-approved YELLOW, merged via `fix(frontend): align chat action disabled reasons`)
+
 Baseline moved 317/4 → 320/1. One scoped product-code touch (`ChatActionCard.tsx`) + one test update:
+
 - [x] `chat-action-card.test.tsx` (3) — added an explicit `open_drawer → "Coming soon"` branch to
       `disabledReason()` (product), kept the `submit`-no-endpoint message
       `"No endpoint configured for this action"` as-is, and updated that test's expectation to the
       current (more useful) message. No other component behavior changed.
 
 #### RESOLVED — PR B4 (owner-approved YELLOW, merged via `test(frontend): align sidebar routing with current IA`)
+
 Owner decision: the `/queue` ("Applications") sidebar nav removal is **intentional** — do not restore
 it; keep the `/queue` page itself untouched. Suite is now **320/0** (total dropped from 321 because
 the obsolete nav-item test was removed, not "fixed"):
+
 - [x] `sidebar-nav-routing.test.ts` — removed the obsolete `applications`/`/queue` nav-item lookup and
       its routing test (there is no longer a `/queue` sidebar nav item to assert a contract for). The
       `/queue` route is kept as a valid *origin* pathname in the other cases since the page still
@@ -473,7 +516,9 @@ the obsolete nav-item test was removed, not "fixed"):
       `/queue` item). No sidebar UX/rendering change.
 
 #### RESOLVED — PR B5 (Autonomous GREEN, merged via `ci(frontend): make vitest a blocking gate`)
+
 Fixed the pre-existing `scrollTo` full-suite flake and promoted vitest to a required CI gate:
+
 - [x] `vitest.setup.ts` — added `HTMLElement.prototype.scrollTo` + `window.scrollTo` mocks (jsdom
       implements neither). The command page's `scrollMessagesPane` no longer throws inside a
       requestAnimationFrame callback, which was the cross-file flake source. Stability proven by 6
@@ -483,13 +528,16 @@ Fixed the pre-existing `scrollTo` full-suite flake and promoted vitest to a requ
       unchanged.
 
 #### Status: DONE — frontend test-health arc complete
+
 `309/12 → 317/4 (B1+B2) → 320/1 (B3) → 320/0 (B4) → 320/0 stable + vitest blocking (B5)`.
 
 #### Constraints
+
 - Do not touch: backend/API, auth/session internals, billing, schema/migrations, dependencies,
   AI provider/prompt/routing, #920.
 
 #### Acceptance criteria
+
 - [x] The 8 clearly test-only failures resolved without touching product code (PR B1+B2).
 - [x] B3 (`chat-action-card`) resolved with owner sign-off (scoped product touch).
 - [x] B4 (`sidebar-nav-routing`) resolved with owner sign-off (obsolete test + orphaned metadata
@@ -506,6 +554,7 @@ Branch: `feat/design-preview-hub` (merged, squash `9d47711`); docs sync on `clau
 Issue/PR: #929 (merged)
 
 #### Objective
+
 Owner asked for one internal preview URL to review the whole Rico Atelier direction at once
 instead of piece by piece. Shipped `/design-preview`: a noindex hub with a sticky
 INTERNAL PREVIEW · SAMPLE DATA · ACTIONS DISABLED header, quick-jump nav, and six grouped
@@ -515,6 +564,7 @@ auth, onboarding, authenticated workspace, support/legal, and
 empty/loading/error/mobile/RTL states.
 
 #### Continuity Block
+
 - Scope: `apps/web/app/design-preview/{page,_client}.tsx` (new), 53 PNGs in
   `apps/web/public/design-preview/`, near-bottom-aware auto-follow in
   `apps/web/components/design-gallery/atelier-console/RicoConsole.tsx` (preview-only
@@ -530,9 +580,11 @@ empty/loading/error/mobile/RTL states.
 - Rollback: revert #929 (squash `9d47711`) and let Vercel redeploy.
 
 #### Merge provenance
+
 Owner approved the draft merge in-chat; PR marked ready then squash-merged.
 
 #### Next (owner-gated)
+
 - Follow-up preview-only PRs by route group to turn the reference surfaces (landing, auth,
   onboarding, dashboard/profile/settings/applications/upload/pricing, support) into live
   interactive previews (shadcn-free rewrites of the Lovable screens).
@@ -547,11 +599,13 @@ Branch: multiple (all merged); docs sync on `docs/workspace-sync-2026-07-10`
 Issue/PR: #914, #916, #921, #919, #924, #925, #926 (merged); #918 (closed); #920 (opened); #908 (closed)
 
 #### Objective
+
 Land the approved #908 attachment/Active-CV fixes, then explore the Atelier Console
 as the candidate authenticated-workspace direction behind reference/preview surfaces —
 without any production replacement or real actions.
 
 #### What shipped (all owner-approved, merged unless noted)
+
 - #914 — #908 RC1: widen attachment-follow-up regex → transcript-grounded handler.
 - #916 — #908 RC4: prevent non-CV documents becoming the Active CV (`/upload-cv` +
   `/confirm-cv-profile`). Both RC1+RC4 confirmed by owner-run production smoke; **#908 closed**.
@@ -569,11 +623,13 @@ without any production replacement or real actions.
 - #920 opened — legal-review question for the shipped `/privacy` & `/refund-policy` copy.
 
 #### Scope guardrails honored
+
 - No production route/nav change; `/command`, `/rico`, `/` untouched. No real chat/job/apply/
   save/CV actions. No backend/auth/billing/Neon/schema change in the frontend/docs PRs.
 - Not started: #917, #899, #872, #873, Phase 3, any production migration off Nocturne.
 
 #### Next (owner-gated)
+
 - Answer #920 (legal review of live privacy/refund copy).
 - Any `/rico-preview` → production migration needs its own DEC + approved PR.
 
@@ -585,17 +641,20 @@ Branch: docs/908-909-triage-and-906-907-sync
 Issue/PR: #906 (merged), #907 (merged), #908 (triage only), #909 (triage only)
 
 #### Objective
+
 Record that #906 (`profile_repo.py` connection-leak fix) and #907 (#758 job-key unification) are
 merged and live (`main` at `ec06ef5`), and triage two new issues opened after the last
 board-health scan: #908 (attachment-first orchestration bug, owner-flagged High) and #909
 (governance-doc request, owner-flagged High).
 
 #### Context
+
 - Relevant files: none changed besides `AI_WORKSPACE/*`
 - Relevant docs: `HANDOFFS/2026-07-09-board-health-scan.md` (last full scan, 34 issues, predates
   #908/#909), `HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` (full triage detail)
 
 #### Constraints
+
 - Do not touch: runtime code, tests, Neon, Vercel/Render config, issue labels/state, any
   `GOVERNANCE/` files
 - No migrations
@@ -603,6 +662,7 @@ board-health scan: #908 (attachment-first orchestration bug, owner-flagged High)
   `AI_WORKSPACE/MASTER_INDEX.md`
 
 #### Acceptance criteria
+
 - [x] #906/#907 merge state and production-READY status recorded in `PROJECT_STATUS.md`
 - [x] #908 triaged: owner's own comments quoted verbatim (orchestration root-cause, not symptom
       patches); flagged as needing owner sign-off before a deep-dive is launched
@@ -610,6 +670,7 @@ board-health scan: #908 (attachment-first orchestration bug, owner-flagged High)
       no `GOVERNANCE/` file created
 
 #### Continuity Block
+
 - Task ID: TASK-20260709-004
 - GitHub issue/PR: #906 (merged), #907 (merged), #908 (triage only), #909 (triage only)
 - Branch: docs/908-909-triage-and-906-907-sync
@@ -642,11 +703,13 @@ Branch: docs/446-stage1-cleanup (docs-only persistence PR)
 Issue/PR: #446 (Stage 1 of 2)
 
 #### Objective
+
 Clean up the 16 `public:web-*` `rico_users` rows that were corrupted by the old `ON CONFLICT`
 bug (root cause fixed in #445), without touching the 5 non-public rows sharing the same email —
 those need separate review (Stage 2).
 
 #### Continuity Block
+
 - Task ID: TASK-20260709-003
 - GitHub issue/PR: #446 (Stage 1 of 2; issue not closed)
 - Branch: none for the cleanup itself (executed via a session with live Neon connector access,
@@ -680,6 +743,7 @@ those need separate review (Stage 2).
   `HANDOFFS/2026-07-09-446-stage1-cleanup.md`
 
 #### Full detail
+
 See `AI_WORKSPACE/HANDOFFS/2026-07-09-446-stage1-cleanup.md` for the complete 16-ID rollback
 manifest, before/after counts, and validation detail.
 
@@ -691,11 +755,13 @@ Branch: docs/security-data-risk-deep-dive (docs-only persistence PR)
 Issue/PR: #127, #198 (read-only code-inspection deep dive; #263 deferred, not checked)
 
 #### Objective
+
 Verify, by direct code inspection against current `main`, whether the security/data-risk claims
 in #127 and #198 (flagged "needs full deep dive" by the 2026-07-09 board-health scan) are still
 live, before touching #758/#812/#446.
 
 #### Continuity Block
+
 - Task ID: TASK-20260709-002
 - GitHub issue/PR: #127, #198 (read-only; #263 deferred)
 - Branch: none during the deep dive itself (read-only); persisted via
@@ -734,6 +800,7 @@ live, before touching #758/#812/#446.
   workspace files above
 
 #### Full detail
+
 See `AI_WORKSPACE/HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for the complete per-claim
 table (claim / file-function checked / status / severity / smallest-safe-fix / tests-needed /
 rollback) for both #127 and #198.
@@ -746,10 +813,12 @@ Branch: docs/board-health-scan-sync (docs-only state-sync PR)
 Issue/PR: none (read-only board scan); persisted via this docs-only PR
 
 #### Objective
+
 Classify all 34 open GitHub issues (P0/P1/P2/P3/close-candidate/needs-deep-dive) using the
 newly-active Rico Continuity Gate, so the next work item is chosen from evidence, not guesswork.
 
 #### Continuity Block
+
 - Task ID: TASK-20260709-001
 - GitHub issue/PR: none (read-only board scan)
 - Branch: none during the scan itself (no branch created — read-only); this entry is persisted
@@ -783,6 +852,7 @@ newly-active Rico Continuity Gate, so the next work item is chosen from evidence
   workspace files listed above
 
 #### Full detail
+
 See `AI_WORKSPACE/HANDOFFS/2026-07-09-board-health-scan.md` for the complete issue-by-issue
 classification, top 10 risks, close candidates, and old-roadmap list.
 
@@ -794,23 +864,27 @@ Branch: feat/chat-followup-readiness (merged, squash `80e246b`)
 Issue/PR: #891 — Engineering Roadmap Phase 3 (Chat Integration)
 
 #### Objective
+
 Let chat answer "what should I follow up?" / "which jobs are due for follow-up?" (EN + AR) by
 reusing the merged #885 readiness logic (`get_by_status("applied")` → `select_revisit_candidates`,
 the same reads behind `GET /api/v1/jobs/lifecycle/follow-ups`). No new lifecycle logic.
 
 #### Scope
+
 - Add `_FOLLOWUP_READINESS_RE` + `_handle_followup_readiness` in `src/rico_chat_api.py`; dispatch
   before `_FOLLOWUP_TIMING_RE` so timing questions are untouched.
 - Out of scope: unifying `applications_repo` vs `user_job_context`; notifications; scheduler;
   migrations; UI; changes to "show my applications" / "opened but not applied" / timing advice.
 
 #### Acceptance criteria
+
 - [x] Follow-up readiness query routes to lifecycle readiness, not job_search or timing.
 - [x] Empty state is safe (no fake success), EN + AR.
 - [x] Existing lifecycle/timing/applications routes unchanged (regex non-hijack tests + 1264-test regression green).
 - [x] `tests/unit/test_chat_followup_readiness.py` passes.
 
 #### Follow-up
+
 - [ ] Phase 4 / DEC-PR-B: reconcile the two application stores (`applications_repo` vs
       `user_job_context`) — deliberately out of this slice.
 
@@ -822,12 +896,14 @@ Branch: per-phase (this entry is the roadmap, not a single PR)
 Issue/PR: DECISIONS.md → DEC-20260707-001
 
 #### Objective
+
 Mature Rico from a mixed-responsibility backend into a clean API + worker split with Neon as the
 single source of truth, in ordered phases. Fix operational state (Rico must never forget what it
 found, what the user opened, what was applied, and what needs follow-up) **before** any platform
 migration or UI redesign.
 
 #### Context
+
 - Relevant docs: `AI_WORKSPACE/ARCHITECTURE.md` (Target architecture section), DEC-20260707-001,
   and the near-term execution gate `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
   (+ Codex follow-up). Read the audit before starting any feature/redesign/worker/infra work.
@@ -837,6 +913,7 @@ migration or UI redesign.
   `rico_chat_api.py` write/read paths, lifecycle routers) — so PR A is verify-first, not rebuild.
 
 #### Constraints
+
 - DEC-20260707-001 is the architecture-level roadmap; the 2026-07-08 production hardening audit is
   the near-term execution gate that controls immediate stabilization work.
 - Smallest-safe-first; one phase per PR from current `main`.
@@ -849,6 +926,7 @@ migration or UI redesign.
 - Fixes must be global and user-agnostic (Product Generalization Rule), not per-account.
 
 #### Phase order (each becomes its own scoped task; per-phase success criteria in DEC-20260707-001)
+
 - [ ] Phase 1 (PR A, verify-first) — Persist job context + apply links (top-priority reliability fix;
       prove Audit Phase 2 gaps with synthetic data, fix only proven gaps, do not rebuild)
 - [ ] Phase 2 (PR B) — Application lifecycle cleanup
@@ -859,6 +937,7 @@ migration or UI redesign.
 - [ ] Phase 7 (PR G) — UI redesign (only after 1–6)
 
 #### Required verification
+
 - [ ] Per phase: focused unit tests + `apps/web` build where frontend changes; deploy smoke when
       runtime changes (per OPERATING_RULES.md).
 
@@ -872,15 +951,18 @@ Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-8, TC-11; contributes TC-4/TC-5) — TC-8 landed via #834/#835
 
 #### Objective
+
 Stop the intent dispatcher in `src/rico_chat_api.py` from routing to `job_search` on the mere
 presence of a company/role token. Verb/sentence structure must decide the intent
 ("prepare me for an interview …" → coaching, not search).
 
 #### Context
+
 - Relevant files: `src/rico_chat_api.py` (`classify_intent` + `legacy_intent` dispatch from ~L7485).
 - Existing behavior: company/role keywords appear to force `job_search` regardless of verb.
 
 #### Acceptance criteria
+
 - [x] "prepare me for an interview for <role> at <company>" routes to interview/coaching, not
       search — `_INTERVIEW_REQUEST_RE` guard + `_resolve_interview_prep_target`
       (`rico_chat_api.py`); confirmed green 2026-07-04 via
@@ -900,16 +982,19 @@ Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-7, TC-6) — TC-6 slice landed via #806/#807
 
 #### Objective
+
 Classify structured tracking text ("Position: X. Company: Y. Track it.") into the existing
 `application_tracking` intent, and feed OCR-extracted entities into the tracking tool from
 conversation context instead of re-running extraction.
 
 #### Context
+
 - `application_tracking` intent handler already exists (`rico_chat_api.py:4462`) — this is a
   classify/extract gap, NOT a missing feature. Do not build a parallel tracking path.
 - OCR already extracts company/title (TC-6) but the tool call ignores it.
 
 #### Acceptance criteria
+
 - [ ] "Position: X. Company: Y. Track it." saves to the pipeline without a UI button (TC-7) —
       not verified as of 2026-07-04; still open.
 - [~] Screenshot OCR entities are consumed by the tracking call for the "applied" confirmation
@@ -927,10 +1012,12 @@ Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-2, TC-1) — TC-2 landed via #834/#835/#844
 
 #### Objective
+
 Rank by function + seniority + skills overlap, not job-title keyword presence; flag/deprioritize
 UAE-national-gated roles when the profile does not confirm eligibility.
 
 #### Acceptance criteria
+
 - [x] ESG/Compliance profile no longer surfaces software-engineering roles in top results (TC-2)
       — `relevance_floor` in `rico_chat_api.py` (~L5589); confirmed green 2026-07-04 via
       `tests/test_tc2_target_role_propagation.py` + `tests/test_search_title_relevance_floor.py`.
@@ -946,10 +1033,12 @@ Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-10, TC-3) — TC-3 landed via #815
 
 #### Objective
+
 Cache search results per session/query, dedup against already-shown jobs, and add an idempotency
 key on message render to kill the double-render risk.
 
 #### Acceptance criteria
+
 - [ ] Repeat "search again" does not return a fully disjoint set with no explanation (TC-10) —
       not implemented; existing dedup (`rico_chat_api.py:5460`) is scoped to a single search
       call, not cached/deduped across the session. Still open.
@@ -970,10 +1059,12 @@ Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-9)
 
 #### Objective
+
 Detect language on the latest user message and reply in that language; add a persistent language
 override in settings. Confirm this is not a regression from the #813 Arabic-guard move.
 
 #### Acceptance criteria
+
 - [ ] Switching to English mid-session gets English replies (TC-9).
 - [ ] Arabic cold-start guard behavior (#813) is preserved.
 
@@ -985,11 +1076,13 @@ Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-4, TC-5, TC-12)
 
 #### Objective
+
 Confirm active targets before the first search after a target update (TC-4); re-ask disambiguation
 on a bare "search" when target ambiguity was raised (TC-5); make "what can you do?" onboarding-safe
 for cold-start/first-message users while keeping contextual answers when session data exists (TC-12).
 
 #### Acceptance criteria
+
 - [ ] First search after target update confirms the active targets.
 - [ ] Bare "ابحث"/"search" re-triggers disambiguation when ambiguity is open.
 - [ ] Cold-start "what can you do?" returns a structured capability overview.
@@ -1002,11 +1095,13 @@ Branch: claude/neon-db-index-cleanup-67ewh9
 Issue/PR: #826 (034, merged), #828 (035, merged), #827 (closed dup)
 
 #### Objective
+
 Drop write-amplifying redundant duplicate/subset indexes on the Neon hot per-user
 tables, and codify the covering full-UNIQUE that production carried but the repo
 never created.
 
 #### Outcome
+
 - #826 merged: 034 drops 6 redundant indexes (each covered by a surviving index);
   `034` added to `_NO_OBJECT_MIGRATIONS`.
 - #828 merged: 035 codifies `rico_job_recommendations_user_id_job_key_key`
@@ -1019,6 +1114,7 @@ never created.
   `idx_user_job_context_user_searched_at` (028 drift signature).
 
 #### Follow-up
+
 - [ ] Confirm any other Neon branch Render's `DATABASE_URL` may use also shows 0 rows.
 - [ ] #712 005 remainder (keyword tables / view / enum / trigger) still to verify.
 
@@ -1030,9 +1126,11 @@ Branch: — (PR #784)
 Issue/PR: BUG-14; draft PR #784; migration drift #711
 
 #### Objective
+
 Make a second "save this job" a no-op (no counter increment) on both save paths.
 
 #### Context
+
 - Diagnosed 2026-07-03. The chat ordinal-save persists via
   `rico_db.upsert_recommendation`, whose `ON CONFLICT (user_id, job_key) WHERE job_key
   IS NOT NULL` requires the partial unique index from **migration 011**
@@ -1045,11 +1143,13 @@ Make a second "save this job" a no-op (no counter increment) on both save paths.
   `docs/runbooks/production-drift-005-011.md` (Step A).
 
 #### Constraints
+
 - Migration is owner-gated and includes a destructive dedupe `DELETE` — apply only at the
   Neon console after the runbook's pre-checks. Sandbox cannot reach Neon.
 - No new idempotency scheme; reuse the existing `save_key` / unique-index design.
 
 #### Acceptance criteria
+
 - [x] Migration 011 applied to production Neon (unique index present) — verified 2026-07-03.
 - [ ] PR #784 reviewed + merged (non-ordinal path uses `applications_repo`).
 - [ ] Owner smoke: "save the second job" twice → count +1 then unchanged; repeat on the
@@ -1065,6 +1165,7 @@ Branch: —
 Issue/PR: follows merged PR #807 (`c7d8343`)
 
 #### Objective
+
 Replace the #807 heuristic fallback with a first-class service that turns any attachment
 transcript into a job entity and links it to the user's pipeline. Owner-sketched design:
 `JobFromAttachmentService(attachment_text, user_id)` → `extract_job_entities` (company,
@@ -1074,6 +1175,7 @@ pipeline jobs → create a new `JobAd` (`source_type="screenshot"`) when no matc
 confirmation.
 
 #### Context
+
 - PR #807 shipped the interim behavior: `_applied_from_screenshot_fallback` +
   `_extract_job_entities_from_transcript` in `src/rico_chat_api.py` (heuristics; one-click
   confirm / disambiguation buttons; no pipeline matching, no new entities).
@@ -1082,11 +1184,13 @@ confirmation.
   lists), no `source_type` provenance on the created record beyond `source="chat"`.
 
 #### Constraints
+
 - Keep `src/rico_safety.py` guardrails and the mark-applied confirmation gate.
 - No schema change without owner sign-off (JobAd/JobApplication entities imply migrations).
 - False-positive guard: never create an application without explicit user confirmation.
 
 #### Acceptance criteria
+
 - [ ] Screenshot of an already-tracked job matches the existing pipeline row (no duplicate).
 - [ ] Screenshot of a new job creates one record with screenshot provenance.
 - [ ] Multi-job screenshot produces a disambiguation step (parity with #807).
@@ -1102,15 +1206,18 @@ Branch: —
 Issue/PR: follows merged PR #805 (`f64e7e0`)
 
 #### Objective
+
 Turn on the opt-in job-alert emails shipped inert in PR #805. No new feature code required to
 start; this is the enable + harden pass.
 
 #### Context
+
 - Feature merged and gated/inert. See `CURRENT_STATE.md` → "Email job alerts — PR #805".
 - Key files: `src/services/email_alert_service.py`, `src/services/email_notifications.py`,
   `migrations/033_email_job_alerts.sql`, `.github/workflows/job-alert-emails.yml`.
 
 #### Enable steps (in order)
+
 - [x] Apply `migrations/033` to Neon (done 2026-07-02; both tables + idx_eal_user_sent /
       idx_eut_token + primary/unique indexes verified).
 - [x] Plumbing smoke: `POST /api/v1/pipeline/job-alert-emails?dry_run=true` (X-Cron-Secret) →
@@ -1124,15 +1231,18 @@ start; this is the enable + harden pass.
 - [ ] Monitor `email_alert_log` for the first sends; verify unsubscribe link end-to-end.
 
 #### Hardening (address before/with scale — review findings #3/#5)
+
 - [ ] #3 — cron runs live JSearch per user sequentially in a sync request: move to async/batched
       or a queue so large opt-in volume doesn't time out or exhaust JSearch quota.
 - [ ] #5 — dedup opens a new DB connection per candidate job: fetch the user's already-sent
       job_keys once per user instead of per-job.
 
 #### Follow-on
+
 - [ ] Arabic (RTL) email localization (English-only in MVP).
 
 #### Rollback
+
 Unset `RICO_ENABLE_EMAIL_ALERTS` (runtime off), disable the workflow schedule; migration 033 is
 additive and code tolerates the tables being present.
 
@@ -1144,6 +1254,7 @@ Branch: —
 Issue/PR: docs-only (this ledger entry)
 
 #### Objective
+
 Capture the owner's engineering spec for chat/intent-flow UX so it is not lost in chat
 history. Source: owner review of the conversational search/recommendation flow, reframed as
 a directly-implementable spec ("لكنني سأعيد صياغتها لتكون Engineering Spec قابلة للتنفيذ
@@ -1152,6 +1263,7 @@ implementable engineering spec without baking in solutions that would constrain 
 Priority: P1 (Core Conversation UX). No implementation in this entry — docs/ledger only.
 
 #### Source
+
 Owner-authored spec, pasted verbatim into this session on 2026-06-30, titled "Rico UX
 Improvements — Search & Intent Flow." Touches `src/rico_chat_api.py` (intent classification /
 role intelligence pipeline), `src/services/chat_service.py`, and the public/`/command` and
@@ -1201,6 +1313,7 @@ never be used to bypass an approval-gated action (e.g. apply).
    this order.
 
 #### Owner's overall assessment (verbatim)
+
 "The current implementation demonstrates good profile reasoning and CV understanding. The
 biggest remaining UX gap is execution flow: Rico identifies improvements well, but it
 sometimes pauses for confirmation instead of completing the task the user explicitly
@@ -1208,6 +1321,7 @@ requested. Prioritizing task completion first, followed by optional optimization
 the assistant feel significantly more responsive and aligned with user intent."
 
 #### Constraints
+
 - Docs/ledger only in this entry — no code changes.
 - Each numbered item becomes its own scoped TASK-NNN + branch when implemented. Do not start
   without explicit scope/branch assignment.
@@ -1216,6 +1330,7 @@ the assistant feel significantly more responsive and aligned with user intent."
   new intent, not about skipping approval gates for high-impact actions.
 
 #### Notes
+
 - Logged per explicit owner instruction ("note the following as we need to work on it as
   well") on 2026-06-30, immediately after BUG-2/BUG-3/BUG-6 closure. Not yet prioritized
   against BUG-7/BUG-9/BUG-10/BUG-11.
@@ -1230,12 +1345,15 @@ Branch: `fix/profile-context-role-selection` (merged + deleted)
 Issue/PR: PR #801
 
 #### Objective
+
 Fix the remaining production Tests 1 and 7 after the job-flow stabilization train (#727/#724/#723/#728/#729/#730).
 
 #### Test 1 — ✅ fixed (pending PR/merge)
+
 Prompt: `Find UAE jobs that match my strongest CV profile.`
 
 Expected:
+
 - Do not blindly use stale `target_role` such as Software Engineer.
 - Use the strongest confirmed active CV/profile signal.
 - If multiple profile tracks exist and confidence is ambiguous, ask the user to choose.
@@ -1248,9 +1366,11 @@ with an explanatory note instead of pausing to ask. Falls back to ask-to-choose 
 suggestions are empty or span 2+ families. Commit `48e9cba` on `fix/profile-context-role-selection`.
 
 #### Test 7 — ✅ fixed, already on `main`
+
 Prompt: `Search UAE jobs for Environmental Manager.`
 
 Expected:
+
 - Do not silently substitute Environmental Manager with Environmental Officer.
 - If exact role is unavailable, ask permission before broadening.
 - Preserve authenticated user/CV/session context.
@@ -1262,6 +1382,7 @@ search") — `_classified_role_search`'s `profile_relevant` branch now passes `r
 instead of the taxonomy canonical alias.
 
 #### Constraints
+
 - No auth rewrite.
 - No billing changes.
 - No DB migration.
@@ -1275,6 +1396,7 @@ instead of the taxonomy canonical alias.
 - Do not touch unrelated chat flows.
 
 #### Required process
+
 - [x] Start from clean current `origin/main`.
 - [x] Read-only map current CV/profile selection flow.
 - [x] Read-only map where `target_role` is loaded.
@@ -1294,6 +1416,7 @@ instead of the taxonomy canonical alias.
       deploy chain — production at `a2a53b4`, health ok, 2026-07-02).
 
 #### Handoff notes
+
 - Latest full handoff: `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md`.
 - Current production baseline before PR C: `38fbf5da19975df6f7d3d21168b137741d502e6d`.
 - T1 fix source: an unmerged background session left the search-first behavior on
@@ -1317,24 +1440,29 @@ Branch: —
 Issue/PR: —
 
 #### Objective
+
 When a user uploads a non-CV document (offer letter, contract, cover letter, etc.) and then chats
 about it, Rico currently has no access to the document type or content in its AI prompt. The upload
 route now stores `last_uploaded_document` in `recent_context` (fixed in PR #717), but the chat
 handler does not yet inject this into the AI system prompt or message context.
 
 #### Existing behavior after PR #717
+
 - Explicit meta-queries ("what did I upload?", "document type?") → answered from `recent_context`
   without an AI call via `_get_recent_upload_document_reply`.
 - All other messages about the document (e.g. "can you review it?") → falls through to normal AI
   routing with no document context injected.
 
 #### Required change
+
 In `rico_chat_api.py` `_process_message_inner` or the AI context builder, check for
 `last_uploaded_document` in `recent_context` and if the document is non-CV and recent (< 24h),
 inject a brief note into the system prompt / user context:
+
 ```
 [Uploaded document: {label} ({filename}) — confidence {pct}%]
 ```
+
 This lets the AI model answer "can you review it?", "summarize this offer letter" etc. with
 context about what was uploaded.
 
@@ -1343,12 +1471,14 @@ document content is available in the user's parsed files (via `user_documents` D
 include a brief extract if available.
 
 #### Constraints
+
 - Do not touch: the document classifier, the upload route, `_get_recent_upload_document_reply`
 - No migrations required
 - Must not break existing job-search or onboarding flows
 - Add regression tests for the injection path
 
 #### Acceptance criteria
+
 - [ ] User uploads a cover letter → types "can you review my cover letter?" → Rico responds
   with content-aware review (not generic advice)
 - [ ] User uploads an offer letter → types "summarize it" → Rico summarizes using the document type
@@ -1364,6 +1494,7 @@ Branch: `claude/system-quality-audit-ikkamf`
 Issue/PR: #717 (draft, CI green — pytest ✅ playwright ✅ Vercel ✅)
 
 #### Objective
+
 Continuous codebase audit across auth, DB, repositories, services, migrations, and routers —
 fix small isolated bugs immediately, document larger issues for separate PRs.
 
@@ -1397,6 +1528,7 @@ fix small isolated bugs immediately, document larger issues for separate PRs.
 | D6 | `mark_webhook_event_processed` Optional[str] for UUID FK | `src/rico_db.py` | Validate UUID or change signature to Optional[UUID] |
 
 #### Acceptance criteria
+
 - [x] `list_active_users()` returns correct `email_verified` value from DB
 - [x] `audit_repo.py` imports `List` — no `NameError` from `get_type_hints()`
 - [x] No duplicate cookie deletion in `register()`
@@ -1404,12 +1536,14 @@ fix small isolated bugs immediately, document larger issues for separate PRs.
 - [x] All CI checks green (pytest, playwright, Vercel, Neon)
 
 #### Required verification
+
 - [x] pytest ✅ (all 6 CI checks passed on PR #717)
 - [x] playwright ✅
 - [x] Vercel ✅ (DEPLOYED)
 - [x] No regressions vs main baseline
 
 #### Handoff notes
+
 - Changed files: `src/repositories/users_repo.py`, `src/repositories/audit_repo.py`,
   `src/api/auth.py`, `tests/test_users_scheduler.py`, `AI_WORKSPACE/CURRENT_STATE.md`,
   `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/START_HERE.md`
@@ -1426,12 +1560,14 @@ Branch: —
 Issue/PR: docs-only (this ledger entry)
 
 #### Objective
+
 Track the prioritized recommendations from the 2026-06-19 live production UI/UX audit so they
 are not lost in chat history. Full detail (problem + fix + mockups) lives in
 `docs/audits/ui-ux-live-audit-2026-06-19.md` (shipped via #658); this entry is the actionable
 backlog distilled from it.
 
 #### Source
+
 Direct live audit of `ricohunt.com` covering `/command`, `/flow`, `/profile`, `/upload`,
 `/settings`, `/subscription`, and the global sidebar. 20 recommendations, prioritized by
 impact vs. effort. `ref` below = the section id in the audit doc.
@@ -1439,10 +1575,12 @@ impact vs. effort. `ref` below = the section id in the audit doc.
 #### Backlog (grouped by audit impact)
 
 Critical:
+
 - [x] 1-A — Replace A/B/C/D typed options with clickable inline action buttons. DONE via PR #678.
 - [x] 1-B — Real fit-score badge on job cards (e.g. "82% match") + skills/gaps/location breakdown. DONE via PR #679.
 
 High:
+
 - [x] 1-D — Sidebar widgets load on every mount. DONE via TASK-20260619-027 / PR #658.
 - [ ] 2-D — "Mark as Applied" inline CTA button on Link-opened cards.
 - [ ] 3-B — Surface profile conflict warnings as a top-of-page banner.
@@ -1451,6 +1589,7 @@ High:
 - [ ] 3-A — Profile completeness score: single source of truth (sidebar 71% vs profile 54%).
 
 Medium:
+
 - [x] 6-A — Navy/indigo design system. DONE via PR #641 (v4 tokens, `6fac4c0`); live + smoke-PASS 2026-06-20.
 - [ ] 2-A — Demote "Link Opened" from a primary pipeline stage to card metadata.
 - [ ] 4-A — CV role-mismatch warning banner on My Files.
@@ -1458,9 +1597,11 @@ Medium:
 - [ ] 1-E — Cold-start amber banner ("Rico is starting up ~45s").
 
 Low:
+
 - [ ] 6-D — Move WhatsApp support to a floating help icon; free the sidebar for navigation.
 
 Additional (in the audit body, outside the top-14 priority table):
+
 - [ ] 2-B — Drag-and-drop between pipeline columns / larger stage pill.
 - [ ] 2-C — Collapse zero-value pipeline stat boxes; lead with Applied/Interview/Offer.
 - [ ] 3-C — "Active CV" indicator chip on the Profile page.
@@ -1469,11 +1610,13 @@ Additional (in the audit body, outside the top-14 priority table):
 - [ ] 6-C — Visual hierarchy: make "Ask Rico" the dominant sidebar action.
 
 #### Constraints
+
 - Docs/ledger only in this PR — no code changes.
 - Each item becomes its own scoped TASK-NNN + branch when implemented. Do not start without
   explicit scope/branch assignment (per the Operating target in `CURRENT_STATE.md`).
 
 #### Notes
+
 - Per the audit, 1-A is the biggest UX win for the least effort — likely first to spin out.
 - Sourced solely from the in-repo 2026-06-19 live audit doc. If a separate/larger UI/UX
   review exists, append its items here rather than starting a parallel list.
@@ -1488,15 +1631,18 @@ Branch: `fix/sidebar-status-retry-653` (merged → `712be79` via PR #658)
 Issue/PR: #658 (replaced #653, which was closed/superseded)
 
 #### Objective
+
 Stop the desktop sidebar READINESS/PIPELINE widgets from showing permanent blank grey boxes
 when navigating back to a page after a cold-start (backend-idle) load.
 
 #### Root cause
+
 `useSidebarStatus` cached failed/empty cold-start loads for 60s. When the backend was cold,
 all sources resolved to `null`, that empty result was cached, and subsequent remounts served
 the stuck nulls — so the widgets stayed blank on navigate-back.
 
 #### Fix (PR #658, merged `712be79`, 2026-06-19)
+
 - `loadStatus()` uses `Promise.allSettled` and throws when both core reads (profile + stats)
   reject, so a failed cold-start is never cached and the next mount retries.
 - Cached successes are served instantly and revalidated (stale-while-revalidate) to avoid flicker.
@@ -1507,6 +1653,7 @@ the stuck nulls — so the widgets stayed blank on navigate-back.
   `docs/audits/ui-ux-live-audit-2026-06-19.md` (audit doc).
 
 #### Verification
+
 - `npm run build` green; CI (pytest + playwright) green on #658.
 - Production smoke PASS (2026-06-20): widgets render on mount, repopulate instantly on
   navigate-back (SWR), skeleton→data on hard refresh. Retry chip not exercised (Render warm —
@@ -1515,6 +1662,7 @@ the stuck nulls — so the widgets stayed blank on navigate-back.
   (issuecomment-4756899519).
 
 #### Notes
+
 - Addresses audit item 1-D (see TASK-20260619-028).
 - This is NOT TASK-024 — earlier chat shorthand mislabeled it. TASK-024 is BUG-04. The sidebar
   fix had no ledger ID until this entry, which closes that gap.
@@ -1529,11 +1677,14 @@ Branch: `claude/ai-workspace-review-vtdjrb`
 Issue/PR: (draft PR created 2026-06-19)
 
 #### Objective
+
 Fix the `/command` public chat returning identical "Welcome to Rico AI…" on every message
 after the first, and the double API call from the streaming fallback guard.
 
 #### Root cause
+
 Three compounding issues:
+
 1. `IntentRouter` sends most messages (not starting with `?` / question word / "show me") to
    the legacy classifier.
 2. Legacy classifier always returns the onboarding welcome when `profile is None`, and never
@@ -1542,6 +1693,7 @@ Three compounding issues:
    response via the SSE `"done"` event — causing a duplicate API call.
 
 #### Fix summary
+
 - **Fix A** (`src/services/chat_service.py`): `_force_ai` gate redirects public no-profile
   legacy decisions to `_conversational_ai_reply`.
 - **Fix B** (`src/api/routers/rico_chat.py`): streaming endpoint only takes legacy path when
@@ -1551,6 +1703,7 @@ Three compounding issues:
 - 7 unit tests in `tests/test_public_chat_no_profile_loop.py` (all PASS).
 
 #### Acceptance criteria
+
 - [x] Public user messages (interview prep, profile data, injection) route to AI, not welcome
 - [x] Public user WITH existing profile still routes to legacy (unchanged)
 - [x] Authenticated users unaffected (legacy for no-profile, AI for AI-decision)
@@ -1558,12 +1711,14 @@ Three compounding issues:
 - [x] 7 unit tests passing
 
 #### Required verification
+
 - [x] Unit tests: 7/7 PASS (`tests/test_public_chat_no_profile_loop.py`)
 - [ ] Frontend build: node_modules not installed in this environment; change is a 1-line guard
 - [ ] Render deploy: pending PR merge
 - [ ] Production smoke: pending PR merge
 
 #### Handoff notes
+
 - Changed files: `src/services/chat_service.py`, `src/api/routers/rico_chat.py`,
   `apps/web/app/command/page.tsx`, `tests/test_public_chat_no_profile_loop.py`
 - Risks: `_force_ai` gate is additive; authenticated users and public users with profiles
