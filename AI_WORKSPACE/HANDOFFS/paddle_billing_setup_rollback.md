@@ -2,7 +2,7 @@
 
 Branch: `feat/paddle-billing`
 Migrations: `migrations/040_paddle_billing.sql`, `migrations/041_paddle_grace_period.sql`
-Scope: single plan — Rico Monthly, AED 79/month public price (Paddle catalog charges USD 21.50/month internally — see src/subscription_plans.py)
+Scope: single plan — Rico Monthly, **USD 21.50/month** (authoritative displayed and charged price). AED 79 is shown alongside as an approximate reference for UAE users only. Paddle does not support AED as a billing currency.
 
 ---
 
@@ -12,7 +12,8 @@ Scope: single plan — Rico Monthly, AED 79/month public price (Paddle catalog c
 
 1. Create account at <https://sandbox-vendors.paddle.com>
 2. Go to **Catalog → Products** → create "Rico Monthly" with a single monthly
-   USD 21.50/month price (Paddle operates in USD; the public-facing price shown to Rico users is AED 79/month); single-plan scope — no yearly cycle, no Premium tier
+   USD 21.50/month price. Paddle operates in USD only. AED 79 is an approximate
+   reference shown to UAE users — it is NOT the charged amount. Single-plan scope: no yearly cycle, no Premium tier.
 3. Note the price ID (format: `pri_...`)
 
 ### 2. Webhook endpoint
@@ -39,8 +40,9 @@ PADDLE_API_KEY=<your sandbox API key from Paddle dashboard → Developer Tools>
 PADDLE_WEBHOOK_SECRET=<signing secret from step 2>
 PADDLE_SANDBOX=true
 PADDLE_PRO_MONTHLY_PRICE_ID=pri_01kxdmh4f28mfmz6sg0hxf20cj
-RICO_PRO_PRICE_AED=79
-RICO_MONTHLY_PRICE_USD=21.50   # internal Paddle catalog price only — never exposed publicly
+RICO_PRO_PRICE_USD=21.50  # authoritative display price shown in API, UI, and AI copy
+# Note: PADDLE_PRO_MONTHLY_PRICE_ID is the Paddle catalog Price ID — separate from the display amount above.
+# Note: RICO_PRO_PRICE_AED is obsolete — remove it from any existing Render env configs.
 ```
 
 ### 4. Frontend environment variables (Vercel dashboard)
@@ -80,7 +82,7 @@ Two surfaces exercise the same checkout/status/portal flow: `/subscription`
 Run through at least one of them end-to-end; both call the same backend.
 
 1. Open `/subscription` (or `/settings`) with `NEXT_PUBLIC_BILLING_MODE=paddle`
-2. Confirm the page shows exactly one plan: **Rico Monthly — AED 79/month**
+2. Confirm the page shows exactly one plan: **Rico Monthly — USD 21.50/month** (with AED 79 shown as approximate reference)
 3. Click **Upgrade** → confirm `POST /api/v1/billing/paddle/checkout-session`
    fires first (Network tab) and returns a `session_token`, *then* the
    Paddle.js overlay opens — checkout must never open without that call

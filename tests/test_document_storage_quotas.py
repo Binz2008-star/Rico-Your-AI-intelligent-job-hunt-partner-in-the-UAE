@@ -354,7 +354,7 @@ class TestUploadCvEndpointQuota:
             patch("src.services.subscription_gating.count_user_documents", return_value=cv_count),
             patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=resolved),
             patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=user_id),
-            patch("src.api.routers.rico_chat._is_valid_public_user_id", return_value=False),
+            patch("src.api.routers.rico_chat.is_valid_public_user_id", return_value=False),
         ):
             client = TestClient(app, raise_server_exceptions=False)
             response = client.post(
@@ -393,7 +393,7 @@ class TestUploadCvEndpointQuota:
         with (
             patch("src.api.routers.rico_chat._resolve_upload_user_id",
                   return_value="public:web-abc123"),
-            patch("src.api.routers.rico_chat._is_valid_public_user_id", return_value=True),
+            patch("src.api.routers.rico_chat.is_valid_public_user_id", return_value=True),
             # Quota enforcer must NOT be called for guest — if called, fail the test
             patch("src.services.subscription_gating.enforce_document_quota",
                   side_effect=AssertionError("quota must not be called for guest")) as mock_quota,
@@ -425,7 +425,7 @@ class TestUploadCvEndpointQuota:
         with (
             patch("src.api.routers.rico_chat._resolve_upload_user_id",
                   return_value="authed@example.com"),
-            patch("src.api.routers.rico_chat._is_valid_public_user_id", return_value=False),
+            patch("src.api.routers.rico_chat.is_valid_public_user_id", return_value=False),
             patch("src.services.subscription_gating.enforce_document_quota",
                   side_effect=_capture_quota),
         ):
