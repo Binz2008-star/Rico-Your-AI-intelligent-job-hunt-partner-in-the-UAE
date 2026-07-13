@@ -32,29 +32,50 @@ Scope: single plan — Rico Monthly, **USD 21.50/month** (authoritative displaye
    - `transaction.payment_failed`
 4. Copy the **signing secret** shown (format: `pdl_ntf_...`)
 
-### 3. Backend environment variables (Render dashboard)
+### 3. Backend environment variables — Sandbox (Render dashboard)
 
-```
+> **SANDBOX ONLY.** All values below come from sandbox-vendors.paddle.com.
+> Do NOT mix Sandbox and Live tokens, API keys, webhook secrets, or Price IDs.
+
+```sh
 BILLING_MODE=paddle
-PADDLE_API_KEY=<your sandbox API key from Paddle dashboard → Developer Tools>
-PADDLE_WEBHOOK_SECRET=<signing secret from step 2>
 PADDLE_SANDBOX=true
-PADDLE_PRO_MONTHLY_PRICE_ID=pri_01kxdmh4f28mfmz6sg0hxf20cj
-RICO_PRO_PRICE_USD=21.50  # authoritative display price shown in API, UI, and AI copy
-# Note: PADDLE_PRO_MONTHLY_PRICE_ID is the Paddle catalog Price ID — separate from the display amount above.
-# Note: RICO_PRO_PRICE_AED is obsolete — remove it from any existing Render env configs.
+PADDLE_API_KEY=<sandbox API key — Paddle Sandbox → Developer Tools>
+PADDLE_WEBHOOK_SECRET=<sandbox signing secret from step 2 — format: pdl_ntf_...>
+PADDLE_PRO_MONTHLY_PRICE_ID=<sandbox pri_... — Paddle Sandbox → Catalog → Prices>
+RICO_PRO_PRICE_USD=21.50
 ```
 
-### 4. Frontend environment variables (Vercel dashboard)
+`RICO_PRO_PRICE_USD` is the **display/config amount** shown in the UI and API.
+`PADDLE_PRO_MONTHLY_PRICE_ID` is the **Paddle catalog Price ID** — a separate opaque string.
+These are different values and must not be confused.
 
-```
+Obsolete — remove from Render if present: `RICO_PRO_PRICE_AED`, `RICO_MONTHLY_PRICE_USD`.
+
+### 4. Frontend environment variables — Sandbox (Vercel dashboard)
+
+> **SANDBOX ONLY.** All values below come from sandbox-vendors.paddle.com.
+
+```sh
 NEXT_PUBLIC_BILLING_MODE=paddle
-NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=<client token from Paddle dashboard → Developer Tools → Authentication>
 NEXT_PUBLIC_PADDLE_SANDBOX=true
-NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID=pri_...
+NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=<sandbox client token — Paddle Sandbox → Developer Tools → Authentication>
+NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID=<sandbox pri_... — must match PADDLE_PRO_MONTHLY_PRICE_ID above>
 ```
 
-**NEVER** set `NEXT_PUBLIC_PADDLE_API_KEY` — PADDLE_API_KEY is server-side only.
+**NEVER** set `NEXT_PUBLIC_PADDLE_API_KEY` — `PADDLE_API_KEY` is server-side only.
+
+---
+
+### Live catalog IDs (confirmed by owner — DO NOT use with PADDLE_SANDBOX=true)
+
+| Item | ID | Source |
+|------|----|--------|
+| Rico Monthly — Live Price ID | `pri_01kxdmh4f28mfmz6sg0hxf20cj` | vendors.paddle.com/products-v2 |
+
+This ID was created in the **Live** Paddle dashboard, not Sandbox.
+It must only be used when `PADDLE_SANDBOX=false` and all other Live credentials are in place.
+Do **not** commit it to `.env.example` or any file tracked in git as a default value.
 
 ### 5. Run DB migrations
 
@@ -187,14 +208,14 @@ identity-attribution pattern, and fixed several bugs that would have made
 | `migrations/041_paddle_grace_period.sql` | New: adds `past_due_since` to `paddle_subscriptions` for the 7-day grace period |
 | `src/repositories/paddle_repo.py` | Fixed: `_get_conn` called a nonexistent `db_module.get_connection()`; routed through `RicoDB().connect()` (RealDictCursor) instead. Added `past_due_since`/`clear_past_due` params to `upsert_paddle_subscription`, added `expire_stale_paddle_subscriptions()` |
 | `src/services/paddle_webhook_service.py` | Added `_lookup_existing_status`/`_compute_past_due_transition` for grace-period bookkeeping (fail-open, never blocks the webhook); collapsed price map to the single Rico Monthly price ID |
-| `src/subscription_plans.py` | Rewritten: single `RICO_MONTHLY_PLAN` (AED 79/month public price; Paddle charges USD 21.50 internally) replaces the Pro/Premium two-tier scheme; `resolve_effective_user_plan()` now reads from `paddle_subscriptions` (previously read from the deleted `user_subscriptions` table — entitlement gating was disconnected from what the webhook actually wrote); added `PAST_DUE_GRACE_PERIOD` (7 days) |
+| `src/subscription_plans.py` | Rewritten: single `RICO_MONTHLY_PLAN` (USD 21.50/month authoritative price; AED 79 shown as approximate reference for UAE users) replaces the Pro/Premium two-tier scheme; `resolve_effective_user_plan()` now reads from `paddle_subscriptions` (previously read from the deleted `user_subscriptions` table — entitlement gating was disconnected from what the webhook actually wrote); added `PAST_DUE_GRACE_PERIOD` (7 days) |
 | `src/api/routers/subscription.py` | Rewritten: kept only `/intent`, `/plans`, `/me`; checkout/portal/webhook removed (superseded by `/api/v1/billing/paddle/*`) |
 | `src/api/routers/admin_subscriptions.py` | Repointed manual activation from the deleted `subscription_repo` to `paddle_repo.upsert_paddle_subscription`; `plan` literal restricted to `"pro"` |
 | `src/api/routers/paddle_billing.py` | `create_checkout_session` billing_cycle restricted to `"monthly"` only |
 | `src/run_daily.py` | Swapped `subscription_repo.expire_stale_subscriptions` for `paddle_repo.expire_stale_paddle_subscriptions` |
 | `src/billing_mode.py` | Removed `is_stripe_billing_mode`; `is_manual_billing_mode()` = `!= "paddle"` |
 | `src/schemas/subscription.py` | Removed Stripe-era response/request models; `paddle_customer_id`/`paddle_subscription_id` naming |
-| `src/rico_chat_api.py`, `src/rico_identity.py`, `src/services/chat_service.py` | Chat/AI-identity pricing copy updated to single-plan "Rico Monthly — AED 79/month"; fixed a latent bug in `chat_service.py` where the free-plan branch referenced the deleted `PAID_PLANS[SubscriptionTier.PREMIUM]` |
+| `src/rico_chat_api.py`, `src/rico_identity.py`, `src/services/chat_service.py` | Chat/AI-identity pricing copy updated to single-plan "Rico Monthly — USD 21.50/month (approximately AED 79)"; fixed a latent bug in `chat_service.py` where the free-plan branch referenced the deleted `PAID_PLANS[SubscriptionTier.PREMIUM]` |
 | `src/rico/policy/capabilities.py` | Capability name `stripe_billing` → `paddle_billing` |
 | `requirements.txt` | Removed `stripe` dependency entirely |
 | `src/repositories/subscription_repo.py`, `src/services/subscription_webhook_service.py` | Deleted (Stripe-era, superseded) |
@@ -202,10 +223,10 @@ identity-attribution pattern, and fixed several bugs that would have made
 | `apps/web/lib/api.ts` | Added `createPaddleCheckoutSession()`; removed Stripe-era `createCheckoutSession`/`createCustomerPortalSession` |
 | `apps/web/components/billing/PaddleBillingSection.tsx` | `handleCheckout()` now calls `createPaddleCheckoutSession` before `openPaddleCheckout`; removed yearly-billing button |
 | `apps/web/app/subscription/page.tsx` | Rewritten for single-plan pricing; `handleUpgrade` uses the Paddle.js overlay flow; `handleManage` uses the customer portal |
-| `apps/web/components/LandingPage.tsx`, `apps/web/components/LandingPageNocturne.tsx` | Collapsed the Pro/Premium marketing pricing cards into one "Rico Monthly — AED 79/month" card |
+| `apps/web/components/LandingPage.tsx`, `apps/web/components/LandingPageNocturne.tsx` | Collapsed the Pro/Premium marketing pricing cards into one "Rico Monthly — USD 21.50/month (approximately AED 79)" card |
 | `apps/web/app/terms/TermsContent.tsx` | "Payments are processed through Stripe" → "Paddle" |
 | `apps/web/lib/billing.ts` | `isManualBillingMode()` simplified to `!== "paddle"` |
-| `.env.example`, `apps/web/.env.local.example` | Single-plan env vars only (`RICO_MONTHLY_PRICE_USD`, one price ID); all `STRIPE_*` vars removed |
+| `.env.example`, `apps/web/.env.local.example` | Single-plan env vars only (`RICO_PRO_PRICE_USD=21.50`, `PADDLE_PRO_MONTHLY_PRICE_ID=` blank placeholder); all `STRIPE_*` and `RICO_PRO_PRICE_AED` vars removed |
 | `scripts/check_migration_drift.py` | Added migration-041 drift-check entry |
 | Various `tests/*.py` | Updated for the single-plan model, DB-wiring fix, and grace period; net test delta after this pass: 6922 passed / 22 pre-existing-and-unrelated failures (verified against the unmodified PR #1008 base) |
 
