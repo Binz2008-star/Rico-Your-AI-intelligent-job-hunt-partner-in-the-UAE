@@ -240,6 +240,20 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
                     )}
 
                     {/* Action buttons */}
+                    {!hasPaidPlan && (
+                        <p
+                            style={{
+                                fontSize: "0.78rem",
+                                color: colors.ink40,
+                                margin: "0 0 0.75rem",
+                                lineHeight: 1.4,
+                            }}
+                        >
+                            {isAr
+                                ? "ريكو الشهرية · الدرهم الإماراتي 79/شهر · يُحسب بالدولار عند الدفع"
+                                : "Rico Monthly · AED 79/month · Billed in USD equivalent via Paddle"}
+                        </p>
+                    )}
                     <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
                         {hasPaidPlan ? (
                             <button
