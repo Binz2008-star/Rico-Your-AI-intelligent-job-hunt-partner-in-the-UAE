@@ -22,8 +22,13 @@ Scope: single plan — Rico Monthly, AED 79/month (see src/subscription_plans.py
 3. Subscribe to events:
    - `subscription.created`
    - `subscription.updated`
+   - `subscription.activated`
+   - `subscription.past_due`
+   - `subscription.paused`
+   - `subscription.resumed`
    - `subscription.canceled`
    - `transaction.completed`
+   - `transaction.payment_failed`
 4. Copy the **signing secret** shown (format: `pdl_ntf_...`)
 
 ### 3. Backend environment variables (Render dashboard)
@@ -197,10 +202,13 @@ identity-attribution pattern, and fixed several bugs that would have made
 | `scripts/check_migration_drift.py` | Added migration-041 drift-check entry |
 | Various `tests/*.py` | Updated for the single-plan model, DB-wiring fix, and grace period; net test delta after this pass: 6922 passed / 22 pre-existing-and-unrelated failures (verified against the unmodified PR #1008 base) |
 
-**Customer portal**: `POST /api/v1/subscription/portal` still returns `501` in
-`paddle` billing mode — Paddle's customer-portal API shape was not verified
-against a real sandbox account, so a fabricated integration was deliberately
-not built. Manual/WhatsApp mode is unaffected.
+**Customer portal**: the active contract is
+`POST /api/v1/billing/customer-portal`. It creates a temporary Paddle customer
+portal session server-side for the authenticated user's stored Paddle customer
+and subscription IDs. The code path exists, but it remains **UNVERIFIED** until
+the Sandbox smoke confirms the returned overview/cancellation/payment-method
+URL. The deleted legacy `POST /api/v1/subscription/portal` route is not the
+Paddle contract. Manual/WhatsApp mode is unaffected.
 
 **Sandbox smoke checklist**: see the "Sandbox smoke test" section above —
 unchanged in shape, now exercises the single Rico Monthly plan only.
