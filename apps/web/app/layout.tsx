@@ -114,7 +114,7 @@ export const viewport: Viewport = {
     width: "device-width",
     initialScale: 1,
     viewportFit: "cover",
-    themeColor: "#06060c",
+    themeColor: "#0B0D1C",
 };
 
 // ─── JSON-LD: Organization (full) ────────────────────────────────────────────

@@ -17,7 +17,7 @@ export default function Image() {
         (
             <div
                 style={{
-                    background: "#06060c",
+                    background: "#0B0D1C",
                     width: "100%",
                     height: "100%",
                     display: "flex",
@@ -29,7 +29,7 @@ export default function Image() {
                     position: "relative",
                 }}
             >
-                {/* Subtle purple radial glow top-right */}
+                {/* Subtle gold radial glow top-right */}
                 <div
                     style={{
                         position: "absolute",
@@ -38,7 +38,7 @@ export default function Image() {
                         width: 480,
                         height: 480,
                         borderRadius: "50%",
-                        background: "radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%)",
+                        background: "radial-gradient(circle, rgba(240,169,74,0.16) 0%, transparent 70%)",
                     }}
                 />
 
@@ -63,9 +63,9 @@ export default function Image() {
                                 style={{
                                     fontSize: 12,
                                     fontWeight: 600,
-                                    color: "#A78BFA",
-                                    background: "rgba(139,92,246,0.15)",
-                                    border: "1px solid rgba(139,92,246,0.35)",
+                                    color: "#F0A94A",
+                                    background: "rgba(240,169,74,0.15)",
+                                    border: "1px solid rgba(240,169,74,0.35)",
                                     borderRadius: 6,
                                     padding: "4px 10px",
                                     letterSpacing: 0.5,
@@ -129,7 +129,7 @@ export default function Image() {
                             >
                                 <span
                                     style={{
-                                        color: "#A78BFA",
+                                        color: "#F0A94A",
                                         fontSize: 18,
                                         fontWeight: 700,
                                         width: 24,
