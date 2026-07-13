@@ -15,7 +15,7 @@
 | Active objective | Reconcile coordination, classify open PRs, and establish the launch execution sequence before more runtime work |
 | Runtime writer | None authorized by this document until this control-plane PR is reviewed/merged and the first launch task is claimed |
 | Production access state | Teaser/access gate remains in place; opening access requires the launch gate and owner approval |
-| Billing target | One plan: Rico Monthly — AED 79/month; implementation not yet production-verified |
+| Billing target | One plan: Rico Monthly — AED 79/month; PR #1008 exists but is held for deep security/contract review and is not production-verified |
 | Invitation target | Branded secure email invitations; implementation not yet production-verified |
 
 ## Current execution lock
@@ -31,11 +31,13 @@ Control-plane reconciliation only:
 NEXT — AFTER THIS CONTROL PLANE IS REVIEWED/MERGED
 1. Route/design parity inventory against current production + approved reference.
 2. Launch-critical UI completion through small route-group PRs.
-3. Independent AED 79/month billing track.
+3. Deep audit/reconciliation of #1008 with #989, then the independent AED 79/month billing track.
 4. Independent user-invitation email track.
 5. Full launch smoke, rollback readiness, and owner approval to open access.
 
 HOLD
+- #1008 Paddle billing until deep audit and contract reconciliation
+- #988 non-launch CI bot-comment workflow
 - mixed-scope pitch/explainer/waitlist work (#996)
 - pre-launch gate/waitlist implementation (#967) until explicitly resumed and migration state reconciled
 - journey-state follow-on (#965/#968)
@@ -72,7 +74,8 @@ Read `AI_WORKSPACE/OPEN_PR_TRIAGE_2026-07-13.md` before touching any open PR.
 Key rules:
 
 - #1009, #1007, #1002, #989, and possibly #987 require focused current-main review.
-- #1008 and #988 are unclassified until their exact diffs are inspected.
+- #1008 is a large Paddle billing implementation and is held for deep security, entitlement, webhook, isolation, and test review together with #989.
+- #988 is non-launch CI housekeeping and must not consume the active objective.
 - #997 is superseded and must not be resumed.
 - #996 is mixed scope and stays on hold.
 - #967/#965/#968 stay on hold.
@@ -130,7 +133,7 @@ Stop and report instead of guessing when:
 
 - live state conflicts with this file;
 - another writer owns the objective or branch;
-- an unclassified PR overlaps the proposed files;
+- an unclassified or held PR overlaps the proposed files;
 - work expands into billing, auth, email, database, deployment, or production smoke outside the approved task;
 - a migration number or contract conflicts;
 - production mutation, merge, deploy, or opening access is required without owner approval;
@@ -142,6 +145,6 @@ Stop and report instead of guessing when:
 Review this control-plane PR.
 Then run a read-only route/design parity inventory on fresh current main and record
 one small launch-critical UI task as the first ACTIVE runtime objective.
-Do not start billing or invitations until the route inventory identifies their exact
-frontend/backend contracts and #989 has been reviewed.
+Do not merge or extend #1008 until its deep audit is complete and its contract is
+reconciled with #989 and the single AED 79/month product decision.
 ```
