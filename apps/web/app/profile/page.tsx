@@ -1,7 +1,6 @@
 "use client";
 
 import { AuthGate } from "@/components/auth/AuthGate";
-import { AppShell } from "@/components/layout/AppShell";
 import { ProfileAtelier } from "@/components/profile/ProfileAtelier";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -10,13 +9,13 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { ToastContainer } from "@/components/ui/Toast";
+import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useToast } from "@/hooks/useToast";
-import { ApiError, fetchProfile, logout, updateProfile, type ProfileResponse } from "@/lib/api";
+import { ApiError, fetchProfile, updateProfile, type ProfileResponse } from "@/lib/api";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 const UAE_CITIES = new Set([
@@ -714,7 +713,6 @@ function ProfileDetail({
 }
 
 export default function ProfilePage() {
-    const router = useRouter();
     const { language } = useLanguage();
     const t = useTranslation(language);
     const { toasts, toast } = useToast();
@@ -723,13 +721,6 @@ export default function ProfilePage() {
     // private request fires for a guest (fixes the misleading connection error).
     const { authorized } = useRequireAuth();
 
-    const handleLogout = useCallback(async () => {
-        try {
-            await logout();
-        } finally {
-            router.push("/login");
-        }
-    }, [router]);
     const [profile, setProfile] = useState<ProfileResponse | null>(null);
     const [error, setError] = useState<"auth" | "other" | null>(null);
     const [loading, setLoading] = useState(true);
@@ -955,13 +946,7 @@ export default function ProfilePage() {
     if (!authorized) return <AuthGate />;
 
     return (
-        <AppShell
-            title={t("profileTitle")}
-            sidebarProps={{
-                user: profile ? { name: profile.name ?? undefined, email: profile.email ?? undefined } : undefined,
-                onLogout: handleLogout,
-            }}
-        >
+        <WorkspaceShell>
             <div
                 dir={language === "ar" ? "rtl" : "ltr"}
                 className="w-full max-w-5xl py-3 text-start sm:py-4 lg:max-w-6xl"
@@ -1034,6 +1019,6 @@ export default function ProfilePage() {
                 )}
             </div>
             <ToastContainer toasts={toasts} />
-        </AppShell>
+        </WorkspaceShell>
     );
 }
