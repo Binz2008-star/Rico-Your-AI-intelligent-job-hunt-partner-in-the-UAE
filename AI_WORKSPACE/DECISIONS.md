@@ -28,6 +28,46 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260713-005 — Replace Stripe with Paddle Billing; single-plan Rico Monthly AED 79
+
+Status: accepted
+Date: 2026-07-13
+Owner: Roben (owner)
+Related PR: #1008 (`feat/paddle-billing`)
+
+#### Context
+
+Production billing was dormant — `BILLING_MODE` defaulted to `manual` (WhatsApp-assisted).
+Stripe code existed but was never activated. Owner provided Paddle API keys and asked for
+a full Stripe→Paddle swap. Two parallel implementations were produced (#1008, #1011);
+# 1008 was chosen as the base (standard Paddle.js overlay checkout, matches existing
+idempotency patterns); #1011's server-owned checkout identity-attribution pattern was
+ported in to fix three production-breaking bugs found in #1008.
+
+#### Decision
+
+- Full Stripe removal (no dual-provider). `stripe` dependency deleted.
+- Single plan: **Rico Monthly, AED 79/month** (Pro/Premium two-tier collapsed).
+- Server-owned checkout attribution: `POST /billing/paddle/checkout-session` issues an
+  opaque `session_token`; webhook resolves user identity via that token, not `custom_data.user_id`.
+- 7-day past-due grace period (migration 041) per the refund policy already shown to users.
+- Customer portal deferred (`501`) until verified against a live Paddle sandbox account.
+- `BILLING_MODE` stays `manual` until owner explicitly sets `BILLING_MODE=paddle` on Render.
+- Migrations 040 + 041 must be applied to Neon **with explicit owner approval** before activation.
+
+#### Consequences
+
+- Positive: clean single-provider billing, secure identity attribution, grace period honoured.
+- Negative/trade-off: customer portal (`/billing/customer-portal`) is a stub until sandbox
+  smoke confirms Paddle's portal API shape. Manual/WhatsApp mode remains the fallback.
+
+#### Follow-up
+
+- [ ] Paddle Sandbox smoke test (10-step checklist in `AI_WORKSPACE/HANDOFFS/paddle_billing_setup_rollback.md`)
+- [ ] Independent code review (Codex / second reviewer)
+- [ ] Owner explicit approval to apply migrations 040 + 041 to Neon production DB
+- [ ] Owner explicit approval to set `BILLING_MODE=paddle` on Render
+
 ### DEC-20260710-004 — `/onboarding` is the real authenticated first-run setup flow (supersedes "chat is the app" routing for `/onboarding` only)
 
 Status: accepted
@@ -64,25 +104,31 @@ note, **this note wins.**
    decision and the handoff originally wrote `next.config` / `next.config.mjs`).
 
 #### Context
+
 `apps/web/next.config` 307-redirects `/onboarding → /command`, grouped with other "deprecated user-facing routes redirect to /command (chat is the app)" routes (`/dashboard`, `/jobs`, `/signals`, `/archive`, `/saved-searches`, `/orchestrate`). This made the real, working 466-line `apps/web/app/onboarding/page.tsx` (CV upload → profile confirm → done, wired to `uploadCV` / `submitOnboarding` / `fetchMe`) unreachable dead-UI. The approved `/design-preview` direction requires a real onboarding flow, directly conflicting with the redirect. Owner reviewed the evidence and chose to re-enable + migrate onboarding.
 
 #### Decision
+
 This decision supersedes the "chat is the app" routing deprecation **for `/onboarding` only**:
+
 - `/onboarding` becomes the real authenticated first-run setup flow.
 - `/command` remains Rico's primary application after onboarding. **This does NOT authorize any `/command` redesign.**
 - Remove **only** the `/onboarding → /command` redirect from `next.config`. **Keep all other deprecated-route redirects unchanged.**
 
 Required user flow:
+
 1. Create account → 2. verify email (where required) → 3. sign in → 4. if onboarding/profile setup is **incomplete**, route to `/onboarding` → 5. if setup is **already complete**, route directly to `/command` → 6. after successful onboarding, route to `/command` → 7. "Skip for now" also routes to `/command` **without** falsely claiming profile completion → 8. returning completed users must **not** be forced through onboarding again.
 
 Completion signal (from repo evidence): `GET /api/v1/rico/profile` → `ProfileResponse.profile_exists` is the canonical persisted signal. `GET /api/v1/me` (`MeResponse`: email/role/authenticated/guest/name) carries **no** onboarding flag. **Do not invent a new completion flag or schema** unless no reliable existing state exists; `profile_exists` is the existing signal.
 
 #### Consequences
+
 - Positive: delivers the approved onboarding design; real flow + APIs already exist (low restore risk).
 - Trade-off: changes post-signup routing behavior; must gate on `profile_exists` so completed users skip onboarding.
 - The misleading `/dashboard?skip=1` completion/skip destinations in `onboarding/page.tsx` (3 usages) must become `/command` (`/dashboard` itself redirects to `/command`, and `?skip=1` falsely implies completion).
 
 #### Follow-up
+
 - [ ] One focused PR: restore `/onboarding` reachability + migrate to Atelier + fix routing (see handoff `2026-07-10-fe-onboarding-restore-atelier.md`).
 - [ ] Do NOT begin workspace/dashboard migration until this PR is merged and production-verified.
 
@@ -94,6 +140,7 @@ Owner: Roben (decision) / Claude (recorded)
 Related task: landing content completion follow-up to #936/#937/#938/#939
 
 #### Context
+
 The approved `/design-preview` prospectus (see `DEC-20260710-002`) includes an on-page
 "Rates" section using **editorial** plan names — **Reader / Correspondent / Editor** (AED
 0 / 29 / 49) from `rico-lovable-source.zip → src/lib/landing-content.ts → EN.rates`. The
@@ -106,7 +153,9 @@ production landing (`apps/web/components/LandingPageV2.tsx`) currently has **no*
 rates section and routes nav "Rates" → `/subscription`.
 
 #### Decision
+
 **Option D — keep the landing rates section omitted for now.**
+
 - Do not add an on-page rates section to the landing.
 - Landing "Rates" navigation continues to route to `/subscription`.
 - `/subscription` remains the **single source of truth** for pricing and plan names.
@@ -117,6 +166,7 @@ rates section and routes nav "Rates" → `/subscription`.
   follow-up decision record.
 
 #### Consequences
+
 - Positive: no duplicated pricing content; no editorial-vs-billing name mismatch at
   checkout; no pricing/name drift risk; user trust and billing integrity protected; one
   canonical pricing surface.
@@ -124,6 +174,7 @@ rates section and routes nav "Rates" → `/subscription`.
   only if the owner wants it, under the naming constraint above.
 
 #### Follow-up
+
 - [ ] Revisit an on-page rates teaser only on owner request, using billing-facing names.
 - [ ] Any future rates work is YELLOW (pricing/rates naming, billing-facing copy) and must
       not read/alter live billing data without owner approval.
@@ -136,6 +187,7 @@ Owner: Roben (clarified in-session; recorded by Claude)
 Related task: TASK-20260710-003 (revised scope)
 
 #### Context
+
 `DEC-20260710-001` framed the Atelier rollout as "visual-only, below-the-fold first." During
 Phase 1 (#933) the owner clarified that this under-scoped the goal. The approved production
 direction is to **reproduce the full Rico `/design-preview` package** — same visual language,
@@ -152,6 +204,7 @@ The authoritative reference is the in-repo `/design-preview` source (live at
 per owner instruction the repo source is used as authoritative in its place.
 
 #### Why this supersedes the narrower Phase 1 interpretation
+
 `DEC-20260710-001` was read as "visual-only, landing below-the-fold first," and #933 was built
 that way. The owner has stated that reading **under-scoped the approved target**: the goal was
 never partial landing polish or an "inspired-by" restyle. This decision **supersedes that
@@ -161,6 +214,7 @@ approval, single-revert rollback) is kept; only the *scope* is corrected — fro
 paint job to reproducing the whole package's shape, content, sections, routes, and flows.
 
 #### Decision
+
 1. **`/design-preview` is the approved production target for shape, content, and flows** — not
    merely palette/typography, and not partial landing polish. This **supersedes the narrower
    Phase 1 reading of** `DEC-20260710-001` and expands it. Concretely the target includes:
@@ -200,6 +254,7 @@ paint job to reproducing the whole package's shape, content, sections, routes, a
    Recommendation: (a) revise-in-place if the hero is unfrozen, else (c).
 
 #### Guardrails (binding for every migration PR)
+
 - `/design-preview` (live + repo source) is the **single source of truth**.
 - **No improvising a separate theme; no "inspired-by" implementation** — match the package.
 - **One objective per PR**; no mixed concerns.
@@ -212,6 +267,7 @@ paint job to reproducing the whole package's shape, content, sections, routes, a
 - No shadcn/ui without its own DEC — rebuild on the existing Tailwind stack.
 
 #### Acceptance criteria (per migration PR)
+
 - Side-by-side with its `/design-preview` reference, the route matches shape + content +
   sections + flow (not just palette); EN/AR where the package ships it; desktop + mobile.
 - `npm run build` passes; no new test failures vs the known baseline; 0 app console errors;
@@ -220,6 +276,7 @@ paint job to reproducing the whole package's shape, content, sections, routes, a
 - Owner approves the Vercel preview before merge; post-merge production smoke on the route.
 
 #### Consequences
+
 - Positive: one canonical, evidence-based target removes the re-interpretation risk seen in
   #933's first two attempts; scope, order, and gates are explicit.
 - Negative/trade-off: substantially larger than a visual polish — includes new shells and
@@ -227,6 +284,7 @@ paint job to reproducing the whole package's shape, content, sections, routes, a
   backend/billing/OAuth decisions that are deferred, not resolved, by this decision.
 
 #### Follow-up (owner-gated decisions before implementation)
+
 - [ ] Unfreeze the landing hero for PR 1, and decide #899's fate.
 - [ ] Choose canonical onboarding flow: reference intent-flow vs production CV-first.
 - [ ] Adopt the reference workspace left-sidebar (Shell C) in production?
@@ -242,6 +300,7 @@ Owner: Roben (plan + audit verdict accepted in-session; recorded by Claude)
 Related task: TASK-20260710-003 (Phase 1); TASK-20260710-004..007 (audit P2 items)
 
 #### Context
+
 The owner reviewed and approved the `/design-preview` consolidation hub (#929, merged,
 production-verified) as the intended Rico Atelier direction, and accepted a phased
 production implementation plan. A full read-only system audit (2026-07-10, on `main`
@@ -251,6 +310,7 @@ safe manual/WhatsApp mode, no security exposures). Full audit record:
 `HANDOFFS/2026-07-10-system-audit-phase0-gate.md`.
 
 #### Decision
+
 1. **Phased visual-only rollout** of the approved Atelier direction, one route group per
    small PR, logic/handlers/endpoints frozen in every phase:
    - Phase 1: public landing static sections (`/`, about/contact/FAQ statics) — below the
@@ -289,6 +349,7 @@ safe manual/WhatsApp mode, no security exposures). Full audit record:
    touching backend/auth/billing/Neon/schema; or an unsatisfiable phase gate.
 
 #### Consequences
+
 - Positive: the approved direction ships incrementally with bounded blast radius, explicit
   gates, and one-revert rollback at every step.
 - Negative/trade-off: Nocturne and Atelier coexist in the workspace during phases 3–6
@@ -296,6 +357,7 @@ safe manual/WhatsApp mode, no security exposures). Full audit record:
   shadcn-free, which is slower.
 
 #### Follow-up
+
 - [ ] Phase 1 PR (landing below-the-fold statics) — TASK-20260710-003; requires this DEC
       merged first (owner instruction 2026-07-10: migration starts only after Phase 0 docs merge).
 - [ ] Future `/command` migration DEC (not started).
@@ -309,6 +371,7 @@ Owner: Roben
 Related task: Atelier Console gallery reference (#924)
 
 #### Context
+
 The Lovable "Atelier Console" — a warm editorial paper/ink/sun console with a
 matched dark mode, EN/AR + RTL, and a scripted job-hunt workflow — was ported at
 high fidelity into an isolated `/design-gallery` reference tab and merged (#924).
@@ -320,6 +383,7 @@ so future workspace *exploration* can proceed — without changing any productio
 surface. This record captures the direction only; it authorizes no code.
 
 #### Decision
+
 1. **Atelier Console is the candidate design direction for the authenticated
    Career Workspace**, going forward, for preview and exploration only.
 2. This **amends / supersedes `DEC-20260708-003` for future workspace-exploration
@@ -342,6 +406,7 @@ surface. This record captures the direction only; it authorizes no code.
    approved** by this decision.
 
 #### Consequences
+
 - Positive: records the accepted workspace direction as a single source of truth
   and unblocks *future* exploration without any risky production swap.
 - Negative/trade-off: Rico will temporarily carry two workspace design languages
@@ -349,6 +414,7 @@ surface. This record captures the direction only; it authorizes no code.
   separately-approved migration decision.
 
 #### Follow-up
+
 - [ ] `/rico-preview` preview route — separate approval required before implementation.
 - [ ] A production migration of any authenticated surface to Atelier requires its
       own separate DEC + approved PR (this decision does not authorize it).
@@ -361,6 +427,7 @@ Owner: Roben (approved); recorded by Claude (GitHub session)
 Related task: none (documentation clarification only — no code, no issue closed, no roadmap reprioritization)
 
 #### Context
+
 "C3" is currently used for at least two unrelated things in this workspace, and "C4" for one
 undefined placeholder plus one unrelated thing:
 
@@ -388,6 +455,7 @@ an entirely different, still-unapproved change to the production landing hero �
 design-phase reference with a security-finding reference sharing the same short code.
 
 #### Decision
+
 Retire bare "C#" labels (`C1`–`C8`) as implementation identifiers for new work. Use explicit
 names instead:
 
@@ -405,12 +473,13 @@ names instead:
 | #198 findings `C1`–`C4` | Reference as **`#198-C1`…`#198-C4`** (issue-scoped prefix) so a security-finding ID can never again collide with a product-phase name | 2 fixed, 2 not yet investigated |
 
 This decision is documentation clarification only. It does not rename PR #899, does not start
-#899/#872/#873/#908/#909/#446 Stage 2, does not close any issue, and does not reprioritize the
+# 899/#872/#873/#908/#909/#446 Stage 2, does not close any issue, and does not reprioritize the
 roadmap. Existing "C1"/"C2" references to already-shipped work (`/terms`, `/privacy`,
 `/refund-policy`) are historical fact and are not being undone — future *new* work should use the
 explicit names above instead of minting further "C#" labels.
 
 #### Consequences
+
 - Positive: a design-phase reference and a security-finding reference can no longer collide on
   the same short code; a mislabeled PR (like #899) can be spotted immediately by name instead of
   requiring cross-referencing three handoffs; future planning docs read unambiguously without
@@ -420,6 +489,7 @@ explicit names above instead of minting further "C#" labels.
   historical record rather than rewritten, per the Historical-handoffs rule in `MASTER_INDEX.md`.
 
 #### Follow-up
+
 - [ ] When any of About/Contact/FAQ Migration, Landing Hero Polish, Command Streaming Chat
   Rewrite, or Design Gallery Integration is next picked up, use the explicit name above in the
   PR title/branch, not a "C#" label.
@@ -434,6 +504,7 @@ Owner: Roben Edwan (owner); recorded by Claude (GitHub session)
 Related task: C-series Atelier migration (C8 = `/command`)
 
 #### Context
+
 A streaming command-chat foundation ("PR-1") was built in the Lovable / TanStack
 prototype repo (`Binz2008-star/rico-hunt-ai`): a new `src/routes/api/chat.ts`
 route wired to the Lovable AI Gateway (`google/gemini-2.5-flash`), a server-only
@@ -447,6 +518,7 @@ DEC-20260708-001 (prototype sandboxes are design reference requiring production
 adaptation, not portable code).
 
 #### Decision
+
 Quarantine the experiment. It must NOT be merged, published, or used as
 production code — it is reference research only. The Lovable prototype stays
 frozen. Any streaming command chat must be re-implemented in the production Rico
@@ -455,6 +527,7 @@ where `/command` is phase **C8** (last, most sensitive) and is not to be touched
 until explicitly reprioritized. The TanStack implementation is not to be ported.
 
 #### Consequences
+
 - Positive: production stays stable and single-sourced in the real repo; the
   Lovable freeze stays intact; no premature or backend-coupled command changes;
   a clear provenance boundary (prototype = reference, real repo = build target).
@@ -462,6 +535,7 @@ until explicitly reprioritized. The TanStack implementation is not to be ported.
   reusable; a future C8 re-implements it natively in Next.js rather than porting.
 
 #### Follow-up
+
 - [ ] When C8 is reprioritized, design streaming `/command` in `apps/web`
   (Next.js) from scratch — not a port of the TanStack prototype.
 - [ ] Keep the Lovable prototype reference-only; revisit the freeze only on an
@@ -482,12 +556,14 @@ Related task: design-handoffs review (command-concept-sandbox)
 > boundary still governs all shipped/production surfaces.
 
 #### Context
+
 Rico now has two live design directions: Atelier V2 (light-first "paper/ink/sun",
 piloted on `/terms`) and Nocturne (dark navy/gold/aura, used by `/command` and the
 authenticated app). Without an explicit boundary, future work risks trying to merge
 them into a single system and eroding both.
 
 #### Decision
+
 Split the two systems by surface, and do not merge them:
 
 - Public marketing surfaces → **Atelier**.
@@ -497,11 +573,13 @@ Each system stays scoped to its surface class. Do not attempt to unify Atelier a
 Nocturne into one design system.
 
 #### Consequences
+
 - Positive: clear identity per surface class; no cross-contamination of tokens;
   reviewers can reject "merge the two" proposals on sight.
 - Negative/trade-off: some shared primitives may be authored twice, once per system.
 
 #### Follow-up
+
 - [ ] Tag future design handoffs with their target system (Atelier vs Nocturne).
 
 ### DEC-20260708-002 — Action routing contract for agentic UI (no frontend-only actions)
@@ -512,11 +590,13 @@ Owner: Roben
 Related task: design-handoffs review (command-concept-sandbox)
 
 #### Context
+
 The reviewed prototype demonstrated a Safety Approval Surface and job Apply/Save
 CTAs using frontend-only approval state and `alert()` calls. That pattern pretends
 persistence and bypasses Rico's backend safety layer.
 
 #### Decision
+
 Any interactive action promoted from a design reference into production MUST route
 through the full pipeline:
 
@@ -525,7 +605,7 @@ Intent → Safety Policy → Agent Runtime → Persistence → Confirmation
 ```
 
 Concretely: `rico_safety.py` guardrails + `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS`
-+ `agent_runtime.handle_action()` + `POST /api/v1/actions/{action}` (idempotent,
+- `agent_runtime.handle_action()` + `POST /api/v1/actions/{action}` (idempotent,
 audit-logged), with confirmation surfaced back to the user. Hard rules:
 
 - No frontend-only approval logic.
@@ -533,12 +613,14 @@ audit-logged), with confirmation surfaced back to the user. Hard rules:
 - No local state pretending persistence.
 
 #### Consequences
+
 - Positive: prototypes cannot smuggle unsafe action paths into production; safety
   stays backend-owned and auditable.
 - Negative/trade-off: promoting a UI concept always requires backend wiring work,
   never a copy-paste of the prototype interactions.
 
 #### Follow-up
+
 - [ ] Apply this contract to any future promotion of the command-concept scenes.
 
 ### DEC-20260708-001 — Classify `command-concept-sandbox` as Approved Design Reference (requires production adaptation)
@@ -549,12 +631,14 @@ Owner: Roben
 Related task: design-handoffs review (command-concept-sandbox)
 
 #### Context
+
 The `command-concept-sandbox` handoff (Tool Activity Timeline, Explainable Match
 Card, Safety Approval Surface, Thinking State) is on-identity (Nocturne),
 dependency-safe (`framer-motion` only), and built on real theme tokens, but its
 interactions were mock-only (frontend approval, `alert()`, fake persistence).
 
 #### Decision
+
 Classify it as **Approved as Design Reference (requires production adaptation)** —
 not rejected, not promoted to production or `/design-gallery`. Move it to
 `design-handoffs/reviewed/` only after cleanup: hardcoded RGB → design tokens,
@@ -563,12 +647,14 @@ non-functional; required production routing documented). Any production use is a
 separate, safety-reviewed effort governed by DEC-20260708-002.
 
 #### Consequences
+
 - Positive: the four concepts are preserved as a clean, tokenized, honest reference
   without any unsafe interaction path or production risk.
 - Negative/trade-off: the reference is intentionally non-functional; real behavior
   must be rebuilt on the production architecture later.
 
 #### Follow-up
+
 - [ ] If prioritized, scope a gallery-only or workspace implementation PR that wires
   actions through the DEC-20260708-002 pipeline.
 
@@ -583,6 +669,7 @@ Owner: Roben / Claude
 Related task: TASK-20260707-001 (phased architecture roadmap)
 
 #### Relationship to the production hardening audit gate (2026-07-08)
+
 This decision is the **architecture-level roadmap**. The **near-term execution authority is the
 production hardening audit gate**: `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
 (+ Codex follow-up `AI_WORKSPACE/AUDITS/2026-07-08-audit-gate-codex-followup.md`). Agents must
@@ -603,6 +690,7 @@ job persistence. Verification and any fix use **synthetic users and synthetic pr
 no real-user smoke or mutation is authorized unless the owner explicitly approves a specific run.
 
 #### Context
+
 Rico's current architecture is valid but not mature. It works as a stable production stack
 (Vercel frontend → `/proxy` → Render FastAPI → Rico chat/NLU/safety/job logic → Neon), but
 several backend responsibilities are still mixed: request handling, temporary chat memory, and
@@ -614,6 +702,7 @@ strong; the weak point is **operational state**. The clearest warning is the app
 Rico can find a job but lose the apply URL because job context was not reliably persisted to Neon.
 
 Concrete risks:
+
 | Area | Risk |
 | --- | --- |
 | Render | ephemeral disk, weaker worker/cron story |
@@ -624,6 +713,7 @@ Concrete risks:
 | UI | redesign branches can break stable production |
 
 #### Decision
+
 Mature the architecture in **ordered phases**, smallest-safe first, and do not redesign the UI
 or migrate the whole platform while operational state is still unstable.
 
@@ -639,6 +729,7 @@ Telegram / Email  notifications only
 ```
 
 Guiding principles:
+
 1. **Separate API from worker logic.** FastAPI handles requests only; workers own job scans,
    email alerts, follow-ups, link verification, and scheduled tasks.
 2. **Neon is the single source of truth.** No important state lives only in memory or on Render
@@ -689,6 +780,7 @@ drafts of this decision listed API consolidation first — it has been demoted b
 and application lifecycle because state reliability is the higher current risk.
 
 #### Consequences
+
 - Positive: reliability-first ordering — Rico stops forgetting what it found, what the user
   opened, what was applied, and what needs follow-up, before any risky migration or redesign.
 - Positive: each phase is a small, reviewable PR from current `main`; production stays stable.
@@ -697,6 +789,7 @@ and application lifecycle because state reliability is the higher current risk.
   reduce reliance on process-local state.
 
 #### Follow-up
+
 - [ ] Phase 1 (PR A): confirm job-context + apply-link persistence to Neon end-to-end (top-priority
       reliability fix; ties into DEC-20260703-001 recommendation-table work).
 - [ ] Phase 2 (PR B): define the application lifecycle states and reconcile router/runtime writes.
@@ -714,6 +807,7 @@ Owner: Claude (GitHub session)
 Related task: TASK-20260703-037
 
 #### Context
+
 `rico_job_recommendations` carries both a partial-UNIQUE
 (`idx_rico_recommendations_user_job_unique`, WHERE job_key IS NOT NULL — migration 011)
 and a full-UNIQUE (`rico_job_recommendations_user_id_job_key_key`) in production.
@@ -721,6 +815,7 @@ Migration 034 dropped the two plain `(user_id, job_key)` indexes; something must
 their read role, and the upsert's ON CONFLICT targets a specific arbiter.
 
 #### Decision
+
 Keep the partial-UNIQUE as the named `ON CONFLICT (user_id, job_key) WHERE job_key IS NOT NULL`
 arbiter (do not replace it). Codify the full-UNIQUE in migration 035 so a fresh DB matches
 production and covers general `(user_id, job_key)` lookups after 034's drops. Chose #826's
@@ -728,12 +823,14 @@ production and covers general `(user_id, job_key)` lookups after 034's drops. Ch
 is re-created by the `rico_db.py` runtime DDL on every startup, so a migration DROP would not stick.
 
 #### Consequences
+
 - Positive: less write amplification on hot tables; code and production schema agree; BUG-14
   idempotency arbiter untouched; drift checker now verifies the full-unique constraint.
 - Negative/trade-off: production briefly carried a schema object (the full-unique) the repo
   did not declare; 035 closes that gap retroactively rather than at table-create time.
 
 #### Follow-up
+
 - [ ] Verify remaining 005 objects for #712 before closing it.
 
 ### DEC-20260628-001 — No Dead UI Rule
@@ -784,7 +881,6 @@ redirect-only with no implementation, or gate it behind a feature flag that make
 - [ ] Phase B: resolve `/dashboard`, `/onboarding`, `/jobs`, `/signals`, `/archive`, `/saved-searches` —
       each requires an explicit product decision: make live, strip to stub, or delete.
 
-
 ### DEC-20260621-003 — Action-audit hardening rolled out; migration drift surfaced and tracked
 
 Status: accepted
@@ -815,9 +911,9 @@ migration drift it surfaced.
   root cause behind both 030's manual apply and the 021/005/011 drift.
 
 #### Follow-up
+
 - [ ] #711 — apply 005 (targeted) and 011 (verify-first) under explicit approval.
 - [ ] Add a migration runner / CI gate so prod schema can't silently fall behind `main`.
-
 
 ### DEC-20260621-002 — Harden existing `action_audit_log`; do not build parallel audit/approval systems
 
@@ -910,8 +1006,10 @@ Owner: Roben / Claude
 Related task: TASK-20260621-001
 
 #### Context
+
 A codebase sweep surfaced a class of high-impact correctness and security gaps in the
 agent action / approval path:
+
 - The permission approval engine (CAREER-OS-03) issued `apply` permissions that were not
   bound to a specific job, allowing a valid `permission_id` to be replayed against a
   *different* job.
@@ -928,6 +1026,7 @@ Per the user directive, the chosen approach was the smallest safe fix first — 
 place through existing systems rather than building a parallel audit/approval framework.
 
 #### Decision
+
 Ship the hardening as small, focused PRs from current `main`, each independently testable:
 
 - **#700** — Bind `job_key` to issued `apply` permissions; reject replay against a different
@@ -947,6 +1046,7 @@ Ship the hardening as small, focused PRs from current `main`, each independently
   DEC-20260617-001).
 
 #### Consequences
+
 - Positive: closes a permission-replay vector and an approval-bypass vector; restores audit
   and application-attempt persistence; eliminates two connection leaks. All changes are
   backward compatible (unbound permissions still accept any job; empty key normalizes to
@@ -955,6 +1055,7 @@ Ship the hardening as small, focused PRs from current `main`, each independently
   permission across jobs will now be rejected (intended).
 
 #### Verification (2026-06-21)
+
 - Render: "Your service is live"; Uvicorn up on port 10000; `rico_db_init OK`;
   `settings_migration OK`; `startup_check: critical tables present`;
   `migration_ok label=028_performance_indexes`.
@@ -962,6 +1063,7 @@ Ship the hardening as small, focused PRs from current `main`, each independently
 - Warning (non-blocking): SkillNER not installed; did not block startup.
 
 #### Follow-up
+
 - [x] Confirmed deployed commit: `/version.commit` = `d93bb25` (current `main` HEAD), so the
       merged hardening batch (#700–#704) is live in production. Note: the `/version.deployed_at`
       field reads `2026-05-23` — it is a static build-time constant, not the actual deploy time,
@@ -979,23 +1081,27 @@ Owner: Roben / Claude
 Related task: TASK-20260618-014
 
 #### Context
+
 Three open PRs created backlog noise. #601 was a broad multi-batch feature PR (~1.3k LOC)
 touching `src/rico_chat_api.py` on a stale base, still in draft, with an unchecked test plan
 and a body/title mismatch. #608 and #566 were small, clean, docs-only additions.
 
 #### Decision
+
 Close #601 without merging and without opening a replacement PR. Merge the two docs-only PRs
 (#608 localization pattern, #566 Gmail read-only connector design) after confirming they are
 clean, docs-only, and Vercel-green. Re-cut #601's deterministic fast paths later as small,
 focused PRs from current `main` only if still needed.
 
 #### Consequences
+
 - Positive: open PR backlog is clean (0 open PRs); design docs for localization and the
   Gmail connector (#356) are now on `main`; future fast-path work starts from a current base.
 - Trade-off: the fast-path content in #601 must be re-authored against current `main` if still
   wanted — its existing diff is not reused.
 
 #### Follow-up
+
 - [ ] Re-cut #601 fast paths as small PRs from `main` if/when prioritised.
 - [ ] Consider disabling the third-party "Continuous AI" bot checks (they error on every PR).
 
@@ -1007,15 +1113,19 @@ Owner: Roben / ChatGPT
 Related task: TASK-20260617-001
 
 #### Context
+
 Multiple AI tools can plan, implement, review, and verify Rico work. Without a shared repo-native context, each tool can drift based on stale chat history.
 
 #### Decision
+
 All multi-model work must use `AI_WORKSPACE/` as the shared source of truth for project context, active tasks, handoff briefs, decisions, and verification evidence.
 
 #### Consequences
+
 - Positive: less context drift, clearer PR boundaries, easier review.
 - Trade-off: every contributor must update the workspace files when task state changes.
 
 #### Follow-up
+
 - [ ] Use the handoff template for the next implementation task.
 - [ ] Keep decisions short and tied to tasks.
