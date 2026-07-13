@@ -78,6 +78,95 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260713-001 — Reconcile Rico control plane and record governed follow-up direction
+
+Status: review
+Owner: ChatGPT (writer) / independent review this session
+Branch: `chore/agent-control-plane-reconciliation`
+Issue/PR: #1010
+
+#### Objective
+Reconcile Rico's stale coordination layer with live GitHub state, establish the binding
+execution sequence for interface completion, the one AED 79/month plan, invitations, and
+controlled launch, and record (without expanding runtime scope) the governed long-term
+direction for the Agent Operating System and the Rico-entity vision.
+
+#### Context
+- Relevant files: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/START_HERE.md`,
+  `AI_WORKSPACE/DAILY_AUTOPILOT.md`, `AI_WORKSPACE/OPEN_PR_TRIAGE_2026-07-13.md`,
+  `AI_WORKSPACE/LAUNCH_EXECUTION_PLAN.md`,
+  `AI_WORKSPACE/HANDOFFS/2026-07-13-control-plane-reconciliation.md`,
+  `AI_WORKSPACE/AGENT_OS_ROADMAP_AR.md`, `AI_WORKSPACE/VISION/RICO_ENTITY_AR.md`,
+  `AI_WORKSPACE/FOLLOW_UPS/AGENT_OS_AND_RICO_ENTITY.md`
+- Relevant docs: `AI_WORKSPACE/OPERATING_RULES.md` (canonical boot order)
+- Existing behavior: previous workspace snapshot claimed a stale `60978ae…` main state;
+  live main had already advanced through Atelier kit, Workspace Shell/dashboard, profile,
+  settings, teaser/film, and verification-route fixes.
+
+#### Constraints
+- Do not touch: runtime application code, database migrations, environment configuration,
+  deployment configuration, billing provider configuration, production data.
+- No migrations: none required (docs-only PR).
+- Keep scope limited to: control-plane/coordination documentation only.
+
+#### Acceptance criteria
+- [x] Open PRs classified (incl. Paddle PR #1008 held for #989 joint review; CI-housekeeping
+      PR #988 held as non-launch).
+- [x] `START_HERE.md`/`DAILY_AUTOPILOT.md` aligned with `OPERATING_RULES.md` canonical boot
+      order (conflict found and corrected).
+- [x] Branch-authority roles (WRITER/REVIEWER/RELEASE/IDLE) distinguished from activity-pass
+      roles (Planner/Coder/Reviewer/Tester/Deploy verifier).
+- [x] Agent OS roadmap and Rico-entity vision recorded as governed follow-up only (no runtime
+      scope expansion; explicit "do not implement on ambition alone" gate).
+- [x] This Continuity Block present in `AI_WORKSPACE/TASKS.md` before merge.
+- [ ] Final PR head/CI re-confirmed after latest docs commits.
+- [ ] Independent review + explicit owner merge approval obtained.
+
+#### Required verification
+- [ ] Unit tests: n/a (docs-only)
+- [ ] Integration tests: n/a (docs-only)
+- [ ] Frontend build: n/a (no `apps/web` files touched)
+- [ ] Local smoke: n/a
+- [ ] Production/deploy smoke if applicable: n/a — no runtime/production files in diff
+
+#### Continuity Block
+- Task ID: TASK-20260713-001
+- GitHub issue/PR: #1010
+- Branch: `chore/agent-control-plane-reconciliation`
+- Base branch: `main`
+- Last safe commit SHA: `7aa81aef1bb4ecd717372a40e3e571e96ae070b6` (base at branch creation)
+- Current head SHA: `0eb7cd40a74b80a0409262291f3bae1ddc71d085` (head immediately prior to this
+  update commit; a commit cannot state its own resulting SHA in advance — verify the live PR
+  head via `git log -1` or the GitHub PR page rather than treating this field as always-current)
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: `AGENTS.md`, `CLAUDE.md` entry references, `AI_WORKSPACE/PROJECT_STATUS.md`,
+  `AI_WORKSPACE/START_HERE.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/OPERATING_RULES.md`,
+  `AI_WORKSPACE/AGENT_OPERATING_MODEL.md`, open PR metadata, recent main commits
+- Files changed: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/START_HERE.md`,
+  `AI_WORKSPACE/DAILY_AUTOPILOT.md`, `AI_WORKSPACE/OPEN_PR_TRIAGE_2026-07-13.md`,
+  `AI_WORKSPACE/LAUNCH_EXECUTION_PLAN.md`,
+  `AI_WORKSPACE/HANDOFFS/2026-07-13-control-plane-reconciliation.md`,
+  `AI_WORKSPACE/AGENT_OS_ROADMAP_AR.md`, `AI_WORKSPACE/VISION/RICO_ENTITY_AR.md`,
+  `AI_WORKSPACE/FOLLOW_UPS/AGENT_OS_AND_RICO_ENTITY.md`, `AI_WORKSPACE/TASKS.md` (this entry)
+- Files intentionally not touched: runtime application code, database migrations,
+  environment configuration, deployment configuration, billing provider configuration,
+  production data
+- What is complete: see acceptance criteria above (checked items)
+- What is incomplete: final-head re-confirm, independent review sign-off, owner merge approval
+- Known blockers: do not merge while PR remains draft; do not merge without independent review
+  and explicit owner merge approval
+- Validation already run: branch-compare vs `main` (docs/control files only); GitHub QA
+  Tests / Create-Delete Branch / Vercel Preview all green on head `0eb7cd40a7`
+- Validation still required: final-head CI/diff re-verification after this commit;
+  independent reviewer sign-off against live main/open PRs; owner merge approval
+- Deployment/CI/Neon/Vercel state to check next: none — docs-only, no Neon/Render action
+- Next exact action: re-verify final-head CI/diff for #1010, obtain independent review, then
+  request explicit owner merge approval — do not mark ready for review or merge without it
+- Stop condition: stop and ask the owner before merge, production mutation, runtime
+  implementation, or opening a parallel branch/Agent Registry/Task Leases track
+- Rollback plan: revert PR #1010; no runtime or production rollback required
+
 ### TASK-20260710-003 — Migrate the full `/design-preview` package to production (shape + content + flows)
 
 Status: scoped — REVISED 2026-07-10 to full-package scope per `DEC-20260710-002`

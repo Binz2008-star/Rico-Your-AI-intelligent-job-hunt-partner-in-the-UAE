@@ -6,8 +6,13 @@
 - Branch: `chore/agent-control-plane-reconciliation`
 - Base branch: `main`
 - Base SHA at branch creation: `7aa81aef1bb4ecd717372a40e3e571e96ae070b6`
-- Current head SHA: `5b578bbaa09dab3f0519d9a0c3c7c03ce7091c56`
-- Owner/session: ChatGPT — WRITER during docs preparation; independent review required before merge
+- Current head SHA: `0eb7cd40a74b80a0409262291f3bae1ddc71d085` (head immediately prior to this
+  update commit; a commit cannot state its own resulting SHA in advance — verify the live PR
+  head via `git log -1` or the GitHub PR page rather than treating this field as always-current)
+- Owner/session: ChatGPT — WRITER during docs preparation. Independent-review session applied
+  the TASK-20260713-001 ledger entry and this SHA correction under explicit owner WRITER
+  authorization, scope-limited to `AI_WORKSPACE/TASKS.md` and this handoff file only.
+  Independent review of the full PR and owner merge approval are still required.
 - Uncommitted changes present: no
 - Status: review
 - Files inspected: `AGENTS.md`, `CLAUDE.md` entry references, `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/START_HERE.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/OPERATING_RULES.md`, `AI_WORKSPACE/AGENT_OPERATING_MODEL.md`, open PR metadata, recent main commits
@@ -30,10 +35,9 @@
 - What is incomplete:
   - independent review of #1010
   - final PR head/check status must be re-read after this commit
-  - `AI_WORKSPACE/TASKS.md` still needs a canonical TASK-20260713-001 entry before merge; this handoff does not replace that requirement
 - Known blockers:
   - do not merge while PR remains draft
-  - do not merge until the TASKS.md Continuity Block is present and current
+  - do not merge without independent review and explicit owner merge approval
   - Continuous AI bot statuses are noisy/non-authoritative; required GitHub workflows and Vercel must be separated from optional bot checks
 - Validation already run:
   - branch compare against main: documentation/control files only
@@ -41,12 +45,12 @@
   - Create/Delete Branch workflow: success on previously reviewed head
   - boot-order consistency review against `AI_WORKSPACE/OPERATING_RULES.md`: conflict found and corrected
   - open PR metadata review: #1008 identified as large Paddle implementation; #988 identified as non-launch workflow housekeeping
+  - `AI_WORKSPACE/TASKS.md` canonical `TASK-20260713-001` entry added (this commit)
 - Validation still required:
-  - verify final-head QA workflow after latest docs commits
+  - verify final-head QA workflow after this commit
   - verify final PR diff contains only intended coordination files
   - independent reviewer checks claims against live main/open PRs
-  - add canonical task entry to `AI_WORKSPACE/TASKS.md`
 - Deployment/CI/Neon/Vercel state to check next: Vercel preview/check and final-head workflow runs; no Neon or Render action required for docs-only PR
-- Next exact action: add TASK-20260713-001 with this Continuity Block to `AI_WORKSPACE/TASKS.md`, then re-run final-head review and mark #1010 ready only if required checks are green
-- Stop condition: stop and ask the owner before merge, production mutation, runtime implementation, or opening a parallel branch
+- Next exact action: re-verify final-head CI/diff for #1010, obtain independent review, then request explicit owner merge approval — do not mark ready for review or merge without it
+- Stop condition: stop and ask the owner before merge, production mutation, runtime implementation, or opening a parallel branch/Agent Registry/Task Leases track
 - Rollback plan: revert PR #1010; no runtime or production rollback required
