@@ -13,9 +13,15 @@ const { fetchApplicationsMock, createManualApplicationMock, updateApplicationSta
     fetchMeMock: vi.fn(),
 }));
 
+// The real Next router has a stable identity across renders. Returning a
+// fresh object from every useRouter() call re-fires any effect that lists the
+// router in its deps (useAuth re-calls fetchMe forever → unbounded render
+// loop / OOM), so the mock must hand back one shared object.
+const routerMock = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-    usePathname: () => "/flow",
+    useRouter: () => routerMock,
+    usePathname: () => "/applications",
     useSearchParams: () => new URLSearchParams(),
     redirect: vi.fn(),
 }));
@@ -56,14 +62,14 @@ vi.mock("@/lib/api", async (importOriginal) => {
     };
 });
 
-import FlowPage from "@/app/flow/page";
+import ApplicationsPage from "@/app/applications/page";
 
-// FlowPage (and the DashboardShell it renders) read the language from
+// ApplicationsPage (and the WorkspaceShell it renders) read the language from
 // LanguageContext, so every render must be wrapped in a LanguageProvider.
 function renderFlow() {
     return render(
         <LanguageProvider>
-            <FlowPage />
+            <ApplicationsPage />
         </LanguageProvider>,
     );
 }
@@ -267,8 +273,8 @@ describe("Flow Arabic / RTL localization", () => {
 
         renderFlow();
 
-        // Title = مسار الطلبات, Track application = تتبع طلب
-        expect(await screen.findByText("مسار الطلبات")).toBeInTheDocument();
+        // Atelier headline = مسار طلباتك. (reference wording), Track application = تتبع طلب
+        expect(await screen.findByText("مسار طلباتك.")).toBeInTheDocument();
         expect(
             await screen.findByRole("button", { name: /تتبع طلب/ }),
         ).toBeInTheDocument();
@@ -279,7 +285,7 @@ describe("Flow Arabic / RTL localization", () => {
 
         renderFlow();
 
-        await screen.findByText("مسار الطلبات");
+        await screen.findByText("مسار طلباتك.");
         await waitFor(() => {
             expect(document.documentElement.dir).toBe("rtl");
         });
