@@ -6,7 +6,7 @@
 - Branch: `chore/agent-control-plane-reconciliation`
 - Base branch: `main`
 - Base SHA at branch creation: `7aa81aef1bb4ecd717372a40e3e571e96ae070b6`
-- Current head SHA: update from live PR after this commit
+- Current head SHA: `5b578bbaa09dab3f0519d9a0c3c7c03ce7091c56`
 - Owner/session: ChatGPT — WRITER during docs preparation; independent review required before merge
 - Uncommitted changes present: no
 - Status: review
