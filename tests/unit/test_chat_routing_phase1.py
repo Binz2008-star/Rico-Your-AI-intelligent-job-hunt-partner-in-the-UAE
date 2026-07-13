@@ -47,19 +47,19 @@ def _free_sub():
     return SubscriptionResponse(subscription=sub, plan=None, is_active=False)
 
 
-def _premium_sub():
+def _pro_sub():
     from src.schemas.subscription import (
         SubscriptionResponse, SubscriptionStatus, SubscriptionTier, UserSubscription,
     )
-    from src.subscription_plans import PREMIUM_PLAN
+    from src.subscription_plans import RICO_MONTHLY_PLAN
     sub = UserSubscription(
-        user_id="test@rico.ai", plan=SubscriptionTier.PREMIUM,
+        user_id="test@rico.ai", plan=SubscriptionTier.PRO,
         subscription_status=SubscriptionStatus.ACTIVE,
         current_period_start=datetime.now(timezone.utc),
         current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
-        entitlements=PREMIUM_PLAN.entitlements,
+        entitlements=RICO_MONTHLY_PLAN.entitlements,
     )
-    return SubscriptionResponse(subscription=sub, plan=PREMIUM_PLAN, is_active=True)
+    return SubscriptionResponse(subscription=sub, plan=RICO_MONTHLY_PLAN, is_active=True)
 
 
 # ---------------------------------------------------------------------------
@@ -172,10 +172,10 @@ class TestSubscriptionAuthenticated:
         assert result["plan"] == "free"
         assert result["is_active"] is False
 
-    def test_premium_user_sees_premium_plan(self):
-        result, _, _ = self._send("my subscription status", _premium_sub())
-        assert "Premium" in result["message"]
-        assert result["plan"] == "premium"
+    def test_pro_user_sees_rico_monthly_plan(self):
+        result, _, _ = self._send("my subscription status", _pro_sub())
+        assert "Rico Monthly" in result["message"]
+        assert result["plan"] == "pro"
         assert result["is_active"] is True
 
     def test_arabic_subscription_routes_to_service(self):

@@ -467,20 +467,15 @@ def _account_service_response(ctx: RicoSessionContext) -> Dict[str, Any]:
                 f"Monthly AI message limit: {limit:,}."
             )
         else:
-            # Read prices from plan definitions so this stays accurate if pricing changes.
+            # Read price from the plan definition so this stays accurate if pricing changes.
             try:
-                from src.subscription_plans import PAID_PLANS
-                from src.schemas.subscription import SubscriptionTier
-                pro_price = PAID_PLANS[SubscriptionTier.PRO].price_monthly
-                premium_price = PAID_PLANS[SubscriptionTier.PREMIUM].price_monthly
-                pro_label = f"{pro_price} AED/mo"
-                premium_label = f"{premium_price} AED/mo"
+                from src.subscription_plans import RICO_MONTHLY_PLAN
+                monthly_label = f"USD {RICO_MONTHLY_PLAN.price_monthly:.2f}/mo (≈ AED 79)"
             except Exception:
-                pro_label = "29 AED/mo"
-                premium_label = "49 AED/mo"
+                monthly_label = "USD 21.50/mo (≈ AED 79)"
             msg = (
                 f"You are on the **Free** plan — {limit} AI messages per month. "
-                f"Upgrade to Pro ({pro_label}) or Premium ({premium_label}) for higher limits."
+                f"Upgrade to Rico Monthly ({monthly_label}) for higher limits."
             )
 
         return {

@@ -12,11 +12,10 @@ class TestRicoIdentity:
         assert "ricohunt.com" in RICO_IDENTITY
 
     def test_contains_subscription_pricing(self):
-        """Rico identity must contain AED 29 and AED 49 pricing."""
-        assert "AED 29" in RICO_IDENTITY
-        assert "AED 49" in RICO_IDENTITY
-        assert "Pro plan" in RICO_IDENTITY
-        assert "Premium plan" in RICO_IDENTITY
+        """Rico identity must contain the single-plan USD 21.50 pricing."""
+        assert "USD 21.50" in RICO_IDENTITY
+        assert "AED 79" in RICO_IDENTITY
+        assert "Rico Monthly" in RICO_IDENTITY
         assert "Free plan" in RICO_IDENTITY
 
     def test_no_auto_apply_claims(self):

@@ -1,34 +1,26 @@
+"""Read-only subscription plan/status endpoints.
+
+Checkout, portal, and webhook processing live in
+src/api/routers/paddle_billing.py — this router only exposes the plan
+catalog and the current user's resolved status (both backed by
+src/subscription_plans.resolve_effective_user_plan, which reads Paddle
+subscription state).
+"""
 from __future__ import annotations
 
-import json
-import logging
-import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import ValidationError
-
-logger = logging.getLogger(__name__)
+from fastapi import APIRouter, Depends, Request
 
 from src.api.deps import get_current_user_id
 from src.db import record_subscription_intent
 from src.schemas.subscription import (
-    CheckoutResponse,
     PlansResponse,
-    SubscriptionCreateRequest,
     SubscriptionIntentRequest,
     SubscriptionIntentResponse,
     SubscriptionResponse,
-    SubscriptionWebhookResponse,
-    WebhookEvent,
 )
-from src.subscription_plans import (
-    build_checkout_response,
-    create_customer_portal_session,
-    handle_subscription_webhook,
-    list_paid_plans,
-    resolve_effective_user_plan,
-)
+from src.subscription_plans import list_paid_plans, resolve_effective_user_plan
 
 router = APIRouter(prefix="/api/v1/subscription", tags=["subscription"])
 
@@ -67,57 +59,3 @@ def get_subscription_plans() -> PlansResponse:
 @router.get("/me", response_model=SubscriptionResponse)
 def get_my_subscription(user_id: str = Depends(get_current_user_id)) -> SubscriptionResponse:
     return resolve_effective_user_plan(user_id)
-
-
-@router.post("/checkout", response_model=CheckoutResponse)
-def create_subscription_checkout(
-    request: SubscriptionCreateRequest,
-    user_id: str = Depends(get_current_user_id),
-) -> CheckoutResponse:
-    try:
-        return build_checkout_response(user_id, request)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-
-@router.post("/portal", response_model=CheckoutResponse)
-def create_customer_portal(
-    user_id: str = Depends(get_current_user_id),
-) -> CheckoutResponse:
-    try:
-        return create_customer_portal_session(user_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    except RuntimeError as exc:
-        logger.error("stripe_portal_session_failed user=%s error=%s", user_id, exc)
-        raise HTTPException(status_code=502, detail="Could not create billing portal session")
-
-
-@router.post("/webhook", response_model=SubscriptionWebhookResponse)
-async def subscription_webhook(
-    request: Request,
-    stripe_signature: str | None = Header(default=None, alias="stripe-signature"),
-) -> SubscriptionWebhookResponse:
-    payload = await request.body()
-    stripe_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
-    try:
-        if stripe_secret:
-            # Signature-verified path: skip Pydantic entirely. Stripe's own payload
-            # format may not match our schema, so we hand raw bytes + signature to
-            # stripe.Webhook.construct_event() which is the authoritative decoder.
-            # The sentinel is never inspected by handle_subscription_webhook here.
-            sentinel = WebhookEvent(id="stripe_signed_event", type="stripe.signed", data={})
-            return handle_subscription_webhook(sentinel, payload=payload, signature=stripe_signature)
-        # No webhook secret: mock/dev mode — validate body with Pydantic normally.
-        body = json.loads(payload or b"{}")
-        event = WebhookEvent.model_validate(body)
-        return handle_subscription_webhook(event, payload=payload, signature=None)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors())
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("stripe_webhook_error")
-        raise HTTPException(status_code=500, detail="Stripe webhook processing failed")

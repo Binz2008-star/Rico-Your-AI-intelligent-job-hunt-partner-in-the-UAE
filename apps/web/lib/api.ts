@@ -1,3 +1,10 @@
+import type {
+  AgentChatRequest,
+  AgentUIResponse,
+  ExecutePermissionActionRequest,
+  ExecutePermissionActionResponse,
+  OnboardingStatusResponse,
+} from "@/lib/schemas";
 import {
   AgentChatRequestSchema,
   AgentUIResponseSchema,
@@ -11,13 +18,6 @@ import {
   RicoProfileResponseSchema,
   SavedSearchesResponseSchema,
   UploadCVResponseSchema,
-} from "@/lib/schemas";
-import type {
-  AgentChatRequest,
-  AgentUIResponse,
-  ExecutePermissionActionRequest,
-  ExecutePermissionActionResponse,
-  OnboardingStatusResponse,
 } from "@/lib/schemas";
 import { getSignupAttribution } from "@/lib/signupAttribution";
 import type {
@@ -437,9 +437,9 @@ const MOCK_JOBS: Job[] = [
 function normalizeStringArray(value: unknown, fallback: string[]): string[] {
   const items = Array.isArray(value)
     ? value
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean)
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)
     : [];
 
   return items.length > 0 ? items : fallback;
@@ -455,8 +455,8 @@ function normalizeMatchExplanation(raw: unknown): Job["match_explanation"] {
   return {
     verdict:
       verdict === "strong_fit" ||
-      verdict === "worth_checking" ||
-      verdict === "weak_fit"
+        verdict === "worth_checking" ||
+        verdict === "weak_fit"
         ? verdict
         : "worth_checking",
     summary: String(item.summary ?? ""),
@@ -901,14 +901,14 @@ export interface JobMatch {
    *  Never used as an apply link — only surfaced in the company-site fallback CTA. */
   employer_url?: string;
   verification_status?:
-    | "live"
-    | "live_verified"
-    | "lead_needs_verification"
-    | "needs_source_verification"
-    | "login_required"
-    | "rate_limited"
-    | "aggregator_untrusted"
-    | "google_intermediary";
+  | "live"
+  | "live_verified"
+  | "lead_needs_verification"
+  | "needs_source_verification"
+  | "login_required"
+  | "rate_limited"
+  | "aggregator_untrusted"
+  | "google_intermediary";
 }
 
 export interface RicoOption {
@@ -1511,12 +1511,12 @@ export async function sendAgentChat(
 
 export interface LinkVerificationResult {
   status:
-    | "live"
-    | "expired"
-    | "blocked"
-    | "redirect"
-    | "source_only"
-    | "needs_review";
+  | "live"
+  | "expired"
+  | "blocked"
+  | "redirect"
+  | "source_only"
+  | "needs_review";
   http_status: number | null;
   error_message: string | null;
   verified_at: string;
@@ -1565,7 +1565,7 @@ export interface SubscriptionEntitlements {
 
 export interface SubscriptionPlan {
   id: string;
-  plan: "pro" | "premium";
+  plan: "pro";
   name: string;
   price_monthly: number;
   currency: string;
@@ -1581,10 +1581,10 @@ export interface PlansResponse {
 
 export interface UserSubscription {
   user_id: string;
-  plan: "free" | "pro" | "premium";
+  plan: "free" | "pro";
   subscription_status: "active" | "inactive" | "past_due" | "canceled";
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
+  paddle_customer_id: string | null;
+  paddle_subscription_id: string | null;
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at: string | null;
@@ -1599,13 +1599,6 @@ export interface SubscriptionMeResponse {
   is_active: boolean;
 }
 
-export interface CheckoutResponse {
-  checkout_url: string;
-  provider: "stripe" | "mock" | "manual";
-  plan: "free" | "pro" | "premium";
-  status: "ready" | "mock" | "manual";
-}
-
 export async function getSubscriptionPlans(): Promise<PlansResponse> {
   return requestJson<PlansResponse>("/api/v1/subscription/plans", {
     method: "GET",
@@ -1618,20 +1611,10 @@ export async function getMySubscription(): Promise<SubscriptionMeResponse> {
   });
 }
 
-export async function createCheckoutSession(
-  plan: "pro" | "premium",
-): Promise<CheckoutResponse> {
-  return requestJson<CheckoutResponse>("/api/v1/subscription/checkout", {
-    method: "POST",
-    body: JSON.stringify({ plan }),
-  });
-}
-
-export async function createCustomerPortalSession(): Promise<CheckoutResponse> {
-  return requestJson<CheckoutResponse>("/api/v1/subscription/portal", {
-    method: "POST",
-  });
-}
+// Checkout and subscription management go through the Paddle billing API —
+// see createPaddleCheckoutSession() and createPaddleCustomerPortalSession()
+// further below. There is no server-redirect checkout_url in the Paddle.js
+// overlay flow, so this module no longer exposes a generic createCheckoutSession().
 
 // ── Apply Queue (job agent) ───────────────────────────────────────────────────
 
@@ -1755,7 +1738,7 @@ export async function submitAction(
 
 export async function recordSubscriptionIntent(
   plan: string,
-  billingMode: "manual" | "stripe" = "manual",
+  billingMode: "manual" | "paddle" = "manual",
   sourcePage: string = "/subscription",
 ): Promise<void> {
   try {
@@ -1819,4 +1802,58 @@ export async function executePermissionAction(
     },
   );
   return validateShape(ExecutePermissionActionResponseSchema, raw, "executePermissionAction");
+}
+
+// ── Paddle Billing ────────────────────────────────────────────────────────────
+
+export interface PaddleBillingStatus {
+  user_id: string;
+  plan: string;
+  status: string;
+  billing_cycle: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at: string | null;
+  canceled_at: string | null;
+  paddle_subscription_id: string | null;
+  provider: string;
+}
+
+export async function getPaddleBillingStatus(
+  signal?: AbortSignal,
+): Promise<PaddleBillingStatus> {
+  return requestJson<PaddleBillingStatus>("/api/v1/billing/status", {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function createPaddleCustomerPortalSession(): Promise<{ portal_url: string }> {
+  return requestJson<{ portal_url: string }>("/api/v1/billing/customer-portal", {
+    method: "POST",
+  });
+}
+
+export interface PaddleCheckoutSession {
+  session_token: string;
+  price_id: string | null;
+  plan: string;
+  billing_cycle: string;
+}
+
+/**
+ * Create a server-owned checkout session before opening the Paddle.js
+ * overlay. The returned session_token must be passed as
+ * customData.checkout_session_id to openPaddleCheckout() — the webhook
+ * resolves the Rico user via this record, never via browser-supplied
+ * custom_data.user_id.
+ */
+export async function createPaddleCheckoutSession(
+  plan: string = "pro",
+  billingCycle: string = "monthly",
+): Promise<PaddleCheckoutSession> {
+  return requestJson<PaddleCheckoutSession>("/api/v1/billing/paddle/checkout-session", {
+    method: "POST",
+    body: JSON.stringify({ plan, billing_cycle: billingCycle }),
+  });
 }

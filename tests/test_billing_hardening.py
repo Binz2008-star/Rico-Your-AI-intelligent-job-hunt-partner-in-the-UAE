@@ -1,18 +1,21 @@
 """Regression tests for post-PR-253 billing hardening fixes.
 
-Covers three Codex findings:
+Covers two Codex findings:
   1. WhatsApp number normalization (billing.ts logic verified via Python equivalent)
   2. Admin activation returns 503 when DB is unavailable vs 404 when user not found
-  3. upsert_subscription clear_cancellation clears cancel_at/canceled_at on reactivation
+
+(The former third finding — upsert_subscription's clear_cancellation flag — tested
+src/repositories/subscription_repo.py's Stripe-era COALESCE-preservation pattern,
+which doesn't apply to paddle_repo.upsert_paddle_subscription: Paddle webhooks
+deliver full subscription state on every event, not partial diffs, so cancel_at/
+canceled_at are always set directly from the event payload rather than needing a
+selective-clear flag.)
 """
 from __future__ import annotations
 
 import os
 import re
 import sys
-from contextlib import contextmanager
-from datetime import datetime, timezone
-from unittest.mock import patch
 
 import pytest
 
@@ -62,26 +65,6 @@ def admin_client():
     return tc
 
 
-def _fake_user(email: str = "target@rico.ai"):
-    from src.repositories.users_repo import User
-    return User(
-        id=99,
-        email=email,
-        password_hash="x",
-        role="user",
-        is_active=True,
-        created_at=datetime.now(timezone.utc),
-        last_login_at=None,
-    )
-
-
-def _fake_upsert(calls: list):
-    def _inner(user_id, *, plan, status, **kwargs):
-        calls.append({"user_id": user_id, "plan": plan, "status": status, **kwargs})
-        return {"user_id": user_id, "plan": plan, "status": status}
-    return _inner
-
-
 class TestAdminActivationDbGating:
     def test_503_when_db_unavailable(self, admin_client, monkeypatch):
         monkeypatch.setattr("src.db.is_db_available", lambda: False)
@@ -115,104 +98,3 @@ class TestAdminActivationDbGating:
         )
 
         assert r.status_code == 422
-
-
-# ── upsert_subscription: clear_cancellation ───────────────────────────────────
-
-class FakeCursor:
-    def __init__(self):
-        self.sql_log: list[str] = []
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        pass
-
-    def execute(self, sql, params=None):
-        self.sql_log.append(sql)
-
-    def fetchone(self):
-        return None
-
-
-class FakeConn:
-    def __init__(self):
-        self._cursor = FakeCursor()
-
-    def cursor(self):
-        return self._cursor
-
-    def commit(self):
-        pass
-
-    def rollback(self):
-        pass
-
-    def close(self):
-        pass
-
-
-@contextmanager
-def _fake_transaction(conn):
-    yield conn
-
-
-class TestClearCancellation:
-    def _run_upsert(self, **kwargs):
-        conn = FakeConn()
-
-        with patch(
-            "src.repositories.subscription_repo._db_transaction",
-            return_value=_fake_transaction(conn),
-        ):
-            from src.repositories.subscription_repo import upsert_subscription
-            upsert_subscription("user@test.com", plan="pro", status="active", **kwargs)
-
-        return conn._cursor.sql_log
-
-    def test_clear_cancellation_true_writes_null_for_both_fields(self):
-        sql_log = self._run_upsert(clear_cancellation=True)
-
-        assert sql_log, "upsert SQL was not executed"
-        sql = sql_log[0]
-        assert "cancel_at                      = NULL" in sql
-        assert "canceled_at                    = NULL" in sql
-        assert "COALESCE(EXCLUDED.cancel_at" not in sql
-        assert "COALESCE(EXCLUDED.canceled_at" not in sql
-
-    def test_clear_cancellation_false_uses_coalesce(self):
-        sql_log = self._run_upsert(clear_cancellation=False)
-
-        sql = sql_log[0]
-        assert "COALESCE(EXCLUDED.cancel_at" in sql
-        assert "COALESCE(EXCLUDED.canceled_at" in sql
-
-    def test_clear_cancellation_defaults_to_false(self):
-        sql_log = self._run_upsert()
-
-        sql = sql_log[0]
-        assert "COALESCE(EXCLUDED.cancel_at" in sql
-        assert "COALESCE(EXCLUDED.canceled_at" in sql
-
-    def test_admin_activation_passes_clear_cancellation_true(self, admin_client, monkeypatch):
-        monkeypatch.setattr("src.db.is_db_available", lambda: True)
-        monkeypatch.setattr(
-            "src.repositories.users_repo.get_user_by_email",
-            lambda e: _fake_user(e),
-        )
-
-        calls: list = []
-        monkeypatch.setattr(
-            "src.repositories.subscription_repo.upsert_subscription",
-            _fake_upsert(calls),
-        )
-
-        r = admin_client.post(
-            "/api/v1/admin/subscriptions/activate",
-            json={"email": "target@rico.ai", "plan": "pro", "duration_days": 30},
-        )
-
-        assert r.status_code == 200
-        assert calls, "upsert_subscription was not called"
-        assert calls[0].get("clear_cancellation") is True

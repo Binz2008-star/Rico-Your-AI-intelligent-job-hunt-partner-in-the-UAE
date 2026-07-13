@@ -35,7 +35,7 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 | --- | --- |
 | **Where is Rico?** | Release verification for #963: the onboarding CV persistence implementation is merged as `241b85d…`, CI-green, and Vercel-ready. |
 | **Where is it going?** | Verify the deployed backend/authenticated flow, then resume the approved per-route Atelier migration and separately scoped hardening. |
-| **What is blocked?** | No new runtime/design objective may start until the #963 release gate (migration 038 schema proof + authenticated smoke) passes. Render version already matches `241b85d…`. |
+| **What is blocked?** | No new runtime/design objective may start until the #963 release gate (migration 038 schema proof + authenticated smoke) passes. Render version already matches `241b85d…`. **#1008 (Paddle billing)** is draft — blocked on migrations 040+041, `PADDLE_*` env vars, and owner approval to set `BILLING_MODE=paddle`. |
 | **What is completed?** | Phases 0–1, #969 document idempotency foundation, and #963 implementation. Production verification of #963 is pending. |
 | **What comes next?** | Complete release verification; then select one objective only: #962 or the next owner-approved design route. |
 
@@ -72,23 +72,29 @@ Naming/branch/PR governance: see `AI_WORKSPACE/OPERATING_RULES.md` and
 Status legend: ✅ completed · 🔵 in progress · ⬜ planned (not started)
 
 ### Phase 0 — Architecture & Governance ✅
+
 The workspace, roadmap, audit gate, operational-memory strategy, branch/PR
 governance, and naming standards that let multiple agents work without drift.
+
 - Delivered: AI Workspace, `ARCHITECTURE.md`, DEC-20260707-001, the 2026-07-08
   production hardening audit gate, this roadmap.
 - PRs: #881 (roadmap + audit reconciliation, merged).
 
 ### Phase 1 — Operational Memory Foundation ✅
+
 Rico must never forget what it found, opened, applied to, or needs to follow up.
+
 - Delivered: `user_job_context` persistence (migrations 018–022), operational
   memory readiness helper, follow-up readiness selection, read-only lifecycle
   follow-ups endpoint, Audit Phase 2 verification (persistence proven sound).
 - PRs: #883 (readiness helper, merged), #885 (follow-ups endpoint, merged).
 
 ### Phase 2 — Hardening 🔵 (current)
+
 Not features, not UI. Robustness, resilience, regression protection, operational
 safety. Each finding becomes a small, scoped hardening PR — verify-first, and
 fix only proven gaps (synthetic data only).
+
 - Delivered: #887 — batch-row-isolation in `upsert_matches` (one malformed row
   no longer drops the whole apply-link batch); proven against real Postgres.
 - Delivered, awaiting release verification: #969/#960 exact document dedupe and #975/#963
@@ -96,7 +102,9 @@ fix only proven gaps (synthetic data only).
 - Next candidates: any gap surfaced by continued Audit Phase 2–9 verification.
 
 ### Phase 3 — Chat Integration 🔵 (current)
+
 Wire chat to what is already persisted — almost no new logic, just connection.
+
 - Delivered: #891 — "what should I follow up?" / "which jobs are due for
   follow-up?" (EN + AR) → reuses the merged readiness logic
   (`get_by_status("applied")` → `select_revisit_candidates`).
@@ -107,21 +115,25 @@ Wire chat to what is already persisted — almost no new logic, just connection.
 - Constraint: reuse existing lifecycle reads; verify-first; synthetic data only.
 
 ### Phase 4 — Lifecycle Intelligence ⬜
+
 Rico stops being only a keeper and starts following up with the user, e.g.
 "You applied 6 days ago — prepare a follow-up email?" / "You opened this job
 three times — want to apply?"
 
 ### Phase 5 — UX Facelift ⬜
+
 Only after the system is stable. Atelier, Rico Alive, Nocturne, and the new
 design language. (Corresponds to DEC-20260707-001 "UI redesign / PR G".)
 The approved target is `/design-preview` per DEC-20260710-002; migration remains
 per-route and owner-gated, and resumes after the #963 release gate.
 
 ### Phase 6 — Notifications ⬜
+
 After lifecycle exists: email, WhatsApp, reminders, weekly reports. Must honor
 the Telegram audience rules (admin/dev vs user channels).
 
 ### Phase 7 — Infrastructure Evolution ⬜ (last)
+
 Not now. Railway, worker split, queue, Redis, background processing. Render
 stays the production backend until a Railway target passes full production
 smoke. (Corresponds to DEC-20260707-001 PRs D/E.)

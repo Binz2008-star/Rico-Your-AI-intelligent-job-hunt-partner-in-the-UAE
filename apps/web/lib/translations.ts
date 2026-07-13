@@ -258,21 +258,29 @@ export const translations = {
       "Click the WhatsApp button on your chosen plan. Send us your Rico account email and preferred plan. We'll confirm your payment and activate your account within a few hours.",
     faqHowUpgradeStripe:
       "Click Upgrade to be taken to secure checkout. After payment your plan activates immediately.",
+    faqHowUpgradePaddle:
+      "Click Upgrade to open secure checkout. After payment your plan activates immediately.",
     faqPaymentMethods: "What payment methods are accepted?",
     faqPaymentMethodsManual:
       "We accept bank transfer, Ziina, and Mamo. After payment, send the receipt and your Rico account email via WhatsApp for activation.",
     faqPaymentMethodsStripe:
       "We accept all major credit and debit cards. Your payment is securely processed and card details are never stored on our servers.",
+    faqPaymentMethodsPaddle:
+      "We accept all major credit and debit cards. Your payment is securely processed by Paddle and card details are never stored on our servers.",
     faqActivationTime: "How quickly is my account activated?",
     faqActivationTimeManual:
       "After we receive your payment confirmation via WhatsApp, your Rico account is activated within a few hours. You will need to logout and log back in if premium access does not appear immediately.",
     faqActivationTimeStripe:
+      "Activation is immediate after successful payment.",
+    faqActivationTimePaddle:
       "Activation is immediate after successful payment.",
     faqChangeCancel: "Can I change or cancel my plan?",
     faqChangeCancelManual:
       "Contact Rico support via WhatsApp to adjust or cancel your subscription. Your access continues until the end of your current period.",
     faqChangeCancelStripe:
       "You can upgrade, downgrade, or cancel at any time through the subscription management portal. When cancelling, access continues until the end of the billing period.",
+    faqChangeCancelPaddle:
+      "You can cancel at any time through the subscription management portal. If a payment fails, you keep full access for a 7-day grace period while we retry the charge — after that, your plan moves to Free.",
     pricesInAED: "Prices in AED. Billed monthly. Cancel any time.",
     subscriptionPaymentConfiguring: "Payment processing is being configured. No charge has been made.",
     subscriptionCheckoutFailed: "Checkout failed. Please try again.",
@@ -1180,6 +1188,31 @@ export const translations = {
     atlResetLinkInvalid: "This reset link is invalid, expired, or already used.",
     atlVerifyNoToken: "No verification token found. Please use the link from your email.",
     atlVerifyInvalid: "This verification link is invalid, expired, or has already been used.",
+
+    // Paddle Billing
+    paddleBillingTitle: "Subscription",
+    paddleBillingSubtitle: "Manage your Rico Pro plan",
+    paddleCurrentPlan: "Current plan",
+    paddlePlanFree: "Free",
+    paddlePlanPro: "Rico Pro",
+    paddlePlanPremium: "Rico Premium",
+    paddleStatusActive: "Active",
+    paddleStatusTrialing: "Trial",
+    paddleStatusPastDue: "Payment due",
+    paddlePaused: "Paused",
+    paddleCanceled: "Canceled",
+    paddleStatusInactive: "Inactive",
+    paddleRenewsOn: "Renews",
+    paddleExpiresOn: "Expires",
+    paddleCancelScheduled: "Cancels on",
+    paddleManageSubscription: "Manage subscription",
+    paddleManageSubscriptionLoading: "Opening portal…",
+    paddleUpgradeMonthly: "Upgrade monthly",
+    paddleUpgradeYearly: "Upgrade yearly",
+    paddleCheckoutLoading: "Opening checkout…",
+    paddleBillingLoadError: "Could not load billing status.",
+    paddlePortalError: "Could not open billing portal. Please try again.",
+    paddleNotConfigured: "Paddle checkout is not configured for this environment.",
   },
   ar: {
     // Common
@@ -1435,20 +1468,27 @@ export const translations = {
       "انقر على زر واتساب في الخطة المختارة. أرسل لنا بريدك الإلكتروني في ريكو والخطة المفضلة. سنؤكد دفعك ونفعل حسابك خلال بضع ساعات.",
     faqHowUpgradeStripe:
       "انقر ترقية للانتقال إلى الدفع الآمن. بعد الدفع، يتم تفعيل خطتك فورًا.",
+    faqHowUpgradePaddle:
+      "انقر ترقية لفتح الدفع الآمن. بعد الدفع، يتم تفعيل خطتك فورًا.",
     faqPaymentMethods: "ما هي طرق الدفع المقبولة؟",
     faqPaymentMethodsManual:
       "نقبل التحويل البنكي وزيينة ومامو. بعد الدفع، أرسل الإيصال وبريدك الإلكتروني في ريكو عبر واتساب للتفعيل.",
     faqPaymentMethodsStripe:
       "نقبل جميع بطاقات الائتمان والخصم الرئيسية. يتم معالجة الدفع بشكل آمن ولا يتم تخزين تفاصيل البطاقة على خوادمنا.",
+    faqPaymentMethodsPaddle:
+      "نقبل جميع بطاقات الائتمان والخصم الرئيسية. يتم معالجة الدفع بشكل آمن عبر Paddle ولا يتم تخزين تفاصيل البطاقة على خوادمنا.",
     faqActivationTime: "كم سرعة تفعيل حسابي؟",
     faqActivationTimeManual:
       "بعد استلام تأكيد الدفع عبر واتساب، يتم تفعيل حساب ريكو خلال بضع ساعات. قد تحتاج إلى تسجيل الخروج وتسجيل الدخول مرة أخرى إذا لم يظهر الوصول المميز فورًا.",
     faqActivationTimeStripe: "التفعيل فوري بعد الدفع الناجح.",
+    faqActivationTimePaddle: "التفعيل فوري بعد الدفع الناجح.",
     faqChangeCancel: "هل يمكنني تغيير أو إلغاء خطتي؟",
     faqChangeCancelManual:
       "اتصل بدعم ريكو عبر واتساب لضبط أو إلغاء اشتراكك. يستمر الوصول حتى نهاية فترتك الحالية.",
     faqChangeCancelStripe:
       "يمكنك الترقية أو التخفيض أو الإلغاء في أي وقت من خلال بوابة إدارة الاشتراك. عند الإلغاء، يستمر الوصول حتى نهاية فترة الفوترة.",
+    faqChangeCancelPaddle:
+      "يمكنك الإلغاء في أي وقت من خلال بوابة إدارة الاشتراك. إذا فشلت عملية الدفع، يستمر وصولك الكامل لمدة ٧ أيام كفترة سماح ريثما نعيد محاولة الدفع — بعدها تنتقل خطتك إلى المجانية.",
     pricesInAED: "الأسعار بالدرهم الإمارات. فوترة شهرية. إلغاء في أي وقت.",
     subscriptionPaymentConfiguring: "معالجة الدفع قيد الإعداد. لم يتم خصم أي رسوم.",
     subscriptionCheckoutFailed: "فشل الدفع. يرجى المحاولة مرة أخرى.",
@@ -2354,6 +2394,31 @@ export const translations = {
     atlResetLinkInvalid: "رابط إعادة التعيين هذا غير صالح أو منتهي الصلاحية أو مُستخدم من قبل.",
     atlVerifyNoToken: "لم يتم العثور على رمز التحقق. يرجى استخدام الرابط من بريدك الإلكتروني.",
     atlVerifyInvalid: "رابط التحقق هذا غير صالح أو منتهي الصلاحية أو تم استخدامه من قبل.",
+
+    // Paddle Billing
+    paddleBillingTitle: "الاشتراك",
+    paddleBillingSubtitle: "إدارة خطة ريكو برو",
+    paddleCurrentPlan: "الخطة الحالية",
+    paddlePlanFree: "مجاني",
+    paddlePlanPro: "ريكو برو",
+    paddlePlanPremium: "ريكو بريميوم",
+    paddleStatusActive: "نشط",
+    paddleStatusTrialing: "تجريبي",
+    paddleStatusPastDue: "دفعة متأخرة",
+    paddlePaused: "موقوف",
+    paddleCanceled: "ملغى",
+    paddleStatusInactive: "غير نشط",
+    paddleRenewsOn: "يجدد في",
+    paddleExpiresOn: "ينتهي في",
+    paddleCancelScheduled: "يُلغى في",
+    paddleManageSubscription: "إدارة الاشتراك",
+    paddleManageSubscriptionLoading: "جارٍ فتح البوابة…",
+    paddleUpgradeMonthly: "ترقية شهرية",
+    paddleUpgradeYearly: "ترقية سنوية",
+    paddleCheckoutLoading: "جارٍ فتح الدفع…",
+    paddleBillingLoadError: "تعذّر تحميل حالة الاشتراك.",
+    paddlePortalError: "تعذّر فتح بوابة الفوترة. يرجى المحاولة مجدداً.",
+    paddleNotConfigured: "بوابة Paddle غير مهيأة في هذه البيئة.",
   },
 } as const;
 

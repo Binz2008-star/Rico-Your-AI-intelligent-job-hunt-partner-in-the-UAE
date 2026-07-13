@@ -52,6 +52,7 @@ jobs:
             tests/test_user_documents_dedup.py \
             tests/test_908_rc4_prevent_noncv_active_cv.py \
             tests/test_963_onboarding_cv_persistence.py \
+            tests/test_paddle_billing.py \
             -v --tb=short
 
   # Real-Postgres coverage for the user_documents single-primary invariant

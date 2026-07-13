@@ -3,13 +3,12 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { TranslationKey } from "@/lib/translations";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import {
     ApiError,
-    createCheckoutSession,
-    createCustomerPortalSession,
+    createPaddleCheckoutSession,
+    createPaddleCustomerPortalSession,
     getMySubscription,
     getSubscriptionPlans,
     logout,
@@ -18,6 +17,8 @@ import {
     type SubscriptionPlan,
 } from "@/lib/api";
 import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
+import { getPaddlePriceId, openPaddleCheckout } from "@/lib/paddle";
+import type { TranslationKey } from "@/lib/translations";
 import { useTranslation } from "@/lib/translations";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,13 +26,14 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 const MANUAL_BILLING = isManualBillingMode();
 
+// Single-plan scope: Rico Monthly only.
 const FALLBACK_PLANS: SubscriptionPlan[] = [
     {
-        id: "pro_monthly",
+        id: "rico_monthly",
         plan: "pro",
-        name: "Pro",
-        price_monthly: 29,
-        currency: "AED",
+        name: "Rico Monthly",
+        price_monthly: 21.50,
+        currency: "USD",
         description: "Smart AI job hunting for active UAE professionals.",
         features: [
             "Unlimited CV analysis",
@@ -52,44 +54,16 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
         },
         is_popular: true,
     },
-    {
-        id: "premium_monthly",
-        plan: "premium",
-        name: "Premium",
-        price_monthly: 49,
-        currency: "AED",
-        description: "Full automation and premium AI recommendations.",
-        features: [
-            "Everything in Pro",
-            "Auto-apply system",
-            "Priority AI ranking",
-            "Advanced job automation",
-            "Premium job pipelines",
-            "Recruiter visibility (coming soon)",
-        ],
-        entitlements: {
-            monthly_ai_message_limit: 1500,
-            saved_jobs_limit: null,
-            profile_optimization_limit: 100,
-            cv_storage_limit: null,
-            other_document_limit: null,
-            premium_recommendations_enabled: true,
-            application_automation_enabled: true,
-        },
-        is_popular: false,
-    },
 ];
 
-const PLAN_TIER: Record<string, number> = { free: 0, pro: 1, premium: 2 };
+const PLAN_TIER: Record<string, number> = { free: 0, pro: 1 };
 
 const PLAN_NAME_KEY: Record<string, TranslationKey> = {
-    Pro: "planProName",
-    Premium: "planPremiumName",
+    "Rico Monthly": "planProName",
 };
 
 const PLAN_DESC_KEY: Record<string, TranslationKey> = {
     "Smart AI job hunting for active UAE professionals.": "planProDesc",
-    "Full automation and premium AI recommendations.": "planPremiumDesc",
 };
 
 const PLAN_FEATURE_KEY: Record<string, TranslationKey> = {
@@ -99,12 +73,6 @@ const PLAN_FEATURE_KEY: Record<string, TranslationKey> = {
     "Saved searches": "planFeatureSavedSearches",
     "Priority support": "planFeaturePrioritySupport",
     "Higher daily job limits": "planFeatureHigherLimits",
-    "Everything in Pro": "planFeatureEverythingPro",
-    "Auto-apply system": "planFeatureAutoApply",
-    "Priority AI ranking": "planFeaturePriorityAI",
-    "Advanced job automation": "planFeatureAdvancedAuto",
-    "Premium job pipelines": "planFeaturePremiumPipelines",
-    "Recruiter visibility (coming soon)": "planFeatureRecruiter",
 };
 
 function PlanCard({
@@ -130,9 +98,9 @@ function PlanCard({
     loading: boolean;
     subLoading: boolean;
     anyCheckoutPending: boolean;
-    onUpgrade: (plan: "pro" | "premium") => void;
+    onUpgrade: (plan: "pro") => void;
     onManage: () => void;
-    onIntent: (plan: "pro" | "premium") => void;
+    onIntent: (plan: "pro") => void;
     maintenanceMode: boolean;
     manualBilling: boolean;
     userEmail: string | null;
@@ -188,10 +156,10 @@ function PlanCard({
 
             <div className="relative z-10 mt-5 flex items-baseline gap-1">
                 <span className="text-[38px] font-black text-text-primary leading-none">
-                    {plan.price_monthly}
+                    {plan.currency} {plan.price_monthly}
                 </span>
                 <span className="text-[13px] text-text-secondary font-medium">
-                    {plan.currency}/mo
+                    /mo
                 </span>
             </div>
 
@@ -387,16 +355,6 @@ export default function SubscriptionPage() {
                 t('planFeaturePrioritySupport'), t('planFeatureHigherLimits'),
             ],
         },
-        {
-            ...FALLBACK_PLANS[1],
-            name: t('planPremiumName'),
-            description: t('planPremiumDesc'),
-            features: [
-                t('planFeatureEverythingPro'), t('planFeatureAutoApply'),
-                t('planFeaturePriorityAI'), t('planFeatureAdvancedAuto'),
-                t('planFeaturePremiumPipelines'), t('planFeatureRecruiter'),
-            ],
-        },
     ], [language]);
 
     const [apiPlans, setApiPlans] = useState<SubscriptionPlan[]>([]);
@@ -406,12 +364,11 @@ export default function SubscriptionPage() {
     const [subLoading, setSubLoading] = useState(false);
     const [planError, setPlanError] = useState(false);
     const [subscriptionError, setSubscriptionError] = useState(false);
-    const [checkingOut, setCheckingOut] = useState<"pro" | "premium" | null>(null);
+    const [checkingOut, setCheckingOut] = useState<"pro" | null>(null);
     const backendMaintenanceSubMessage = t('backendMaintenanceSub');
     const subscriptionCheckoutFailedMessage = t('subscriptionCheckoutFailed');
     const subscriptionPaymentConfiguringMessage = t('subscriptionPaymentConfiguring');
     const subscriptionPortalFailedMessage = t('subscriptionPortalFailed');
-    const subscriptionPortalNotConfiguredMessage = t('subscriptionPortalNotConfigured');
 
     const loadPlans = useCallback(() => {
         if (maintenanceMode) {
@@ -466,29 +423,29 @@ export default function SubscriptionPage() {
     }, [maintenanceMode, toast, userEmail]);
 
     const handleUpgrade = useCallback(
-        async (plan: "pro" | "premium") => {
+        async (plan: "pro") => {
             if (maintenanceMode) {
                 toast(backendMaintenanceSubMessage, "error");
                 return;
             }
             // Safety guard: if env var is missing/wrong and manual mode is active,
-            // open WhatsApp directly — never call the Stripe checkout API.
+            // open WhatsApp directly — never call the Paddle checkout API.
             if (MANUAL_BILLING) {
                 const price = plans.find((p) => p.plan === plan)?.price_monthly ?? null;
                 window.open(buildWhatsAppUpgradeUrl(plan, userEmail, price), "_blank", "noopener,noreferrer");
                 return;
             }
+            const priceId = getPaddlePriceId();
+            if (!priceId) {
+                toast(subscriptionPaymentConfiguringMessage, "error");
+                return;
+            }
             setCheckingOut(plan);
             try {
-                const result = await createCheckoutSession(plan);
-                if (result.provider === "mock") {
-                    toast(subscriptionPaymentConfiguringMessage, "error");
-                } else if (result.provider === "manual") {
-                    // Backend in manual mode — open WhatsApp URL returned by the server.
-                    window.open(result.checkout_url, "_blank", "noopener,noreferrer");
-                } else {
-                    window.location.href = result.checkout_url;
-                }
+                // Server-owned checkout session first — the webhook resolves
+                // identity via this record, never via a browser-supplied user_id.
+                const session = await createPaddleCheckoutSession(plan, "monthly");
+                await openPaddleCheckout(priceId, session.session_token, userEmail, language as "en" | "ar");
             } catch (err) {
                 const msg =
                     err instanceof ApiError
@@ -499,11 +456,11 @@ export default function SubscriptionPage() {
                 setCheckingOut(null);
             }
         },
-        [backendMaintenanceSubMessage, maintenanceMode, subscriptionCheckoutFailedMessage, subscriptionPaymentConfiguringMessage, toast]
+        [backendMaintenanceSubMessage, language, maintenanceMode, plans, subscriptionCheckoutFailedMessage, subscriptionPaymentConfiguringMessage, toast, userEmail]
     );
 
-    const handleIntent = useCallback((plan: "pro" | "premium") => {
-        void recordSubscriptionIntent(plan, MANUAL_BILLING ? "manual" : "stripe", "/subscription");
+    const handleIntent = useCallback((plan: "pro") => {
+        void recordSubscriptionIntent(plan, MANUAL_BILLING ? "manual" : "paddle", "/subscription");
     }, []);
 
     const handleManage = useCallback(async () => {
@@ -517,12 +474,8 @@ export default function SubscriptionPage() {
             return;
         }
         try {
-            const result = await createCustomerPortalSession();
-            if (result.provider === "mock") {
-                toast(subscriptionPortalNotConfiguredMessage, "error");
-            } else {
-                window.location.href = result.checkout_url;
-            }
+            const { portal_url } = await createPaddleCustomerPortalSession();
+            window.location.href = portal_url;
         } catch (err) {
             const msg =
                 err instanceof ApiError
@@ -530,7 +483,7 @@ export default function SubscriptionPage() {
                     : subscriptionPortalFailedMessage;
             toast(msg, "error");
         }
-    }, [backendMaintenanceSubMessage, maintenanceMode, subscriptionPortalFailedMessage, subscriptionPortalNotConfiguredMessage, toast]);
+    }, [backendMaintenanceSubMessage, maintenanceMode, subscriptionPortalFailedMessage, toast]);
 
     const currentPlan = user ? sub?.subscription?.plan ?? null : null;
     const isActive = Boolean(sub?.is_active);
@@ -597,7 +550,7 @@ export default function SubscriptionPage() {
                     </div>
                 )}
 
-                {/* Stripe cancel redirect banner (only relevant in Stripe mode) */}
+                {/* Paddle cancel redirect banner (only relevant in Paddle mode) */}
                 {!MANUAL_BILLING && (
                     <Suspense>
                         <CancelBanner />
@@ -623,7 +576,7 @@ export default function SubscriptionPage() {
                         <span className="text-gold text-[20px]">✦</span>
                         <div>
                             <p className="text-[13px] font-semibold text-text-primary">
-                                {t('activePlan')} {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
+                                {t('activePlan')} {t('planProName')}
                             </p>
                             {sub.subscription.current_period_end && (
                                 <p className="mt-0.5 text-[12px] text-text-secondary">
@@ -702,7 +655,7 @@ export default function SubscriptionPage() {
                             <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqHowUpgradeManual')
-                                    : t('faqHowUpgradeStripe')}
+                                    : t('faqHowUpgradePaddle')}
                             </p>
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
@@ -710,7 +663,7 @@ export default function SubscriptionPage() {
                             <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqPaymentMethodsManual')
-                                    : t('faqPaymentMethodsStripe')}
+                                    : t('faqPaymentMethodsPaddle')}
                             </p>
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
@@ -718,7 +671,7 @@ export default function SubscriptionPage() {
                             <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqActivationTimeManual')
-                                    : t('faqActivationTimeStripe')}
+                                    : t('faqActivationTimePaddle')}
                             </p>
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
@@ -726,7 +679,7 @@ export default function SubscriptionPage() {
                             <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqChangeCancelManual')
-                                    : t('faqChangeCancelStripe')}
+                                    : t('faqChangeCancelPaddle')}
                             </p>
                         </div>
                     </div>

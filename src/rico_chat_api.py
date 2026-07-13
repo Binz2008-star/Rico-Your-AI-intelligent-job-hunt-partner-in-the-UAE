@@ -12293,39 +12293,35 @@ class RicoChatAPI:
         return f"{header}\n\n{body}"
 
     def _handle_subscription_plans(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
-        """Return Rico subscription plans and pricing."""
-        # Try to get user's current plan from subscription repo
+        """Return Rico's subscription plan and pricing (single-plan scope: Rico Monthly)."""
         try:
-            from src.repositories.subscription_repo import get_subscription
-            sub = get_subscription(user_id)
-            current_plan = (sub.get("plan") or "free") if sub else "free"
+            from src.subscription_plans import RICO_MONTHLY_PLAN, resolve_effective_user_plan
+            current_plan = resolve_effective_user_plan(user_id).subscription.plan.value
+            price_aed = RICO_MONTHLY_PLAN.price_monthly
         except Exception:
             current_plan = "free"
+            price_aed = 79
 
         plans_msg = (
-            "ريكو يوفر خطتين:\n"
-            "• **Pro** — 29 درهم/شهرياً (محادثات ذكاء اصطناعي غير محدودة، تنبيهات ذات أولوية، تحسين السيرة الذاتية)\n"
-            "• **Premium** — 49 درهم/شهرياً (كل مزايا Pro + تحضير للمقابلات، خطابات تقديم، دعم مخصص)\n\n"
+            f"ريكو يوفر خطة واحدة:\n"
+            f"• **Rico Monthly** — {price_aed} درهم/شهرياً (محادثات ذكاء اصطناعي غير محدودة، تنبيهات ذات أولوية، تحسين السيرة الذاتية، بحث محفوظ)\n\n"
             "اشترك على ricohunt.com/subscription أو اسألني للتفاصيل."
             if self._is_arabic_text(message) else
-            "Rico has two plans:\n"
-            "• **Pro** — AED 29/month (unlimited AI chats, priority alerts, CV optimization)\n"
-            "• **Premium** — AED 49/month (Pro + interview prep, cover letters, dedicated support)\n\n"
+            f"Rico has one plan:\n"
+            f"• **Rico Monthly** — AED {price_aed}/month (unlimited AI chats, priority alerts, CV optimization, saved searches)\n\n"
             "Subscribe at ricohunt.com/subscription or ask me for details."
         )
         return {
             "type": "subscription.show_plans",
             "message": plans_msg,
             "plans": [
-                {"name": "Pro", "price_aed": 29, "period": "monthly"},
-                {"name": "Premium", "price_aed": 49, "period": "monthly"},
+                {"name": "Rico Monthly", "price_aed": price_aed, "period": "monthly"},
             ],
             "current_plan": current_plan,
             "next_action": "choose_plan_or_continue",
             "options": [
-                {"action": "subscription_pro_details", "label": "Tell me more about Pro", "message": "Tell me more about the Rico Pro plan"},
-                {"action": "subscription_premium_details", "label": "Tell me more about Premium", "message": "Tell me more about the Rico Premium plan"},
-                {"action": "subscription_how_to", "label": "How do I subscribe?", "message": "How do I subscribe to Rico Pro or Premium?"},
+                {"action": "subscription_pro_details", "label": "Tell me more about Rico Monthly", "message": "Tell me more about the Rico Monthly plan"},
+                {"action": "subscription_how_to", "label": "How do I subscribe?", "message": "How do I subscribe to Rico Monthly?"},
             ],
         }
 
