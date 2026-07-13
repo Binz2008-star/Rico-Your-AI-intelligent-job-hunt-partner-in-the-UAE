@@ -1,6 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { AuthGate } from "@/components/auth/AuthGate";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { ApplicationDraftCard } from "@/components/queue/ApplicationDraftCard";
 import {
@@ -10,15 +11,16 @@ import {
     rejectApplication,
     type ApplicationDraft,
 } from "@/lib/api";
-import { useAuth } from "@/hooks/useAuth";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation } from "@/lib/translations";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 export default function QueuePage() {
-    const { user, ready, logout: doLogout } = useAuth();
-    const router = useRouter();
+    // Authenticated-only: a guest is redirected to /login?next=/queue by the
+    // guard and sees a neutral loader (never the private AppShell), and no
+    // private request fires until an authenticated identity is confirmed.
+    const { user, authorized, logout: doLogout } = useRequireAuth();
     const { language } = useLanguage();
     const t = useTranslation(language);
     const [drafts, setDrafts] = useState<ApplicationDraft[]>([]);
@@ -27,11 +29,7 @@ export default function QueuePage() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!ready) return;
-        if (!user) {
-            router.push("/login");
-            return;
-        }
+        if (!authorized) return;
         const ctrl = new AbortController();
         setLoading(true);
         Promise.all([
@@ -48,7 +46,7 @@ export default function QueuePage() {
             })
             .finally(() => setLoading(false));
         return () => ctrl.abort();
-    }, [ready, user, router, t]);
+    }, [authorized, t]);
 
     const handleApprove = useCallback(async (id: string) => {
         await approveApplication(id);
@@ -63,6 +61,9 @@ export default function QueuePage() {
     const handleLogout = useCallback(async () => {
         await doLogout();
     }, [doLogout]);
+
+    // Never render the private shell until an authenticated identity is confirmed.
+    if (!authorized) return <AuthGate />;
 
     return (
         <AppShell

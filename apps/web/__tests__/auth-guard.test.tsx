@@ -24,12 +24,14 @@ const { replace, push, pathnameMock } = vi.hoisted(() => ({
   pathnameMock: vi.fn(() => "/"),
 }));
 const authState = vi.hoisted(() => ({ current: { user: null as unknown, ready: false, logout: vi.fn() } }));
-const { getSettings, getTelegramStatus, fetchProfile, getApplications, getApplicationStats } = vi.hoisted(() => ({
+const { getSettings, getTelegramStatus, fetchProfile, getApplications, getApplicationStats, getApplicationQueue, getFollowUpReminders } = vi.hoisted(() => ({
   getSettings: vi.fn(),
   getTelegramStatus: vi.fn(),
   fetchProfile: vi.fn(),
   getApplications: vi.fn(),
   getApplicationStats: vi.fn(),
+  getApplicationQueue: vi.fn(),
+  getFollowUpReminders: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -49,12 +51,13 @@ vi.mock("@/components/layout/AppShell", () => ({
 }));
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, getSettings, getTelegramStatus, fetchProfile, getApplications, getApplicationStats };
+  return { ...actual, getSettings, getTelegramStatus, fetchProfile, getApplications, getApplicationStats, getApplicationQueue, getFollowUpReminders };
 });
 
 import SettingsPage from "@/app/settings/page";
 import ProfilePage from "@/app/profile/page";
 import ApplicationsPage from "@/app/applications/page";
+import QueuePage from "@/app/queue/page";
 
 function asGuest() {
   authState.current = { user: null, ready: true, logout: vi.fn() };
@@ -78,6 +81,8 @@ beforeEach(() => {
   fetchProfile.mockResolvedValue({ profile_exists: false, email: "u@test.com" });
   getApplications.mockResolvedValue({ applications: [], total: 0 });
   getApplicationStats.mockResolvedValue({ total: 0 });
+  getApplicationQueue.mockResolvedValue([]);
+  getFollowUpReminders.mockResolvedValue([]);
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -176,6 +181,38 @@ describe("/profile auth guard", () => {
     render(<ProfilePage />);
     expect(screen.getByRole("main")).toBeInTheDocument();
     await waitFor(() => expect(fetchProfile).toHaveBeenCalled());
+    expect(replace).not.toHaveBeenCalled();
+  });
+});
+
+describe("/queue auth guard", () => {
+  beforeEach(() => pathnameMock.mockReturnValue("/queue"));
+
+  it("redirects a guest to /login with the return path and never renders the shell or fires the API", async () => {
+    asGuest();
+    render(<QueuePage />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fqueue"));
+    // /queue keeps the AppShell (auth-guard only); the mocked AppShell test id
+    // stands in for "private shell rendered". The neutral AuthGate renders none.
+    expect(screen.queryByTestId("app-shell")).toBeNull();
+    expect(getApplicationQueue).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("shows a neutral loader while auth is still resolving (no shell, no API, no redirect)", async () => {
+    asChecking();
+    render(<QueuePage />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.queryByTestId("app-shell")).toBeNull();
+    expect(getApplicationQueue).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("renders the page and loads the queue for an authenticated user", async () => {
+    asAuthed();
+    render(<QueuePage />);
+    expect(await screen.findByTestId("app-shell")).toBeInTheDocument();
+    await waitFor(() => expect(getApplicationQueue).toHaveBeenCalled());
     expect(replace).not.toHaveBeenCalled();
   });
 });
