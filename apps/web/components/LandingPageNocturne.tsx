@@ -176,7 +176,8 @@ export default function LandingPageNocturne() {
         freeF2: isAr ? "١٠ وظائف محفوظة" : "10 saved jobs",
         freeF3: isAr ? "تقييم ملاءمة السيرة والأسباب" : "CV fit scoring & reasons",
         proName: isAr ? "ريكو الشهرية" : "Rico Monthly",
-        proPrice: "AED 79",
+        proPrice: isAr ? "21.50 دولار" : "USD 21.50",
+        proPriceRef: isAr ? "(ما يعادل تقريبًا 79 درهمًا)" : "(approximately AED 79)",
         proF1: isAr ? "١٥٠٠ رسالة AI/شهر" : "1,500 AI messages/month",
         proF2: isAr ? "وظائف محفوظة بلا حدود" : "Unlimited saved jobs",
         proF3: isAr ? "مطابقة أولوية وتنبيهات" : "Priority matching & alerts",
@@ -614,6 +615,7 @@ export default function LandingPageNocturne() {
                                         <div className="mb-6">
                                             <p className="font-mono text-xs uppercase tracking-[0.16em] text-ember">{t.proName}</p>
                                             <p className="font-display text-3xl font-semibold mt-2">{t.proPrice}<span className="text-base font-normal text-text-tertiary">/mo</span></p>
+                                            <p className="text-xs text-text-tertiary mt-1">{t.proPriceRef}</p>
                                         </div>
                                         <ul className="space-y-3 mb-8 flex-1">
                                             <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF1}</li>

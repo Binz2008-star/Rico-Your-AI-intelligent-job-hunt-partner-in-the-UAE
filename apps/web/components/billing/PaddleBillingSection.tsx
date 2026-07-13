@@ -250,8 +250,8 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
                             }}
                         >
                             {isAr
-                                ? "ريكو الشهرية · الدرهم الإماراتي 79/شهر · يُحسب بالدولار عند الدفع"
-                                : "Rico Monthly · AED 79/month · Billed in USD equivalent via Paddle"}
+                                ? "ريكو الشهرية · 21.50 دولار أمريكي شهريًا (ما يعادل تقريبًا 79 درهمًا)"
+                                : "Rico Monthly · USD 21.50/month (approximately AED 79)"}
                         </p>
                     )}
                     <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>

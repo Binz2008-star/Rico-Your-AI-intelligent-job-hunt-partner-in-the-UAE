@@ -36,8 +36,8 @@ class SubscriptionPlan(BaseModel):
     id: str
     plan: SubscriptionTier
     name: str
-    price_monthly: int
-    currency: str = "AED"
+    price_monthly: float
+    currency: str = "USD"
     features: List[str]
     entitlements: SubscriptionEntitlements
     is_popular: bool = False

@@ -56,8 +56,9 @@ class TestProductIdentity:
 # ---------------------------------------------------------------------------
 
 class TestSubscriptionFacts:
-    def test_rico_monthly_price_aed_79_in_identity(self):
-        assert "79" in RICO_IDENTITY, "RICO_IDENTITY must state AED 79 Rico Monthly plan"
+    def test_rico_monthly_price_usd_in_identity(self):
+        assert "USD 21.50" in RICO_IDENTITY, "RICO_IDENTITY must state USD 21.50 Rico Monthly price"
+        assert "79" in RICO_IDENTITY, "RICO_IDENTITY must include AED 79 as approximate reference"
 
     def test_subscription_page_hint_present(self):
         assert "subscription" in IDENTITY_LOWER, "RICO_IDENTITY must reference the /subscription page"

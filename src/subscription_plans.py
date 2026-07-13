@@ -51,10 +51,10 @@ RICO_MONTHLY_PLAN = SubscriptionPlan(
     id="rico_monthly",
     plan=SubscriptionTier.PRO,
     name="Rico Monthly",
-    # Public price: AED 79/month.  Paddle's internal charge (≈ USD 21.50) is
-    # kept server-side only and must never appear in the public API response.
-    price_monthly=int(_price_from_env("RICO_PRO_PRICE_AED", 79)),
-    currency="AED",
+    # Paddle charges USD 21.50/month (Paddle does not support AED billing).
+    # AED 79 is the approximate reference shown to UAE users alongside the USD price.
+    price_monthly=_price_from_env("RICO_PRO_PRICE_USD", 21.50),
+    currency="USD",
     description="Smart AI job hunting for active UAE professionals.",
     features=[
         "Unlimited CV analysis",

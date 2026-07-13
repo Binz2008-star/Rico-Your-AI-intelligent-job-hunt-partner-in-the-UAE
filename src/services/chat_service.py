@@ -470,9 +470,9 @@ def _account_service_response(ctx: RicoSessionContext) -> Dict[str, Any]:
             # Read price from the plan definition so this stays accurate if pricing changes.
             try:
                 from src.subscription_plans import RICO_MONTHLY_PLAN
-                monthly_label = f"{RICO_MONTHLY_PLAN.price_monthly} AED/mo"
+                monthly_label = f"USD {RICO_MONTHLY_PLAN.price_monthly:.2f}/mo (≈ AED 79)"
             except Exception:
-                monthly_label = "79 AED/mo"
+                monthly_label = "USD 21.50/mo (≈ AED 79)"
             msg = (
                 f"You are on the **Free** plan — {limit} AI messages per month. "
                 f"Upgrade to Rico Monthly ({monthly_label}) for higher limits."

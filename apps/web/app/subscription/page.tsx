@@ -32,8 +32,8 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
         id: "rico_monthly",
         plan: "pro",
         name: "Rico Monthly",
-        price_monthly: 79,
-        currency: "AED",
+        price_monthly: 21.50,
+        currency: "USD",
         description: "Smart AI job hunting for active UAE professionals.",
         features: [
             "Unlimited CV analysis",

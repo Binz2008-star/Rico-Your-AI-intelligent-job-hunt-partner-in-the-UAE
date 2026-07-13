@@ -28,7 +28,7 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
-### DEC-20260713-005 — Replace Stripe with Paddle Billing; single-plan Rico Monthly AED 79
+### DEC-20260713-005 — Replace Stripe with Paddle Billing; single-plan Rico Monthly USD 21.50/month
 
 Status: accepted
 Date: 2026-07-13
@@ -40,15 +40,18 @@ Related PR: #1008 (`feat/paddle-billing`)
 Production billing was dormant — `BILLING_MODE` defaulted to `manual` (WhatsApp-assisted).
 Stripe code existed but was never activated. Owner provided Paddle API keys and asked for
 a full Stripe→Paddle swap. Two parallel implementations were produced (#1008, #1011);
+
 # 1008 was chosen as the base (standard Paddle.js overlay checkout, matches existing
+
 idempotency patterns); #1011's server-owned checkout identity-attribution pattern was
 ported in to fix three production-breaking bugs found in #1008.
 
 #### Decision
 
 - Full Stripe removal (no dual-provider). `stripe` dependency deleted.
-- Single plan: **Rico Monthly, AED 79/month** (Pro/Premium two-tier collapsed). Paddle's
-  internal catalog price is USD 21.50/month — this is never exposed in the public API or UI.
+- Single plan: **Rico Monthly, USD 21.50/month** (Pro/Premium two-tier collapsed). Paddle does
+  not support AED as a billing currency. AED 79 is displayed as an approximate reference only.
+  The authoritative displayed and charged price is USD 21.50 in all API responses, UI, and AI copy.
 - Server-owned checkout attribution: `POST /billing/paddle/checkout-session` issues an
   opaque `session_token`; webhook resolves user identity via that token, not `custom_data.user_id`.
 - 7-day past-due grace period (migration 041) per the refund policy already shown to users.
@@ -475,7 +478,9 @@ names instead:
 | #198 findings `C1`–`C4` | Reference as **`#198-C1`…`#198-C4`** (issue-scoped prefix) so a security-finding ID can never again collide with a product-phase name | 2 fixed, 2 not yet investigated |
 
 This decision is documentation clarification only. It does not rename PR #899, does not start
+
 # 899/#872/#873/#908/#909/#446 Stage 2, does not close any issue, and does not reprioritize the
+
 roadmap. Existing "C1"/"C2" references to already-shipped work (`/terms`, `/privacy`,
 `/refund-policy`) are historical fact and are not being undone — future *new* work should use the
 explicit names above instead of minting further "C#" labels.
@@ -607,6 +612,7 @@ Intent → Safety Policy → Agent Runtime → Persistence → Confirmation
 ```
 
 Concretely: `rico_safety.py` guardrails + `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS`
+
 - `agent_runtime.handle_action()` + `POST /api/v1/actions/{action}` (idempotent,
 audit-logged), with confirmation surfaced back to the user. Hard rules:
 

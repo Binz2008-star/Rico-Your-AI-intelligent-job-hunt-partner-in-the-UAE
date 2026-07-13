@@ -215,8 +215,8 @@ class TestAdminSubscriptionActivation:
 # ── Pricing validation ─────────────────────────────────────────────────────────
 
 class TestPricingValues:
-    def test_rico_monthly_price_is_79_aed_by_default(self, monkeypatch):
-        monkeypatch.delenv("RICO_PRO_PRICE_AED", raising=False)
+    def test_rico_monthly_price_is_21_50_usd_by_default(self, monkeypatch):
+        monkeypatch.delenv("RICO_PRO_PRICE_USD", raising=False)
 
         from fastapi.testclient import TestClient
         from src.api.app import app
@@ -225,8 +225,8 @@ class TestPricingValues:
             plans = c.get("/api/v1/subscription/plans").json()["plans"]
 
         assert len(plans) == 1
-        assert plans[0]["price_monthly"] == 79
-        assert plans[0]["currency"] == "AED"
+        assert plans[0]["price_monthly"] == 21.50
+        assert plans[0]["currency"] == "USD"
         assert plans[0]["name"] == "Rico Monthly"
 
     def test_rico_monthly_is_popular_flag(self):

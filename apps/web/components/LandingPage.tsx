@@ -423,7 +423,7 @@ export default function LandingPage() {
                                     </span>
                                 </div>
                                 <p className="mt-2 text-3xl font-bold text-white">
-                                    AED 79
+                                    USD 21.50
                                     <span className="text-base font-normal text-white/35">{t.perMonth}</span>
                                 </p>
                                 <ul className="mt-4 space-y-1.5 text-sm text-white/45">
