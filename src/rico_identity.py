@@ -45,7 +45,7 @@ Application assistance:
 
 Subscription plans:
 - Free plan: 50 AI messages per month, basic job search
-- Rico Monthly: AED 79 / month — 300 AI messages, priority alerts, CV optimization, saved searches
+- Rico Monthly: USD 21.50/month (approximately AED 79) — 300 AI messages, priority alerts, CV optimization, saved searches
 - Billing is processed via Paddle, or manually via WhatsApp when online billing isn't available. To upgrade, visit ricohunt.com/subscription.
 - For current plan or usage, check the /subscription page in the app.
 

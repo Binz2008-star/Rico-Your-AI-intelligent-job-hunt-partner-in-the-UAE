@@ -46,8 +46,8 @@ class TestSubscriptionPlans:
         assert r.status_code == 200
         plans = r.json()["plans"]
         assert [plan["plan"] for plan in plans] == ["pro"]
-        assert [plan["price_monthly"] for plan in plans] == [79]
-        assert all(plan["currency"] == "AED" for plan in plans)
+        assert [plan["price_monthly"] for plan in plans] == [21.5]
+        assert all(plan["currency"] == "USD" for plan in plans)
 
     def test_rico_monthly_entitlement_shape(self, client):
         plans = client.get("/api/v1/subscription/plans").json()["plans"]
@@ -107,7 +107,7 @@ class TestCurrentSubscription:
         assert body["subscription"]["plan"] == "pro"
         assert body["subscription"]["subscription_status"] == "active"
         assert body["subscription"]["paddle_customer_id"] == "ctm_test"
-        assert body["plan"]["price_monthly"] == 79
+        assert body["plan"]["price_monthly"] == 21.5
         assert body["subscription"]["entitlements"]["monthly_ai_message_limit"] == 300
 
     def test_me_requires_auth(self, client):

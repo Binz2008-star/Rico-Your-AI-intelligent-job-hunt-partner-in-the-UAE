@@ -8,8 +8,8 @@ import { Aura } from "./ui/rico/Aura";
 import { Eyebrow } from "./ui/rico/Eyebrow";
 import { FitRing } from "./ui/rico/FitRing";
 import { GlassCard } from "./ui/rico/GlassCard";
-import { RicoLogoMark } from "./ui/rico/RicoLogoMark";
 import { RicoButton } from "./ui/rico/RicoButton";
+import { RicoLogoMark } from "./ui/rico/RicoLogoMark";
 
 // Reusable fade-up wrapper — uses `animate` (not whileInView) so content is always
 // visible on mount regardless of scroll position or IntersectionObserver state.
@@ -176,7 +176,8 @@ export default function LandingPageNocturne() {
         freeF2: isAr ? "١٠ وظائف محفوظة" : "10 saved jobs",
         freeF3: isAr ? "تقييم ملاءمة السيرة والأسباب" : "CV fit scoring & reasons",
         proName: isAr ? "ريكو الشهرية" : "Rico Monthly",
-        proPrice: "AED 79",
+        proPrice: "USD 21.50",
+        proAedApprox: "≈ AED 79",
         proF1: isAr ? "١٥٠٠ رسالة AI/شهر" : "1,500 AI messages/month",
         proF2: isAr ? "وظائف محفوظة بلا حدود" : "Unlimited saved jobs",
         proF3: isAr ? "مطابقة أولوية وتنبيهات" : "Priority matching & alerts",
@@ -244,521 +245,522 @@ export default function LandingPageNocturne() {
 
     return (
         <MotionConfig reducedMotion="user">
-        {/* Scroll progress bar — gold line at the top of the viewport */}
-        <motion.div
-            className="fixed top-0 inset-x-0 h-[2px] origin-left z-[60] motion-reduce:hidden"
-            style={{ scaleX: scrollProgress, background: "linear-gradient(90deg, rgb(var(--gold-hover)), rgb(var(--gold)))" }}
-            aria-hidden="true"
-        />
-        <div dir={isAr ? "rtl" : "ltr"} className="relative min-h-screen overflow-x-hidden bg-void text-text-primary">
-            {/* Atmosphere — layered command-center depth (all fixed, non-interactive) */}
-            <div className="fixed inset-0 pointer-events-none z-0 motion-reduce:opacity-50" aria-hidden="true">
-                {/* Stage light: faint ember radial from top center */}
-                <div className="absolute inset-x-0 -top-[30%] h-[80%] bg-[radial-gradient(ellipse_55%_60%_at_50%_0%,rgb(var(--gold)/0.08),transparent_70%)]" />
-                {/* Drifting glows (slow float = parallax against the 3px card drift) */}
-                <div className="absolute -left-40 -top-40 h-[620px] w-[620px] rounded-full bg-ember/[0.07] blur-[140px] animate-float" />
-                <div className="absolute -right-40 top-[40%] h-[520px] w-[520px] rounded-full bg-aura/[0.04] blur-[140px] animate-float-delayed" />
-                <div className="absolute bottom-[-160px] left-[30%] h-[520px] w-[520px] rounded-full bg-ember/[0.04] blur-[140px]" />
-                {/* Beam: vertical light shaft behind the hero card column */}
-                <div className="absolute top-0 start-[58%] h-[70vh] w-[44%] bg-[linear-gradient(180deg,rgb(var(--gold)/0.05),transparent_75%)] [mask-image:radial-gradient(ellipse_60%_90%_at_50%_0%,#000,transparent)] blur-2xl" />
-                {/* Grid: faint plotting lines, fading out radially */}
-                <div className="absolute inset-0 opacity-[0.35] bg-[linear-gradient(rgb(var(--overlay)/0.045)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--overlay)/0.045)_1px,transparent_1px)] bg-[size:72px_72px] [mask-image:radial-gradient(ellipse_75%_60%_at_50%_22%,#000_30%,transparent_78%)]" />
-                {/* Vignette: pulls focus to center, grounds the edges */}
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_115%_95%_at_50%_40%,transparent_55%,rgb(var(--bg)/0.55)_100%)]" />
-            </div>
-
-            {/* Header */}
-            <header className={`sticky top-0 z-50 backdrop-blur-xl bg-void/55 transition-[border-color,box-shadow] duration-200 ${headerScrolled ? "border-b border-overlay/15 shadow-[0_1px_16px_rgba(0,0,0,0.35)]" : "border-b border-transparent"}`}>
-                {/* Gradient hairline + ember accent — ties the bar into the stage light */}
-                <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-overlay/20 to-transparent" aria-hidden="true" />
-                <div className="absolute inset-x-[30%] bottom-0 h-px bg-gradient-to-r from-transparent via-ember/30 to-transparent" aria-hidden="true" />
-                <div className="max-w-[1140px] mx-auto px-6 h-16 flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2.5 font-display font-bold text-lg tracking-tight">
-                        <RicoLogoMark />
-                        <span>Rico<span className="text-ember font-bold"> Hunt</span></span>
-                    </Link>
-                    <nav className="flex items-center gap-2.5">
-                        <div className="hidden md:flex items-center gap-1 me-1">
-                            <a href="#how" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-2 py-1 rounded-lg hover:bg-surface/40">{t.stepsEyebrow}</a>
-                            <a href="#pricing" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-2 py-1 rounded-lg hover:bg-surface/40">{t.pricingEyebrow}</a>
-                            <a href="#faq" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-2 py-1 rounded-lg hover:bg-surface/40">{t.faqEyebrow}</a>
-                        </div>
-                        <button type="button" onClick={() => setLanguage(isAr ? "en" : "ar")} className="font-mono text-xs text-text-secondary border border-overlay/7 px-2.5 py-1.5 rounded-lg hover:text-text-primary hover:border-ember transition-colors bg-transparent">{t.langToggle}</button>
-                        <Link href="/login" className="hidden sm:block text-sm text-text-secondary hover:text-text-primary transition-colors">{t.signIn}</Link>
-                        <Link href="/signup"><RicoButton variant="primary" size="sm">{t.startFree}</RicoButton></Link>
-                    </nav>
+            {/* Scroll progress bar — gold line at the top of the viewport */}
+            <motion.div
+                className="fixed top-0 inset-x-0 h-[2px] origin-left z-[60] motion-reduce:hidden"
+                style={{ scaleX: scrollProgress, background: "linear-gradient(90deg, rgb(var(--gold-hover)), rgb(var(--gold)))" }}
+                aria-hidden="true"
+            />
+            <div dir={isAr ? "rtl" : "ltr"} className="relative min-h-screen overflow-x-hidden bg-void text-text-primary">
+                {/* Atmosphere — layered command-center depth (all fixed, non-interactive) */}
+                <div className="fixed inset-0 pointer-events-none z-0 motion-reduce:opacity-50" aria-hidden="true">
+                    {/* Stage light: faint ember radial from top center */}
+                    <div className="absolute inset-x-0 -top-[30%] h-[80%] bg-[radial-gradient(ellipse_55%_60%_at_50%_0%,rgb(var(--gold)/0.08),transparent_70%)]" />
+                    {/* Drifting glows (slow float = parallax against the 3px card drift) */}
+                    <div className="absolute -left-40 -top-40 h-[620px] w-[620px] rounded-full bg-ember/[0.07] blur-[140px] animate-float" />
+                    <div className="absolute -right-40 top-[40%] h-[520px] w-[520px] rounded-full bg-aura/[0.04] blur-[140px] animate-float-delayed" />
+                    <div className="absolute bottom-[-160px] left-[30%] h-[520px] w-[520px] rounded-full bg-ember/[0.04] blur-[140px]" />
+                    {/* Beam: vertical light shaft behind the hero card column */}
+                    <div className="absolute top-0 start-[58%] h-[70vh] w-[44%] bg-[linear-gradient(180deg,rgb(var(--gold)/0.05),transparent_75%)] [mask-image:radial-gradient(ellipse_60%_90%_at_50%_0%,#000,transparent)] blur-2xl" />
+                    {/* Grid: faint plotting lines, fading out radially */}
+                    <div className="absolute inset-0 opacity-[0.35] bg-[linear-gradient(rgb(var(--overlay)/0.045)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--overlay)/0.045)_1px,transparent_1px)] bg-[size:72px_72px] [mask-image:radial-gradient(ellipse_75%_60%_at_50%_22%,#000_30%,transparent_78%)]" />
+                    {/* Vignette: pulls focus to center, grounds the edges */}
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_115%_95%_at_50%_40%,transparent_55%,rgb(var(--bg)/0.55)_100%)]" />
                 </div>
-            </header>
 
-            <main className="relative z-10">
-                {/* Hero */}
-                <section className="py-16 md:py-[78px] pb-12 md:pb-[70px]">
-                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-14 items-center">
-                        <FadeUp>
-                            <Eyebrow className="mb-6">{t.eyebrow}</Eyebrow>
-                            <h1 className="font-display font-semibold text-[clamp(2.3rem,5.6vw,4.2rem)] leading-[1.03] tracking-[-0.028em]">
-                                <span className="bg-gradient-to-b from-text-primary to-text-secondary bg-clip-text text-transparent">
-                                    {t.headline1.split(" ").map((word, i, arr) => (
-                                        <motion.span
-                                            key={`h1-${i}`}
-                                            initial={{ opacity: 0, y: 14 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ duration: 0.5, delay: i * 0.04, ease: [0.22, 0.61, 0.36, 1] }}
-                                            className="inline-block"
-                                        >{word}{i < arr.length - 1 ? " " : ""}</motion.span>
-                                    ))}
-                                </span>
-                                <br />
-                                <span className="bg-gradient-to-b from-ember-bright to-ember bg-clip-text text-transparent">
-                                    {t.headline2.split(" ").map((word, i, arr) => (
-                                        <motion.span
-                                            key={`h2-${i}`}
-                                            initial={{ opacity: 0, y: 14 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ duration: 0.5, delay: (t.headline1.split(" ").length + i) * 0.04, ease: [0.22, 0.61, 0.36, 1] }}
-                                            className="inline-block"
-                                        >{word}{i < arr.length - 1 ? " " : ""}</motion.span>
-                                    ))}
-                                </span>
-                            </h1>
-                            <p className="mt-6 max-w-[42ch] text-lg leading-relaxed text-text-secondary">{t.subtitle}</p>
-                            <div className="mt-9 flex flex-wrap gap-3">
-                                <Link href="/upload"><RicoButton variant="primary" size="md">{t.ctaUpload}</RicoButton></Link>
-                                <Link href="#how"><RicoButton variant="ghost" size="md">{t.ctaHow}</RicoButton></Link>
+                {/* Header */}
+                <header className={`sticky top-0 z-50 backdrop-blur-xl bg-void/55 transition-[border-color,box-shadow] duration-200 ${headerScrolled ? "border-b border-overlay/15 shadow-[0_1px_16px_rgba(0,0,0,0.35)]" : "border-b border-transparent"}`}>
+                    {/* Gradient hairline + ember accent — ties the bar into the stage light */}
+                    <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-overlay/20 to-transparent" aria-hidden="true" />
+                    <div className="absolute inset-x-[30%] bottom-0 h-px bg-gradient-to-r from-transparent via-ember/30 to-transparent" aria-hidden="true" />
+                    <div className="max-w-[1140px] mx-auto px-6 h-16 flex items-center justify-between">
+                        <Link href="/" className="flex items-center gap-2.5 font-display font-bold text-lg tracking-tight">
+                            <RicoLogoMark />
+                            <span>Rico<span className="text-ember font-bold"> Hunt</span></span>
+                        </Link>
+                        <nav className="flex items-center gap-2.5">
+                            <div className="hidden md:flex items-center gap-1 me-1">
+                                <a href="#how" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-2 py-1 rounded-lg hover:bg-surface/40">{t.stepsEyebrow}</a>
+                                <a href="#pricing" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-2 py-1 rounded-lg hover:bg-surface/40">{t.pricingEyebrow}</a>
+                                <a href="#faq" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-2 py-1 rounded-lg hover:bg-surface/40">{t.faqEyebrow}</a>
                             </div>
-                            <div className="mt-8 flex flex-wrap gap-2">
-                                {[t.trust1, t.trust2, t.trust3].map((item, i) => (
-                                    <motion.span
-                                        key={item}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.4, delay: 0.45 + i * 0.06, ease: "easeOut" }}
-                                        className="inline-flex items-center gap-1.5 font-mono text-[11px] text-text-tertiary border border-overlay/7 rounded-full px-3 py-1.5 bg-surface/30"
-                                    >
-                                        <span className="h-1 w-1 rounded-full bg-aura shadow-[0_0_6px_rgb(var(--aura)/0.5)]" />{item}
-                                    </motion.span>
-                                ))}
-                            </div>
-                        </FadeUp>
-                        <FadeUp delay={0.18} className="relative mt-8 lg:mt-0 [perspective:1300px]">
-                            {/* Halo grounding the card in the stage light (breathes with the orb) */}
-                            <div aria-hidden="true" className="absolute -inset-10 bg-[radial-gradient(ellipse_at_50%_38%,rgb(var(--gold)/0.10),transparent_65%)] blur-2xl animate-glow-pulse motion-reduce:animate-none" />
-                            {/* Floor shadow — sells the float */}
-                            <div aria-hidden="true" className="absolute -bottom-10 inset-x-12 h-10 bg-[radial-gradient(ellipse_at_center,rgb(var(--shadow-color)/0.6),transparent_70%)] blur-md" />
-                            {/* Tilt layer — mouse-tracking 3-D */}
-                            <TiltCard>
-                            <GlassCard className="p-5 relative overflow-visible animate-drift motion-reduce:animate-none">
-                                {/* Top edge-light */}
-                                <div aria-hidden="true" className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-ember/40 to-transparent" />
-                                <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-overlay/7 -mx-5 -mt-5 px-5 pt-5 rounded-t-rico-lg bg-gradient-to-b from-overlay/[0.04] to-transparent">
-                                    <div className="w-[30px] h-[30px] rounded-full bg-[radial-gradient(circle_at_38%_34%,#fff,rgb(var(--gold-hover))_38%,rgb(var(--gold))_70%)] shadow-[0_0_18px_rgb(var(--gold)/0.65)] motion-safe:animate-breathe" />
-                                    <div>
-                                        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary">{t.matchLabel}</p>
-                                        <p className="text-xs text-text-tertiary">{t.matchBy}</p>
-                                    </div>
+                            <button type="button" onClick={() => setLanguage(isAr ? "en" : "ar")} className="font-mono text-xs text-text-secondary border border-overlay/7 px-2.5 py-1.5 rounded-lg hover:text-text-primary hover:border-ember transition-colors bg-transparent">{t.langToggle}</button>
+                            <Link href="/login" className="hidden sm:block text-sm text-text-secondary hover:text-text-primary transition-colors">{t.signIn}</Link>
+                            <Link href="/signup"><RicoButton variant="primary" size="sm">{t.startFree}</RicoButton></Link>
+                        </nav>
+                    </div>
+                </header>
+
+                <main className="relative z-10">
+                    {/* Hero */}
+                    <section className="py-16 md:py-[78px] pb-12 md:pb-[70px]">
+                        <div className="max-w-[1140px] mx-auto px-4 sm:px-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-14 items-center">
+                            <FadeUp>
+                                <Eyebrow className="mb-6">{t.eyebrow}</Eyebrow>
+                                <h1 className="font-display font-semibold text-[clamp(2.3rem,5.6vw,4.2rem)] leading-[1.03] tracking-[-0.028em]">
+                                    <span className="bg-gradient-to-b from-text-primary to-text-secondary bg-clip-text text-transparent">
+                                        {t.headline1.split(" ").map((word, i, arr) => (
+                                            <motion.span
+                                                key={`h1-${i}`}
+                                                initial={{ opacity: 0, y: 14 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ duration: 0.5, delay: i * 0.04, ease: [0.22, 0.61, 0.36, 1] }}
+                                                className="inline-block"
+                                            >{word}{i < arr.length - 1 ? " " : ""}</motion.span>
+                                        ))}
+                                    </span>
+                                    <br />
+                                    <span className="bg-gradient-to-b from-ember-bright to-ember bg-clip-text text-transparent">
+                                        {t.headline2.split(" ").map((word, i, arr) => (
+                                            <motion.span
+                                                key={`h2-${i}`}
+                                                initial={{ opacity: 0, y: 14 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ duration: 0.5, delay: (t.headline1.split(" ").length + i) * 0.04, ease: [0.22, 0.61, 0.36, 1] }}
+                                                className="inline-block"
+                                            >{word}{i < arr.length - 1 ? " " : ""}</motion.span>
+                                        ))}
+                                    </span>
+                                </h1>
+                                <p className="mt-6 max-w-[42ch] text-lg leading-relaxed text-text-secondary">{t.subtitle}</p>
+                                <div className="mt-9 flex flex-wrap gap-3">
+                                    <Link href="/upload"><RicoButton variant="primary" size="md">{t.ctaUpload}</RicoButton></Link>
+                                    <Link href="#how"><RicoButton variant="ghost" size="md">{t.ctaHow}</RicoButton></Link>
                                 </div>
-                                <div className="flex gap-4 items-center">
-                                    <div className="flex-1">
-                                        <p className="font-display font-semibold text-base">{t.matchRole}</p>
-                                        <p className="text-xs text-text-tertiary">{t.matchMeta}</p>
-                                        <div className="mt-3 space-y-1.5">
-                                            {[t.matchReason1, t.matchReason2, t.matchReason3].map((r) => (
-                                                <div key={r} className="flex items-center gap-2 text-sm text-text-secondary">
-                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-aura flex-shrink-0"><path d="M20 6L9 17l-5-5" /></svg>{r}
+                                <div className="mt-8 flex flex-wrap gap-2">
+                                    {[t.trust1, t.trust2, t.trust3].map((item, i) => (
+                                        <motion.span
+                                            key={item}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ duration: 0.4, delay: 0.45 + i * 0.06, ease: "easeOut" }}
+                                            className="inline-flex items-center gap-1.5 font-mono text-[11px] text-text-tertiary border border-overlay/7 rounded-full px-3 py-1.5 bg-surface/30"
+                                        >
+                                            <span className="h-1 w-1 rounded-full bg-aura shadow-[0_0_6px_rgb(var(--aura)/0.5)]" />{item}
+                                        </motion.span>
+                                    ))}
+                                </div>
+                            </FadeUp>
+                            <FadeUp delay={0.18} className="relative mt-8 lg:mt-0 [perspective:1300px]">
+                                {/* Halo grounding the card in the stage light (breathes with the orb) */}
+                                <div aria-hidden="true" className="absolute -inset-10 bg-[radial-gradient(ellipse_at_50%_38%,rgb(var(--gold)/0.10),transparent_65%)] blur-2xl animate-glow-pulse motion-reduce:animate-none" />
+                                {/* Floor shadow — sells the float */}
+                                <div aria-hidden="true" className="absolute -bottom-10 inset-x-12 h-10 bg-[radial-gradient(ellipse_at_center,rgb(var(--shadow-color)/0.6),transparent_70%)] blur-md" />
+                                {/* Tilt layer — mouse-tracking 3-D */}
+                                <TiltCard>
+                                    <GlassCard className="p-5 relative overflow-visible animate-drift motion-reduce:animate-none">
+                                        {/* Top edge-light */}
+                                        <div aria-hidden="true" className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-ember/40 to-transparent" />
+                                        <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-overlay/7 -mx-5 -mt-5 px-5 pt-5 rounded-t-rico-lg bg-gradient-to-b from-overlay/[0.04] to-transparent">
+                                            <div className="w-[30px] h-[30px] rounded-full bg-[radial-gradient(circle_at_38%_34%,#fff,rgb(var(--gold-hover))_38%,rgb(var(--gold))_70%)] shadow-[0_0_18px_rgb(var(--gold)/0.65)] motion-safe:animate-breathe" />
+                                            <div>
+                                                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary">{t.matchLabel}</p>
+                                                <p className="text-xs text-text-tertiary">{t.matchBy}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-4 items-center">
+                                            <div className="flex-1">
+                                                <p className="font-display font-semibold text-base">{t.matchRole}</p>
+                                                <p className="text-xs text-text-tertiary">{t.matchMeta}</p>
+                                                <div className="mt-3 space-y-1.5">
+                                                    {[t.matchReason1, t.matchReason2, t.matchReason3].map((r) => (
+                                                        <div key={r} className="flex items-center gap-2 text-sm text-text-secondary">
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-aura flex-shrink-0"><path d="M20 6L9 17l-5-5" /></svg>{r}
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="relative">
-                                        <div aria-hidden="true" className="absolute -inset-3 rounded-full bg-aura/10 blur-xl" />
-                                        <FitRing className="relative" value={86} size={96} label={isAr ? "ملاءمة" : "Fit"} />
-                                    </div>
-                                </div>
-                                <div className="mt-4 pt-3 border-t border-overlay/7 flex items-center justify-between">
-                                    <p className="text-xs text-text-tertiary">{isAr ? "التالي: " : "Next: "}<span className="text-text-primary font-medium">{isAr ? "فتح رابط التقديم" : "open apply link"}</span></p>
-                                    <RicoButton variant="ghost" size="sm">{t.matchReview}</RicoButton>
-                                </div>
-                            </GlassCard>
-                            </TiltCard>
-                        </FadeUp>
-                    </div>
-                </section>
-
-                {/* Trust Bar */}
-                <div className="border-y border-overlay/7 py-4 md:py-6 bg-surface/30 backdrop-blur-sm">
-                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6 flex flex-wrap justify-center md:justify-between gap-4 md:gap-6">
-                        {[t.trustBar1, t.trustBar2, t.trustBar3, t.trustBar4].map((item, i) => (
-                            <motion.div
-                                key={i}
-                                initial={{ opacity: 0, y: 16 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.45, delay: i * 0.08, ease: "easeOut" }}
-                                className="flex items-center gap-2.5 text-sm text-text-secondary"
-                            >
-                                <span className="w-[34px] h-[34px] rounded-[10px] bg-surface border border-overlay/7 flex items-center justify-center text-ember">
-                                    {i === 0 && <ShieldIcon />}{i === 1 && <CheckIcon />}{i === 2 && <GlobeIcon />}{i === 3 && <LanguagesIcon />}
-                                </span>{item}
-                            </motion.div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Steps */}
-                <section id="how" className="py-16 md:py-24">
-                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="max-w-[600px] mb-8 md:mb-12">
-                            <Eyebrow className="mb-4">{t.stepsEyebrow}</Eyebrow>
-                            <h2 className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.stepsTitle}</h2>
-                            <p className="text-text-secondary text-sm md:text-base">{t.stepsSubtitle}</p>
-                        </FadeUp>
-                        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
-                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
-                            <GlassCard className="p-6" role="article" aria-label={t.step1Title}>
-                                <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step1Num}</span>
-                                <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step1Title}</h3>
-                                <p className="text-sm text-text-secondary">{t.step1Body}</p>
-                                <div className="mt-5 h-24 rounded-xl bg-surface border border-overlay/7 flex items-center justify-center">
-                                    <div className="flex flex-col gap-1.5 w-[60%]">
-                                        <div className="h-1.5 rounded bg-overlay/12 w-[80%]" /><div className="h-1.5 rounded bg-overlay/12 w-full" /><div className="h-1.5 rounded bg-overlay/12 w-[55%]" /><div className="h-1.5 rounded bg-ember/50 w-[90%]" />
-                                    </div>
-                                </div>
-                            </GlassCard>
-                            </motion.div>
-                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
-                            <GlassCard className="p-6" role="article" aria-label={t.step2Title}>
-                                <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step2Num}</span>
-                                <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step2Title}</h3>
-                                <p className="text-sm text-text-secondary">{t.step2Body}</p>
-                                <div className="mt-5 h-24 rounded-xl bg-surface border border-overlay/7 flex items-center justify-center">
-                                    <div className="flex gap-1.5 items-end h-14">
-                                        <div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[38px]" /><div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[46px]" /><div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[54px]" /><div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[30px]" /><div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[42px]" />
-                                    </div>
-                                </div>
-                            </GlassCard>
-                            </motion.div>
-                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}>
-                            <GlassCard className="p-6" role="article" aria-label={t.step3Title}>
-                                <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step3Num}</span>
-                                <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step3Title}</h3>
-                                <p className="text-sm text-text-secondary">{t.step3Body}</p>
-                                <div className="mt-5 h-24 rounded-xl bg-surface border border-overlay/7 flex items-center justify-center gap-2">
-                                    <span className="font-mono text-[10px] px-2 py-1 rounded-md border border-overlay/7 text-text-tertiary">{isAr ? "محفوظة" : "Saved"}</span>
-                                    <span className="font-mono text-[10px] px-2 py-1 rounded-md border border-ember/40 text-ember">{isAr ? "مفتوحة" : "Opened"}</span>
-                                    <span className="font-mono text-[10px] px-2 py-1 rounded-md border border-aura/40 text-aura">{isAr ? "متقدَّم" : "Applied"}</span>
-                                </div>
-                            </GlassCard>
-                            </motion.div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Phase 4 - Product Window / Command UI */}
-                <section id="command" className="py-16 md:py-24 pt-0" aria-labelledby="command-heading">
-                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="max-w-[600px] mb-8 md:mb-12">
-                            <Eyebrow className="mb-4">{t.cmdEyebrow}</Eyebrow>
-                            <h2 id="command-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.cmdTitle}</h2>
-                            <p className="text-text-secondary text-sm md:text-base">{t.cmdSubtitle}</p>
-                        </FadeUp>
-                        {/* Window Frame */}
-                        <FadeUp delay={0.12}>
-                        <div className="rounded-rico-lg overflow-hidden border border-overlay/12 shadow-[0_40px_120px_rgba(0,0,0,0.6)]" role="img" aria-label="Rico command center interface preview">
-                            {/* Title Bar */}
-                            <div className="flex items-center gap-2 px-4 py-3 bg-surface-elevated border-b border-overlay/7">
-                                <div className="flex gap-1.5">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-overlay/20" /><span className="w-2.5 h-2.5 rounded-full bg-overlay/20" /><span className="w-2.5 h-2.5 rounded-full bg-overlay/20" />
-                                </div>
-                                <span className="font-mono text-[11.5px] text-text-tertiary ml-2">ricohunt.com / command</span>
-                            </div>
-                            {/* App Content */}
-                            <div className="grid grid-cols-1 md:grid-cols-[64px_1fr] min-h-[440px] bg-void">
-                                {/* Rail */}
-                                <div className="hidden md:flex border-r border-overlay/7 py-5 flex-col items-center gap-5 bg-void">
-                                    <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-ember bg-ember/10 border border-ember/30"><HomeIcon /></span>
-                                    <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors cursor-pointer"><SearchIcon /></span>
-                                    <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors cursor-pointer"><BookmarkIcon /></span>
-                                    <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors cursor-pointer"><UserIcon /></span>
-                                </div>
-                                {/* Chat Area */}
-                                <div className="p-6 flex flex-col">
-                                    <div className="flex-1 space-y-4 max-w-[560px]">
-                                        {/* User Message */}
-                                        <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.1 }} className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
-                                            {t.chatMsg1}
-                                        </motion.div>
-                                        {/* Rico Response */}
-                                        <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.3 }} className="self-start bg-gradient-to-br from-ember/13 to-ember/5 border border-ember/20 rounded-[14px] rounded-bl-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%]">
-                                            <div className="flex items-center gap-2 mb-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ember">
-                                                <Aura size="sm" variant="ember" animate={false} aria-hidden="true" />
-                                                <span>Rico</span>
                                             </div>
-                                            {t.chatMsg2}
-                                        </motion.div>
-                                        {/* User Follow-up */}
-                                        <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.5 }} className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
-                                            {t.chatMsg3}
-                                        </motion.div>
-                                    </div>
-                                    {/* Input */}
-                                    <div className="mt-5 flex items-center gap-3 p-3 rounded-xl bg-void border border-overlay/12 max-w-[560px]">
-                                        <Aura size="sm" variant="ember" animate={false} aria-hidden="true" />
-                                        <span className="text-sm text-text-tertiary flex-1">{t.chatInput}</span>
-                                        <span className="w-8 h-8 rounded-lg bg-ember flex items-center justify-center text-void">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        </FadeUp>
-                    </div>
-                </section>
-
-                {/* Phase 4 - Dashboard Preview */}
-                <section className="py-16 md:py-24 pt-0" aria-labelledby="dashboard-heading">
-                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="max-w-[600px] mb-8 md:mb-12">
-                            <Eyebrow className="mb-4">{t.dashEyebrow}</Eyebrow>
-                            <h2 id="dashboard-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.dashTitle}</h2>
-                            <p className="text-text-secondary text-sm md:text-base">{t.dashSubtitle}</p>
-                        </FadeUp>
-                        <GlassCard className="p-6 md:p-8 overflow-x-auto">
-                            <div className="min-w-[600px]">
-                                {/* Dashboard Header */}
-                                <div className="flex items-center justify-between mb-6 pb-4 border-b border-overlay/7">
-                                    <div className="flex items-center gap-3">
-                                        <span className="w-10 h-10 rounded-xl bg-ember/10 border border-ember/30 flex items-center justify-center text-ember"><BarChartIcon /></span>
-                                        <div>
-                                            <p className="font-display font-semibold">{isAr ? "نظرة عامة" : "Overview"}</p>
-                                            <p className="text-xs text-text-tertiary">{isAr ? "٣ وظائف نشطة · آخر تحديث: منذ ٢ ساعة" : "3 active jobs · Last updated: 2 hours ago"}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <span className="px-3 py-1.5 rounded-lg bg-surface border border-overlay/7 text-xs text-text-secondary">{isAr ? "آخر ٧ أيام" : "Last 7 days"}</span>
-                                    </div>
-                                </div>
-                                {/* Stats Grid */}
-                                <div className="grid grid-cols-4 gap-4 mb-6">
-                                    <div className="p-4 rounded-xl bg-surface border border-overlay/7">
-                                        <p className="text-xs text-text-tertiary mb-1">{isAr ? "محفوظة" : "Saved"}</p>
-                                        <p className="font-display text-2xl font-semibold text-text-primary"><CountUp to={12} /></p>
-                                    </div>
-                                    <div className="p-4 rounded-xl bg-surface border border-overlay/7">
-                                        <p className="text-xs text-text-tertiary mb-1">{isAr ? "مفتوحة" : "Opened"}</p>
-                                        <p className="font-display text-2xl font-semibold text-ember"><CountUp to={8} /></p>
-                                    </div>
-                                    <div className="p-4 rounded-xl bg-surface border border-overlay/7">
-                                        <p className="text-xs text-text-tertiary mb-1">{isAr ? "متقدم" : "Applied"}</p>
-                                        <p className="font-display text-2xl font-semibold text-aura"><CountUp to={5} /></p>
-                                    </div>
-                                    <div className="p-4 rounded-xl bg-surface border border-overlay/7">
-                                        <p className="text-xs text-text-tertiary mb-1">{isAr ? "مقابلة" : "Interview"}</p>
-                                        <p className="font-display text-2xl font-semibold text-aura"><CountUp to={2} /></p>
-                                    </div>
-                                </div>
-                                {/* Job List Preview */}
-                                <div className="space-y-3">
-                                    <div className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-overlay/7">
-                                        <div className="flex items-center gap-3">
-                                            <FitRing value={94} size={44} label="" />
-                                            <div>
-                                                <p className="font-medium text-sm">{isAr ? "مدير امتثال" : "Compliance Manager"}</p>
-                                                <p className="text-xs text-text-tertiary">{isAr ? "مصرف · دبي" : "Bank · Dubai"}</p>
+                                            <div className="relative">
+                                                <div aria-hidden="true" className="absolute -inset-3 rounded-full bg-aura/10 blur-xl" />
+                                                <FitRing className="relative" value={86} size={96} label={isAr ? "ملاءمة" : "Fit"} />
                                             </div>
                                         </div>
-                                        <span className="px-2.5 py-1 rounded-md bg-aura/10 border border-aura/30 text-aura text-xs font-mono">{isAr ? "متقدم" : "Applied"}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-overlay/7">
-                                        <div className="flex items-center gap-3">
-                                            <FitRing value={89} size={44} label="" />
-                                            <div>
-                                                <p className="font-medium text-sm">{isAr ? "محلل مالي" : "Financial Analyst"}</p>
-                                                <p className="text-xs text-text-tertiary">{isAr ? "استشارات · أبوظبي" : "Consulting · Abu Dhabi"}</p>
-                                            </div>
+                                        <div className="mt-4 pt-3 border-t border-overlay/7 flex items-center justify-between">
+                                            <p className="text-xs text-text-tertiary">{isAr ? "التالي: " : "Next: "}<span className="text-text-primary font-medium">{isAr ? "فتح رابط التقديم" : "open apply link"}</span></p>
+                                            <RicoButton variant="ghost" size="sm">{t.matchReview}</RicoButton>
                                         </div>
-                                        <span className="px-2.5 py-1 rounded-md bg-aura/10 border border-aura/30 text-aura text-xs font-mono">{isAr ? "مقابلة" : "Interview"}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </GlassCard>
-                    </div>
-                </section>
-
-                {/* Phase 4 - Pricing */}
-                <section id="pricing" className="py-16 md:py-24 pt-0" aria-labelledby="pricing-heading">
-                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="max-w-[600px] mb-8 md:mb-12 md:mx-auto md:text-center">
-                            <Eyebrow className="mb-4 md:justify-center">{t.pricingEyebrow}</Eyebrow>
-                            <h2 id="pricing-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.pricingTitle}</h2>
-                        </FadeUp>
-                        <div className="grid sm:grid-cols-2 gap-4 md:gap-5">
-                            {/* Free */}
-                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
-                            <GlassCard className="p-6 flex flex-col">
-                                <div className="mb-6">
-                                    <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-tertiary">{t.freeName}</p>
-                                    <p className="font-display text-3xl font-semibold mt-2">{t.freePrice}</p>
-                                </div>
-                                <ul className="space-y-3 mb-8 flex-1">
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.freeF1}</li>
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.freeF2}</li>
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.freeF3}</li>
-                                </ul>
-                                <Link href="/signup"><RicoButton variant="ghost" size="md" className="w-full">{t.startFree}</RicoButton></Link>
-                            </GlassCard>
-                            </motion.div>
-                            {/* Pro - Featured */}
-                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
-                            <GlassCard className="p-6 flex flex-col relative border-ember/30">
-                                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-ember text-void text-xs font-mono font-semibold">{t.popular}</span>
-                                <div className="mb-6">
-                                    <p className="font-mono text-xs uppercase tracking-[0.16em] text-ember">{t.proName}</p>
-                                    <p className="font-display text-3xl font-semibold mt-2">{t.proPrice}<span className="text-base font-normal text-text-tertiary">/mo</span></p>
-                                </div>
-                                <ul className="space-y-3 mb-8 flex-1">
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF1}</li>
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF2}</li>
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF3}</li>
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF4}</li>
-                                </ul>
-                                <Link href="/subscription"><RicoButton variant="primary" size="md" className="w-full">{t.proName}</RicoButton></Link>
-                            </GlassCard>
-                            </motion.div>
+                                    </GlassCard>
+                                </TiltCard>
+                            </FadeUp>
                         </div>
-                        <p className="text-center text-sm text-text-tertiary mt-6">{t.cancelAnytime}</p>
-                    </div>
-                </section>
+                    </section>
 
-                {/* Phase 5 - Credibility */}
-                <section className="py-16 md:py-24 pt-0" aria-labelledby="credibility-heading">
-                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp>
-                        <GlassCard className="p-6 md:p-8 lg:p-10">
-                            <div className="grid md:grid-cols-2 gap-10 items-center">
-                                <div>
-                                    <Eyebrow className="mb-4">{t.credEyebrow}</Eyebrow>
-                                    <h2 id="credibility-heading" className="font-display font-semibold text-[clamp(1.5rem,3vw,2rem)] leading-[1.15] tracking-[-0.02em] mb-4">{t.credTitle}</h2>
-                                    <p className="text-text-secondary mb-6">{t.credSubtitle}</p>
-                                    <div className="flex items-center gap-3 p-3 rounded-xl bg-surface border border-overlay/7">
-                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-ember/30 to-ember/10 flex items-center justify-center text-ember font-bold text-lg">RE</div>
-                                        <div>
-                                            <p className="font-semibold text-sm">{t.founderLabel}</p>
-                                            <p className="text-xs text-text-tertiary">{t.founderMeta}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="space-y-4">
-                                    <div className="flex gap-4 p-4 rounded-xl bg-surface border border-overlay/7">
-                                        <span className="w-10 h-10 rounded-lg bg-ember/10 border border-ember/30 flex items-center justify-center text-ember flex-shrink-0"><ShieldIcon /></span>
-                                        <div>
-                                            <p className="font-semibold text-sm mb-1">{t.credPoint1Title}</p>
-                                            <p className="text-xs text-text-tertiary">{t.credPoint1Body}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-4 p-4 rounded-xl bg-surface border border-overlay/7">
-                                        <span className="w-10 h-10 rounded-lg bg-aura/10 border border-aura/30 flex items-center justify-center text-aura flex-shrink-0"><LockIcon /></span>
-                                        <div>
-                                            <p className="font-semibold text-sm mb-1">{t.credPoint2Title}</p>
-                                            <p className="text-xs text-text-tertiary">{t.credPoint2Body}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-4 p-4 rounded-xl bg-surface border border-overlay/7">
-                                        <span className="w-10 h-10 rounded-lg bg-ember/10 border border-ember/30 flex items-center justify-center text-ember flex-shrink-0"><LanguagesIcon /></span>
-                                        <div>
-                                            <p className="font-semibold text-sm mb-1">{t.credPoint3Title}</p>
-                                            <p className="text-xs text-text-tertiary">{t.credPoint3Body}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </GlassCard>
-                        </FadeUp>
-                    </div>
-                </section>
-
-                {/* Phase 5 - FAQ */}
-                <section id="faq" className="py-16 md:py-24 pt-0" aria-labelledby="faq-heading">
-                    <div className="max-w-[720px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="mb-8 md:mb-10 text-center">
-                            <Eyebrow className="mb-4 justify-center">{t.faqEyebrow}</Eyebrow>
-                            <h2 id="faq-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em]">{t.faqTitle}</h2>
-                        </FadeUp>
-                        <div className="space-y-3">
-                            {[
-                                { q: t.faq1Q, a: t.faq1A },
-                                { q: t.faq2Q, a: t.faq2A },
-                                { q: t.faq3Q, a: t.faq3A },
-                                { q: t.faq4Q, a: t.faq4A },
-                            ].map((faq, i) => (
-                                <GlassCard key={i} className="p-0 overflow-hidden">
-                                    <button
-                                        className="w-full flex items-center justify-between p-5 text-start"
-                                        onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                                        aria-expanded={openFaq === i}
-                                        aria-controls={`faq-answer-${i}`}
-                                    >
-                                        <span className="font-display font-semibold text-base">{faq.q}</span>
-                                        <span className={`transform transition-transform duration-200 ${openFaq === i ? 'rotate-180' : ''}`}><ChevronDownIcon /></span>
-                                    </button>
-                                    <AnimatePresence initial={false}>
-                                        {openFaq === i && (
-                                            <motion.div
-                                                id={`faq-answer-${i}`}
-                                                key={`faq-answer-${i}`}
-                                                initial={{ height: 0, opacity: 0 }}
-                                                animate={{ height: "auto", opacity: 1 }}
-                                                exit={{ height: 0, opacity: 0 }}
-                                                transition={{ duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
-                                                className="overflow-hidden"
-                                            >
-                                                <p className="px-5 pb-5 text-sm text-text-secondary">{faq.a}</p>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                </GlassCard>
+                    {/* Trust Bar */}
+                    <div className="border-y border-overlay/7 py-4 md:py-6 bg-surface/30 backdrop-blur-sm">
+                        <div className="max-w-[1140px] mx-auto px-4 sm:px-6 flex flex-wrap justify-center md:justify-between gap-4 md:gap-6">
+                            {[t.trustBar1, t.trustBar2, t.trustBar3, t.trustBar4].map((item, i) => (
+                                <motion.div
+                                    key={i}
+                                    initial={{ opacity: 0, y: 16 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.45, delay: i * 0.08, ease: "easeOut" }}
+                                    className="flex items-center gap-2.5 text-sm text-text-secondary"
+                                >
+                                    <span className="w-[34px] h-[34px] rounded-[10px] bg-surface border border-overlay/7 flex items-center justify-center text-ember">
+                                        {i === 0 && <ShieldIcon />}{i === 1 && <CheckIcon />}{i === 2 && <GlobeIcon />}{i === 3 && <LanguagesIcon />}
+                                    </span>{item}
+                                </motion.div>
                             ))}
                         </div>
                     </div>
-                </section>
 
-                {/* Phase 5 - Final CTA */}
-                <section className="py-16 md:py-24" aria-labelledby="final-cta-heading">
-                    <FadeUp className="max-w-[600px] mx-auto px-4 sm:px-6 text-center">
-                        <div className="mb-6 flex justify-center">
-                            <Aura size="md" variant="ember" aria-hidden="true" />
+                    {/* Steps */}
+                    <section id="how" className="py-16 md:py-24">
+                        <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                            <FadeUp className="max-w-[600px] mb-8 md:mb-12">
+                                <Eyebrow className="mb-4">{t.stepsEyebrow}</Eyebrow>
+                                <h2 className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.stepsTitle}</h2>
+                                <p className="text-text-secondary text-sm md:text-base">{t.stepsSubtitle}</p>
+                            </FadeUp>
+                            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
+                                <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
+                                    <GlassCard className="p-6" role="article" aria-label={t.step1Title}>
+                                        <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step1Num}</span>
+                                        <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step1Title}</h3>
+                                        <p className="text-sm text-text-secondary">{t.step1Body}</p>
+                                        <div className="mt-5 h-24 rounded-xl bg-surface border border-overlay/7 flex items-center justify-center">
+                                            <div className="flex flex-col gap-1.5 w-[60%]">
+                                                <div className="h-1.5 rounded bg-overlay/12 w-[80%]" /><div className="h-1.5 rounded bg-overlay/12 w-full" /><div className="h-1.5 rounded bg-overlay/12 w-[55%]" /><div className="h-1.5 rounded bg-ember/50 w-[90%]" />
+                                            </div>
+                                        </div>
+                                    </GlassCard>
+                                </motion.div>
+                                <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
+                                    <GlassCard className="p-6" role="article" aria-label={t.step2Title}>
+                                        <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step2Num}</span>
+                                        <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step2Title}</h3>
+                                        <p className="text-sm text-text-secondary">{t.step2Body}</p>
+                                        <div className="mt-5 h-24 rounded-xl bg-surface border border-overlay/7 flex items-center justify-center">
+                                            <div className="flex gap-1.5 items-end h-14">
+                                                <div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[38px]" /><div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[46px]" /><div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[54px]" /><div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[30px]" /><div className="w-3 rounded-t bg-gradient-to-t from-aura-dim to-aura h-[42px]" />
+                                            </div>
+                                        </div>
+                                    </GlassCard>
+                                </motion.div>
+                                <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}>
+                                    <GlassCard className="p-6" role="article" aria-label={t.step3Title}>
+                                        <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step3Num}</span>
+                                        <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step3Title}</h3>
+                                        <p className="text-sm text-text-secondary">{t.step3Body}</p>
+                                        <div className="mt-5 h-24 rounded-xl bg-surface border border-overlay/7 flex items-center justify-center gap-2">
+                                            <span className="font-mono text-[10px] px-2 py-1 rounded-md border border-overlay/7 text-text-tertiary">{isAr ? "محفوظة" : "Saved"}</span>
+                                            <span className="font-mono text-[10px] px-2 py-1 rounded-md border border-ember/40 text-ember">{isAr ? "مفتوحة" : "Opened"}</span>
+                                            <span className="font-mono text-[10px] px-2 py-1 rounded-md border border-aura/40 text-aura">{isAr ? "متقدَّم" : "Applied"}</span>
+                                        </div>
+                                    </GlassCard>
+                                </motion.div>
+                            </div>
                         </div>
-                        <h2 id="final-cta-heading" className="font-display font-semibold text-[clamp(1.7rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-4">{t.finalTitle}</h2>
-                        <p className="text-text-secondary mb-8">{t.finalSubtitle}</p>
-                        <Link href="/upload"><RicoButton variant="primary" size="lg">{t.finalCta}</RicoButton></Link>
-                    </FadeUp>
-                </section>
-            </main>
+                    </section>
 
-            {/* Phase 5 - Footer */}
-            <footer className="relative z-10 border-t border-overlay/7 py-8 md:py-12" role="contentinfo">
-                <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                        <Link href="/" className="flex items-center gap-2 font-display font-bold text-lg">
-                            <RicoLogoMark animate={false} />
-                            <span>Rico<span className="text-ember font-bold"> Hunt</span></span>
-                        </Link>
-                        <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-                            <Link href="/about" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerAbout}</Link>
-                            <Link href="/contact" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerContact}</Link>
-                            <Link href="/terms" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerTerms}</Link>
-                            <Link href="/privacy" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerPrivacy}</Link>
-                            <Link href="/refund-policy" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerRefunds}</Link>
-                            <Link href="/faq" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerFaq}</Link>
-                            <a href="https://wa.me/971585989080" target="_blank" rel="noopener noreferrer" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerWhatsapp}</a>
-                        </nav>
+                    {/* Phase 4 - Product Window / Command UI */}
+                    <section id="command" className="py-16 md:py-24 pt-0" aria-labelledby="command-heading">
+                        <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                            <FadeUp className="max-w-[600px] mb-8 md:mb-12">
+                                <Eyebrow className="mb-4">{t.cmdEyebrow}</Eyebrow>
+                                <h2 id="command-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.cmdTitle}</h2>
+                                <p className="text-text-secondary text-sm md:text-base">{t.cmdSubtitle}</p>
+                            </FadeUp>
+                            {/* Window Frame */}
+                            <FadeUp delay={0.12}>
+                                <div className="rounded-rico-lg overflow-hidden border border-overlay/12 shadow-[0_40px_120px_rgba(0,0,0,0.6)]" role="img" aria-label="Rico command center interface preview">
+                                    {/* Title Bar */}
+                                    <div className="flex items-center gap-2 px-4 py-3 bg-surface-elevated border-b border-overlay/7">
+                                        <div className="flex gap-1.5">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-overlay/20" /><span className="w-2.5 h-2.5 rounded-full bg-overlay/20" /><span className="w-2.5 h-2.5 rounded-full bg-overlay/20" />
+                                        </div>
+                                        <span className="font-mono text-[11.5px] text-text-tertiary ml-2">ricohunt.com / command</span>
+                                    </div>
+                                    {/* App Content */}
+                                    <div className="grid grid-cols-1 md:grid-cols-[64px_1fr] min-h-[440px] bg-void">
+                                        {/* Rail */}
+                                        <div className="hidden md:flex border-r border-overlay/7 py-5 flex-col items-center gap-5 bg-void">
+                                            <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-ember bg-ember/10 border border-ember/30"><HomeIcon /></span>
+                                            <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors cursor-pointer"><SearchIcon /></span>
+                                            <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors cursor-pointer"><BookmarkIcon /></span>
+                                            <span className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors cursor-pointer"><UserIcon /></span>
+                                        </div>
+                                        {/* Chat Area */}
+                                        <div className="p-6 flex flex-col">
+                                            <div className="flex-1 space-y-4 max-w-[560px]">
+                                                {/* User Message */}
+                                                <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.1 }} className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
+                                                    {t.chatMsg1}
+                                                </motion.div>
+                                                {/* Rico Response */}
+                                                <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.3 }} className="self-start bg-gradient-to-br from-ember/13 to-ember/5 border border-ember/20 rounded-[14px] rounded-bl-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%]">
+                                                    <div className="flex items-center gap-2 mb-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ember">
+                                                        <Aura size="sm" variant="ember" animate={false} aria-hidden="true" />
+                                                        <span>Rico</span>
+                                                    </div>
+                                                    {t.chatMsg2}
+                                                </motion.div>
+                                                {/* User Follow-up */}
+                                                <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.5 }} className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
+                                                    {t.chatMsg3}
+                                                </motion.div>
+                                            </div>
+                                            {/* Input */}
+                                            <div className="mt-5 flex items-center gap-3 p-3 rounded-xl bg-void border border-overlay/12 max-w-[560px]">
+                                                <Aura size="sm" variant="ember" animate={false} aria-hidden="true" />
+                                                <span className="text-sm text-text-tertiary flex-1">{t.chatInput}</span>
+                                                <span className="w-8 h-8 rounded-lg bg-ember flex items-center justify-center text-void">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </FadeUp>
+                        </div>
+                    </section>
+
+                    {/* Phase 4 - Dashboard Preview */}
+                    <section className="py-16 md:py-24 pt-0" aria-labelledby="dashboard-heading">
+                        <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                            <FadeUp className="max-w-[600px] mb-8 md:mb-12">
+                                <Eyebrow className="mb-4">{t.dashEyebrow}</Eyebrow>
+                                <h2 id="dashboard-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.dashTitle}</h2>
+                                <p className="text-text-secondary text-sm md:text-base">{t.dashSubtitle}</p>
+                            </FadeUp>
+                            <GlassCard className="p-6 md:p-8 overflow-x-auto">
+                                <div className="min-w-[600px]">
+                                    {/* Dashboard Header */}
+                                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-overlay/7">
+                                        <div className="flex items-center gap-3">
+                                            <span className="w-10 h-10 rounded-xl bg-ember/10 border border-ember/30 flex items-center justify-center text-ember"><BarChartIcon /></span>
+                                            <div>
+                                                <p className="font-display font-semibold">{isAr ? "نظرة عامة" : "Overview"}</p>
+                                                <p className="text-xs text-text-tertiary">{isAr ? "٣ وظائف نشطة · آخر تحديث: منذ ٢ ساعة" : "3 active jobs · Last updated: 2 hours ago"}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <span className="px-3 py-1.5 rounded-lg bg-surface border border-overlay/7 text-xs text-text-secondary">{isAr ? "آخر ٧ أيام" : "Last 7 days"}</span>
+                                        </div>
+                                    </div>
+                                    {/* Stats Grid */}
+                                    <div className="grid grid-cols-4 gap-4 mb-6">
+                                        <div className="p-4 rounded-xl bg-surface border border-overlay/7">
+                                            <p className="text-xs text-text-tertiary mb-1">{isAr ? "محفوظة" : "Saved"}</p>
+                                            <p className="font-display text-2xl font-semibold text-text-primary"><CountUp to={12} /></p>
+                                        </div>
+                                        <div className="p-4 rounded-xl bg-surface border border-overlay/7">
+                                            <p className="text-xs text-text-tertiary mb-1">{isAr ? "مفتوحة" : "Opened"}</p>
+                                            <p className="font-display text-2xl font-semibold text-ember"><CountUp to={8} /></p>
+                                        </div>
+                                        <div className="p-4 rounded-xl bg-surface border border-overlay/7">
+                                            <p className="text-xs text-text-tertiary mb-1">{isAr ? "متقدم" : "Applied"}</p>
+                                            <p className="font-display text-2xl font-semibold text-aura"><CountUp to={5} /></p>
+                                        </div>
+                                        <div className="p-4 rounded-xl bg-surface border border-overlay/7">
+                                            <p className="text-xs text-text-tertiary mb-1">{isAr ? "مقابلة" : "Interview"}</p>
+                                            <p className="font-display text-2xl font-semibold text-aura"><CountUp to={2} /></p>
+                                        </div>
+                                    </div>
+                                    {/* Job List Preview */}
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-overlay/7">
+                                            <div className="flex items-center gap-3">
+                                                <FitRing value={94} size={44} label="" />
+                                                <div>
+                                                    <p className="font-medium text-sm">{isAr ? "مدير امتثال" : "Compliance Manager"}</p>
+                                                    <p className="text-xs text-text-tertiary">{isAr ? "مصرف · دبي" : "Bank · Dubai"}</p>
+                                                </div>
+                                            </div>
+                                            <span className="px-2.5 py-1 rounded-md bg-aura/10 border border-aura/30 text-aura text-xs font-mono">{isAr ? "متقدم" : "Applied"}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-overlay/7">
+                                            <div className="flex items-center gap-3">
+                                                <FitRing value={89} size={44} label="" />
+                                                <div>
+                                                    <p className="font-medium text-sm">{isAr ? "محلل مالي" : "Financial Analyst"}</p>
+                                                    <p className="text-xs text-text-tertiary">{isAr ? "استشارات · أبوظبي" : "Consulting · Abu Dhabi"}</p>
+                                                </div>
+                                            </div>
+                                            <span className="px-2.5 py-1 rounded-md bg-aura/10 border border-aura/30 text-aura text-xs font-mono">{isAr ? "مقابلة" : "Interview"}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </GlassCard>
+                        </div>
+                    </section>
+
+                    {/* Phase 4 - Pricing */}
+                    <section id="pricing" className="py-16 md:py-24 pt-0" aria-labelledby="pricing-heading">
+                        <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                            <FadeUp className="max-w-[600px] mb-8 md:mb-12 md:mx-auto md:text-center">
+                                <Eyebrow className="mb-4 md:justify-center">{t.pricingEyebrow}</Eyebrow>
+                                <h2 id="pricing-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.pricingTitle}</h2>
+                            </FadeUp>
+                            <div className="grid sm:grid-cols-2 gap-4 md:gap-5">
+                                {/* Free */}
+                                <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
+                                    <GlassCard className="p-6 flex flex-col">
+                                        <div className="mb-6">
+                                            <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-tertiary">{t.freeName}</p>
+                                            <p className="font-display text-3xl font-semibold mt-2">{t.freePrice}</p>
+                                        </div>
+                                        <ul className="space-y-3 mb-8 flex-1">
+                                            <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.freeF1}</li>
+                                            <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.freeF2}</li>
+                                            <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.freeF3}</li>
+                                        </ul>
+                                        <Link href="/signup"><RicoButton variant="ghost" size="md" className="w-full">{t.startFree}</RicoButton></Link>
+                                    </GlassCard>
+                                </motion.div>
+                                {/* Pro - Featured */}
+                                <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
+                                    <GlassCard className="p-6 flex flex-col relative border-ember/30">
+                                        <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-ember text-void text-xs font-mono font-semibold">{t.popular}</span>
+                                        <div className="mb-6">
+                                            <p className="font-mono text-xs uppercase tracking-[0.16em] text-ember">{t.proName}</p>
+                                            <p className="font-display text-3xl font-semibold mt-2">{t.proPrice}<span className="text-base font-normal text-text-tertiary">/mo</span></p>
+                                            <p className="text-xs text-text-tertiary mt-0.5">{t.proAedApprox}</p>
+                                        </div>
+                                        <ul className="space-y-3 mb-8 flex-1">
+                                            <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF1}</li>
+                                            <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF2}</li>
+                                            <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF3}</li>
+                                            <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF4}</li>
+                                        </ul>
+                                        <Link href="/subscription"><RicoButton variant="primary" size="md" className="w-full">{t.proName}</RicoButton></Link>
+                                    </GlassCard>
+                                </motion.div>
+                            </div>
+                            <p className="text-center text-sm text-text-tertiary mt-6">{t.cancelAnytime}</p>
+                        </div>
+                    </section>
+
+                    {/* Phase 5 - Credibility */}
+                    <section className="py-16 md:py-24 pt-0" aria-labelledby="credibility-heading">
+                        <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                            <FadeUp>
+                                <GlassCard className="p-6 md:p-8 lg:p-10">
+                                    <div className="grid md:grid-cols-2 gap-10 items-center">
+                                        <div>
+                                            <Eyebrow className="mb-4">{t.credEyebrow}</Eyebrow>
+                                            <h2 id="credibility-heading" className="font-display font-semibold text-[clamp(1.5rem,3vw,2rem)] leading-[1.15] tracking-[-0.02em] mb-4">{t.credTitle}</h2>
+                                            <p className="text-text-secondary mb-6">{t.credSubtitle}</p>
+                                            <div className="flex items-center gap-3 p-3 rounded-xl bg-surface border border-overlay/7">
+                                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-ember/30 to-ember/10 flex items-center justify-center text-ember font-bold text-lg">RE</div>
+                                                <div>
+                                                    <p className="font-semibold text-sm">{t.founderLabel}</p>
+                                                    <p className="text-xs text-text-tertiary">{t.founderMeta}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <div className="flex gap-4 p-4 rounded-xl bg-surface border border-overlay/7">
+                                                <span className="w-10 h-10 rounded-lg bg-ember/10 border border-ember/30 flex items-center justify-center text-ember flex-shrink-0"><ShieldIcon /></span>
+                                                <div>
+                                                    <p className="font-semibold text-sm mb-1">{t.credPoint1Title}</p>
+                                                    <p className="text-xs text-text-tertiary">{t.credPoint1Body}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-4 p-4 rounded-xl bg-surface border border-overlay/7">
+                                                <span className="w-10 h-10 rounded-lg bg-aura/10 border border-aura/30 flex items-center justify-center text-aura flex-shrink-0"><LockIcon /></span>
+                                                <div>
+                                                    <p className="font-semibold text-sm mb-1">{t.credPoint2Title}</p>
+                                                    <p className="text-xs text-text-tertiary">{t.credPoint2Body}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-4 p-4 rounded-xl bg-surface border border-overlay/7">
+                                                <span className="w-10 h-10 rounded-lg bg-ember/10 border border-ember/30 flex items-center justify-center text-ember flex-shrink-0"><LanguagesIcon /></span>
+                                                <div>
+                                                    <p className="font-semibold text-sm mb-1">{t.credPoint3Title}</p>
+                                                    <p className="text-xs text-text-tertiary">{t.credPoint3Body}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </GlassCard>
+                            </FadeUp>
+                        </div>
+                    </section>
+
+                    {/* Phase 5 - FAQ */}
+                    <section id="faq" className="py-16 md:py-24 pt-0" aria-labelledby="faq-heading">
+                        <div className="max-w-[720px] mx-auto px-4 sm:px-6">
+                            <FadeUp className="mb-8 md:mb-10 text-center">
+                                <Eyebrow className="mb-4 justify-center">{t.faqEyebrow}</Eyebrow>
+                                <h2 id="faq-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em]">{t.faqTitle}</h2>
+                            </FadeUp>
+                            <div className="space-y-3">
+                                {[
+                                    { q: t.faq1Q, a: t.faq1A },
+                                    { q: t.faq2Q, a: t.faq2A },
+                                    { q: t.faq3Q, a: t.faq3A },
+                                    { q: t.faq4Q, a: t.faq4A },
+                                ].map((faq, i) => (
+                                    <GlassCard key={i} className="p-0 overflow-hidden">
+                                        <button
+                                            className="w-full flex items-center justify-between p-5 text-start"
+                                            onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                                            aria-expanded={openFaq === i}
+                                            aria-controls={`faq-answer-${i}`}
+                                        >
+                                            <span className="font-display font-semibold text-base">{faq.q}</span>
+                                            <span className={`transform transition-transform duration-200 ${openFaq === i ? 'rotate-180' : ''}`}><ChevronDownIcon /></span>
+                                        </button>
+                                        <AnimatePresence initial={false}>
+                                            {openFaq === i && (
+                                                <motion.div
+                                                    id={`faq-answer-${i}`}
+                                                    key={`faq-answer-${i}`}
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: "auto", opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    transition={{ duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <p className="px-5 pb-5 text-sm text-text-secondary">{faq.a}</p>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </GlassCard>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Phase 5 - Final CTA */}
+                    <section className="py-16 md:py-24" aria-labelledby="final-cta-heading">
+                        <FadeUp className="max-w-[600px] mx-auto px-4 sm:px-6 text-center">
+                            <div className="mb-6 flex justify-center">
+                                <Aura size="md" variant="ember" aria-hidden="true" />
+                            </div>
+                            <h2 id="final-cta-heading" className="font-display font-semibold text-[clamp(1.7rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-4">{t.finalTitle}</h2>
+                            <p className="text-text-secondary mb-8">{t.finalSubtitle}</p>
+                            <Link href="/upload"><RicoButton variant="primary" size="lg">{t.finalCta}</RicoButton></Link>
+                        </FadeUp>
+                    </section>
+                </main>
+
+                {/* Phase 5 - Footer */}
+                <footer className="relative z-10 border-t border-overlay/7 py-8 md:py-12" role="contentinfo">
+                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                            <Link href="/" className="flex items-center gap-2 font-display font-bold text-lg">
+                                <RicoLogoMark animate={false} />
+                                <span>Rico<span className="text-ember font-bold"> Hunt</span></span>
+                            </Link>
+                            <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+                                <Link href="/about" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerAbout}</Link>
+                                <Link href="/contact" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerContact}</Link>
+                                <Link href="/terms" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerTerms}</Link>
+                                <Link href="/privacy" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerPrivacy}</Link>
+                                <Link href="/refund-policy" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerRefunds}</Link>
+                                <Link href="/faq" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerFaq}</Link>
+                                <a href="https://wa.me/971585989080" target="_blank" rel="noopener noreferrer" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerWhatsapp}</a>
+                            </nav>
+                        </div>
+                        <div className="mt-8 pt-6 border-t border-overlay/7 text-center">
+                            <p className="text-xs text-text-tertiary">{t.footerPowered}</p>
+                            <p className="text-xs text-text-tertiary mt-1">{t.footerRights}</p>
+                        </div>
                     </div>
-                    <div className="mt-8 pt-6 border-t border-overlay/7 text-center">
-                        <p className="text-xs text-text-tertiary">{t.footerPowered}</p>
-                        <p className="text-xs text-text-tertiary mt-1">{t.footerRights}</p>
-                    </div>
-                </div>
-            </footer>
-        </div>
+                </footer>
+            </div>
         </MotionConfig>
     );
 }

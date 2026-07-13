@@ -29,18 +29,20 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 ---
 
-## Where Rico is right now (2026-07-11)
+## Where Rico is right now (2026-07-13) — Launch Program
 
 | Question | Answer |
 | --- | --- |
-| **Where is Rico?** | Release verification for #963: the onboarding CV persistence implementation is merged as `241b85d…`, CI-green, and Vercel-ready. |
-| **Where is it going?** | Verify the deployed backend/authenticated flow, then resume the approved per-route Atelier migration and separately scoped hardening. |
-| **What is blocked?** | No new runtime/design objective may start until the #963 release gate (migration 038 schema proof + authenticated smoke) passes. Render version already matches `241b85d…`. |
-| **What is completed?** | Phases 0–1, #969 document idempotency foundation, and #963 implementation. Production verification of #963 is pending. |
-| **What comes next?** | Complete release verification; then select one objective only: #962 or the next owner-approved design route. |
+| **Where is Rico?** | Production is in **pre-launch teaser mode**. `ricohunt.com` serves the launch film to the public and gates the unfinished app. The P0 email-verification break is fixed and live. |
+| **Where is it going?** | Open to real users behind a proper **waitlist gate** (#967), then enable **billing** (#1008). Each is blocked on a Neon migration + env the owner must approve. |
+| **What is blocked?** | **#967** (waitlist) — needs migration 039 + waitlist/backend smoke before merge. **#1008** (Paddle billing) — needs migration 040 + `PADDLE_*` env + `BILLING_MODE`. **#989** — scope unverified (doc gap). |
+| **What is completed?** | Teaser gate live (#1003/#1004), **P0 verify-email allowlist fix live (#1005)**, icon unification (#1007), Playwright CI stability (#1005 env + #1009), control-plane docs (#1010). |
+| **What comes next?** | Owner-run production smoke: **Signup → Resend → Verify → Login**. Then per-PR launch decisions (#967, then #1008). Product hardening (Phases 2–4 below) resumes after launch stabilizes. |
 
-Production is stable: Render backend healthy (`/health` ok, providers configured),
-Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
+Live gate: `apps/web/middleware.ts` (`NEXT_PUBLIC_SITE_LIVE`). Launch film:
+`apps/web/public/explainer/` (option-2/3/3b, random cut per visit). Detail:
+handoffs `2026-07-12-rico-launch-film-3d.md`, `2026-07-13-p0-verify-email-hotfix.md`;
+`DECISIONS.md` DEC-20260712-001. Render backend + Neon DB unchanged.
 
 ---
 
@@ -64,6 +66,36 @@ EPIC        Career Operating System
 
 Naming/branch/PR governance: see `AI_WORKSPACE/OPERATING_RULES.md` and
 `AI_WORKSPACE/PR_QUALITY_GATE_RULES.md`.
+
+---
+
+## Launch Program — Vision → Epic → Milestone → Phase → PR (current focus)
+
+Status: ✅ done · 🔵 in progress · ⛔ blocked · ⬜ planned. Owners:
+**C**=Claude · **L**=Lovable · **X**=Codex · **D**=Devin · **O**=Owner (Roben — approvals/merges/prod env).
+
+**Vision** (`PROJECT_BRIEF.md` · `CAREER_OS_VISION.md`): a UAE-focused AI career
+companion that models the user and runs their job search — launched safely, users
+onboarded behind a controlled gate, then monetized.
+
+| Epic | Milestone | Phase / PR | Status | Owner |
+| --- | --- | --- | --- | --- |
+| **Launch & Access** | Public teaser | Ship teaser gate + launch film — #1003, #1004 | ✅ live | C · O |
+| | | P0: unblock email verification — **#1005** (`b66eb46f`) | ✅ live | C · O |
+| | Waitlist onboarding | Atelier bilingual waitlist + film-in-page + gate — **#967** | ⛔ migration 039 + waitlist/backend smoke | C · L · O |
+| | Full-site open | Flip `NEXT_PUBLIC_SITE_LIVE`/`RICO_LAUNCH_MODE` after validation (env, no PR) | ⬜ owner-gated | O |
+| **Monetization** | Paddle billing | Stripe→Paddle: checkout, webhooks, entitlements — **#1008** | ⛔ migration 040 + `PADDLE_*` env + `BILLING_MODE` | C · O |
+| **Brand & UI** | Consistent brand | Unify app icons / brand mark — #1007 | ✅ live | C |
+| | Launch film | 3D "Dimensional" cuts + remix, bilingual, random rotation | ✅ built (in #967 / `explainer/*`) | C |
+| **Eng. Quality** | CI reliability | Playwright full-site mode + headroom — #1005 env, #1009 | ✅ merged | C · O |
+| | Control plane | Roadmap/status/decisions reconciliation — #1010 | ✅ merged | C · O |
+
+PR triage + decisions are the source of truth, not this table:
+`AI_WORKSPACE/OPEN_PR_TRIAGE.md`, `DECISIONS.md`, `TASKS.md`, and the per-PR
+handoffs under `AI_WORKSPACE/HANDOFFS/`. This table only maps them.
+
+The product-engineering spine (Phases 0–7 below) is the longer-horizon plan;
+launch work above takes precedence until production is open and stable.
 
 ---
 
@@ -152,13 +184,18 @@ before feature/redesign/worker/notification/infra work.
 
 ## Releases (what reached production)
 
-| Date | Commit | What went live |
+| Date | Commit / PR | What went live |
 | --- | --- | --- |
-| 2026-07-08 | `7d167dd` | #887 — batch-row-isolation hardening (apply-link batch resilience) |
+| 2026-07-08 | `7d167dd` · #887 | batch-row-isolation hardening (apply-link batch resilience) |
+| 2026-07-12 | #1003 / #1004 | teaser gate + launch film on `ricohunt.com` |
+| 2026-07-12 | `67758854` · #1007 | unified gold brand icons |
+| 2026-07-12 | `b66eb46f` · **#1005** | teaser allowlist fix — `/verify-email`, `/privacy`, `/terms` reachable (P0) |
+| 2026-07-12 | `fd49129b` · #1009 | Playwright CI headroom (CI-only) |
+| 2026-07-13 | `b7538858` · #1010 | control-plane docs — current production deploy `dpl_HyctVSpC…` (READY) |
 
-_Merged to `main` (`80e246b`), deploy verification pending: #885 (follow-ups
-endpoint) and #891 (chat follow-up readiness). Promote each to a release row once
-`/version.commit` on Render reads `80e246b…` and `/health` is ok._
+_P0 (#1005) production route-smoke verified: `/verify-email?token=fake` → 200 (not
+the teaser). **Not yet closed** — pending owner-run fresh Signup → Resend → Verify →
+Login on production._
 
 _Add a row when a runtime change is deployed and verified (`/version.commit`
 matches `main`, `/health` ok). Docs-only merges are not releases._

@@ -3,7 +3,6 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { TranslationKey } from "@/lib/translations";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import {
@@ -19,6 +18,7 @@ import {
 } from "@/lib/api";
 import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
 import { getPaddlePriceId, openPaddleCheckout } from "@/lib/paddle";
+import type { TranslationKey } from "@/lib/translations";
 import { useTranslation } from "@/lib/translations";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -32,8 +32,8 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
         id: "rico_monthly",
         plan: "pro",
         name: "Rico Monthly",
-        price_monthly: 79,
-        currency: "AED",
+        price_monthly: 21.50,
+        currency: "USD",
         description: "Smart AI job hunting for active UAE professionals.",
         features: [
             "Unlimited CV analysis",
@@ -156,12 +156,15 @@ function PlanCard({
 
             <div className="relative z-10 mt-5 flex items-baseline gap-1">
                 <span className="text-[38px] font-black text-text-primary leading-none">
-                    {plan.price_monthly}
+                    {plan.currency} {plan.price_monthly}
                 </span>
                 <span className="text-[13px] text-text-secondary font-medium">
-                    {plan.currency}/mo
+                    /mo
                 </span>
             </div>
+            {plan.currency === "USD" && (
+                <p className="relative z-10 text-[11px] text-text-secondary mt-0.5">≈ AED 79</p>
+            )}
 
             <ul className="relative z-10 mt-6 flex flex-1 flex-col gap-2.5">
                 {localFeatures.map((feature, i) => (

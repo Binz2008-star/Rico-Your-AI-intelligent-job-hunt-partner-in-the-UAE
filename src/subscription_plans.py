@@ -36,12 +36,12 @@ FREE_ENTITLEMENTS = SubscriptionEntitlements(
 )
 
 
-def _price_from_env(env_name: str, default: int) -> int:
+def _price_from_env(env_name: str, default: float) -> float:
     raw_value = os.getenv(env_name, "").strip()
     if not raw_value:
         return default
     try:
-        price = int(raw_value)
+        price = float(raw_value)
     except ValueError:
         return default
     return price if price > 0 else default
@@ -51,8 +51,8 @@ RICO_MONTHLY_PLAN = SubscriptionPlan(
     id="rico_monthly",
     plan=SubscriptionTier.PRO,
     name="Rico Monthly",
-    price_monthly=_price_from_env("RICO_MONTHLY_PRICE_AED", 79),
-    currency="AED",
+    price_monthly=_price_from_env("RICO_MONTHLY_PRICE_USD", 21.50),
+    currency="USD",
     description="Smart AI job hunting for active UAE professionals.",
     features=[
         "Unlimited CV analysis",
