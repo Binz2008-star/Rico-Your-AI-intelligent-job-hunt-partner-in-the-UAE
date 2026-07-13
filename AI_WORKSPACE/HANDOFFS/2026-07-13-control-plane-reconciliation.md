@@ -6,17 +6,17 @@
 - Branch: `chore/agent-control-plane-reconciliation`
 - Base branch: `main`
 - Base SHA at branch creation: `7aa81aef1bb4ecd717372a40e3e571e96ae070b6`
-- Current head SHA: update from live PR head before merge
+- Current head SHA: update from live PR after this commit
 - Owner/session: ChatGPT — WRITER during docs preparation; independent review required before merge
 - Uncommitted changes present: no
 - Status: review
-- Files inspected: `AGENTS.md`, `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/START_HERE.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/OPERATING_RULES.md`, `AI_WORKSPACE/AGENT_OPERATING_MODEL.md`, open PR metadata, recent main commits
+- Files inspected: `AGENTS.md`, `CLAUDE.md` entry references, `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/START_HERE.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/OPERATING_RULES.md`, `AI_WORKSPACE/AGENT_OPERATING_MODEL.md`, open PR metadata, recent main commits
 - Files changed:
-  - `AI_WORKSPACE/PROJECT_STATUS.md` — current control lock and launch sequence
+  - `AI_WORKSPACE/PROJECT_STATUS.md` — current control lock, review status, and launch sequence
   - `AI_WORKSPACE/START_HERE.md` — canonical cold-start path
   - `AI_WORKSPACE/DAILY_AUTOPILOT.md` — proactive session discovery and ownership protocol
   - `AI_WORKSPACE/OPEN_PR_TRIAGE_2026-07-13.md` — dated open-PR classification
-  - `AI_WORKSPACE/LAUNCH_EXECUTION_PLAN.md` — ordered launch execution plan
+  - `AI_WORKSPACE/LAUNCH_EXECUTION_PLAN.md` — ordered launch execution plan and billing entry gate
   - `AI_WORKSPACE/HANDOFFS/2026-07-13-control-plane-reconciliation.md` — continuity record
 - Files intentionally not touched: runtime application code, database migrations, environment configuration, deployment configuration, billing provider configuration, production data
 - What is complete:
@@ -26,23 +26,24 @@
   - Daily Autopilot created
   - START_HERE and Daily Autopilot aligned with `OPERATING_RULES.md` canonical boot order
   - authority roles and activity-pass roles explicitly distinguished
+  - billing entry gate now requires joint #1008/#989 deep review before implementation resumes
 - What is incomplete:
   - independent review of #1010
-  - exact current PR head must be recorded before merge
+  - final PR head/check status must be re-read after this commit
   - `AI_WORKSPACE/TASKS.md` still needs a canonical TASK-20260713-001 entry before merge; this handoff does not replace that requirement
-  - Vercel/check completion still pending at time of this handoff
 - Known blockers:
   - do not merge while PR remains draft
   - do not merge until the TASKS.md Continuity Block is present and current
-  - Continuous AI bot statuses are noisy/non-authoritative; real required checks must be separated from optional bot statuses
+  - Continuous AI bot statuses are noisy/non-authoritative; required GitHub workflows and Vercel must be separated from optional bot checks
 - Validation already run:
-  - branch compare against main: docs/control files only
-  - GitHub QA Tests workflow: success on earlier reviewed head
-  - Create/Delete Branch workflow: success on earlier reviewed head
+  - branch compare against main: documentation/control files only
+  - GitHub QA Tests workflow: success on previously reviewed head
+  - Create/Delete Branch workflow: success on previously reviewed head
   - boot-order consistency review against `AI_WORKSPACE/OPERATING_RULES.md`: conflict found and corrected
+  - open PR metadata review: #1008 identified as large Paddle implementation; #988 identified as non-launch workflow housekeeping
 - Validation still required:
   - verify final-head QA workflow after latest docs commits
-  - verify PR diff contains only intended coordination files
+  - verify final PR diff contains only intended coordination files
   - independent reviewer checks claims against live main/open PRs
   - add canonical task entry to `AI_WORKSPACE/TASKS.md`
 - Deployment/CI/Neon/Vercel state to check next: Vercel preview/check and final-head workflow runs; no Neon or Render action required for docs-only PR
