@@ -140,6 +140,13 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Run Playwright E2E tests
+        env:
+          # E2E exercises real application pages (e.g. /signals), so run the whole
+          # suite in full-site mode. Otherwise the pre-launch teaser gate (ON when
+          # NEXT_PUBLIC_SITE_LIVE is unset) redirects app routes to /explainer and
+          # the webServer readiness probe on '/' never succeeds. CI-only — this
+          # does NOT affect any deployed or production environment.
+          NEXT_PUBLIC_SITE_LIVE: "true"
         run: |
           cd apps/web
           npx playwright test --project=chromium
