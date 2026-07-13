@@ -80,10 +80,10 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ### TASK-20260713-002 — Atelier migration program: parity matrix + first route PR (/applications)
 
-Status: in_progress
+Status: review
 Owner: Claude (WRITER; activity pass: Planner → Coder)
 Branch: `claude/atelier-migration-planning-mq6bt6`
-Issue/PR: draft PR from this branch (owner execution order 2026-07-13)
+Issue/PR: #1012 (draft; owner execution order 2026-07-13)
 
 #### Objective
 
@@ -128,7 +128,7 @@ Workspace Shell C with an `ApplicationsAtelier` component.
 #### Continuity Block
 
 - Task ID: TASK-20260713-002
-- GitHub issue/PR: draft PR from `claude/atelier-migration-planning-mq6bt6` (see PR list)
+- GitHub issue/PR: #1012 (draft)
 - Branch: `claude/atelier-migration-planning-mq6bt6`
 - Base branch: main
 - Last safe commit SHA: b753885 (main after #1010 merge)
