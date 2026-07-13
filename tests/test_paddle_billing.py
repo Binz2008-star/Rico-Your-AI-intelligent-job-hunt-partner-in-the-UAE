@@ -695,5 +695,68 @@ class TestPaddleRepoConnection(unittest.TestCase):
         self.assertIs(conn, fake_conn)
 
 
+class TestBillingConfigEndpoint(unittest.TestCase):
+    """GET /api/v1/billing/config — unauthenticated, no secrets exposed."""
+
+    def _get_client(self, billing_mode: str = "paddle", sandbox: str = "true"):
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        from src.api.routers.paddle_billing import router
+        app = FastAPI()
+        app.include_router(router)
+        env = {"BILLING_MODE": billing_mode, "PADDLE_SANDBOX": sandbox}
+        with patch.dict(os.environ, env):
+            return TestClient(app)
+
+    def test_returns_200_no_auth(self):
+        client = self._get_client("paddle", "true")
+        with patch.dict(os.environ, {"BILLING_MODE": "paddle", "PADDLE_SANDBOX": "true"}):
+            r = client.get("/api/v1/billing/config")
+        self.assertEqual(r.status_code, 200)
+
+    def test_paddle_mode_fields(self):
+        with patch.dict(os.environ, {"BILLING_MODE": "paddle", "PADDLE_SANDBOX": "true"}):
+            from fastapi.testclient import TestClient
+            from fastapi import FastAPI
+            from src.api.routers.paddle_billing import router
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app)
+            r = client.get("/api/v1/billing/config")
+        data = r.json()
+        self.assertEqual(data["billing_mode"], "paddle")
+        self.assertTrue(data["paddle_active"])
+        self.assertTrue(data["sandbox"])
+
+    def test_manual_mode_fields(self):
+        with patch.dict(os.environ, {"BILLING_MODE": "manual", "PADDLE_SANDBOX": "true"}):
+            from fastapi.testclient import TestClient
+            from fastapi import FastAPI
+            from src.api.routers.paddle_billing import router
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app)
+            r = client.get("/api/v1/billing/config")
+        data = r.json()
+        self.assertEqual(data["billing_mode"], "manual")
+        self.assertFalse(data["paddle_active"])
+
+    def test_no_secrets_in_response(self):
+        with patch.dict(os.environ, {"BILLING_MODE": "paddle", "PADDLE_SANDBOX": "true",
+                                      "PADDLE_API_KEY": "secret_key",
+                                      "PADDLE_WEBHOOK_SECRET": "secret_webhook"}):
+            from fastapi.testclient import TestClient
+            from fastapi import FastAPI
+            from src.api.routers.paddle_billing import router
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app)
+            r = client.get("/api/v1/billing/config")
+        body = r.text
+        self.assertNotIn("secret_key", body)
+        self.assertNotIn("secret_webhook", body)
+        self.assertNotIn("PADDLE_API_KEY", body)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -34,6 +34,26 @@ _PADDLE_TIMESTAMP_TOLERANCE_SECONDS = 300  # 5 minutes
 
 
 # ---------------------------------------------------------------------------
+# Unauthenticated config endpoint — safe for smoke-test health checks
+# ---------------------------------------------------------------------------
+
+@router.get("/config")
+async def billing_config() -> Dict[str, Any]:
+    """Return public billing configuration. No auth required, no secrets exposed.
+
+    Used by smoke tests and the frontend to confirm the billing mode is active
+    before attempting an authenticated checkout. Returns only non-secret flags.
+    """
+    from src.billing_mode import is_paddle_billing_mode
+    sandbox = os.getenv("PADDLE_SANDBOX", "true").strip().lower() != "false"
+    return {
+        "billing_mode": "paddle" if is_paddle_billing_mode() else os.getenv("BILLING_MODE", "manual"),
+        "paddle_active": is_paddle_billing_mode(),
+        "sandbox": sandbox,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Signature verification
 # ---------------------------------------------------------------------------
 

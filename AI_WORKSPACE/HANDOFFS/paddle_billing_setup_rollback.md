@@ -139,25 +139,30 @@ Two surfaces exercise the same checkout/status/portal flow: `/subscription`
 (main pricing page) and `/settings` (Account tab → PaddleBillingSection).
 Run through at least one of them end-to-end; both call the same backend.
 
-1. Open `/subscription` (or `/settings`) with `NEXT_PUBLIC_BILLING_MODE=paddle`
-2. Confirm the page shows exactly one plan: **Rico Monthly — USD 21.50/month** (with AED 79 shown as approximate reference)
-3. Click **Upgrade** → confirm `POST /api/v1/billing/paddle/checkout-session`
+1. **Health check (no login required):** open in browser:
+   `https://rico-job-automation-api.onrender.com/api/v1/billing/config`
+   Expected response: `{"billing_mode":"paddle","paddle_active":true,"sandbox":true}`
+   If you still see `"billing_mode":"manual"` → Render hasn't redeployed from `main` yet (PR #1008 must be merged first).
+   Note: `GET /api/v1/billing/status` is **authenticated** and returns per-user subscription data — it cannot be used as a health check.
+2. Open `/subscription` (or `/settings`) with `NEXT_PUBLIC_BILLING_MODE=paddle`
+3. Confirm the page shows exactly one plan: **Rico Monthly — USD 21.50/month** (with AED 79 shown as approximate reference)
+4. Click **Upgrade** → confirm `POST /api/v1/billing/paddle/checkout-session`
    fires first (Network tab) and returns a `session_token`, *then* the
    Paddle.js overlay opens — checkout must never open without that call
    succeeding first (this is the identity-attribution fix; skipping it means
    the resulting subscription can't be linked to any Rico user)
-4. Complete test checkout (Paddle test card: `4242 4242 4242 4242`)
-5. Verify webhook received in Paddle dashboard (Notifications log)
-6. Check `paddle_subscriptions` row created for your user, with
+5. Complete test checkout (Paddle test card: `4242 4242 4242 4242`)
+6. Verify webhook received in Paddle dashboard (Notifications log)
+7. Check `paddle_subscriptions` row created for your user, with
    `paddle_customer_id` populated in `paddle_customers` too
-7. Verify `/api/v1/billing/status` returns `plan: "pro"`, `status: "active"`
-8. Verify `/api/v1/subscription/me` (used by `/subscription`) also reflects
+8. Verify `/api/v1/billing/status` (authenticated — use browser DevTools Network tab while logged in) returns `plan: "pro"`, `status: "active"`
+9. Verify `/api/v1/subscription/me` (used by `/subscription`) also reflects
    the new Paddle-backed state — this is the same data source used by
    feature gating (chat limits, saved jobs, etc.), so also confirm a paid
    feature (e.g. saved-search limit) actually unlocks, not just the billing
    status display
-9. Click **Manage subscription** → Paddle portal opens
-10. Grace period: in Paddle sandbox, simulate a failed renewal (or manually
+10. Click **Manage subscription** → Paddle portal opens
+11. Grace period: in Paddle sandbox, simulate a failed renewal (or manually
     set the subscription's DB row to `status='past_due'` with a
     `past_due_since` a few minutes in the past) and confirm entitlements
     stay active; then confirm they downgrade to Free once `past_due_since`
