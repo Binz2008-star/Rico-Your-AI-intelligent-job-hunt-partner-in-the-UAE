@@ -148,15 +148,18 @@ def process_paddle_webhook(
             logger.info("paddle_webhook_duplicate event_id=%s type=%s", event_id, event_type)
             return {"status": "skipped", "reason": "duplicate"}
 
-        # Durably persist the raw event BEFORE any business logic.
-        # If this fails, raise so the router returns non-200 to Paddle → retry.
-        inserted = paddle_repo.record_paddle_webhook_event(
+        # Atomically CLAIM the event BEFORE any business logic. A new,
+        # previously-failed, or abandoned (crashed mid-flight) event is claimed
+        # and (re)processed; an already-processed or still-in-flight event is
+        # not. If the claim call itself errors it raises → router returns
+        # non-200 → Paddle retries, preserving durability.
+        claimed = paddle_repo.record_paddle_webhook_event(
             db_module,
             paddle_event_id=event_id,
             event_type=event_type,
             payload=json.dumps(payload) if payload else None,
         )
-        if not inserted:
+        if not claimed:
             return {"status": "skipped", "reason": "duplicate"}
 
         handler = _HANDLERS.get(event_type)

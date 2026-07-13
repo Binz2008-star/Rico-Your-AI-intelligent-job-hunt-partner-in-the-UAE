@@ -59,8 +59,19 @@ CREATE TABLE IF NOT EXISTS paddle_webhook_events (
     payload         JSONB,
     error_detail    TEXT,
     processed_at    TIMESTAMPTZ,
+    -- claimed_at: when this event was last claimed for processing. Lets the
+    -- webhook claim atomically reprocess 'failed' or crashed-mid-flight (stale
+    -- 'pending') events on a Paddle retry, without double-running an event that
+    -- another worker just claimed. See record_paddle_webhook_event().
+    claimed_at      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Defensive: if an earlier revision of this migration already created the table
+-- without claimed_at, add it idempotently (040 uses IF NOT EXISTS throughout,
+-- so re-running it is a no-op).
+ALTER TABLE paddle_webhook_events
+    ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_paddle_webhook_events_event_id
     ON paddle_webhook_events (paddle_event_id);

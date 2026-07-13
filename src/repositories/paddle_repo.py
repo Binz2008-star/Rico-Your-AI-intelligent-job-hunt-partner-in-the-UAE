@@ -12,6 +12,13 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+# A 'pending' webhook-event row older than this is treated as abandoned — the
+# worker that claimed it crashed before marking it processed/failed — and may be
+# reclaimed for reprocessing. Comfortably longer than real handler latency
+# (sub-second) and far shorter than Paddle's multi-hour retry backoff, so a
+# normal in-flight event is never double-claimed.
+_PENDING_RECLAIM_SECONDS = 900  # 15 minutes
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -426,7 +433,28 @@ def record_paddle_webhook_event(
     payload=None,
     conn=None,
 ) -> bool:
-    """Insert a new event row. Returns True if newly inserted, False if duplicate."""
+    """Atomically CLAIM a webhook event for processing.
+
+    Returns True if THIS caller now owns the event and must run its handler,
+    False if it must be skipped.
+
+    Claim rules (a single atomic upsert, so two concurrent deliveries of the
+    same event can never both win):
+      - brand-new event id            -> insert 'pending', claim  -> True
+      - existing 'failed' event       -> reclaim, reset 'pending'  -> True
+      - existing abandoned 'pending'  -> reclaim                   -> True
+        (claimed_at older than _PENDING_RECLAIM_SECONDS: the previous worker
+         crashed before marking it processed/failed)
+      - existing 'processed' event    -> skip                      -> False
+      - existing in-flight 'pending'  -> skip (no double-run)      -> False
+
+    This replaces the previous ``INSERT ... ON CONFLICT DO NOTHING``, which
+    returned False for ANY pre-existing row and therefore silently dropped
+    Paddle's retries of failed/crashed events — a paid subscription could then
+    never be written to the DB. The event handler is idempotent (subscription
+    upsert keyed by user_id, with an occurred_at stale-guard), so a rare
+    over-claim inside the reclaim window is safe.
+    """
     should_close = conn is None
     if conn is None:
         conn = _get_conn(db_module)
@@ -435,16 +463,30 @@ def record_paddle_webhook_event(
             cur.execute(
                 """
                 INSERT INTO paddle_webhook_events
-                    (paddle_event_id, event_type, user_id, status, payload)
-                VALUES (%s, %s, %s, 'pending', %s)
-                ON CONFLICT (paddle_event_id) DO NOTHING
+                    (paddle_event_id, event_type, user_id, status, payload, claimed_at)
+                VALUES (%s, %s, %s, 'pending', %s, NOW())
+                ON CONFLICT (paddle_event_id) DO UPDATE
+                    SET status       = 'pending',
+                        event_type   = EXCLUDED.event_type,
+                        error_detail = NULL,
+                        claimed_at   = NOW()
+                    WHERE paddle_webhook_events.status = 'failed'
+                       OR (
+                            paddle_webhook_events.status = 'pending'
+                            AND (
+                                paddle_webhook_events.claimed_at IS NULL
+                                OR paddle_webhook_events.claimed_at
+                                     < NOW() - make_interval(secs => %s)
+                            )
+                          )
+                RETURNING id
                 """,
-                (paddle_event_id, event_type, user_id, payload),
+                (paddle_event_id, event_type, user_id, payload, _PENDING_RECLAIM_SECONDS),
             )
-            inserted = cur.rowcount > 0
+            claimed = cur.fetchone() is not None
         if should_close:
             conn.commit()
-        return inserted
+        return claimed
     except Exception:
         if should_close:
             try:

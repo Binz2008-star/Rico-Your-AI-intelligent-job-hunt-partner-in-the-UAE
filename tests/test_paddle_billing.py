@@ -199,6 +199,167 @@ class TestPaddleWebhookIdempotency(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Webhook replay after failure — regression for the claim/idempotency bug.
+#
+# In-memory stand-in for the paddle_webhook_events table, faithful enough to run
+# the REAL paddle_repo claim/mark functions end-to-end without a live DB. It
+# distinguishes ON CONFLICT DO NOTHING (old, buggy) from DO UPDATE ... reclaim
+# (new), so the replay test below fails on the old code and passes on the fix.
+# ---------------------------------------------------------------------------
+
+class _FakeCursor:
+    def __init__(self, events: Dict[str, str]):
+        self._events = events
+        self._result = None
+        self.rowcount = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    @staticmethod
+    def _reclaimable(status: str, sql: str) -> bool:
+        # Mirror the claim's WHERE clause: a 'failed' row is reclaimable only
+        # when the SQL actually asks to reclaim failed events. (Stale-'pending'
+        # timing is not modeled here — not needed for this regression.)
+        return status == "failed" and "status = 'failed'" in sql
+
+    def execute(self, sql, params=None):
+        params = params or ()
+        s = " ".join(sql.split())
+        if "INSERT INTO paddle_webhook_events" in s:
+            eid = params[0]
+            status = self._events.get(eid)
+            if status is None:
+                self._events[eid] = "pending"
+                self._result, self.rowcount = (1,), 1
+            elif "DO UPDATE" in s and self._reclaimable(status, s):
+                self._events[eid] = "pending"
+                self._result, self.rowcount = (1,), 1
+            else:
+                # ON CONFLICT DO NOTHING, or claim disallowed (processed/in-flight)
+                self._result, self.rowcount = None, 0
+        elif "SELECT status FROM paddle_webhook_events" in s:
+            status = self._events.get(params[0])
+            self._result = {"status": status} if status is not None else None
+            self.rowcount = 1 if status is not None else 0
+        elif "status = 'processed'" in s:
+            self._events[params[0]] = "processed"
+            self.rowcount = 1
+        elif "status = 'failed'" in s:
+            # mark_paddle_event_failed params = (error_detail, event_id)
+            self._events[params[1]] = "failed"
+            self.rowcount = 1
+        else:
+            self._result, self.rowcount = None, 0
+
+    def fetchone(self):
+        return self._result
+
+
+class _FakeWebhookEventsDB:
+    def __init__(self):
+        self.events: Dict[str, str] = {}
+
+    def cursor(self):
+        return _FakeCursor(self.events)
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class TestPaddleWebhookReplayAfterFailure(unittest.TestCase):
+    """A webhook event that FAILS (HTTP 500) must be fully reprocessed — not
+    silently skipped as a duplicate — when Paddle retries the same event_id."""
+
+    def _process(self, db, event_id, upsert):
+        from src.services.paddle_webhook_service import process_paddle_webhook
+        _clear_price_cache()
+        with patch("src.repositories.paddle_repo._get_conn", return_value=db), \
+             patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id",
+                   return_value={"user_id": "user_replay"}), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_checkout_session", return_value=None), \
+             patch("src.repositories.paddle_repo.get_paddle_subscription_by_user", return_value=None), \
+             patch("src.repositories.paddle_repo.upsert_paddle_customer"), \
+             patch("src.repositories.paddle_repo.upsert_paddle_subscription", upsert), \
+             patch.dict(os.environ, _PRO_ENV, clear=False):
+            return process_paddle_webhook(
+                event_id=event_id,
+                event_type="subscription.created",
+                payload=_build_sub_payload(event_id=event_id),
+                db_module=MagicMock(),
+            )
+
+    def test_failed_event_is_reprocessed_on_retry(self):
+        db = _FakeWebhookEventsDB()
+        # First delivery raises inside the handler; the Paddle retry succeeds.
+        upsert = MagicMock(side_effect=[Exception("db down"), {}])
+        event_id = "evt_replay_1"
+
+        first = self._process(db, event_id, upsert)
+        self.assertEqual(first["status"], "failed")
+        self.assertEqual(db.events[event_id], "failed",
+                         "first failure must persist as 'failed' for replay")
+
+        second = self._process(db, event_id, upsert)
+        self.assertEqual(second["status"], "processed",
+                         "failed event must be reprocessed on retry, not skipped as duplicate")
+        self.assertEqual(db.events[event_id], "processed")
+        self.assertEqual(upsert.call_count, 2,
+                         "the subscription upsert must actually run again on the retry")
+
+    def test_processed_event_is_not_reprocessed(self):
+        db = _FakeWebhookEventsDB()
+        upsert = MagicMock(return_value={})
+        event_id = "evt_replay_2"
+
+        first = self._process(db, event_id, upsert)
+        self.assertEqual(first["status"], "processed")
+
+        # A duplicate delivery of an already-processed event must be skipped.
+        second = self._process(db, event_id, upsert)
+        self.assertEqual(second["status"], "skipped")
+        self.assertEqual(second["reason"], "duplicate")
+        self.assertEqual(upsert.call_count, 1,
+                         "an already-processed event must not run the handler again")
+
+    def test_claim_sql_reclaims_failed_and_returns_by_row(self):
+        """record_paddle_webhook_event must be an atomic claim: it returns True
+        iff the DB returns a claimed row, and its SQL reclaims failed events."""
+        from src.repositories import paddle_repo
+        cur = MagicMock()
+        conn = MagicMock()
+        conn.cursor.return_value.__enter__.return_value = cur
+
+        cur.fetchone.return_value = (42,)  # RETURNING id -> a row -> claimed
+        with patch("src.repositories.paddle_repo._get_conn", return_value=conn):
+            claimed = paddle_repo.record_paddle_webhook_event(
+                MagicMock(), "evt_wire", "subscription.created")
+        self.assertTrue(claimed)
+
+        sql = " ".join(cur.execute.call_args[0][0].split())
+        self.assertIn("ON CONFLICT", sql)
+        self.assertIn("DO UPDATE", sql)
+        self.assertIn("RETURNING", sql)
+        self.assertIn("status = 'failed'", sql, "claim must reclaim previously-failed events")
+
+        cur.fetchone.return_value = None  # no row -> not claimed
+        with patch("src.repositories.paddle_repo._get_conn", return_value=conn):
+            not_claimed = paddle_repo.record_paddle_webhook_event(
+                MagicMock(), "evt_wire", "subscription.created")
+        self.assertFalse(not_claimed)
+
+
+# ---------------------------------------------------------------------------
 # Webhook service: subscription lifecycle (findings #8, #9, #10)
 # ---------------------------------------------------------------------------
 
