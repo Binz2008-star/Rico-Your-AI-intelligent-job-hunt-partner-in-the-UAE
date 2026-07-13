@@ -14,14 +14,15 @@ This inventory is a control-plane snapshot, not permission to merge. Live GitHub
 
 | PR | Subject | Classification | Required action |
 | ---: | --- | --- | --- |
+| #1010 | control-plane reconciliation and launch execution | ACTIVE | Docs/control only; independently review, add canonical TASKS Continuity Block, verify final-head checks, then seek owner merge approval. |
 | #1009 | Playwright cold-start diagnostics/timeout | REVIEW | Focused review; merge only if still needed against current main and CI evidence supports it. |
-| #1008 | Paddle billing implementation (`feat/paddle-billing`; 17 files, ~2.9k additions) | HOLD / DEEP REVIEW | Do not merge or extend. Audit checkout, signed webhooks, user isolation, entitlement lifecycle, secrets/config, migrations, tests, and exact AED 79 contract. Split mixed scope if needed. |
+| #1008 | Paddle billing implementation (`feat/paddle-billing`) | HOLD | Large security-sensitive change: 17 files and roughly 2.9k additions. Deep-audit checkout, webhook verification, identity mapping, entitlement lifecycle, secrets, migration/config, tests, and overlap with #989 before any merge decision. Do not extend the branch meanwhile. |
 | #1007 | favicon/icon system correction | REVIEW | Verify changed assets, build, metadata/PWA behavior, and visual approval. |
 | #1002 | truthful “Discuss with Rico” settings affordances | REVIEW | Rebase/reconcile with merged #1000/#1001; confirm no false execution claim and no settings regression. |
 | #997 | earlier `/settings` Atelier migration | STALE/CLOSE | Superseded by merged #1000/#1001; do not rebase or resume. |
 | #996 | pitch/explainer/waitlist bundle | HOLD | Mixed scope; split any still-needed deliverable into separate tasks/PRs. |
 | #989 | subscription-gating audit follow-ups | REVIEW | Deep review required before billing implementation; preserve per-account isolation and reconcile with #1008. |
-| #988 | CI workflow to hide noisy bot comments | HOLD / NON-LAUNCH | One workflow file, unrelated to launch-critical product work. Review security/pinned-action permissions separately or close/defer; do not consume the active objective. |
+| #988 | workflow to hide noisy bot comments | HOLD | Non-launch CI housekeeping. Do not distract from the launch-critical sequence; review later as a narrow workflow/security task. |
 | #987 | auth guards for `/flow` and `/queue` | REVIEW | Check current route state and conflicts; either finish as one narrow auth PR or supersede with a fresh route-specific task. |
 | #985 | owner design decisions/docs | REVIEW | Confirm decisions are already reflected in current main/workspace; close if fully recorded elsewhere. |
 | #968 | governance record for #965 | HOLD | Do not treat as permission for agentic implementation. |
@@ -44,15 +45,16 @@ This inventory is a control-plane snapshot, not permission to merge. Live GitHub
 
 ## Immediate cleanup order
 
-1. Review and decide #1009.
-2. Review and decide #1007.
-3. Reconcile #1002 against current `/settings` main state.
-4. Close #997 as superseded.
-5. Perform a security and contract audit of #1008 together with #989 before any billing merge.
-6. Defer or close #988 as non-launch CI housekeeping unless separately approved.
-7. Keep #996, #967, #965, and #968 on hold.
-8. Preserve #961, #935, #873, and #872 as reference only.
-9. Re-audit #987 against the final route inventory.
+1. Complete review and merge decision for #1010.
+2. Review and decide #1009.
+3. Review and decide #1007.
+4. Reconcile #1002 against current `/settings` main state.
+5. Close #997 as superseded.
+6. Deep-audit #1008 together with #989 before billing resumes.
+7. Keep #988 outside the launch-critical sequence.
+8. Keep #996, #967, #965, and #968 on hold.
+9. Preserve #961, #935, #873, and #872 as reference only.
+10. Re-audit #987 against the final route inventory.
 
 ## Safety rule
 
