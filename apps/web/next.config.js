@@ -16,11 +16,17 @@ const csp = [
     "default-src 'self'",
     // theme-init hash: sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=
     // lang-init hash:  sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=
-    "script-src 'self' 'unsafe-inline' 'sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=' 'sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=' https://va.vercel-scripts.com",
+    // https://cdn.paddle.com — Paddle.js v2 client SDK (loaded lazily by lib/paddle.ts)
+    "script-src 'self' 'unsafe-inline' 'sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=' 'sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=' https://va.vercel-scripts.com https://cdn.paddle.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
-    "connect-src 'self' https://rico-job-automation-api.onrender.com https://vitals.vercel-insights.com",
+    // https://rico-job-automation-api.onrender.com — backend proxy (existing)
+    // https://sandbox-api.paddle.com — Paddle.js SDK calls during sandbox checkout
+    // https://api.paddle.com          — Paddle.js SDK calls during production checkout
+    "connect-src 'self' https://rico-job-automation-api.onrender.com https://vitals.vercel-insights.com https://sandbox-api.paddle.com https://api.paddle.com",
+    // https://checkout.paddle.com — Paddle overlay checkout iframe (sandbox and production share this host)
+    "frame-src 'self' https://checkout.paddle.com",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",

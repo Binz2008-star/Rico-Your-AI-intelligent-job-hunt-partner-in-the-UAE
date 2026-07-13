@@ -32,8 +32,8 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
         id: "rico_monthly",
         plan: "pro",
         name: "Rico Monthly",
-        price_monthly: 21.50,
-        currency: "USD",
+        price_monthly: 79,
+        currency: "AED",
         description: "Smart AI job hunting for active UAE professionals.",
         features: [
             "Unlimited CV analysis",
@@ -162,9 +162,6 @@ function PlanCard({
                     /mo
                 </span>
             </div>
-            {plan.currency === "USD" && (
-                <p className="relative z-10 text-[11px] text-text-secondary mt-0.5">≈ AED 79</p>
-            )}
 
             <ul className="relative z-10 mt-6 flex flex-1 flex-col gap-2.5">
                 {localFeatures.map((feature, i) => (

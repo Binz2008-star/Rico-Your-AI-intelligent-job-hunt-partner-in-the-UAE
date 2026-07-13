@@ -47,19 +47,21 @@ ported in to fix three production-breaking bugs found in #1008.
 #### Decision
 
 - Full Stripe removal (no dual-provider). `stripe` dependency deleted.
-- Single plan: **Rico Monthly, AED 79/month** (Pro/Premium two-tier collapsed).
+- Single plan: **Rico Monthly, AED 79/month** (Pro/Premium two-tier collapsed). Paddle's
+  internal catalog price is USD 21.50/month — this is never exposed in the public API or UI.
 - Server-owned checkout attribution: `POST /billing/paddle/checkout-session` issues an
   opaque `session_token`; webhook resolves user identity via that token, not `custom_data.user_id`.
 - 7-day past-due grace period (migration 041) per the refund policy already shown to users.
-- Customer portal deferred (`501`) until verified against a live Paddle sandbox account.
+- Customer portal `POST /api/v1/billing/customer-portal` is fully implemented (not 501).
+  It remains unverified against live sandbox until the smoke test step 9 is completed.
 - `BILLING_MODE` stays `manual` until owner explicitly sets `BILLING_MODE=paddle` on Render.
 - Migrations 040 + 041 must be applied to Neon **with explicit owner approval** before activation.
 
 #### Consequences
 
 - Positive: clean single-provider billing, secure identity attribution, grace period honoured.
-- Negative/trade-off: customer portal (`/billing/customer-portal`) is a stub until sandbox
-  smoke confirms Paddle's portal API shape. Manual/WhatsApp mode remains the fallback.
+- Negative/trade-off: customer portal is implemented but unverified against live sandbox.
+  Manual/WhatsApp mode remains the fallback until `BILLING_MODE=paddle` is set.
 
 #### Follow-up
 

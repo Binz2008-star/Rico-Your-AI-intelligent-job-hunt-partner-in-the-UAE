@@ -176,8 +176,7 @@ export default function LandingPageNocturne() {
         freeF2: isAr ? "١٠ وظائف محفوظة" : "10 saved jobs",
         freeF3: isAr ? "تقييم ملاءمة السيرة والأسباب" : "CV fit scoring & reasons",
         proName: isAr ? "ريكو الشهرية" : "Rico Monthly",
-        proPrice: "USD 21.50",
-        proAedApprox: "≈ AED 79",
+        proPrice: "AED 79",
         proF1: isAr ? "١٥٠٠ رسالة AI/شهر" : "1,500 AI messages/month",
         proF2: isAr ? "وظائف محفوظة بلا حدود" : "Unlimited saved jobs",
         proF3: isAr ? "مطابقة أولوية وتنبيهات" : "Priority matching & alerts",
@@ -608,14 +607,13 @@ export default function LandingPageNocturne() {
                                         <Link href="/signup"><RicoButton variant="ghost" size="md" className="w-full">{t.startFree}</RicoButton></Link>
                                     </GlassCard>
                                 </motion.div>
-                                {/* Pro - Featured */}
+                                {/* Rico Monthly - Featured */}
                                 <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
                                     <GlassCard className="p-6 flex flex-col relative border-ember/30">
                                         <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-ember text-void text-xs font-mono font-semibold">{t.popular}</span>
                                         <div className="mb-6">
                                             <p className="font-mono text-xs uppercase tracking-[0.16em] text-ember">{t.proName}</p>
                                             <p className="font-display text-3xl font-semibold mt-2">{t.proPrice}<span className="text-base font-normal text-text-tertiary">/mo</span></p>
-                                            <p className="text-xs text-text-tertiary mt-0.5">{t.proAedApprox}</p>
                                         </div>
                                         <ul className="space-y-3 mb-8 flex-1">
                                             <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF1}</li>

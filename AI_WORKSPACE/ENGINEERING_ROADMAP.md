@@ -29,20 +29,18 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 ---
 
-## Where Rico is right now (2026-07-13) — Launch Program
+## Where Rico is right now (2026-07-11)
 
 | Question | Answer |
 | --- | --- |
-| **Where is Rico?** | Production is in **pre-launch teaser mode**. `ricohunt.com` serves the launch film to the public and gates the unfinished app. The P0 email-verification break is fixed and live. |
-| **Where is it going?** | Open to real users behind a proper **waitlist gate** (#967), then enable **billing** (#1008). Each is blocked on a Neon migration + env the owner must approve. |
-| **What is blocked?** | **#967** (waitlist) — needs migration 039 + waitlist/backend smoke before merge. **#1008** (Paddle billing) — needs migration 040 + `PADDLE_*` env + `BILLING_MODE`. **#989** — scope unverified (doc gap). |
-| **What is completed?** | Teaser gate live (#1003/#1004), **P0 verify-email allowlist fix live (#1005)**, icon unification (#1007), Playwright CI stability (#1005 env + #1009), control-plane docs (#1010). |
-| **What comes next?** | Owner-run production smoke: **Signup → Resend → Verify → Login**. Then per-PR launch decisions (#967, then #1008). Product hardening (Phases 2–4 below) resumes after launch stabilizes. |
+| **Where is Rico?** | Release verification for #963: the onboarding CV persistence implementation is merged as `241b85d…`, CI-green, and Vercel-ready. |
+| **Where is it going?** | Verify the deployed backend/authenticated flow, then resume the approved per-route Atelier migration and separately scoped hardening. |
+| **What is blocked?** | No new runtime/design objective may start until the #963 release gate (migration 038 schema proof + authenticated smoke) passes. Render version already matches `241b85d…`. **#1008 (Paddle billing)** is draft — blocked on migrations 040+041, `PADDLE_*` env vars, and owner approval to set `BILLING_MODE=paddle`. |
+| **What is completed?** | Phases 0–1, #969 document idempotency foundation, and #963 implementation. Production verification of #963 is pending. |
+| **What comes next?** | Complete release verification; then select one objective only: #962 or the next owner-approved design route. |
 
-Live gate: `apps/web/middleware.ts` (`NEXT_PUBLIC_SITE_LIVE`). Launch film:
-`apps/web/public/explainer/` (option-2/3/3b, random cut per visit). Detail:
-handoffs `2026-07-12-rico-launch-film-3d.md`, `2026-07-13-p0-verify-email-hotfix.md`;
-`DECISIONS.md` DEC-20260712-001. Render backend + Neon DB unchanged.
+Production is stable: Render backend healthy (`/health` ok, providers configured),
+Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
 
 ---
 
@@ -69,58 +67,34 @@ Naming/branch/PR governance: see `AI_WORKSPACE/OPERATING_RULES.md` and
 
 ---
 
-## Launch Program — Vision → Epic → Milestone → Phase → PR (current focus)
-
-Status: ✅ done · 🔵 in progress · ⛔ blocked · ⬜ planned. Owners:
-**C**=Claude · **L**=Lovable · **X**=Codex · **D**=Devin · **O**=Owner (Roben — approvals/merges/prod env).
-
-**Vision** (`PROJECT_BRIEF.md` · `CAREER_OS_VISION.md`): a UAE-focused AI career
-companion that models the user and runs their job search — launched safely, users
-onboarded behind a controlled gate, then monetized.
-
-| Epic | Milestone | Phase / PR | Status | Owner |
-| --- | --- | --- | --- | --- |
-| **Launch & Access** | Public teaser | Ship teaser gate + launch film — #1003, #1004 | ✅ live | C · O |
-| | | P0: unblock email verification — **#1005** (`b66eb46f`) | ✅ live | C · O |
-| | Waitlist onboarding | Atelier bilingual waitlist + film-in-page + gate — **#967** | ⛔ migration 039 + waitlist/backend smoke | C · L · O |
-| | Full-site open | Flip `NEXT_PUBLIC_SITE_LIVE`/`RICO_LAUNCH_MODE` after validation (env, no PR) | ⬜ owner-gated | O |
-| **Monetization** | Paddle billing | Stripe→Paddle: checkout, webhooks, entitlements — **#1008** | ⛔ migration 040 + `PADDLE_*` env + `BILLING_MODE` | C · O |
-| **Brand & UI** | Consistent brand | Unify app icons / brand mark — #1007 | ✅ live | C |
-| | Launch film | 3D "Dimensional" cuts + remix, bilingual, random rotation | ✅ built (in #967 / `explainer/*`) | C |
-| **Eng. Quality** | CI reliability | Playwright full-site mode + headroom — #1005 env, #1009 | ✅ merged | C · O |
-| | Control plane | Roadmap/status/decisions reconciliation — #1010 | ✅ merged | C · O |
-
-PR triage + decisions are the source of truth, not this table:
-`AI_WORKSPACE/OPEN_PR_TRIAGE.md`, `DECISIONS.md`, `TASKS.md`, and the per-PR
-handoffs under `AI_WORKSPACE/HANDOFFS/`. This table only maps them.
-
-The product-engineering spine (Phases 0–7 below) is the longer-horizon plan;
-launch work above takes precedence until production is open and stable.
-
----
-
 ## Phases 0–7
 
 Status legend: ✅ completed · 🔵 in progress · ⬜ planned (not started)
 
 ### Phase 0 — Architecture & Governance ✅
+
 The workspace, roadmap, audit gate, operational-memory strategy, branch/PR
 governance, and naming standards that let multiple agents work without drift.
+
 - Delivered: AI Workspace, `ARCHITECTURE.md`, DEC-20260707-001, the 2026-07-08
   production hardening audit gate, this roadmap.
 - PRs: #881 (roadmap + audit reconciliation, merged).
 
 ### Phase 1 — Operational Memory Foundation ✅
+
 Rico must never forget what it found, opened, applied to, or needs to follow up.
+
 - Delivered: `user_job_context` persistence (migrations 018–022), operational
   memory readiness helper, follow-up readiness selection, read-only lifecycle
   follow-ups endpoint, Audit Phase 2 verification (persistence proven sound).
 - PRs: #883 (readiness helper, merged), #885 (follow-ups endpoint, merged).
 
 ### Phase 2 — Hardening 🔵 (current)
+
 Not features, not UI. Robustness, resilience, regression protection, operational
 safety. Each finding becomes a small, scoped hardening PR — verify-first, and
 fix only proven gaps (synthetic data only).
+
 - Delivered: #887 — batch-row-isolation in `upsert_matches` (one malformed row
   no longer drops the whole apply-link batch); proven against real Postgres.
 - Delivered, awaiting release verification: #969/#960 exact document dedupe and #975/#963
@@ -128,7 +102,9 @@ fix only proven gaps (synthetic data only).
 - Next candidates: any gap surfaced by continued Audit Phase 2–9 verification.
 
 ### Phase 3 — Chat Integration 🔵 (current)
+
 Wire chat to what is already persisted — almost no new logic, just connection.
+
 - Delivered: #891 — "what should I follow up?" / "which jobs are due for
   follow-up?" (EN + AR) → reuses the merged readiness logic
   (`get_by_status("applied")` → `select_revisit_candidates`).
@@ -139,21 +115,25 @@ Wire chat to what is already persisted — almost no new logic, just connection.
 - Constraint: reuse existing lifecycle reads; verify-first; synthetic data only.
 
 ### Phase 4 — Lifecycle Intelligence ⬜
+
 Rico stops being only a keeper and starts following up with the user, e.g.
 "You applied 6 days ago — prepare a follow-up email?" / "You opened this job
 three times — want to apply?"
 
 ### Phase 5 — UX Facelift ⬜
+
 Only after the system is stable. Atelier, Rico Alive, Nocturne, and the new
 design language. (Corresponds to DEC-20260707-001 "UI redesign / PR G".)
 The approved target is `/design-preview` per DEC-20260710-002; migration remains
 per-route and owner-gated, and resumes after the #963 release gate.
 
 ### Phase 6 — Notifications ⬜
+
 After lifecycle exists: email, WhatsApp, reminders, weekly reports. Must honor
 the Telegram audience rules (admin/dev vs user channels).
 
 ### Phase 7 — Infrastructure Evolution ⬜ (last)
+
 Not now. Railway, worker split, queue, Redis, background processing. Render
 stays the production backend until a Railway target passes full production
 smoke. (Corresponds to DEC-20260707-001 PRs D/E.)
@@ -184,18 +164,13 @@ before feature/redesign/worker/notification/infra work.
 
 ## Releases (what reached production)
 
-| Date | Commit / PR | What went live |
+| Date | Commit | What went live |
 | --- | --- | --- |
-| 2026-07-08 | `7d167dd` · #887 | batch-row-isolation hardening (apply-link batch resilience) |
-| 2026-07-12 | #1003 / #1004 | teaser gate + launch film on `ricohunt.com` |
-| 2026-07-12 | `67758854` · #1007 | unified gold brand icons |
-| 2026-07-12 | `b66eb46f` · **#1005** | teaser allowlist fix — `/verify-email`, `/privacy`, `/terms` reachable (P0) |
-| 2026-07-12 | `fd49129b` · #1009 | Playwright CI headroom (CI-only) |
-| 2026-07-13 | `b7538858` · #1010 | control-plane docs — current production deploy `dpl_HyctVSpC…` (READY) |
+| 2026-07-08 | `7d167dd` | #887 — batch-row-isolation hardening (apply-link batch resilience) |
 
-_P0 (#1005) production route-smoke verified: `/verify-email?token=fake` → 200 (not
-the teaser). **Not yet closed** — pending owner-run fresh Signup → Resend → Verify →
-Login on production._
+_Merged to `main` (`80e246b`), deploy verification pending: #885 (follow-ups
+endpoint) and #891 (chat follow-up readiness). Promote each to a release row once
+`/version.commit` on Render reads `80e246b…` and `/health` is ok._
 
 _Add a row when a runtime change is deployed and verified (`/version.commit`
 matches `main`, `/health` ok). Docs-only merges are not releases._

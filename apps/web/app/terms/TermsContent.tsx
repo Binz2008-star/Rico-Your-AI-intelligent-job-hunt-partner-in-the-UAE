@@ -143,8 +143,8 @@ export function TermsContent() {
               <h2>{isAr ? "٥. الاشتراك والمدفوعات" : "5. Subscription and Payments"}</h2>
               <p>
                 {isAr
-                  ? "تتطلب بعض الميزات اشتراكاً مدفوعاً. تُعالج المدفوعات عبر Paddle. تتجدد الاشتراكات تلقائياً ما لم يتم إلغاؤها. يمكنك الإلغاء في أي وقت عبر بوابة إدارة الاشتراكات. لا استرداد للأشهر الجزئية ما لم يقتضِ ذلك القانون."
-                  : "Some features require a paid subscription. Payments are processed through Paddle. Subscriptions auto-renew unless cancelled. You may cancel at any time through the subscription management portal. No refunds for partial months unless required by law."}
+                  ? "تتطلب بعض الميزات اشتراكاً مدفوعاً. تُعالج المدفوعات عبر Stripe. تتجدد الاشتراكات تلقائياً ما لم يتم إلغاؤها. يمكنك الإلغاء في أي وقت عبر بوابة إدارة الاشتراكات. لا استرداد للأشهر الجزئية ما لم يقتضِ ذلك القانون."
+                  : "Some features require a paid subscription. Payments are processed through Stripe. Subscriptions auto-renew unless cancelled. You may cancel at any time through the subscription management portal. No refunds for partial months unless required by law."}
               </p>
             </section>
 
