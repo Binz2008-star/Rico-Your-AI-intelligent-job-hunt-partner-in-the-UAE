@@ -67,6 +67,43 @@ NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID=<sandbox pri_... — must match PADDLE_P
 
 ---
 
+### Sandbox catalog IDs (created programmatically — safe to document, DO NOT use with PADDLE_SANDBOX=false)
+
+| Item | ID |
+|------|----|
+| Product | `pro_01kxer83ae1mhafykkvgj7482z` |
+| Price ID (`PADDLE_PRO_MONTHLY_PRICE_ID`) | `pri_01kxer8h278hvw37ec59yg73hg` |
+| Webhook destination | `ntfset_01kxer96wk8jrgdyxjjdtyzc6x` |
+| Webhook signing secret (`PADDLE_WEBHOOK_SECRET`) | `pdl_ntfset_01kxer96wk8jrgdyxjjdtyzc6x_LMwc5p61X4HPq/YYytBXSs0gNY9ROJDq` |
+
+Price: USD 21.50/month, monthly, qty 1, no trial. All 9 events subscribed.
+Endpoint: `https://rico-job-automation-api.onrender.com/api/v1/billing/paddle/webhook`
+
+**Client token** (`NEXT_PUBLIC_PADDLE_CLIENT_TOKEN`): cannot be retrieved via API.
+Get it from: sandbox-vendors.paddle.com → Developer Tools → Authentication → Client-side tokens.
+
+**Complete Sandbox env block for Render:**
+
+```sh
+BILLING_MODE=paddle
+PADDLE_SANDBOX=true
+PADDLE_API_KEY=<sandbox API key — keep in Render only, never commit>
+PADDLE_WEBHOOK_SECRET=pdl_ntfset_01kxer96wk8jrgdyxjjdtyzc6x_LMwc5p61X4HPq/YYytBXSs0gNY9ROJDq
+PADDLE_PRO_MONTHLY_PRICE_ID=pri_01kxer8h278hvw37ec59yg73hg
+RICO_PRO_PRICE_USD=21.50
+```
+
+**Complete Sandbox env block for Vercel:**
+
+```sh
+NEXT_PUBLIC_BILLING_MODE=paddle
+NEXT_PUBLIC_PADDLE_SANDBOX=true
+NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=<get from sandbox-vendors.paddle.com → Developer Tools → Authentication>
+NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID=pri_01kxer8h278hvw37ec59yg73hg
+```
+
+---
+
 ### Live catalog IDs (confirmed by owner — DO NOT use with PADDLE_SANDBOX=true)
 
 | Item | ID | Source |

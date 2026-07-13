@@ -133,3 +133,5 @@ test_results.json
 qa_destruction_report.txt
 bandit_out.json
 .env.locust
+
+rico-job-automation-api.env
