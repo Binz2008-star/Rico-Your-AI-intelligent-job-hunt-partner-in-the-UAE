@@ -2,22 +2,26 @@
 
 ## Purpose
 
-Every agent session must begin by determining the real project state, current ownership, and the highest-priority safe work. Agents must not open with a generic question such as "What would you like me to do?" when the repository already contains enough information to determine the next action.
+Every agent session must determine the real project state, current ownership, and the highest-priority safe work. Agents must not open with a generic question such as "What would you like me to do?" when the repository already contains enough information to determine the next action.
 
-## Mandatory boot sequence
+## Canonical boot sequence
 
-Before planning, editing, testing, creating a branch, or opening a PR:
+`AI_WORKSPACE/OPERATING_RULES.md` remains canonical for read order. Before planning, editing, testing, creating a branch, or opening a PR:
 
-1. Fetch live `main` and record the exact SHA.
-2. Read `AI_WORKSPACE/PROJECT_STATUS.md`.
-3. Read `AI_WORKSPACE/START_HERE.md`.
-4. Read the active task and continuity block in `AI_WORKSPACE/TASKS.md`.
-5. Read the latest relevant handoff.
-6. Inspect all open PRs, their branch heads, mergeability, draft state, CI state, and changed-file overlap.
-7. Build the session occupancy table.
-8. Declare exactly one role: `WRITER`, `REVIEWER`, `RELEASE`, or `IDLE`.
-9. Select the highest-priority unowned task compatible with the declared role.
-10. Claim it before making any write.
+1. Read `AI_WORKSPACE/START_HERE.md`.
+2. Read `CLAUDE.md`.
+3. Read `AI_WORKSPACE/CURRENT_STATE.md`.
+4. Read the active task and Continuity Block in `AI_WORKSPACE/TASKS.md`.
+5. Read `AI_WORKSPACE/OPERATING_RULES.md`.
+6. Read the latest relevant handoff referenced by `START_HERE.md`.
+7. Fetch live `main` and record the exact SHA.
+8. Inspect all open PRs relevant to the proposed work: owner, head, draft state, mergeability, CI, and changed-file overlap.
+9. Reconcile live state against `PROJECT_STATUS.md` and the dated PR triage snapshot.
+10. Build the session occupancy table.
+11. Declare exactly one execution role: `WRITER`, `REVIEWER`, `RELEASE`, or `IDLE`.
+12. Select and claim the highest-priority safe unowned task compatible with that role.
+
+The Planner/Coder/Reviewer/Tester/Deploy-verifier pass types in `OPERATING_RULES.md` describe the activity being performed. The `WRITER`/`REVIEWER`/`RELEASE`/`IDLE` roles describe branch authority and concurrency. An agent must obey both without mixing responsibilities.
 
 If live GitHub state and workspace documents disagree, the agent must stop implementation, report the conflict, and choose `REVIEWER` or `IDLE` until the control plane is reconciled.
 
@@ -32,7 +36,8 @@ Active production objective: <one objective or none>
 Open implementation PRs: <PR / owner / branch / status>
 Other active agents: <known claims>
 Stale or overlapping work: <PRs/branches that must not be resumed>
-My role: WRITER | REVIEWER | RELEASE | IDLE
+My authority role: WRITER | REVIEWER | RELEASE | IDLE
+My activity pass: Planner | Coder | Reviewer | Tester | Deploy verifier
 My task: <single task>
 Branch: <existing or proposed branch>
 Why this task is safe now: <one sentence>
@@ -68,7 +73,8 @@ A valid claim records:
 ```text
 Task ID:
 Objective:
-Role:
+Authority role:
+Activity pass:
 Owner/session:
 Branch:
 Base SHA:
@@ -80,7 +86,7 @@ Known overlaps checked:
 Stop condition:
 ```
 
-The claim belongs in the task continuity block or the active handoff before code changes begin.
+The claim belongs in the task Continuity Block or the active handoff before code changes begin.
 
 ## No-work behavior
 
@@ -100,7 +106,7 @@ Do not start fan-out, broad repository scans, long integration suites, productio
 
 Before stopping or approaching a context/tool/time limit:
 
-- update the existing continuity block;
+- update the existing Continuity Block;
 - record branch, head SHA, files changed, tests, CI/deploy state, blockers, rollback, and next exact action;
 - add/update a dated handoff if the task is not verified;
 - leave no undocumented work in progress.
