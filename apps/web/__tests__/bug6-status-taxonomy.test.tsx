@@ -100,6 +100,17 @@ vi.mock("next/navigation", () => ({
     redirect: vi.fn(),
 }));
 
+// /flow renders behind useRequireAuth; authorize directly so these taxonomy
+// tests exercise the board/list content (auth-guard.test.tsx covers the guard).
+vi.mock("@/hooks/useRequireAuth", () => ({
+    useRequireAuth: () => ({
+        user: { user_id: "u@test.com", name: "u", email: "test@example.com" },
+        ready: true,
+        authorized: true,
+        logout: vi.fn(),
+    }),
+}));
+
 vi.mock("next/link", () => ({
     default: ({ children, href, ...props }: { children: ReactNode; href: string }) => (
         <a href={href} {...props}>

@@ -20,6 +20,18 @@ vi.mock("next/navigation", () => ({
     redirect: vi.fn(),
 }));
 
+// /flow now renders behind useRequireAuth. These tests cover the flow *content*,
+// not the guard (auth-guard.test.tsx does), so authorize directly — this also
+// avoids the real useAuth effect looping under the fresh-object useRouter mock.
+vi.mock("@/hooks/useRequireAuth", () => ({
+    useRequireAuth: () => ({
+        user: { user_id: "u@test.com", name: "u", email: "test@example.com" },
+        ready: true,
+        authorized: true,
+        logout: vi.fn(),
+    }),
+}));
+
 vi.mock("next/link", () => ({
     default: ({ children, href, ...props }: { children: ReactNode; href: string }) => (
         <a href={href} {...props}>
