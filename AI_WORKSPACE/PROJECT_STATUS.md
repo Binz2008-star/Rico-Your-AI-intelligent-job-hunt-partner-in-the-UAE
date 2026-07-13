@@ -19,6 +19,24 @@
 | **Owner gate after #963** | Cleared — authenticated production smoke owner-confirmed PASS; the design/workspace queue is released. |
 | **Last updated** | 2026-07-11 (post-#962 + #982 merge; `main` at `60978ae…`). |
 
+## Owner-approved side track: Paddle billing migration (2026-07-13)
+
+`billing` is a listed stop condition below — this track is opened on
+explicit, direct owner approval given in-session (owner supplied Paddle API
+keys and requested the integration; confirmed scope: full replace of Stripe,
+not dual-provider; self-service portal explicitly deferred). It does **not**
+change or supersede the queued objective above (per-route design migration /
+auth-guard routes remain owner-selectable as before) — this is a separate,
+explicitly authorized concurrent track, not a silent reinterpretation of the
+lock.
+
+- Branch: `claude/paddle-connector-issue-smjnbt` (WRITER: this session).
+- Full detail: `AI_WORKSPACE/HANDOFFS/2026-07-13-paddle-billing-migration.md`.
+- Status: implementation + tests complete on the branch; not yet PR'd/merged;
+  not production-verified (no live Paddle account yet — `BILLING_MODE`
+  defaults to `manual` so production behavior is unchanged until the owner
+  configures real Paddle credentials on Render/Vercel).
+
 ## Execution lock
 
 ```text

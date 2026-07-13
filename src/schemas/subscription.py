@@ -48,8 +48,8 @@ class UserSubscription(BaseModel):
     user_id: str
     plan: SubscriptionTier
     subscription_status: SubscriptionStatus
-    stripe_customer_id: Optional[str] = None
-    stripe_subscription_id: Optional[str] = None
+    paddle_customer_id: Optional[str] = None
+    paddle_subscription_id: Optional[str] = None
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
     cancel_at: Optional[datetime] = None
@@ -77,14 +77,14 @@ class PlansResponse(BaseModel):
 
 class CheckoutResponse(BaseModel):
     checkout_url: str
-    provider: Literal["stripe", "mock", "manual"]
+    provider: Literal["paddle", "mock", "manual"]
     plan: SubscriptionTier
     status: Literal["ready", "mock", "manual"]
 
 
 class SubscriptionWebhookResponse(BaseModel):
     received: bool
-    provider: str = "stripe"
+    provider: str = "paddle"
     event_type: Optional[str] = None
     processed: bool = False
     mock: bool = False

@@ -2,11 +2,11 @@
  * Billing mode helpers and WhatsApp upgrade URL builder.
  *
  * NEXT_PUBLIC_BILLING_MODE=manual  → WhatsApp-assisted activation (default)
- * NEXT_PUBLIC_BILLING_MODE=stripe  → Stripe checkout
+ * NEXT_PUBLIC_BILLING_MODE=paddle  → Paddle checkout
  */
 
 export function isManualBillingMode(): boolean {
-    return (process.env.NEXT_PUBLIC_BILLING_MODE ?? "manual").trim().toLowerCase() !== "stripe";
+    return (process.env.NEXT_PUBLIC_BILLING_MODE ?? "manual").trim().toLowerCase() !== "paddle";
 }
 
 /**

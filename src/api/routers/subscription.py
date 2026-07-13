@@ -96,18 +96,18 @@ def create_customer_portal(
 @router.post("/webhook", response_model=SubscriptionWebhookResponse)
 async def subscription_webhook(
     request: Request,
-    stripe_signature: str | None = Header(default=None, alias="stripe-signature"),
+    paddle_signature: str | None = Header(default=None, alias="paddle-signature"),
 ) -> SubscriptionWebhookResponse:
     payload = await request.body()
-    stripe_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
+    paddle_secret = os.getenv("PADDLE_WEBHOOK_SECRET", "").strip()
     try:
-        if stripe_secret:
-            # Signature-verified path: skip Pydantic entirely. Stripe's own payload
+        if paddle_secret:
+            # Signature-verified path: skip Pydantic entirely. Paddle's own payload
             # format may not match our schema, so we hand raw bytes + signature to
-            # stripe.Webhook.construct_event() which is the authoritative decoder.
+            # paddle_client.verify_webhook_signature() which is the authoritative check.
             # The sentinel is never inspected by handle_subscription_webhook here.
-            sentinel = WebhookEvent(id="stripe_signed_event", type="stripe.signed", data={})
-            return handle_subscription_webhook(sentinel, payload=payload, signature=stripe_signature)
+            sentinel = WebhookEvent(id="paddle_signed_event", type="paddle.signed", data={})
+            return handle_subscription_webhook(sentinel, payload=payload, signature=paddle_signature)
         # No webhook secret: mock/dev mode — validate body with Pydantic normally.
         body = json.loads(payload or b"{}")
         event = WebhookEvent.model_validate(body)
@@ -119,5 +119,5 @@ async def subscription_webhook(
     except HTTPException:
         raise
     except Exception:
-        logger.exception("stripe_webhook_error")
-        raise HTTPException(status_code=500, detail="Stripe webhook processing failed")
+        logger.exception("paddle_webhook_error")
+        raise HTTPException(status_code=500, detail="Paddle webhook processing failed")

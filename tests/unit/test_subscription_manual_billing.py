@@ -82,9 +82,9 @@ def test_manual_billing_plan_field_matches_request() -> None:
     assert result.plan == SubscriptionTier.PREMIUM
 
 
-def test_manual_billing_mode_even_when_stripe_key_present() -> None:
-    """BILLING_MODE=manual takes priority even if STRIPE_SECRET_KEY is set."""
-    with patch.dict(os.environ, {"BILLING_MODE": "manual", "STRIPE_SECRET_KEY": "sk_test_fake"}):
+def test_manual_billing_mode_even_when_paddle_key_present() -> None:
+    """BILLING_MODE=manual takes priority even if PADDLE_API_KEY is set."""
+    with patch.dict(os.environ, {"BILLING_MODE": "manual", "PADDLE_API_KEY": "pdl_test_fake"}):
         result = build_checkout_response("user@example.com", _make_request("pro"))
     assert result.provider == "manual"
     assert result.checkout_url.startswith("https://wa.me/")

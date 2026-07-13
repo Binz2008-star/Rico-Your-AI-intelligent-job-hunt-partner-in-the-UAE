@@ -1583,8 +1583,8 @@ export interface UserSubscription {
   user_id: string;
   plan: "free" | "pro" | "premium";
   subscription_status: "active" | "inactive" | "past_due" | "canceled";
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
+  paddle_customer_id: string | null;
+  paddle_subscription_id: string | null;
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at: string | null;
@@ -1601,7 +1601,7 @@ export interface SubscriptionMeResponse {
 
 export interface CheckoutResponse {
   checkout_url: string;
-  provider: "stripe" | "mock" | "manual";
+  provider: "paddle" | "mock" | "manual";
   plan: "free" | "pro" | "premium";
   status: "ready" | "mock" | "manual";
 }
@@ -1755,7 +1755,7 @@ export async function submitAction(
 
 export async function recordSubscriptionIntent(
   plan: string,
-  billingMode: "manual" | "stripe" = "manual",
+  billingMode: "manual" | "paddle" = "manual",
   sourcePage: string = "/subscription",
 ): Promise<void> {
   try {

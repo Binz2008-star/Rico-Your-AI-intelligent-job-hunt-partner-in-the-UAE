@@ -1,13 +1,14 @@
 """Rico Hunt subscription plans and entitlement helpers."""
 from __future__ import annotations
 
-import importlib
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException
 
+from src.services import paddle_client
 from src.schemas.subscription import (
     CheckoutResponse,
     PlansResponse,
@@ -22,6 +23,8 @@ from src.schemas.subscription import (
     UserSubscription,
     WebhookEvent,
 )
+
+logger = logging.getLogger(__name__)
 
 FREE_ENTITLEMENTS = SubscriptionEntitlements(
     monthly_ai_message_limit=50,
@@ -105,8 +108,8 @@ PAID_PLANS = {
 }
 
 PRICE_ENV_BY_PLAN = {
-    SubscriptionTier.PRO: ("STRIPE_PRO_PRICE_ID", "STRIPE_PRICE_PRO"),
-    SubscriptionTier.PREMIUM: ("STRIPE_PREMIUM_PRICE_ID", "STRIPE_PRICE_PREMIUM"),
+    SubscriptionTier.PRO: "PADDLE_PRO_PRICE_ID",
+    SubscriptionTier.PREMIUM: "PADDLE_PREMIUM_PRICE_ID",
 }
 
 
@@ -154,8 +157,8 @@ def resolve_effective_user_plan(user_id: str) -> SubscriptionResponse:
         user_id=user_id,
         plan=tier,
         subscription_status=status,
-        stripe_customer_id=row.get("stripe_customer_id"),
-        stripe_subscription_id=row.get("stripe_subscription_id"),
+        paddle_customer_id=row.get("paddle_customer_id"),
+        paddle_subscription_id=row.get("paddle_subscription_id"),
         current_period_start=row.get("current_period_start"),
         current_period_end=current_period_end,
         cancel_at=row.get("cancel_at"),
@@ -175,10 +178,6 @@ def get_paid_plan(plan: SubscriptionTier) -> SubscriptionPlan:
     return PAID_PLANS[plan]
 
 
-def _load_stripe() -> Any:
-    return importlib.import_module("stripe")
-
-
 def _frontend_url() -> str:
     return os.getenv("FRONTEND_URL", "https://ricohunt.com").strip().rstrip("/") or "https://ricohunt.com"
 
@@ -191,12 +190,8 @@ def _checkout_urls(request: SubscriptionCreateRequest) -> tuple[str, str]:
     )
 
 
-def _stripe_price_id(plan: SubscriptionTier) -> str:
-    for env_name in PRICE_ENV_BY_PLAN[plan]:
-        price_id = os.getenv(env_name, "").strip()
-        if price_id:
-            return price_id
-    return ""
+def _paddle_price_id(plan: SubscriptionTier) -> str:
+    return os.getenv(PRICE_ENV_BY_PLAN[plan], "").strip()
 
 
 def _whatsapp_checkout_url(plan_label: str) -> str:
@@ -221,36 +216,29 @@ def build_checkout_response(
             status="manual",
         )
     plan = get_paid_plan(request.plan)
-    stripe_key = os.getenv("STRIPE_SECRET_KEY", "").strip()
-    stripe_price = _stripe_price_id(plan.plan)
+    paddle_price = _paddle_price_id(plan.plan)
 
-    if not stripe_key or not stripe_price:
+    if not paddle_client.is_configured() or not paddle_price:
         raise HTTPException(
             status_code=503,
             detail="Checkout is not available at this time. Please try again later or contact support.",
         )
 
-    stripe = _load_stripe()
-    stripe.api_key = stripe_key
-    success_url, cancel_url = _checkout_urls(request)
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        line_items=[{"price": stripe_price, "quantity": 1}],
-        success_url=success_url,
-        cancel_url=cancel_url,
-        customer_email=user_id,
-        metadata={"user_id": user_id, "plan": plan.plan.value},
-        subscription_data={"metadata": {"user_id": user_id, "plan": plan.plan.value}},
-    )
-    checkout_url = getattr(session, "url", None)
-    if not checkout_url and isinstance(session, dict):
-        checkout_url = session.get("url")
-    if not checkout_url:
-        raise RuntimeError("Stripe checkout session did not include a URL")
+    success_url, _cancel_url = _checkout_urls(request)
+    try:
+        checkout_url = paddle_client.create_transaction_checkout(
+            price_id=paddle_price,
+            user_id=user_id,
+            plan=plan.plan.value,
+            success_url=success_url,
+        )
+    except RuntimeError as exc:
+        logger.error("paddle_checkout_failed user=%s error=%s", user_id, exc)
+        raise HTTPException(status_code=502, detail="Could not create checkout session")
 
     return CheckoutResponse(
         checkout_url=checkout_url,
-        provider="stripe",
+        provider="paddle",
         plan=plan.plan,
         status="ready",
     )
@@ -262,9 +250,8 @@ def _webhook_response(event: Any, *, mock: bool) -> SubscriptionWebhookResponse:
         received=True,
         event_type=event_type,
         processed=(
-            event_type.startswith("checkout.")
-            or event_type.startswith("customer.subscription.")
-            or event_type.startswith("invoice.")
+            event_type.startswith("transaction.")
+            or event_type.startswith("subscription.")
         ),
         mock=mock,
     )
@@ -276,33 +263,36 @@ def handle_subscription_webhook(
     payload: bytes | None = None,
     signature: str | None = None,
 ) -> SubscriptionWebhookResponse:
-    stripe_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
-    if not stripe_secret:
+    paddle_secret = os.getenv("PADDLE_WEBHOOK_SECRET", "").strip()
+    if not paddle_secret:
         # Mock mode — no signature verification, no DB writes.
         return _webhook_response(event, mock=True)
     if not payload or not signature:
-        raise ValueError("Stripe webhook signature is required")
+        raise ValueError("Paddle webhook signature is required")
 
-    stripe = _load_stripe()
-    verified_event = stripe.Webhook.construct_event(payload, signature, stripe_secret)
+    if not paddle_client.verify_webhook_signature(payload, signature, paddle_secret):
+        raise ValueError("Paddle webhook signature verification failed")
+
+    import json
+    verified_event = json.loads(payload)
 
     # Process the verified event (idempotent, DB-backed).
     try:
-        from src.services.subscription_webhook_service import process_stripe_event
-        _ev = verified_event if isinstance(verified_event, dict) else dict(verified_event)
-        process_stripe_event(
-            event_id=_ev.get("id", ""),
-            event_type=_ev.get("type", ""),
-            event_data=_ev.get("data", {}),
+        from src.services.subscription_webhook_service import process_paddle_event
+        process_paddle_event(
+            event_id=verified_event.get("event_id", ""),
+            event_type=verified_event.get("event_type", ""),
+            event_data=verified_event,
         )
-        # Stripe always gets 200 — failures are tracked in subscription_events and
-        # surfaced via internal logs/retries, not by returning 5xx to Stripe.
+        # Paddle always gets 200 — failures are tracked in subscription_events and
+        # surfaced via internal logs/retries, not by returning 5xx to Paddle.
     except Exception:
-        import logging as _logging
-        _logging.getLogger(__name__).exception("handle_subscription_webhook: processing failed")
-        # Do not re-raise: Stripe must receive 200 so it doesn't retry blindly.
+        logger.exception("handle_subscription_webhook: processing failed")
+        # Do not re-raise: Paddle must receive 200 so it doesn't retry blindly.
 
-    return _webhook_response(verified_event, mock=False)
+    return _webhook_response(
+        {"type": verified_event.get("event_type", "")}, mock=False
+    )
 
 
 def check_usage_allowed(user_id: str, feature: str, current_usage: int) -> UsageCheckResponse:
@@ -321,51 +311,18 @@ def check_usage_allowed(user_id: str, feature: str, current_usage: int) -> Usage
 
 
 def create_customer_portal_session(user_id: str) -> CheckoutResponse:
-    """Create a Stripe Customer Portal session for subscription management."""
+    """Self-service subscription management (cancel / update payment method).
+
+    Not yet implemented for Paddle — until it is, users manage their
+    subscription through support rather than a self-service portal.
+    """
     from src.billing_mode import is_manual_billing_mode
     if is_manual_billing_mode():
         raise HTTPException(
             status_code=403,
             detail="Online checkout is not enabled. Please use manual payment activation.",
         )
-    from src.repositories.subscription_repo import get_subscription
-
-    stripe_key = os.getenv("STRIPE_SECRET_KEY", "").strip()
-    if not stripe_key:
-        return CheckoutResponse(
-            checkout_url="",
-            provider="mock",
-            plan=SubscriptionTier.FREE,
-            status="mock",
-        )
-    
-    sub = get_subscription(user_id)
-    if not sub or not sub.get("stripe_customer_id"):
-        raise ValueError("No active subscription found for user")
-    
-    stripe = _load_stripe()
-    stripe.api_key = stripe_key
-    frontend = _frontend_url()
-    
-    session = stripe.billing_portal.Session.create(
-        customer=sub["stripe_customer_id"],
-        return_url=f"{frontend}/subscription",
-    )
-    
-    try:
-        plan = SubscriptionTier(sub.get("plan", "free"))
-    except ValueError:
-        plan = SubscriptionTier.FREE
-
-    portal_url = getattr(session, "url", None)
-    if not portal_url and isinstance(session, dict):
-        portal_url = session.get("url")
-    if not portal_url:
-        raise RuntimeError("Stripe billing portal session did not include a URL")
-
-    return CheckoutResponse(
-        checkout_url=portal_url,
-        provider="stripe",
-        plan=plan,
-        status="ready",
+    raise HTTPException(
+        status_code=501,
+        detail="Self-service subscription management is not available yet. Please contact support.",
     )

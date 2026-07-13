@@ -105,6 +105,7 @@ Where relevant, cover:
 - Job search API: JSearch / RapidAPI
 - Notifications: Telegram
 - Intake fallback: Jotform
+- Billing: Paddle (BILLING_MODE=paddle) → manual/WhatsApp fallback (default)
 - AI providers: OpenAI (gpt-4.1-mini) → DeepSeek (deepseek-v4-flash) → HuggingFace → Keyword Fallback
 
 ## Production Source of Truth
@@ -182,6 +183,11 @@ The repo combines three layers:
 - `src/agent/runtime.py` — central action dispatcher; idempotency, audit logging, dry-run
 - `src/agent/registry/tool_registry.py` — declarative tool system
 - `src/services/chat_service.py` — chat business logic
+- `src/billing_mode.py` — BILLING_MODE guard (manual vs. paddle)
+- `src/subscription_plans.py` — plan definitions, entitlements, checkout/webhook orchestration
+- `src/services/paddle_client.py` — Paddle Billing REST API client (checkout, webhook signature verification)
+- `src/services/subscription_webhook_service.py` — Paddle webhook event processing (idempotent)
+- `src/api/routers/subscription.py` — subscription plans/checkout/portal/webhook routes
 - `src/db.py` — DB connection layer
 - `src/repositories/*` — repository layer
 - `src/run_daily.py` — Daily Job Bot / intelligence pipeline
@@ -225,6 +231,11 @@ The repo combines three layers:
 - `POST /api/v1/rico/webhooks/telegram`
 - `POST /api/v1/rico/webhooks/github`
 - `POST /api/v1/agent/chat`
+- `GET /api/v1/subscription/plans`
+- `GET /api/v1/subscription/me`
+- `POST /api/v1/subscription/checkout`
+- `POST /api/v1/subscription/portal`
+- `POST /api/v1/subscription/webhook`
 - `POST /api/v1/actions/run`
 - `GET /api/v1/pipeline/status`
 - `POST /api/v1/pipeline/trigger`
@@ -322,6 +333,17 @@ JOTFORM_API_KEY=
 JOTFORM_FORM_ID=
 JOTFORM_WEBHOOK_SECRET=
 
+# Billing (Paddle). BILLING_MODE defaults to "manual" (WhatsApp-assisted
+# activation) so Paddle is never accidentally exposed in production; set to
+# "paddle" to enable checkout. See src/billing_mode.py, src/subscription_plans.py,
+# src/services/paddle_client.py, src/services/subscription_webhook_service.py.
+BILLING_MODE=manual
+PADDLE_API_KEY=
+PADDLE_WEBHOOK_SECRET=
+PADDLE_ENVIRONMENT=sandbox
+PADDLE_PRO_PRICE_ID=
+PADDLE_PREMIUM_PRICE_ID=
+
 RICO_ENABLE_AUTO_APPLY=false
 RICO_INTERACTIVE_APPLY=false
 RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true
@@ -343,6 +365,10 @@ EMAIL_TO=
 
 ```env
 NEXT_PUBLIC_RICO_API=https://rico-job-automation-api.onrender.com
+
+# Billing mode. Default: manual (WhatsApp-assisted activation).
+# Set to "paddle" to enable Paddle checkout UI (requires backend BILLING_MODE=paddle).
+NEXT_PUBLIC_BILLING_MODE=manual
 ```
 
 Do not invent new env var names unless the code is being intentionally migrated.
@@ -391,6 +417,25 @@ Do not invent new env var names unless the code is being intentionally migrated.
 ## Migration Status: `lib/client.ts` → `lib/api.ts`
 
 Migration is complete. `apps/web/lib/client.ts` has been deleted. All API calls now go through `apps/web/lib/api.ts`. Do not reintroduce `lib/client.ts`.
+
+## Migration Status: Stripe → Paddle Billing
+
+Paddle fully replaces Stripe as the subscription payment provider. `stripe` has
+been removed from `requirements.txt`; there is no Stripe code path anywhere in
+`src/`. `user_subscriptions.stripe_customer_id` / `stripe_subscription_id`
+columns remain in the Neon schema (unused, left for historical/rollback
+safety) — new code must read/write `paddle_customer_id` / `paddle_subscription_id`
+only. `subscription_events.stripe_event_id` is intentionally unchanged and now
+stores Paddle event IDs (a generic-enough column that a rename wasn't
+warranted). Do not reintroduce a Stripe code path or add `stripe` back to
+`requirements.txt`.
+
+Self-service subscription management (cancel / update payment method) is
+**not yet implemented** for Paddle — `POST /api/v1/subscription/portal`
+returns `501` in `paddle` billing mode until it is. Manual/WhatsApp mode is
+unaffected (still returns `403`, unchanged). Do not fabricate a Paddle
+customer-portal integration without verifying the exact API shape against a
+real Paddle sandbox account first.
 
 ## Agent Runtime Rules
 

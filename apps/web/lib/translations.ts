@@ -179,7 +179,7 @@ export const translations = {
     signInToAgent: "Sign in to your autonomous job agent",
     backendMaintenance: "Backend maintenance in progress",
     backendMaintenanceAuth:
-      "Rico's backend service is temporarily offline while hosting is being restored. Subscription, login, Telegram, and Stripe webhook features are paused. No payment validation should be attempted until the backend is back online.",
+      "Rico's backend service is temporarily offline while hosting is being restored. Subscription, login, Telegram, and Paddle webhook features are paused. No payment validation should be attempted until the backend is back online.",
     authenticating: "Authenticating...",
     accessIntelligence: "Access Intelligence",
     pleaseVerifyEmail:
@@ -256,23 +256,23 @@ export const translations = {
     faqHowUpgrade: "How does upgrading work?",
     faqHowUpgradeManual:
       "Click the WhatsApp button on your chosen plan. Send us your Rico account email and preferred plan. We'll confirm your payment and activate your account within a few hours.",
-    faqHowUpgradeStripe:
+    faqHowUpgradePaddle:
       "Click Upgrade to be taken to secure checkout. After payment your plan activates immediately.",
     faqPaymentMethods: "What payment methods are accepted?",
     faqPaymentMethodsManual:
       "We accept bank transfer, Ziina, and Mamo. After payment, send the receipt and your Rico account email via WhatsApp for activation.",
-    faqPaymentMethodsStripe:
+    faqPaymentMethodsPaddle:
       "We accept all major credit and debit cards. Your payment is securely processed and card details are never stored on our servers.",
     faqActivationTime: "How quickly is my account activated?",
     faqActivationTimeManual:
       "After we receive your payment confirmation via WhatsApp, your Rico account is activated within a few hours. You will need to logout and log back in if premium access does not appear immediately.",
-    faqActivationTimeStripe:
+    faqActivationTimePaddle:
       "Activation is immediate after successful payment.",
     faqChangeCancel: "Can I change or cancel my plan?",
     faqChangeCancelManual:
       "Contact Rico support via WhatsApp to adjust or cancel your subscription. Your access continues until the end of your current period.",
-    faqChangeCancelStripe:
-      "You can upgrade, downgrade, or cancel at any time through the subscription management portal. When cancelling, access continues until the end of the billing period.",
+    faqChangeCancelPaddle:
+      "Contact Rico support to upgrade, downgrade, or cancel your subscription. When cancelling, access continues until the end of the billing period.",
     pricesInAED: "Prices in AED. Billed monthly. Cancel any time.",
     subscriptionPaymentConfiguring: "Payment processing is being configured. No charge has been made.",
     subscriptionCheckoutFailed: "Checkout failed. Please try again.",
@@ -1357,7 +1357,7 @@ export const translations = {
     signInToAgent: "سجّل الدخول إلى وكيل الوظائف الذكي",
     backendMaintenance: "صيانة الخادم قيد التقدم",
     backendMaintenanceAuth:
-      "خدمة خادم ريكو متوقفة مؤقتًا أثناء استعادة الاستضافة. الاشتراك، تسجيل الدخول، تيليجرام، وخطافات Stripe متوقفة. لا يجب محاولة التحقق من الدفع حتى يعود الخادم للعمل.",
+      "خدمة خادم ريكو متوقفة مؤقتًا أثناء استعادة الاستضافة. الاشتراك، تسجيل الدخول، تيليجرام، وخطافات Paddle متوقفة. لا يجب محاولة التحقق من الدفع حتى يعود الخادم للعمل.",
     authenticating: "جاري المصادقة...",
     accessIntelligence: "الوصول إلى الذكاء",
     pleaseVerifyEmail:
@@ -1433,22 +1433,22 @@ export const translations = {
     faqHowUpgrade: "كيف تعمل الترقية؟",
     faqHowUpgradeManual:
       "انقر على زر واتساب في الخطة المختارة. أرسل لنا بريدك الإلكتروني في ريكو والخطة المفضلة. سنؤكد دفعك ونفعل حسابك خلال بضع ساعات.",
-    faqHowUpgradeStripe:
+    faqHowUpgradePaddle:
       "انقر ترقية للانتقال إلى الدفع الآمن. بعد الدفع، يتم تفعيل خطتك فورًا.",
     faqPaymentMethods: "ما هي طرق الدفع المقبولة؟",
     faqPaymentMethodsManual:
       "نقبل التحويل البنكي وزيينة ومامو. بعد الدفع، أرسل الإيصال وبريدك الإلكتروني في ريكو عبر واتساب للتفعيل.",
-    faqPaymentMethodsStripe:
+    faqPaymentMethodsPaddle:
       "نقبل جميع بطاقات الائتمان والخصم الرئيسية. يتم معالجة الدفع بشكل آمن ولا يتم تخزين تفاصيل البطاقة على خوادمنا.",
     faqActivationTime: "كم سرعة تفعيل حسابي؟",
     faqActivationTimeManual:
       "بعد استلام تأكيد الدفع عبر واتساب، يتم تفعيل حساب ريكو خلال بضع ساعات. قد تحتاج إلى تسجيل الخروج وتسجيل الدخول مرة أخرى إذا لم يظهر الوصول المميز فورًا.",
-    faqActivationTimeStripe: "التفعيل فوري بعد الدفع الناجح.",
+    faqActivationTimePaddle: "التفعيل فوري بعد الدفع الناجح.",
     faqChangeCancel: "هل يمكنني تغيير أو إلغاء خطتي؟",
     faqChangeCancelManual:
       "اتصل بدعم ريكو عبر واتساب لضبط أو إلغاء اشتراكك. يستمر الوصول حتى نهاية فترتك الحالية.",
-    faqChangeCancelStripe:
-      "يمكنك الترقية أو التخفيض أو الإلغاء في أي وقت من خلال بوابة إدارة الاشتراك. عند الإلغاء، يستمر الوصول حتى نهاية فترة الفوترة.",
+    faqChangeCancelPaddle:
+      "اتصل بدعم ريكو للترقية أو التخفيض أو الإلغاء. عند الإلغاء، يستمر الوصول حتى نهاية فترة الفوترة.",
     pricesInAED: "الأسعار بالدرهم الإمارات. فوترة شهرية. إلغاء في أي وقت.",
     subscriptionPaymentConfiguring: "معالجة الدفع قيد الإعداد. لم يتم خصم أي رسوم.",
     subscriptionCheckoutFailed: "فشل الدفع. يرجى المحاولة مرة أخرى.",

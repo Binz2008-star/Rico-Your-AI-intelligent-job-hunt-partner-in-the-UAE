@@ -62,6 +62,7 @@ CHECKS: list[tuple[str, str, object]] = [
     ("037", "index", "uq_user_documents_user_type_hash"),
     ("037", "index", "uq_user_documents_one_primary_per_type"),
     ("038", "table", "cv_upload_artifacts"),
+    ("039", "column", ("user_subscriptions", "paddle_customer_id")),
 ]
 
 

@@ -472,7 +472,7 @@ export default function SubscriptionPage() {
                 return;
             }
             // Safety guard: if env var is missing/wrong and manual mode is active,
-            // open WhatsApp directly — never call the Stripe checkout API.
+            // open WhatsApp directly — never call the Paddle checkout API.
             if (MANUAL_BILLING) {
                 const price = plans.find((p) => p.plan === plan)?.price_monthly ?? null;
                 window.open(buildWhatsAppUpgradeUrl(plan, userEmail, price), "_blank", "noopener,noreferrer");
@@ -503,7 +503,7 @@ export default function SubscriptionPage() {
     );
 
     const handleIntent = useCallback((plan: "pro" | "premium") => {
-        void recordSubscriptionIntent(plan, MANUAL_BILLING ? "manual" : "stripe", "/subscription");
+        void recordSubscriptionIntent(plan, MANUAL_BILLING ? "manual" : "paddle", "/subscription");
     }, []);
 
     const handleManage = useCallback(async () => {
@@ -597,7 +597,7 @@ export default function SubscriptionPage() {
                     </div>
                 )}
 
-                {/* Stripe cancel redirect banner (only relevant in Stripe mode) */}
+                {/* Paddle cancel redirect banner (only relevant in Paddle mode) */}
                 {!MANUAL_BILLING && (
                     <Suspense>
                         <CancelBanner />
@@ -702,7 +702,7 @@ export default function SubscriptionPage() {
                             <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqHowUpgradeManual')
-                                    : t('faqHowUpgradeStripe')}
+                                    : t('faqHowUpgradePaddle')}
                             </p>
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
@@ -710,7 +710,7 @@ export default function SubscriptionPage() {
                             <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqPaymentMethodsManual')
-                                    : t('faqPaymentMethodsStripe')}
+                                    : t('faqPaymentMethodsPaddle')}
                             </p>
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
@@ -718,7 +718,7 @@ export default function SubscriptionPage() {
                             <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqActivationTimeManual')
-                                    : t('faqActivationTimeStripe')}
+                                    : t('faqActivationTimePaddle')}
                             </p>
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
@@ -726,7 +726,7 @@ export default function SubscriptionPage() {
                             <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqChangeCancelManual')
-                                    : t('faqChangeCancelStripe')}
+                                    : t('faqChangeCancelPaddle')}
                             </p>
                         </div>
                     </div>

@@ -30,8 +30,8 @@ def _fake_row(**overrides) -> dict:
         "user_id": "alice@rico.ai",
         "plan": "pro",
         "status": "active",
-        "stripe_customer_id": "cus_test",
-        "stripe_subscription_id": "sub_test",
+        "paddle_customer_id": "ctm_test",
+        "paddle_subscription_id": "sub_test",
         "current_period_start": None,
         "current_period_end": None,
         "created_at": None,
@@ -95,7 +95,7 @@ class TestGetSubscription:
         assert result is not None
         assert result["plan"] == "pro"
         assert result["status"] == "active"
-        assert result["stripe_customer_id"] == "cus_test"
+        assert result["paddle_customer_id"] == "ctm_test"
 
     def test_returns_none_on_db_exception(self, monkeypatch):
         import src.repositories.subscription_repo as repo
@@ -210,7 +210,7 @@ class TestMeEndpointDbBacked:
         assert body["is_active"] is True
         assert body["subscription"]["plan"] == "pro"
         assert body["subscription"]["subscription_status"] == "active"
-        assert body["subscription"]["stripe_customer_id"] == "cus_test"
+        assert body["subscription"]["paddle_customer_id"] == "ctm_test"
         assert body["plan"]["price_monthly"] == 29
         assert body["plan"]["currency"] == "AED"
         assert body["subscription"]["entitlements"]["monthly_ai_message_limit"] == 300
@@ -351,13 +351,13 @@ class TestRecordSubscriptionEvent:
     def test_returns_true_on_fresh_insert(self, monkeypatch):
         import src.repositories.subscription_repo as repo
         monkeypatch.setattr(repo, "_db_transaction", self._make_transaction_mock(rowcount=1))
-        result = repo.record_subscription_event("evt_new", "checkout.session.completed")
+        result = repo.record_subscription_event("evt_new", "transaction.completed")
         assert result is True
 
     def test_returns_false_on_duplicate(self, monkeypatch):
         import src.repositories.subscription_repo as repo
         monkeypatch.setattr(repo, "_db_transaction", self._make_transaction_mock(rowcount=0))
-        result = repo.record_subscription_event("evt_dup", "checkout.session.completed")
+        result = repo.record_subscription_event("evt_dup", "transaction.completed")
         assert result is False
 
     def test_returns_false_when_db_unavailable(self, monkeypatch):
@@ -369,7 +369,7 @@ class TestRecordSubscriptionEvent:
             yield None
 
         monkeypatch.setattr(repo, "_db_transaction", no_db)
-        result = repo.record_subscription_event("evt_any", "checkout.session.completed")
+        result = repo.record_subscription_event("evt_any", "transaction.completed")
         assert result is False
 
     def test_returns_false_on_db_exception(self, monkeypatch):
@@ -382,21 +382,21 @@ class TestRecordSubscriptionEvent:
             yield  # noqa: unreachable
 
         monkeypatch.setattr(repo, "_db_transaction", exploding)
-        result = repo.record_subscription_event("evt_err", "checkout.session.completed")
+        result = repo.record_subscription_event("evt_err", "transaction.completed")
         assert result is False
 
     def test_returns_true_when_reclaiming_failed_event(self, monkeypatch):
         # ON CONFLICT DO UPDATE WHERE status='failed' fires → rowcount=1 → re-claim succeeds
         import src.repositories.subscription_repo as repo
         monkeypatch.setattr(repo, "_db_transaction", self._make_transaction_mock(rowcount=1))
-        result = repo.record_subscription_event("evt_retry", "checkout.session.completed")
+        result = repo.record_subscription_event("evt_retry", "transaction.completed")
         assert result is True
 
     def test_returns_false_when_event_is_in_progress(self, monkeypatch):
         # Another worker holds status='pending' → DO UPDATE WHERE condition is false → rowcount=0
         import src.repositories.subscription_repo as repo
         monkeypatch.setattr(repo, "_db_transaction", self._make_transaction_mock(rowcount=0))
-        result = repo.record_subscription_event("evt_inprog", "checkout.session.completed")
+        result = repo.record_subscription_event("evt_inprog", "transaction.completed")
         assert result is False
 
 
@@ -583,7 +583,7 @@ class TestSubscriptionEventsDefaultStatus:
         import src.repositories.subscription_repo as repo
         txn, executed = self._make_capture_mock()
         monkeypatch.setattr(repo, "_db_transaction", txn)
-        repo.record_subscription_event("evt_new", "checkout.session.completed")
+        repo.record_subscription_event("evt_new", "transaction.completed")
 
         # Check that the INSERT uses DEFAULT 'pending' for status column
         insert_sql = executed[0]

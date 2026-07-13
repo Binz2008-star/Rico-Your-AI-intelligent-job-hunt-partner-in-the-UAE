@@ -51,9 +51,9 @@ def admin_client():
 class TestBillingModeHelpers:
     def test_manual_is_default(self, monkeypatch):
         monkeypatch.delenv("BILLING_MODE", raising=False)
-        from src.billing_mode import is_manual_billing_mode, is_stripe_billing_mode
+        from src.billing_mode import is_manual_billing_mode, is_paddle_billing_mode
         assert is_manual_billing_mode() is True
-        assert is_stripe_billing_mode() is False
+        assert is_paddle_billing_mode() is False
 
     def test_explicit_manual(self, monkeypatch):
         monkeypatch.setenv("BILLING_MODE", "manual")
@@ -61,24 +61,24 @@ class TestBillingModeHelpers:
         import src.billing_mode as bm
         reload(bm)
         assert bm.is_manual_billing_mode() is True
-        assert bm.is_stripe_billing_mode() is False
+        assert bm.is_paddle_billing_mode() is False
 
-    def test_explicit_stripe(self, monkeypatch):
-        monkeypatch.setenv("BILLING_MODE", "stripe")
+    def test_explicit_paddle(self, monkeypatch):
+        monkeypatch.setenv("BILLING_MODE", "paddle")
         from importlib import reload
         import src.billing_mode as bm
         reload(bm)
         assert bm.is_manual_billing_mode() is False
-        assert bm.is_stripe_billing_mode() is True
+        assert bm.is_paddle_billing_mode() is True
 
 
-# ── Manual mode blocks Stripe checkout ────────────────────────────────────────
+# ── Manual mode blocks Paddle checkout ────────────────────────────────────────
 
 class TestManualModeBlocksCheckout:
     def test_checkout_returns_whatsapp_redirect_in_manual_mode(self, user_client, monkeypatch):
         monkeypatch.setenv("BILLING_MODE", "manual")
-        monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_safe")
-        monkeypatch.setenv("STRIPE_PRO_PRICE_ID", "price_test_pro")
+        monkeypatch.setenv("PADDLE_API_KEY", "pdl_test_safe")
+        monkeypatch.setenv("PADDLE_PRO_PRICE_ID", "pri_test_pro")
 
         r = user_client.post("/api/v1/subscription/checkout", json={"plan": "pro"})
 
@@ -89,7 +89,7 @@ class TestManualModeBlocksCheckout:
 
     def test_portal_returns_403_in_manual_mode(self, user_client, monkeypatch):
         monkeypatch.setenv("BILLING_MODE", "manual")
-        monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_safe")
+        monkeypatch.setenv("PADDLE_API_KEY", "pdl_test_safe")
 
         r = user_client.post("/api/v1/subscription/portal")
 
@@ -97,34 +97,32 @@ class TestManualModeBlocksCheckout:
         detail = r.json()["detail"].lower()
         assert "online checkout is not enabled" in detail
 
-    def test_checkout_passes_in_stripe_mode(self, user_client, monkeypatch):
-        from types import SimpleNamespace
-
+    def test_checkout_passes_in_paddle_mode(self, user_client, monkeypatch):
         calls: list = []
 
-        class FakeSession:
-            @staticmethod
-            def create(**kwargs):
-                calls.append(kwargs)
-                return {"url": "https://checkout.stripe.com/c/pay/cs_test_ok"}
+        def fake_create_transaction_checkout(**kwargs):
+            calls.append(kwargs)
+            return "https://checkout.paddle.com/c/pay/txn_test_ok"
 
-        fake_stripe = SimpleNamespace(api_key=None, checkout=SimpleNamespace(Session=FakeSession))
-        monkeypatch.setenv("BILLING_MODE", "stripe")
-        monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_safe")
-        monkeypatch.setenv("STRIPE_PRO_PRICE_ID", "price_pro_test")
-        monkeypatch.setattr("src.subscription_plans._load_stripe", lambda: fake_stripe)
+        monkeypatch.setenv("BILLING_MODE", "paddle")
+        monkeypatch.setenv("PADDLE_API_KEY", "pdl_test_safe")
+        monkeypatch.setenv("PADDLE_PRO_PRICE_ID", "pri_pro_test")
+        monkeypatch.setattr(
+            "src.services.paddle_client.create_transaction_checkout",
+            fake_create_transaction_checkout,
+        )
 
         r = user_client.post("/api/v1/subscription/checkout", json={"plan": "pro"})
 
         assert r.status_code == 200
-        assert r.json()["checkout_url"] == "https://checkout.stripe.com/c/pay/cs_test_ok"
-        assert r.json()["provider"] == "stripe"
+        assert r.json()["checkout_url"] == "https://checkout.paddle.com/c/pay/txn_test_ok"
+        assert r.json()["provider"] == "paddle"
         assert len(calls) == 1
 
     def test_premium_checkout_returns_whatsapp_redirect_in_manual_mode(self, user_client, monkeypatch):
         monkeypatch.setenv("BILLING_MODE", "manual")
-        monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_safe")
-        monkeypatch.setenv("STRIPE_PREMIUM_PRICE_ID", "price_test_premium")
+        monkeypatch.setenv("PADDLE_API_KEY", "pdl_test_safe")
+        monkeypatch.setenv("PADDLE_PREMIUM_PRICE_ID", "pri_test_premium")
 
         r = user_client.post("/api/v1/subscription/checkout", json={"plan": "premium"})
 

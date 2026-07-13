@@ -57,7 +57,7 @@ def get_subscription(user_id: str) -> dict[str, Any] | None:
             cur.execute(
                 """
                 SELECT user_id, plan, status,
-                       stripe_customer_id, stripe_subscription_id,
+                       paddle_customer_id, paddle_subscription_id,
                        current_period_start, current_period_end,
                        cancel_at, canceled_at,
                        monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
@@ -78,8 +78,8 @@ def get_subscription(user_id: str) -> dict[str, Any] | None:
             conn.close()
 
 
-def get_subscription_by_stripe_customer(stripe_customer_id: str) -> dict[str, Any] | None:
-    """Look up a subscription by Stripe customer ID (for webhook processing).
+def get_subscription_by_paddle_customer(paddle_customer_id: str) -> dict[str, Any] | None:
+    """Look up a subscription by Paddle customer ID (for webhook processing).
 
     Returns the most-recently-updated row when multiple records share the same
     customer ID (e.g. after a plan migration that left stale rows).
@@ -94,25 +94,25 @@ def get_subscription_by_stripe_customer(stripe_customer_id: str) -> dict[str, An
             cur.execute(
                 """
                 SELECT user_id, plan, status,
-                       stripe_customer_id, stripe_subscription_id,
+                       paddle_customer_id, paddle_subscription_id,
                        current_period_start, current_period_end,
                        cancel_at, canceled_at,
                        monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
                        premium_recommendations_enabled, application_automation_enabled,
                        created_at, updated_at
                 FROM user_subscriptions
-                WHERE stripe_customer_id = %s
+                WHERE paddle_customer_id = %s
                 ORDER BY updated_at DESC
                 LIMIT 1
                 """,
-                (stripe_customer_id,),
+                (paddle_customer_id,),
             )
             row = cur.fetchone()
         return dict(row) if row else None
     except Exception:
         logger.exception(
-            "subscription_repo: get_subscription_by_stripe_customer failed cus=%s",
-            stripe_customer_id,
+            "subscription_repo: get_subscription_by_paddle_customer failed cus=%s",
+            paddle_customer_id,
         )
         return None
     finally:
@@ -127,8 +127,8 @@ def upsert_subscription(
     *,
     plan: str,
     status: str,
-    stripe_customer_id: str | None = None,
-    stripe_subscription_id: str | None = None,
+    paddle_customer_id: str | None = None,
+    paddle_subscription_id: str | None = None,
     current_period_start: datetime | None = None,
     current_period_end: datetime | None = None,
     cancel_at: datetime | None = None,
@@ -142,7 +142,7 @@ def upsert_subscription(
 ) -> dict[str, Any] | None:
     """Create or update a subscription record.
 
-    Stripe ID fields use COALESCE so an upsert without IDs never clears
+    Paddle ID fields use COALESCE so an upsert without IDs never clears
     an existing customer/subscription ID — only an explicit non-None value
     will overwrite.
 
@@ -169,7 +169,7 @@ def upsert_subscription(
                     f"""
                     INSERT INTO user_subscriptions
                         (user_id, plan, status,
-                         stripe_customer_id, stripe_subscription_id,
+                         paddle_customer_id, paddle_subscription_id,
                          current_period_start, current_period_end,
                          cancel_at, canceled_at,
                          monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
@@ -178,13 +178,13 @@ def upsert_subscription(
                     ON CONFLICT (user_id) DO UPDATE SET
                         plan                           = EXCLUDED.plan,
                         status                         = EXCLUDED.status,
-                        stripe_customer_id             = COALESCE(
-                            EXCLUDED.stripe_customer_id,
-                            user_subscriptions.stripe_customer_id
+                        paddle_customer_id             = COALESCE(
+                            EXCLUDED.paddle_customer_id,
+                            user_subscriptions.paddle_customer_id
                         ),
-                        stripe_subscription_id         = COALESCE(
-                            EXCLUDED.stripe_subscription_id,
-                            user_subscriptions.stripe_subscription_id
+                        paddle_subscription_id         = COALESCE(
+                            EXCLUDED.paddle_subscription_id,
+                            user_subscriptions.paddle_subscription_id
                         ),
                         current_period_start           = COALESCE(
                             EXCLUDED.current_period_start,
@@ -218,7 +218,7 @@ def upsert_subscription(
                         ),
                         updated_at                     = NOW()
                     RETURNING user_id, plan, status,
-                              stripe_customer_id, stripe_subscription_id,
+                              paddle_customer_id, paddle_subscription_id,
                               current_period_start, current_period_end,
                               cancel_at, canceled_at,
                               monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
@@ -227,7 +227,7 @@ def upsert_subscription(
                     """,
                     (
                         user_id, plan, status,
-                        stripe_customer_id, stripe_subscription_id,
+                        paddle_customer_id, paddle_subscription_id,
                         current_period_start, current_period_end,
                         cancel_at, canceled_at,
                         monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
@@ -242,13 +242,15 @@ def upsert_subscription(
 
 
 # ── Webhook idempotency ───────────────────────────────────────────────────────
+# The ledger column is still named stripe_event_id in the DB (schema left
+# unchanged to avoid an unnecessary migration); it now stores Paddle event IDs.
 
-def event_already_processed(stripe_event_id: str) -> bool:
-    """Return True if this Stripe event has already completed successfully."""
-    return get_subscription_event_status(stripe_event_id) == "processed"
+def event_already_processed(event_id: str) -> bool:
+    """Return True if this Paddle event has already completed successfully."""
+    return get_subscription_event_status(event_id) == "processed"
 
 
-def get_subscription_event_status(stripe_event_id: str) -> str | None:
+def get_subscription_event_status(event_id: str) -> str | None:
     """Return the current subscription_events status, or None if missing / DB unavailable."""
     db = _db()
     if not db:
@@ -263,13 +265,13 @@ def get_subscription_event_status(stripe_event_id: str) -> str | None:
                   FROM subscription_events
                  WHERE stripe_event_id = %s
                 """,
-                (stripe_event_id,),
+                (event_id,),
             )
             row = cur.fetchone()
             return row["status"] if row and row.get("status") else None
     except Exception:
         logger.exception(
-            "subscription_repo: get_subscription_event_status failed event_id=%s", stripe_event_id
+            "subscription_repo: get_subscription_event_status failed event_id=%s", event_id
         )
         return None
     finally:
@@ -278,13 +280,13 @@ def get_subscription_event_status(stripe_event_id: str) -> str | None:
 
 
 def record_subscription_event(
-    stripe_event_id: str,
+    event_id: str,
     event_type: str,
     *,
     user_id: str | None = None,
     payload: dict[str, Any] | None = None,
 ) -> bool:
-    """Atomically claim a Stripe webhook event for processing.
+    """Atomically claim a Paddle webhook event for processing.
 
     Returns True when the caller should proceed with side effects:
       - newly inserted (first time we've seen this event_id), OR
@@ -316,19 +318,19 @@ def record_subscription_event(
                             error_detail = NULL
                       WHERE subscription_events.status = 'failed'
                     """,
-                    (stripe_event_id, event_type, user_id, Json(payload or {})),
+                    (event_id, event_type, user_id, Json(payload or {})),
                 )
                 inserted = cur.rowcount > 0
         return inserted
     except Exception:
         logger.exception(
-            "subscription_repo: record_subscription_event failed event_id=%s", stripe_event_id
+            "subscription_repo: record_subscription_event failed event_id=%s", event_id
         )
         return False
 
 
 def update_subscription_event_status(
-    stripe_event_id: str,
+    event_id: str,
     status: str,
     *,
     error_detail: str | None = None,
@@ -352,7 +354,7 @@ def update_subscription_event_status(
                            SET status = %s, error_detail = %s, processed_at = NOW()
                          WHERE stripe_event_id = %s
                         """,
-                        (status, error_detail, stripe_event_id),
+                        (status, error_detail, event_id),
                     )
                 else:
                     cur.execute(
@@ -361,12 +363,12 @@ def update_subscription_event_status(
                            SET status = %s, error_detail = %s
                          WHERE stripe_event_id = %s
                         """,
-                        (status, error_detail, stripe_event_id),
+                        (status, error_detail, event_id),
                     )
                 return cur.rowcount > 0
     except Exception:
         logger.exception(
-            "subscription_repo: update_subscription_event_status failed event_id=%s", stripe_event_id
+            "subscription_repo: update_subscription_event_status failed event_id=%s", event_id
         )
         return False
 
