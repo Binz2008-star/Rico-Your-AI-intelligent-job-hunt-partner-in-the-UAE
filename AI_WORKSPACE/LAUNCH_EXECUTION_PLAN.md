@@ -27,16 +27,17 @@ Make repository coordination reflect live GitHub state before additional impleme
 
 ### Deliverables
 
-- Current `main` SHA recorded.
-- Every open PR classified as `ACTIVE`, `REVIEW`, `HOLD`, `STALE/CLOSE`, or `REFERENCE`.
-- One active runtime objective recorded.
-- Each active branch has one owner and one role.
+- Current `main` SHA fetched and reported at every session start.
+- Every relevant open PR classified as `ACTIVE`, `REVIEW`, `HOLD`, `STALE/CLOSE`, or `REFERENCE`.
+- One active runtime objective recorded after the control-plane PR is merged.
+- Each active branch has one owner and one authority role.
 - Stale branches are explicitly prohibited from resumption.
-- Daily Autopilot is mandatory for every agent session.
+- Daily Autopilot is mandatory after the canonical `OPERATING_RULES.md` boot sequence.
+- Every active PR has a current TASKS Continuity Block and dated handoff when incomplete.
 
 ### Exit gate
 
-No unknown writer, no competing branch, and no stale control document claiming an obsolete execution lock.
+No unknown writer, no competing branch, no missing Continuity Block, and no stale control document claiming an obsolete execution lock.
 
 ## Phase 1 — Route and design parity inventory
 
@@ -103,6 +104,16 @@ Price: AED 79 per month
 Paid plans exposed to users: one
 Billing authority: verified provider webhook, never frontend success state
 ```
+
+### Entry gate
+
+Before billing implementation resumes:
+
+- deep-review PR #1008 together with subscription-gating follow-up #989;
+- identify every changed file, migration/config dependency, and external contract;
+- confirm whether #1008 is salvageable or must be superseded by smaller PRs;
+- record a dedicated billing task and Continuity Block;
+- keep production provider mutation forbidden without explicit owner approval.
 
 ### Required implementation
 
@@ -177,14 +188,16 @@ Only the owner authorizes removal of the teaser/waitlist/access gate and product
 
 ## Agent allocation model
 
-| Agent/session | Primary role | Allowed work |
+| Agent/session | Primary authority role | Allowed work |
 | --- | --- | --- |
 | UI account/session | WRITER | one route-group UI PR at a time |
 | Backend/billing account/session | WRITER | billing or invitations, never overlapping UI files without agreement |
 | Independent account/session | REVIEWER / RELEASE | diff review, CI, deployment and smoke evidence |
-| Local Windsurf/OneSurf | verifier | focused local build/tests/screenshots; no foreign-branch edits |
-| Codex | reviewer | correctness/regression signal only |
+| Local Windsurf/OneSurf | verifier activity | focused local build/tests/screenshots; no foreign-branch edits |
+| Codex | reviewer activity | correctness/regression signal only |
 | Lovable | design reference | prototypes and handoff evidence; no backend/billing/auth mutation |
+
+Every session must also state its activity pass from `OPERATING_RULES.md`.
 
 ## Definition of done
 
