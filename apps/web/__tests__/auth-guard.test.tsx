@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Auth guard for authenticated-only account pages (/settings, /profile).
+ * Auth guard for authenticated-only account pages (/settings, /profile,
+ * /applications).
  *
  * Confirmed production bugs this pins:
  *  - guest direct access to /settings rendered the private AppShell
@@ -23,10 +24,12 @@ const { replace, push, pathnameMock } = vi.hoisted(() => ({
   pathnameMock: vi.fn(() => "/"),
 }));
 const authState = vi.hoisted(() => ({ current: { user: null as unknown, ready: false, logout: vi.fn() } }));
-const { getSettings, getTelegramStatus, fetchProfile } = vi.hoisted(() => ({
+const { getSettings, getTelegramStatus, fetchProfile, getApplications, getApplicationStats } = vi.hoisted(() => ({
   getSettings: vi.fn(),
   getTelegramStatus: vi.fn(),
   fetchProfile: vi.fn(),
+  getApplications: vi.fn(),
+  getApplicationStats: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -46,11 +49,12 @@ vi.mock("@/components/layout/AppShell", () => ({
 }));
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, getSettings, getTelegramStatus, fetchProfile };
+  return { ...actual, getSettings, getTelegramStatus, fetchProfile, getApplications, getApplicationStats };
 });
 
 import SettingsPage from "@/app/settings/page";
 import ProfilePage from "@/app/profile/page";
+import ApplicationsPage from "@/app/applications/page";
 
 function asGuest() {
   authState.current = { user: null, ready: true, logout: vi.fn() };
@@ -72,6 +76,8 @@ beforeEach(() => {
   getSettings.mockResolvedValue({ include_keywords: [], exclude_keywords: [], min_score: 0, max_daily_applies: 0, telegram_chat_id: "" });
   getTelegramStatus.mockResolvedValue({ opted_in: false, telegram_username: null });
   fetchProfile.mockResolvedValue({ profile_exists: false, email: "u@test.com" });
+  getApplications.mockResolvedValue({ applications: [], total: 0 });
+  getApplicationStats.mockResolvedValue({ total: 0 });
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -110,6 +116,38 @@ describe("/settings auth guard", () => {
   });
 });
 
+describe("/applications auth guard", () => {
+  beforeEach(() => pathnameMock.mockReturnValue("/applications"));
+
+  it("redirects a guest to /login with the return path and never renders the shell or fires the API", async () => {
+    asGuest();
+    render(<ApplicationsPage />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fapplications"));
+    // /applications uses the WorkspaceShell (Shell C); its <main> landmark
+    // stands in for "private shell rendered". The neutral loader has no <main>.
+    expect(screen.queryByRole("main")).toBeNull();
+    expect(getApplications).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("shows a neutral loader while auth is still resolving (no shell, no API, no redirect)", async () => {
+    asChecking();
+    render(<ApplicationsPage />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.queryByRole("main")).toBeNull();
+    expect(getApplications).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("renders the page and loads applications for an authenticated user", async () => {
+    asAuthed();
+    render(<ApplicationsPage />);
+    expect(screen.getByRole("main")).toBeInTheDocument();
+    await waitFor(() => expect(getApplications).toHaveBeenCalled());
+    expect(replace).not.toHaveBeenCalled();
+  });
+});
+
 describe("/profile auth guard", () => {
   beforeEach(() => pathnameMock.mockReturnValue("/profile"));
 
@@ -117,7 +155,9 @@ describe("/profile auth guard", () => {
     asGuest();
     render(<ProfilePage />);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fprofile"));
-    expect(screen.queryByTestId("app-shell")).toBeNull();
+    // /profile now uses the WorkspaceShell (Shell C); its <main> landmark stands
+    // in for "private shell rendered". The neutral AuthGate renders no <main>.
+    expect(screen.queryByRole("main")).toBeNull();
     expect(fetchProfile).not.toHaveBeenCalled();
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
@@ -126,7 +166,7 @@ describe("/profile auth guard", () => {
     asChecking();
     render(<ProfilePage />);
     expect(screen.getByRole("status")).toBeInTheDocument();
-    expect(screen.queryByTestId("app-shell")).toBeNull();
+    expect(screen.queryByRole("main")).toBeNull();
     expect(fetchProfile).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
   });
@@ -134,7 +174,7 @@ describe("/profile auth guard", () => {
   it("renders the page and loads the profile for an authenticated user", async () => {
     asAuthed();
     render(<ProfilePage />);
-    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    expect(screen.getByRole("main")).toBeInTheDocument();
     await waitFor(() => expect(fetchProfile).toHaveBeenCalled());
     expect(replace).not.toHaveBeenCalled();
   });
