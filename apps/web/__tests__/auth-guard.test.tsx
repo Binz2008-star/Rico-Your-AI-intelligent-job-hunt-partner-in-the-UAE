@@ -155,7 +155,9 @@ describe("/profile auth guard", () => {
     asGuest();
     render(<ProfilePage />);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?next=%2Fprofile"));
-    expect(screen.queryByTestId("app-shell")).toBeNull();
+    // /profile now uses the WorkspaceShell (Shell C); its <main> landmark stands
+    // in for "private shell rendered". The neutral AuthGate renders no <main>.
+    expect(screen.queryByRole("main")).toBeNull();
     expect(fetchProfile).not.toHaveBeenCalled();
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
@@ -164,7 +166,7 @@ describe("/profile auth guard", () => {
     asChecking();
     render(<ProfilePage />);
     expect(screen.getByRole("status")).toBeInTheDocument();
-    expect(screen.queryByTestId("app-shell")).toBeNull();
+    expect(screen.queryByRole("main")).toBeNull();
     expect(fetchProfile).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
   });
@@ -172,7 +174,7 @@ describe("/profile auth guard", () => {
   it("renders the page and loads the profile for an authenticated user", async () => {
     asAuthed();
     render(<ProfilePage />);
-    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    expect(screen.getByRole("main")).toBeInTheDocument();
     await waitFor(() => expect(fetchProfile).toHaveBeenCalled());
     expect(replace).not.toHaveBeenCalled();
   });

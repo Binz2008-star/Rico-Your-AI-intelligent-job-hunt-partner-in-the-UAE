@@ -3,7 +3,7 @@
 /**
  * ProfileAtelier — read-only "portrait" view of the authenticated profile.
  *
- * Uses the shared Atelier typography and the active application theme while
+ * Uses the shared Atelier typography and the active WorkspaceShell theme while
  * rendering only real ProfileResponse fields. No fabricated education,
  * experience-timeline, or language sections. The portrait is the default
  * /profile view; an explicit Edit button switches to the existing production
@@ -13,9 +13,8 @@
 import { Mono } from "@/components/atelier-kit/primitives";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
-import { WORKSPACE_THEME, type WorkspacePalette } from "@/components/workspace/theme";
+import { useWorkspaceTheme, type WorkspacePalette } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { type ProfileResponse } from "@/lib/api";
 import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
@@ -151,10 +150,9 @@ export function ProfileAtelier({
     onEdit: () => void;
 }) {
     const { language } = useLanguage();
-    const { resolvedTheme } = useTheme();
     const t = useTranslation(language);
     const isAr = language === "ar";
-    const palette = WORKSPACE_THEME[resolvedTheme];
+    const palette = useWorkspaceTheme();
 
     const displayName = profile.name?.trim() || t("profileNoProfileTitle");
     const subtitle = [profile.current_role, profile.current_company]
