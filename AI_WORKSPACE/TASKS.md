@@ -123,8 +123,11 @@ direction for the Agent Operating System and the Rico-entity vision.
 - [x] Agent OS roadmap and Rico-entity vision recorded as governed follow-up only (no runtime
       scope expansion; explicit "do not implement on ambition alone" gate).
 - [x] This Continuity Block present in `AI_WORKSPACE/TASKS.md` before merge.
-- [ ] Final PR head/CI re-confirmed after origin/main merge + truth-reconciliation commit.
-- [ ] Independent review + explicit owner merge approval obtained.
+- [x] Final PR head/CI re-confirmed: head `255e0c69e8c5085233f28b214bfd498f915ef548` —
+      pytest ✅ postgres-integration ✅ playwright ✅ frontend ✅ Vercel ✅ Create Neon Branch ✅.
+      Independent review finding: stale next-action text (step 1 already done) — corrected
+      in this truth-only commit.
+- [ ] Independent approval + explicit owner merge approval obtained.
 
 #### Required verification
 
@@ -162,16 +165,17 @@ direction for the Agent Operating System and the Rico-entity vision.
 - What is incomplete: final-head re-confirm, independent review sign-off, owner merge approval
 - Known blockers: do not merge while PR remains draft; do not merge without independent review
   and explicit owner merge approval
-- Validation already run: branch-compare vs `main` (docs/control files only); GitHub QA
-  Tests / Create-Delete Branch / Vercel Preview all green on head `c56fa89e`; origin/main
-  merged (no conflicts, 21 files: runtime assets from main, docs unchanged); truth corrections
-  applied: #1009 MERGED, #1007 MERGED, #1011 CLOSED/ported into #1008, TASK-20260713-001
-  blocker removed, #989 confirmed open/active, main baseline updated to `5a03035a`
-- Validation still required: final-head CI re-confirmation after origin/main merge commit;
-  independent reviewer sign-off against live main/open PRs; owner merge approval
+- Validation already run: branch-compare vs `main` (docs/control files only); origin/main
+  merged (no conflicts); truth corrections applied (#1009/#1007 MERGED, #1011 CLOSED,
+  TASK block blocker removed, #989 confirmed open, main baseline updated); head
+  `255e0c69e8c5085233f28b214bfd498f915ef548` — pytest ✅ postgres-integration ✅ playwright ✅
+  frontend ✅ Vercel ✅ Create Neon Branch ✅; independent review second pass: one finding
+  (stale next-action step 1) — corrected in this truth-only commit
+- Validation still required: final-head CI re-confirmation after this truth-only commit;
+  independent approval; owner explicit merge approval
 - Deployment/CI/Neon/Vercel state to check next: none — docs-only, no Neon/Render action
-- Next exact action: re-verify final-head CI/diff for #1010, obtain independent review, then
-  request explicit owner merge approval — do not mark ready for review or merge without it
+- Next exact action: confirm CI green on the truth-only commit head, then stop for
+  independent approval and owner explicit merge approval — do not mark ready or merge without it
 - Stop condition: stop and ask the owner before merge, production mutation, runtime
   implementation, or opening a parallel branch/Agent Registry/Task Leases track
 - Rollback plan: revert PR #1010; no runtime or production rollback required
@@ -204,7 +208,8 @@ PR 6 workspace action surfaces (billing-gated) → PR 7 command/chat (own DEC).
 
 Recommend: keep #933 as a draft reference and make PR 1 the full public-landing parity that
 supersedes it (revise-in-place if the owner unfreezes the hero and rules on #899; otherwise
-# 933 does not merge). Do NOT merge #933 as below-the-fold-only.
+
+# 933 does not merge). Do NOT merge #933 as below-the-fold-only
 
 #### Owner-gated decisions before implementation
 

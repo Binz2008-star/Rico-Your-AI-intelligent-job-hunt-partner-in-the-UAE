@@ -14,7 +14,7 @@ This inventory is a control-plane snapshot, not permission to merge. Live GitHub
 
 | PR | Subject | Classification | Required action |
 | ---: | --- | --- | --- |
-| #1010 | control-plane reconciliation and launch execution | ACTIVE | Docs/control only; independently review, add canonical TASKS Continuity Block, verify final-head checks, then seek owner merge approval. |
+| #1010 | control-plane reconciliation and launch execution | ACTIVE | Docs/control only. TASKS Continuity Block exists. Head `255e0c69` passed all CI checks (pytest \u2705 postgres-integration \u2705 playwright \u2705 frontend \u2705 Vercel \u2705). Remaining: final-head verification after this truth-only commit, independent approval, owner merge approval. |
 | #1009 | Playwright cold-start diagnostics/timeout | MERGED | Merged to main (`fd49129b`). No further action required. |
 | #1008 | Paddle billing implementation (`feat/paddle-billing`) | HOLD | CI green (pytest ✅ playwright ✅ frontend ✅ postgres-integration ✅ on `36536396`). Scope-audited and out-of-scope files reverted. #1011 closed without merge; its server-owned checkout-attribution pattern was ported into #1008. HOLD: do NOT merge or activate (`BILLING_MODE=paddle`) until Paddle Sandbox smoke, entitlement lifecycle, migration gates, and independent review are satisfied. Migrations 040+041 have NOT been applied to Neon production. |
 | #1007 | favicon/icon system correction | MERGED | Merged to main (`67758854fa692e292ab7cce479805736222b749d`); Vercel production deploy confirmed. No further action required. |

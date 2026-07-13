@@ -161,9 +161,14 @@ Stop and report instead of guessing when:
 ## Next exact action
 
 ```text
-1. Add TASK-20260713-001 with the complete Continuity Block to AI_WORKSPACE/TASKS.md.
-2. Re-run final-head diff/CI review for #1010.
-3. Obtain independent review and explicit owner merge approval.
+Verified head: 255e0c69e8c5085233f28b214bfd498f915ef548
+QA Tests (pytest / postgres-integration / playwright / frontend) ✅
+Create Neon Branch ✅  Vercel Preview ✅  on that head.
+
+Remaining steps:
+1. Final-head CI re-confirmation after this truth-only commit.
+2. Independent approval.
+3. Owner explicit merge approval.
 4. After merge, run the read-only route/design parity inventory and record one small
    launch-critical UI task as the first ACTIVE runtime objective.
 ```
