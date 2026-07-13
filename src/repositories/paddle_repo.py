@@ -1,8 +1,9 @@
 """Repository layer for Paddle billing tables.
 
-Wraps paddle_customers, paddle_subscriptions, and paddle_webhook_events.
-All functions accept an optional ``conn`` parameter to allow callers to
-reuse an existing connection (unit-test injection).
+Wraps paddle_customers, paddle_subscriptions, paddle_webhook_events, and
+paddle_checkout_sessions. All functions accept an optional ``conn``
+parameter to allow callers to reuse an existing connection (unit-test
+injection).
 """
 from __future__ import annotations
 
@@ -16,9 +17,22 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_conn(db_module: Any):
-    """Return a fresh connection from the shared pool."""
-    return db_module.get_connection()
+def _rico_db():
+    from src.rico_db import RicoDB
+    return RicoDB()
+
+
+def _get_conn(db_module: Any = None):
+    """Return a connection with dict-row cursors (RealDictCursor).
+
+    ``db_module`` is accepted for call-site compatibility but is no longer
+    used for connection acquisition: ``src.db.get_db_connection()`` returns
+    a plain-tuple-cursor connection, which is incompatible with this
+    module's ``dict(row)`` / ``row["field"]`` access pattern. RicoDB is the
+    connection helper the rest of the app's repositories use and always
+    sets cursor_factory=RealDictCursor.
+    """
+    return _rico_db().connect()
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +139,8 @@ def upsert_paddle_subscription(
     cancel_at=None,
     canceled_at=None,
     occurred_at=None,
+    past_due_since=None,
+    clear_past_due: bool = False,
     conn=None,
 ) -> Dict[str, Any]:
     """Upsert a subscription row with stale-event protection.
@@ -132,19 +148,26 @@ def upsert_paddle_subscription(
     If ``occurred_at`` is provided, the UPDATE branch only applies when
     the incoming event is *newer* than the stored ``last_event_occurred_at``.
     This prevents out-of-order or replayed events from overwriting fresher state.
+
+    ``past_due_since`` stamps when a subscription first became past_due (for
+    the 7-day payment-retry grace period). Pass ``clear_past_due=True`` when
+    the subscription is no longer past_due, to NULL the column back out.
     """
     should_close = conn is None
     if conn is None:
         conn = _get_conn(db_module)
+    past_due_sql = "NULL" if clear_past_due else "COALESCE(%(past_due_since)s, paddle_subscriptions.past_due_since)"
     try:
         with conn.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 INSERT INTO paddle_subscriptions
                     (user_id, paddle_subscription_id, paddle_customer_id, plan, status,
                      billing_cycle, price_id, current_period_start, current_period_end,
-                     cancel_at, canceled_at, last_event_occurred_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     cancel_at, canceled_at, last_event_occurred_at, past_due_since)
+                VALUES (%(user_id)s, %(paddle_subscription_id)s, %(paddle_customer_id)s, %(plan)s, %(status)s,
+                        %(billing_cycle)s, %(price_id)s, %(current_period_start)s, %(current_period_end)s,
+                        %(cancel_at)s, %(canceled_at)s, %(occurred_at)s, %(past_due_since)s)
                 ON CONFLICT (user_id) DO UPDATE
                     SET paddle_subscription_id = EXCLUDED.paddle_subscription_id,
                         paddle_customer_id     = EXCLUDED.paddle_customer_id,
@@ -157,6 +180,7 @@ def upsert_paddle_subscription(
                         cancel_at              = EXCLUDED.cancel_at,
                         canceled_at            = EXCLUDED.canceled_at,
                         last_event_occurred_at = EXCLUDED.last_event_occurred_at,
+                        past_due_since         = {past_due_sql},
                         updated_at             = NOW()
                     WHERE (
                         EXCLUDED.last_event_occurred_at IS NULL
@@ -165,20 +189,21 @@ def upsert_paddle_subscription(
                     )
                 RETURNING *
                 """,
-                (
-                    user_id,
-                    paddle_subscription_id,
-                    paddle_customer_id,
-                    plan,
-                    status,
-                    billing_cycle,
-                    price_id,
-                    current_period_start,
-                    current_period_end,
-                    cancel_at,
-                    canceled_at,
-                    occurred_at,
-                ),
+                {
+                    "user_id": user_id,
+                    "paddle_subscription_id": paddle_subscription_id,
+                    "paddle_customer_id": paddle_customer_id,
+                    "plan": plan,
+                    "status": status,
+                    "billing_cycle": billing_cycle,
+                    "price_id": price_id,
+                    "current_period_start": current_period_start,
+                    "current_period_end": current_period_end,
+                    "cancel_at": cancel_at,
+                    "canceled_at": canceled_at,
+                    "occurred_at": occurred_at,
+                    "past_due_since": past_due_since,
+                },
             )
             row = cur.fetchone()
             result = dict(row) if row else {}
@@ -492,6 +517,56 @@ def mark_paddle_event_failed(
             except Exception:
                 pass
         raise
+    finally:
+        if should_close:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Expiry maintenance
+# ---------------------------------------------------------------------------
+
+def expire_stale_paddle_subscriptions(db_module: Any = None, conn=None) -> int:
+    """Mark subscriptions whose current_period_end has passed as inactive.
+
+    Daily hygiene pass — entitlement resolution (resolve_effective_user_plan)
+    already independently enforces current_period_end at read time, so this
+    is not correctness-critical, but keeps the stored status column truthful
+    for admin/reporting views. Only touches rows still 'active' whose period
+    has ended; never touches canceled_at or admin-set fields.
+
+    Returns the number of rows updated, or -1 if DB is unavailable.
+    """
+    should_close = conn is None
+    if conn is None:
+        try:
+            conn = _get_conn(db_module)
+        except Exception:
+            return -1
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE paddle_subscriptions
+                   SET status     = 'inactive',
+                       updated_at = NOW()
+                 WHERE status             = 'active'
+                   AND current_period_end IS NOT NULL
+                   AND current_period_end < NOW()
+                """,
+            )
+            updated = cur.rowcount
+        if should_close:
+            conn.commit()
+        return updated
+    except Exception:
+        logger.exception("paddle_repo: expire_stale_paddle_subscriptions failed")
+        if should_close:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return -1
     finally:
         if should_close:
             conn.close()

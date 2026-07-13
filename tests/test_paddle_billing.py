@@ -57,7 +57,6 @@ def _build_sub_payload(
 
 _PRO_ENV = {
     "PADDLE_PRO_MONTHLY_PRICE_ID": "pri_pro_monthly",
-    "PADDLE_PRO_YEARLY_PRICE_ID": "pri_pro_yearly",
 }
 
 
@@ -301,11 +300,12 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
             self.assertIn("unmapped", result.get("warning", ""),
                           "Unknown price ID must produce unmapped_price warning")
 
-    def test_yearly_billing_cycle(self):
+    def test_billing_cycle_is_always_monthly(self):
+        """Single-plan scope: no yearly SKU exists, billing_cycle is always 'monthly'."""
         payload = _build_sub_payload(
-            event_id="evt_yearly",
+            event_id="evt_cycle",
             event_type="subscription.created",
-            price_id="pri_pro_yearly",
+            price_id="pri_pro_monthly",
         )
         _clear_price_cache()
         captured = {}
@@ -322,12 +322,12 @@ class TestPaddleSubscriptionLifecycle(unittest.TestCase):
              patch.dict(os.environ, _PRO_ENV, clear=False):
             from src.services.paddle_webhook_service import process_paddle_webhook
             process_paddle_webhook(
-                event_id="evt_yearly",
+                event_id="evt_cycle",
                 event_type="subscription.created",
                 payload=payload,
                 db_module=MagicMock(),
             )
-        self.assertEqual(captured.get("billing_cycle"), "yearly")
+        self.assertEqual(captured.get("billing_cycle"), "monthly")
 
     def test_unhandled_event_type_skipped_gracefully(self):
         payload = {"event_id": "evt_unk", "event_type": "customer.created", "data": {}}
@@ -639,7 +639,6 @@ class TestBillingMode(unittest.TestCase):
             import src.billing_mode as bm
             reload(bm)
             self.assertTrue(bm.is_paddle_billing_mode())
-            self.assertFalse(bm.is_stripe_billing_mode())
             self.assertFalse(bm.is_manual_billing_mode())
 
     def test_manual_mode_default(self):
@@ -666,6 +665,34 @@ class TestBillingMode(unittest.TestCase):
         source = inspect.getsource(pws)
         self.assertNotIn("PADDLE_PREMIUM_MONTHLY_PRICE_ID", source)
         self.assertNotIn("PADDLE_PREMIUM_YEARLY_PRICE_ID", source)
+
+
+# ---------------------------------------------------------------------------
+# Regression: paddle_repo must use a real, dict-cursor-capable connection
+# ---------------------------------------------------------------------------
+#
+# src.db.get_db_connection() returns a plain-tuple-cursor psycopg2 connection
+# with no get_connection() method at all — every paddle_repo.* call that
+# doesn't inject conn= explicitly would previously raise AttributeError (or,
+# if patched to the right method name, break on dict(row) access against a
+# tuple cursor). This is masked by every other test in this file because
+# they patch the paddle_repo functions themselves. Guard the fix directly.
+
+class TestPaddleRepoConnection(unittest.TestCase):
+    def test_get_conn_uses_ricodb_not_db_module(self):
+        from src.repositories import paddle_repo
+
+        fake_conn = MagicMock()
+        fake_ricodb = MagicMock()
+        fake_ricodb.connect.return_value = fake_conn
+
+        broken_db_module = MagicMock(spec=[])  # no get_connection/get_db_connection attrs at all
+
+        with patch("src.repositories.paddle_repo._rico_db", return_value=fake_ricodb):
+            conn = paddle_repo._get_conn(broken_db_module)
+
+        fake_ricodb.connect.assert_called_once()
+        self.assertIs(conn, fake_conn)
 
 
 if __name__ == "__main__":

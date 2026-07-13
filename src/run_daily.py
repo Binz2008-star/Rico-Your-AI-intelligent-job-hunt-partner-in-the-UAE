@@ -72,7 +72,7 @@ from src.telegram_bot import send_telegram_message, format_telegram_jobs
 from src.job_history import add_jobs_to_history, load_job_history
 from src.apply_assistant import run_apply_assistant
 from src.db import init_db, save_job, is_db_available, get_top_jobs
-from src.repositories.subscription_repo import expire_stale_subscriptions
+from src.repositories.paddle_repo import expire_stale_paddle_subscriptions
 from src.repositories.profile_repo import get_users_with_telegram_alerts, get_profile
 from src.telegram_bot import send_telegram_to_user, format_telegram_jobs
 from src.candidate_profile import get_candidate_profile, get_target_roles
@@ -259,7 +259,7 @@ def _expire_subscriptions() -> None:
     reflect reality rather than showing expired rows as 'active'.
     """
     try:
-        updated = expire_stale_subscriptions()
+        updated = expire_stale_paddle_subscriptions()
         if updated == -1:
             logger.warning("subscription_expiry_skipped db_unavailable")
         elif updated > 0:

@@ -3,15 +3,15 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
 
 class SubscriptionTier(str, Enum):
     FREE = "free"
-    PRO = "pro"
-    PREMIUM = "premium"
+    PRO = "pro"  # internal key for the single Rico Monthly plan
+    PREMIUM = "premium"  # reserved — out of scope until a pricing decision approves it
 
 
 class SubscriptionStatus(str, Enum):
@@ -48,21 +48,14 @@ class UserSubscription(BaseModel):
     user_id: str
     plan: SubscriptionTier
     subscription_status: SubscriptionStatus
-    stripe_customer_id: Optional[str] = None
-    stripe_subscription_id: Optional[str] = None
+    paddle_customer_id: Optional[str] = None
+    paddle_subscription_id: Optional[str] = None
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
     cancel_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None
     entitlements: SubscriptionEntitlements
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class SubscriptionCreateRequest(BaseModel):
-    plan: SubscriptionTier
-    billing_cycle: Literal["monthly"] = "monthly"
-    success_url: Optional[str] = None
-    cancel_url: Optional[str] = None
 
 
 class SubscriptionResponse(BaseModel):
@@ -75,32 +68,11 @@ class PlansResponse(BaseModel):
     plans: List[SubscriptionPlan]
 
 
-class CheckoutResponse(BaseModel):
-    checkout_url: str
-    provider: Literal["stripe", "mock", "manual"]
-    plan: SubscriptionTier
-    status: Literal["ready", "mock", "manual"]
-
-
-class SubscriptionWebhookResponse(BaseModel):
-    received: bool
-    provider: str = "stripe"
-    event_type: Optional[str] = None
-    processed: bool = False
-    mock: bool = False
-
-
 class UsageCheckResponse(BaseModel):
     allowed: bool
     remaining: Optional[int] = None
     limit: Optional[int] = None
     message: Optional[str] = None
-
-
-class WebhookEvent(BaseModel):
-    id: str
-    type: str
-    data: Dict[str, Any]
 
 
 class SubscriptionIntentRequest(BaseModel):

@@ -93,12 +93,12 @@ class CapabilityRegistry:
         )
         
         self._capabilities[RicoDomain.BILLING_PAYMENT] = Capability(
-            name="stripe_billing",
+            name="paddle_billing",
             domain=RicoDomain.BILLING_PAYMENT,
             available=True,
             requires_auth=True,
             requires_db=True,
-            requires_external_tool=True,  # Uses Stripe
+            requires_external_tool=True,  # Uses Paddle
             reason_if_unavailable="",
             alternative_suggestion="",
         )

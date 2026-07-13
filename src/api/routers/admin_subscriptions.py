@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/v1/admin/subscriptions", tags=["admin-subscripti
 
 class AdminActivateRequest(BaseModel):
     email: str
-    plan: Literal["pro", "premium"]
+    plan: Literal["pro"]  # single-plan scope: Rico Monthly only
     duration_days: int
     payment_reference: Optional[str] = None
 
@@ -49,7 +49,7 @@ def admin_activate_subscription(
     """
     from src.db import is_db_available
     from src.repositories.users_repo import get_user_by_email
-    from src.repositories.subscription_repo import upsert_subscription
+    from src.repositories import paddle_repo
 
     email = body.email.strip().lower()
 
@@ -76,18 +76,26 @@ def admin_activate_subscription(
             email, body.plan, body.duration_days, admin.get("email"),
         )
 
-    result = upsert_subscription(
-        user_id=email,
-        plan=body.plan,
-        status="active",
-        current_period_start=now,
-        current_period_end=expires_at,
-        cancel_at=None,
-        canceled_at=None,
-        clear_cancellation=True,
-    )
+    # Manually-activated subscriptions have no real Paddle IDs — use stable
+    # sentinels so repeat activations for the same email upsert cleanly
+    # (paddle_subscriptions.user_id is the unique key regardless).
+    try:
+        result = paddle_repo.upsert_paddle_subscription(
+            None,
+            user_id=email,
+            paddle_subscription_id=f"admin_manual_{email}",
+            paddle_customer_id=f"admin_manual_{email}",
+            plan=body.plan,
+            status="active",
+            current_period_start=now,
+            current_period_end=expires_at,
+            clear_past_due=True,
+        )
+    except Exception:
+        logger.exception("admin_activate_failed user=%s", email)
+        result = None
 
-    if result is None:
+    if not result:
         raise HTTPException(
             status_code=503,
             detail="Database unavailable. Subscription could not be activated.",

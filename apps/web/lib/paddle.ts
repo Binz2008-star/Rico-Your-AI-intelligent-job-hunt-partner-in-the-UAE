@@ -91,14 +91,20 @@ export function initPaddle(): Promise<PaddleInstance> {
 /**
  * Open the Paddle overlay checkout for a given price ID.
  *
- * @param priceId  - Paddle price ID (e.g. NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID)
- * @param userId   - Rico user ID passed as custom_data so webhooks can map the subscription
- * @param userEmail - Pre-fill customer email in checkout
- * @param language - 'en' | 'ar' — sets checkout locale
+ * SECURITY: checkoutSessionId must be a server-owned token from
+ * createPaddleCheckoutSession() (POST /api/v1/billing/paddle/checkout-session),
+ * passed here as customData.checkout_session_id. The webhook resolves the
+ * Rico user via that server-side record — never via a browser-supplied
+ * user_id, which could be tampered with client-side.
+ *
+ * @param priceId          - Paddle price ID (e.g. NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID)
+ * @param checkoutSessionId - Server-owned session token from createPaddleCheckoutSession()
+ * @param userEmail        - Pre-fill customer email in checkout
+ * @param language         - 'en' | 'ar' — sets checkout locale
  */
 export async function openPaddleCheckout(
     priceId: string,
-    userId: string,
+    checkoutSessionId: string,
     userEmail?: string | null,
     language: "en" | "ar" = "en",
 ): Promise<void> {
@@ -106,7 +112,7 @@ export async function openPaddleCheckout(
 
     paddle.Checkout.open({
         items: [{ priceId, quantity: 1 }],
-        customData: { user_id: userId },
+        customData: { checkout_session_id: checkoutSessionId },
         customer: userEmail ? { email: userEmail } : undefined,
         settings: {
             displayMode: "overlay",
@@ -117,21 +123,9 @@ export async function openPaddleCheckout(
 }
 
 /**
- * Map plan + billing cycle to the correct Paddle price ID from env vars.
+ * Return the Paddle price ID for the (single) Rico Monthly plan from env vars.
  * Returns null when the price ID is not configured.
  */
-export function getPaddlePriceId(
-    plan: "pro" | "premium",
-    cycle: "monthly" | "yearly",
-): string | null {
-    const key =
-        plan === "pro"
-            ? cycle === "yearly"
-                ? process.env.NEXT_PUBLIC_PADDLE_PRO_YEARLY_PRICE_ID
-                : process.env.NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID
-            : cycle === "yearly"
-            ? process.env.NEXT_PUBLIC_PADDLE_PREMIUM_YEARLY_PRICE_ID
-            : process.env.NEXT_PUBLIC_PADDLE_PREMIUM_MONTHLY_PRICE_ID;
-
-    return key?.trim() || null;
+export function getPaddlePriceId(): string | null {
+    return process.env.NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID?.trim() || null;
 }

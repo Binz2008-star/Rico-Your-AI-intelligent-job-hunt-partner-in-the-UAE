@@ -1565,7 +1565,7 @@ export interface SubscriptionEntitlements {
 
 export interface SubscriptionPlan {
   id: string;
-  plan: "pro" | "premium";
+  plan: "pro";
   name: string;
   price_monthly: number;
   currency: string;
@@ -1581,10 +1581,10 @@ export interface PlansResponse {
 
 export interface UserSubscription {
   user_id: string;
-  plan: "free" | "pro" | "premium";
+  plan: "free" | "pro";
   subscription_status: "active" | "inactive" | "past_due" | "canceled";
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
+  paddle_customer_id: string | null;
+  paddle_subscription_id: string | null;
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at: string | null;
@@ -1599,13 +1599,6 @@ export interface SubscriptionMeResponse {
   is_active: boolean;
 }
 
-export interface CheckoutResponse {
-  checkout_url: string;
-  provider: "stripe" | "mock" | "manual";
-  plan: "free" | "pro" | "premium";
-  status: "ready" | "mock" | "manual";
-}
-
 export async function getSubscriptionPlans(): Promise<PlansResponse> {
   return requestJson<PlansResponse>("/api/v1/subscription/plans", {
     method: "GET",
@@ -1618,20 +1611,10 @@ export async function getMySubscription(): Promise<SubscriptionMeResponse> {
   });
 }
 
-export async function createCheckoutSession(
-  plan: "pro" | "premium",
-): Promise<CheckoutResponse> {
-  return requestJson<CheckoutResponse>("/api/v1/subscription/checkout", {
-    method: "POST",
-    body: JSON.stringify({ plan }),
-  });
-}
-
-export async function createCustomerPortalSession(): Promise<CheckoutResponse> {
-  return requestJson<CheckoutResponse>("/api/v1/subscription/portal", {
-    method: "POST",
-  });
-}
+// Checkout and subscription management go through the Paddle billing API —
+// see createPaddleCheckoutSession() and createPaddleCustomerPortalSession()
+// further below. There is no server-redirect checkout_url in the Paddle.js
+// overlay flow, so this module no longer exposes a generic createCheckoutSession().
 
 // ── Apply Queue (job agent) ───────────────────────────────────────────────────
 
@@ -1755,7 +1738,7 @@ export async function submitAction(
 
 export async function recordSubscriptionIntent(
   plan: string,
-  billingMode: "manual" | "stripe" = "manual",
+  billingMode: "manual" | "paddle" = "manual",
   sourcePage: string = "/subscription",
 ): Promise<void> {
   try {
@@ -1848,5 +1831,29 @@ export async function getPaddleBillingStatus(
 export async function createPaddleCustomerPortalSession(): Promise<{ portal_url: string }> {
   return requestJson<{ portal_url: string }>("/api/v1/billing/customer-portal", {
     method: "POST",
+  });
+}
+
+export interface PaddleCheckoutSession {
+  session_token: string;
+  price_id: string | null;
+  plan: string;
+  billing_cycle: string;
+}
+
+/**
+ * Create a server-owned checkout session before opening the Paddle.js
+ * overlay. The returned session_token must be passed as
+ * customData.checkout_session_id to openPaddleCheckout() — the webhook
+ * resolves the Rico user via this record, never via browser-supplied
+ * custom_data.user_id.
+ */
+export async function createPaddleCheckoutSession(
+  plan: string = "pro",
+  billingCycle: string = "monthly",
+): Promise<PaddleCheckoutSession> {
+  return requestJson<PaddleCheckoutSession>("/api/v1/billing/paddle/checkout-session", {
+    method: "POST",
+    body: JSON.stringify({ plan, billing_cycle: billingCycle }),
   });
 }

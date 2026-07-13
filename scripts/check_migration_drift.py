@@ -67,6 +67,7 @@ CHECKS: list[tuple[str, str, object]] = [
     ("040", "table", "paddle_webhook_events"),
     ("040", "table", "paddle_checkout_sessions"),
     ("040", "column", ("paddle_subscriptions", "last_event_occurred_at")),
+    ("041", "column", ("paddle_subscriptions", "past_due_since")),
 ]
 
 

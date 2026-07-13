@@ -175,19 +175,13 @@ export default function LandingPageNocturne() {
         freeF1: isAr ? "٥٠ رسالة ذكاء اصطناعي/شهر" : "50 AI messages/month",
         freeF2: isAr ? "١٠ وظائف محفوظة" : "10 saved jobs",
         freeF3: isAr ? "تقييم ملاءمة السيرة والأسباب" : "CV fit scoring & reasons",
-        proName: isAr ? "الاحترافية" : "Pro",
-        proPrice: "AED 29",
-        proF1: isAr ? "٣٠٠ رسالة AI/شهر" : "300 AI messages/month",
-        proF2: isAr ? "١٠٠ وظيفة محفوظة" : "100 saved jobs",
+        proName: isAr ? "ريكو الشهرية" : "Rico Monthly",
+        proPrice: "AED 79",
+        proF1: isAr ? "١٥٠٠ رسالة AI/شهر" : "1,500 AI messages/month",
+        proF2: isAr ? "وظائف محفوظة بلا حدود" : "Unlimited saved jobs",
         proF3: isAr ? "مطابقة أولوية وتنبيهات" : "Priority matching & alerts",
-        proF4: isAr ? "مساعد مسودات التقديم" : "Application draft assistant",
+        proF4: isAr ? "تحسين السيرة عربي + إنجليزي" : "CV optimization AR+EN",
         popular: isAr ? "الأكثر شعبية" : "Most popular",
-        premiumName: isAr ? "المميزة" : "Premium",
-        premiumPrice: "AED 49",
-        premiumF1: isAr ? "١٥٠٠ رسالة AI/شهر" : "1,500 AI messages/month",
-        premiumF2: isAr ? "وظائف محفوظة بلا حدود" : "Unlimited saved jobs",
-        premiumF3: isAr ? "تحسين السيرة عربي + إنجليزي" : "CV optimization AR+EN",
-        premiumF4: isAr ? "تذكيرات متابعة ورؤى" : "Follow-up reminders & insights",
         cancelAnytime: isAr ? "إلغاء في أي وقت. لا تحتاج بطاقة للبدء." : "Cancel anytime. No card required to start.",
         // Phase 5 - Credibility
         credEyebrow: isAr ? "لماذا تثق في ريكو" : "Why trust Rico",
@@ -597,7 +591,7 @@ export default function LandingPageNocturne() {
                             <Eyebrow className="mb-4 md:justify-center">{t.pricingEyebrow}</Eyebrow>
                             <h2 id="pricing-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.pricingTitle}</h2>
                         </FadeUp>
-                        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
+                        <div className="grid sm:grid-cols-2 gap-4 md:gap-5">
                             {/* Free */}
                             <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6 flex flex-col">
@@ -628,22 +622,6 @@ export default function LandingPageNocturne() {
                                     <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.proF4}</li>
                                 </ul>
                                 <Link href="/subscription"><RicoButton variant="primary" size="md" className="w-full">{t.proName}</RicoButton></Link>
-                            </GlassCard>
-                            </motion.div>
-                            {/* Premium */}
-                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}>
-                            <GlassCard className="p-6 flex flex-col">
-                                <div className="mb-6">
-                                    <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-tertiary">{t.premiumName}</p>
-                                    <p className="font-display text-3xl font-semibold mt-2">{t.premiumPrice}<span className="text-base font-normal text-text-tertiary">/mo</span></p>
-                                </div>
-                                <ul className="space-y-3 mb-8 flex-1">
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.premiumF1}</li>
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.premiumF2}</li>
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.premiumF3}</li>
-                                    <li className="flex items-center gap-2 text-sm text-text-secondary"><CheckIcon />{t.premiumF4}</li>
-                                </ul>
-                                <Link href="/subscription"><RicoButton variant="ghost" size="md" className="w-full">{t.premiumName}</RicoButton></Link>
                             </GlassCard>
                             </motion.div>
                         </div>

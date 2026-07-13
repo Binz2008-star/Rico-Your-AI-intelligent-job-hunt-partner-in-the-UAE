@@ -6,13 +6,17 @@ state transitions, and mapping Paddle statuses to Rico plan/status values.
 Security contract:
   - Signature verification and timestamp freshness are done in the router.
   - Identity: DB lookup (customer_id / subscription_id) is authoritative.
-    custom_data.user_id is used ONLY as a last-resort bootstrap for
-    subscription.created when the customer record does not yet exist in DB.
+    custom_data.checkout_session_id resolves a server-owned checkout_session
+    row as a bootstrap for subscription.created, when no DB record exists
+    yet. custom_data.user_id is browser-supplied and is NEVER trusted.
   - Unknown price IDs NEVER grant paid entitlement (no default-to-pro).
   - occurred_at staleness: events older than the DB record are ignored.
+  - past_due grace: past_due_since is stamped on the first past_due
+    transition and cleared once the subscription recovers; entitlement
+    resolution (src/subscription_plans.py) honors a 7-day grace window
+    from that timestamp before downgrading to Free.
 
-Approved plan scope: Rico Pro only (monthly + yearly).
-Premium is out of scope until a pricing decision approves it.
+Approved plan scope: Rico Monthly only (single plan, single price).
 """
 from __future__ import annotations
 
@@ -43,13 +47,16 @@ _PRICE_TO_PLAN: Dict[str, str] = {}
 
 
 def _build_price_map() -> None:
-    """Populate _PRICE_TO_PLAN from environment variables (approved scope: pro only)."""
+    """Populate _PRICE_TO_PLAN from environment variables.
+
+    Single-plan scope: Rico Monthly only (internal plan key stays "pro" —
+    see src/subscription_plans.py — only its display name/price changed).
+    """
     import os
     _PRICE_TO_PLAN.clear()
-    for key in ("PADDLE_PRO_MONTHLY_PRICE_ID", "PADDLE_PRO_YEARLY_PRICE_ID"):
-        pid = os.getenv(key, "").strip()
-        if pid:
-            _PRICE_TO_PLAN[pid] = "pro"
+    pid = os.getenv("PADDLE_PRO_MONTHLY_PRICE_ID", "").strip()
+    if pid:
+        _PRICE_TO_PLAN[pid] = "pro"
 
 
 def _resolve_plan_from_price_id(price_id: Optional[str]) -> Optional[str]:
@@ -65,13 +72,37 @@ def _resolve_plan_from_price_id(price_id: Optional[str]) -> Optional[str]:
     return None  # NEVER default to a paid plan
 
 
-def _billing_cycle_from_price_id(price_id: Optional[str]) -> str:
-    """Return 'yearly' when the price_id matches the yearly Pro price, else 'monthly'."""
-    import os
-    yearly_id = os.getenv("PADDLE_PRO_YEARLY_PRICE_ID", "").strip()
-    if price_id and yearly_id and price_id == yearly_id:
-        return "yearly"
-    return "monthly"
+def _lookup_existing_status(db_module: Any, user_id: str, paddle_repo: Any) -> Optional[str]:
+    """Best-effort existing-status lookup for grace-period bookkeeping.
+
+    Never raises — a lookup failure here must not block the subscription
+    upsert; it only means the past_due_since transition can't be computed
+    for this event, which is a minor bookkeeping gap, not a correctness bug.
+    """
+    try:
+        existing = paddle_repo.get_paddle_subscription_by_user(db_module, user_id)
+        return existing["status"] if existing else None
+    except Exception:
+        logger.warning("paddle_webhook: existing-status lookup failed user_id=%s", user_id)
+        return None
+
+
+def _compute_past_due_transition(
+    existing_status: Optional[str], new_status: str
+) -> tuple[Optional[datetime], bool]:
+    """Return (past_due_since, clear_past_due) for the grace-period column.
+
+    - Entering past_due for the first time (wasn't past_due before): stamp now.
+    - Leaving past_due (was past_due, isn't anymore): clear the stamp.
+    - Staying in the same state either way: leave the stored value untouched.
+    """
+    was_past_due = existing_status == "past_due"
+    is_past_due = new_status == "past_due"
+    if is_past_due and not was_past_due:
+        return datetime.now(timezone.utc), False
+    if was_past_due and not is_past_due:
+        return None, True
+    return None, False
 
 
 def _parse_occurred_at(payload: Dict[str, Any]) -> Optional[datetime]:
@@ -191,7 +222,7 @@ def _extract_subscription_data(
         )
         return {"unmapped": True, "price_id": price_id, "sub_id": sub_id}
 
-    billing_cycle = _billing_cycle_from_price_id(price_id)
+    billing_cycle = "monthly"  # single-plan scope: monthly only, no yearly SKU
 
     current_billing = data.get("current_billing_period", {})
     period_start = current_billing.get("starts_at")
@@ -259,6 +290,10 @@ def _handle_subscription_created(
 
     occurred_at = _parse_occurred_at(payload)
     _ensure_paddle_customer(db_module, user_id, fields["customer_id"], paddle_repo)
+    existing_status = _lookup_existing_status(db_module, user_id, paddle_repo)
+    past_due_since, clear_past_due = _compute_past_due_transition(
+        existing_status, fields["rico_status"]
+    )
     paddle_repo.upsert_paddle_subscription(
         db_module,
         user_id=user_id,
@@ -271,6 +306,8 @@ def _handle_subscription_created(
         current_period_start=fields["period_start"],
         current_period_end=fields["period_end"],
         occurred_at=occurred_at,
+        past_due_since=past_due_since,
+        clear_past_due=clear_past_due,
     )
     logger.info("paddle_subscription_created user_id=%s plan=%s status=%s",
                 user_id, fields["plan"], fields["rico_status"])
@@ -296,6 +333,10 @@ def _handle_subscription_updated(
 
     occurred_at = _parse_occurred_at(payload)
     _ensure_paddle_customer(db_module, user_id, fields["customer_id"], paddle_repo)
+    existing_status = _lookup_existing_status(db_module, user_id, paddle_repo)
+    past_due_since, clear_past_due = _compute_past_due_transition(
+        existing_status, fields["rico_status"]
+    )
     paddle_repo.upsert_paddle_subscription(
         db_module,
         user_id=user_id,
@@ -309,6 +350,8 @@ def _handle_subscription_updated(
         current_period_end=fields["period_end"],
         cancel_at=fields["cancel_at"],
         occurred_at=occurred_at,
+        past_due_since=past_due_since,
+        clear_past_due=clear_past_due,
     )
     logger.info("paddle_subscription_updated user_id=%s plan=%s status=%s",
                 user_id, fields["plan"], fields["rico_status"])
@@ -359,6 +402,7 @@ def _handle_subscription_canceled(
         status="canceled",
         canceled_at=canceled_at,
         occurred_at=occurred_at,
+        clear_past_due=True,
     )
     logger.info("paddle_subscription_canceled user_id=%s sub_id=%s", user_id, sub_id)
     return {"user_id": user_id, "subscription_status": "canceled"}

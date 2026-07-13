@@ -60,20 +60,12 @@ class TestEntitlementsSchema:
         assert FREE_ENTITLEMENTS.other_document_limit == 2
 
     def test_pro_plan_has_cv_limit_of_5(self):
-        from src.subscription_plans import PRO_PLAN
-        assert PRO_PLAN.entitlements.cv_storage_limit == 5
+        from src.subscription_plans import RICO_MONTHLY_PLAN
+        assert RICO_MONTHLY_PLAN.entitlements.cv_storage_limit == 5
 
     def test_pro_plan_has_other_limit_of_10(self):
-        from src.subscription_plans import PRO_PLAN
-        assert PRO_PLAN.entitlements.other_document_limit == 10
-
-    def test_premium_plan_has_unlimited_cv(self):
-        from src.subscription_plans import PREMIUM_PLAN
-        assert PREMIUM_PLAN.entitlements.cv_storage_limit is None
-
-    def test_premium_plan_has_unlimited_other(self):
-        from src.subscription_plans import PREMIUM_PLAN
-        assert PREMIUM_PLAN.entitlements.other_document_limit is None
+        from src.subscription_plans import RICO_MONTHLY_PLAN
+        assert RICO_MONTHLY_PLAN.entitlements.other_document_limit == 10
 
     def test_entitlements_serialise_to_dict(self):
         from src.subscription_plans import FREE_ENTITLEMENTS

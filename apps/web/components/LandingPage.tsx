@@ -95,15 +95,10 @@ export default function LandingPage() {
         freeF2: isAr ? "١٠ وظائف محفوظة" : "10 saved jobs",
         freeBtn: isAr ? "ابدأ مجاناً" : "Start free",
 
-        proName: isAr ? "الاحترافية" : "Pro",
-        proF1: isAr ? "٣٠٠ رسالة ذكاء اصطناعي" : "300 AI messages",
-        proF2: isAr ? "١٠٠ وظيفة محفوظة" : "100 saved jobs",
-        proBtn: isAr ? "اختر الاحترافية" : "Get Pro",
-
-        premiumName: isAr ? "المميزة" : "Premium",
-        premiumF1: isAr ? "١٥٠٠ رسالة ذكاء اصطناعي" : "1500 AI messages",
-        premiumF2: isAr ? "وظائف محفوظة بلا حدود" : "Unlimited saved jobs",
-        premiumBtn: isAr ? "اختر المميزة" : "Get Premium",
+        proName: isAr ? "ريكو الشهرية" : "Rico Monthly",
+        proF1: isAr ? "١٥٠٠ رسالة ذكاء اصطناعي" : "1500 AI messages",
+        proF2: isAr ? "وظائف محفوظة بلا حدود" : "Unlimited saved jobs",
+        proBtn: isAr ? "اشترك الآن" : "Get Rico Monthly",
 
         // Trust block
         trustBlock: isAr
@@ -395,7 +390,7 @@ export default function LandingPage() {
                         </h2>
 
                         {/* Pricing grid */}
-                        <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
 
                             {/* Free */}
                             <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-5">
@@ -428,7 +423,7 @@ export default function LandingPage() {
                                     </span>
                                 </div>
                                 <p className="mt-2 text-3xl font-bold text-white">
-                                    AED 29
+                                    AED 79
                                     <span className="text-base font-normal text-white/35">{t.perMonth}</span>
                                 </p>
                                 <ul className="mt-4 space-y-1.5 text-sm text-white/45">
@@ -440,27 +435,6 @@ export default function LandingPage() {
                                     className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-[#f5a623] py-2.5 text-sm font-semibold text-[#0a0a1a] transition-opacity hover:opacity-90"
                                 >
                                     {t.proBtn}
-                                </Link>
-                            </div>
-
-                            {/* Premium */}
-                            <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-5">
-                                <p className="font-mono text-[10px] uppercase tracking-widest text-white/35">
-                                    {t.premiumName}
-                                </p>
-                                <p className="mt-2 text-3xl font-bold text-white">
-                                    AED 49
-                                    <span className="text-base font-normal text-white/35">{t.perMonth}</span>
-                                </p>
-                                <ul className="mt-4 space-y-1.5 text-sm text-white/45">
-                                    <li>{t.premiumF1}</li>
-                                    <li>{t.premiumF2}</li>
-                                </ul>
-                                <Link
-                                    href="/subscription"
-                                    className="mt-5 inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.04] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/[0.08]"
-                                >
-                                    {t.premiumBtn}
                                 </Link>
                             </div>
                         </div>

@@ -56,11 +56,8 @@ class TestProductIdentity:
 # ---------------------------------------------------------------------------
 
 class TestSubscriptionFacts:
-    def test_pro_price_aed_29_in_identity(self):
-        assert "29" in RICO_IDENTITY, "RICO_IDENTITY must state AED 29 Pro plan"
-
-    def test_premium_price_aed_49_in_identity(self):
-        assert "49" in RICO_IDENTITY, "RICO_IDENTITY must state AED 49 Premium plan"
+    def test_rico_monthly_price_aed_79_in_identity(self):
+        assert "79" in RICO_IDENTITY, "RICO_IDENTITY must state AED 79 Rico Monthly plan"
 
     def test_subscription_page_hint_present(self):
         assert "subscription" in IDENTITY_LOWER, "RICO_IDENTITY must reference the /subscription page"
@@ -163,5 +160,4 @@ class TestSystemPromptUserContext:
     def test_no_user_context_prompt_still_valid(self):
         prompt = get_rico_system_prompt()
         assert "Rico Hunt" in prompt
-        assert "29" in prompt
-        assert "49" in prompt
+        assert "79" in prompt

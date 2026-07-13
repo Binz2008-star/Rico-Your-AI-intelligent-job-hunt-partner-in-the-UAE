@@ -268,10 +268,10 @@ async def create_checkout_session(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unsupported plan: {plan!r}. Allowed: pro",
         )
-    if billing_cycle not in ("monthly", "yearly"):
+    if billing_cycle != "monthly":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported billing_cycle: {billing_cycle!r}. Allowed: monthly, yearly",
+            detail=f"Unsupported billing_cycle: {billing_cycle!r}. Allowed: monthly",
         )
 
     session_token = secrets.token_urlsafe(32)
@@ -305,9 +305,7 @@ async def create_checkout_session(
 
 def _resolve_price_id(plan: str, billing_cycle: str) -> Optional[str]:
     """Return the Paddle price_id for the given plan/cycle, or None."""
-    if plan == "pro" and billing_cycle == "yearly":
-        return os.getenv("PADDLE_PRO_YEARLY_PRICE_ID", "").strip() or None
-    if plan == "pro":
+    if plan == "pro" and billing_cycle == "monthly":
         return os.getenv("PADDLE_PRO_MONTHLY_PRICE_ID", "").strip() or None
     return None
 

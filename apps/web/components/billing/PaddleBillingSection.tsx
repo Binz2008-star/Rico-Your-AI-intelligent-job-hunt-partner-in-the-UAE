@@ -12,7 +12,7 @@
 
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { PaddleBillingStatus } from "@/lib/api";
-import { createPaddleCustomerPortalSession, getPaddleBillingStatus } from "@/lib/api";
+import { createPaddleCheckoutSession, createPaddleCustomerPortalSession, getPaddleBillingStatus } from "@/lib/api";
 import { getPaddlePriceId, openPaddleCheckout } from "@/lib/paddle";
 import { useTranslation } from "@/lib/translations";
 import { useCallback, useEffect, useState } from "react";
@@ -74,16 +74,18 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
         }
     };
 
-    const handleCheckout = async (plan: "pro" | "premium", cycle: "monthly" | "yearly") => {
-        const priceId = getPaddlePriceId(plan, cycle);
+    const handleCheckout = async () => {
+        const priceId = getPaddlePriceId();
         if (!priceId) {
             setError(t("paddleNotConfigured"));
             return;
         }
-        const key = `${plan}_${cycle}`;
-        setCheckoutLoading(key);
+        setCheckoutLoading("pro_monthly");
         try {
-            await openPaddleCheckout(priceId, userId, userEmail, language as "en" | "ar");
+            // Server-owned checkout session first — the webhook resolves
+            // identity via this record, never via a browser-supplied user_id.
+            const session = await createPaddleCheckoutSession("pro", "monthly");
+            await openPaddleCheckout(priceId, session.session_token, userEmail, language as "en" | "ar");
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
             setError(msg);
@@ -94,7 +96,6 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
 
     const planLabel = (plan: string) => {
         if (plan === "pro") return t("paddlePlanPro");
-        if (plan === "premium") return t("paddlePlanPremium");
         return t("paddlePlanFree");
     };
 
@@ -260,44 +261,24 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
                                     : t("paddleManageSubscription")}
                             </button>
                         ) : (
-                            <>
-                                <button
-                                    onClick={() => handleCheckout("pro", "monthly")}
-                                    disabled={!!checkoutLoading}
-                                    style={{
-                                        padding: "0.5rem 1rem",
-                                        fontSize: "0.82rem",
-                                        borderRadius: 6,
-                                        border: "none",
-                                        background: colors.red,
-                                        color: "#fff",
-                                        cursor: checkoutLoading ? "not-allowed" : "pointer",
-                                        opacity: checkoutLoading ? 0.6 : 1,
-                                    }}
-                                >
-                                    {checkoutLoading === "pro_monthly"
-                                        ? t("paddleCheckoutLoading")
-                                        : t("paddleUpgradeMonthly")}
-                                </button>
-                                <button
-                                    onClick={() => handleCheckout("pro", "yearly")}
-                                    disabled={!!checkoutLoading}
-                                    style={{
-                                        padding: "0.5rem 1rem",
-                                        fontSize: "0.82rem",
-                                        borderRadius: 6,
-                                        border: `1px solid ${colors.borderDefault}`,
-                                        background: "transparent",
-                                        color: colors.ink,
-                                        cursor: checkoutLoading ? "not-allowed" : "pointer",
-                                        opacity: checkoutLoading ? 0.6 : 1,
-                                    }}
-                                >
-                                    {checkoutLoading === "pro_yearly"
-                                        ? t("paddleCheckoutLoading")
-                                        : t("paddleUpgradeYearly")}
-                                </button>
-                            </>
+                            <button
+                                onClick={() => handleCheckout()}
+                                disabled={!!checkoutLoading}
+                                style={{
+                                    padding: "0.5rem 1rem",
+                                    fontSize: "0.82rem",
+                                    borderRadius: 6,
+                                    border: "none",
+                                    background: colors.red,
+                                    color: "#fff",
+                                    cursor: checkoutLoading ? "not-allowed" : "pointer",
+                                    opacity: checkoutLoading ? 0.6 : 1,
+                                }}
+                            >
+                                {checkoutLoading === "pro_monthly"
+                                    ? t("paddleCheckoutLoading")
+                                    : t("paddleUpgradeMonthly")}
+                            </button>
                         )}
                     </div>
                 </>

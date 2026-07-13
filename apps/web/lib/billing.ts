@@ -2,8 +2,10 @@
  * Billing mode helpers and WhatsApp upgrade URL builder.
  *
  * NEXT_PUBLIC_BILLING_MODE=manual  → WhatsApp-assisted activation (default)
- * NEXT_PUBLIC_BILLING_MODE=stripe  → Stripe checkout
  * NEXT_PUBLIC_BILLING_MODE=paddle  → Paddle Billing overlay checkout
+ *
+ * Any other/unset value (including the retired "stripe") falls back to
+ * manual — there is no code path left that renders a Stripe checkout UI.
  *
  * SECURITY: PADDLE_API_KEY must NEVER appear in NEXT_PUBLIC_* variables or
  * any client-side code. All Paddle server-side API calls go through the
@@ -12,8 +14,7 @@
  */
 
 export function isManualBillingMode(): boolean {
-    const mode = (process.env.NEXT_PUBLIC_BILLING_MODE ?? "manual").trim().toLowerCase();
-    return mode !== "stripe" && mode !== "paddle";
+    return (process.env.NEXT_PUBLIC_BILLING_MODE ?? "manual").trim().toLowerCase() !== "paddle";
 }
 
 export function isPaddleBillingMode(): boolean {

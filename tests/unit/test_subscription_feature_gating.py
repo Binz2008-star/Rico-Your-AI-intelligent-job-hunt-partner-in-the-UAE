@@ -120,10 +120,11 @@ def _active_pro_row(user_id: str = _PAID_EMAIL) -> dict:
         "user_id": user_id,
         "plan": "pro",
         "status": "active",
-        "stripe_customer_id": None,
-        "stripe_subscription_id": None,
+        "paddle_customer_id": None,
+        "paddle_subscription_id": None,
         "current_period_start": now - timedelta(days=1),
         "current_period_end": now + timedelta(days=29),
+        "past_due_since": None,
         "cancel_at": None,
         "canceled_at": None,
     }
@@ -133,13 +134,14 @@ def test_resolve_uses_the_email_key_verbatim_and_pays_out_pro():
     """A subscription stored under the email resolves to PRO when queried by that email."""
     from src.subscription_plans import resolve_effective_user_plan
 
-    def fake_get_subscription(key):
+    def fake_get_subscription(db_module, key):
         return _active_pro_row() if key == _PAID_EMAIL else None
 
-    with patch("src.repositories.subscription_repo.get_subscription", side_effect=fake_get_subscription) as gs:
+    with patch("src.repositories.paddle_repo.get_paddle_subscription_by_user", side_effect=fake_get_subscription) as gs:
         resolved = resolve_effective_user_plan(_PAID_EMAIL)
 
-    gs.assert_called_once_with(_PAID_EMAIL)  # queried by the exact key, untransformed
+    gs.assert_called_once()
+    assert gs.call_args.args[1] == _PAID_EMAIL  # queried by the exact key, untransformed
     assert resolved.is_active is True
     assert resolved.subscription.plan.value == "pro"
     assert resolved.subscription.entitlements.monthly_ai_message_limit == 300
@@ -155,10 +157,10 @@ def test_resolve_falls_back_to_free_for_a_non_email_identity():
 
     uuid_identity = "0cb0b1d1-0037-408e-823f-c7eccb337582"
 
-    def fake_get_subscription(key):
+    def fake_get_subscription(db_module, key):
         return _active_pro_row() if key == _PAID_EMAIL else None
 
-    with patch("src.repositories.subscription_repo.get_subscription", side_effect=fake_get_subscription):
+    with patch("src.repositories.paddle_repo.get_paddle_subscription_by_user", side_effect=fake_get_subscription):
         resolved = resolve_effective_user_plan(uuid_identity)
 
     assert resolved.is_active is False

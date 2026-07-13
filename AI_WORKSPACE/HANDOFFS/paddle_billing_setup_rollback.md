@@ -1,7 +1,8 @@
 # Paddle Billing — Setup & Rollback
 
 Branch: `feat/paddle-billing`
-Migration: `migrations/040_paddle_billing.sql`
+Migrations: `migrations/040_paddle_billing.sql`, `migrations/041_paddle_grace_period.sql`
+Scope: single plan — Rico Monthly, AED 79/month (see src/subscription_plans.py)
 
 ---
 
@@ -10,9 +11,9 @@ Migration: `migrations/040_paddle_billing.sql`
 ### 1. Paddle Sandbox account
 
 1. Create account at <https://sandbox-vendors.paddle.com>
-2. Go to **Catalog → Products** → create "Rico Pro" with monthly + yearly prices
-3. Go to **Catalog → Products** → create "Rico Premium" with monthly + yearly prices
-4. Note all four price IDs (format: `pri_...`)
+2. Go to **Catalog → Products** → create "Rico Monthly" with a single monthly
+   price of AED 79 (single-plan scope — no yearly cycle, no Premium tier)
+3. Note the price ID (format: `pri_...`)
 
 ### 2. Webhook endpoint
 
@@ -33,9 +34,7 @@ PADDLE_API_KEY=<your sandbox API key from Paddle dashboard → Developer Tools>
 PADDLE_WEBHOOK_SECRET=<signing secret from step 2>
 PADDLE_SANDBOX=true
 PADDLE_PRO_MONTHLY_PRICE_ID=pri_...
-PADDLE_PRO_YEARLY_PRICE_ID=pri_...
-PADDLE_PREMIUM_MONTHLY_PRICE_ID=pri_...
-PADDLE_PREMIUM_YEARLY_PRICE_ID=pri_...
+RICO_MONTHLY_PRICE_AED=79
 ```
 
 ### 4. Frontend environment variables (Vercel dashboard)
@@ -45,20 +44,21 @@ NEXT_PUBLIC_BILLING_MODE=paddle
 NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=<client token from Paddle dashboard → Developer Tools → Authentication>
 NEXT_PUBLIC_PADDLE_SANDBOX=true
 NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID=pri_...
-NEXT_PUBLIC_PADDLE_PRO_YEARLY_PRICE_ID=pri_...
-NEXT_PUBLIC_PADDLE_PREMIUM_MONTHLY_PRICE_ID=pri_...
-NEXT_PUBLIC_PADDLE_PREMIUM_YEARLY_PRICE_ID=pri_...
 ```
 
 **NEVER** set `NEXT_PUBLIC_PADDLE_API_KEY` — PADDLE_API_KEY is server-side only.
 
-### 5. Run DB migration
+### 5. Run DB migrations
 
 ```bash
 psql $DATABASE_URL -f migrations/040_paddle_billing.sql
+psql $DATABASE_URL -f migrations/041_paddle_grace_period.sql
 ```
 
-This creates `paddle_customers`, `paddle_subscriptions`, `paddle_webhook_events`.
+Migration 040 creates `paddle_customers`, `paddle_subscriptions`,
+`paddle_webhook_events`, `paddle_checkout_sessions`. Migration 041 adds
+`paddle_subscriptions.past_due_since` for the 7-day payment-retry grace
+period (see `src/subscription_plans.PAST_DUE_GRACE_PERIOD`).
 
 ### 6. Deploy
 
@@ -69,13 +69,33 @@ git push origin feat/paddle-billing
 
 ### 7. Sandbox smoke test
 
-1. Open `/settings` with `NEXT_PUBLIC_BILLING_MODE=paddle`
-2. Click **Upgrade monthly** → Paddle overlay appears
-3. Complete test checkout (Paddle test card: `4242 4242 4242 4242`)
-4. Verify webhook received in Paddle dashboard (Notifications log)
-5. Check `paddle_subscriptions` row created for your user
-6. Verify `/api/v1/billing/status` returns `plan: "pro"`, `status: "active"`
-7. Click **Manage subscription** → Paddle portal opens
+Two surfaces exercise the same checkout/status/portal flow: `/subscription`
+(main pricing page) and `/settings` (Account tab → PaddleBillingSection).
+Run through at least one of them end-to-end; both call the same backend.
+
+1. Open `/subscription` (or `/settings`) with `NEXT_PUBLIC_BILLING_MODE=paddle`
+2. Confirm the page shows exactly one plan: **Rico Monthly — AED 79/month**
+3. Click **Upgrade** → confirm `POST /api/v1/billing/paddle/checkout-session`
+   fires first (Network tab) and returns a `session_token`, *then* the
+   Paddle.js overlay opens — checkout must never open without that call
+   succeeding first (this is the identity-attribution fix; skipping it means
+   the resulting subscription can't be linked to any Rico user)
+4. Complete test checkout (Paddle test card: `4242 4242 4242 4242`)
+5. Verify webhook received in Paddle dashboard (Notifications log)
+6. Check `paddle_subscriptions` row created for your user, with
+   `paddle_customer_id` populated in `paddle_customers` too
+7. Verify `/api/v1/billing/status` returns `plan: "pro"`, `status: "active"`
+8. Verify `/api/v1/subscription/me` (used by `/subscription`) also reflects
+   the new Paddle-backed state — this is the same data source used by
+   feature gating (chat limits, saved jobs, etc.), so also confirm a paid
+   feature (e.g. saved-search limit) actually unlocks, not just the billing
+   status display
+9. Click **Manage subscription** → Paddle portal opens
+10. Grace period: in Paddle sandbox, simulate a failed renewal (or manually
+    set the subscription's DB row to `status='past_due'` with a
+    `past_due_since` a few minutes in the past) and confirm entitlements
+    stay active; then confirm they downgrade to Free once `past_due_since`
+    is more than 7 days in the past
 
 ---
 
@@ -84,25 +104,31 @@ git push origin feat/paddle-billing
 ### Immediate (no DB change needed)
 
 ```bash
-# Revert BILLING_MODE to previous value in Render & Vercel
-BILLING_MODE=manual           # or stripe
-NEXT_PUBLIC_BILLING_MODE=manual  # or stripe
+# Revert BILLING_MODE to manual in Render & Vercel
+BILLING_MODE=manual
+NEXT_PUBLIC_BILLING_MODE=manual
 ```
 
 The Paddle billing UI is gated on `isPaddleBillingMode()` — setting mode back to
-`manual` or `stripe` hides all Paddle UI instantly, no redeploy required for env-var
-changes on Render/Vercel.
+`manual` hides all Paddle checkout/portal UI instantly (WhatsApp-assisted activation
+takes over), no redeploy required for env-var changes on Render/Vercel. Note: Stripe
+has been fully removed from this codebase (no code path, no `stripe` dependency) —
+`manual` is the only fallback mode.
 
 ### Full rollback (remove Paddle tables)
 
 ```sql
 -- Only run if you want to fully remove Paddle data
 DROP TABLE IF EXISTS paddle_webhook_events;
+DROP TABLE IF EXISTS paddle_checkout_sessions;
 DROP TABLE IF EXISTS paddle_subscriptions;
 DROP TABLE IF EXISTS paddle_customers;
 DROP FUNCTION IF EXISTS update_paddle_customers_updated_at();
 DROP FUNCTION IF EXISTS update_paddle_subscriptions_updated_at();
 ```
+
+(Migration 041's `past_due_since` column is dropped automatically with the
+`paddle_subscriptions` table above — no separate statement needed.)
 
 ### Git rollback
 
@@ -132,5 +158,49 @@ git push origin main
 | `apps/web/components/settings/SettingsAtelier.tsx` | Modified: renders PaddleBillingSection in Account tab when paddle mode |
 | `.env.example` | Modified: added Paddle backend variable placeholders |
 | `apps/web/.env.local.example` | Modified: added Paddle frontend variable placeholders |
-| `tests/test_paddle_billing.py` | New: 12 backend tests (sig, idempotency, lifecycle, billing_mode) |
+| `tests/test_paddle_billing.py` | New/Modified: backend tests (sig, idempotency, lifecycle, billing_mode) + DB-wiring regression test |
 | `AI_WORKSPACE/HANDOFFS/paddle_billing_setup_rollback.md` | New: this file |
+
+### Follow-up pass: PR #1008 vs #1011 reconciliation, single-plan pricing, grace period
+
+The above table reflects PR #1008's original scope. A follow-up pass compared
+#1008 against a second, independent Paddle implementation (PR #1011), kept
+#1008's architecture (client-side Paddle.js overlay checkout, DB-backed
+webhook idempotency) as the base, ported over #1011's server-owned checkout
+identity-attribution pattern, and fixed several bugs that would have made
+#1008 non-functional in production. Additional changes in this pass:
+
+| File | Change |
+|------|--------|
+| `migrations/041_paddle_grace_period.sql` | New: adds `past_due_since` to `paddle_subscriptions` for the 7-day grace period |
+| `src/repositories/paddle_repo.py` | Fixed: `_get_conn` called a nonexistent `db_module.get_connection()`; routed through `RicoDB().connect()` (RealDictCursor) instead. Added `past_due_since`/`clear_past_due` params to `upsert_paddle_subscription`, added `expire_stale_paddle_subscriptions()` |
+| `src/services/paddle_webhook_service.py` | Added `_lookup_existing_status`/`_compute_past_due_transition` for grace-period bookkeeping (fail-open, never blocks the webhook); collapsed price map to the single Rico Monthly price ID |
+| `src/subscription_plans.py` | Rewritten: single `RICO_MONTHLY_PLAN` (79 AED) replaces the Pro/Premium two-tier scheme; `resolve_effective_user_plan()` now reads from `paddle_subscriptions` (previously read from the deleted `user_subscriptions` table — entitlement gating was disconnected from what the webhook actually wrote); added `PAST_DUE_GRACE_PERIOD` (7 days) |
+| `src/api/routers/subscription.py` | Rewritten: kept only `/intent`, `/plans`, `/me`; checkout/portal/webhook removed (superseded by `/api/v1/billing/paddle/*`) |
+| `src/api/routers/admin_subscriptions.py` | Repointed manual activation from the deleted `subscription_repo` to `paddle_repo.upsert_paddle_subscription`; `plan` literal restricted to `"pro"` |
+| `src/api/routers/paddle_billing.py` | `create_checkout_session` billing_cycle restricted to `"monthly"` only |
+| `src/run_daily.py` | Swapped `subscription_repo.expire_stale_subscriptions` for `paddle_repo.expire_stale_paddle_subscriptions` |
+| `src/billing_mode.py` | Removed `is_stripe_billing_mode`; `is_manual_billing_mode()` = `!= "paddle"` |
+| `src/schemas/subscription.py` | Removed Stripe-era response/request models; `paddle_customer_id`/`paddle_subscription_id` naming |
+| `src/rico_chat_api.py`, `src/rico_identity.py`, `src/services/chat_service.py` | Chat/AI-identity pricing copy updated to single-plan "Rico Monthly — AED 79"; fixed a latent bug in `chat_service.py` where the free-plan branch referenced the deleted `PAID_PLANS[SubscriptionTier.PREMIUM]` |
+| `src/rico/policy/capabilities.py` | Capability name `stripe_billing` → `paddle_billing` |
+| `requirements.txt` | Removed `stripe` dependency entirely |
+| `src/repositories/subscription_repo.py`, `src/services/subscription_webhook_service.py` | Deleted (Stripe-era, superseded) |
+| `apps/web/lib/paddle.ts` | Fixed critical identity-attribution bug: checkout now sends `customData: { checkout_session_id }` (server-issued opaque token) instead of the browser-supplied `user_id`, which the webhook could not trust |
+| `apps/web/lib/api.ts` | Added `createPaddleCheckoutSession()`; removed Stripe-era `createCheckoutSession`/`createCustomerPortalSession` |
+| `apps/web/components/billing/PaddleBillingSection.tsx` | `handleCheckout()` now calls `createPaddleCheckoutSession` before `openPaddleCheckout`; removed yearly-billing button |
+| `apps/web/app/subscription/page.tsx` | Rewritten for single-plan pricing; `handleUpgrade` uses the Paddle.js overlay flow; `handleManage` uses the customer portal |
+| `apps/web/components/LandingPage.tsx`, `apps/web/components/LandingPageNocturne.tsx` | Collapsed the Pro/Premium marketing pricing cards into one "Rico Monthly — AED 79" card, matching the live checkout |
+| `apps/web/app/terms/TermsContent.tsx` | "Payments are processed through Stripe" → "Paddle" |
+| `apps/web/lib/billing.ts` | `isManualBillingMode()` simplified to `!== "paddle"` |
+| `.env.example`, `apps/web/.env.local.example` | Single-plan env vars only (`RICO_MONTHLY_PRICE_AED`, one price ID); all `STRIPE_*` vars removed |
+| `scripts/check_migration_drift.py` | Added migration-041 drift-check entry |
+| Various `tests/*.py` | Updated for the single-plan model, DB-wiring fix, and grace period; net test delta after this pass: 6922 passed / 22 pre-existing-and-unrelated failures (verified against the unmodified PR #1008 base) |
+
+**Customer portal**: `POST /api/v1/subscription/portal` still returns `501` in
+`paddle` billing mode — Paddle's customer-portal API shape was not verified
+against a real sandbox account, so a fabricated integration was deliberately
+not built. Manual/WhatsApp mode is unaffected.
+
+**Sandbox smoke checklist**: see the "Sandbox smoke test" section above —
+unchanged in shape, now exercises the single Rico Monthly plan only.
