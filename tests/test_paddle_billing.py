@@ -493,20 +493,6 @@ class TestPaddleWebhookFailureSemantics(unittest.TestCase):
         mock_request.body = _fake_body
         mock_request.headers = {"Paddle-Signature": "ts=1;h1=x"}
 
-        # process_paddle_webhook is imported inside the function with:
-        #   from src.services.paddle_webhook_service import process_paddle_webhook
-        # so we patch at the source module level.
-        with patch("src.api.routers.paddle_billing._verify_paddle_signature", return_value=True), \
-             patch("src.services.paddle_webhook_service.process_paddle_webhook",
-                   return_value={"status": "failed", "error": "db down"}), \
-             patch("src.services.paddle_webhook_service",
-                   **{"process_paddle_webhook": MagicMock(
-                       return_value={"status": "failed", "error": "db down"})}):
-            pass  # pre-import to set up module
-
-        # Simpler approach: patch the module attribute directly after import
-        import src.services.paddle_webhook_service as _pws
-        original = _pws.process_paddle_webhook if hasattr(_pws, "process_paddle_webhook") else None
         import asyncio as _asyncio
         with patch("src.api.routers.paddle_billing._verify_paddle_signature", return_value=True), \
              patch("src.repositories.paddle_repo.paddle_event_already_processed", return_value=False), \
@@ -522,7 +508,7 @@ class TestPaddleWebhookFailureSemantics(unittest.TestCase):
                                      "ENVIRONMENT": "test"}):
             _clear_price_cache()
             with self.assertRaises(HTTPException) as ctx:
-                _asyncio.get_event_loop().run_until_complete(paddle_webhook(mock_request))
+                _asyncio.run(paddle_webhook(mock_request))
         self.assertEqual(ctx.exception.status_code, 500,
                          "failed processing must return HTTP 500 so Paddle retries")
 
@@ -613,7 +599,7 @@ class TestPaddleWebhookFailureSemantics(unittest.TestCase):
              patch("sys.modules", {**__import__('sys').modules, "src.db": MagicMock()}), \
              patch.dict(os.environ, {"PADDLE_PRO_MONTHLY_PRICE_ID": "pri_pro_monthly"}):
             import asyncio as _asyncio
-            resp = _asyncio.get_event_loop().run_until_complete(
+            resp = _asyncio.run(
                 create_checkout_session(mock_request, user_id="user_cs1")
             )
         self.assertIn("session_token", resp)
@@ -636,7 +622,7 @@ class TestPaddleWebhookFailureSemantics(unittest.TestCase):
         mock_request.json = _fake_json
 
         with self.assertRaises(HTTPException) as ctx:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 create_checkout_session(mock_request, user_id="user_bad")
             )
         self.assertEqual(ctx.exception.status_code, 400)
