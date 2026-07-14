@@ -1,33 +1,34 @@
 "use client";
 
+import { CommandComposer } from "@/components/command/CommandComposer";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
-import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
-import { useLanguage } from "@/contexts/LanguageContext";
-import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
-import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, RicoAttachmentAnalysis, ExecuteAllowedAction } from "@/lib/schemas";
-import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
-import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
-import { bustSidebarCache } from "@/hooks/useSidebarStatus";
-import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
-import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
-import { MissionContextBar } from "@/components/mission/MissionContextBar";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
+import { MissionContextBar } from "@/components/mission/MissionContextBar";
+import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
+import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
-import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
+import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
+import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { bustSidebarCache } from "@/hooks/useSidebarStatus";
+import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
 import { ApiError, clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
+import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
+import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
+import { buildCopyText, getJobFallbackActions } from "@/lib/job-fallback";
 import { buildAuthHref } from "@/lib/redirect";
-import { getJobFallbackActions, buildCopyText } from "@/lib/job-fallback";
+import type { ExecuteAllowedAction, RicoAgenticUi, RicoAttachmentAnalysis, RicoChatAction, RicoProposedChange } from "@/lib/schemas";
+import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
-import { pickOperationState, isRetryableJobSearchIntent } from "./operationState";
-import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
 import type { ApplicationStatus } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { isRetryableJobSearchIntent, pickOperationState } from "./operationState";
 
 function ensureSessionId(sessionIdRef: React.MutableRefObject<string | null>): string {
     if (typeof window === "undefined") return sessionIdRef.current || "ssr-session";
@@ -303,8 +304,8 @@ function SearchElapsedTimer({ t }: { t: (k: TranslationKey) => string }) {
     }, []);
     const hint =
         elapsed >= 20 ? t("cmdSearchWakingUp")
-        : elapsed >= 10 ? t("cmdSearchStillLooking")
-        : null;
+            : elapsed >= 10 ? t("cmdSearchStillLooking")
+                : null;
     return (
         <div className="pl-[42px] flex flex-col gap-1">
             <span className="text-[11px] tabular-nums text-text-muted" aria-live="off">{elapsed}s</span>
@@ -1737,137 +1738,148 @@ export default function CommandPage() {
         <CommandChrome audience={chatAudience}>
             {/* Main column — fills remaining width */}
             <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
-            {/* Top nav: always on mobile/tablet; on lg+ the authenticated audience gets the
+                {/* Top nav: always on mobile/tablet; on lg+ the authenticated audience gets the
                 WorkspaceShell rail instead (public keeps this header on all widths). */}
-            <div className={chatAudience === "authenticated" ? "lg:hidden" : ""}>
-                <MobileCommandHeader
-                    chatAudience={chatAudience}
-                    onLogout={handleLogout}
-                    onNewChat={handleNewChat}
-                    onClearChat={handleClearChat}
-                    loginHref={COMMAND_LOGIN_HREF}
-                    signupHref={COMMAND_SIGNUP_HREF}
-                />
-            </div>
-
-            {/* Hidden file input for CV upload */}
-            <input
-                id="cv-file-upload"
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.webp,.gif,.bmp,.eml,.msg"
-                aria-label="Upload document"
-                title="Upload document"
-                className="hidden"
-                onChange={handleCVUpload}
-            />
-
-            {/* Mission Context Bar — authenticated only; shows goal, progress, next action */}
-            {chatAudience === "authenticated" && (
-                <MissionContextBar onAction={(prompt) => void sendMessage(prompt)} />
-            )}
-
-            <main id="command-main" className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
-                {/* The cold-start banner stays mounted and overlays the message pane,
-                    so its delayed appearance cannot resize the pane or composer. */}
-                <div
-                    role="status"
-                    aria-hidden={!(slowHint && thinking)}
-                    data-testid="command-slow-banner"
-                    className={`pointer-events-none absolute inset-x-0 top-0 z-20 mx-2 mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-300 shadow-lg shadow-background/40 transition-opacity duration-200 sm:mx-4 ${
-                        slowHint && thinking ? "visible opacity-100" : "invisible opacity-0"
-                    }`}
-                >
-                    <span aria-hidden="true">⚡</span>
-                    {t("cmdWorkingSlowHint")}
+                <div className={chatAudience === "authenticated" ? "lg:hidden" : ""}>
+                    <MobileCommandHeader
+                        chatAudience={chatAudience}
+                        onLogout={handleLogout}
+                        onNewChat={handleNewChat}
+                        onClearChat={handleClearChat}
+                        loginHref={COMMAND_LOGIN_HREF}
+                        signupHref={COMMAND_SIGNUP_HREF}
+                    />
                 </div>
 
-                {/* Messages Container */}
-                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pt-12 pb-5 space-y-4 scroll-pb-32 sm:px-4 sm:pt-14 sm:pb-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
+                {/* Mission Context Bar — authenticated only; shows goal, progress, next action */}
+                {chatAudience === "authenticated" && (
+                    <MissionContextBar onAction={(prompt) => void sendMessage(prompt)} />
+                )}
 
-                    {/* Desktop conversation toolbar — New chat + (authenticated) Clear history.
+                <main id="command-main" className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
+                    {/* The cold-start banner stays mounted and overlays the message pane,
+                    so its delayed appearance cannot resize the pane or composer. */}
+                    <div
+                        role="status"
+                        aria-hidden={!(slowHint && thinking)}
+                        data-testid="command-slow-banner"
+                        className={`pointer-events-none absolute inset-x-0 top-0 z-20 mx-2 mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-300 shadow-lg shadow-background/40 transition-opacity duration-200 sm:mx-4 ${slowHint && thinking ? "visible opacity-100" : "invisible opacity-0"
+                            }`}
+                    >
+                        <span aria-hidden="true">⚡</span>
+                        {t("cmdWorkingSlowHint")}
+                    </div>
+
+                    {/* Messages Container */}
+                    <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pt-12 pb-5 space-y-4 scroll-pb-32 sm:px-4 sm:pt-14 sm:pb-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
+
+                        {/* Desktop conversation toolbar — New chat + (authenticated) Clear history.
                         Mobile already has both via MobileCommandHeader's overflow menu, so this
                         is desktop-only to avoid a redundant duplicate control on small screens.
                         Lives inside the scrollable pane (like the row it replaces) so it can
                         never shift the composer's position — see command-composer-stability e2e. */}
-                    {chatAudience !== "checking" && messages.length > 0 && (
-                        <div className="hidden md:flex items-center justify-end gap-3 pb-1">
-                            <button
-                                type="button"
-                                onClick={handleNewChat}
-                                disabled={thinking}
-                                className="text-[11px] text-text-muted hover:text-text-secondary transition-colors disabled:opacity-50"
-                                aria-label={t("newChat")}
-                                title={t("newChat")}
-                            >
-                                {t("newChat")}
-                            </button>
-                            {chatAudience === "authenticated" && messages.length > 1 && (
-                                confirmClear ? (
-                                    <div className="flex items-center gap-2 text-[11px]">
-                                        <span className="text-text-muted">{t("cmdDeleteHistory")}</span>
+                        {chatAudience !== "checking" && messages.length > 0 && (
+                            <div className="hidden md:flex items-center justify-end gap-3 pb-1">
+                                <button
+                                    type="button"
+                                    onClick={handleNewChat}
+                                    disabled={thinking}
+                                    className="text-[11px] text-text-muted hover:text-text-secondary transition-colors disabled:opacity-50"
+                                    aria-label={t("newChat")}
+                                    title={t("newChat")}
+                                >
+                                    {t("newChat")}
+                                </button>
+                                {chatAudience === "authenticated" && messages.length > 1 && (
+                                    confirmClear ? (
+                                        <div className="flex items-center gap-2 text-[11px]">
+                                            <span className="text-text-muted">{t("cmdDeleteHistory")}</span>
+                                            <button
+                                                type="button"
+                                                onClick={handleClearHistory}
+                                                disabled={clearingHistory}
+                                                className="px-2.5 py-1 rounded-lg bg-rico-red/20 border border-rico-red/40 text-rico-red hover:bg-rico-red/30 transition-colors disabled:opacity-50"
+                                            >
+                                                {clearingHistory ? t("cmdClearing") : t("cmdClearConfirm")}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setConfirmClear(false)}
+                                                className="px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:text-rico-text transition-colors"
+                                            >
+                                                {t("cancel")}
+                                            </button>
+                                        </div>
+                                    ) : (
                                         <button
                                             type="button"
                                             onClick={handleClearHistory}
-                                            disabled={clearingHistory}
-                                            className="px-2.5 py-1 rounded-lg bg-rico-red/20 border border-rico-red/40 text-rico-red hover:bg-rico-red/30 transition-colors disabled:opacity-50"
+                                            className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
+                                            aria-label={t("cmdClearHistory")}
                                         >
-                                            {clearingHistory ? t("cmdClearing") : t("cmdClearConfirm")}
+                                            {t("cmdClearHistory")}
                                         </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setConfirmClear(false)}
-                                            className="px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:text-rico-text transition-colors"
-                                        >
-                                            {t("cancel")}
-                                        </button>
+                                    )
+                                )}
+                            </div>
+                        )}
+
+                        {/* Clear-history error — shown if server DELETE failed */}
+                        {clearHistoryError && (
+                            <p className="px-4 py-1.5 text-[11px] text-amber-400/90 text-center">
+                                {clearHistoryError}
+                            </p>
+                        )}
+
+                        {/* CV-ready onboarding panel — Pulse-style glass card with action chips */}
+                        {initialContentReady && cvReady && messages.length === 0 && chatAudience !== "checking" && !thinking && (
+                            <CvReadyOnboardingPanel
+                                onAction={(prompt, label) => sendMessage(prompt, label)}
+                                disabled={thinking}
+                            />
+                        )}
+
+                        {/* Welcome hero + quick start chips */}
+                        {initialContentReady && messages.length === 0 && !thinking && !cvReady && (
+                            <div className="flex flex-col items-center gap-5 pb-4 pt-6 sm:pt-10 animate-in fade-in motion-reduce:animate-none">
+                                {/* Hero */}
+                                <div className="flex flex-col items-center gap-3 text-center">
+                                    <div className="rico-orb !w-12 !h-12 !text-[18px]" aria-hidden="true"><span>R</span></div>
+                                    <div>
+                                        <p className="text-[22px] font-bold tracking-tight text-text-primary sm:text-[26px]">
+                                            {t("cmdHeroTitle")}
+                                        </p>
+                                        <p className="mt-1.5 text-[13px] leading-relaxed text-text-secondary sm:text-[14px]">
+                                            {t("cmdHeroSubtitle")}
+                                        </p>
                                     </div>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        onClick={handleClearHistory}
-                                        className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
-                                        aria-label={t("cmdClearHistory")}
-                                    >
-                                        {t("cmdClearHistory")}
-                                    </button>
-                                )
-                            )}
-                        </div>
-                    )}
-
-                    {/* Clear-history error — shown if server DELETE failed */}
-                    {clearHistoryError && (
-                        <p className="px-4 py-1.5 text-[11px] text-amber-400/90 text-center">
-                            {clearHistoryError}
-                        </p>
-                    )}
-
-                    {/* CV-ready onboarding panel — Pulse-style glass card with action chips */}
-                    {initialContentReady && cvReady && messages.length === 0 && chatAudience !== "checking" && !thinking && (
-                        <CvReadyOnboardingPanel
-                            onAction={(prompt, label) => sendMessage(prompt, label)}
-                            disabled={thinking}
-                        />
-                    )}
-
-                    {/* Welcome hero + quick start chips */}
-                    {initialContentReady && messages.length === 0 && !thinking && !cvReady && (
-                        <div className="flex flex-col items-center gap-5 pb-4 pt-6 sm:pt-10 animate-in fade-in motion-reduce:animate-none">
-                            {/* Hero */}
-                            <div className="flex flex-col items-center gap-3 text-center">
-                                <div className="rico-orb !w-12 !h-12 !text-[18px]" aria-hidden="true"><span>R</span></div>
-                                <div>
-                                    <p className="text-[22px] font-bold tracking-tight text-text-primary sm:text-[26px]">
-                                        {t("cmdHeroTitle")}
-                                    </p>
-                                    <p className="mt-1.5 text-[13px] leading-relaxed text-text-secondary sm:text-[14px]">
-                                        {t("cmdHeroSubtitle")}
-                                    </p>
+                                </div>
+                                {/* Chips */}
+                                <div className="grid w-full max-w-xl grid-cols-1 gap-2 min-[480px]:grid-cols-2">
+                                    {QUICK_ACTION_DEFS.map((qa) => {
+                                        const label = t(qa.key as TranslationKey);
+                                        const icon = QUICK_ACTION_ICONS[qa.key];
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={qa.key}
+                                                onClick={() => sendMessage(qa.prompt, label)}
+                                                disabled={thinking || chatAudience === "checking"}
+                                                className="group flex min-h-[52px] cursor-pointer items-center gap-3 rounded-2xl border border-border-subtle bg-surface-glass px-4 py-3 text-start text-[12px] text-text-secondary transition-all hover:border-gold/30 hover:bg-surface-subtle hover:text-text-primary disabled:opacity-50 rico-focus-strong"
+                                            >
+                                                <span className="shrink-0 text-text-muted transition-colors group-hover:text-gold" aria-hidden="true">
+                                                    {icon}
+                                                </span>
+                                                <span>{label}</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                            {/* Chips */}
-                            <div className="grid w-full max-w-xl grid-cols-1 gap-2 min-[480px]:grid-cols-2">
+                        )}
+                        {/* Chips only (no hero) when there's already one message */}
+                        {messages.length === 1 && !thinking && !cvReady && (
+                            <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2">
                                 {QUICK_ACTION_DEFS.map((qa) => {
                                     const label = t(qa.key as TranslationKey);
                                     const icon = QUICK_ACTION_ICONS[qa.key];
@@ -1877,7 +1889,7 @@ export default function CommandPage() {
                                             key={qa.key}
                                             onClick={() => sendMessage(qa.prompt, label)}
                                             disabled={thinking || chatAudience === "checking"}
-                                            className="group flex min-h-[52px] cursor-pointer items-center gap-3 rounded-2xl border border-border-subtle bg-surface-glass px-4 py-3 text-start text-[12px] text-text-secondary transition-all hover:border-gold/30 hover:bg-surface-subtle hover:text-text-primary disabled:opacity-50 rico-focus-strong"
+                                            className="group flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-border-subtle bg-surface-glass px-3 py-2.5 text-start text-[11px] text-text-secondary transition-all hover:border-gold/25 hover:bg-surface-subtle hover:text-text-primary disabled:opacity-50 rico-focus-strong"
                                         >
                                             <span className="shrink-0 text-text-muted transition-colors group-hover:text-gold" aria-hidden="true">
                                                 {icon}
@@ -1887,486 +1899,361 @@ export default function CommandPage() {
                                     );
                                 })}
                             </div>
-                        </div>
-                    )}
-                    {/* Chips only (no hero) when there's already one message */}
-                    {messages.length === 1 && !thinking && !cvReady && (
-                        <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2">
-                            {QUICK_ACTION_DEFS.map((qa) => {
-                                const label = t(qa.key as TranslationKey);
-                                const icon = QUICK_ACTION_ICONS[qa.key];
-                                return (
-                                    <button
-                                        type="button"
-                                        key={qa.key}
-                                        onClick={() => sendMessage(qa.prompt, label)}
-                                        disabled={thinking || chatAudience === "checking"}
-                                        className="group flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-border-subtle bg-surface-glass px-3 py-2.5 text-start text-[11px] text-text-secondary transition-all hover:border-gold/25 hover:bg-surface-subtle hover:text-text-primary disabled:opacity-50 rico-focus-strong"
-                                    >
-                                        <span className="shrink-0 text-text-muted transition-colors group-hover:text-gold" aria-hidden="true">
-                                            {icon}
-                                        </span>
-                                        <span>{label}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
+                        )}
 
-                    {/* Messages */}
-                    {messages.map((m, idx) => {
-                        const prevMsg = messages[idx - 1];
-                        const isFirstInGroup = !prevMsg || prevMsg.role !== m.role;
-                        // Only profile_preview gets a light panel — all other Rico responses
-                        // render as flowing text with no backing bubble.
-                        const isStructured = m.type === "profile_preview";
+                        {/* Messages */}
+                        {messages.map((m, idx) => {
+                            const prevMsg = messages[idx - 1];
+                            const isFirstInGroup = !prevMsg || prevMsg.role !== m.role;
+                            // Only profile_preview gets a light panel — all other Rico responses
+                            // render as flowing text with no backing bubble.
+                            const isStructured = m.type === "profile_preview";
 
-                        return (
-                            <div
-                                key={m.id}
-                                dir="ltr"
-                                className={`flex min-h-6 animate-in fade-in motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
-                            >
-                                {m.role === "rico" && (
-                                    <div
-                                        className={`rico-orb !w-6 !h-6 !text-[10px] mt-0.5 shrink-0 ${isFirstInGroup ? "" : "invisible"}`}
-                                        aria-hidden="true"
-                                    ><span>R</span></div>
-                                )}
-                                <div dir="auto" className={`${m.role === "user"
-                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-gold px-3.5 py-2.5 text-start text-[14px] font-medium leading-relaxed text-[#0a0a1a] sm:max-w-[72%]"
-                                    : isStructured
-                                        ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
-                                        : "flex-1 min-w-0 break-words text-start text-[14px] leading-relaxed text-rico-text"
-                                    }`}>
-
-                                    {/* Search result caption */}
-                                    {m.type === "job_matches" && m.search_query && (
-                                        <div className="mb-1.5 text-[10px] text-text-muted">
-                                            {m.stale && (
-                                                <span className="mr-1.5 px-1.5 py-0.5 rounded bg-border-subtle text-text-muted border border-border-soft">
-                                                    {t("cmdOldResult")}
-                                                </span>
-                                            )}
-                                            {m.result_count != null && m.result_count > 0
-                                                ? `${m.result_count} ${m.result_count === 1 ? t("cmdMatch") : t("cmdMatches")}`
-                                                : t("cmdNoMatches")} for <strong className="text-text-secondary">{m.search_query}</strong>
-                                            {m.broadened && <span className="text-rico-amber"> · {t("cmdBroadened")}</span>}
-                                        </div>
+                            return (
+                                <div
+                                    key={m.id}
+                                    dir="ltr"
+                                    className={`flex min-h-6 animate-in fade-in motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
+                                >
+                                    {m.role === "rico" && (
+                                        <div
+                                            className={`rico-orb !w-6 !h-6 !text-[10px] mt-0.5 shrink-0 ${isFirstInGroup ? "" : "invisible"}`}
+                                            aria-hidden="true"
+                                        ><span>R</span></div>
                                     )}
+                                    <div dir="auto" className={`${m.role === "user"
+                                        ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-gold px-3.5 py-2.5 text-start text-[14px] font-medium leading-relaxed text-[#0a0a1a] sm:max-w-[72%]"
+                                        : isStructured
+                                            ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
+                                            : "flex-1 min-w-0 break-words text-start text-[14px] leading-relaxed text-rico-text"
+                                        }`}>
 
-                                    {/* Message text */}
-                                    {m.text && (
-                                        m.role === "rico"
-                                            ? <RicoMarkdownContent>{m.text!}</RicoMarkdownContent>
-                                            : <div className="whitespace-pre-wrap">{m.text}</div>
-                                    )}
+                                        {/* Search result caption */}
+                                        {m.type === "job_matches" && m.search_query && (
+                                            <div className="mb-1.5 text-[10px] text-text-muted">
+                                                {m.stale && (
+                                                    <span className="mr-1.5 px-1.5 py-0.5 rounded bg-border-subtle text-text-muted border border-border-soft">
+                                                        {t("cmdOldResult")}
+                                                    </span>
+                                                )}
+                                                {m.result_count != null && m.result_count > 0
+                                                    ? `${m.result_count} ${m.result_count === 1 ? t("cmdMatch") : t("cmdMatches")}`
+                                                    : t("cmdNoMatches")} for <strong className="text-text-secondary">{m.search_query}</strong>
+                                                {m.broadened && <span className="text-rico-amber"> · {t("cmdBroadened")}</span>}
+                                            </div>
+                                        )}
 
-                                    {/* Source rate-limited notice — keep the user inside Rico
+                                        {/* Message text */}
+                                        {m.text && (
+                                            m.role === "rico"
+                                                ? <RicoMarkdownContent>{m.text!}</RicoMarkdownContent>
+                                                : <div className="whitespace-pre-wrap">{m.text}</div>
+                                        )}
+
+                                        {/* Source rate-limited notice — keep the user inside Rico
                                     and point them at the alternate link on each card. */}
-                                    {m.rate_limit_notice && (
-                                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-gold/30 bg-gold/8 px-3 py-2 text-[11px] text-gold">
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5" aria-hidden="true">
-                                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                                <line x1="12" y1="9" x2="12" y2="13" />
-                                                <line x1="12" y1="17" x2="12.01" y2="17" />
-                                            </svg>
-                                            <span>{m.rate_limit_notice}</span>
-                                        </div>
-                                    )}
+                                        {m.rate_limit_notice && (
+                                            <div className="mt-2 flex items-start gap-2 rounded-lg border border-gold/30 bg-gold/8 px-3 py-2 text-[11px] text-gold">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5" aria-hidden="true">
+                                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                                    <line x1="12" y1="9" x2="12" y2="13" />
+                                                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                                                </svg>
+                                                <span>{m.rate_limit_notice}</span>
+                                            </div>
+                                        )}
 
-                                    {/* Job match cards — stale results are collapsed by default */}
-                                    {m.matches && m.matches.length > 0 && (
-                                        m.stale ? (
-                                            <details className="mt-2 group">
-                                                <summary className="cursor-pointer text-[11px] text-text-muted hover:text-text-secondary transition-colors select-none list-none flex items-center gap-1">
-                                                    <svg width="10" height="10" viewBox="0 0 10 10" className="transition-transform group-open:rotate-90" fill="currentColor"><path d="M3 2l4 3-4 3V2z" /></svg>
-                                                    {t("cmdShowOld")} {m.matches.length} {m.matches.length === 1 ? t("cmdMatch") : t("cmdMatches")} {t("cmdStaleNote")}
-                                                </summary>
-                                                <div className="mt-2 space-y-2 opacity-70">
+                                        {/* Job match cards — stale results are collapsed by default */}
+                                        {m.matches && m.matches.length > 0 && (
+                                            m.stale ? (
+                                                <details className="mt-2 group">
+                                                    <summary className="cursor-pointer text-[11px] text-text-muted hover:text-text-secondary transition-colors select-none list-none flex items-center gap-1">
+                                                        <svg width="10" height="10" viewBox="0 0 10 10" className="transition-transform group-open:rotate-90" fill="currentColor"><path d="M3 2l4 3-4 3V2z" /></svg>
+                                                        {t("cmdShowOld")} {m.matches.length} {m.matches.length === 1 ? t("cmdMatch") : t("cmdMatches")} {t("cmdStaleNote")}
+                                                    </summary>
+                                                    <div className="mt-2 space-y-2 opacity-70">
+                                                        {m.matches.map((match, i) => (
+                                                            <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                        ))}
+                                                    </div>
+                                                </details>
+                                            ) : (
+                                                <div className="mt-2 space-y-2">
                                                     {m.matches.map((match, i) => (
                                                         <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
                                                     ))}
                                                 </div>
-                                            </details>
-                                        ) : (
-                                            <div className="mt-2 space-y-2">
-                                                {m.matches.map((match, i) => (
-                                                    <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
-                                                ))}
-                                            </div>
-                                        )
-                                    )}
+                                            )
+                                        )}
 
-                                    {/* Application status card */}
-                                    {m.type === "application_status" && m.applications && m.applications.length > 0 && (
-                                        <ApplicationStatusCard
-                                            applications={m.applications}
-                                            followUpNeeded={m.follow_up_needed ?? []}
-                                        />
-                                    )}
+                                        {/* Application status card */}
+                                        {m.type === "application_status" && m.applications && m.applications.length > 0 && (
+                                            <ApplicationStatusCard
+                                                applications={m.applications}
+                                                followUpNeeded={m.follow_up_needed ?? []}
+                                            />
+                                        )}
 
-                                    {/* Profile gap card */}
-                                    {m.type === "profile_gap" && m.profile_gaps && m.profile_gaps.length > 0 && (
-                                        <ProfileGapCard gaps={m.profile_gaps} />
-                                    )}
+                                        {/* Profile gap card */}
+                                        {m.type === "profile_gap" && m.profile_gaps && m.profile_gaps.length > 0 && (
+                                            <ProfileGapCard gaps={m.profile_gaps} />
+                                        )}
 
-                                    {/* CV draft card — structured preview, no raw contact values */}
-                                    {m.type === "profile_preview" && m.preview && (
-                                        <CVDraftCard
-                                            preview={m.preview}
-                                            filename={m.filename ?? ""}
-                                            extractionQuality={m.extractionQuality}
-                                        />
-                                    )}
+                                        {/* CV draft card — structured preview, no raw contact values */}
+                                        {m.type === "profile_preview" && m.preview && (
+                                            <CVDraftCard
+                                                preview={m.preview}
+                                                filename={m.filename ?? ""}
+                                                extractionQuality={m.extractionQuality}
+                                            />
+                                        )}
 
-                                    {/* Profile preview confirmation buttons */}
-                                    {m.type === "profile_preview" && m.preview && m.filename && editingProfileId !== m.id && (
-                                        <div className="mt-3 flex gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id, m.docType, m.uploadId)}
-                                                disabled={thinking}
-                                                className="text-[12px] px-4 py-2 rounded-lg bg-gold text-[#0a0a1a] font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
-                                            >
-                                                {t("cmdProfileUseThis")}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setEditingProfileId(m.id);
-                                                    setDraftProfile(m.preview!);
-                                                }}
-                                                disabled={thinking}
-                                                className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-gold/40 hover:text-rico-text transition-colors disabled:opacity-50"
-                                            >
-                                                {t("cmdProfileEditBefore")}
-                                            </button>
-                                        </div>
-                                    )}
-                                    {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
-                                        <div className="mt-3 space-y-2 border-t border-border-soft pt-3">
-                                            <p className="text-[11px] font-semibold text-gold">{t("cmdProfileEditLabel")}</p>
-                                            {(
-                                                [
-                                                    ["name", t("name")],
-                                                    ["current_role", t("cmdProfileCurrentRole")],
-                                                    ["email", t("email")],
-                                                    ["phone", t("profilePhone")],
-                                                ] as [keyof ProfilePreview, string][]
-                                            ).map(([field, label]) => (
-                                                <label key={field} className="block space-y-0.5">
-                                                    <span className="text-[10px] text-text-muted">{label}</span>
-                                                    <input
-                                                        value={(draftProfile[field] as string) ?? ""}
-                                                        onChange={(e) =>
-                                                            setDraftProfile((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
-                                                        }
-                                                        className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-gold/60"
-                                                    />
-                                                </label>
-                                            ))}
-                                            <label className="block space-y-0.5">
-                                                <span className="text-[10px] text-text-muted">{t("cmdProfileSkills")}</span>
-                                                <input
-                                                    value={(draftProfile.skills_detected ?? draftProfile.skills ?? []).join(", ")}
-                                                    onChange={(e) => {
-                                                        const skills = e.target.value.split(",").map((skill) => skill.trim()).filter(Boolean);
-                                                        setDraftProfile((prev) =>
-                                                            prev ? { ...prev, skills_detected: skills, skills } : prev
-                                                        );
-                                                    }}
-                                                    className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-gold/60"
-                                                />
-                                            </label>
-                                            <div className="flex gap-2 pt-1">
+                                        {/* Profile preview confirmation buttons */}
+                                        {m.type === "profile_preview" && m.preview && m.filename && editingProfileId !== m.id && (
+                                            <div className="mt-3 flex gap-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => {
-                                                        handleConfirmProfile(draftProfile, m.filename!, m.id, m.docType, m.uploadId);
-                                                        setEditingProfileId(null);
-                                                        setDraftProfile(null);
-                                                    }}
+                                                    onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id, m.docType, m.uploadId)}
                                                     disabled={thinking}
                                                     className="text-[12px] px-4 py-2 rounded-lg bg-gold text-[#0a0a1a] font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
                                                 >
-                                                    {t("cmdProfileSave")}
+                                                    {t("cmdProfileUseThis")}
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => {
-                                                        setEditingProfileId(null);
-                                                        setDraftProfile(null);
+                                                        setEditingProfileId(m.id);
+                                                        setDraftProfile(m.preview!);
                                                     }}
-                                                    className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-gold/40 hover:text-rico-text transition-colors"
+                                                    disabled={thinking}
+                                                    className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-gold/40 hover:text-rico-text transition-colors disabled:opacity-50"
                                                 >
-                                                    {t("cancel")}
+                                                    {t("cmdProfileEditBefore")}
                                                 </button>
                                             </div>
-                                        </div>
-                                    )}
-                                    {!m.streaming && m.options && m.options.length > 0 && (
-                                        <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
-                                    )}
-                                    {!m.streaming && m.agentic_ui?.actions && m.agentic_ui.actions.length > 0 && (
-                                        <ChatActionsRow
-                                            actions={m.agentic_ui.actions}
-                                            onChatContinue={(prompt) => sendMessage(prompt)}
-                                            onSubmit={(action) => handleActionSubmit(m, action)}
-                                            onOpenDrawer={(action) => handleOpenDrawer(m, action)}
-                                            disabled={thinking}
-                                        />
-                                    )}
-                                    {!m.streaming && m.actions && m.actions.length > 0 && (
-                                        <ChatActionsRow
-                                            actions={m.actions}
-                                            onChatContinue={(prompt) => sendMessage(prompt)}
-                                            disabled={thinking}
-                                        />
-                                    )}
-                                    {!m.streaming && !m.permission_dismissed && m.agentic_ui?.permission_request && (
-                                        <PermissionRequestCard
-                                            request={m.agentic_ui.permission_request}
-                                            disabled={thinking}
-                                            onApprove={(action: RicoChatAction) =>
-                                                handlePermissionApprove(m, action)
-                                            }
-                                            onCancel={() =>
-                                                setMessages((prev) =>
-                                                    prev.map((msg) =>
-                                                        msg.id === m.id
-                                                            ? { ...msg, permission_dismissed: true }
-                                                            : msg,
-                                                    ),
-                                                )
-                                            }
-                                        />
-                                    )}
-                                    {!m.streaming && !m.proposed_dismissed &&
-                                        m.agentic_ui?.proposed_changes &&
-                                        m.agentic_ui.proposed_changes.length > 0 && (
-                                        <ProposedChangeCard
-                                            changes={m.agentic_ui.proposed_changes as RicoProposedChange[]}
-                                            submitAction={m.agentic_ui.actions?.find(
-                                                (a) => a.kind === "submit",
-                                            )}
-                                            onSubmit={(action) => handleActionSubmit(m, action)}
-                                            onCancel={() =>
-                                                setMessages((prev) =>
-                                                    prev.map((msg) =>
-                                                        msg.id === m.id
-                                                            ? { ...msg, proposed_dismissed: true }
-                                                            : msg,
-                                                    ),
-                                                )
-                                            }
-                                            disabled={thinking}
-                                        />
-                                    )}
-                                    {!m.streaming &&
-                                        m.agentic_ui?.attachment_analysis &&
-                                        m.agentic_ui.attachment_analysis.length > 0 && (
-                                        <AttachmentAnalysisCard
-                                            analyses={m.agentic_ui.attachment_analysis as RicoAttachmentAnalysis[]}
-                                        />
-                                    )}
-
-                                    {/* Role confirmation reasons + next_actions */}
-                                    {!m.streaming && m.type === "role_confirmation" && (
-                                        <div className="mt-3 space-y-2">
-                                            {m.reasons && m.reasons.length > 0 && (
-                                                <ul className="list-disc list-inside text-[12px] text-text-secondary space-y-0.5">
-                                                    {m.reasons.map((r, i) => (
-                                                        <li key={i}>{r}</li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                            {m.next_actions && m.next_actions.length > 0 && (
-                                                <div className="flex flex-wrap gap-2 pt-1">
-                                                    {m.next_actions.map((na) => (
-                                                        <button
-                                                            type="button"
-                                                            key={na.action}
-                                                            onClick={() => sendMessage(na.message ?? na.label)}
-                                                            className="text-[11px] px-3 py-1.5 rounded-xl border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 transition-colors rico-focus-strong"
-                                                        >
-                                                            {na.label}
-                                                        </button>
-                                                    ))}
+                                        )}
+                                        {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
+                                            <div className="mt-3 space-y-2 border-t border-border-soft pt-3">
+                                                <p className="text-[11px] font-semibold text-gold">{t("cmdProfileEditLabel")}</p>
+                                                {(
+                                                    [
+                                                        ["name", t("name")],
+                                                        ["current_role", t("cmdProfileCurrentRole")],
+                                                        ["email", t("email")],
+                                                        ["phone", t("profilePhone")],
+                                                    ] as [keyof ProfilePreview, string][]
+                                                ).map(([field, label]) => (
+                                                    <label key={field} className="block space-y-0.5">
+                                                        <span className="text-[10px] text-text-muted">{label}</span>
+                                                        <input
+                                                            value={(draftProfile[field] as string) ?? ""}
+                                                            onChange={(e) =>
+                                                                setDraftProfile((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
+                                                            }
+                                                            className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-gold/60"
+                                                        />
+                                                    </label>
+                                                ))}
+                                                <label className="block space-y-0.5">
+                                                    <span className="text-[10px] text-text-muted">{t("cmdProfileSkills")}</span>
+                                                    <input
+                                                        value={(draftProfile.skills_detected ?? draftProfile.skills ?? []).join(", ")}
+                                                        onChange={(e) => {
+                                                            const skills = e.target.value.split(",").map((skill) => skill.trim()).filter(Boolean);
+                                                            setDraftProfile((prev) =>
+                                                                prev ? { ...prev, skills_detected: skills, skills } : prev
+                                                            );
+                                                        }}
+                                                        className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-gold/60"
+                                                    />
+                                                </label>
+                                                <div className="flex gap-2 pt-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            handleConfirmProfile(draftProfile, m.filename!, m.id, m.docType, m.uploadId);
+                                                            setEditingProfileId(null);
+                                                            setDraftProfile(null);
+                                                        }}
+                                                        disabled={thinking}
+                                                        className="text-[12px] px-4 py-2 rounded-lg bg-gold text-[#0a0a1a] font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
+                                                    >
+                                                        {t("cmdProfileSave")}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditingProfileId(null);
+                                                            setDraftProfile(null);
+                                                        }}
+                                                        className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-gold/40 hover:text-rico-text transition-colors"
+                                                    >
+                                                        {t("cancel")}
+                                                    </button>
                                                 </div>
+                                            </div>
+                                        )}
+                                        {!m.streaming && m.options && m.options.length > 0 && (
+                                            <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
+                                        )}
+                                        {!m.streaming && m.agentic_ui?.actions && m.agentic_ui.actions.length > 0 && (
+                                            <ChatActionsRow
+                                                actions={m.agentic_ui.actions}
+                                                onChatContinue={(prompt) => sendMessage(prompt)}
+                                                onSubmit={(action) => handleActionSubmit(m, action)}
+                                                onOpenDrawer={(action) => handleOpenDrawer(m, action)}
+                                                disabled={thinking}
+                                            />
+                                        )}
+                                        {!m.streaming && m.actions && m.actions.length > 0 && (
+                                            <ChatActionsRow
+                                                actions={m.actions}
+                                                onChatContinue={(prompt) => sendMessage(prompt)}
+                                                disabled={thinking}
+                                            />
+                                        )}
+                                        {!m.streaming && !m.permission_dismissed && m.agentic_ui?.permission_request && (
+                                            <PermissionRequestCard
+                                                request={m.agentic_ui.permission_request}
+                                                disabled={thinking}
+                                                onApprove={(action: RicoChatAction) =>
+                                                    handlePermissionApprove(m, action)
+                                                }
+                                                onCancel={() =>
+                                                    setMessages((prev) =>
+                                                        prev.map((msg) =>
+                                                            msg.id === m.id
+                                                                ? { ...msg, permission_dismissed: true }
+                                                                : msg,
+                                                        ),
+                                                    )
+                                                }
+                                            />
+                                        )}
+                                        {!m.streaming && !m.proposed_dismissed &&
+                                            m.agentic_ui?.proposed_changes &&
+                                            m.agentic_ui.proposed_changes.length > 0 && (
+                                                <ProposedChangeCard
+                                                    changes={m.agentic_ui.proposed_changes as RicoProposedChange[]}
+                                                    submitAction={m.agentic_ui.actions?.find(
+                                                        (a) => a.kind === "submit",
+                                                    )}
+                                                    onSubmit={(action) => handleActionSubmit(m, action)}
+                                                    onCancel={() =>
+                                                        setMessages((prev) =>
+                                                            prev.map((msg) =>
+                                                                msg.id === m.id
+                                                                    ? { ...msg, proposed_dismissed: true }
+                                                                    : msg,
+                                                            ),
+                                                        )
+                                                    }
+                                                    disabled={thinking}
+                                                />
                                             )}
-                                        </div>
-                                    )}
+                                        {!m.streaming &&
+                                            m.agentic_ui?.attachment_analysis &&
+                                            m.agentic_ui.attachment_analysis.length > 0 && (
+                                                <AttachmentAnalysisCard
+                                                    analyses={m.agentic_ui.attachment_analysis as RicoAttachmentAnalysis[]}
+                                                />
+                                            )}
 
-                                    {/* Copy / Retry row — copy is offered on every settled Rico turn;
+                                        {/* Role confirmation reasons + next_actions */}
+                                        {!m.streaming && m.type === "role_confirmation" && (
+                                            <div className="mt-3 space-y-2">
+                                                {m.reasons && m.reasons.length > 0 && (
+                                                    <ul className="list-disc list-inside text-[12px] text-text-secondary space-y-0.5">
+                                                        {m.reasons.map((r, i) => (
+                                                            <li key={i}>{r}</li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                                {m.next_actions && m.next_actions.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2 pt-1">
+                                                        {m.next_actions.map((na) => (
+                                                            <button
+                                                                type="button"
+                                                                key={na.action}
+                                                                onClick={() => sendMessage(na.message ?? na.label)}
+                                                                className="text-[11px] px-3 py-1.5 rounded-xl border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 transition-colors rico-focus-strong"
+                                                            >
+                                                                {na.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Copy / Retry row — copy is offered on every settled Rico turn;
                                         retry only on turns marked isError (network/timeout/generic send
                                         failures), and resends the exact original user text. */}
-                                    {!m.streaming && m.role === "rico" && (m.text || (m.isError && m.retryText)) && (
-                                        <div className="mt-2 flex items-center gap-3">
-                                            {m.text && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleCopyMessage(m.id, m.text)}
-                                                    className="inline-flex items-center gap-1 text-[10px] text-text-muted transition-colors hover:text-text-secondary rico-focus-strong"
-                                                    aria-label={copiedId === m.id ? t("cmdCopied") : t("cmdCopy")}
-                                                >
-                                                    {copiedId === m.id ? <IconCheck /> : <IconCopy />}
-                                                    {copiedId === m.id ? t("cmdCopied") : t("cmdCopy")}
-                                                </button>
-                                            )}
-                                            {m.isError && m.retryText && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => sendMessage(m.retryText!)}
-                                                    disabled={thinking}
-                                                    className="inline-flex items-center gap-1 text-[10px] text-gold transition-colors hover:text-gold-hover disabled:opacity-50 rico-focus-strong"
-                                                    aria-label={t("retry")}
-                                                >
-                                                    <IconRetry />
-                                                    {t("retry")}
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
+                                        {!m.streaming && m.role === "rico" && (m.text || (m.isError && m.retryText)) && (
+                                            <div className="mt-2 flex items-center gap-3">
+                                                {m.text && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyMessage(m.id, m.text)}
+                                                        className="inline-flex items-center gap-1 text-[10px] text-text-muted transition-colors hover:text-text-secondary rico-focus-strong"
+                                                        aria-label={copiedId === m.id ? t("cmdCopied") : t("cmdCopy")}
+                                                    >
+                                                        {copiedId === m.id ? <IconCheck /> : <IconCopy />}
+                                                        {copiedId === m.id ? t("cmdCopied") : t("cmdCopy")}
+                                                    </button>
+                                                )}
+                                                {m.isError && m.retryText && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => sendMessage(m.retryText!)}
+                                                        disabled={thinking}
+                                                        className="inline-flex items-center gap-1 text-[10px] text-gold transition-colors hover:text-gold-hover disabled:opacity-50 rico-focus-strong"
+                                                        aria-label={t("retry")}
+                                                    >
+                                                        <IconRetry />
+                                                        {t("retry")}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
+                            );
+                        })}
+
+                        {thinking && (
+                            <div className="flex min-h-12 flex-col gap-2">
+                                <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
+                                {operationState?.state === "searching" && (
+                                    <SearchElapsedTimer t={t} />
+                                )}
                             </div>
-                        );
-                    })}
+                        )}
 
-                    {thinking && (
-                        <div className="flex min-h-12 flex-col gap-2">
-                            <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
-                            {operationState?.state === "searching" && (
-                                <SearchElapsedTimer t={t} />
-                            )}
-                        </div>
-                    )}
-
-                    <div aria-hidden="true" />
-                </div>
-
-                {/* Input bar — shrink-0 flex child keeps it below the scroll area;
-                    safe-area padding covers iOS home indicator. */}
-                <div className={`shrink-0 px-2 pt-3 sm:px-4 ${chatAudience === "authenticated" ? "pb-[calc(56px+1rem+env(safe-area-inset-bottom))] md:pb-[calc(1rem+env(safe-area-inset-bottom))]" : "pb-[calc(1rem+env(safe-area-inset-bottom))]"}`}>
-                    {/* Dynamic notices use an always-present slot, preventing quota,
-                        upload, or sign-up messages from moving the composer. */}
-                    <div className="relative min-h-10" aria-live="polite">
-                        <div className="absolute inset-x-0 bottom-2 space-y-2">
-                            {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
-                                <div className="flex items-center justify-between gap-3 px-1">
-                                    <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
-                                    <Link
-                                        href={COMMAND_SIGNUP_HREF}
-                                        className="text-[11px] px-3 py-1 rounded-lg bg-gold/10 border border-gold/25 text-gold hover:bg-gold/18 transition-colors shrink-0 font-medium cursor-pointer"
-                                    >
-                                        {t("cmdSignUpFree")}
-                                    </Link>
-                                </div>
-                            )}
-                            {uploadError && (
-                                <p className="text-center text-[11px] text-rico-red" role="alert">{uploadError}</p>
-                            )}
-                            {messagesRemaining !== null && messagesRemaining <= 10 && chatAudience === "authenticated" && (
-                                <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2" role="status">
-                                    <p className="text-[11px] text-amber-400">
-                                        {messagesRemaining === 0
-                                            ? t("cmdMsgLimitReached")
-                                            : messagesRemaining === 1
-                                                ? t("cmdMsgLimitOne")
-                                                : t("cmdMsgLimitFew").replace("{n}", String(messagesRemaining))}
-                                    </p>
-                                    <Link
-                                        href="/subscription"
-                                        className="shrink-0 text-[11px] font-medium text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors"
-                                    >
-                                        {t("cmdUpgrade")}
-                                    </Link>
-                                </div>
-                            )}
-                        </div>
+                        <div aria-hidden="true" />
                     </div>
-                    <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface-elevated/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-md transition-[border-color,box-shadow] focus-within:border-gold/30 focus-within:shadow-[0_0_0_3px_rgba(245,166,35,0.07),0_8px_32px_rgba(0,0,0,0.12)]">
-                        {/* CV upload button — label triggers the hidden file input natively,
-                            avoiding the programmatic .click() which some mobile browsers block. */}
-                        <label
-                            htmlFor={thinking || chatAudience === "checking" || hasPendingPermission ? undefined : "cv-file-upload"}
-                            role="button"
-                            tabIndex={thinking || chatAudience === "checking" || hasPendingPermission ? -1 : 0}
-                            aria-disabled={thinking || chatAudience === "checking" || hasPendingPermission}
-                            title={t("cmdUploadCvTitle")}
-                            aria-label={t("cmdUploadCvAriaLabel")}
-                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-secondary transition-colors rico-focus-strong ${thinking || chatAudience === "checking" || hasPendingPermission ? "opacity-30 pointer-events-none cursor-default" : "cursor-pointer hover:bg-surface-subtle hover:text-rico-text"}`}
-                        >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                            </svg>
-                        </label>
 
-                        {/* Text input */}
-                        <div className="relative flex-1">
-                            <textarea
-                                ref={textareaRef}
-                                value={input}
-                                onChange={(e) => {
-                                    setInput(e.target.value);
-                                    e.target.style.height = "auto";
-                                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                                }}
-                                onKeyDown={handleKeyDown}
-                                // Not disabled during thinking — the cancel button handles
-                                // abort; keeping textarea active lets users read/edit the
-                                // queued text while waiting.  Enter while thinking is a no-op
-                                // (sendingRef guard) so accidental sends are prevented.
-                                disabled={chatAudience === "checking" || hasPendingPermission}
-                                rows={1}
-                                aria-label="Message Rico"
-                                aria-describedby="command-input-hint"
-                                placeholder={hasPendingPermission
-                                    ? "Approve or cancel the request above to continue"
-                                    : chatAudience === "checking"
-                                        ? t("cmdPlaceholderChecking")
-                                        : t("cmdPlaceholderReady")}
-                                className="max-h-[120px] w-full resize-none rounded-xl border-0 bg-transparent py-3 pe-12 ps-3 text-[16px] sm:text-sm text-rico-text placeholder:text-text-muted outline-none transition-all"
-                            />
-                            {/* Cancel button — replaces the send button while a request is in
-                                flight (BUG #7). Clicking aborts the active AbortController,
-                                resets all in-progress UI state, and appends a "cancelled"
-                                message so the user knows the request was stopped cleanly.
-                                The send icon is shown when idle; the ✕ stop icon when thinking. */}
-                            {thinking ? (
-                                <button
-                                    type="button"
-                                    onClick={cancelRequest}
-                                    className="absolute bottom-1.5 end-1.5 top-1.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-rico-red/90 text-white transition-colors hover:bg-rico-red rico-focus-strong"
-                                    aria-label={t("cmdCancelRequest")}
-                                    title={t("cmdCancelRequest")}
-                                >
-                                    {/* ✕ stop icon */}
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                        <line x1="18" y1="6" x2="6" y2="18" />
-                                        <line x1="6" y1="6" x2="18" y2="18" />
-                                    </svg>
-                                </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={handleSend}
-                                    disabled={chatAudience === "checking" || hasPendingPermission || !input.trim()}
-                                    className="absolute bottom-1.5 end-1.5 top-1.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-gold text-[#0a0a1a] transition-colors hover:bg-gold-hover disabled:opacity-30 disabled:grayscale rico-focus-strong"
-                                    aria-label={t("send")}
-                                >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-                                    </svg>
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                    <p id="command-input-hint" className="mt-2 min-h-4 text-center text-[10px] text-text-secondary">
-                        {t("cmdHint")}
-                    </p>
-                </div>
-            </main>
+                    {/* Input bar — PR 4 of the Atelier migration program.
+                    Extracted into CommandComposer; all handlers stay here. */}
+                    <CommandComposer
+                        showSignUpCta={chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2}
+                        input={input}
+                        onInputChange={setInput}
+                        textareaRef={textareaRef}
+                        fileInputRef={fileInputRef}
+                        thinking={thinking}
+                        chatAudience={chatAudience}
+                        hasPendingPermission={hasPendingPermission}
+                        messagesRemaining={messagesRemaining}
+                        uploadError={uploadError}
+                        onKeyDown={handleKeyDown}
+                        onSend={handleSend}
+                        onCancel={cancelRequest}
+                        onCVUpload={handleCVUpload}
+                        t={t}
+                        signupHref={COMMAND_SIGNUP_HREF}
+                    />
+                </main>
             </div>{/* end main column */}
 
             {/* Mobile bottom dock — authenticated only (public gets sign-in links in MobileCommandHeader) */}
