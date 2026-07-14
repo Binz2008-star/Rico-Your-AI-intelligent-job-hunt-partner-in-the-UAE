@@ -1,11 +1,9 @@
 /**
  * Billing mode helpers and WhatsApp upgrade URL builder.
  *
- * NEXT_PUBLIC_BILLING_MODE=manual  → WhatsApp-assisted activation
- * NEXT_PUBLIC_BILLING_MODE=paddle  → Paddle Billing overlay checkout
- *
- * Paddle is the deployed default. Manual mode remains available only when it
- * is selected explicitly through NEXT_PUBLIC_BILLING_MODE=manual.
+ * The current public release is Paddle-only. Keep these helpers explicit so a
+ * stale Vercel NEXT_PUBLIC_BILLING_MODE=manual value cannot silently switch the
+ * subscription UI back to WhatsApp-assisted activation.
  *
  * SECURITY: PADDLE_API_KEY must NEVER appear in NEXT_PUBLIC_* variables or
  * any client-side code. All Paddle server-side API calls go through the
@@ -13,21 +11,18 @@
  * (a read-only Paddle.js token used solely to initialize the checkout widget).
  */
 
-function billingMode(): string {
-    return (process.env.NEXT_PUBLIC_BILLING_MODE ?? "paddle").trim().toLowerCase();
-}
-
 export function isManualBillingMode(): boolean {
-    return billingMode() === "manual";
+    return false;
 }
 
 export function isPaddleBillingMode(): boolean {
-    return billingMode() !== "manual";
+    return true;
 }
 
 /**
  * Build the WhatsApp deep-link for the upgrade flow.
- * Opens a pre-filled conversation with the Rico support number.
+ * Retained only for support/rollback code paths; not used by the active
+ * subscription checkout UI.
  */
 export function buildWhatsAppUpgradeUrl(plan?: string, email?: string | null, priceMonthly?: number | null): string {
     const raw = process.env.NEXT_PUBLIC_RICO_WHATSAPP_NUMBER ?? "971585989080";
@@ -40,7 +35,7 @@ export function buildWhatsAppUpgradeUrl(plan?: string, email?: string | null, pr
 }
 
 /**
- * Build the WhatsApp deep-link for subscription management requests.
+ * Build the WhatsApp deep-link for support requests.
  */
 export function buildWhatsAppManageUrl(): string {
     const raw = process.env.NEXT_PUBLIC_RICO_WHATSAPP_NUMBER ?? "971585989080";
