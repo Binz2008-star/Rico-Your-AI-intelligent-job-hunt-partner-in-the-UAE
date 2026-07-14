@@ -400,6 +400,48 @@ body::after {
     50%       { opacity: 1; transform: translateY(-2px); }
 }
 
+/* Reference command spec: "awaiting first token → Shimmer text, never a spinner;
+   streaming → solid blinking caret at the tail". On-token, reduced-motion aware. */
+.rico-thinking-shimmer {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.32) 0%,
+        rgba(255, 255, 255, 0.85) 50%,
+        rgba(255, 255, 255, 0.32) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: ricoShimmerText 1.8s ease-in-out infinite;
+}
+
+@keyframes ricoShimmerText {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.rico-caret {
+    display: inline-block;
+    width: 0.5ch;
+    height: 1.05em;
+    margin-inline-start: 2px;
+    vertical-align: text-bottom;
+    background: rgb(var(--gold));
+    border-radius: 1px;
+    animation: ricoCaretBlink 1s steps(1) infinite;
+}
+
+@keyframes ricoCaretBlink {
+    0%, 50%      { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rico-thinking-shimmer { animation: none; color: rgba(255, 255, 255, 0.7); }
+    .rico-caret { animation: none; opacity: 0.7; }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {

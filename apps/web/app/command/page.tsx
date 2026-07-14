@@ -288,8 +288,8 @@ function WorkingIndicator({ message }: { message: string }) {
             <span className="sr-only">{message}</span>
             <div className="rico-orb" aria-hidden="true"><span>R</span></div>
             <div className="rico-thinking-label">
-                <span>{message}</span>
-                <span className="rico-dots" aria-hidden="true"><i /><i /><i /></span>
+                {/* Reference: shimmer text, never a spinner. */}
+                <span className="rico-thinking-shimmer">{message}</span>
             </div>
         </div>
     );
@@ -1958,7 +1958,11 @@ export default function CommandPage() {
                                     {/* Message text */}
                                     {m.text && (
                                         m.role === "rico"
-                                            ? <RicoMarkdownContent>{m.text!}</RicoMarkdownContent>
+                                            ? <>
+                                                <RicoMarkdownContent>{m.text!}</RicoMarkdownContent>
+                                                {/* Reference: solid blinking caret at the tail while streaming. */}
+                                                {m.streaming && <span className="rico-caret" aria-hidden="true" />}
+                                              </>
                                             : <div className="whitespace-pre-wrap">{m.text}</div>
                                     )}
 
