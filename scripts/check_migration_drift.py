@@ -68,6 +68,9 @@ CHECKS: list[tuple[str, str, object]] = [
     ("040", "table", "paddle_checkout_sessions"),
     ("040", "column", ("paddle_subscriptions", "last_event_occurred_at")),
     ("041", "column", ("paddle_subscriptions", "past_due_since")),
+    ("042", "table", "career_memory_events"),
+    ("042", "table", "career_memory_facts"),
+    ("042", "constraint", "career_memory_events_account_idem_key"),
 ]
 
 
