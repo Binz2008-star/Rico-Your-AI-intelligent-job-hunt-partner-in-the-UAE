@@ -1,5 +1,6 @@
 "use client";
 
+import { AtelierCommandComposer } from "@/components/command/AtelierCommandComposer";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
@@ -926,6 +927,11 @@ export default function CommandPage() {
     // Exposed so the cancel button can abort mid-stream without waiting for the
     // 45-second hard timeout.  Nulled in the sendMessage finally block.
     const abortRef = useRef<AbortController | null>(null);
+    // Latest-closure refs for the global keyboard shortcuts (Ctrl+J = new chat).
+    // Kept in refs so the window listener never resubscribes per render, and so
+    // the shortcut is suppressed while a pending-permission request owns input.
+    const handleNewChatRef = useRef<() => void>(() => {});
+    const pendingPermissionRef = useRef(false);
 
     /** Cancel any in-flight request and reset UI to idle state. */
     const cancelRequest = useCallback(() => {
@@ -945,15 +951,22 @@ export default function CommandPage() {
     }, [t]);
 
     // Keyboard shortcuts: Esc cancels an in-flight request (same action as the
-    // composer's Cancel button); Ctrl/Cmd+K focuses the composer. Both are pure
-    // additions — this page previously wired no global shortcuts, so neither
-    // combo can collide with an existing handler.
+    // composer's Cancel button); Ctrl/Cmd+K focuses the composer; Ctrl/Cmd+J
+    // starts a new conversation (the existing handleNewChat action). Ctrl+K/J are
+    // suppressed while a pending-permission request owns the interaction, so the
+    // shortcuts never fire under that modal-like state. Esc-to-cancel is
+    // unconditional. Latest closures are read from refs (see above).
     useEffect(() => {
         function onKeyDown(e: KeyboardEvent) {
             const mod = e.metaKey || e.ctrlKey;
             if (mod && e.key.toLowerCase() === "k") {
+                if (pendingPermissionRef.current) return;
                 e.preventDefault();
                 textareaRef.current?.focus();
+            } else if (mod && e.key.toLowerCase() === "j") {
+                if (pendingPermissionRef.current) return;
+                e.preventDefault();
+                handleNewChatRef.current();
             } else if (e.key === "Escape" && thinking) {
                 e.preventDefault();
                 cancelRequest();
@@ -1584,6 +1597,11 @@ export default function CommandPage() {
         setMessages([{ id: nextId(), role: "rico", text: greeting }]);
         setInput("");
     }
+
+    // Point the global-shortcut refs at the current closures every render so
+    // Ctrl+J (new chat) and the pending-permission guard always see live state.
+    handleNewChatRef.current = handleNewChat;
+    pendingPermissionRef.current = hasPendingPermission;
 
     function handleClearChat() {
         setMessages([]);
@@ -2285,6 +2303,33 @@ export default function CommandPage() {
                             )}
                         </div>
                     </div>
+                    {chatAudience === "authenticated" ? (
+                        /* Slice 4a — Atelier composer (authenticated only). Behavior is
+                           unchanged: value/send/cancel/attachment/disabled gates are the
+                           same props the inline composer used; the page still owns them. */
+                        <AtelierCommandComposer
+                            value={input}
+                            onValueChange={setInput}
+                            onSend={handleSend}
+                            onCancel={cancelRequest}
+                            thinking={thinking}
+                            inputDisabled={hasPendingPermission}
+                            canSend={!hasPendingPermission && !!input.trim()}
+                            placeholder={hasPendingPermission
+                                ? "Approve or cancel the request above to continue"
+                                : t("cmdComposerPlaceholder")}
+                            textareaRef={textareaRef}
+                            attachInputId="cv-file-upload"
+                            attachDisabled={thinking || hasPendingPermission}
+                            attachTitle={t("cmdUploadCvTitle")}
+                            attachAriaLabel={t("cmdUploadCvAriaLabel")}
+                            sendAriaLabel={t("send")}
+                            cancelAriaLabel={t("cmdCancelRequest")}
+                        />
+                    ) : (
+                        /* Public/guest + transient "checking" — original inline composer,
+                           unchanged in this slice (migrated in a later Command slice). */
+                        <>
                     <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface-elevated/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-md transition-[border-color,box-shadow] focus-within:border-gold/30 focus-within:shadow-[0_0_0_3px_rgba(245,166,35,0.07),0_8px_32px_rgba(0,0,0,0.12)]">
                         {/* CV upload button — label triggers the hidden file input natively,
                             avoiding the programmatic .click() which some mobile browsers block. */}
@@ -2365,6 +2410,8 @@ export default function CommandPage() {
                     <p id="command-input-hint" className="mt-2 min-h-4 text-center text-[10px] text-text-secondary">
                         {t("cmdHint")}
                     </p>
+                        </>
+                    )}
                 </div>
             </main>
             </div>{/* end main column */}
