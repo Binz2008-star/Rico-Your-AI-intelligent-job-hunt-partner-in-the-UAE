@@ -1,7 +1,7 @@
 # ADR-001 — Rico Career Memory Engine
 
-- Status: **PROPOSED** (rev 2 — owner's seven review amendments incorporated
-  2026-07-14; status moves to ACCEPTED only by explicit owner approval)
+- Status: **ACCEPTED** (owner review on PR #1024, 2026-07-14 — rev 2 satisfies
+  all seven required amendments; M1 may begin under its strict scope)
 - Date: 2026-07-14
 - Program: Rico Intelligence Phase 1 — Epic 1 (see `AI_WORKSPACE/RICO_INTELLIGENCE_PHASE1.md`)
 - Deciders: Owner (Roben) — this ADR is the decision artifact; no code ships from it
@@ -262,4 +262,7 @@ One read API (`MemoryReader`) with named views — features never query tables:
 6. **M6** — conflict-resolution UX (cross-tier ask flow) + forget/export/legal-
    hold paths end-to-end.
 
-Nothing in M1–M6 starts until the owner marks this ADR **ACCEPTED**.
+Owner-accepted M1 strict scope (2026-07-14): additive schema; MemoryWriter;
+shadow writes only; feature flag default OFF; no MemoryReader rollout; no
+chat/context behavior change; no migration of legacy readers; no user-visible
+behavior change. M1 ships as a separate Draft PR and stops before merge.
