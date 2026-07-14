@@ -30,7 +30,7 @@ const realPageItems = mainNavSections
     .filter((item) => item.href !== "/command");
 
 describe("sidebar nav routing — items with real destinations", () => {
-    const otherRoutes = ["/flow", "/queue", "/profile", "/upload", "/settings", "/subscription"];
+    const otherRoutes = ["/applications", "/queue", "/profile", "/upload", "/settings", "/subscription"];
 
     test.each(realPageItems)(
         "$label ($href) → navigates to its own href from any non-/command route",
@@ -62,12 +62,12 @@ describe("sidebar nav routing — items with real destinations", () => {
 // ── Specific required routes ──────────────────────────────────────────────────
 
 describe("sidebar nav routing — specific pages", () => {
-    const pipeline = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/flow")!;
+    const pipeline = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/applications")!;
     const profile = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/profile")!;
     const settings = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/settings")!;
 
-    it("/flow (Pipeline) opens /flow from /settings", () => {
-        expect(resolveNavHref(pipeline.href, pipeline.chatPrompt, "/settings")).toBe("/flow");
+    it("/applications (Pipeline) opens /applications from /settings — canonical target, no /flow double-hop", () => {
+        expect(resolveNavHref(pipeline.href, pipeline.chatPrompt, "/settings")).toBe("/applications");
     });
 
     // Note: Applications (/queue) was intentionally removed from the sidebar IA.
