@@ -211,14 +211,16 @@ Legacy-shell import census on `main` (production routes only): `AppShell` →
 
 | Owner step | Existing PR | State | Verdict |
 | --- | --- | --- | --- |
-| Step 1 — preview-route hygiene (F-4) | **#1026** `fix/protect-internal-preview-routes` | DRAFT, base `main`, Vercel preview green; only third-party Continue.dev bot checks red (noise) | **VALID — finish this next** |
+| Step 1 — preview-route hygiene (F-4) | **#1026** `fix/protect-internal-preview-routes` | **MERGED** `21ae19a7` (squash) | **DONE** — verified locally (focused 20/20, vitest 387/387, prod build green, prod-mode smoke 5×404 + `/`,`/login` 200) and "Deploy to Production" workflow success. Direct production curl not runnable from CI env (network policy blocks `ricohunt.com`). |
 | Step 3 — `/queue` | **#1016** `claude/queue-auth-guard` | DRAFT, guard-only (keeps `AppShell`) | Coordinate: merge-then-migrate, or supersede with full `/queue` Atelier PR |
 | Step 7 — Paddle runtime | **#1022** `fix/paddle-event-callback` | DRAFT (split B of #1018) | Real Sandbox browser smoke gates merge |
 
 Out of scope for this program (owner: do not touch): #1024, #1025 (Career Memory
 Engine M1), and the abandoned `claude/m1-postgres-integration-tests-*` branch.
 
-**Next existing Atelier PR to finish: #1026 (Step 1).** Execution order otherwise
-follows Steps 1→8 above; each step ships as its own small draft PR cut from latest
-`main` with the full per-PR gate (vitest + build + Playwright smoke + EN/AR/RTL +
-desktop/mobile screenshots + Vercel preview).
+**Step 1 complete (#1026 merged @ `21ae19a7`). Next: Step 2 — `/command`
+composer/messages/tool-state Atelier migration** (no existing PR yet; PR 4 in the
+sequence, previously deferred). Execution order otherwise follows Steps 2→8 above;
+each step ships as its own small draft PR cut from latest `main` with the full
+per-PR gate (vitest + build + Playwright smoke + EN/AR/RTL + desktop/mobile
+screenshots + Vercel preview).
