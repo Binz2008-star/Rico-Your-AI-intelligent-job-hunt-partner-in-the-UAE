@@ -46,11 +46,29 @@ const NAV: NavItem[] = [
     { key: "settings", href: "/settings", label: { en: "Settings", ar: "الإعدادات" }, icon: ic(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>) },
 ];
 
-export function WorkspaceShell({ children }: { children: React.ReactNode }) {
+export function WorkspaceShell({
+    children,
+    variant = "document",
+    defaultDark = false,
+}: {
+    children: React.ReactNode;
+    /**
+     * "document" (default) — scrolling page content with padding and max-width,
+     * plus the shell's own mobile top bar/drawer. Byte-identical behavior for
+     * the routes shipped before this prop existed.
+     * "app" — full-height application surface (e.g. /command): the main region
+     * becomes a full-bleed flex column that manages its own scrolling, and the
+     * shell renders no mobile chrome (the child owns its mobile header/dock).
+     */
+    variant?: "document" | "app";
+    /** Start the local light/dark island in dark (e.g. the chat surface). */
+    defaultDark?: boolean;
+}) {
     const { language, setLanguage } = useLanguage();
     const pathname = usePathname();
     const isAr = language === "ar";
-    const [dark, setDark] = useState(false);
+    const isApp = variant === "app";
+    const [dark, setDark] = useState(defaultDark);
     const [open, setOpen] = useState(false);
     const c = dark ? WORKSPACE_THEME.dark : WORKSPACE_THEME.light;
     const SERIF = ATELIER_FONT.serif;
@@ -112,7 +130,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
     return (
         <div
-            className={`wsx-root ${isAr ? "wsx-ar" : ""} min-h-screen ${atelierFraunces.variable}`}
+            className={`wsx-root ${isAr ? "wsx-ar" : ""} ${isApp ? "h-[100dvh] overflow-hidden" : "min-h-screen"} ${atelierFraunces.variable}`}
             dir={isAr ? "rtl" : "ltr"}
             lang={language}
             style={{ background: c.bg, color: c.ink, fontFamily: ATELIER_FONT.body }}
@@ -125,7 +143,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                 .wsx-root a:focus-visible, .wsx-root button:focus-visible { outline: 2px solid ${c.red}; outline-offset: 2px; border-radius: 4px; }
                 .wsx-root.wsx-ar * { letter-spacing: 0 !important; }
             ` }} />
-            <div className="lg:grid" style={{ gridTemplateColumns: "244px 1fr" }}>
+            <div className={`lg:grid ${isApp ? "h-full" : ""}`} style={{ gridTemplateColumns: "244px 1fr" }}>
                 {/* ── Desktop sidebar ── */}
                 <aside
                     className="hidden lg:flex flex-col justify-between sticky top-0 h-screen px-5 py-6"
@@ -138,16 +156,18 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                     {Controls}
                 </aside>
 
-                {/* ── Mobile top bar ── */}
-                <div className="lg:hidden sticky top-0 z-20 flex items-center justify-between px-5 py-4" style={{ background: c.rail, borderBottom: `1px solid ${c.hair}` }}>
-                    {Brand}
-                    <button type="button" aria-label="Menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="p-1" style={{ color: c.ink70, background: "transparent", cursor: "pointer" }}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-6 h-6" aria-hidden="true">
-                            {open ? <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />}
-                        </svg>
-                    </button>
-                </div>
-                {open && (
+                {/* ── Mobile top bar (document variant only — app children own their mobile chrome) ── */}
+                {!isApp && (
+                    <div className="lg:hidden sticky top-0 z-20 flex items-center justify-between px-5 py-4" style={{ background: c.rail, borderBottom: `1px solid ${c.hair}` }}>
+                        {Brand}
+                        <button type="button" aria-label="Menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="p-1" style={{ color: c.ink70, background: "transparent", cursor: "pointer" }}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-6 h-6" aria-hidden="true">
+                                {open ? <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />}
+                            </svg>
+                        </button>
+                    </div>
+                )}
+                {!isApp && open && (
                     <div className="lg:hidden px-5 py-4 flex flex-col gap-4" style={{ background: c.rail, borderBottom: `1px solid ${c.hair}` }}>
                         {NavList}
                         {Controls}
@@ -155,7 +175,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                 )}
 
                 {/* ── Main content ── */}
-                <main className="px-5 sm:px-8 lg:px-12 py-8 lg:py-12 max-w-5xl w-full">
+                <main className={isApp ? "flex h-full min-h-0 w-full flex-col overflow-hidden" : "px-5 sm:px-8 lg:px-12 py-8 lg:py-12 max-w-5xl w-full"}>
                     <WorkspaceThemeContext.Provider value={c}>
                         {children}
                     </WorkspaceThemeContext.Provider>
