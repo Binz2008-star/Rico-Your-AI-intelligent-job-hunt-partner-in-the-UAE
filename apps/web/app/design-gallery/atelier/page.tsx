@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Amiri, Fraunces, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { assertInternalPreviewAccess } from "@/lib/internalPreview";
 import AtelierSpecimen from "./_specimen";
 
 /**
@@ -38,6 +39,7 @@ export const metadata: Metadata = {
 };
 
 export default function AtelierSpecimenPage() {
+    assertInternalPreviewAccess();
     return (
         <div className={`${fraunces.variable} ${amiri.variable} ${ibmPlexSansArabic.variable}`}>
             <AtelierSpecimen />

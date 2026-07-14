@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { assertInternalPreviewAccess } from "@/lib/internalPreview";
 import DesignGalleryClient from "./_client";
 
 export const metadata: Metadata = {
@@ -8,5 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default function DesignGalleryPage() {
+  assertInternalPreviewAccess();
   return <DesignGalleryClient />;
 }
