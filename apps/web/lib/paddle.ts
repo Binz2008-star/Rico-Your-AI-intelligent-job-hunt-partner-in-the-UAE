@@ -18,6 +18,11 @@ declare global {
     }
 }
 
+export interface PaddleEventDetail {
+    name: string;
+    data?: Record<string, unknown>;
+}
+
 export interface PaddleInstance {
     Setup: (opts: { token: string; pwCustomer?: { email?: string } }) => void;
     Checkout: {
@@ -37,9 +42,16 @@ export interface PaddleCheckoutOptions {
         theme?: "light" | "dark";
         locale?: string;
     };
+    /** Paddle v2 event callback — use to capture checkout.error and checkout.closed */
+    eventCallback?: (event: PaddleEventDetail) => void;
 }
 
 let _initPromise: Promise<PaddleInstance> | null = null;
+
+/** Exposed for unit tests only — resets the cached Paddle init promise. */
+export function _resetInitPromise(): void {
+    _initPromise = null;
+}
 
 /**
  * Lazily load Paddle.js and initialize with the client token.
@@ -77,6 +89,12 @@ export function initPaddle(): Promise<PaddleInstance> {
                 paddle.Environment.set("sandbox");
             }
 
+            // Diagnostic: log init mode so network tab confirms correct environment.
+            // Never logs token value.
+            console.debug(
+                `[paddle] init env=${sandbox ? "sandbox" : "production"} token_prefix=${token.slice(0, 8)}…`,
+            );
+
             paddle.Setup({ token });
             resolve(paddle);
         };
@@ -90,16 +108,19 @@ export function initPaddle(): Promise<PaddleInstance> {
 /**
  * Open the Paddle overlay checkout for a given price ID.
  *
+ * Returns a Promise that rejects if Paddle fires a checkout.error event,
+ * so callers can surface a meaningful Rico error toast instead of the generic
+ * Paddle "Something went wrong" overlay.
+ *
  * SECURITY: checkoutSessionId must be a server-owned token from
  * createPaddleCheckoutSession() (POST /api/v1/billing/paddle/checkout-session),
- * passed here as customData.checkout_session_id. The webhook resolves the
- * Rico user via that server-side record — never via a browser-supplied
- * user_id, which could be tampered with client-side.
+ * passed as customData.checkout_session_id. The webhook resolves the Rico user
+ * via that server-side record — never via a browser-supplied user_id.
  *
- * @param priceId          - Paddle price ID (e.g. NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID)
+ * @param priceId           - Paddle price ID (e.g. NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID)
  * @param checkoutSessionId - Server-owned session token from createPaddleCheckoutSession()
- * @param userEmail        - Pre-fill customer email in checkout
- * @param language         - 'en' | 'ar' — sets checkout locale
+ * @param userEmail         - Pre-fill customer email in checkout
+ * @param language          - 'en' | 'ar' — sets checkout locale
  */
 export async function openPaddleCheckout(
     priceId: string,
@@ -109,15 +130,38 @@ export async function openPaddleCheckout(
 ): Promise<void> {
     const paddle = await initPaddle();
 
-    paddle.Checkout.open({
-        items: [{ priceId, quantity: 1 }],
-        customData: { checkout_session_id: checkoutSessionId },
-        customer: userEmail ? { email: userEmail } : undefined,
-        settings: {
-            displayMode: "overlay",
-            theme: "dark",
-            locale: language === "ar" ? "ar" : "en",
-        },
+    // Diagnostic: confirm the exact priceId and session token prefix being sent.
+    // Never logs the full token.
+    console.debug(
+        `[paddle] checkout open priceId=${priceId} session_prefix=${checkoutSessionId.slice(0, 8)}… email=${userEmail ?? "(none)"}`,
+    );
+
+    return new Promise<void>((resolve, reject) => {
+        paddle.Checkout.open({
+            items: [{ priceId, quantity: 1 }],
+            customData: { checkout_session_id: checkoutSessionId },
+            customer: userEmail ? { email: userEmail } : undefined,
+            settings: {
+                displayMode: "overlay",
+                theme: "dark",
+                locale: language === "ar" ? "ar" : "en",
+            },
+            eventCallback: (event: PaddleEventDetail) => {
+                console.debug("[paddle] event", event.name, event.data ?? "");
+                if (event.name === "checkout.error") {
+                    const detail =
+                        (event.data?.message as string | undefined) ??
+                        (event.data?.error as string | undefined) ??
+                        "Paddle checkout error";
+                    reject(new Error(detail));
+                } else if (event.name === "checkout.completed") {
+                    resolve();
+                } else if (event.name === "checkout.closed") {
+                    // User dismissed — not an error; resolve quietly.
+                    resolve();
+                }
+            },
+        });
     });
 }
 
