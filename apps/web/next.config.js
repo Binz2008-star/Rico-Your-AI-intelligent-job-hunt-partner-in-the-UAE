@@ -69,7 +69,9 @@ const nextConfig = {
 
     // www → apex 308 (requires www.ricohunt.com to be a Vercel domain alias for this to fire).
     // Deprecated user-facing routes redirect to /command (ChatGPT-style: chat is the app).
-    // NOTE: /flow and /applications are NOT redirected — /flow is the live Application Flow page.
+    // NOTE: /dashboard, /applications, and /flow are NOT redirected — /dashboard is the
+    // live Shell C workspace home (Atelier migration), and /flow redirects to
+    // /applications at the page level. See AI_WORKSPACE/ATELIER_FULL_SITE_MIGRATION.md §6.
     async redirects() {
         return [
             {
@@ -79,7 +81,6 @@ const nextConfig = {
                 permanent: true,
             },
             { source: "/chat", destination: "/command", permanent: false },
-            { source: "/dashboard", destination: "/command", permanent: false },
             { source: "/jobs", destination: "/command", permanent: false },
             { source: "/signals", destination: "/command", permanent: false },
             { source: "/archive", destination: "/command", permanent: false },
