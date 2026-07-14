@@ -78,6 +78,149 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260715-001 — Atelier migration PR 4: extract CommandComposer from /command page
+
+Status: review
+Owner: Claude (WRITER; activity pass: Planner → Coder)
+Branch: `feat/atelier-command-composer`
+Issue/PR: PR pending — branch pushed; owner must open PR via GitHub
+
+#### Objective
+
+PR 4 of the Atelier full-site migration program. Extract the input bar
+(textarea, send/cancel, CV-upload trigger, quota/sign-up notices, hint)
+from the 2,400-line `apps/web/app/command/page.tsx` into a self-contained
+`CommandComposer` presentational component. Zero behavior change.
+
+#### Constraints
+
+- Do not touch: backend/API, auth/session, billing, Neon/schema, AI routing,
+  other command page handlers, any route outside `/command`.
+- No migrations.
+- Scope limited to: `CommandComposer.tsx` (new), `page.tsx` (import + swap),
+  `command-composer.test.tsx` (new tests).
+
+#### Acceptance criteria
+
+- [x] `CommandComposer` extracted with all props forwarded from `CommandPage`.
+- [x] Duplicate `<input id="cv-file-upload">` removed from `page.tsx`.
+- [x] 14 new tests covering send states, cancel, quota, sign-up CTA, upload error, a11y.
+- [x] Full vitest suite green (404/404, +14 new).
+- [x] `npm run build` passes.
+- [ ] Owner review + explicit merge approval required before merge.
+
+#### Continuity Block
+
+- Task ID: TASK-20260715-001
+- GitHub issue/PR: branch `feat/atelier-command-composer` pushed; PR not yet opened (403 from MCP token — owner opens via https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/new/feat/atelier-command-composer)
+- Branch: `feat/atelier-command-composer`
+- Base branch: main
+- Last safe commit SHA: `21ae19a7` (main at branch creation)
+- Current head SHA: `fc786264`
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: `apps/web/app/command/page.tsx` (full 2404 lines),
+  `apps/web/__tests__/command-workspace-shell.test.tsx`,
+  `apps/web/__tests__/chat-confirm-profile.test.tsx`,
+  `apps/web/__tests__/test-utils.tsx`,
+  `apps/web/lib/translations.ts`,
+  `apps/web/components/command/MobileCommandHeader.tsx`
+- Files changed:
+  `apps/web/components/command/CommandComposer.tsx` (new — 263 lines);
+  `apps/web/app/command/page.tsx` (import added, 120-line inline composer block replaced with `<CommandComposer …/>`, duplicate file input removed);
+  `apps/web/__tests__/command-composer.test.tsx` (new — 14 tests)
+- Files intentionally not touched: all other command page handlers, backend,
+  auth, billing, Neon, other Atelier PRs, `apps/web/app/page.tsx`
+- What is complete: extraction, wiring, tests, build, commit, push
+- What is incomplete: owner opens PR on GitHub; CI on PR head; owner review
+- Known blockers: MCP token lacks PR-write scope (owner opens manually)
+- Validation already run: `npx vitest run` → 404/404; `npm run build` → pass
+- Validation still required: CI green on PR head after owner opens PR
+- Deployment/CI/Neon/Vercel state to check next: PR CI after PR is opened
+- Next exact action: owner opens draft PR from the branch link above, reviews, and approves merge
+- Stop condition: any request to touch backend/auth/billing/Neon, or swap production landing component → stop and ask
+- Rollback plan: `git revert fc786264` — self-contained; no schema/env/runtime behavior change
+
+### TASK-20260714-001 — Rico Intelligence Phase 1, Epic 1, M1: Career Memory Engine (schema + writer + shadow writes)
+
+Status: review
+Owner: Claude (WRITER; activity pass: Coder → Tester)
+Branch: `feat/memory-engine-m1`
+Issue/PR: draft PR (owner execution order 2026-07-14, STEP 3)
+
+#### Objective
+
+Implement M1 of the ACCEPTED ADR-001 under its strict scope: additive migration
+042 (`career_memory_events` + `career_memory_facts` with history semantics),
+the single `MemoryWriter`, shadow-write integration in
+`agent_runtime.handle_action()` only, `RICO_MEMORY_ENGINE_ENABLED` default
+false, kill switch + circuit breaker, idempotency keys with real unique
+constraints, canonical immutable account ID keying, mandatory provenance,
+per-user isolation tests, write-failure and drift metrics, and
+rollback/backfill documentation.
+
+#### Constraints (owner-forbidden in M1)
+
+No MemoryReader rollout; no chat context change; no summarization jobs; no
+legacy-store retirement; no user-visible behavior change; no public-session
+implicit merge; no billing/security/document payload copies.
+
+#### Acceptance criteria
+
+- [x] Migration 042 additive-only; applies cleanly to disposable Postgres 16.
+- [x] MemoryWriter is the only write path; provenance mandatory; exclusion
+      filter rejects secret/billing/document payloads; trust hierarchy enforced.
+- [x] Shadow write mirrors legacy career_memory in runtime step 11b; action
+      result byte-identical when engine on / off / broken (pinned by test).
+- [x] Flag default false; RICO_MEMORY_ENGINE_KILL beats the enable flag;
+      circuit breaker opens after 5 consecutive failures.
+- [x] Unit tests (38) offline; real-Postgres integration tests (11) cover
+      unique constraints, fact history, CHECK constraints, per-user isolation,
+      and public-session separation.
+- [ ] Owner review + merge approval (PR stays draft).
+
+#### Continuity Block
+
+- Task ID: TASK-20260714-001
+- GitHub issue/PR: draft PR from `feat/memory-engine-m1`
+- Branch: `feat/memory-engine-m1`
+- Base branch: main
+- Last safe commit SHA: `6e86442c` (main at branch creation; dashboard [skip ci] commits after)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: `src/agent/runtime.py`, `src/repositories/audit_repo.py`,
+  `src/services/career_memory.py`, `src/rico_db.py` (get_user_bundle),
+  `src/db.py`, `src/rico_env.py`, migrations 007/030/031/040/041,
+  `tests/integration/test_user_documents_postgres.py`, `.github/workflows/qa-tests.yml`
+- Files changed: `migrations/042_career_memory_engine.sql` (new);
+  `src/repositories/career_memory_repo.py` (new); `src/services/memory_writer.py`
+  (new); `src/agent/runtime.py` (step 11 captures legacy result + step 11b shadow
+  write); `tests/test_memory_engine_m1.py` (new, 38 tests);
+  `tests/integration/test_career_memory_engine_postgres.py` (new, 11 tests);
+  `.github/workflows/qa-tests.yml` (both new test files wired in);
+  `docs/career-memory-engine.md` (new ops doc); `CLAUDE.md` (env var);
+  `AI_WORKSPACE/TASKS.md` (this entry)
+- Files intentionally not touched: chat context builders (`rico_chat_api.py`,
+  `chat_service.py`), legacy `career_memory.py` / `rico_memory.py` (stay the
+  behavior of record), all billing/auth/frontend files, safety layer
+- What is complete: schema, writer, shadow integration, tests, docs; local
+  verification against disposable Docker Postgres 16 (migration applied, 11/11)
+- What is incomplete: owner review; CI on PR head; production flag remains off
+  after merge until the owner turns it on
+- Known blockers: none
+- Validation already run: unit 38/38; integration 11/11 on postgres:16
+  (disposable container); CI-selection regression suite (see PR body)
+- Validation still required: CI green on PR head; owner merge approval
+- Deployment/CI/Neon/Vercel state to check next: PR CI checks; NO Neon action —
+  migration 042 is applied to production only per OPERATING_RULES Neon gate,
+  with owner approval, before/with enabling the flag
+- Next exact action: owner review of the draft PR
+- Stop condition: any request to enable the flag in production, run migration
+  042 on Neon, add a reader, or touch chat context → stop and ask the owner
+- Rollback plan: flag off (default) → kill switch → revert PR → approved-only
+  DROP of the two tables; see docs/career-memory-engine.md §Rollback
+
 ### TASK-20260713-002 — Atelier migration program: parity matrix + first route PR (/applications)
 
 Status: review
