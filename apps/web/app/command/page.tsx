@@ -1,8 +1,8 @@
 "use client";
 
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
-import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
+import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
 import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, RicoAttachmentAnalysis, ExecuteAllowedAction } from "@/lib/schemas";
@@ -874,7 +874,6 @@ export default function CommandPage() {
     const [clearingHistory, setClearingHistory] = useState(false);
     const [confirmClear, setConfirmClear] = useState(false);
     const [clearHistoryError, setClearHistoryError] = useState<string | null>(null);
-    const [sidebarUser, setSidebarUser] = useState<{ email?: string } | null>(null);
     const [userName, setUserName] = useState<string | null>(null);
     // "pending" = history not yet checked; "has_history" = history loaded; "empty" = no history
     const [historyState, setHistoryState] = useState<"pending" | "has_history" | "empty">("pending");
@@ -987,7 +986,6 @@ export default function CommandPage() {
                 if (cancelled) return;
                 clearTimeout(fallbackId);
                 setChatAudience(me.authenticated ? "authenticated" : "public");
-                setSidebarUser(me.authenticated ? { email: me.email ?? undefined } : null);
                 setUserName(me.authenticated && me.name ? me.name : null);
             })
             .catch(() => {
@@ -1736,24 +1734,12 @@ export default function CommandPage() {
     }
 
     return (
-        <div
-            className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-background"
-        >
-            {/* Desktop sidebar — md+ only, hidden on mobile. Shown when authenticated or
-                checking (so there's no layout jump when auth resolves). Hides for public. */}
-            {chatAudience !== "public" && (
-                <AppSidebar
-                    className="hidden md:flex shrink-0"
-                    user={sidebarUser ?? undefined}
-                    onLogout={chatAudience === "authenticated" ? handleLogout : undefined}
-                    loading={chatAudience === "checking"}
-                />
-            )}
-
+        <CommandChrome audience={chatAudience}>
             {/* Main column — fills remaining width */}
             <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
-            {/* Top nav: always on mobile; on desktop only when no sidebar (public/checking→public) */}
-            <div className={chatAudience === "authenticated" ? "md:hidden" : ""}>
+            {/* Top nav: always on mobile/tablet; on lg+ the authenticated audience gets the
+                WorkspaceShell rail instead (public keeps this header on all widths). */}
+            <div className={chatAudience === "authenticated" ? "lg:hidden" : ""}>
                 <MobileCommandHeader
                     chatAudience={chatAudience}
                     onLogout={handleLogout}
@@ -2383,8 +2369,35 @@ export default function CommandPage() {
             </main>
             </div>{/* end main column */}
 
-            {/* Mobile bottom dock — matches AppShell; authenticated only (public gets sign-in links in MobileCommandHeader) */}
+            {/* Mobile bottom dock — authenticated only (public gets sign-in links in MobileCommandHeader) */}
             {chatAudience === "authenticated" && <MobileBottomNav />}
-        </div>
+        </CommandChrome>
+    );
+}
+
+/**
+ * Command chrome — PR 3 of the Atelier program.
+ *
+ * Public/guest keeps the approved reference chrome untouched (top bar +
+ * chat column; no sidebar — matches the design-reference screenshots).
+ * Authenticated (and the transient "checking" state, so auth resolution
+ * causes no layout jump) lives in the WorkspaceShell rail like every other
+ * workspace route — dark-first here so the rail matches the chat surface.
+ * Chat behavior, streaming, attachments, safety, and EN/AR are untouched.
+ */
+function CommandChrome({ audience, children }: { audience: "checking" | "public" | "authenticated"; children: React.ReactNode }) {
+    if (audience === "public") {
+        return (
+            <div className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-background">
+                {children}
+            </div>
+        );
+    }
+    return (
+        <WorkspaceShell variant="app" defaultDark>
+            <div className="relative flex h-full min-h-0 flex-1 overflow-hidden bg-background">
+                {children}
+            </div>
+        </WorkspaceShell>
     );
 }
