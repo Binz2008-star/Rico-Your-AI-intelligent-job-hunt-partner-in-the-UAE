@@ -212,15 +212,38 @@ Legacy-shell import census on `main` (production routes only): `AppShell` →
 | Owner step | Existing PR | State | Verdict |
 | --- | --- | --- | --- |
 | Step 1 — preview-route hygiene (F-4) | **#1026** `fix/protect-internal-preview-routes` | **MERGED** `21ae19a7` (squash) | **DONE** — verified locally (focused 20/20, vitest 387/387, prod build green, prod-mode smoke 5×404 + `/`,`/login` 200) and "Deploy to Production" workflow success. Direct production curl not runnable from CI env (network policy blocks `ricohunt.com`). |
+| Step 2 — `/command` composer (slice 4a) | **#1028** `feat/atelier-command-composer` | **DRAFT** — sole active Step-2 implementation PR | **ACTIVE** — Atelier paper/ink composer + sun-red controls in workspace theme tokens; 29/29 composer + 416/416 vitest + build green. Visual gate (EN/AR desktop+mobile Playwright) required before it leaves draft. **Claude is writer** (owner directive); Windsurf reviewer-only. |
+| Step 2 — `/command` composer (reference) | **#1029** (editorial-console composer) | **CLOSED, no merge** | **Technical reference only** — do not reopen or re-cut. Superseded by #1028. |
 | Step 3 — `/queue` | **#1016** `claude/queue-auth-guard` | DRAFT, guard-only (keeps `AppShell`) | Coordinate: merge-then-migrate, or supersede with full `/queue` Atelier PR |
 | Step 7 — Paddle runtime | **#1022** `fix/paddle-event-callback` | DRAFT (split B of #1018) | Real Sandbox browser smoke gates merge |
 
 Out of scope for this program (owner: do not touch): #1024, #1025 (Career Memory
 Engine M1), and the abandoned `claude/m1-postgres-integration-tests-*` branch.
 
-**Step 1 complete (#1026 merged @ `21ae19a7`). Next: Step 2 — `/command`
-composer/messages/tool-state Atelier migration** (no existing PR yet; PR 4 in the
-sequence, previously deferred). Execution order otherwise follows Steps 2→8 above;
-each step ships as its own small draft PR cut from latest `main` with the full
-per-PR gate (vitest + build + Playwright smoke + EN/AR/RTL + desktop/mobile
-screenshots + Vercel preview).
+**Step 1 complete (#1026 merged @ `21ae19a7`). Step 2 in progress — `/command`
+composer/messages/tool-state Atelier migration**, split into slices:
+
+- **4a — composer** → **#1028** (sole active implementation PR; ACTIVE). Awaiting
+  its visual gate before leaving draft.
+- **4b — empty state + message bubbles/markdown**, **4c — tool/permission/
+  attachment/error/loading states** (incl. the streaming state: shimmer-over-spinner
+  + tail caret per the design reference's streaming spec — built in **Atelier
+  paper/ink/sun-red tokens**, *not* the legacy `--gold`/`rico-thinking-row`
+  Nocturne classes), **4d — right rail**, **4e — remaining Command chrome**.
+  Each is a follow-up slice *after* 4a merges; none is open yet.
+
+Execution order otherwise follows Steps 2→8 above; each step/slice ships as its own
+small draft PR cut from latest `main` with the full per-PR gate (vitest + build +
+Playwright smoke + EN/AR/RTL + desktop/mobile screenshots + Vercel preview).
+
+### Program authority (owner directive, 2026-07-14)
+
+- **#1028 is the sole active Step-2 slice-4a implementation PR.** Do not open
+  parallel `/command` implementation PRs; one active slice at a time.
+- **#1029 is closed without merge** and may be used only as a technical reference.
+- Remaining phases **derive from the repository's existing Atelier tokens, approved
+  migrated surfaces, and the WorkspaceShell/AuthShell patterns** — with EN/AR/RTL,
+  accessibility, and mobile parity — **not** from new owner mockups. **No agent
+  should pause and request new owner mockups** for the remaining phases.
+- **Claude is writer** for the active PR; **Windsurf is reviewer-only** unless
+  authority is explicitly transferred.
