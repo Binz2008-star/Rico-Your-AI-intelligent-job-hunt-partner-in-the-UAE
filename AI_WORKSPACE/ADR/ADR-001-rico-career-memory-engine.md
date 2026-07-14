@@ -1,6 +1,7 @@
 # ADR-001 — Rico Career Memory Engine
 
-- Status: **PROPOSED** (owner approval required before any implementation)
+- Status: **PROPOSED** (rev 2 — owner's seven review amendments incorporated
+  2026-07-14; status moves to ACCEPTED only by explicit owner approval)
 - Date: 2026-07-14
 - Program: Rico Intelligence Phase 1 — Epic 1 (see `AI_WORKSPACE/RICO_INTELLIGENCE_PHASE1.md`)
 - Deciders: Owner (Roben) — this ADR is the decision artifact; no code ships from it
@@ -26,12 +27,12 @@ about. Every Epic in Rico Intelligence Phase 1 (Application Intelligence, Daily
 Executive Brief, Autonomous Career Agent) needs the same missing substrate.
 
 Binding constraints inherited from the workspace: Neon Postgres is the single
-source of truth (DEC-20260707-001); identity keys on the account email
-(#982 invariant); user isolation via JWT; the Product Generalization Rule (no
-per-account logic); the safety layer (no autonomous high-impact action without
-approval); the honesty contract (Done / Suggested / Needs-your-ok / Sample —
-Rico never claims knowledge it doesn't have); cost rules (summarization must
-work on the cheap-provider chain and degrade to keyword fallback).
+source of truth (DEC-20260707-001); user isolation via JWT; the Product
+Generalization Rule (no per-account logic); the safety layer (no autonomous
+high-impact action without approval); the honesty contract (Done / Suggested /
+Needs-your-ok / Sample — Rico never claims knowledge it doesn't have); cost
+rules (summarization must work on the cheap-provider chain and degrade to
+keyword fallback).
 
 ## Decision
 
@@ -42,68 +43,160 @@ schedule, and governed by an explicit trust hierarchy. Existing stores become
 **sources** that feed it (then get deprecated one by one) — not parallel
 memories.
 
+**Authority boundary (owner amendment 7).** The engine is the unified
+*intelligence substrate*, not the system of record for any domain. Profile,
+applications, billing, and documents remain authoritative in their existing
+stores; memory holds **provenance-linked observations and projections** of
+them. When memory and an authoritative domain store disagree, the domain store
+wins and the memory record is corrected (with history), never the reverse.
+
 ### 1. What is "memory" in Rico?
 
 Durable, user-scoped, provenance-tagged knowledge that outlives the session and
 is queryable by every feature through one API. Anything Rico "knows" must be
 reconstructible from memory; anything not in memory, Rico must not claim to
 know (honesty contract). Memory is **not** the chat transcript, the model
-context window, or per-feature caches — those are inputs and projections.
+context window, per-feature caches, or the authoritative domain records —
+those are inputs, projections, and referenced sources.
 
 ### 2. Memory types
 
 | Type | Examples | Mutability |
 | --- | --- | --- |
 | **Identity & Goals** (who you are, what you want) | target roles, salary floor, visa/notice status, strengths, weaknesses, stated goals | current-value with full change history ("what changed since yesterday" = history diff) |
-| **Episodes** (what happened) | searched, viewed, applied, rejected, interview, offer, CV uploaded, message exchanged | append-only, immutable |
+| **Episodes** (what happened) | searched, viewed, applied, rejected, interview, offer, CV uploaded, message exchanged | append-only, immutable content; lifetime governed by retention class (§4) |
 | **Decisions & Reasons** (what you refused and why) | "rejected Deloitte role — commute", "won't apply below AED X" | append-only; reasons are first-class, captured at decision time in the user's own words |
 | **Learnings / Insights** (what Rico concluded) | "6% response rate on Operations roles", "PMP gap recurs in rejections" | derived + versioned + **recomputable from episodes**; never authoritative over them |
 | **Commitments** (what Rico promised) | "follow up on Emirates NBD application Thursday" | open → done/cancelled lifecycle; the Daily Brief and the Autonomous Agent read these |
 | **Working context** (last week / since yesterday) | recency-window projections over episodes + facts history | not stored — always computed |
 
-### 3. Lifecycle
+### 3. Identity keying (owner amendment 1)
+
+- The **storage key is the immutable canonical account ID** (the internal user
+  ID that never changes). Email is **an attribute** — retained as verified
+  identity/provenance data and as a lookup index, never as the durable primary
+  key (emails are mutable).
+- **Public sessions** (`public:web-*`) are keyed separately and never merge
+  into account memory implicitly. Merging a public session's memory into an
+  authenticated account requires an **explicit, audited merge step** after
+  authentication (its own episode record: who, when, what was merged).
+- Existing call sites that key on email (the #982 gating invariant and
+  friends) are unaffected — they address their own domains; the memory engine
+  maps email → canonical ID at the write boundary.
+
+### 4. Lifecycle, retention, and data minimization (owner amendment 2)
 
 ```
-capture → normalize → store → summarize → retrieve → decay → forget
+capture → normalize → store → summarize → retrieve → retention policy → forget/export
 ```
 
 - **Capture**: only through the single writer (`MemoryWriter`), called from the
   existing action paths — `agent_runtime.handle_action()` (already has
   idempotency + audit), chat handlers, webhooks, pipeline runs. No router ever
   writes memory directly.
-- **Normalize**: every record gets `{user_id (email-keyed), type, version,
-  occurred_at, source, confidence, payload}`. `source` ∈ user_stated /
-  verified_event / cv_extracted / inferred.
+- **Normalize**: mandatory envelope (see §6 provenance) with type, version,
+  retention class, and provenance fields.
 - **Store**: episodes append-only; facts upsert-with-history (old value moves
-  to a history row, never overwritten in place).
+  to a history row with `effective_from`/`effective_to`, never overwritten in
+  place).
 - **Summarize**: rolling summaries per period (weekly conversation digest) and
-  per entity (one summary per application thread). Summaries are themselves
-  memory records of type `insight`, marked derived.
-- **Retrieve**: feature-shaped read views (see §5) with token budgets — a
-  context pack, not a table dump.
-- **Decay**: retention tiers — raw chat older than N days survives only as its
-  digest; episodes never decay (they are small and structured).
-- **Forget**: user-initiated deletion is a hard delete of the user's memory
-  rows (same isolation guarantees as the rest of the account data), plus
-  recompute of any derived insight that referenced them.
+  per entity (one summary per application thread). Summaries are memory
+  records of type `insight`, marked derived, with derivation links (§6).
+- **Retention is policy-driven per record class — nothing is "forever" by
+  default**:
 
-### 4. What is summarized vs. kept whole?
+  | Retention class | Examples | Default policy (configurable) |
+  | --- | --- | --- |
+  | `core_fact` | identity facts + history, decisions+reasons, commitments | retained while the account is active; exportable; deletable on request |
+  | `episode` | application/search/interaction events | long-lived but bounded (default multi-year, configurable); oldest compact into digests |
+  | `bulk_text` | raw chat, provider payload excerpts | short window, then digest-only |
+  | `derived` | insights, summaries | recomputable — freely expirable |
+  | `referenced` | billing, security, audit, documents | **never copied into memory** — stored as references (`source_uri`/`source_record_id`) to their authoritative systems |
 
-**Kept verbatim, forever** (small, structured, load-bearing):
-identity facts + their history; decisions **with reasons**; commitments;
-application/episode records; billing events; explicit user confirmations
-(safety-relevant). Document artifacts stay in the existing hash-aware My Files
-store — memory references them, never copies them.
+- **Legal hold**: a per-account hold flag suspends deletion/compaction across
+  all classes until released.
+- **Export**: user-initiated export produces the account's memory records
+  (facts + history, episodes, decisions, commitments) in a documented format.
+- **Forget**: user-initiated deletion is a hard delete of the account's memory
+  rows by class or in full, followed by **recomputation of every derived
+  record** that referenced the deleted sources (derivation links make the
+  affected set enumerable). Deletion itself is audited (§8).
 
-**Summarized** (bulky, low per-token value):
-chat transcripts beyond the recency window (weekly digests); raw search result
-sets (keep counts + top exemplars + the user's reactions); provider payloads.
+### 5. What is summarized vs. kept whole?
 
-Rule of thumb: *anything Rico might have to justify to the user is kept whole;
-anything Rico only needs the gist of is summarized — and the raw source is
-kept until its digest is confirmed written.*
+**Kept whole under `core_fact` retention** (small, structured, load-bearing):
+identity facts + history; decisions **with reasons**; commitments; structured
+episode records; explicit user confirmations (safety-relevant).
 
-### 5. How every feature uses it
+**Referenced, never copied** (owner amendment 2): billing events, security and
+audit records, document artifacts (My Files' hash-aware store) — memory keeps
+`source_record_id`/`source_uri` pointers into the authoritative systems.
+
+**Summarized** (bulky, low per-token value): chat transcripts beyond the
+recency window (weekly digests); raw search result sets (counts + top
+exemplars + the user's reactions); provider payloads.
+
+Rule of thumb: *anything Rico might have to justify to the user is kept whole
+or referenced to its authoritative source; anything Rico only needs the gist
+of is summarized — and the raw source is kept until its digest is confirmed
+written.*
+
+### 6. Provenance, confidence, and traceability (owner amendment 4)
+
+Every record carries a **mandatory** provenance block:
+
+- `source` ∈ user_stated / verified_event / cv_extracted / inferred
+- `source_record_id` and/or `source_uri` — the exact originating record
+  (chat message ID, application row, webhook event, document hash)
+- `captured_at` (when memory learned it) distinct from `occurred_at` (when it
+  happened)
+- `actor` — who caused the write (user, Rico agent, pipeline, webhook)
+- `confidence` — calibrated per source tier (user_stated = 1.0;
+  verified_event = 1.0; cv_extracted = the parser's calibrated score;
+  inferred = the deriving job's documented score), never a free-floating guess
+- **Derivation links**: every insight/summary stores the IDs of the records it
+  was derived from, so any conclusion is traceable to sources and recomputable
+  when they change or are deleted.
+
+### 7. Avoiding contradictions (owner amendment 3)
+
+- **Trust hierarchy** (highest wins): explicit user statement → verified event
+  → CV-extracted → inferred. A lower tier can never overwrite a higher tier.
+- **Per-fact-class resolution policies — timestamps alone never decide**:
+
+  | Fact class | Policy |
+  | --- | --- |
+  | `replaceable` (e.g. notice period) | same-tier newer value supersedes; old value archived with `effective_from`/`effective_to` |
+  | `set_valued` (e.g. target roles, skills) | add/remove semantics — a new value **joins** the set; removal is explicit, never implied by a new arrival |
+  | `time_bound` (e.g. availability, visa status) | valid only within its `effective_from`/`effective_to` window; overlapping windows are a material conflict |
+  | `verified_only` (e.g. email-verified identity attributes) | only `verified_event`-tier writes accepted; anything else is queued as unverified |
+
+- **Material conflicts ask the user** ("Your CV says 8 years, you said 10 —
+  which should I keep?") — a Needs-your-ok turn, consistent with the existing
+  agentic honesty contract. Silent guessing is prohibited.
+- Insights never overwrite facts or episodes; a wrong insight is fixed by
+  recomputation, not by editing memory.
+- Domain stores stay authoritative (Decision §authority boundary): a memory
+  observation contradicting the applications table is corrected from the
+  table, with the correction recorded in history.
+
+### 8. Privacy & security boundary (owner amendment 6)
+
+- **Excluded from memory, always**: secrets, credentials, tokens, full
+  provider payloads, payment instrument data, and sensitive personal data not
+  needed for career assistance. The writer enforces an exclusion filter;
+  violations are dropped and logged.
+- **Access control**: memory rows are per-account (canonical ID) with the same
+  JWT-derived isolation as the rest of the API; no cross-user read path
+  exists in `MemoryReader` by construction.
+- **Encryption**: at rest via the managed Postgres encryption (Neon), in
+  transit via TLS; any future field-level encryption for especially sensitive
+  fact classes is an additive envelope change.
+- **Audit trail**: memory writes, deletes, merges (public→account), exports,
+  and privileged reads are recorded through the existing audit-log
+  infrastructure (migrations 030/031 pattern) — who, what, when.
+
+### 9. How every feature uses it
 
 One read API (`MemoryReader`) with named views — features never query tables:
 
@@ -115,36 +208,24 @@ One read API (`MemoryReader`) with named views — features never query tables:
   applications, 6% response, PMP gap" analysis is a derived insight computed
   over this view.
 - **Daily Executive Brief (Epic 3)**: `since(user_id, last_brief_at)` →
-  facts-history diff + new episodes + commitments due + new insights. The brief
-  is a projection of memory, not a separate pipeline.
+  facts-history diff + new episodes + commitments due + new insights. The
+  brief is a projection of memory, not a separate pipeline.
 - **Autonomous Career Agent (Epic 4)**: subscribes to episode writes and
   commitment due-dates; every proactive action it proposes cites the memory
   records that justify it (and still passes the safety approval gate).
 
-### 6. Avoiding contradictions
+### 10. Evolving without breaking
 
-- **Trust hierarchy** (highest wins): explicit user statement → verified event
-  → CV-extracted → inferred. A lower tier can never overwrite a higher tier.
-- Same-tier conflict on a fact → newest wins, old value preserved in history.
-- **Cross-tier conflict → Rico asks** ("Your CV says 8 years, you said 10 —
-  which should I keep?") — a Needs-your-ok turn, consistent with the existing
-  agentic honesty contract. Silent guessing is prohibited.
-- Insights never overwrite facts or episodes; a wrong insight is fixed by
-  recomputation, not by editing memory.
-- One identity key: the account email (verbatim, the #982 invariant). Public
-  `public:web-*` sessions never merge into account memory implicitly.
-
-### 7. Evolving without breaking
-
-- **Envelope versioning**: every record is `{type, version, payload jsonb}` —
-  new fields are additive inside payload; readers ignore unknown fields.
+- **Envelope versioning**: every record is `{type, version, retention_class,
+  provenance, payload jsonb}` — new fields are additive inside payload;
+  readers ignore unknown fields.
 - **Additive-only migrations**, continuing the existing numbered scheme
   (042+); no destructive rename — deprecate, backfill, then drop in a later
   approved migration.
 - **Views isolate storage**: features depend on `MemoryReader` view names, so
   storage can be reshaped behind them.
 - **Derived layer is disposable**: insights/summaries can always be recomputed
-  from episodes — schema mistakes in the derived layer are cheap.
+  from episodes via derivation links.
 - Legacy stores are **migrated as sources** (career_memory JSON entries →
   episodes; user_job_context stays and is wrapped by a view first, migrated
   later) — never deleted before their reader is repointed and verified.
@@ -157,22 +238,28 @@ One read API (`MemoryReader`) with named views — features never query tables:
 - Negative / cost: two new tables + a writer/reader service to maintain;
   summarization jobs add scheduled load (mitigated: cheap-provider chain +
   keyword fallback, per cost rules); migration of six legacy stores is a
-  multi-PR effort.
+  multi-PR effort; retention/legal-hold/export machinery is real scope.
 - Risks: double-write drift during migration (mitigation: legacy stores become
-  read-through sources first, single writer from day one); token-budget
-  regressions in chat context (mitigation: context-pack size tests).
+  read-through sources first, single writer from day one, drift metrics —
+  §M1); token-budget regressions in chat context (mitigation: context-pack
+  size tests).
 
 ## Implementation phases (each = one small PR, after ADR approval)
 
-1. **M1** — schema: `career_memory_events` (append-only envelope) +
-   `career_memory_facts` (+history) migrations; `MemoryWriter` wired into
-   `agent_runtime.handle_action()` only; shadow writes, zero readers.
+1. **M1** — schema + writer + **shadow writes only**, hardened per owner
+   amendment 5: idempotency keys on every write; unique constraints enforcing
+   them; per-user isolation tests; **zero reader behavior change**; feature
+   flag + kill switch (`RICO_MEMORY_ENGINE_ENABLED`, default off); documented
+   backfill and rollback plan; metrics for write failures and legacy↔engine
+   drift. Canonical-ID keying from day one.
 2. **M2** — decisions & reasons capture in chat (reject/accept flows ask one
    short reason question, per the one-focused-question UX rule) + commitments.
-3. **M3** — `MemoryReader` views + chat `context_pack` swap (behind a flag).
-4. **M4** — summarization jobs (weekly digest, per-application summary).
+3. **M3** — `MemoryReader` views + chat `context_pack` swap (behind the flag).
+4. **M4** — summarization jobs (weekly digest, per-application summary) +
+   retention-policy enforcement job.
 5. **M5** — legacy source migration: `career_memory.py` JSON → episodes;
-   retire `RicoMemoryStore` file paths.
-6. **M6** — conflict-resolution UX (cross-tier ask flow) + forget/delete path.
+   retire `RicoMemoryStore` file paths; public→account audited merge flow.
+6. **M6** — conflict-resolution UX (cross-tier ask flow) + forget/export/legal-
+   hold paths end-to-end.
 
 Nothing in M1–M6 starts until the owner marks this ADR **ACCEPTED**.
