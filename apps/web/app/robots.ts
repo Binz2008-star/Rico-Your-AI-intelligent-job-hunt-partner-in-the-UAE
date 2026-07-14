@@ -22,6 +22,8 @@ export default function robots(): MetadataRoute.Robots {
                     "/admin",
                     "/sandbox",
                     "/design-gallery",
+                    "/design-preview",
+                    "/rico-preview",
                     "/orchestrate",
                     "/signals",
                     "/archive",

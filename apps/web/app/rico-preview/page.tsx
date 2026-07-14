@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { assertInternalPreviewAccess } from "@/lib/internalPreview";
 import RicoPreviewClient from "./_client";
 
 /**
@@ -18,5 +19,6 @@ export const metadata: Metadata = {
 };
 
 export default function RicoPreviewPage() {
+  assertInternalPreviewAccess();
   return <RicoPreviewClient />;
 }
