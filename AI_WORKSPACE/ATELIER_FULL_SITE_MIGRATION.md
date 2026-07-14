@@ -143,3 +143,26 @@ user-facing imports of legacy `AppShell`/`DashboardShell`. 5. Desktop + mobile
 consistent. 6. EN/AR + RTL pass. 7. Auth + billing work. 8. Paddle checkout + portal
 pass real Sandbox browser smoke. 9. Preview/demo routes removed or protected.
 10. Full frontend CI + Playwright green.
+
+## Program closure — 2026-07-14 (owner decision)
+
+Owner directive: close the UI-unification program after merging #1019 and
+splitting #1018, and shift full focus to Rico's intelligent features (AI and
+product) — the real user value.
+
+Final state:
+
+| Item | Outcome |
+| --- | --- |
+| PR 1 foundation (#1017) | **MERGED** `745bb41d` — matrix, canonical nav, /dashboard unblocked, F-1 CI fix |
+| PR 3 /command shell (#1020) | **MERGED** `fe0d2199` — authenticated /command in WorkspaceShell (app/dark variant); guest reference chrome untouched |
+| Opening films (#1019) | **MERGED** `ccdf7bff` — waitlist retired; random launch film once per session; 7-point launch smoke passed |
+| PR 2 (#1018) | **CLOSED, split** per owner decision → **#1021** (A: /subscription Atelier UI only) + **#1022** (B: Paddle Setup-level eventCallback fix). Gate unchanged: real browser Sandbox smoke before B merges/activates |
+| PR 4 (command composer/messages) | **DEFERRED** — owner pivot to AI features |
+| PR 5 (/queue + dead routes /jobs /signals /archive /saved-searches) | **DEFERRED** (open draft #1016 = /queue guard, still valid) |
+| PR 6 (public /about /contact /faq + landing parity) | **DEFERRED** |
+| PR 7 (auth verification pass) | **DEFERRED** — all auth pages already on AtelierAuthShell |
+| PR 8 (admin + preview-route protection) | **DEFERRED** — note F-4 stands: /design-preview, /rico-preview, /sandbox/* are publicly reachable on the open site |
+
+Re-opening any deferred item requires a fresh owner instruction; the matrix
+above (§1–§7) remains the authoritative inventory when that happens.
