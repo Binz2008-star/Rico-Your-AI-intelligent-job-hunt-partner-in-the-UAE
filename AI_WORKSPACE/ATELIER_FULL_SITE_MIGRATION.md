@@ -166,3 +166,59 @@ Final state:
 
 Re-opening any deferred item requires a fresh owner instruction; the matrix
 above (§1–§7) remains the authoritative inventory when that happens.
+
+## Program status — 2026-07-14 (owner re-open)
+
+**REOPENED BY OWNER — FULL-SITE ATELIER MIGRATION REQUIRED.**
+
+The closure above is superseded. The owner directs migrating the **entire** Rico
+website to the approved Atelier design — not the seven selected surfaces, but
+**every production user-facing route**. All previously DEFERRED items (PR 4/5/6/7/8)
+are re-activated. Completed routes are preserved and are **not** rebuilt unless a
+per-route audit proves they still expose legacy UI.
+
+### Refreshed route matrix — audited @ `main = 5cf9a6f` (2026-07-14)
+
+`main` advanced past the Phase-0 base (`c11575d`): #1017 (foundation),
+#1020 (`/command` → WorkspaceShell), #1019 (opening films), #1021
+(`/subscription` Atelier UI), #1022-history merged. Re-audited from the live tree
+(33 `page.tsx` routes) — shell import verified per route.
+
+| Route | Shell on `main` 5cf9a6f | Status | Owner step |
+| --- | --- | --- | --- |
+| `/` | `LandingPageV2` (own layout) | **PARTIAL** — parity verify vs approved public reference | Step 4 |
+| `/about` `/contact` `/faq` | legacy glass content (no shell) | **LEGACY** | Step 4 |
+| `/privacy` `/terms` `/refund-policy` | Atelier editorial | **DONE** | — |
+| `/login` `/signup` | `AtelierAuthShell` (via `LoginForm`/`SignupForm`) | **DONE** | Step 5 verify |
+| `/forgot-password` `/reset-password` `/verify-email` | `AtelierAuthShell` | **DONE** | Step 5 verify |
+| `/onboarding` | Atelier island | **DONE** | Step 5 verify |
+| `/dashboard` | `WorkspaceShell` + `DashboardAtelier` | **DONE** — reachable (stale redirect removed; confirmed absent from `next.config.js`) | — |
+| `/command` | `WorkspaceShell` | **SHELL DONE** (#1020); composer/messages/tool-states still legacy | Step 2 |
+| `/profile` `/settings` `/applications` `/upload` | `WorkspaceShell` | **DONE** | — |
+| `/queue` | **`AppShell`** | **LEGACY** — draft #1016 = auth-guard only (keeps AppShell) | Step 3 |
+| `/jobs` `/archive` `/saved-searches` | **`AppShell`** | **LEGACY + DEAD** (config redirect → `/command`) | Step 3 (restore-in-Atelier or delete) |
+| `/signals` | legacy glass (no shell) | **LEGACY + DEAD** (config redirect) | Step 3 |
+| `/subscription` | `WorkspaceShell` | **SHELL DONE** (#1021); live Paddle Sandbox checkout error outstanding | Step 7 |
+| `/subscription/success` | **`DashboardShell`** (only remaining consumer) | **LEGACY** | Step 3/7 |
+| `/admin/leads` | bare page (no shell) | **LEGACY** | Step 6 |
+| `/design-gallery`(+`/atelier`) `/design-preview` `/rico-preview` `/sandbox/command-primitives` | preview/dev | **PUBLICLY REACHABLE** (F-4) | Step 1 |
+
+Legacy-shell import census on `main` (production routes only): `AppShell` →
+`/queue` `/jobs` `/archive` `/saved-searches`; `DashboardShell` →
+`/subscription/success`. Step 8 legacy deletion is gated until these reach zero.
+
+### Existing Atelier PRs in flight (do not duplicate)
+
+| Owner step | Existing PR | State | Verdict |
+| --- | --- | --- | --- |
+| Step 1 — preview-route hygiene (F-4) | **#1026** `fix/protect-internal-preview-routes` | DRAFT, base `main`, Vercel preview green; only third-party Continue.dev bot checks red (noise) | **VALID — finish this next** |
+| Step 3 — `/queue` | **#1016** `claude/queue-auth-guard` | DRAFT, guard-only (keeps `AppShell`) | Coordinate: merge-then-migrate, or supersede with full `/queue` Atelier PR |
+| Step 7 — Paddle runtime | **#1022** `fix/paddle-event-callback` | DRAFT (split B of #1018) | Real Sandbox browser smoke gates merge |
+
+Out of scope for this program (owner: do not touch): #1024, #1025 (Career Memory
+Engine M1), and the abandoned `claude/m1-postgres-integration-tests-*` branch.
+
+**Next existing Atelier PR to finish: #1026 (Step 1).** Execution order otherwise
+follows Steps 1→8 above; each step ships as its own small draft PR cut from latest
+`main` with the full per-PR gate (vitest + build + Playwright smoke + EN/AR/RTL +
+desktop/mobile screenshots + Vercel preview).
