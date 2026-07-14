@@ -2,6 +2,7 @@
 
 - Status: **ACCEPTED** (owner review on PR #1024, 2026-07-14 — rev 2 satisfies
   all seven required amendments; M1 may begin under its strict scope)
+- Accepted head: `ef66ebfa` (rev 2 as independently reviewed and owner-accepted on #1024)
 - Date: 2026-07-14
 - Program: Rico Intelligence Phase 1 — Epic 1 (see `AI_WORKSPACE/RICO_INTELLIGENCE_PHASE1.md`)
 - Deciders: Owner (Roben) — this ADR is the decision artifact; no code ships from it
