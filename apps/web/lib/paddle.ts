@@ -9,6 +9,9 @@
  * block the initial page render.
  */
 
+const DEFAULT_SANDBOX_CLIENT_TOKEN = "test_1a1754e60e504b4a93b1efc9604";
+const DEFAULT_SANDBOX_PRICE_ID = "pri_01kxer8h278hvw37ec59yg73hg";
+
 declare global {
     interface Window {
         Paddle?: PaddleInstance;
@@ -56,11 +59,7 @@ export function initPaddle(): Promise<PaddleInstance> {
             return;
         }
 
-        const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN ?? "";
-        if (!token) {
-            reject(new Error("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN is not set"));
-            return;
-        }
+        const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim() || DEFAULT_SANDBOX_CLIENT_TOKEN;
 
         const script = document.createElement("script");
         script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
@@ -123,9 +122,9 @@ export async function openPaddleCheckout(
 }
 
 /**
- * Return the Paddle price ID for the (single) Rico Monthly plan from env vars.
- * Returns null when the price ID is not configured.
+ * Return the Paddle price ID for the single Rico Monthly Sandbox plan.
+ * A Vercel environment value overrides the deployed Sandbox default.
  */
 export function getPaddlePriceId(): string | null {
-    return process.env.NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID?.trim() || null;
+    return process.env.NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID?.trim() || DEFAULT_SANDBOX_PRICE_ID;
 }
