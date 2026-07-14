@@ -228,6 +228,20 @@ class AgentRuntime:
             message=message, error=error_str, duration_ms=elapsed,
         )
 
+        # 8b. Career Memory Engine shadow write (ADR-001 M1). Flag-gated
+        #     (RICO_MEMORY_ENGINE_ENABLED, default OFF) and fire-and-forget:
+        #     a memory failure must never affect the action result. No reader
+        #     consumes these rows yet.
+        try:
+            from src.services.memory_writer import record_action_episode
+            record_action_episode(
+                user_id=user_id, action=action, job=resolved_job,
+                job_key=job_key, ok=tool_ok, source=source,
+                action_id=action_id, error=error_str,
+            )
+        except Exception:
+            logger.debug("runtime: memory shadow write failed", exc_info=True)
+
         # 9. Persist per-job interaction so Rico can recall it across sessions.
         #    Fire-and-forget: never let a context-write failure affect the action.
         if tool_ok and resolved_job.get("title") and resolved_job.get("company"):
