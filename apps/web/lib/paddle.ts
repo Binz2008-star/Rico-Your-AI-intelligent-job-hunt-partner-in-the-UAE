@@ -24,7 +24,12 @@ export interface PaddleEventDetail {
 }
 
 export interface PaddleInstance {
-    Setup: (opts: { token: string; pwCustomer?: { email?: string } }) => void;
+    Setup: (opts: {
+        token: string;
+        pwCustomer?: { email?: string };
+        /** Paddle.js v2 only honors eventCallback here (Setup/Initialize) — never per-checkout. */
+        eventCallback?: (event: PaddleEventDetail) => void;
+    }) => void;
     Checkout: {
         open: (opts: PaddleCheckoutOptions) => void;
     };
@@ -42,15 +47,35 @@ export interface PaddleCheckoutOptions {
         theme?: "light" | "dark";
         locale?: string;
     };
-    /** Paddle v2 event callback — use to capture checkout.error and checkout.closed */
-    eventCallback?: (event: PaddleEventDetail) => void;
+    // NOTE: no eventCallback here. Paddle.js v2 silently ignores an
+    // eventCallback passed to Checkout.open() — events only flow through the
+    // callback registered at Setup time (see dispatchPaddleEvent below).
 }
 
 let _initPromise: Promise<PaddleInstance> | null = null;
 
+/**
+ * The listener for the currently open overlay checkout. Paddle renders one
+ * overlay at a time, so a single active listener is sufficient. Registered by
+ * openPaddleCheckout(); events arrive via the Setup-level dispatchPaddleEvent.
+ */
+let _activeCheckoutListener: ((event: PaddleEventDetail) => void) | null = null;
+
+/**
+ * Global Paddle.js v2 event dispatcher, registered once at Setup time.
+ * Passing eventCallback to Checkout.open() is silently ignored by Paddle.js v2
+ * (the checkout Promise would never settle and the upgrade button would hang),
+ * so this is the only supported event path.
+ */
+function dispatchPaddleEvent(event: PaddleEventDetail): void {
+    console.debug("[paddle] event", event.name, event.data ?? "");
+    _activeCheckoutListener?.(event);
+}
+
 /** Exposed for unit tests only — resets the cached Paddle init promise. */
 export function _resetInitPromise(): void {
     _initPromise = null;
+    _activeCheckoutListener = null;
 }
 
 /**
@@ -66,23 +91,9 @@ export function initPaddle(): Promise<PaddleInstance> {
             return;
         }
 
-        if (window.Paddle) {
-            resolve(window.Paddle);
-            return;
-        }
-
         const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim() || DEFAULT_SANDBOX_CLIENT_TOKEN;
 
-        const script = document.createElement("script");
-        script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
-        script.async = true;
-        script.onload = () => {
-            const paddle = window.Paddle;
-            if (!paddle) {
-                reject(new Error("Paddle.js loaded but window.Paddle is undefined"));
-                return;
-            }
-
+        const configure = (paddle: PaddleInstance): void => {
             const sandbox =
                 (process.env.NEXT_PUBLIC_PADDLE_SANDBOX ?? "true").trim().toLowerCase() !== "false";
             if (sandbox) {
@@ -95,7 +106,29 @@ export function initPaddle(): Promise<PaddleInstance> {
                 `[paddle] init env=${sandbox ? "sandbox" : "production"} token_prefix=${token.slice(0, 8)}…`,
             );
 
-            paddle.Setup({ token });
+            // eventCallback MUST be registered here — Paddle.js v2 ignores it on
+            // Checkout.open(), which would leave every checkout Promise unsettled.
+            paddle.Setup({ token, eventCallback: dispatchPaddleEvent });
+        };
+
+        if (window.Paddle) {
+            // Paddle.js already present but not configured by us — Setup is still
+            // required so the token and the event dispatcher are registered.
+            configure(window.Paddle);
+            resolve(window.Paddle);
+            return;
+        }
+
+        const script = document.createElement("script");
+        script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+        script.async = true;
+        script.onload = () => {
+            const paddle = window.Paddle;
+            if (!paddle) {
+                reject(new Error("Paddle.js loaded but window.Paddle is undefined"));
+                return;
+            }
+            configure(paddle);
             resolve(paddle);
         };
         script.onerror = () => reject(new Error("Failed to load Paddle.js"));
@@ -137,31 +170,42 @@ export async function openPaddleCheckout(
     );
 
     return new Promise<void>((resolve, reject) => {
-        paddle.Checkout.open({
-            items: [{ priceId, quantity: 1 }],
-            customData: { checkout_session_id: checkoutSessionId },
-            customer: userEmail ? { email: userEmail } : undefined,
-            settings: {
-                displayMode: "overlay",
-                theme: "dark",
-                locale: language === "ar" ? "ar" : "en",
-            },
-            eventCallback: (event: PaddleEventDetail) => {
-                console.debug("[paddle] event", event.name, event.data ?? "");
-                if (event.name === "checkout.error") {
-                    const detail =
-                        (event.data?.message as string | undefined) ??
-                        (event.data?.error as string | undefined) ??
-                        "Paddle checkout error";
-                    reject(new Error(detail));
-                } else if (event.name === "checkout.completed") {
-                    resolve();
-                } else if (event.name === "checkout.closed") {
-                    // User dismissed — not an error; resolve quietly.
-                    resolve();
-                }
-            },
-        });
+        const settle = (fn: () => void): void => {
+            _activeCheckoutListener = null;
+            fn();
+        };
+
+        // Events arrive through the Setup-level dispatcher (dispatchPaddleEvent);
+        // Paddle.js v2 ignores eventCallback on Checkout.open().
+        _activeCheckoutListener = (event: PaddleEventDetail) => {
+            if (event.name === "checkout.error") {
+                const detail =
+                    (event.data?.message as string | undefined) ??
+                    (event.data?.error as string | undefined) ??
+                    "Paddle checkout error";
+                settle(() => reject(new Error(detail)));
+            } else if (event.name === "checkout.completed") {
+                settle(resolve);
+            } else if (event.name === "checkout.closed") {
+                // User dismissed — not an error; resolve quietly.
+                settle(resolve);
+            }
+        };
+
+        try {
+            paddle.Checkout.open({
+                items: [{ priceId, quantity: 1 }],
+                customData: { checkout_session_id: checkoutSessionId },
+                customer: userEmail ? { email: userEmail } : undefined,
+                settings: {
+                    displayMode: "overlay",
+                    theme: "dark",
+                    locale: language === "ar" ? "ar" : "en",
+                },
+            });
+        } catch (err) {
+            settle(() => reject(err instanceof Error ? err : new Error(String(err))));
+        }
     });
 }
 

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { SubscriptionAtelier } from "@/components/subscription/SubscriptionAtelier";
 import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
