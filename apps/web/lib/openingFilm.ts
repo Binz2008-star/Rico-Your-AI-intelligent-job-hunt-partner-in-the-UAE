@@ -12,7 +12,10 @@
  */
 
 export const OPENING_FILM_SESSION_FLAG = "rico-opening-film-shown";
-export const OPENING_FILM_PATH = "/explainer";
+// Explicit index.html: bare "/explainer" relies on host-level directory-index
+// resolution (Vercel does it, `next dev` 404s). index.html itself immediately
+// location.replace()s to a random option film, so this URL is transient.
+export const OPENING_FILM_PATH = "/explainer/index.html";
 
 /**
  * True exactly once per browser session: sets the flag and tells the caller
