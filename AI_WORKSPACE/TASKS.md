@@ -78,6 +78,101 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260715-001 — Atelier migration: slice 4a — CommandComposer
+
+Status: review
+Owner: Claude (WRITER)
+Branch: `feat/atelier-command-composer`
+Issue/PR: #1028 (draft)
+
+#### Objective
+
+Rebuild PR #1028 as a real Atelier Command Composer migration (slice 4a only).
+Replace the legacy extraction with a focused presentational `CommandComposer`
+component that uses `WorkspaceThemeContext` palette tokens, adds the required
+keyboard shortcuts (Enter, Shift+Enter, IME, Ctrl+K, Ctrl+J, Escape), and adds
+29 tests covering all 13 required cases. Minimal diff in `page.tsx`.
+
+#### Context
+
+- Relevant files: `apps/web/components/command/CommandComposer.tsx`,
+  `apps/web/app/command/page.tsx`, `apps/web/lib/translations.ts`,
+  `apps/web/__tests__/command-composer.test.tsx`
+- Relevant docs: `AI_WORKSPACE/ATELIER_FULL_SITE_MIGRATION.md`
+- Existing behavior: all handlers and state live in `CommandPage` and are passed
+  as props; no backend, streaming, or auth changes
+
+#### Constraints
+
+- Do not touch: other slices (empty state, message bubbles, tool cards, right
+  rail, mobile header), backend/streaming/auth/billing
+- No other routes touched
+- Public/guest composer surface is unchanged in slice 4a
+
+#### Acceptance criteria
+
+- [x] Atelier authenticated surface: panel bg, ink, sun-red, mono hint
+- [x] Public/guest surface unchanged
+- [x] Enter sends, Shift+Enter newlines, IME guard, Ctrl+K, Ctrl+J, Escape
+- [x] RTL mirroring for Arabic
+- [x] 29 tests across 13 required cases — all green
+- [x] `page.tsx` diff minimal: import, hidden-input removal, component swap
+- [x] `npm run build` exit 0
+- [x] Full vitest suite 416/416 green
+- [ ] Playwright screenshots EN/AR desktop/mobile captured
+- [ ] Owner visual review and approval
+
+#### Required verification
+
+- [x] Unit tests: `npx vitest run __tests__/command-composer.test.tsx` → 29/29
+- [x] Full suite: `npx vitest run` → 416/416
+- [x] Frontend build: `npm run build` → exit 0
+- [ ] Playwright screenshots: EN desktop, EN mobile, AR desktop, AR mobile
+- [ ] Owner visual review
+
+#### Continuity Block
+
+- Task ID: TASK-20260715-001
+- GitHub issue/PR: #1028 (draft — do not merge)
+- Branch: `feat/atelier-command-composer`
+- Base branch: main
+- Last safe commit SHA: 21ae19a7 (origin/main at branch reset)
+- Current head SHA: fa6c6e24
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: `apps/web/components/workspace/theme.ts`,
+  `apps/web/components/atelier-kit/tokens.ts`,
+  `apps/web/components/atelier-kit/primitives.tsx`,
+  `apps/web/components/workspace/WorkspaceShell.tsx`,
+  `apps/web/app/_atelier/atelier-tokens.css`,
+  `apps/web/app/command/page.tsx`,
+  `apps/web/lib/translations.ts`
+- Files changed:
+  `apps/web/components/command/CommandComposer.tsx` (new — Atelier component);
+  `apps/web/app/command/page.tsx` (import + hidden-input removal + swap);
+  `apps/web/lib/translations.ts` (cmdAtelierPlaceholder + cmdAtelierHint EN/AR);
+  `apps/web/__tests__/command-composer.test.tsx` (new — 29 tests)
+- Files intentionally not touched: backend, streaming, auth, billing, other routes,
+  message bubbles, empty state, tool cards, right rail, mobile header
+- What is complete: component built, wired, tested, built, committed, force-pushed;
+  backup branch `backup/pr-1028-legacy-extraction` pushed; PR #1028 branch updated
+- What is incomplete: Playwright screenshots; owner visual review; PR description
+  update (GitHub MCP write access denied — owner must update PR #1028 description manually)
+- Known blockers: GitHub MCP 403 on PR update (token read-only); owner must update
+  PR title/description manually or grant write access
+- Validation already run:
+  `npx vitest run __tests__/command-composer.test.tsx` → 29/29 ✅
+  `npx vitest run` → 416/416 ✅
+  `npm run build` → exit 0 ✅
+- Validation still required: Playwright visual smoke (EN/AR desktop/mobile)
+- Deployment/CI/Neon/Vercel state to check next: PR CI checks on fa6c6e24
+- Next exact action: capture Playwright screenshots for EN desktop, EN mobile,
+  AR desktop, AR mobile against local dev server, then add to PR
+- Stop condition: do not merge without owner visual approval and Playwright screenshots
+- Rollback plan: `git revert fa6c6e24` or reset branch to 21ae19a7
+
+---
+
 ### TASK-20260714-001 — Atelier full-site migration REOPENED: refreshed gap matrix + next-PR routing
 
 Status: review
