@@ -9,13 +9,13 @@
 | Field | Current value |
 | --- | --- |
 | Repository | `Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE` |
-| Snapshot date | 2026-07-15 |
-| Live-main baseline audited | `de8ce666` (four dashboard-only `[skip ci]` commits on top of `21ae19a7` = #1026); agents must fetch and report the exact current SHA at session start |
+| Snapshot date | 2026-07-16 |
+| Live-main baseline audited | `27df7ba6` (#1022 squash-merge); agents must fetch and report the exact current SHA at session start |
 | Control-plane PR #1010 | **MERGED** `b753885` (2026-07-13) — the reconciliation freeze it imposed is over |
 | Active objectives | Two owner-directed, non-overlapping tracks: (1) Atelier full-site migration **REOPENED by owner 2026-07-14** — Step 2 slice 4a via PR #1028; (2) Rico Intelligence Phase 1 — ADR-001 **ACCEPTED** on #1024; M1 shadow-write PR #1025 (stops before merge) |
 | Runtime writers | UI track: **Claude is writer on #1028** (owner directive; Windsurf reviewer-only). Memory track: #1025 draft only, no merge authority |
 | Production access state | **Teaser/access gate REMOVED** (`96b7efd`) — the full site is open; waitlist retired; landing plays one of 3 launch films at random (#1019) |
-| Billing | **Paddle merged** (#1008 `1b1748c` + follow-up fixes `d05ca08`/`30ebb7d`/`c11575d`, Sandbox mode). One plan "Rico Monthly" — **USD 21.50/mo is the authoritative price** (`403c28b`); AED 79 is a reference display note only. Live Sandbox "Something went wrong" checkout error under diagnosis; split B fix is PR #1022 (gated) |
+| Billing | **Paddle merged** (#1008 `1b1748c` + follow-up fixes `d05ca08`/`30ebb7d`/`c11575d`, Sandbox mode). One plan "Rico Monthly" — **USD 21.50/mo is the authoritative price** (`403c28b`); AED 79 is a reference display note only. **#1022 MERGED** (`27df7ba6`) — Setup-level eventCallback fix production-verified (open/close/reopen smoke PASS). Paddle billing NOT activated in production (`NEXT_PUBLIC_BILLING_MODE=""`). Sandbox checkout URL configured in Paddle dashboard. Architecture debt: hardcoded fallbacks still present (separate PR planned) |
 | Invitation target | Branded secure email invitations; not started, not production-verified |
 
 ## Current execution lock
@@ -36,9 +36,9 @@ ACTIVE NOW (owner-directed, two non-overlapping tracks)
 GATES
 - #1028 needs its EN/AR desktop+mobile visual gate before leaving draft,
   then owner merge approval.
-- #1022 (Paddle split B — Setup-level eventCallback) merges only after a
-  real browser Sandbox smoke: checkout opens · cancel · successful payment ·
-  customer portal · webhook processing · USD 21.50 displayed correctly.
+- #1022 (Paddle split B — Setup-level eventCallback) **MERGED** `27df7ba6`
+  after Sandbox open/close/reopen smoke PASS. Full payment/webhook/entitlement
+  testing deferred to isolated staging track (separate Render + Neon branch).
 - Migrations 040/041 (Paddle) application state on Neon production is NOT
   verified in this snapshot; verify drift check before relying on them.
 
@@ -62,7 +62,7 @@ REFERENCE ONLY / DO NOT RESUME
 - #997/#987/#985/#968 are no longer open — do not resurrect
 ```
 
-## Recent main reality (5a03035a → de8ce666, 2026-07-13 → 07-14)
+## Recent main reality (de8ce666 → 27df7ba6, 2026-07-14 → 07-16)
 
 Merged/landed since the previous 2026-07-13 snapshot — agents must not plan from it:
 
@@ -85,7 +85,7 @@ Fresh snapshot 2026-07-15 (12 open PRs) — `OPEN_PR_TRIAGE_2026-07-13.md` is re
 | #1027 | docs: reopen full-site Atelier migration, refreshed gap matrix | REVIEW |
 | #1025 | Memory Engine M1 — additive schema + shadow MemoryWriter | ACTIVE-DRAFT — owner scope: stops before merge |
 | #1024 | ADR-001 Career Memory Engine + Phase 1 program file | REVIEW — ADR accepted at `ef66ebfa` |
-| #1022 | Paddle Setup-level eventCallback (split B of #1018) | HOLD — real browser Sandbox smoke gates merge |
+| #1022 | Paddle Setup-level eventCallback (split B of #1018) | **MERGED** `27df7ba6` — production-verified |
 | #1016 | /queue auth guard | REVIEW — coordinate with program Step 3 |
 | #1002 | settings honesty labels | REVIEW |
 | #989 | subscription-audit follow-ups | REVIEW — reconcile with merged #1008 |
@@ -118,9 +118,12 @@ It must:
 ```text
 [done] control plane        — #1010 merged
 [done] open access          — teaser gate removed 96b7efd
-[live] billing (Sandbox)    — Paddle merged; Sandbox checkout error + #1022 gate
-[open] billing verification — real browser Sandbox smoke, migration 040/041 proof,
+[done] billing fix         — #1022 merged; eventCallback smoke PASS
+[open] billing verification — full payment/webhook/entitlement test on
+                              isolated staging track (separate Render + Neon);
                               then owner decision on live activation
+[open] architecture debt    — remove hardcoded Paddle fallbacks, fail-closed on
+                              missing env vars, separate PR (not #1022)
 [open] invitations          — not started
 [open] launch smoke         — full production smoke after billing verification
 ```
@@ -159,9 +162,10 @@ Stop and report instead of guessing when:
    merge #1024 to record the accepted ADR-001.
 2. UI track: run the #1028 EN/AR desktop+mobile visual gate; on pass, owner
    merge approval; then cut slice 4b from latest main.
-3. Billing track: diagnose the live Paddle Sandbox checkout error; run the
-   real-browser Sandbox smoke that gates #1022; verify migration 040/041
-   drift-check state before any activation decision.
+3. Billing track: #1022 MERGED and production-verified. Next: rotate exposed
+   Paddle Sandbox webhook secret (security PR); then isolated staging track
+   for full payment/webhook/entitlement testing. Architecture debt (remove
+   hardcoded fallbacks) as a separate PR after security work.
 4. Memory track: finish #1025 to its stop-before-merge boundary; owner review.
 5. Housekeeping: owner decision on #967 (obsolete intent) and the REVIEW queue
    (#989, #1002, #1016).
