@@ -1,5 +1,11 @@
 # Open PR Triage — 2026-07-13
 
+> **Superseded 2026-07-15.** #1010 merged (`b753885`), #1008 merged (`1b1748c`),
+> #997/#987/#985/#968/#961/#935/#873/#872 are no longer open, and new PRs
+> #1016–#1028 exist. The fresh open-PR classification lives in
+> `AI_WORKSPACE/PROJECT_STATUS.md` (snapshot 2026-07-15). This file is retained
+> as the historical 2026-07-13 snapshot only.
+
 This inventory is a control-plane snapshot, not permission to merge. Live GitHub state and current PR heads remain authoritative.
 
 ## Classification rules
