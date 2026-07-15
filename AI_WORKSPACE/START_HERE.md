@@ -28,19 +28,20 @@ If any source disagrees, do not guess from conversation history. Declare `REVIEW
 ## Current execution lock
 
 ```text
-ACTIVE NOW
-Control-plane reconciliation on:
-chore/agent-control-plane-reconciliation
-PR #1010
+ACTIVE NOW (2026-07-15; #1010 merged b753885 — see PROJECT_STATUS.md)
+Two owner-directed, non-overlapping tracks:
+1. Atelier full-site migration — REOPENED by owner 2026-07-14.
+   Step 2 slice 4a = PR #1028 (sole active UI implementation PR;
+   Claude writer, Windsurf reviewer-only). Docs flip = PR #1027.
+2. Rico Intelligence Phase 1 — ADR-001 ACCEPTED (#1024).
+   M1 shadow-write PR #1025 (draft; owner scope: stops before merge).
 
-No runtime implementation writer is authorized by the workspace until this control
-plane is independently reviewed/merged and the first launch task is explicitly claimed.
+FACTS since the 07-13 snapshot: teaser gate REMOVED — the full site is
+OPEN; waitlist retired; Paddle billing merged (#1008, Sandbox mode,
+USD 21.50/mo authoritative); #1022 gated on a real browser Sandbox smoke.
 
-NEXT
-Read-only route/design parity inventory, then one small launch-critical UI PR.
-Billing (AED 79/month) and invitations are separate later tracks.
-
-Production access stays gated until the launch smoke and owner approval.
+Merges, deploys, Neon changes, and billing activation remain
+owner-approval gated.
 ```
 
 ## Required daily opening
