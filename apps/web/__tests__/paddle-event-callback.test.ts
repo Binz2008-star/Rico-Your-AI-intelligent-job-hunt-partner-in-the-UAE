@@ -50,6 +50,7 @@ function firePaddleEvent(event: PaddleEventDetail): void {
 
 beforeEach(() => {
     vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "test_client_token");
     setupOpts = undefined;
     checkoutOpts = undefined;
     checkoutOpen.mockClear();
@@ -60,6 +61,7 @@ beforeEach(() => {
 afterEach(() => {
     delete (window as unknown as { Paddle?: PaddleInstance }).Paddle;
     _resetInitPromise();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
 });
 
@@ -111,6 +113,15 @@ describe("openPaddleCheckout — Paddle.js v2 event contract", () => {
         });
         await expect(openPaddleCheckout("pri_test", "sess_token_123", null, "en")).rejects.toThrow(
             "paddle exploded",
+        );
+    });
+
+    it("rejects when NEXT_PUBLIC_PADDLE_CLIENT_TOKEN is not set (fail-closed)", async () => {
+        vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "");
+        _resetInitPromise();
+
+        await expect(openPaddleCheckout("pri_test", "sess_token_123", null, "en")).rejects.toThrow(
+            "NEXT_PUBLIC_PADDLE_CLIENT_TOKEN is not set",
         );
     });
 });
