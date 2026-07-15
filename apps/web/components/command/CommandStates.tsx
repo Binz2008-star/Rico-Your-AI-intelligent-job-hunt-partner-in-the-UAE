@@ -28,9 +28,9 @@
  * the public/guest surface renders its children verbatim (pre-4c classes),
  * matching 4a/4b.
  *
- * SCOPE BOUNDARY: job-match / application / profile-gap cards and the right
- * rail are slices 4d–4e and are intentionally NOT wrapped here — they keep
- * the global variables until their own reviewed slice.
+ * SCOPE BOUNDARY: slice 4d extended the same wrap to the job-match /
+ * application / profile-gap cards (see page.tsx render sites). The right
+ * rail is slice 4e and keeps the global variables until its own slice.
  */
 
 import React from "react";
