@@ -16,7 +16,7 @@ import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
-import { ApiError, clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
+import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, executePermissionAction, fetchChatHistory, fetchMe, getCvQuotaError, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
@@ -1518,12 +1518,19 @@ export default function CommandPage() {
                 setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
             }
         } catch (err) {
-            // A 413 means the file was too large — show the friendly size message,
-            // never the generic "could not process your CV" (the size is the real reason).
+            // Explicit order: 413 (file too large) → CV storage-quota 422
+            // (detected via the exact backend sentinel, never a blanket 422
+            // mapping) → generic upload error. The quota copy is the existing
+            // localized key — never the raw English backend message.
             const tooLarge = err instanceof ApiError && err.statusCode === 413;
-            const msgKey = tooLarge ? "cmdCvTooLarge" : "cmdCvUploadErr";
-            setUploadError(t(msgKey));
-            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t(msgKey) }]);
+            const quota = tooLarge ? null : getCvQuotaError(err);
+            const msg = tooLarge
+                ? t("cmdCvTooLarge")
+                : quota
+                    ? `${t("uploadErrQuota")}${cvQuotaCountSuffix(quota)}`
+                    : t("cmdCvUploadErr");
+            setUploadError(msg);
+            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: msg }]);
         } finally {
             setThinking(false);
             setOperationState(null);

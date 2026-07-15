@@ -1055,13 +1055,64 @@ export async function confirmCVProfile(
   );
 }
 
-function extractDetail(detail: unknown, fallback: string): string {
+/** Exported for unit tests — used internally by requestJson error handling. */
+export function extractDetail(detail: unknown, fallback: string): string {
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail) && detail.length > 0) {
     const first = detail[0] as { msg?: string; message?: string };
     return first.msg ?? first.message ?? fallback;
   }
+  // Structured object details (e.g. the CV storage-quota rejection from
+  // subscription_gating.enforce_document_quota) carry their human-readable
+  // text in a `message` field — surface it instead of the raw status fallback.
+  if (detail && typeof detail === "object") {
+    const msg = (detail as { message?: unknown }).message;
+    if (typeof msg === "string") return msg;
+  }
   return fallback;
+}
+
+// ── CV storage-quota error (POST /api/v1/rico/upload-cv) ─────────────────────
+
+export interface CvQuotaError {
+  used?: number;
+  limit?: number;
+  plan?: string;
+  message?: string;
+}
+
+/**
+ * Detect the CV storage-quota rejection raised by the backend's
+ * enforce_document_quota (HTTP 422 with a structured dict detail whose
+ * sentinel is detail.detail === "cv_storage_limit_exceeded").
+ *
+ * Returns the structured payload ONLY for that exact sentinel. Every other
+ * value — empty-file/executable 422s (string detail), FastAPI validation
+ * arrays, other *_exceeded quotas, 413/5xx, non-ApiError values — returns
+ * null, so callers never mislabel an unrelated failure as a quota rejection.
+ */
+export function getCvQuotaError(err: unknown): CvQuotaError | null {
+  if (!(err instanceof ApiError) || err.statusCode !== 422) return null;
+  const detail = (err.data as { detail?: unknown } | undefined)?.detail;
+  if (!detail || typeof detail !== "object" || Array.isArray(detail)) return null;
+  const d = detail as Record<string, unknown>;
+  if (d.detail !== "cv_storage_limit_exceeded") return null;
+  return {
+    used: typeof d.used === "number" ? d.used : undefined,
+    limit: typeof d.limit === "number" ? d.limit : undefined,
+    plan: typeof d.plan === "string" ? d.plan : undefined,
+    message: typeof d.message === "string" ? d.message : undefined,
+  };
+}
+
+/**
+ * " (used/limit)" suffix for the localized quota message — appended only when
+ * BOTH counts are valid finite numbers (0 is valid), otherwise empty string.
+ */
+export function cvQuotaCountSuffix(quota: CvQuotaError): string {
+  return Number.isFinite(quota.used) && Number.isFinite(quota.limit)
+    ? ` (${quota.used}/${quota.limit})`
+    : "";
 }
 
 export async function uploadCV(
