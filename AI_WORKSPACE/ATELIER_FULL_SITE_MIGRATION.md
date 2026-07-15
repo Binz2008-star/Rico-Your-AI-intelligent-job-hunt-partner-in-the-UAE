@@ -275,7 +275,7 @@ progress states; public/guest surface unchanged unless a slice scopes it):
   Sessions position (New chat · current conversation · Clear history · real
   history loading/error; general nav relocated to compact top-bar icons; no
   fabricated sessions — **multi-session history is a separately scoped
-  backend capability gap**), an interactive **no-regression suite** over the
+  backend capability gap** (ADR-002, PROPOSED)), an interactive **no-regression suite** over the
   real mounted CommandPage (send, streaming tokens, completion, stop/cancel,
   retry, New chat, Clear history, panel/language/theme toggles — network-
   boundary fixtures, real SSE), and all synthetic screenshots stamped

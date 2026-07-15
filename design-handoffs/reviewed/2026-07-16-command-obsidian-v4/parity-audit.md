@@ -17,9 +17,10 @@ experience**. Recorded status (binding until the owner changes it):
 | --- | --- |
 | C1 visual shell | implemented in Draft (#1043) |
 | C1 functional no-regression evidence | **partial** — a mounted-component interactive suite now covers send / user turn / thinking / streaming tokens / completion / stop-cancel / retry / New chat / Clear history / panel + language + theme toggles at the network boundary; the full 19-flow acceptance matrix below remains OPEN |
-| Sessions rail parity | truthful single-conversation rail shipped in C1 (New chat · current conversation · Clear history · history loading/error). **True multi-session history = backend capability gap, separately scoped — no session APIs exist; nothing may be fabricated** |
+| Sessions rail parity | truthful single-conversation rail shipped in C1 (New chat · current conversation · Clear history · history loading/error). **True multi-session history = backend capability gap, separately scoped — no session APIs exist; nothing may be fabricated** (architecture proposal: `AI_WORKSPACE/ADR/ADR-002-command-multi-session-history.md`, PROPOSED, needs separate approval) |
 | Transcript interaction parity | **missing** (C2) |
 | Canonical flow parity | **not implemented** (C2+) |
+| Action integration | **not demonstrated** — real apply/save/verify/permission/profile flows join in C4/C5; C1 adds no decorative buttons (every C1 control is wired to an existing handler) |
 | PR #1043 | **Draft — not ready for merge**; owner gate required |
 
 Screenshot rule: every synthetic capture is stamped
@@ -94,6 +95,48 @@ theme context it repaints every 4a–4e surface to the Obsidian world in one
 reviewable diff, with zero chat-logic movement.
 
 
+## Canonical interaction grammar (verified against the published Lovable source)
+
+YOU · THINK · PLAN · RUN/TOOL · CHECK · RICO · MATCH · ASK · FORM · DIFF ·
+TRACK · REMINDER · ANALYTICS · DONE — with progressive reveal, transcript
+auto-follow, live status bar, session-derived rail, streamed replies,
+Stop/Retry/Reset, and operation-dependent presentation. The Lovable project is
+a scripted prototype (static sessions, seeded jobs, dead Attach handler,
+prototype notices, AI Gateway + localStorage) — those limitations are **not**
+ported. Target = that choreography over Rico's real APIs/state/actions.
+Adapter contracts: `c2-adapter-interfaces.md`. THINK narration is scripted in
+the prototype; production shows only safe operational language grounded in
+real states ("Reading your CV", "Searching matching roles", "Scoring
+results", "Preparing changes for review", "Saving after confirmation").
+REMINDER/ANALYTICS have no production source yet — capability gaps, never
+fabricated.
+
+## Functional control mapping (no decorative dead buttons)
+
+Every visible production control maps to a verified existing handler.
+C1 ships rows marked ✔; later slices restyle the rest without replacing or
+duplicating any handler (`sendChatStream`, `sendChat`, `sendChatPublic`,
+`uploadCV`, `confirmCVProfile`, `clearChatHistory`, permission execution,
+profile updates, application actions, job actions, attachment analysis are
+all preserved verbatim).
+
+| Control | Real handler (in `app/command/page.tsx` unless noted) | C1 |
+| --- | --- | --- |
+| Composer Send | `handleSend` → `sendMessage` → `sendChatStream`/`sendChatPublic` | ✔ wired + tested |
+| Stop | `cancelRequest` → `AbortController` | ✔ wired + tested |
+| Retry | `isError`/`retryText` path → `sendMessage(retryText)` | ✔ wired + tested |
+| Attach | existing `fileInputRef` → `handleCVUpload` → `uploadCV` | present (composer, 4a); flow test = C5 |
+| New Chat | `handleNewChat` (rail + toolbar + mobile menu) | ✔ wired + tested |
+| Clear History | `handleClearHistory` → `clearChatHistory` (two-step confirm) | ✔ wired + tested |
+| Panel toggles / EN-AR / RTL / theme | shell props + `useLanguage` + local island | ✔ wired + tested |
+| Job Apply | existing apply link path + `JobFallbackActions` (`getJobFallbackActions`) | C4 restyle |
+| Save / Skip | existing job-action prompt path (`onAction` → `sendMessage`) | C4 restyle |
+| Verify | existing `verification_status` link-verification presentation | C4 restyle |
+| Profile Confirm / Edit | `handleConfirmProfile` → `confirmCVProfile`; edit-before-confirm flow | C5 restyle |
+| Permission Approve/Cancel | `executePermissionAction` path + dismiss flags | C5 restyle |
+| Proposed change review | `submitAction`/`updateProfile` mutation confirmation path | C5 restyle |
+| Application actions | existing application handlers (`applications` messages, follow-ups) | C5 restyle |
+
 ## Functional acceptance matrix (owner-mandated — gate for "Command parity complete")
 
 Real flows that must be verified (mounted components or real authenticated
@@ -121,6 +164,14 @@ complete. Status as of this revision:
 | 17 | EN/AR and RTL | partial — shell/rail toggle covered; per-flow AR coverage OPEN |
 | 18 | Desktop/mobile | partial — desktop covered; mobile drawers are C6 |
 | 19 | Loading | partial — history loading covered; per-surface loading states OPEN |
+
+### Interactive 14-point check (owner list → mounted-component suite)
+
+type ✔ · send ✔ · user turn ✔ · thinking/working ✔ · streamed tokens ✔ ·
+completed answer ✔ · stop ✔ · retry ✔ · New Chat ✔ · Clear History ✔ ·
+panel toggles ✔ · EN/AR ✔ · RTL ✔ · theme toggle ✔ — all in
+`apps/web/__tests__/command-obsidian-noregression.test.tsx` against the real
+mounted CommandPage with network-boundary fixtures (real SSE streams).
 
 Do not declare `/command` complete until every row is **covered** and the
 owner's recording-based visual gate passes on the real product.
