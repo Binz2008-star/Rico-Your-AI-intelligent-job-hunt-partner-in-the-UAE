@@ -74,10 +74,8 @@ CommandPage over network-boundary fixtures) and the owner's real smoke.
 - `parity-audit.md` — Phase-1 component-level mismatch matrix
   (production `/command` @ `cafe340a` vs recording/canonical source)
 - `risks.md` — behavior risks and mitigations for the port
-- `c2-adapter-interfaces.md` — C2 real event/presentation adapter contracts
-  (production truth → canonical transcript; anti-fabrication rules)
-- multi-session architecture proposal:
-  `AI_WORKSPACE/ADR/ADR-002-command-multi-session-history.md` (PROPOSED —
-  separate approval required; never implemented inside design slices)
+- C2 adapter contracts and the multi-session architecture proposal are
+  deliberately NOT in the C1 PR — they follow as a separate docs-only review
+  after C1 is stable (owner scope ruling, 2026-07-16)
 - `screenshots/` — extracted recording frames (canonical) and production
   evidence used for the side-by-side gate

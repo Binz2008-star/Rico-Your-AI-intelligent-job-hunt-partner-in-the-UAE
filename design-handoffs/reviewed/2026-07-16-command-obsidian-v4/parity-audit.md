@@ -17,7 +17,7 @@ experience**. Recorded status (binding until the owner changes it):
 | --- | --- |
 | C1 visual shell | implemented in Draft (#1043) |
 | C1 functional no-regression evidence | **partial** — a mounted-component interactive suite now covers send / user turn / thinking / streaming tokens / completion / stop-cancel / retry / New chat / Clear history / panel + language + theme toggles at the network boundary; the full 19-flow acceptance matrix below remains OPEN |
-| Sessions rail parity | truthful single-conversation rail shipped in C1 (New chat · current conversation · Clear history · history loading/error). **True multi-session history = backend capability gap, separately scoped — no session APIs exist; nothing may be fabricated** (architecture proposal: `AI_WORKSPACE/ADR/ADR-002-command-multi-session-history.md`, PROPOSED, needs separate approval) |
+| Sessions rail parity | truthful single-conversation rail shipped in C1 (New chat · current conversation · Clear history · history loading/error). **True multi-session history = backend capability gap, separately scoped — no session APIs exist; nothing may be fabricated** (architecture proposal deferred to a separate docs-only review after C1 — not in this PR) |
 | Transcript interaction parity | **missing** (C2) |
 | Canonical flow parity | **not implemented** (C2+) |
 | Action integration | **not demonstrated** — real apply/save/verify/permission/profile flows join in C4/C5; C1 adds no decorative buttons (every C1 control is wired to an existing handler) |
@@ -104,7 +104,7 @@ Stop/Retry/Reset, and operation-dependent presentation. The Lovable project is
 a scripted prototype (static sessions, seeded jobs, dead Attach handler,
 prototype notices, AI Gateway + localStorage) — those limitations are **not**
 ported. Target = that choreography over Rico's real APIs/state/actions.
-Adapter contracts: `c2-adapter-interfaces.md`. THINK narration is scripted in
+Adapter contracts arrive in a separate docs-only C2 proposal after C1 is stable. THINK narration is scripted in
 the prototype; production shows only safe operational language grounded in
 real states ("Reading your CV", "Searching matching roles", "Scoring
 results", "Preparing changes for review", "Saving after confirmation").
@@ -147,7 +147,7 @@ complete. Status as of this revision:
 | --- | --- | --- |
 | 1 | Normal conversation | **covered** — no-regression suite (mounted CommandPage, network fixtures) |
 | 2 | Streamed response | **covered** — real `sendChatStream`/`_readSSE` over a driven SSE body |
-| 3 | Stop generation | **covered** — abort-wired stream → real AbortError path + Retry |
+| 3 | Stop generation | **PARTIAL** — verified: AbortController cancellation works, UI recovers, Retry appears. NOT verified: canonical deliberate-Stop state, partial streamed-response preservation, "Generation stopped" presentation, cancellation-vs-timeout distinction (C2 scope) |
 | 4 | Retry failed response | **covered** — network-failure → error turn → Retry resends same text |
 | 5 | Upload CV | OPEN |
 | 6 | Upload another document type | OPEN |
@@ -168,7 +168,7 @@ complete. Status as of this revision:
 ### Interactive 14-point check (owner list → mounted-component suite)
 
 type ✔ · send ✔ · user turn ✔ · thinking/working ✔ · streamed tokens ✔ ·
-completed answer ✔ · stop ✔ · retry ✔ · New Chat ✔ · Clear History ✔ ·
+completed answer ✔ · stop PARTIAL (cancellation+recovery+Retry verified; deliberate-Stop presentation = C2) · retry ✔ · New Chat ✔ · Clear History ✔ ·
 panel toggles ✔ · EN/AR ✔ · RTL ✔ · theme toggle ✔ — all in
 `apps/web/__tests__/command-obsidian-noregression.test.tsx` against the real
 mounted CommandPage with network-boundary fixtures (real SSE streams).

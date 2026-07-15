@@ -37,6 +37,23 @@ export function deriveConversationTitle(
     return title.length > max ? title.slice(0, max - 1).trimEnd() + "…" : title;
 }
 
+/** Real user turns only — the synthetic Rico welcome/greeting must never be
+ *  counted as conversation activity (owner blocker, 2026-07-16). */
+export function countUserTurns(
+    messages: Array<{ role: "user" | "rico"; text: string }>,
+): number {
+    return messages.filter((m) => m.role === "user" && m.text.trim().length > 0).length;
+}
+
+/** A conversation is REAL only when server history was loaded or the user has
+ *  actually written. A welcome-only transcript is not a conversation. */
+export function hasRealConversation(
+    messages: Array<{ role: "user" | "rico"; text: string }>,
+    historyState: "pending" | "has_history" | "empty",
+): boolean {
+    return historyState === "has_history" || countUserTurns(messages) > 0;
+}
+
 export function CommandConversationRail({
     audience,
     messages,
@@ -75,6 +92,10 @@ export function CommandConversationRail({
 
     const loading = audience === "checking" || (audience === "authenticated" && historyState === "pending");
     const title = deriveConversationTitle(messages, t("cmdSessionsCurrentFallback"));
+    // Real-conversation model (owner blocker): a synthetic welcome-only
+    // transcript shows the fallback title with NO count and NO Clear History.
+    const userTurnCount = countUserTurns(messages);
+    const real = hasRealConversation(messages, historyState);
 
     return (
         <div data-testid="command-conversation-rail" className="flex w-[260px] flex-1 min-h-0 flex-col p-4">
@@ -112,9 +133,17 @@ export function CommandConversationRail({
                     >
                         <span aria-hidden="true" className="h-1 w-1 shrink-0 -translate-y-[2px] rounded-full" style={{ background: c.red }} />
                         <span className="min-w-0 flex-1 truncate text-[13px] leading-snug">{title}</span>
-                        <span dir="ltr" className="shrink-0" style={{ ...eyebrow, fontSize: 10, color: c.ink55 }}>
-                            {messages.length}
-                        </span>
+                        {real && (
+                            <span
+                                dir="ltr"
+                                className="shrink-0"
+                                data-testid="command-rail-turn-count"
+                                title={t("cmdSessionsTurnCount")}
+                                style={{ ...eyebrow, fontSize: 10, color: c.ink55 }}
+                            >
+                                {userTurnCount}
+                            </span>
+                        )}
                     </div>
                 )}
 
@@ -129,8 +158,9 @@ export function CommandConversationRail({
                 )}
             </div>
 
-            {/* Controls: real Clear-history flow (authenticated only — server truth) */}
-            {audience === "authenticated" && messages.length > 0 && (
+            {/* Controls: real Clear-history flow — authenticated AND a real
+                conversation only (never offered for a synthetic welcome). */}
+            {audience === "authenticated" && real && (
                 <div className="mt-3 border-t pt-3" style={{ borderColor: c.hair }}>
                     {confirmClear ? (
                         <div className="flex items-center gap-2" style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10 }}>

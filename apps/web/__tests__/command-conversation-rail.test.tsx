@@ -13,7 +13,9 @@
 
 import {
     CommandConversationRail,
+    countUserTurns,
     deriveConversationTitle,
+    hasRealConversation,
 } from "@/components/command/CommandConversationRail";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
@@ -60,13 +62,57 @@ describe("deriveConversationTitle", () => {
 });
 
 describe("CommandConversationRail", () => {
-    it("renders exactly one conversation entry with the real title and count", () => {
+    it("renders exactly one conversation entry with the real title and user-turn count", () => {
         render(<CommandConversationRail {...baseProps} />);
         const current = screen.getAllByTestId("command-rail-current");
         expect(current).toHaveLength(1);
         expect(current[0]).toHaveTextContent("Find me HSE Manager jobs in Dubai");
-        expect(current[0]).toHaveTextContent("2");
+        // Count = real USER turns only (1), never messages.length (2).
+        expect(screen.getByTestId("command-rail-turn-count")).toHaveTextContent("1");
         expect(screen.getByText("1 thread")).toBeInTheDocument();
+    });
+
+    /* ── Owner blocker: real-conversation truth model ─────────────────────── */
+
+    it("welcome-only empty history: fallback title, no count, Clear History hidden", () => {
+        render(
+            <CommandConversationRail
+                {...baseProps}
+                historyState="empty"
+                messages={[msg("rico", "Welcome back. What would you like to work on today?")]}
+            />,
+        );
+        expect(countUserTurns([msg("rico", "welcome")])).toBe(0);
+        expect(hasRealConversation([msg("rico", "welcome")], "empty")).toBe(false);
+        // Fallback title allowed; the synthetic welcome is NOT a conversation:
+        expect(screen.getByTestId("command-rail-current")).toHaveTextContent("New conversation");
+        expect(screen.queryByTestId("command-rail-turn-count")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("command-rail-clear-history")).not.toBeInTheDocument();
+    });
+
+    it("first real user turn after the welcome: title flips, Clear History appears, count excludes the welcome", () => {
+        const messages = [
+            msg("rico", "Welcome back. What would you like to work on today?"),
+            msg("user", "Find me HSE jobs in Abu Dhabi"),
+        ];
+        expect(hasRealConversation(messages, "empty")).toBe(true);
+        render(<CommandConversationRail {...baseProps} historyState="empty" messages={messages} />);
+        expect(screen.getByTestId("command-rail-current")).toHaveTextContent("Find me HSE jobs in Abu Dhabi");
+        expect(screen.getByTestId("command-rail-turn-count")).toHaveTextContent("1"); // welcome excluded
+        expect(screen.getByTestId("command-rail-clear-history")).toBeInTheDocument();
+    });
+
+    it("persisted server history: real conversation, rail reflects it, Clear History appears", () => {
+        const messages = [
+            msg("user", "Find me HSE Manager jobs in Dubai"),
+            msg("rico", "Here are your top three."),
+            msg("user", "Tailor my CV for the first one"),
+        ];
+        expect(hasRealConversation(messages, "has_history")).toBe(true);
+        render(<CommandConversationRail {...baseProps} historyState="has_history" messages={messages} />);
+        expect(screen.getByTestId("command-rail-current")).toHaveTextContent("Find me HSE Manager jobs in Dubai");
+        expect(screen.getByTestId("command-rail-turn-count")).toHaveTextContent("2");
+        expect(screen.getByTestId("command-rail-clear-history")).toBeInTheDocument();
     });
 
     it("shows the loading row while authenticated history is pending", () => {

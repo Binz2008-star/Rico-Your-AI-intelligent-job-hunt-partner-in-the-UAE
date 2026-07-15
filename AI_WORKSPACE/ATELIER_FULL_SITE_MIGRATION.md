@@ -275,23 +275,22 @@ progress states; public/guest surface unchanged unless a slice scopes it):
   Sessions position (New chat · current conversation · Clear history · real
   history loading/error; general nav relocated to compact top-bar icons; no
   fabricated sessions — **multi-session history is a separately scoped
-  backend capability gap** (ADR-002, PROPOSED)), an interactive **no-regression suite** over the
+  backend capability gap**), an interactive **no-regression suite** over the
   real mounted CommandPage (send, streaming tokens, completion, stop/cancel,
   retry, New chat, Clear history, panel/language/theme toggles — network-
   boundary fixtures, real SSE), and all synthetic screenshots stamped
   `MOCKED VISUAL EVIDENCE — NOT FUNCTIONAL SMOKE`. Status: **C1 visual shell
   in Draft; functional evidence partial; transcript interaction parity
   missing; canonical flow parity not implemented.**
-- **C2 — real Command event/presentation adapter** (owner directive — NOT a
-  typography-only repaint): maintainable mapping from existing production
-  truth to canonical Obsidian presentation — user→YOU, thinking→working
-  indicator, operationState→safe TOOL label, SSE token/done/error→streaming/
-  completed/ERROR+Retry, agentic_ui progress/actions→progress/ASK rows,
-  permission_request→checkpoint, proposed_changes→DIFF review,
-  attachment_analysis→file intelligence, matches→JOB MATCH,
-  applications→TRACKER, profile_gaps→profile intelligence,
-  options/next_actions→real controls. Never display hidden chain-of-thought;
-  never fabricate PLAN/TOOL steps. Includes the gutter/type-scale rhythm.
+- **C2 — real Command event/presentation adapter** (pending; owner directive —
+  NOT a typography-only repaint): map existing production truth onto the
+  canonical transcript grammar using existing handlers only. No hidden
+  chain-of-thought; no fabricated PLAN/TOOL steps; no fake sessions.
+  Detailed adapter contracts and the multi-session architecture proposal are
+  intentionally NOT in the C1 PR — they arrive as a separate docs-only
+  review after C1 is stable. Multi-session history remains a capability gap.
+  **Stop-vs-timeout distinction remains open** (deliberate-Stop presentation,
+  partial-stream preservation — C2 scope).
 - **C3 — composer parity.** **C4 — job intelligence cards.**
 - **C5 — right-rail content parity.** **C6 — mobile drawers + RTL +
   route-scoped typography + final recording-parity visual gate.**

@@ -244,14 +244,31 @@ describe("C1 no-regression — real CommandPage over network fixtures", () => {
     });
 
     it("Clear history (conversation rail, two-step) empties the transcript via the real DELETE", async () => {
+        streamHandlers.push((init) => {
+            const sse = manualSSE(init?.signal);
+            queueMicrotask(() => {
+                sse.push({ type: "done", response: { response: "Noted.", type: "chat" } });
+                sse.close();
+            });
+            return sse.response;
+        });
         const log = await mountAuthenticated();
-        const welcome = await log.findByText(/welcome back/i);
+
+        // Welcome-only transcript is NOT a real conversation — no Clear History.
+        await log.findByText(/welcome back/i);
+        expect(screen.queryByTestId("command-rail-clear-history")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("command-rail-turn-count")).not.toBeInTheDocument();
+
+        // A real user turn makes it a conversation; the control appears.
+        await sendText("Remember my target role");
+        const sent = await log.findByText("Remember my target role");
+        await log.findByText("Noted.");
 
         fireEvent.click(screen.getByTestId("command-rail-clear-history")); // arm
         fireEvent.click(await screen.findByTestId("command-rail-clear-confirm")); // perform
 
         await waitFor(() => expect(deleteHistoryCalls).toBe(1));
-        await waitFor(() => expect(welcome).not.toBeInTheDocument());
+        await waitFor(() => expect(sent).not.toBeInTheDocument());
     });
 
     it("left and right panel toggles collapse/expand the rails", async () => {
