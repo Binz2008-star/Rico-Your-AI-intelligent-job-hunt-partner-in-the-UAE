@@ -173,6 +173,72 @@ keyboard shortcuts (Enter, Shift+Enter, IME, Ctrl+K, Ctrl+J, Escape), and adds
 
 ---
 
+### TASK-20260714-001 — Atelier full-site migration REOPENED: refreshed gap matrix + next-PR routing
+
+Status: review
+Owner: Claude (WRITER; Planner pass)
+Branch: `claude/atelier-fullsite-reopen`
+Issue/PR: this docs PR (draft); execution then follows Steps 1→8
+
+#### Objective
+
+Owner reopened the full-site Atelier migration (supersedes the 2026-07-14 program
+closure). Flip `ATELIER_FULL_SITE_MIGRATION.md` from CLOSED/DEFERRED to REOPENED,
+re-audit the route matrix against live `main`, and route execution to the next
+existing in-flight Atelier PR without duplicating work.
+
+#### Context
+
+- Target: **every** production user-facing route on the approved Atelier design,
+  not the original seven surfaces.
+- `main` advanced past the Phase-0 audit base `c11575d` → re-audited @ `5cf9a6f`.
+- Existing in-flight PRs mapped: #1026 (Step 1 preview hygiene, VALID — next),
+  #1016 (Step 3 `/queue` guard-only), #1022 (Step 7 Paddle runtime).
+- Out of scope (owner): #1024/#1025 memory engine; abandoned M1 postgres branch.
+
+#### Constraints
+
+- Docs-only in this PR; no route/component/backend/billing/Neon changes.
+- Preserve completed routes; do not rebuild unless a per-route audit proves
+  residual legacy UI.
+- No direct push to `main`; small draft PRs cut from latest `main`.
+
+#### Acceptance criteria
+
+- [x] Program status flipped to REOPENED with owner directive recorded.
+- [x] Route matrix re-audited from the live tree @ `5cf9a6f` (33 `page.tsx`).
+- [x] Legacy-shell census recorded (`AppShell`, `DashboardShell` consumers).
+- [x] Next existing Atelier PR identified (#1026, Step 1) and validity checked.
+
+#### Required verification
+
+- [x] Route audit: `find app -name page.tsx` + per-route shell grep + `next.config.js` redirects.
+- [x] PR validity: #1026 base=`main`, Vercel preview green (bot checks are noise).
+- [ ] Integration tests: n/a (docs-only).
+- [ ] Frontend build: n/a (no `apps/web` code change).
+
+#### Continuity Block
+
+- Task ID: TASK-20260714-001
+- GitHub issue/PR: docs PR (draft)
+- Branch: `claude/atelier-fullsite-reopen`
+- Base branch: main
+- Last safe commit SHA: 5cf9a6f (live origin/main; owner-verified)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: all 33 `apps/web/app/**/page.tsx` routes, `next.config.js`
+  redirects, open PR list (#1016/#1022/#1024/#1025/#1026 + unrelated), PR #1026 detail+status
+- Files changed: `AI_WORKSPACE/ATELIER_FULL_SITE_MIGRATION.md` (REOPEN status +
+  refreshed matrix + in-flight PR map); `AI_WORKSPACE/TASKS.md` (this entry)
+- Files intentionally not touched: all `apps/web` route/component code; backend;
+  #1024/#1025 memory work; abandoned `claude/m1-postgres-integration-tests-*` branch
+- What is complete: reopen recorded; live gap matrix; next-PR routing to #1026
+- What is incomplete: Steps 1→8 execution (starting by finishing #1026)
+- Known blockers: none for this docs PR
+- Validation already run: route/shell audit; #1026 base+status check
+- Validation still required: owner ack of matrix; then execute Step 1 via #1026
+
 ### TASK-20260713-002 — Atelier migration program: parity matrix + first route PR (/applications)
 
 Status: review

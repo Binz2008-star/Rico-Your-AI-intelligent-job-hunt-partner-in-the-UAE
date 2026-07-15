@@ -166,3 +166,84 @@ Final state:
 
 Re-opening any deferred item requires a fresh owner instruction; the matrix
 above (§1–§7) remains the authoritative inventory when that happens.
+
+## Program status — 2026-07-14 (owner re-open)
+
+**REOPENED BY OWNER — FULL-SITE ATELIER MIGRATION REQUIRED.**
+
+The closure above is superseded. The owner directs migrating the **entire** Rico
+website to the approved Atelier design — not the seven selected surfaces, but
+**every production user-facing route**. All previously DEFERRED items (PR 4/5/6/7/8)
+are re-activated. Completed routes are preserved and are **not** rebuilt unless a
+per-route audit proves they still expose legacy UI.
+
+### Refreshed route matrix — audited @ `main = 5cf9a6f` (2026-07-14)
+
+`main` advanced past the Phase-0 base (`c11575d`): #1017 (foundation),
+#1020 (`/command` → WorkspaceShell), #1019 (opening films), #1021
+(`/subscription` Atelier UI), #1022-history merged. Re-audited from the live tree
+(33 `page.tsx` routes) — shell import verified per route.
+
+| Route | Shell on `main` 5cf9a6f | Status | Owner step |
+| --- | --- | --- | --- |
+| `/` | `LandingPageV2` (own layout) | **PARTIAL** — parity verify vs approved public reference | Step 4 |
+| `/about` `/contact` `/faq` | legacy glass content (no shell) | **LEGACY** | Step 4 |
+| `/privacy` `/terms` `/refund-policy` | Atelier editorial | **DONE** | — |
+| `/login` `/signup` | `AtelierAuthShell` (via `LoginForm`/`SignupForm`) | **DONE** | Step 5 verify |
+| `/forgot-password` `/reset-password` `/verify-email` | `AtelierAuthShell` | **DONE** | Step 5 verify |
+| `/onboarding` | Atelier island | **DONE** | Step 5 verify |
+| `/dashboard` | `WorkspaceShell` + `DashboardAtelier` | **DONE** — reachable (stale redirect removed; confirmed absent from `next.config.js`) | — |
+| `/command` | `WorkspaceShell` | **SHELL DONE** (#1020); composer/messages/tool-states still legacy | Step 2 |
+| `/profile` `/settings` `/applications` `/upload` | `WorkspaceShell` | **DONE** | — |
+| `/queue` | **`AppShell`** | **LEGACY** — draft #1016 = auth-guard only (keeps AppShell) | Step 3 |
+| `/jobs` `/archive` `/saved-searches` | **`AppShell`** | **LEGACY + DEAD** (config redirect → `/command`) | Step 3 (restore-in-Atelier or delete) |
+| `/signals` | legacy glass (no shell) | **LEGACY + DEAD** (config redirect) | Step 3 |
+| `/subscription` | `WorkspaceShell` | **SHELL DONE** (#1021); live Paddle Sandbox checkout error outstanding | Step 7 |
+| `/subscription/success` | **`DashboardShell`** (only remaining consumer) | **LEGACY** | Step 3/7 |
+| `/admin/leads` | bare page (no shell) | **LEGACY** | Step 6 |
+| `/design-gallery`(+`/atelier`) `/design-preview` `/rico-preview` `/sandbox/command-primitives` | preview/dev | **PUBLICLY REACHABLE** (F-4) | Step 1 |
+
+Legacy-shell import census on `main` (production routes only): `AppShell` →
+`/queue` `/jobs` `/archive` `/saved-searches`; `DashboardShell` →
+`/subscription/success`. Step 8 legacy deletion is gated until these reach zero.
+
+### Existing Atelier PRs in flight (do not duplicate)
+
+| Owner step | Existing PR | State | Verdict |
+| --- | --- | --- | --- |
+| Step 1 — preview-route hygiene (F-4) | **#1026** `fix/protect-internal-preview-routes` | **MERGED** `21ae19a7` (squash) | **DONE** — verified locally (focused 20/20, vitest 387/387, prod build green, prod-mode smoke 5×404 + `/`,`/login` 200) and "Deploy to Production" workflow success. Direct production curl not runnable from CI env (network policy blocks `ricohunt.com`). |
+| Step 2 — `/command` composer (slice 4a) | **#1028** `feat/atelier-command-composer` | **DRAFT** — sole active Step-2 implementation PR | **ACTIVE** — Atelier paper/ink composer + sun-red controls in workspace theme tokens; 29/29 composer + 416/416 vitest + build green. Visual gate (EN/AR desktop+mobile Playwright) required before it leaves draft. **Claude is writer** (owner directive); Windsurf reviewer-only. |
+| Step 2 — `/command` composer (reference) | **#1029** (editorial-console composer) | **CLOSED, no merge** | **Technical reference only** — do not reopen or re-cut. Superseded by #1028. |
+| Step 3 — `/queue` | **#1016** `claude/queue-auth-guard` | DRAFT, guard-only (keeps `AppShell`) | Coordinate: merge-then-migrate, or supersede with full `/queue` Atelier PR |
+| Step 7 — Paddle runtime | **#1022** `fix/paddle-event-callback` | DRAFT (split B of #1018) | Real Sandbox browser smoke gates merge |
+
+Out of scope for this program (owner: do not touch): #1024, #1025 (Career Memory
+Engine M1), and the abandoned `claude/m1-postgres-integration-tests-*` branch.
+
+**Step 1 complete (#1026 merged @ `21ae19a7`). Step 2 in progress — `/command`
+composer/messages/tool-state Atelier migration**, split into slices:
+
+- **4a — composer** → **#1028** (sole active implementation PR; ACTIVE). Awaiting
+  its visual gate before leaving draft.
+- **4b — empty state + message bubbles/markdown**, **4c — tool/permission/
+  attachment/error/loading states** (incl. the streaming state: shimmer-over-spinner
+  + tail caret per the design reference's streaming spec — built in **Atelier
+  paper/ink/sun-red tokens**, *not* the legacy `--gold`/`rico-thinking-row`
+  Nocturne classes), **4d — right rail**, **4e — remaining Command chrome**.
+  Each is a follow-up slice *after* 4a merges; none is open yet.
+
+Execution order otherwise follows Steps 2→8 above; each step/slice ships as its own
+small draft PR cut from latest `main` with the full per-PR gate (vitest + build +
+Playwright smoke + EN/AR/RTL + desktop/mobile screenshots + Vercel preview).
+
+### Program authority (owner directive, 2026-07-14)
+
+- **#1028 is the sole active Step-2 slice-4a implementation PR.** Do not open
+  parallel `/command` implementation PRs; one active slice at a time.
+- **#1029 is closed without merge** and may be used only as a technical reference.
+- Remaining phases **derive from the repository's existing Atelier tokens, approved
+  migrated surfaces, and the WorkspaceShell/AuthShell patterns** — with EN/AR/RTL,
+  accessibility, and mobile parity — **not** from new owner mockups. **No agent
+  should pause and request new owner mockups** for the remaining phases.
+- **Claude is writer** for the active PR; **Windsurf is reviewer-only** unless
+  authority is explicitly transferred.
