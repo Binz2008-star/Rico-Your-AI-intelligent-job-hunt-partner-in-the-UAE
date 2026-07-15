@@ -8,10 +8,12 @@
  * Route-scoped chrome for the AUTHENTICATED `/command` surface only, replacing
  * WorkspaceShell there: the recording's dark operator console — obsidian
  * canvas with grid grain + acid-lime aura, a full-width h-12 top status bar
- * (panel toggles · Rico · workspace eyebrow · live status · EN/ع · theme),
- * a collapsible 260px start rail carrying the shared workspace nav, and a
- * flexible console area whose children (transcript column + CommandRail)
- * come from CommandPage unchanged.
+ * (panel toggles · Rico · workspace eyebrow · compact icon nav · live status ·
+ * EN/ع · theme), a collapsible 260px start rail carrying the `leftRail`
+ * content (the canonical Sessions position — CommandConversationRail; general
+ * app navigation deliberately does NOT occupy it, per the owner's 2026-07-16
+ * correction), and a flexible console area whose children (transcript column
+ * + CommandRail) come from CommandPage unchanged.
  *
  * Theme delivery: provides COMMAND_OBSIDIAN through the existing
  * WorkspaceThemeContext, so every merged 4a–4e surface (composer, message
@@ -70,6 +72,7 @@ function PanelIcon({ side }: { side: "start" | "end" }) {
 
 export function CommandObsidianShell({
     children,
+    leftRail,
     busy = false,
     leftOpen = true,
     rightOpen = true,
@@ -77,6 +80,8 @@ export function CommandObsidianShell({
     onToggleRight,
 }: {
     children: React.ReactNode;
+    /** Content of the start rail — the canonical Sessions position. */
+    leftRail?: React.ReactNode;
     /** True while Rico is thinking/streaming — drives the top-bar status. */
     busy?: boolean;
     leftOpen?: boolean;
@@ -151,6 +156,27 @@ export function CommandObsidianShell({
                 <span className="hidden sm:inline" style={{ ...EYEBROW, color: c.ink55, letterSpacing: isAr ? "0.04em" : "0.22em" }}>
                     {t("cmdWorkspaceTag")}
                 </span>
+                {/* Compact icon nav — general app navigation relocated out of the
+                    Sessions rail position (owner correction 2026-07-16). */}
+                <nav aria-label={t("cmdNavRailTitle")} className="ms-3 flex items-center gap-0.5" data-testid="command-obsidian-topnav">
+                    {WORKSPACE_NAV.map((item) => {
+                        const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                        const label = isAr ? item.label.ar : item.label.en;
+                        return (
+                            <Link
+                                key={item.key}
+                                href={item.href}
+                                aria-label={label}
+                                title={label}
+                                aria-current={active ? "page" : undefined}
+                                className="obs-ghost inline-flex items-center justify-center rounded-md p-1.5"
+                                style={{ color: active ? c.red : c.ink55 }}
+                            >
+                                {item.icon}
+                            </Link>
+                        );
+                    })}
+                </nav>
                 <span
                     data-testid="command-obsidian-status"
                     className="ms-auto flex items-center gap-2"
@@ -207,48 +233,25 @@ export function CommandObsidianShell({
                 </button>
             </header>
 
-            {/* ── Console body: start rail · children (transcript + right rail) ── */}
-            <div className="relative z-10 flex min-h-0 flex-1">
-                <aside
-                    data-testid="command-obsidian-navrail"
-                    className={`${leftOpen ? "lg:flex lg:w-[260px]" : "lg:w-0"} hidden shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
-                    style={{ borderInlineEnd: leftOpen ? `1px solid ${c.hair}` : "none", background: `${c.rail}99` }}
-                >
-                    <div className="flex w-[260px] flex-1 flex-col p-4">
-                        <div className="mb-4" style={{ ...EYEBROW, color: c.ink55, letterSpacing: isAr ? "0.04em" : "0.22em" }}>
-                            {t("cmdNavRailTitle")}
-                        </div>
-                        <nav className="flex flex-col gap-0.5">
-                            {WORKSPACE_NAV.map((item) => {
-                                const active = pathname === item.href || pathname.startsWith(item.href + "/");
-                                return (
-                                    <Link
-                                        key={item.key}
-                                        href={item.href}
-                                        className="obs-nav flex items-center gap-3 rounded-md px-2 py-2"
-                                        style={{
-                                            color: active ? c.ink : c.ink70,
-                                            background: active ? c.panel : "transparent",
-                                            textDecoration: "none",
-                                        }}
-                                        aria-current={active ? "page" : undefined}
-                                    >
-                                        {active && <span aria-hidden="true" className="h-1 w-1 shrink-0 rounded-full" style={{ background: c.red }} />}
-                                        <span style={{ color: active ? c.red : c.ink40, display: "inline-flex" }}>{item.icon}</span>
-                                        <span style={{ fontSize: 13.5 }}>{isAr ? item.label.ar : item.label.en}</span>
-                                    </Link>
-                                );
-                            })}
-                        </nav>
-                    </div>
-                </aside>
+            {/* ── Console body: start rail · children (transcript + right rail) ──
+                The palette provider wraps BOTH the left rail and the main area so
+                every consumer (conversation rail, composer, messages, right rail)
+                reads the same Obsidian palette. */}
+            <WorkspaceThemeContext.Provider value={c}>
+                <div className="relative z-10 flex min-h-0 flex-1">
+                    <aside
+                        data-testid="command-obsidian-leftrail"
+                        className={`${leftOpen ? "lg:flex lg:w-[260px]" : "lg:w-0"} hidden shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
+                        style={{ borderInlineEnd: leftOpen ? `1px solid ${c.hair}` : "none", background: `${c.rail}99` }}
+                    >
+                        {leftRail}
+                    </aside>
 
-                <WorkspaceThemeContext.Provider value={c}>
                     <main className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
                         {children}
                     </main>
-                </WorkspaceThemeContext.Provider>
-            </div>
+                </div>
+            </WorkspaceThemeContext.Provider>
 
             <style dangerouslySetInnerHTML={{ __html: `
                 [data-testid="command-obsidian-shell"] .obs-nav { transition: background-color .15s ease, color .15s ease; }

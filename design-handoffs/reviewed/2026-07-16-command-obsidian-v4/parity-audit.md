@@ -8,6 +8,26 @@
   console; the public/guest surface keeps its approved reference chrome and is only
   affected where noted)
 
+## Status correction — owner executive review, 2026-07-16 (second pass)
+
+The first C1 draft was a **visual shell, not the owner-approved Command
+experience**. Recorded status (binding until the owner changes it):
+
+| Item | Status |
+| --- | --- |
+| C1 visual shell | implemented in Draft (#1043) |
+| C1 functional no-regression evidence | **partial** — a mounted-component interactive suite now covers send / user turn / thinking / streaming tokens / completion / stop-cancel / retry / New chat / Clear history / panel + language + theme toggles at the network boundary; the full 19-flow acceptance matrix below remains OPEN |
+| Sessions rail parity | truthful single-conversation rail shipped in C1 (New chat · current conversation · Clear history · history loading/error). **True multi-session history = backend capability gap, separately scoped — no session APIs exist; nothing may be fabricated** |
+| Transcript interaction parity | **missing** (C2) |
+| Canonical flow parity | **not implemented** (C2+) |
+| PR #1043 | **Draft — not ready for merge**; owner gate required |
+
+Screenshot rule: every synthetic capture is stamped
+**MOCKED VISUAL EVIDENCE — NOT FUNCTIONAL SMOKE** and proves layout only.
+Functional claims come exclusively from the mounted-component no-regression
+suite (`apps/web/__tests__/command-obsidian-noregression.test.tsx`) and,
+later, the owner's real authenticated smoke.
+
 **Honest completion vs the recording: ~25%.** Slices 4a–4e delivered the right
 *functional* skeleton (three-region layout, Atelier composer, message rows,
 job cards, right rail) with business behavior preserved — but the entire
@@ -22,7 +42,7 @@ Severity: **B** = blocker (gate cannot pass), **M** = major, **m** = minor.
 | Slice | Objective |
 | --- | --- |
 | **C1** | Route-scoped Command Obsidian foundation: obsidian tokens through the existing workspace-theme context, dark canvas + grid texture + lime aura, top status bar, three-column proportions, rail framing, desktop rail toggles |
-| **C2** | Transcript rhythm: gutter labels, user/assistant type scale, progress/reasoning presentation, streaming cursor, error/retry rows |
+| **C2** | **Real Command event/presentation adapter** (owner directive — NOT a typography-only repaint): a maintainable mapping layer from existing production truth to canonical Obsidian presentation. Real source → canonical presentation: user message → YOU · thinking=true → safe working indicator · operationState → safe TOOL/working label · SSE token → streaming RICO response · SSE done → completed response · SSE error/timeout → ERROR + real Retry · agentic_ui.progress → progress rows · agentic_ui.actions → ASK/action rows · permission_request → permission checkpoint · proposed_changes → DIFF/review surface · attachment_analysis → file intelligence surface · matches → JOB MATCH · applications → TRACKER/pipeline · profile_gaps → profile intelligence · options/next_actions → real next-action controls. Never display hidden chain-of-thought; never fabricate PLAN/TOOL steps; render only operational labels supported by real API/state evidence. Includes the transcript gutter/type-scale rhythm those mappings render in |
 | **C3** | Composer parity: `/` glyph, hints row, send/stop treatment, gradient fade |
 | **C4** | Job intelligence cards: MATCH card structure, ScorePip tiers, WHY-IT-FITS/HONEST-GAPS blocks |
 | **C5** | Right-rail content parity: shortlist mini-cards, pipeline stage bars, SIGNAL section, empty states |
@@ -36,7 +56,7 @@ Severity: **B** = blocker (gate cannot pass), **M** = major, **m** = minor.
 | 2 | Acid-lime accent & glow | Single signal `--sun #c8ff3f` (dark) / `#3e6b0f` (light); selection lime; plate shadows with lime edge | Accent = sun-red `#E0895A` (dark) / `#C6492E`; legacy Nocturne `gold` classes on state chips/retry | Accent hue entirely different; no lime anywhere; two competing accents (red + gold) | **B** | palette override (`c.red`→sun) covers themed surfaces; remaining hard-coded `gold` classes in `app/command/page.tsx` | None | C1 (tokens) + C2/C4 (gold remnants) |
 | 3 | Grid texture & aura | Fixed 64px 1px grid @5% radial-masked + lime radial aura (20% dark) above viewport | Absent (flat island background) | Missing both texture layers | M | new route-scoped canvas layers in the `/command` shell (must NOT touch global `body::before/::after`) | None (pointer-events-none) | C1 |
 | 4 | Top status bar | Full-width h-12 sticky bar: PanelLeft · **Rico** · `JOB HUNT · UAE` eyebrow · status dot (lime pulse while working) + mono caps READY/WORKING · EN/ع · theme · PanelRight | Desktop authenticated: **no top bar at all** (side nav only); mobile/public: MobileCommandHeader (different content, no status) | Entire component missing on desktop; no live status indicator anywhere | **B** | new `CommandObsidianShell` top bar; `app/command/page.tsx` passes `busy` | Low — new chrome, no handlers moved | C1 |
-| 5 | Left rail | 260px SESSIONS rail: eyebrow + `+ new`, session rows w/ relative time, active lime dot, `N THREADS` footer; collapsible | 244px WorkspaceShell **workspace nav** (Command/Profile/Applications/Upload/Settings), cream-island styling, not collapsible | Different width, purpose (nav vs sessions), styling; sessions list is a product capability `/command` does not have yet | **B** (framing) / M (sessions content — needs owner/product decision; nav must remain reachable) | new shell left rail (C1 = Obsidian framing + nav content, 260px, collapsible); sessions list deferred until a sessions feature exists | Nav links must remain (only desktop nav to /profile etc.) | C1 framing; sessions content OPEN |
+| 5 | Left rail | 260px SESSIONS rail: eyebrow + `+ new`, session rows w/ relative time, active lime dot, `N THREADS` footer; collapsible | **C1 draft:** truthful CommandConversationRail (New chat · current conversation title/count · Clear history · history loading/error; nav relocated to compact top-bar icons) | Multi-session list still impossible — no backend session APIs; single-conversation surface is the truthful maximum today | M (product/backend gap) | backend session APIs = separately scoped capability; rail content parity beyond one conversation blocked on it | Must never fabricate sessions | OPEN (backend) |
 | 6 | Desktop proportions | 260 / flexible transcript `max-w-[720px]` / 300 | 244 / `max-w-5xl` (1024px) / 300 | Transcript measure ~40% too wide; rails misproportioned | **B** | shell grid + `app/command/page.tsx` main `max-w` | None | C1 |
 | 7 | Transcript gutter labels | Mono 10px caps gutter (`min-w-[64px]`): YOU/THINK/PLAN/RUN/DONE/FAIL/ASK/MATCH/RICO, lime for hot states | No gutter column; rico turns get a serif "R" avatar mark, user turns end-aligned | Entire gutter system missing | **B** | `components/command/CommandMessages.tsx`, `app/command/page.tsx` rows | Low — presentational wrapper around existing rows | C2 |
 | 8 | User messages | Display font 22–26px tight, gutter `YOU`, start-aligned | 14–15px emphasized ink, end-aligned, no gutter | Type scale, alignment, gutter | **B** | `CommandMessages.tsx` | None | C2 |
@@ -72,3 +92,35 @@ canvas + texture/aura, top status bar, 260/720/300 proportions, rail framing,
 desktop rail toggles). It is the highest-impact isolated change: through the
 theme context it repaints every 4a–4e surface to the Obsidian world in one
 reviewable diff, with zero chat-logic movement.
+
+
+## Functional acceptance matrix (owner-mandated — gate for "Command parity complete")
+
+Real flows that must be verified (mounted components or real authenticated
+smoke — synthetic screenshots do not count) before `/command` may be declared
+complete. Status as of this revision:
+
+| # | Flow | Status |
+| --- | --- | --- |
+| 1 | Normal conversation | **covered** — no-regression suite (mounted CommandPage, network fixtures) |
+| 2 | Streamed response | **covered** — real `sendChatStream`/`_readSSE` over a driven SSE body |
+| 3 | Stop generation | **covered** — abort-wired stream → real AbortError path + Retry |
+| 4 | Retry failed response | **covered** — network-failure → error turn → Retry resends same text |
+| 5 | Upload CV | OPEN |
+| 6 | Upload another document type | OPEN |
+| 7 | Profile preview and confirm | OPEN |
+| 8 | Job search and results | OPEN (job-card rendering exists in 4d tests; end-to-end flow not yet in the C-suite) |
+| 9 | Apply / Save / Verify / fallback actions | OPEN |
+| 10 | Application-status response | OPEN |
+| 11 | Permission request and approve/cancel | OPEN |
+| 12 | Proposed profile change and review | OPEN |
+| 13 | Action chips and navigation | OPEN |
+| 14 | Current conversation history | **covered** — history fixture restore + truthful load-error surfacing |
+| 15 | New Chat and Clear History | **covered** — rail controls → real handlers → real DELETE |
+| 16 | Right rail updates from actual messages | partial — unit-tested derivations (4e); live-update flow OPEN |
+| 17 | EN/AR and RTL | partial — shell/rail toggle covered; per-flow AR coverage OPEN |
+| 18 | Desktop/mobile | partial — desktop covered; mobile drawers are C6 |
+| 19 | Loading | partial — history loading covered; per-surface loading states OPEN |
+
+Do not declare `/command` complete until every row is **covered** and the
+owner's recording-based visual gate passes on the real product.

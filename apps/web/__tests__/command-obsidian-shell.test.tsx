@@ -7,8 +7,10 @@
  *     component changes.
  *  2. Top bar: brand, workspace eyebrow, live status (READY idle / WORKING
  *     while busy), panel toggles wired to the callbacks.
- *  3. Nav rail: shared WORKSPACE_NAV links render; /command is current page;
- *     leftOpen=false collapses the rail width.
+ *  3. Compact top-bar nav: shared WORKSPACE_NAV links render as icon links
+ *     (general navigation does NOT occupy the Sessions rail position — owner
+ *     correction 2026-07-16); /command is current page. The start rail renders
+ *     the injected `leftRail` content; leftOpen=false collapses its width.
  *  4. Theme toggle flips to the light "Obsidian at dawn" palette.
  *  5. Arabic: dir=rtl + lang=ar on the root.
  *  6. Route-scoping: no global body/root mutation — canvas layers live inside
@@ -77,27 +79,41 @@ describe("CommandObsidianShell (slice C1)", () => {
                 x
             </CommandObsidianShell>,
         );
-        fireEvent.click(screen.getByLabelText("Toggle workspace rail"));
+        fireEvent.click(screen.getByLabelText("Toggle sessions rail"));
         fireEvent.click(screen.getByLabelText("Toggle shortlist rail"));
         expect(onToggleLeft).toHaveBeenCalledTimes(1);
         expect(onToggleRight).toHaveBeenCalledTimes(1);
 
-        expect(screen.getByTestId("command-obsidian-navrail").className).toContain("lg:w-[260px]");
+        expect(screen.getByTestId("command-obsidian-leftrail").className).toContain("lg:w-[260px]");
         rerender(
             <CommandObsidianShell leftOpen={false} rightOpen onToggleLeft={onToggleLeft} onToggleRight={onToggleRight}>
                 x
             </CommandObsidianShell>,
         );
-        expect(screen.getByTestId("command-obsidian-navrail").className).toContain("lg:w-0");
+        expect(screen.getByTestId("command-obsidian-leftrail").className).toContain("lg:w-0");
     });
 
-    it("renders the shared workspace nav with /command as the current page", () => {
+    it("renders the shared workspace nav as compact top-bar icons, /command current", () => {
         render(<CommandObsidianShell>x</CommandObsidianShell>);
+        const topnav = screen.getByTestId("command-obsidian-topnav");
+        expect(topnav).toBeInTheDocument();
         const command = screen.getByRole("link", { name: /command/i });
         expect(command).toHaveAttribute("aria-current", "page");
+        expect(topnav).toContainElement(command);
         expect(screen.getByRole("link", { name: /profile/i })).toHaveAttribute("href", "/profile");
         expect(screen.getByRole("link", { name: /applications/i })).toHaveAttribute("href", "/applications");
         expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute("href", "/settings");
+    });
+
+    it("renders the injected leftRail content in the Sessions rail position", () => {
+        render(
+            <CommandObsidianShell leftRail={<div data-testid="sessions-probe">sessions</div>}>
+                x
+            </CommandObsidianShell>,
+        );
+        expect(screen.getByTestId("command-obsidian-leftrail")).toContainElement(
+            screen.getByTestId("sessions-probe"),
+        );
     });
 
     it("theme toggle flips to the light 'Obsidian at dawn' palette", () => {

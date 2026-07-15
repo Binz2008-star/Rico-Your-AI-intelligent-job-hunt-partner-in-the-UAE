@@ -268,14 +268,38 @@ Slice plan (each its own draft PR from latest `main`, full per-PR gate;
 presentation-only — no backend/Neon/Paddle/Profile changes, no fabricated
 progress states; public/guest surface unchanged unless a slice scopes it):
 
-- **C1 — Obsidian foundation**: route-scoped tokens (workspace-theme
-  override), dark canvas + grid texture + lime aura, top status bar,
-  260/720/300 proportions, rail framing, desktop rail toggles.
-- **C2 — transcript rhythm**: gutter labels, type scale, real-state
-  progress/streaming/error presentation.
+- **C1 — Obsidian foundation** → **Draft #1043, not ready for merge** (owner
+  second-pass correction 2026-07-16): route-scoped tokens, dark canvas +
+  texture/aura, top status bar, 260/720/300 proportions, rail toggles, PLUS
+  the corrections: truthful **CommandConversationRail** in the canonical
+  Sessions position (New chat · current conversation · Clear history · real
+  history loading/error; general nav relocated to compact top-bar icons; no
+  fabricated sessions — **multi-session history is a separately scoped
+  backend capability gap**), an interactive **no-regression suite** over the
+  real mounted CommandPage (send, streaming tokens, completion, stop/cancel,
+  retry, New chat, Clear history, panel/language/theme toggles — network-
+  boundary fixtures, real SSE), and all synthetic screenshots stamped
+  `MOCKED VISUAL EVIDENCE — NOT FUNCTIONAL SMOKE`. Status: **C1 visual shell
+  in Draft; functional evidence partial; transcript interaction parity
+  missing; canonical flow parity not implemented.**
+- **C2 — real Command event/presentation adapter** (owner directive — NOT a
+  typography-only repaint): maintainable mapping from existing production
+  truth to canonical Obsidian presentation — user→YOU, thinking→working
+  indicator, operationState→safe TOOL label, SSE token/done/error→streaming/
+  completed/ERROR+Retry, agentic_ui progress/actions→progress/ASK rows,
+  permission_request→checkpoint, proposed_changes→DIFF review,
+  attachment_analysis→file intelligence, matches→JOB MATCH,
+  applications→TRACKER, profile_gaps→profile intelligence,
+  options/next_actions→real controls. Never display hidden chain-of-thought;
+  never fabricate PLAN/TOOL steps. Includes the gutter/type-scale rhythm.
 - **C3 — composer parity.** **C4 — job intelligence cards.**
 - **C5 — right-rail content parity.** **C6 — mobile drawers + RTL +
   route-scoped typography + final recording-parity visual gate.**
+
+Gate: the **19-flow functional acceptance matrix** in the reviewed manifest's
+`parity-audit.md` must be fully covered (mounted-component or real
+authenticated smoke — stamped synthetic screenshots never count as functional
+proof) before `/command` may be declared complete.
 
 Superseded/closed: **#1042** (superseded slice-4c re-cut) — do not reopen or
 reuse. Old Atelier `/command` branches must not be reused; each slice starts

@@ -41,7 +41,7 @@ behavior. Port **visual composition and safe interaction patterns only**.
 Route-scope all new design variables under `/command`; do not modify global
 `:root`, `body::before`, `body::after`, or unrelated pages.
 
-## Status correction (recorded per owner directive)
+## Status correction (recorded per owner directives, incl. 2026-07-16 second pass)
 
 `/command` is **not** "Fully Atelier" and not visually complete:
 
@@ -49,8 +49,24 @@ Route-scope all new design variables under `/command`; do not modify global
 - current Rico business behavior: **preserved**
 - owner-approved Obsidian visual parity: **pending**
 - Command migration completion: **OPEN until the recording-based parity gate passes**
+- C1 visual shell: **implemented in Draft (#1043)** — a visual shell is NOT the
+  owner-approved Command experience
+- C1 functional no-regression evidence: **partial** (mounted-component
+  interactive suite for send/stream/stop/retry/new-chat/clear-history/toggles;
+  the 19-flow acceptance matrix in `parity-audit.md` remains OPEN)
+- Sessions rail parity: truthful single-conversation rail shipped;
+  **multi-session history = separately scoped backend capability gap**
+- transcript interaction parity: **missing** (C2 adapter)
+- canonical flow parity: **not implemented**
+- PR #1043: **Draft — not ready for merge**
 
 Closed PR #1042 is superseded; it must not be reopened or reused.
+
+**Evidence rule:** every synthetic screenshot in `screenshots/` is stamped
+`MOCKED VISUAL EVIDENCE — NOT FUNCTIONAL SMOKE`. Those images prove layout
+only — never chat, action, upload, or session behavior. Functional claims come
+from `apps/web/__tests__/command-obsidian-noregression.test.tsx` (real mounted
+CommandPage over network-boundary fixtures) and the owner's real smoke.
 
 ## Contents
 

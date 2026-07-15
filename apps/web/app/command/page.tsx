@@ -13,6 +13,7 @@ import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
+import { CommandConversationRail } from "@/components/command/CommandConversationRail";
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
@@ -881,6 +882,10 @@ export default function CommandPage() {
     // presentation state, never touches chat behavior.
     const [leftRailOpen, setLeftRailOpen] = useState(true);
     const [rightRailOpen, setRightRailOpen] = useState(true);
+    // Real signal: the authenticated server-history fetch failed. Existing
+    // behavior (fall through to the welcome state) is unchanged — this only
+    // lets the conversation rail tell the user truthfully what happened.
+    const [historyLoadError, setHistoryLoadError] = useState(false);
     const [clearHistoryError, setClearHistoryError] = useState<string | null>(null);
     const [userName, setUserName] = useState<string | null>(null);
     // "pending" = history not yet checked; "has_history" = history loaded; "empty" = no history
@@ -1064,7 +1069,9 @@ export default function CommandPage() {
                     return;
                 }
             } catch {
-                // If history fetch fails, fall through to show welcome
+                // If history fetch fails, fall through to show welcome. The
+                // conversation rail surfaces this real failure (no behavior change).
+                if (!cancelled) setHistoryLoadError(true);
             }
             if (!cancelled) setHistoryState("empty");
         })();
@@ -1777,6 +1784,20 @@ export default function CommandPage() {
             rightOpen={rightRailOpen}
             onToggleLeft={() => setLeftRailOpen((v) => !v)}
             onToggleRight={() => setRightRailOpen((v) => !v)}
+            leftRail={
+                <CommandConversationRail
+                    audience={chatAudience}
+                    messages={messages}
+                    historyState={historyState}
+                    historyLoadError={historyLoadError}
+                    busy={thinking}
+                    confirmClear={confirmClear}
+                    clearingHistory={clearingHistory}
+                    onNewChat={handleNewChat}
+                    onClearHistory={() => void handleClearHistory()}
+                    onCancelClear={() => setConfirmClear(false)}
+                />
+            }
         >
             {/* Main column — fills remaining width */}
             <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
@@ -2356,6 +2377,7 @@ function CommandChrome({
     rightOpen,
     onToggleLeft,
     onToggleRight,
+    leftRail,
     children,
 }: {
     audience: "checking" | "public" | "authenticated";
@@ -2364,6 +2386,7 @@ function CommandChrome({
     rightOpen: boolean;
     onToggleLeft: () => void;
     onToggleRight: () => void;
+    leftRail: React.ReactNode;
     children: React.ReactNode;
 }) {
     if (audience === "public") {
@@ -2380,6 +2403,7 @@ function CommandChrome({
             rightOpen={rightOpen}
             onToggleLeft={onToggleLeft}
             onToggleRight={onToggleRight}
+            leftRail={leftRail}
         >
             <div className="relative flex h-full min-h-0 flex-1 overflow-hidden">
                 {children}
