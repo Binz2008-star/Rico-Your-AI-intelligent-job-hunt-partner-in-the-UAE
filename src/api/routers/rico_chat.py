@@ -1472,6 +1472,25 @@ async def rico_upload_cv(
                 resp["source"] = "image"
                 return resp
             _metrics.record_request((time.time() - start_time) * 1000)
+            logger.info(
+                "doc_image_ocr_failed user=%s filename=%s chars=%d request_ref=%s",
+                resolved_user_id, safe_name, len(extracted or ""), request_ref,
+            )
+            # Store the image context even without text so follow-up actions
+            # ("extract text", "describe image") know an image was uploaded.
+            try:
+                from src.repositories.uploaded_document_repo import set_last_uploaded_document
+                set_last_uploaded_document(
+                    resolved_user_id,
+                    extracted_text="",
+                    filename=safe_name,
+                    document_type="image",
+                    display_label=classification.display_label or "Image",
+                    source="image",
+                    request_ref=request_ref,
+                )
+            except Exception:
+                pass
             return _classification_response(classification, safe_name)
 
         # Identity documents: hard block — never echo content.

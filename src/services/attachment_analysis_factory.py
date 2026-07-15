@@ -35,6 +35,7 @@ _PURPOSE_MAP: dict[str, RicoAttachmentPurpose] = {
     "company_profile": RicoAttachmentPurpose.company_profile,
     "public_comment": RicoAttachmentPurpose.public_comment,
     "application_confirmation": RicoAttachmentPurpose.application_evidence,
+    "image": RicoAttachmentPurpose.unknown_document,
 }
 
 
@@ -64,7 +65,9 @@ def build_attachment_analysis(classification: Any, filename: str | None = None) 
     summary = f"Detected as {display_label} ({pct}% confidence)."
 
     warnings: list[str] = []
-    if purpose == RicoAttachmentPurpose.unknown_document:
+    if document_type == "image":
+        warnings.append("Image uploaded — text extraction pending. Use the actions below to read or describe it.")
+    elif purpose == RicoAttachmentPurpose.unknown_document:
         warnings.append("Rico is not sure what this document is — confirm before acting on it.")
     if confidence < 0.5:
         warnings.append("Low classification confidence.")
