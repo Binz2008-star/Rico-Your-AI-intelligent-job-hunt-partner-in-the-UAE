@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { useWorkspaceTheme } from "@/components/workspace/theme";
+import type { WorkspacePalette } from "@/components/workspace/theme";
 import type { RicoChatAction, RicoActionImpact } from "@/lib/schemas";
 
 export interface ChatActionsRowProps {
@@ -11,6 +14,9 @@ export interface ChatActionsRowProps {
     onSubmit?: (action: RicoChatAction) => Promise<void>;
     onOpenDrawer?: (action: RicoChatAction) => void;
     disabled?: boolean;
+    /** Atelier surface (authenticated /command, slice 4c). Default false =
+     *  pre-4c presentation, unchanged. */
+    atelier?: boolean;
 }
 
 /** Only allow internal paths and safe external URLs — blocks javascript: and data: URIs. */
@@ -82,22 +88,60 @@ function activeClass(impact: RicoActionImpact): string {
 
 const INACTIVE = cn(BASE, "border-border-soft text-text-muted opacity-50 cursor-not-allowed");
 
+/** Atelier presentation: sun-red accents on paper hairlines (slice 4c).
+ *  Hover rules live in the scoped style emitted by ChatActionsRow. */
+function presentation(
+    impact: RicoActionImpact,
+    enabled: boolean,
+    atelier: boolean,
+    c: WorkspacePalette,
+): { className: string; style?: React.CSSProperties } {
+    if (!atelier) {
+        return { className: enabled ? activeClass(impact) : INACTIVE };
+    }
+    if (!enabled) {
+        return {
+            className: cn(BASE, "opacity-50 cursor-not-allowed"),
+            style: { borderColor: c.hair, color: c.ink40, fontFamily: ATELIER_FONT.body },
+        };
+    }
+    if (impact === "medium") {
+        return {
+            className: cn(BASE, "atl4c-action cursor-pointer"),
+            style: {
+                borderColor: `${c.red}66`,
+                background: `${c.red}14`,
+                color: c.red,
+                fontFamily: ATELIER_FONT.body,
+            },
+        };
+    }
+    return {
+        className: cn(BASE, "atl4c-action cursor-pointer"),
+        style: { borderColor: c.hair, color: c.ink55, fontFamily: ATELIER_FONT.body },
+    };
+}
+
 function ChatActionCard({
     action,
     onChatContinue,
     onSubmit,
     onOpenDrawer,
     disabled = false,
+    atelier = false,
 }: {
     action: RicoChatAction;
     onChatContinue: (message: string) => void;
     onSubmit?: (action: RicoChatAction) => Promise<void>;
     onOpenDrawer?: (action: RicoChatAction) => void;
     disabled?: boolean;
+    atelier?: boolean;
 }) {
+    const c = useWorkspaceTheme();
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const enabled = !disabled && isEnabled(action);
+    const active = presentation(action.impact, true, atelier, c);
 
     if (action.kind === "navigate" && enabled) {
         const href = sanitizeHref(action.href)!;
@@ -108,7 +152,8 @@ function ChatActionCard({
                 {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 data-testid="action-card-navigate"
                 data-impact={action.impact}
-                className={activeClass(action.impact)}
+                className={active.className}
+                style={active.style}
             >
                 {action.label}
             </Link>
@@ -124,7 +169,8 @@ function ChatActionCard({
                 data-testid="action-card-chat-continue"
                 data-impact={action.impact}
                 onClick={() => onChatContinue(msg)}
-                className={activeClass(action.impact)}
+                className={active.className}
+                style={active.style}
             >
                 {action.label}
             </button>
@@ -154,7 +200,8 @@ function ChatActionCard({
                     data-impact={action.impact}
                     onClick={handleSubmit}
                     disabled={submitting}
-                    className={cn(activeClass(action.impact), submitting && "opacity-70 cursor-wait")}
+                    className={cn(active.className, submitting && "opacity-70 cursor-wait")}
+                    style={active.style}
                 >
                     {submitting ? "Saving…" : action.label}
                 </button>
@@ -172,7 +219,8 @@ function ChatActionCard({
                 data-testid="action-card-open-drawer"
                 data-impact={action.impact}
                 onClick={() => onOpenDrawer(action)}
-                className={activeClass(action.impact)}
+                className={active.className}
+                style={active.style}
             >
                 {action.label}
             </button>
@@ -180,6 +228,7 @@ function ChatActionCard({
     }
 
     const reason = disabledReason(action);
+    const inactive = presentation(action.impact, false, atelier, c);
     return (
         <button
             type="button"
@@ -188,7 +237,8 @@ function ChatActionCard({
             disabled
             title={reason}
             aria-label={`${action.label} — ${reason}`}
-            className={INACTIVE}
+            className={inactive.className}
+            style={inactive.style}
         >
             {action.label}
         </button>
@@ -201,7 +251,9 @@ export function ChatActionsRow({
     onSubmit,
     onOpenDrawer,
     disabled = false,
+    atelier = false,
 }: ChatActionsRowProps) {
+    const c = useWorkspaceTheme();
     if (!actions.length) return null;
     return (
         <div
@@ -218,8 +270,18 @@ export function ChatActionsRow({
                     onSubmit={onSubmit}
                     onOpenDrawer={onOpenDrawer}
                     disabled={disabled}
+                    atelier={atelier}
                 />
             ))}
+            {atelier && (
+                <style dangerouslySetInnerHTML={{ __html: `
+                    .atl4c-action:hover {
+                        border-color: ${c.red} !important;
+                        color: ${c.red} !important;
+                        background: ${c.red}1F !important;
+                    }
+                ` }} />
+            )}
         </div>
     );
 }

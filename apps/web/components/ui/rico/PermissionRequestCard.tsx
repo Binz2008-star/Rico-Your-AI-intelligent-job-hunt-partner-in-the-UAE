@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { useWorkspaceTheme } from "@/components/workspace/theme";
 import type { RicoPermissionRequest, RicoChatAction } from "@/lib/schemas";
 
 export interface PermissionRequestCardProps {
@@ -16,6 +18,9 @@ export interface PermissionRequestCardProps {
     onReview?: (action: RicoChatAction) => void;
     /** When true, the approve button is disabled (e.g. while the chat is streaming). */
     disabled?: boolean;
+    /** Atelier surface (authenticated /command, slice 4c). Default false =
+     *  pre-4c presentation, unchanged. */
+    atelier?: boolean;
 }
 
 const RISK_BADGE: Record<string, string> = {
@@ -41,7 +46,9 @@ export function PermissionRequestCard({
     onCancel,
     onReview,
     disabled = false,
+    atelier = false,
 }: PermissionRequestCardProps) {
+    const c = useWorkspaceTheme();
     const [executing, setExecuting] = useState(false);
     const [executed, setExecuted] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -70,17 +77,28 @@ export function PermissionRequestCard({
     const riskLabel = RISK_LABEL[request.risk_level] ?? request.risk_level;
     const cardAccent = CARD_ACCENT[request.risk_level] ?? "";
 
+    /* Atelier keeps the semantic amber/red risk accents on the hairline. */
+    const atelierAccent =
+        request.risk_level === "high" ? "rgba(239,68,68,0.35)"
+            : request.risk_level === "medium" ? "rgba(245,158,11,0.30)"
+                : c.hair;
+
     return (
         <div
             data-testid="permission-request-card"
             className={cn(
-                "mt-3 rounded-xl border bg-surface-2 p-4 space-y-3",
-                cardAccent,
+                "mt-3 rounded-xl p-4 space-y-3",
+                !atelier && "border bg-surface-2",
+                !atelier && cardAccent,
             )}
+            style={atelier ? { background: c.panel, border: `1px solid ${atelierAccent}` } : undefined}
         >
             {/* Header: title + risk badge */}
             <div className="flex items-start justify-between gap-3">
-                <h4 className="text-sm font-semibold text-text-primary leading-tight">
+                <h4
+                    className={cn("text-sm font-semibold leading-tight", !atelier && "text-text-primary")}
+                    style={atelier ? { color: c.ink, fontFamily: ATELIER_FONT.body } : undefined}
+                >
                     {request.title}
                 </h4>
                 <span
@@ -95,23 +113,33 @@ export function PermissionRequestCard({
             </div>
 
             {/* Summary */}
-            <p className="text-[13px] text-text-muted leading-relaxed">
+            <p
+                className={cn("text-[13px] leading-relaxed", !atelier && "text-text-muted")}
+                style={atelier ? { color: c.ink55, fontFamily: ATELIER_FONT.body } : undefined}
+            >
                 {request.summary}
             </p>
 
             {/* Data used */}
             {request.data_used.length > 0 && (
                 <div className="space-y-1" data-testid="data-used-section">
-                    <p className="text-[11px] font-medium text-text-muted uppercase tracking-wide">
+                    <p
+                        className={cn("font-medium uppercase", atelier ? "text-[10px]" : "text-[11px] text-text-muted tracking-wide")}
+                        style={atelier ? { color: c.ink40, fontFamily: ATELIER_FONT.mono, letterSpacing: "0.08em" } : undefined}
+                    >
                         Data used
                     </p>
                     <ul className="space-y-0.5">
                         {request.data_used.map((item) => (
                             <li
                                 key={item}
-                                className="text-[12px] text-text-secondary flex items-center gap-1.5"
+                                className={cn("text-[12px] flex items-center gap-1.5", !atelier && "text-text-secondary")}
+                                style={atelier ? { color: c.ink55, fontFamily: ATELIER_FONT.body } : undefined}
                             >
-                                <span className="w-1 h-1 rounded-full bg-text-muted shrink-0" />
+                                <span
+                                    className={cn("w-1 h-1 rounded-full shrink-0", !atelier && "bg-text-muted")}
+                                    style={atelier ? { background: c.ink40 } : undefined}
+                                />
                                 {item}
                             </li>
                         ))}
@@ -122,16 +150,23 @@ export function PermissionRequestCard({
             {/* Effects */}
             {request.effects.length > 0 && (
                 <div className="space-y-1" data-testid="effects-section">
-                    <p className="text-[11px] font-medium text-text-muted uppercase tracking-wide">
+                    <p
+                        className={cn("font-medium uppercase", atelier ? "text-[10px]" : "text-[11px] text-text-muted tracking-wide")}
+                        style={atelier ? { color: c.ink40, fontFamily: ATELIER_FONT.mono, letterSpacing: "0.08em" } : undefined}
+                    >
                         What will happen
                     </p>
                     <ul className="space-y-0.5">
                         {request.effects.map((item) => (
                             <li
                                 key={item}
-                                className="text-[12px] text-text-secondary flex items-center gap-1.5"
+                                className={cn("text-[12px] flex items-center gap-1.5", !atelier && "text-text-secondary")}
+                                style={atelier ? { color: c.ink55, fontFamily: ATELIER_FONT.body } : undefined}
                             >
-                                <span className="w-1 h-1 rounded-full bg-gold/60 shrink-0" />
+                                <span
+                                    className={cn("w-1 h-1 rounded-full shrink-0", !atelier && "bg-gold/60")}
+                                    style={atelier ? { background: c.red } : undefined}
+                                />
                                 {item}
                             </li>
                         ))}
@@ -161,11 +196,12 @@ export function PermissionRequestCard({
                     disabled={disabled || executing}
                     className={cn(
                         "text-[12px] px-3 py-1.5 rounded-lg font-medium transition-colors",
-                        "bg-gold/20 border border-gold/40 text-gold",
-                        "hover:bg-gold/30 hover:border-gold/60",
+                        !atelier && "bg-gold/20 border border-gold/40 text-gold hover:bg-gold/30 hover:border-gold/60 focus-visible:ring-gold/50",
+                        atelier && "hover:opacity-85 transition-opacity",
                         "disabled:opacity-50 disabled:cursor-not-allowed",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50",
+                        "focus-visible:outline-none focus-visible:ring-2",
                     )}
+                    style={atelier ? { background: c.red, color: c.panel, border: "none", fontFamily: ATELIER_FONT.body } : undefined}
                 >
                     {executing ? "Executing…" : request.approve_action.label}
                 </button>
@@ -181,11 +217,12 @@ export function PermissionRequestCard({
                         title={!onReview ? "Review details — coming soon" : undefined}
                         className={cn(
                             "text-[12px] px-3 py-1.5 rounded-lg border transition-colors",
-                            "border-border-soft text-text-secondary",
-                            "hover:border-border-default enabled:hover:text-text-primary",
+                            !atelier && "border-border-soft text-text-secondary hover:border-border-default enabled:hover:text-text-primary focus-visible:ring-border-soft",
+                            atelier && "enabled:hover:opacity-75 transition-opacity",
                             "disabled:opacity-50 disabled:cursor-not-allowed",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-soft",
+                            "focus-visible:outline-none focus-visible:ring-2",
                         )}
+                        style={atelier ? { borderColor: c.hair, color: c.ink55, fontFamily: ATELIER_FONT.body } : undefined}
                     >
                         {request.review_action.label}
                     </button>
@@ -199,11 +236,12 @@ export function PermissionRequestCard({
                     disabled={executing}
                     className={cn(
                         "text-[12px] px-3 py-1.5 rounded-lg border transition-colors",
-                        "border-border-soft text-text-muted",
-                        "hover:border-border-default hover:text-text-secondary",
+                        !atelier && "border-border-soft text-text-muted hover:border-border-default hover:text-text-secondary focus-visible:ring-border-soft",
+                        atelier && "hover:opacity-75 transition-opacity",
                         "disabled:opacity-50 disabled:cursor-not-allowed",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-soft",
+                        "focus-visible:outline-none focus-visible:ring-2",
                     )}
+                    style={atelier ? { borderColor: c.hair, color: c.ink55, fontFamily: ATELIER_FONT.body } : undefined}
                 >
                     {request.cancel_action.label}
                 </button>

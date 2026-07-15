@@ -78,6 +78,56 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260715-002 — Atelier slice 4c: /command tool/permission/attachment/error/loading states
+
+Status: review
+Owner: Claude (WRITER; Coder pass, owner-directed)
+Branch: `feat/atelier-command-states-4c`
+Issue/PR: draft PR (this slice); program: `ATELIER_FULL_SITE_MIGRATION.md` Step 2
+
+#### Objective
+
+Migrate only the /command tool states, permission request cards,
+attachment-analysis cards, error/retry states, and loading/thinking/streaming
+states to the Atelier direction (authenticated surface only; shimmer over
+spinner + sun-red tail caret per the program's streaming spec).
+
+#### Continuity Block
+
+- Task ID: TASK-20260715-002
+- GitHub issue/PR: draft PR from `feat/atelier-command-states-4c`
+- Branch: `feat/atelier-command-states-4c`
+- Base branch: main
+- Last safe commit SHA: 6dc535cb (main @ branch cut; slice 4b merge)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: `app/command/page.tsx` (states/cards/banner/timer),
+  `components/ui/rico/{PermissionRequestCard,ChatActionCard,
+  AttachmentAnalysisCard,ProposedChangeCard}.tsx`, `lib/schemas/index.ts`,
+  `e2e/command-composer-stability.spec.ts`, globals.css thinking classes
+- Files changed: `components/command/CommandStates.tsx` (new);
+  `atelier` prop branches in the four ui/rico cards;
+  `app/command/page.tsx` (prop pass-through + component swaps only);
+  `__tests__/command-states.test.tsx` (new); this entry
+- Files intentionally not touched: job-result cards (`RicoJobMatchCard`),
+  `CVDraftCard` + CV edit form chrome, right rail (4d), mobile header/canvas
+  (4e), workspace routes, billing, backend, public/guest surface (default
+  `atelier=false` preserves pre-4c markup verbatim)
+- What is complete: implementation; build green; vitest 440/440 (13 new);
+  composer e2e 4/4 (incl. the Atelier slow-banner branch); visual gate
+  7 shots (cards EN/AR × desktop/mobile, thinking ×2, error ×1), 0px
+  horizontal overflow on the card matrix
+- What is incomplete: owner review of draft PR; merge (owner-gated)
+- Known blockers: none
+- Validation already run: `npm run build`; `npx vitest run` (full);
+  `playwright test e2e/command-composer-stability.spec.ts` (chromium)
+- Validation still required: owner visual approval on the PR; final-head CI
+- Next exact action: owner reviews draft PR; on approval, merge; then 4d
+- Stop condition: any change to job cards, right rail, or navigation belongs
+  to later slices — do not widen this PR
+- Rollback plan: revert the single squash commit; no data/backend impact
+
 ### TASK-20260715-001 — Atelier slice 4b: /command message bubbles + empty state
 
 Status: review

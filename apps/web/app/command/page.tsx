@@ -2,6 +2,15 @@
 
 import { CommandComposer } from "@/components/command/CommandComposer";
 import { AtelierMarkdownScope, CommandEmptyState, CommandMessageRow } from "@/components/command/CommandMessages";
+import {
+    AtelierStreamCaret,
+    CommandOptionChips,
+    CommandRateLimitNotice,
+    CommandRetryButton,
+    CommandSearchTimer,
+    CommandSlowBanner,
+    CommandWorkingState,
+} from "@/components/command/CommandStates";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
@@ -283,41 +292,6 @@ function parseHistoryContent(content: string, id: number): Partial<Message> {
     return { id, role: "rico", text: content };
 }
 
-
-function WorkingIndicator({ message }: { message: string }) {
-    return (
-        <div className="rico-thinking-row" role="status" aria-live="polite" aria-label={message}>
-            <span className="sr-only">{message}</span>
-            <div className="rico-orb" aria-hidden="true"><span>R</span></div>
-            <div className="rico-thinking-label">
-                <span>{message}</span>
-                <span className="rico-dots" aria-hidden="true"><i /><i /><i /></span>
-            </div>
-        </div>
-    );
-}
-
-function SearchElapsedTimer({ t }: { t: (k: TranslationKey) => string }) {
-    const [elapsed, setElapsed] = useState(0);
-    useEffect(() => {
-        const id = setInterval(() => setElapsed((s) => s + 1), 1000);
-        return () => clearInterval(id);
-    }, []);
-    const hint =
-        elapsed >= 20 ? t("cmdSearchWakingUp")
-            : elapsed >= 10 ? t("cmdSearchStillLooking")
-                : null;
-    return (
-        <div className="pl-[42px] flex flex-col gap-1">
-            <span className="text-[11px] tabular-nums text-text-muted" aria-live="off">{elapsed}s</span>
-            {hint && (
-                <p className="text-[11px] text-text-muted animate-pulse motion-reduce:animate-none" role="status">
-                    {hint}
-                </p>
-            )}
-        </div>
-    );
-}
 
 function CvReadyOnboardingPanel({
     onAction,
@@ -834,23 +808,6 @@ function IconRetry() {
             <path d="M3 12a9 9 0 1 0 2.64-6.36" />
             <polyline points="3 3 3 9 9 9" />
         </svg>
-    );
-}
-
-function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction: (prompt: string) => void }) {
-    return (
-        <div className="flex flex-wrap gap-2 mt-2">
-            {options.map((opt) => (
-                <button
-                    type="button"
-                    key={opt.action}
-                    onClick={() => onAction(opt.message ?? opt.label)}
-                    className="text-[12px] px-3 py-2 rounded-xl border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 transition-colors rico-focus-strong"
-                >
-                    {opt.label}
-                </button>
-            ))}
-        </div>
     );
 }
 
@@ -1760,16 +1717,11 @@ export default function CommandPage() {
                 <main id="command-main" className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
                     {/* The cold-start banner stays mounted and overlays the message pane,
                     so its delayed appearance cannot resize the pane or composer. */}
-                    <div
-                        role="status"
-                        aria-hidden={!(slowHint && thinking)}
-                        data-testid="command-slow-banner"
-                        className={`pointer-events-none absolute inset-x-0 top-0 z-20 mx-2 mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-300 shadow-lg shadow-background/40 transition-opacity duration-200 sm:mx-4 ${slowHint && thinking ? "visible opacity-100" : "invisible opacity-0"
-                            }`}
-                    >
-                        <span aria-hidden="true">⚡</span>
-                        {t("cmdWorkingSlowHint")}
-                    </div>
+                    <CommandSlowBanner
+                        atelier={chatAudience === "authenticated"}
+                        shown={!!(slowHint && thinking)}
+                        label={t("cmdWorkingSlowHint")}
+                    />
 
                     {/* Messages Container */}
                     <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pt-12 pb-5 space-y-4 scroll-pb-32 sm:px-4 sm:pt-14 sm:pb-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
@@ -1924,17 +1876,22 @@ export default function CommandPage() {
                                                 : <div className="whitespace-pre-wrap">{m.text}</div>
                                         )}
 
+                                        {/* Streaming tail caret — Atelier surface only (slice 4c). */}
+                                        {m.streaming && m.role === "rico" && chatAudience === "authenticated" && (
+                                            <AtelierStreamCaret />
+                                        )}
+
                                         {/* Source rate-limited notice — keep the user inside Rico
                                     and point them at the alternate link on each card. */}
                                         {m.rate_limit_notice && (
-                                            <div className="mt-2 flex items-start gap-2 rounded-lg border border-gold/30 bg-gold/8 px-3 py-2 text-[11px] text-gold">
+                                            <CommandRateLimitNotice atelier={chatAudience === "authenticated"}>
                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5" aria-hidden="true">
                                                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                                                     <line x1="12" y1="9" x2="12" y2="13" />
                                                     <line x1="12" y1="17" x2="12.01" y2="17" />
                                                 </svg>
                                                 <span>{m.rate_limit_notice}</span>
-                                            </div>
+                                            </CommandRateLimitNotice>
                                         )}
 
                                         {/* Job match cards — stale results are collapsed by default */}
@@ -2068,7 +2025,14 @@ export default function CommandPage() {
                                             </div>
                                         )}
                                         {!m.streaming && m.options && m.options.length > 0 && (
-                                            <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
+                                            <CommandOptionChips
+                                                atelier={chatAudience === "authenticated"}
+                                                options={m.options.map((opt) => ({
+                                                    key: opt.action,
+                                                    label: opt.label,
+                                                    onClick: () => sendMessage(opt.message ?? opt.label),
+                                                }))}
+                                            />
                                         )}
                                         {!m.streaming && m.agentic_ui?.actions && m.agentic_ui.actions.length > 0 && (
                                             <ChatActionsRow
@@ -2077,6 +2041,7 @@ export default function CommandPage() {
                                                 onSubmit={(action) => handleActionSubmit(m, action)}
                                                 onOpenDrawer={(action) => handleOpenDrawer(m, action)}
                                                 disabled={thinking}
+                                                atelier={chatAudience === "authenticated"}
                                             />
                                         )}
                                         {!m.streaming && m.actions && m.actions.length > 0 && (
@@ -2084,12 +2049,14 @@ export default function CommandPage() {
                                                 actions={m.actions}
                                                 onChatContinue={(prompt) => sendMessage(prompt)}
                                                 disabled={thinking}
+                                                atelier={chatAudience === "authenticated"}
                                             />
                                         )}
                                         {!m.streaming && !m.permission_dismissed && m.agentic_ui?.permission_request && (
                                             <PermissionRequestCard
                                                 request={m.agentic_ui.permission_request}
                                                 disabled={thinking}
+                                                atelier={chatAudience === "authenticated"}
                                                 onApprove={(action: RicoChatAction) =>
                                                     handlePermissionApprove(m, action)
                                                 }
@@ -2108,6 +2075,7 @@ export default function CommandPage() {
                                             m.agentic_ui?.proposed_changes &&
                                             m.agentic_ui.proposed_changes.length > 0 && (
                                                 <ProposedChangeCard
+                                                    atelier={chatAudience === "authenticated"}
                                                     changes={m.agentic_ui.proposed_changes as RicoProposedChange[]}
                                                     submitAction={m.agentic_ui.actions?.find(
                                                         (a) => a.kind === "submit",
@@ -2130,6 +2098,7 @@ export default function CommandPage() {
                                             m.agentic_ui.attachment_analysis.length > 0 && (
                                                 <AttachmentAnalysisCard
                                                     analyses={m.agentic_ui.attachment_analysis as RicoAttachmentAnalysis[]}
+                                                    atelier={chatAudience === "authenticated"}
                                                 />
                                             )}
 
@@ -2144,18 +2113,15 @@ export default function CommandPage() {
                                                     </ul>
                                                 )}
                                                 {m.next_actions && m.next_actions.length > 0 && (
-                                                    <div className="flex flex-wrap gap-2 pt-1">
-                                                        {m.next_actions.map((na) => (
-                                                            <button
-                                                                type="button"
-                                                                key={na.action}
-                                                                onClick={() => sendMessage(na.message ?? na.label)}
-                                                                className="text-[11px] px-3 py-1.5 rounded-xl border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 transition-colors rico-focus-strong"
-                                                            >
-                                                                {na.label}
-                                                            </button>
-                                                        ))}
-                                                    </div>
+                                                    <CommandOptionChips
+                                                        atelier={chatAudience === "authenticated"}
+                                                        size="sm"
+                                                        options={m.next_actions.map((na) => ({
+                                                            key: na.action,
+                                                            label: na.label,
+                                                            onClick: () => sendMessage(na.message ?? na.label),
+                                                        }))}
+                                                    />
                                                 )}
                                             </div>
                                         )}
@@ -2177,16 +2143,13 @@ export default function CommandPage() {
                                                     </button>
                                                 )}
                                                 {m.isError && m.retryText && (
-                                                    <button
-                                                        type="button"
+                                                    <CommandRetryButton
+                                                        atelier={chatAudience === "authenticated"}
                                                         onClick={() => sendMessage(m.retryText!)}
                                                         disabled={thinking}
-                                                        className="inline-flex items-center gap-1 text-[10px] text-gold transition-colors hover:text-gold-hover disabled:opacity-50 rico-focus-strong"
-                                                        aria-label={t("retry")}
-                                                    >
-                                                        <IconRetry />
-                                                        {t("retry")}
-                                                    </button>
+                                                        label={t("retry")}
+                                                        icon={<IconRetry />}
+                                                    />
                                                 )}
                                             </div>
                                         )}
@@ -2196,9 +2159,12 @@ export default function CommandPage() {
 
                         {thinking && (
                             <div className="flex min-h-12 flex-col gap-2">
-                                <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
+                                <CommandWorkingState
+                                    atelier={chatAudience === "authenticated"}
+                                    message={operationState?.message ?? t("cmdWorking")}
+                                />
                                 {operationState?.state === "searching" && (
-                                    <SearchElapsedTimer t={t} />
+                                    <CommandSearchTimer atelier={chatAudience === "authenticated"} t={t} />
                                 )}
                             </div>
                         )}
