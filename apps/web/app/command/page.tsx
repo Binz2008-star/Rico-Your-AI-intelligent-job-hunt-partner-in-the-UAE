@@ -2,6 +2,7 @@
 
 import { CommandComposer } from "@/components/command/CommandComposer";
 import { AtelierMarkdownScope, CommandEmptyState, CommandMessageRow } from "@/components/command/CommandMessages";
+import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
 import { AtelierCardScope, AtelierWorkingIndicator } from "@/components/command/CommandStates";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
@@ -886,6 +887,27 @@ export default function CommandPage() {
     const [copiedId, setCopiedId] = useState<number | null>(null);
 
     // True when the latest Rico message has an unresolved permission request — blocks new input.
+    // 4e right rail — session-derived only (same contract as the atelier-console
+    // reference): shortlist from this session's job matches, pipeline from the
+    // latest application_status turn. No API calls; pure reads of chat state.
+    const railPicks = React.useMemo(() => deriveSessionPicks(messages), [messages]);
+    const railPipeline = React.useMemo<RailPipelineEntry[]>(() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (m.role === "rico" && m.type === "application_status" && m.applications?.length) {
+                return m.applications.slice(0, 5).map((app, idx) => ({
+                    key: `${app.title ?? ""}|${app.company ?? ""}|${idx}`,
+                    company: app.company ?? "",
+                    title: app.title ?? "",
+                    statusLabel: app.status && CMD_STATUS_LABEL_KEYS[app.status as ApplicationStatus]
+                        ? t(CMD_STATUS_LABEL_KEYS[app.status as ApplicationStatus])
+                        : (app.status ?? ""),
+                }));
+            }
+        }
+        return [];
+    }, [messages, t]);
+
     const hasPendingPermission = messages.some(
         (m) => m.role === "rico" && !m.permission_dismissed && !!m.agentic_ui?.permission_request,
     );
@@ -1760,9 +1782,12 @@ export default function CommandPage() {
                     />
                 </div>
 
-                {/* Mission Context Bar — authenticated only; shows goal, progress, next action */}
+                {/* Mission Context Bar — authenticated only; shows goal, progress, next
+                action. 4e: repainted via AtelierCardScope (supporting workspace panel). */}
                 {chatAudience === "authenticated" && (
-                    <MissionContextBar onAction={(prompt) => void sendMessage(prompt)} />
+                    <AtelierCardScope authenticated>
+                        <MissionContextBar onAction={(prompt) => void sendMessage(prompt)} />
+                    </AtelierCardScope>
                 )}
 
                 <main id="command-main" className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
@@ -2284,6 +2309,14 @@ export default function CommandPage() {
                     />
                 </main>
             </div>{/* end main column */}
+
+            {/* 4e right rail — authenticated lg+ only; session-derived opportunity
+            panel per the atelier-console ShortlistRail reference. */}
+            <CommandRail
+                authenticated={chatAudience === "authenticated"}
+                picks={railPicks}
+                pipeline={railPipeline}
+            />
 
             {/* Mobile bottom dock — authenticated only (public gets sign-in links in MobileCommandHeader) */}
             {chatAudience === "authenticated" && <MobileBottomNav />}
