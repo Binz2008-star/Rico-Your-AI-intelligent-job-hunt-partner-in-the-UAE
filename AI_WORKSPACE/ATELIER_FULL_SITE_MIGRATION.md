@@ -240,10 +240,46 @@ rail, 4e — remaining Command chrome":
   ShortlistRail reference; session-derived, display-only) + supporting
   workspace panels (MissionContextBar)** → **#1038 MERGED** (`eff8e66`).
 
-**/command Atelier migration: implementation COMPLETE through 4e.**
-Next: **Profile Dashboard Atelier** slice (hero + editorial sections +
-single edit-profile flow), then the **final visual-QA pass** (desktop
-spacing, mobile, RTL, light/dark, token drift).
+**/command status — corrected by owner directive (2026-07-16). Do NOT record
+/command as "Fully Atelier" or visually complete:**
+
+- existing functional migration slices 4a–4e: **merged** (above)
+- current Rico business behavior: **preserved**
+- owner-approved Obsidian visual parity: **pending**
+- Command migration completion: **OPEN until the recording-based parity gate
+  passes** (see the Command Obsidian program below)
+
+Profile Dashboard Atelier shipped as **#1041 MERGED** (`d6fa60a`); its real
+authenticated production smoke remains **pending owner verification** (does
+not block Command work).
+
+### Command Obsidian program (owner-approved, 2026-07-16 — route-specific)
+
+Owner executive design correction: production `/command` must reach visual
+parity with the dark acid-lime **"Obsidian" three-column operator console**
+in the owner's recording (`Recording 2026-07-16 004205.mp4`). This applies to
+`/command` only — it does **not** convert Profile or the rest of Rico to this
+language. Canonical source priority, reviewed file inventory, the Phase-1
+component mismatch matrix, and risks live in
+`design-handoffs/reviewed/2026-07-16-command-obsidian-v4/` (single source —
+do not fork). The raw ZIP stays uncommitted in `design-handoffs/incoming/`.
+
+Slice plan (each its own draft PR from latest `main`, full per-PR gate;
+presentation-only — no backend/Neon/Paddle/Profile changes, no fabricated
+progress states; public/guest surface unchanged unless a slice scopes it):
+
+- **C1 — Obsidian foundation**: route-scoped tokens (workspace-theme
+  override), dark canvas + grid texture + lime aura, top status bar,
+  260/720/300 proportions, rail framing, desktop rail toggles.
+- **C2 — transcript rhythm**: gutter labels, type scale, real-state
+  progress/streaming/error presentation.
+- **C3 — composer parity.** **C4 — job intelligence cards.**
+- **C5 — right-rail content parity.** **C6 — mobile drawers + RTL +
+  route-scoped typography + final recording-parity visual gate.**
+
+Superseded/closed: **#1042** (superseded slice-4c re-cut) — do not reopen or
+reuse. Old Atelier `/command` branches must not be reused; each slice starts
+from a fresh branch off latest `main`.
 
 Execution order otherwise follows Steps 2→8 above; each step/slice ships as its own
 small draft PR cut from latest `main` with the full per-PR gate (vitest + build +
