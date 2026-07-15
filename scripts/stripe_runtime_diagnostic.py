@@ -1,22 +1,38 @@
 """
 Production Stripe runtime diagnostic.
 Tests against https://rico-job-automation-api.onrender.com
+
+Usage:
+  export RICO_SMOKE_TEST_EMAIL="your-test-account@example.com"
+  export RICO_SMOKE_TEST_PASSWORD="your-test-account-password"
+  python scripts/stripe_runtime_diagnostic.py
+
+Never commit credentials. Both env vars are required.
 """
 import requests
 import json
 import sys
 import os
 
-BASE_URL = "https://rico-job-automation-api.onrender.com"
-TEST_EMAIL = "smoke_test_2026@ricohunt.com"
-TEST_PASSWORD = "SmokeTest2026!"
+BASE_URL = os.environ.get("RICO_SMOKE_API_BASE", "https://rico-job-automation-api.onrender.com")
+TEST_EMAIL = os.environ.get("RICO_SMOKE_TEST_EMAIL")
+TEST_PASSWORD = os.environ.get("RICO_SMOKE_TEST_PASSWORD")
+
+if not TEST_EMAIL or not TEST_PASSWORD:
+    missing = []
+    if not TEST_EMAIL:
+        missing.append("RICO_SMOKE_TEST_EMAIL")
+    if not TEST_PASSWORD:
+        missing.append("RICO_SMOKE_TEST_PASSWORD")
+    print(f"ERROR: {', '.join(missing)} environment variable(s) not set. Aborting.", file=sys.stderr)
+    sys.exit(2)
 
 def print_result(test_name, status_code, response_data, pass_fail, error=None):
     print(f"\n{test_name}")
     print(f"  Status Code: {status_code}")
     if response_data:
         # Filter out sensitive fields
-        safe_data = {k: v for k, v in response_data.items() 
+        safe_data = {k: v for k, v in response_data.items()
                     if k not in ['checkout_url', 'token', 'access_token']}
         print(f"  Response: {json.dumps(safe_data, indent=2)}")
     print(f"  Result: {pass_fail}")
@@ -25,7 +41,7 @@ def print_result(test_name, status_code, response_data, pass_fail, error=None):
 
 def main():
     results = []
-    
+
     # Step 1: GET /version
     print("=" * 60)
     print("STEP 1: GET /version")
@@ -45,7 +61,7 @@ def main():
     except Exception as e:
         print_result("GET /version", "N/A", None, "FAIL", str(e))
         results.append(("GET /version", False))
-    
+
     # Step 2: Login
     print("\n" + "=" * 60)
     print("STEP 2: Login")
@@ -78,13 +94,13 @@ def main():
         print_result("Login", "N/A", None, "FAIL", str(e))
         results.append(("Login", False))
         token = None
-    
+
     if not token:
         print("\n❌ CRITICAL: No auth token obtained. Cannot continue.")
         return 1
-    
+
     headers = {"Cookie": f"access_token={token}"}
-    
+
     # Step 3: POST /api/v1/subscription/checkout plan=pro
     print("\n" + "=" * 60)
     print("STEP 3: POST /api/v1/subscription/checkout plan=pro")
@@ -98,17 +114,17 @@ def main():
         )
         status_code = response.status_code
         data = response.json() if response.text else {}
-        
+
         provider = data.get("provider", "unknown")
         status = data.get("status", "unknown")
         checkout_url = data.get("checkout_url", "")
         is_stripe = checkout_url.startswith("https://checkout.stripe.com/")
-        
+
         print(f"  Status Code: {status_code}")
         print(f"  Provider: {provider}")
         print(f"  Status: {status}")
         print(f"  Checkout URL starts with https://checkout.stripe.com/: {is_stripe}")
-        
+
         if status_code == 200 and provider == "stripe" and status == "ready" and is_stripe:
             pass_fail = "PASS"
             results.append(("POST /subscription/checkout (pro)", True))
@@ -119,7 +135,7 @@ def main():
     except Exception as e:
         print_result("POST /subscription/checkout (pro)", "N/A", None, "FAIL", str(e))
         results.append(("POST /subscription/checkout (pro)", False))
-    
+
     # Step 4: POST /api/v1/subscription/checkout plan=premium
     print("\n" + "=" * 60)
     print("STEP 4: POST /api/v1/subscription/checkout plan=premium")
@@ -133,17 +149,17 @@ def main():
         )
         status_code = response.status_code
         data = response.json() if response.text else {}
-        
+
         provider = data.get("provider", "unknown")
         status = data.get("status", "unknown")
         checkout_url = data.get("checkout_url", "")
         is_stripe = checkout_url.startswith("https://checkout.stripe.com/")
-        
+
         print(f"  Status Code: {status_code}")
         print(f"  Provider: {provider}")
         print(f"  Status: {status}")
         print(f"  Checkout URL starts with https://checkout.stripe.com/: {is_stripe}")
-        
+
         if status_code == 200 and provider == "stripe" and status == "ready" and is_stripe:
             pass_fail = "PASS"
             results.append(("POST /subscription/checkout (premium)", True))
@@ -154,7 +170,7 @@ def main():
     except Exception as e:
         print_result("POST /subscription/checkout (premium)", "N/A", None, "FAIL", str(e))
         results.append(("POST /subscription/checkout (premium)", False))
-    
+
     # Summary
     print("\n" + "=" * 60)
     print("SUMMARY")
@@ -165,7 +181,7 @@ def main():
         status = "✓ PASS" if result else "✗ FAIL"
         print(f"  {status}: {test_name}")
     print(f"\nTotal: {passed}/{total} passed")
-    
+
     return 0 if passed == total else 1
 
 if __name__ == "__main__":
