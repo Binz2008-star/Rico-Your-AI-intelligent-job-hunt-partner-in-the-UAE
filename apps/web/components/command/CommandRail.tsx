@@ -87,10 +87,13 @@ export function CommandRail({
     authenticated,
     picks,
     pipeline,
+    open = true,
 }: {
     authenticated: boolean;
     picks: JobMatch[];
     pipeline: RailPipelineEntry[];
+    /** Desktop visibility — driven by the shell's PanelRight toggle (slice C1). */
+    open?: boolean;
 }) {
     const c = useWorkspaceTheme();
     const { language } = useLanguage();
@@ -108,7 +111,7 @@ export function CommandRail({
     return (
         <aside
             data-testid="command-rail"
-            className="hidden lg:flex w-[300px] shrink-0 flex-col overflow-hidden"
+            className={`hidden w-[300px] shrink-0 flex-col overflow-hidden ${open ? "lg:flex" : ""}`}
             style={{ borderInlineStart: `1px solid ${c.hair}`, background: c.panel }}
             aria-label={t("cmdRailShortlist")}
         >

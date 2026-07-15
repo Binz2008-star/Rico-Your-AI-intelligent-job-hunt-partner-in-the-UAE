@@ -13,7 +13,7 @@ import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
-import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
+import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
@@ -877,6 +877,10 @@ export default function CommandPage() {
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
     const [clearingHistory, setClearingHistory] = useState(false);
     const [confirmClear, setConfirmClear] = useState(false);
+    // Obsidian shell rail visibility (slice C1) — desktop panel toggles only;
+    // presentation state, never touches chat behavior.
+    const [leftRailOpen, setLeftRailOpen] = useState(true);
+    const [rightRailOpen, setRightRailOpen] = useState(true);
     const [clearHistoryError, setClearHistoryError] = useState<string | null>(null);
     const [userName, setUserName] = useState<string | null>(null);
     // "pending" = history not yet checked; "has_history" = history loaded; "empty" = no history
@@ -1766,7 +1770,14 @@ export default function CommandPage() {
     }
 
     return (
-        <CommandChrome audience={chatAudience}>
+        <CommandChrome
+            audience={chatAudience}
+            busy={thinking}
+            leftOpen={leftRailOpen}
+            rightOpen={rightRailOpen}
+            onToggleLeft={() => setLeftRailOpen((v) => !v)}
+            onToggleRight={() => setRightRailOpen((v) => !v)}
+        >
             {/* Main column — fills remaining width */}
             <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
                 {/* Top nav: always on mobile/tablet; on lg+ the authenticated audience gets the
@@ -1790,7 +1801,7 @@ export default function CommandPage() {
                     </AtelierCardScope>
                 )}
 
-                <main id="command-main" className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
+                <main id="command-main" className={`relative z-10 mx-auto flex min-h-0 w-full flex-1 flex-col px-2 sm:px-4 lg:px-6 ${chatAudience === "public" ? "max-w-5xl" : "max-w-[720px]"}`}>
                     {/* The cold-start banner stays mounted and overlays the message pane,
                     so its delayed appearance cannot resize the pane or composer. */}
                     <div
@@ -2316,6 +2327,7 @@ export default function CommandPage() {
                 authenticated={chatAudience === "authenticated"}
                 picks={railPicks}
                 pipeline={railPipeline}
+                open={rightRailOpen}
             />
 
             {/* Mobile bottom dock — authenticated only (public gets sign-in links in MobileCommandHeader) */}
@@ -2325,16 +2337,35 @@ export default function CommandPage() {
 }
 
 /**
- * Command chrome — PR 3 of the Atelier program.
+ * Command chrome — PR 3 of the Atelier program; re-skinned by slice C1 of the
+ * Command Obsidian program (owner directive 2026-07-16).
  *
  * Public/guest keeps the approved reference chrome untouched (top bar +
  * chat column; no sidebar — matches the design-reference screenshots).
  * Authenticated (and the transient "checking" state, so auth resolution
- * causes no layout jump) lives in the WorkspaceShell rail like every other
- * workspace route — dark-first here so the rail matches the chat surface.
+ * causes no layout jump) lives in the route-scoped CommandObsidianShell:
+ * obsidian canvas, top status bar, collapsible 260px nav rail, and the
+ * COMMAND_OBSIDIAN palette delivered through the same workspace-theme
+ * context the 4a–4e surfaces already consume.
  * Chat behavior, streaming, attachments, safety, and EN/AR are untouched.
  */
-function CommandChrome({ audience, children }: { audience: "checking" | "public" | "authenticated"; children: React.ReactNode }) {
+function CommandChrome({
+    audience,
+    busy,
+    leftOpen,
+    rightOpen,
+    onToggleLeft,
+    onToggleRight,
+    children,
+}: {
+    audience: "checking" | "public" | "authenticated";
+    busy: boolean;
+    leftOpen: boolean;
+    rightOpen: boolean;
+    onToggleLeft: () => void;
+    onToggleRight: () => void;
+    children: React.ReactNode;
+}) {
     if (audience === "public") {
         return (
             <div className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-background">
@@ -2343,10 +2374,16 @@ function CommandChrome({ audience, children }: { audience: "checking" | "public"
         );
     }
     return (
-        <WorkspaceShell variant="app" defaultDark>
-            <div className="relative flex h-full min-h-0 flex-1 overflow-hidden bg-background">
+        <CommandObsidianShell
+            busy={busy}
+            leftOpen={leftOpen}
+            rightOpen={rightOpen}
+            onToggleLeft={onToggleLeft}
+            onToggleRight={onToggleRight}
+        >
+            <div className="relative flex h-full min-h-0 flex-1 overflow-hidden">
                 {children}
             </div>
-        </WorkspaceShell>
+        </CommandObsidianShell>
     );
 }
