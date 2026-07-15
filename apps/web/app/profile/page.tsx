@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthGate } from "@/components/auth/AuthGate";
+import { AtelierCardScope } from "@/components/command/CommandStates";
 import { ProfileAtelier } from "@/components/profile/ProfileAtelier";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -995,6 +996,10 @@ export default function ProfilePage() {
 
                 {!loading && !error && profile?.profile_exists && (
                     isEditing ? (
+                        /* Edit mode — Atelier repaint via the shared CSS-variable
+                        scope (paper/ink/sun-red). All field logic and the 13
+                        onSave* handlers are untouched; presentation only. */
+                        <AtelierCardScope authenticated>
                         <ProfileDetail
                             profile={profile}
                             onSaveName={handleSaveName}
@@ -1013,6 +1018,7 @@ export default function ProfilePage() {
                             onSaveSkills={handleSaveSkills}
                             onCancel={() => setIsEditing(false)}
                         />
+                        </AtelierCardScope>
                     ) : (
                         <ProfileAtelier profile={profile} onEdit={() => setIsEditing(true)} />
                     )

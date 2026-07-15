@@ -25,10 +25,12 @@ function ThemedPlate({
     children,
     className = "",
     palette,
+    "data-testid": testId,
 }: {
     children: React.ReactNode;
     className?: string;
     palette: WorkspacePalette;
+    "data-testid"?: string;
 }) {
     const tick = "absolute h-2 w-2 pointer-events-none";
     const border = `1px solid ${palette.hair}`;
@@ -37,6 +39,7 @@ function ThemedPlate({
         <div
             className={`relative rounded-[4px] ${className}`}
             style={{ background: palette.panel, border: `1px solid ${palette.hair}` }}
+            data-testid={testId}
         >
             <span className={`${tick} left-1.5 top-1.5`} style={{ borderLeft: border, borderTop: border }} aria-hidden="true" />
             <span className={`${tick} right-1.5 top-1.5`} style={{ borderRight: border, borderTop: border }} aria-hidden="true" />
@@ -52,6 +55,31 @@ function SectionTitle({ children, palette }: { children: React.ReactNode; palett
         <Mono className="mb-3 block" style={{ color: palette.ink55 }}>
             {children}
         </Mono>
+    );
+}
+
+/** Editorial section heading — large serif title over the mono eyebrow rhythm. */
+function EditorialTitle({ children, palette }: { children: React.ReactNode; palette: WorkspacePalette }) {
+    return (
+        <h2
+            className="mb-4 text-[1.35rem] leading-tight"
+            style={{ fontFamily: SERIF, fontWeight: 600, color: palette.ink }}
+        >
+            {children}
+        </h2>
+    );
+}
+
+/** Hero metric badge — real profile facts only; callers skip absent values. */
+function HeroBadge({ children, palette }: { children: React.ReactNode; palette: WorkspacePalette }) {
+    return (
+        <span
+            data-testid="profile-hero-badge"
+            className="inline-flex items-center rounded-[3px] px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider"
+            style={{ background: palette.inset, color: palette.ink70, border: `1px solid ${palette.hair}` }}
+        >
+            {children}
+        </span>
     );
 }
 
@@ -162,6 +190,23 @@ export function ProfileAtelier({
     const hasTargetRoles = (profile.target_roles?.length ?? 0) > 0;
     const hasCities = (profile.preferred_cities?.length ?? 0) > 0;
     const hasSkills = (profile.skills?.length ?? 0) > 0;
+    const hasIndustries = (profile.industries?.length ?? 0) > 0;
+    const hasCareer =
+        !!profile.current_role?.trim() || !!profile.current_company?.trim() ||
+        profile.years_experience != null || hasIndustries;
+
+    // Hero metric badges — derived from real ProfileResponse fields only;
+    // absent facts render nothing (no fabricated summary data).
+    const nf = new Intl.NumberFormat(isAr ? "ar-AE" : "en-AE");
+    const heroBadges: string[] = [];
+    if (profile.years_experience != null) {
+        heroBadges.push(`${nf.format(Math.round(profile.years_experience))} ${t("profileBadgeYearsSuffix")}`);
+    }
+    if (hasTargetRoles) {
+        heroBadges.push(`${nf.format(profile.target_roles!.length)} ${t("profileBadgeTargetRoles")}`);
+    }
+    if (profile.visa_status?.trim()) heroBadges.push(profile.visa_status.trim());
+    if (profile.notice_period?.trim()) heroBadges.push(profile.notice_period.trim());
 
     const fieldProps = { palette, isAr };
 
@@ -213,6 +258,13 @@ export function ProfileAtelier({
                                 {subtitle}
                             </p>
                         )}
+                        {heroBadges.length > 0 && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {heroBadges.map((badge) => (
+                                    <HeroBadge key={badge} palette={palette}>{badge}</HeroBadge>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <button
                         type="button"
@@ -233,15 +285,13 @@ export function ProfileAtelier({
 
             <CompletenessBar profile={profile} palette={palette} />
 
-            <ThemedPlate className="p-5 sm:p-6" palette={palette}>
-                <SectionTitle palette={palette}>{t("profileIdentity")}</SectionTitle>
+            <ThemedPlate className="p-5 sm:p-7" palette={palette}>
+                <EditorialTitle palette={palette}>{t("profileIdentity")}</EditorialTitle>
                 <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <Field label={t("name")} {...fieldProps}>{profile.name?.trim() || <EmptyValue palette={palette} />}</Field>
                     <Field label={t("email")} {...fieldProps}>{profile.email ?? <EmptyValue palette={palette} />}</Field>
                     <Field label={t("profilePhone")} {...fieldProps}>{profile.phone?.trim() || <EmptyValue palette={palette} />}</Field>
                     <Field label={t("telegram")} {...fieldProps}>{profile.telegram_username?.trim() || <EmptyValue palette={palette} />}</Field>
-                    <Field label={t("profileCurrentRole")} {...fieldProps}>{profile.current_role?.trim() || <EmptyValue palette={palette} />}</Field>
-                    <Field label={t("profileCurrentCompany")} {...fieldProps}>{profile.current_company?.trim() || <EmptyValue palette={palette} />}</Field>
                     <Field label={t("profileLinkedin")} {...fieldProps}>
                         {profile.linkedin_url?.trim() ? (
                             <Link
@@ -262,8 +312,36 @@ export function ProfileAtelier({
                 </dl>
             </ThemedPlate>
 
-            <ThemedPlate className="p-5 sm:p-6" palette={palette}>
-                <SectionTitle palette={palette}>{t("profileJobPreferences")}</SectionTitle>
+            {/* Career — role, company, experience, industries (owner sketch:
+            Career is its own editorial block, separate from Identity). */}
+            {hasCareer && (
+                <ThemedPlate className="p-5 sm:p-7" palette={palette} data-testid="profile-career-plate">
+                    <EditorialTitle palette={palette}>{t("profileCareer")}</EditorialTitle>
+                    <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                        <Field label={t("profileCurrentRole")} {...fieldProps}>{profile.current_role?.trim() || <EmptyValue palette={palette} />}</Field>
+                        <Field label={t("profileCurrentCompany")} {...fieldProps}>{profile.current_company?.trim() || <EmptyValue palette={palette} />}</Field>
+                        <Field label={t("profileExperience")} {...fieldProps}>
+                            {profile.years_experience != null ? (
+                                <span>{nf.format(Math.round(profile.years_experience))}</span>
+                            ) : (
+                                <EmptyValue palette={palette} />
+                            )}
+                        </Field>
+                        {hasIndustries && (
+                            <Field label={t("profileIndustries")} {...fieldProps}>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {profile.industries!.map((industry) => (
+                                        <TagPill key={industry} palette={palette}>{industry}</TagPill>
+                                    ))}
+                                </div>
+                            </Field>
+                        )}
+                    </dl>
+                </ThemedPlate>
+            )}
+
+            <ThemedPlate className="p-5 sm:p-7" palette={palette}>
+                <EditorialTitle palette={palette}>{t("profileJobPreferences")}</EditorialTitle>
                 <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <Field label={t("profileTargetRoles")} {...fieldProps}>
                         {hasTargetRoles ? (
@@ -293,18 +371,11 @@ export function ProfileAtelier({
                     <Field label={t("profileMinimumSalary")} {...fieldProps}>
                         {formatAed(profile.minimum_salary_aed, language) || <EmptyValue palette={palette} />}
                     </Field>
-                    <Field label={t("profileExperience")} {...fieldProps}>
-                        {profile.years_experience != null ? (
-                            <span>{new Intl.NumberFormat(isAr ? "ar-AE" : "en-AE").format(Math.round(profile.years_experience))}</span>
-                        ) : (
-                            <EmptyValue palette={palette} />
-                        )}
-                    </Field>
                 </dl>
             </ThemedPlate>
 
-            <ThemedPlate className="p-5 sm:p-6" palette={palette}>
-                <SectionTitle palette={palette}>{t("profileSkills")}</SectionTitle>
+            <ThemedPlate className="p-5 sm:p-7" palette={palette}>
+                <EditorialTitle palette={palette}>{t("profileSkills")}</EditorialTitle>
                 {hasSkills ? (
                     <div className="flex flex-wrap gap-1.5">
                         {profile.skills!.map((skill) => (
