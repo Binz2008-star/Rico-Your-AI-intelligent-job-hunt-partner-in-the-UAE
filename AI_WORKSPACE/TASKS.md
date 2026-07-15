@@ -78,6 +78,52 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260715-001 — Atelier slice 4b: /command message bubbles + empty state
+
+Status: review
+Owner: Claude (WRITER; Coder pass, owner-directed)
+Branch: `feat/atelier-command-message-bubbles-empty-state`
+Issue/PR: draft PR (this slice); program: `ATELIER_FULL_SITE_MIGRATION.md` Step 2
+
+#### Objective
+
+Migrate only the /command message bubbles and empty state to the approved
+Atelier direction (typography-first per the in-repo reference
+`components/ui/rico/RicoMessageBubble.tsx`), authenticated surface only.
+
+#### Continuity Block
+
+- Task ID: TASK-20260715-001
+- GitHub issue/PR: draft PR from `feat/atelier-command-message-bubbles-empty-state`
+- Branch: `feat/atelier-command-message-bubbles-empty-state`
+- Base branch: main
+- Last safe commit SHA: baa427c (main @ branch cut; slice 4a merge)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: `app/command/page.tsx` (message map, empty state, chrome),
+  `components/ui/rico/RicoMessageBubble.tsx` + `RicoMarkdownContent.tsx`,
+  `components/workspace/theme.ts`, `components/atelier-kit/tokens.ts`,
+  `e2e/command-composer-stability.spec.ts`, `__tests__/command-*`
+- Files changed: `components/command/CommandMessages.tsx` (new — Atelier row,
+  mark, markdown scope, empty state); `app/command/page.tsx` (wrapper swap
+  only); `__tests__/command-message-bubbles.test.tsx` (new); this entry
+- Files intentionally not touched: composer (#1028), chat API/streaming,
+  job/action cards + `--rico-*` globals (4c), thinking/error states (4c),
+  right rail (4d), mobile header + canvas background (4e), public surface
+- What is complete: implementation; vitest 427/427; build green; composer
+  e2e 4/4; visual gate 6 shots (EN/AR × desktop/mobile + empty ×2), 0px
+  horizontal overflow measured on all
+- What is incomplete: owner review of draft PR; merge (owner-gated)
+- Known blockers: none
+- Validation already run: `npm run build`; `npx vitest run` (full);
+  `playwright test e2e/command-composer-stability.spec.ts` (chromium)
+- Validation still required: owner visual approval on the PR; final-head CI
+- Next exact action: owner reviews draft PR; on approval, merge; then 4c
+- Stop condition: any change requested to job/tool cards or streaming states
+  belongs to 4c — do not widen this PR
+- Rollback plan: revert the single squash commit; no data/backend impact
+
 ### TASK-20260715-001 — Atelier migration: slice 4a — CommandComposer
 
 Status: review

@@ -1,6 +1,7 @@
 "use client";
 
 import { CommandComposer } from "@/components/command/CommandComposer";
+import { AtelierMarkdownScope, CommandEmptyState, CommandMessageRow } from "@/components/command/CommandMessages";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
@@ -1839,66 +1840,44 @@ export default function CommandPage() {
                             />
                         )}
 
-                        {/* Welcome hero + quick start chips */}
+                        {/* Welcome hero + quick start chips — PR 4b: Atelier for
+                        authenticated, original public surface unchanged. */}
                         {initialContentReady && messages.length === 0 && !thinking && !cvReady && (
-                            <div className="flex flex-col items-center gap-5 pb-4 pt-6 sm:pt-10 animate-in fade-in motion-reduce:animate-none">
-                                {/* Hero */}
-                                <div className="flex flex-col items-center gap-3 text-center">
-                                    <div className="rico-orb !w-12 !h-12 !text-[18px]" aria-hidden="true"><span>R</span></div>
-                                    <div>
-                                        <p className="text-[22px] font-bold tracking-tight text-text-primary sm:text-[26px]">
-                                            {t("cmdHeroTitle")}
-                                        </p>
-                                        <p className="mt-1.5 text-[13px] leading-relaxed text-text-secondary sm:text-[14px]">
-                                            {t("cmdHeroSubtitle")}
-                                        </p>
-                                    </div>
-                                </div>
-                                {/* Chips */}
-                                <div className="grid w-full max-w-xl grid-cols-1 gap-2 min-[480px]:grid-cols-2">
-                                    {QUICK_ACTION_DEFS.map((qa) => {
-                                        const label = t(qa.key as TranslationKey);
-                                        const icon = QUICK_ACTION_ICONS[qa.key];
-                                        return (
-                                            <button
-                                                type="button"
-                                                key={qa.key}
-                                                onClick={() => sendMessage(qa.prompt, label)}
-                                                disabled={thinking || chatAudience === "checking"}
-                                                className="group flex min-h-[52px] cursor-pointer items-center gap-3 rounded-2xl border border-border-subtle bg-surface-glass px-4 py-3 text-start text-[12px] text-text-secondary transition-all hover:border-gold/30 hover:bg-surface-subtle hover:text-text-primary disabled:opacity-50 rico-focus-strong"
-                                            >
-                                                <span className="shrink-0 text-text-muted transition-colors group-hover:text-gold" aria-hidden="true">
-                                                    {icon}
-                                                </span>
-                                                <span>{label}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                            <CommandEmptyState
+                                authenticated={chatAudience === "authenticated"}
+                                variant="hero"
+                                title={t("cmdHeroTitle")}
+                                subtitle={t("cmdHeroSubtitle")}
+                                disabled={thinking || chatAudience === "checking"}
+                                actions={QUICK_ACTION_DEFS.map((qa) => {
+                                    const label = t(qa.key as TranslationKey);
+                                    return {
+                                        key: qa.key,
+                                        label,
+                                        icon: QUICK_ACTION_ICONS[qa.key],
+                                        onClick: () => sendMessage(qa.prompt, label),
+                                    };
+                                })}
+                            />
                         )}
                         {/* Chips only (no hero) when there's already one message */}
                         {messages.length === 1 && !thinking && !cvReady && (
-                            <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2">
-                                {QUICK_ACTION_DEFS.map((qa) => {
+                            <CommandEmptyState
+                                authenticated={chatAudience === "authenticated"}
+                                variant="chips"
+                                title={t("cmdHeroTitle")}
+                                subtitle={t("cmdHeroSubtitle")}
+                                disabled={thinking || chatAudience === "checking"}
+                                actions={QUICK_ACTION_DEFS.map((qa) => {
                                     const label = t(qa.key as TranslationKey);
-                                    const icon = QUICK_ACTION_ICONS[qa.key];
-                                    return (
-                                        <button
-                                            type="button"
-                                            key={qa.key}
-                                            onClick={() => sendMessage(qa.prompt, label)}
-                                            disabled={thinking || chatAudience === "checking"}
-                                            className="group flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-border-subtle bg-surface-glass px-3 py-2.5 text-start text-[11px] text-text-secondary transition-all hover:border-gold/25 hover:bg-surface-subtle hover:text-text-primary disabled:opacity-50 rico-focus-strong"
-                                        >
-                                            <span className="shrink-0 text-text-muted transition-colors group-hover:text-gold" aria-hidden="true">
-                                                {icon}
-                                            </span>
-                                            <span>{label}</span>
-                                        </button>
-                                    );
+                                    return {
+                                        key: qa.key,
+                                        label,
+                                        icon: QUICK_ACTION_ICONS[qa.key],
+                                        onClick: () => sendMessage(qa.prompt, label),
+                                    };
                                 })}
-                            </div>
+                            />
                         )}
 
                         {/* Messages */}
@@ -1910,23 +1889,13 @@ export default function CommandPage() {
                             const isStructured = m.type === "profile_preview";
 
                             return (
-                                <div
+                                <CommandMessageRow
                                     key={m.id}
-                                    dir="ltr"
-                                    className={`flex min-h-6 animate-in fade-in motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
+                                    authenticated={chatAudience === "authenticated"}
+                                    role={m.role}
+                                    isFirstInGroup={isFirstInGroup}
+                                    isStructured={isStructured}
                                 >
-                                    {m.role === "rico" && (
-                                        <div
-                                            className={`rico-orb !w-6 !h-6 !text-[10px] mt-0.5 shrink-0 ${isFirstInGroup ? "" : "invisible"}`}
-                                            aria-hidden="true"
-                                        ><span>R</span></div>
-                                    )}
-                                    <div dir="auto" className={`${m.role === "user"
-                                        ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-gold px-3.5 py-2.5 text-start text-[14px] font-medium leading-relaxed text-[#0a0a1a] sm:max-w-[72%]"
-                                        : isStructured
-                                            ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
-                                            : "flex-1 min-w-0 break-words text-start text-[14px] leading-relaxed text-rico-text"
-                                        }`}>
 
                                         {/* Search result caption */}
                                         {m.type === "job_matches" && m.search_query && (
@@ -1943,10 +1912,15 @@ export default function CommandPage() {
                                             </div>
                                         )}
 
-                                        {/* Message text */}
+                                        {/* Message text — markdown ink is scoped so nested
+                                        job/action cards keep the global variables (4c). */}
                                         {m.text && (
                                             m.role === "rico"
-                                                ? <RicoMarkdownContent>{m.text!}</RicoMarkdownContent>
+                                                ? (
+                                                    <AtelierMarkdownScope authenticated={chatAudience === "authenticated"}>
+                                                        <RicoMarkdownContent>{m.text!}</RicoMarkdownContent>
+                                                    </AtelierMarkdownScope>
+                                                )
                                                 : <div className="whitespace-pre-wrap">{m.text}</div>
                                         )}
 
@@ -2216,8 +2190,7 @@ export default function CommandPage() {
                                                 )}
                                             </div>
                                         )}
-                                    </div>
-                                </div>
+                                </CommandMessageRow>
                             );
                         })}
 
