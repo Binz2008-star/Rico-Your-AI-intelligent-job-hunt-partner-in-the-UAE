@@ -11,13 +11,15 @@ const api = vi.hoisted(() => ({
     rejectApplication: vi.fn(),
 }));
 
-const auth = vi.hoisted(() => ({
+const auth = vi.hoisted((): {
+    value: { user: { email: string } | null; authorized: boolean };
+} => ({
     value: { user: { email: "owner@example.com" }, authorized: true },
 }));
 
-vi.mock("@/lib/api", () => ({
-    ...api,
-}));
+const translate = vi.hoisted(() => (key: string) => key);
+
+vi.mock("@/lib/api", () => ({ ...api }));
 
 vi.mock("@/hooks/useRequireAuth", () => ({
     useRequireAuth: () => auth.value,
@@ -28,7 +30,7 @@ vi.mock("@/contexts/LanguageContext", () => ({
 }));
 
 vi.mock("@/lib/translations", () => ({
-    useTranslation: () => (key: string) => key,
+    useTranslation: () => translate,
 }));
 
 vi.mock("@/components/workspace/theme", () => ({
@@ -92,7 +94,7 @@ describe("/queue Atelier migration", () => {
     });
 
     it("never renders the private WorkspaceShell before authorization", () => {
-        auth.value = { user: null, authorized: false } as typeof auth.value;
+        auth.value = { user: null, authorized: false };
         render(<QueuePage />);
         expect(screen.getByTestId("auth-gate")).toBeInTheDocument();
         expect(screen.queryByTestId("workspace-shell")).toBeNull();
@@ -127,7 +129,7 @@ describe("/queue Atelier migration", () => {
     });
 
     it("uses the private queue APIs only after the authorized content mounts", async () => {
-        auth.value = { user: null, authorized: false } as typeof auth.value;
+        auth.value = { user: null, authorized: false };
         const { rerender } = render(<QueuePage />);
         expect(api.getApplicationQueue).not.toHaveBeenCalled();
         auth.value = { user: { email: "owner@example.com" }, authorized: true };
