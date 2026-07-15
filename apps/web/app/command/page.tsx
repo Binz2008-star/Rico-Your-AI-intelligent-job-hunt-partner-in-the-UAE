@@ -1895,9 +1895,10 @@ export default function CommandPage() {
                             // Only profile_preview gets a light panel — all other Rico responses
                             // render as flowing text with no backing bubble.
                             const isStructured = m.type === "profile_preview";
-                            // Atelier 4c surfaces (tool/permission/attachment/CV/error
-                            // states) repaint via AtelierCardScope on the authenticated
-                            // surface only; job cards stay global until 4d.
+                            // Atelier card surfaces (4c: tool/permission/attachment/CV/
+                            // error states; 4d: job-match/application/profile-gap cards)
+                            // repaint via AtelierCardScope on the authenticated surface
+                            // only; the right rail is slice 4e.
                             const atelierCards = chatAudience === "authenticated";
 
                             return (
@@ -1909,8 +1910,10 @@ export default function CommandPage() {
                                     isStructured={isStructured}
                                 >
 
-                                        {/* Search result caption */}
+                                        {/* Search result caption — 4d: Atelier ink on the
+                                        authenticated surface (part of the job-match cluster). */}
                                         {m.type === "job_matches" && m.search_query && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mb-1.5 text-[10px] text-text-muted">
                                                 {m.stale && (
                                                     <span className="mr-1.5 px-1.5 py-0.5 rounded bg-border-subtle text-text-muted border border-border-soft">
@@ -1922,10 +1925,11 @@ export default function CommandPage() {
                                                     : t("cmdNoMatches")} for <strong className="text-text-secondary">{m.search_query}</strong>
                                                 {m.broadened && <span className="text-rico-amber"> · {t("cmdBroadened")}</span>}
                                             </div>
+                                            </AtelierCardScope>
                                         )}
 
-                                        {/* Message text — markdown ink is scoped so nested
-                                        job/action cards keep the global variables (4c). */}
+                                        {/* Message text — markdown ink scope (4b); nested cards
+                                        get their own AtelierCardScope wraps (4c/4d). */}
                                         {m.text && (
                                             m.role === "rico"
                                                 ? (
@@ -1939,6 +1943,7 @@ export default function CommandPage() {
                                         {/* Source rate-limited notice — keep the user inside Rico
                                     and point them at the alternate link on each card. */}
                                         {m.rate_limit_notice && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-2 flex items-start gap-2 rounded-lg border border-gold/30 bg-gold/8 px-3 py-2 text-[11px] text-gold">
                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5" aria-hidden="true">
                                                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -1947,11 +1952,16 @@ export default function CommandPage() {
                                                 </svg>
                                                 <span>{m.rate_limit_notice}</span>
                                             </div>
+                                            </AtelierCardScope>
                                         )}
 
-                                        {/* Job match cards — stale results are collapsed by default */}
+                                        {/* Job match cards — stale results are collapsed by default.
+                                        4d: repainted via AtelierCardScope on the authenticated
+                                        surface; the card components themselves are unchanged so
+                                        the public/guest surface renders pre-4d verbatim. */}
                                         {m.matches && m.matches.length > 0 && (
-                                            m.stale ? (
+                                            <AtelierCardScope authenticated={atelierCards}>
+                                            {m.stale ? (
                                                 <details className="mt-2 group">
                                                     <summary className="cursor-pointer text-[11px] text-text-muted hover:text-text-secondary transition-colors select-none list-none flex items-center gap-1">
                                                         <svg width="10" height="10" viewBox="0 0 10 10" className="transition-transform group-open:rotate-90" fill="currentColor"><path d="M3 2l4 3-4 3V2z" /></svg>
@@ -1969,20 +1979,25 @@ export default function CommandPage() {
                                                         <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
                                                     ))}
                                                 </div>
-                                            )
+                                            )}
+                                            </AtelierCardScope>
                                         )}
 
-                                        {/* Application status card */}
+                                        {/* Application status card — 4d Atelier scope */}
                                         {m.type === "application_status" && m.applications && m.applications.length > 0 && (
-                                            <ApplicationStatusCard
-                                                applications={m.applications}
-                                                followUpNeeded={m.follow_up_needed ?? []}
-                                            />
+                                            <AtelierCardScope authenticated={atelierCards}>
+                                                <ApplicationStatusCard
+                                                    applications={m.applications}
+                                                    followUpNeeded={m.follow_up_needed ?? []}
+                                                />
+                                            </AtelierCardScope>
                                         )}
 
-                                        {/* Profile gap card */}
+                                        {/* Profile gap card — 4d Atelier scope */}
                                         {m.type === "profile_gap" && m.profile_gaps && m.profile_gaps.length > 0 && (
-                                            <ProfileGapCard gaps={m.profile_gaps} />
+                                            <AtelierCardScope authenticated={atelierCards}>
+                                                <ProfileGapCard gaps={m.profile_gaps} />
+                                            </AtelierCardScope>
                                         )}
 
                                         {/* CV draft card — structured preview, no raw contact values */}
