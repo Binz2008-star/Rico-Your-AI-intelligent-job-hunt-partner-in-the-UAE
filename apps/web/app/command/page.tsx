@@ -2,6 +2,7 @@
 
 import { CommandComposer } from "@/components/command/CommandComposer";
 import { AtelierMarkdownScope, CommandEmptyState, CommandMessageRow } from "@/components/command/CommandMessages";
+import { AtelierCardScope, AtelierWorkingIndicator } from "@/components/command/CommandStates";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
@@ -1887,6 +1888,10 @@ export default function CommandPage() {
                             // Only profile_preview gets a light panel — all other Rico responses
                             // render as flowing text with no backing bubble.
                             const isStructured = m.type === "profile_preview";
+                            // Atelier 4c surfaces (tool/permission/attachment/CV/error
+                            // states) repaint via AtelierCardScope on the authenticated
+                            // surface only; job cards stay global until 4d.
+                            const atelierCards = chatAudience === "authenticated";
 
                             return (
                                 <CommandMessageRow
@@ -1975,15 +1980,18 @@ export default function CommandPage() {
 
                                         {/* CV draft card — structured preview, no raw contact values */}
                                         {m.type === "profile_preview" && m.preview && (
-                                            <CVDraftCard
-                                                preview={m.preview}
-                                                filename={m.filename ?? ""}
-                                                extractionQuality={m.extractionQuality}
-                                            />
+                                            <AtelierCardScope authenticated={atelierCards}>
+                                                <CVDraftCard
+                                                    preview={m.preview}
+                                                    filename={m.filename ?? ""}
+                                                    extractionQuality={m.extractionQuality}
+                                                />
+                                            </AtelierCardScope>
                                         )}
 
                                         {/* Profile preview confirmation buttons */}
                                         {m.type === "profile_preview" && m.preview && m.filename && editingProfileId !== m.id && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-3 flex gap-2">
                                                 <button
                                                     type="button"
@@ -2005,8 +2013,10 @@ export default function CommandPage() {
                                                     {t("cmdProfileEditBefore")}
                                                 </button>
                                             </div>
+                                            </AtelierCardScope>
                                         )}
                                         {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-3 space-y-2 border-t border-border-soft pt-3">
                                                 <p className="text-[11px] font-semibold text-gold">{t("cmdProfileEditLabel")}</p>
                                                 {(
@@ -2066,27 +2076,35 @@ export default function CommandPage() {
                                                     </button>
                                                 </div>
                                             </div>
+                                            </AtelierCardScope>
                                         )}
                                         {!m.streaming && m.options && m.options.length > 0 && (
-                                            <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
+                                            <AtelierCardScope authenticated={atelierCards}>
+                                                <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
+                                            </AtelierCardScope>
                                         )}
                                         {!m.streaming && m.agentic_ui?.actions && m.agentic_ui.actions.length > 0 && (
-                                            <ChatActionsRow
-                                                actions={m.agentic_ui.actions}
-                                                onChatContinue={(prompt) => sendMessage(prompt)}
-                                                onSubmit={(action) => handleActionSubmit(m, action)}
-                                                onOpenDrawer={(action) => handleOpenDrawer(m, action)}
-                                                disabled={thinking}
-                                            />
+                                            <AtelierCardScope authenticated={atelierCards}>
+                                                <ChatActionsRow
+                                                    actions={m.agentic_ui.actions}
+                                                    onChatContinue={(prompt) => sendMessage(prompt)}
+                                                    onSubmit={(action) => handleActionSubmit(m, action)}
+                                                    onOpenDrawer={(action) => handleOpenDrawer(m, action)}
+                                                    disabled={thinking}
+                                                />
+                                            </AtelierCardScope>
                                         )}
                                         {!m.streaming && m.actions && m.actions.length > 0 && (
-                                            <ChatActionsRow
-                                                actions={m.actions}
-                                                onChatContinue={(prompt) => sendMessage(prompt)}
-                                                disabled={thinking}
-                                            />
+                                            <AtelierCardScope authenticated={atelierCards}>
+                                                <ChatActionsRow
+                                                    actions={m.actions}
+                                                    onChatContinue={(prompt) => sendMessage(prompt)}
+                                                    disabled={thinking}
+                                                />
+                                            </AtelierCardScope>
                                         )}
                                         {!m.streaming && !m.permission_dismissed && m.agentic_ui?.permission_request && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <PermissionRequestCard
                                                 request={m.agentic_ui.permission_request}
                                                 disabled={thinking}
@@ -2103,10 +2121,12 @@ export default function CommandPage() {
                                                     )
                                                 }
                                             />
+                                            </AtelierCardScope>
                                         )}
                                         {!m.streaming && !m.proposed_dismissed &&
                                             m.agentic_ui?.proposed_changes &&
                                             m.agentic_ui.proposed_changes.length > 0 && (
+                                                <AtelierCardScope authenticated={atelierCards}>
                                                 <ProposedChangeCard
                                                     changes={m.agentic_ui.proposed_changes as RicoProposedChange[]}
                                                     submitAction={m.agentic_ui.actions?.find(
@@ -2124,17 +2144,21 @@ export default function CommandPage() {
                                                     }
                                                     disabled={thinking}
                                                 />
+                                                </AtelierCardScope>
                                             )}
                                         {!m.streaming &&
                                             m.agentic_ui?.attachment_analysis &&
                                             m.agentic_ui.attachment_analysis.length > 0 && (
+                                                <AtelierCardScope authenticated={atelierCards}>
                                                 <AttachmentAnalysisCard
                                                     analyses={m.agentic_ui.attachment_analysis as RicoAttachmentAnalysis[]}
                                                 />
+                                                </AtelierCardScope>
                                             )}
 
                                         {/* Role confirmation reasons + next_actions */}
                                         {!m.streaming && m.type === "role_confirmation" && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-3 space-y-2">
                                                 {m.reasons && m.reasons.length > 0 && (
                                                     <ul className="list-disc list-inside text-[12px] text-text-secondary space-y-0.5">
@@ -2158,12 +2182,14 @@ export default function CommandPage() {
                                                     </div>
                                                 )}
                                             </div>
+                                            </AtelierCardScope>
                                         )}
 
                                         {/* Copy / Retry row — copy is offered on every settled Rico turn;
                                         retry only on turns marked isError (network/timeout/generic send
                                         failures), and resends the exact original user text. */}
                                         {!m.streaming && m.role === "rico" && (m.text || (m.isError && m.retryText)) && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-2 flex items-center gap-3">
                                                 {m.text && (
                                                     <button
@@ -2189,6 +2215,7 @@ export default function CommandPage() {
                                                     </button>
                                                 )}
                                             </div>
+                                            </AtelierCardScope>
                                         )}
                                 </CommandMessageRow>
                             );
@@ -2196,9 +2223,13 @@ export default function CommandPage() {
 
                         {thinking && (
                             <div className="flex min-h-12 flex-col gap-2">
-                                <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
+                                {chatAudience === "authenticated"
+                                    ? <AtelierWorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
+                                    : <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />}
                                 {operationState?.state === "searching" && (
-                                    <SearchElapsedTimer t={t} />
+                                    <AtelierCardScope authenticated={chatAudience === "authenticated"}>
+                                        <SearchElapsedTimer t={t} />
+                                    </AtelierCardScope>
                                 )}
                             </div>
                         )}
