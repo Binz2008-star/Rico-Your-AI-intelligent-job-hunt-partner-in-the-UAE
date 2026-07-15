@@ -70,7 +70,9 @@ CHECKS: list[tuple[str, str, object]] = [
     ("041", "column", ("paddle_subscriptions", "past_due_since")),
     ("042", "table", "career_memory_events"),
     ("042", "table", "career_memory_facts"),
-    ("042", "constraint", "career_memory_events_account_idem_key"),
+    ("042", "constraint", "uq_career_memory_events_idem"),
+    ("042", "constraint", "uq_career_memory_facts_idem"),
+    ("042", "index", "uq_cm_facts_current_single"),
 ]
 
 

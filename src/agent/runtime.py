@@ -33,6 +33,7 @@ from src.agent.orchestrator.intent_detector import ACTION_TO_TOOL, VALID_ACTION_
 from src.agent.registry import tool_registry
 from src.agent.types import RuntimeResult
 from src.repositories.audit_repo import IDEMPOTENT_ACTION_TYPES, is_duplicate, log_action
+from src.services.memory_writer import memory_writer
 
 logger = logging.getLogger(__name__)
 
@@ -228,20 +229,6 @@ class AgentRuntime:
             message=message, error=error_str, duration_ms=elapsed,
         )
 
-        # 8b. Career Memory Engine shadow write (ADR-001 M1). Flag-gated
-        #     (RICO_MEMORY_ENGINE_ENABLED, default OFF) and fire-and-forget:
-        #     a memory failure must never affect the action result. No reader
-        #     consumes these rows yet.
-        try:
-            from src.services.memory_writer import record_action_episode
-            record_action_episode(
-                user_id=user_id, action=action, job=resolved_job,
-                job_key=job_key, ok=tool_ok, source=source,
-                action_id=action_id, error=error_str,
-            )
-        except Exception:
-            logger.debug("runtime: memory shadow write failed", exc_info=True)
-
         # 9. Persist per-job interaction so Rico can recall it across sessions.
         #    Fire-and-forget: never let a context-write failure affect the action.
         if tool_ok and resolved_job.get("title") and resolved_job.get("company"):
@@ -292,11 +279,26 @@ class AgentRuntime:
         #     sessions (blocked companies, recent applies, etc). Fire-and-forget.
         _MEMORY_ACTIONS = frozenset({"apply", "save", "skip", "block", "not_relevant"})
         if tool_ok and action in _MEMORY_ACTIONS and resolved_job:
+            _legacy_write_ok = False
             try:
                 from src.services.career_memory import record_action as _cm_record
-                _cm_record(user_id, action, resolved_job)
+                _legacy_write_ok = bool(_cm_record(user_id, action, resolved_job))
             except Exception:
                 logger.debug("runtime: career_memory record failed", exc_info=True)
+
+            # Career Memory Engine shadow write (ADR-001 M1). Flag-gated
+            # (RICO_MEMORY_ENGINE_ENABLED, default OFF). Runs after the legacy
+            # write so drift metrics can compare the two outcomes. The writer is
+            # itself non-raising; this guard upholds the M1 contract that the
+            # shadow path can never change the action result.
+            try:
+                memory_writer.record_job_action_shadow(
+                    external_user_id=user_id, action=action, job=resolved_job,
+                    action_id=action_id, surface=source,
+                    legacy_write_ok=_legacy_write_ok,
+                )
+            except Exception:
+                logger.debug("runtime: memory shadow write failed", exc_info=True)
 
         return RuntimeResult(
             ok=tool_ok,
