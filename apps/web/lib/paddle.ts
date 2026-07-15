@@ -9,9 +9,6 @@
  * block the initial page render.
  */
 
-const DEFAULT_SANDBOX_CLIENT_TOKEN = "test_1a1754e60e504b4a93b1efc9604";
-const DEFAULT_SANDBOX_PRICE_ID = "pri_01kxer8h278hvw37ec59yg73hg";
-
 declare global {
     interface Window {
         Paddle?: PaddleInstance;
@@ -90,7 +87,11 @@ export function initPaddle(): Promise<PaddleInstance> {
             return;
         }
 
-        const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim() || DEFAULT_SANDBOX_CLIENT_TOKEN;
+        const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim();
+        if (!token) {
+            reject(new Error("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN is not set — Paddle checkout cannot initialize."));
+            return;
+        }
 
         const configure = (paddle: PaddleInstance): void => {
             const sandbox =
@@ -197,9 +198,10 @@ export async function openPaddleCheckout(
 }
 
 /**
- * Return the Paddle price ID for the single Rico Monthly Sandbox plan.
- * A Vercel environment value overrides the deployed Sandbox default.
+ * Return the Paddle price ID for the single Rico Monthly plan.
+ * Returns null if NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID is not set —
+ * callers must handle null and show a "not configured" message.
  */
 export function getPaddlePriceId(): string | null {
-    return process.env.NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID?.trim() || DEFAULT_SANDBOX_PRICE_ID;
+    return process.env.NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID?.trim() || null;
 }
