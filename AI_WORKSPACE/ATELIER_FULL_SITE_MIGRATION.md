@@ -223,14 +223,27 @@ Engine M1), and the abandoned `claude/m1-postgres-integration-tests-*` branch.
 **Step 1 complete (#1026 merged @ `21ae19a7`). Step 2 in progress — `/command`
 composer/messages/tool-state Atelier migration**, split into slices:
 
-- **4a — composer** → **#1028** (sole active implementation PR; ACTIVE). Awaiting
-  its visual gate before leaving draft.
-- **4b — empty state + message bubbles/markdown**, **4c — tool/permission/
-  attachment/error/loading states** (incl. the streaming state: shimmer-over-spinner
-  + tail caret per the design reference's streaming spec — built in **Atelier
-  paper/ink/sun-red tokens**, *not* the legacy `--gold`/`rico-thinking-row`
-  Nocturne classes), **4d — right rail**, **4e — remaining Command chrome**.
-  Each is a follow-up slice *after* 4a merges; none is open yet.
+Slice map — **renumbered by owner directive (2026-07-15)** and now fully
+landed; this list supersedes the earlier draft map that had "4d — right
+rail, 4e — remaining Command chrome":
+
+- **4a — composer** → **#1028 MERGED** (`baa427c`).
+- **4b — empty state + message bubbles/markdown** → **#1032 MERGED** (`6dc535c`).
+- **4c — tool/permission/attachment/error/loading states** → **#1034 MERGED**
+  (`5ac8b2b`); owner production smoke PASS, gate closed 2026-07-15. Built on
+  the AtelierCardScope CSS-variable remap over the existing states (the
+  draft-spec shimmer + tail caret streaming treatment was superseded by the
+  approved AtelierWorkingIndicator; revisit only if the visual-QA pass asks).
+- **4d — job-match / application / profile-gap cards** → **#1037 MERGED**
+  (`4129015`).
+- **4e — right rail ("opportunity panel", from the atelier-console
+  ShortlistRail reference; session-derived, display-only) + supporting
+  workspace panels (MissionContextBar)** → **#1038 MERGED** (`eff8e66`).
+
+**/command Atelier migration: implementation COMPLETE through 4e.**
+Next: **Profile Dashboard Atelier** slice (hero + editorial sections +
+single edit-profile flow), then the **final visual-QA pass** (desktop
+spacing, mobile, RTL, light/dark, token drift).
 
 Execution order otherwise follows Steps 2→8 above; each step/slice ships as its own
 small draft PR cut from latest `main` with the full per-PR gate (vitest + build +
