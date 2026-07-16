@@ -233,6 +233,35 @@ closure). Flip `ATELIER_FULL_SITE_MIGRATION.md` from CLOSED/DEFERRED to REOPENED
 re-audit the route matrix against live `main`, and route execution to the next
 existing in-flight Atelier PR without duplicating work.
 
+**Unified target (updated 2026-07-16, DEC-20260716-001):** the migration target
+is now **Atelier V3 as the single production-wide visual system** across
+marketing, auth, the authenticated workspace, and `/command`, with dark mode
+"**Atelier at Night**" derived from the same semantic tokens. This is the same
+program — not a parallel design doc — with the end-state pinned by
+`DEC-20260716-001` (which supersedes the Atelier/Nocturne split of
+`DEC-20260708-003` and the preview-only stance of `DEC-20260709-006`).
+
+Migration order (foundation-first, `/command` last):
+1. Foundation — Atelier V3 semantic tokens + Atelier-at-Night dark set as the
+   single source of truth.
+2. Shared shell & controls adopt V3 tokens.
+3. Low-risk workspace routes (settings/profile/applications/jobs), per-route.
+4. `/command` **last** — owner decided 2026-07-16 to **re-skin** the completed
+   `/command` slices (C1 tokens, C2 transcript adapter, C3 composer, C4 MATCH
+   cards) from Obsidian acid-lime to the Atelier Console tokens (paper +
+   Atelier at Night, sun-red), sourced from the existing `/rico-preview`
+   Atelier Console. Structure/behavior preserved; token re-skin, not a rebuild.
+   Obsidian acid-lime is historical reference only; C4–C6 do not continue under
+   Obsidian styling.
+5. Visual QA — EN/AR + RTL, light/dark, desktop/mobile parity.
+6. Remove legacy Nocturne tokens once unreferenced.
+
+Nocturne is historical/archive; `/rico-preview`, `/design-gallery`, and
+`/design-preview` stay internal reference-only. Every production API, auth,
+upload, billing, persistence, streaming, and agent contract is preserved — this
+is a visual-token migration only; Lovable/reference surfaces are visual reference
+only, never a source of behavior.
+
 #### Context
 
 - Target: **every** production user-facing route on the approved Atelier design,
