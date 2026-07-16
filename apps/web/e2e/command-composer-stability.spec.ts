@@ -95,8 +95,8 @@ test.describe("/command composer stability", () => {
   test.describe.configure({ mode: "serial" });
 
   for (const scenario of [
-    { name: "desktop English", language: "en", viewport: { width: 1366, height: 768 }, hint: /ENTER TO SEND/ },
-    { name: "mobile Arabic", language: "ar", viewport: { width: 390, height: 844 }, hint: /للإرسال/ },
+    { name: "desktop English", language: "en", viewport: { width: 1366, height: 768 }, hint: /⌘K COMMANDS/ },
+    { name: "mobile Arabic", language: "ar", viewport: { width: 390, height: 844 }, hint: /أوامر/ },
   ] as const) {
     test(`keeps the composer anchored during pending response on ${scenario.name}`, async ({ page }) => {
       await page.setViewportSize(scenario.viewport);
