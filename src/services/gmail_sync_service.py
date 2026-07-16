@@ -77,6 +77,14 @@ SWEEP_MESSAGE_CAP = 25
 SWEEP_TIME_BUDGET_SECONDS = 30
 SWEEP_MAX_USERS = 200
 
+# Pagination bounds for the Gmail message-list phase.
+# These are independent of the per-message processing budget above and
+# prevent one large mailbox from monopolizing sync-all via unbounded
+# list pagination.
+MAX_LIST_PAGES = 10          # hard cap on Gmail API list requests
+MAX_CANDIDATE_MESSAGES = 500  # hard cap on candidate messages collected during listing
+LIST_PAGE_SIZE = 100          # maxResults per list request (Gmail API max is 500)
+
 
 def _clamp_lookback(lookback_days: Optional[int]) -> int:
     try:
@@ -127,6 +135,85 @@ def _is_refresh_error(exc: Exception) -> bool:
         return isinstance(exc, RefreshError)
     except Exception:
         return False
+
+
+# ── Bounded message listing ───────────────────────────────────────────────────
+
+
+def _fetch_messages_bounded(
+    service: Any,
+    lookback_days: int,
+    deadline: float,
+    max_pages: int = MAX_LIST_PAGES,
+    max_candidates: int = MAX_CANDIDATE_MESSAGES,
+    page_size: int = LIST_PAGE_SIZE,
+) -> tuple[List[Dict[str, Any]], str]:
+    """Bounded Gmail message listing with deadline and pagination caps.
+
+    Reuses the same Gmail query and thread-dedup logic as
+    ``src.gmail_importer._fetch_messages`` but adds:
+      * deadline check before every list request
+      * explicit max page count
+      * explicit max candidate-message count
+      * repeated/invalid page-token loop prevention
+
+    Returns ``(messages, stop_reason)`` where stop_reason is one of:
+      ``done`` — no more pages
+      ``deadline`` — time budget expired before listing completed
+      ``page_cap`` — hit MAX_LIST_PAGES
+      ``candidate_cap`` — hit MAX_CANDIDATE_MESSAGES
+    """
+    from datetime import datetime, timedelta
+
+    from src.gmail_importer import _GMAIL_QUERY
+
+    after = int((datetime.now() - timedelta(days=lookback_days)).timestamp())
+    query = f"{_GMAIL_QUERY} after:{after}"
+
+    messages: List[Dict[str, Any]] = []
+    seen_threads: set = set()
+    page_token: Optional[str] = None
+    seen_page_tokens: set = set()
+
+    for page_idx in range(max_pages):
+        if time.monotonic() >= deadline:
+            return messages, "deadline"
+
+        kwargs: Dict[str, Any] = {
+            "userId": "me",
+            "q": query,
+            "maxResults": page_size,
+        }
+        if page_token:
+            kwargs["pageToken"] = page_token
+
+        try:
+            resp = service.users().messages().list(**kwargs).execute()
+        except Exception:
+            logger.warning("gmail_list_page_failed page=%d", page_idx, exc_info=True)
+            return messages, "list_error"
+
+        batch = resp.get("messages", [])
+        for msg in batch:
+            thread_id = msg.get("threadId")
+            if thread_id and thread_id not in seen_threads:
+                seen_threads.add(thread_id)
+                messages.append(msg)
+                if len(messages) >= max_candidates:
+                    return messages, "candidate_cap"
+
+        next_token = resp.get("nextPageToken")
+        if not next_token:
+            return messages, "done"
+
+        # Guard against repeated/invalid page tokens causing an infinite loop.
+        if next_token in seen_page_tokens:
+            logger.warning("gmail_list_repeated_page_token — stopping pagination")
+            return messages, "repeated_token"
+        seen_page_tokens.add(next_token)
+        page_token = next_token
+
+    return messages, "page_cap"
 
 
 # ── Per-user sync ─────────────────────────────────────────────────────────────
@@ -221,14 +308,32 @@ def run_user_sync(
             _extract_company_hint,
             _extract_header,
             _extract_links,
-            _fetch_messages,
             _get_message_detail,
             _match_email_to_application,
         )
 
         service = _build_gmail_service(credentials)
-        raw_messages = _fetch_messages(service, lookback)[: max(1, int(message_cap))]
+
+        # Bounded listing: the deadline is shared between listing and processing.
+        # The listing phase gets the full budget; the processing loop checks the
+        # same deadline per message. This prevents one large mailbox from
+        # monopolizing sync-all via unbounded list pagination.
+        list_deadline = started + time_budget_seconds
+        raw_messages, list_stop_reason = _fetch_messages_bounded(
+            service, lookback, deadline=list_deadline,
+        )
+        # Apply the per-user message cap on top of the listing caps.
+        cap = max(1, int(message_cap))
+        if len(raw_messages) > cap:
+            raw_messages = raw_messages[:cap]
         counters["messages_fetched"] = len(raw_messages)
+
+        # If listing was cut short by a bound (not "done"), record it honestly.
+        if list_stop_reason not in ("done",):
+            if status == "completed":
+                status = "partial"
+            if not error_code:
+                error_code = f"list_{list_stop_reason}"
 
         applications = _load_user_applications(user_id)
         index = _build_application_index(applications)
