@@ -53,6 +53,9 @@ export const metadata: Metadata = {
     },
     description:
         "Rico Hunt helps professionals in the UAE manage their entire job search with AI \u2014 from CV analysis and job matching to application tracking, follow-ups, and interview preparation.",
+    // Home ("/") self-canonical. Public sub-pages declare their own canonical and
+    // internal/app routes are noindex (see lib/seo.ts + robots.ts), so this default
+    // only governs the home route. (#1064)
     alternates: {
         canonical: "/",
     },
@@ -163,14 +166,9 @@ const websiteSchema = {
     description:
         "AI Career Operating System for professionals in the UAE \u2014 CV analysis, job matching, application tracking, follow-ups, and interview preparation.",
     publisher: { "@id": `${SITE_URL}/#organization` },
-    potentialAction: {
-        "@type": "SearchAction",
-        target: {
-            "@type": "EntryPoint",
-            urlTemplate: `${SITE_URL}/jobs?q={search_term_string}`,
-        },
-        "query-input": "required name=search_term_string",
-    },
+    // No SearchAction: there is no stable public search landing. `/jobs` redirects
+    // to the (noindex) `/command` app surface, so advertising it as a search
+    // entry point would be false. (#1064)
     inLanguage: ["en", "ar"],
 };
 
@@ -182,7 +180,7 @@ const softwareAppSchema = {
     url: SITE_URL,
     applicationCategory: "BusinessApplication",
     applicationSubCategory: "CareerPlatform",
-    operatingSystem: "Web, iOS, Android",
+    operatingSystem: "Web",
     description:
         "Rico Hunt helps professionals in the UAE manage their entire job search with AI \u2014 from CV analysis and job matching to application tracking, follow-ups, and interview preparation.",
     featureList: [
@@ -242,7 +240,7 @@ const faqSchema = {
             name: "Is Rico free to use?",
             acceptedAnswer: {
                 "@type": "Answer",
-                text: "Rico offers a free tier with core features. Premium plans unlock advanced AI matching, unlimited applications, and priority interview coaching.",
+                text: "Rico offers a free tier with core features. The Rico Monthly subscription raises your usage limits — more AI messages, saved jobs, CV analyses, and stored documents.",
             },
         },
         {
