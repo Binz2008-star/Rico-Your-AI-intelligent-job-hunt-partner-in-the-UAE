@@ -191,9 +191,13 @@ jobs:
               sha = data.get("commit", "unknown")
               with open("/tmp/deploy_sha.txt", "w") as f:
                   f.write(sha[:12])
-              print("\nCommit SHA   :", sha[:12])
-              print("Environment  :", data.get("environment", "?"))
-              print("Deployed at  :", data.get("deployed_at", "?"))
+              # commit + started_at are the authoritative live-deploy signals.
+              print("\nCommit SHA (authoritative) :", sha[:12])
+              print("Environment                :", data.get("environment", "?"))
+              print("Process started (boot)     :", data.get("started_at", "?"))
+              # deployed_at is static env metadata that may be stale — never treat
+              # it as the deploy time; compare commit to origin/main instead.
+              print("Build metadata (static, may be stale) :", data.get("deployed_at", "?"))
           except Exception as e:
               print("Could not parse version response:", e)
           PYEOF

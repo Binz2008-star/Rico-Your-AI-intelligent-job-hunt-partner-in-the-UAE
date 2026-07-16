@@ -4,7 +4,7 @@
 
 The system is running. Backend is live on Render, frontend is live on Vercel. Public smoke passes. Authenticated smoke is still required after each backend deploy. Specific product flows have known defects documented below.
 
-Last updated: 2026-05-25
+Last updated: 2026-07-16
 
 ---
 
@@ -42,15 +42,15 @@ Known issue: `/me` 401 console noise on public routes (e.g., `/chat`, landing pa
 
 ## Known Issues
 
-### 1. Subscription routing bug (High)
+### 1. Paid billing not activated — intentional (Info)
 
-**Symptom:** Selecting a Pro or Premium package on `/subscription` routes the user to `/command` without completing Stripe Checkout.
+**State:** Billing runs in `BILLING_MODE=manual` (WhatsApp-assisted activation). This is the intended safe default, not a bug.
 
-**Impact:** Users cannot purchase a paid subscription through the UI.
+**Provider:** Paddle is the paid-subscription source of truth. Stripe is fully removed (DEC-20260713-005) — the earlier "Stripe routing bug" is obsolete and no longer applies.
 
-**Root cause:** `apps/web/app/command/page.tsx` handles package selection and routes all plans to `/command` rather than calling `POST /api/v1/subscriptions/checkout`.
+**Plan:** Single plan — Rico Monthly, USD 21.50/month (AED 79 is an approximate reference shown to UAE users; Paddle bills in USD). The retired two-tier Pro/Premium model no longer exists.
 
-**Fix tracked in:** docs/product/subscription-flow.md — Known Gaps #1.
+**Activation gate:** Paddle checkout goes live only when the owner explicitly sets `BILLING_MODE=paddle` on Render and applies migrations 040 + 041 with approval. See `AI_WORKSPACE/HANDOFFS/paddle_billing_setup_rollback.md` and `docs/product/subscription-flow.md`.
 
 ---
 
@@ -96,7 +96,7 @@ Known issue: `/me` 401 console noise on public routes (e.g., `/chat`, landing pa
 
 | # | Description | Priority | Blocking |
 |---|---|---|---|
-| 1 | Subscription routing fix | High | Paid plan revenue |
+| 1 | Paddle billing activation (owner-gated: `BILLING_MODE=paddle` + migrations 040/041 + Sandbox smoke) | Owner action | Paid plan revenue |
 | 2 | Job action context fix ("Prepare application") | High | Application workflow UX |
 | 3 | Manual application entry (backend endpoint + frontend form) | Medium | Application tracking completeness |
 | 4 | Inbox import design and implementation (Gmail OAuth, scan, review screen) | Medium | Application tracking completeness |
@@ -122,4 +122,4 @@ For the Render deploy checklist and migration order, see `docs/PRODUCTION_READIN
 
 Current state is Yellow because:
 - Tier 2 authenticated smoke is pending post-deploy verification.
-- Two high-priority product bugs are open (subscription routing, job action context).
+- One high-priority product bug is open (job action context). Billing is intentionally in manual mode (Paddle activation is an owner-gated action, not a bug).

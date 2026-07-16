@@ -100,12 +100,16 @@ Run after Tier 2 passes. This is a browser-based walkthrough, not automated.
 | Click "Prepare application" on a job card | Rico responds with match reasoning for that specific job |
 | Navigate to `/applications` | Application Flow loads; no "use a spreadsheet" text |
 | Ask Rico: "why don't you have my past applications?" | Rico explains three sources; offers Add manually and "coming next" inbox import |
-| Navigate to `/subscription` | Subscription page loads; packages visible |
-| Click Pro package | Routes to Stripe Checkout (not `/command`) |
+| Navigate to `/subscription` | Subscription page loads; single plan visible — Rico Monthly, USD 21.50/month (AED 79 shown as an approximate reference only) |
+| Click the Rico Monthly plan | With `BILLING_MODE=manual` (default): routes to the manual/WhatsApp-assisted activation path, not `/command`. Paddle checkout appears only after the owner sets `BILLING_MODE=paddle` — see below |
 | Navigate to `/settings` | Settings page loads |
 | Click logout | Session cleared; redirected to landing or `/login` |
 
-Do not use real payment card data in manual smoke. Use Stripe test card `4242 4242 4242 4242`.
+Billing provider is Paddle (Stripe is fully removed — DEC-20260713-005). Paddle
+checkout is **not activated in production**: `BILLING_MODE=manual` is the safe
+default until the owner explicitly sets `BILLING_MODE=paddle` on Render. Any live
+checkout/webhook test is isolated Paddle **Sandbox** work — never run it against
+production and never enter real payment card data in a manual smoke.
 
 ---
 

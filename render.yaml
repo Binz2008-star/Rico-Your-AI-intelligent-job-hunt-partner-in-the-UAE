@@ -96,22 +96,27 @@ services:
         sync: false
 
       # ── Billing mode ─────────────────────────────────────────────────────────
+      # Manual (WhatsApp-assisted) is the safe default. Paddle is activated only
+      # by the owner setting BILLING_MODE=paddle in the Render dashboard — never
+      # here. See DEC-20260713-005 + AI_WORKSPACE/HANDOFFS/paddle_billing_setup_rollback.md.
       - key: BILLING_MODE
         value: "manual"
-      - key: RICO_PRO_PRICE_AED
-        value: "29"
-      - key: RICO_PREMIUM_PRICE_AED
-        value: "49"
 
-      # ── Stripe ────────────────────────────────────────────────────────────────
-      - key: STRIPE_SECRET_KEY
+      # ── Paddle Billing (single plan: Rico Monthly, USD 21.50/mo) ─────────────
+      # Declaration hygiene only — real values live in the Render dashboard, never
+      # in this file. Secrets and the environment-specific Price ID use sync:false
+      # so the owner sets them per environment. Stripe/AED/Premium config is retired.
+      - key: RICO_PRO_PRICE_USD
+        value: "21.50"
+      # Fail-safe to sandbox; owner flips to false only when activating live billing.
+      - key: PADDLE_SANDBOX
+        value: "true"
+      - key: PADDLE_API_KEY
         sync: false
-      - key: STRIPE_WEBHOOK_SECRET
+      - key: PADDLE_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_PRO_PRICE_ID
-        value: "price_1Tf9N0DjGoun5RObhfGUBgeh"
-      - key: STRIPE_PREMIUM_PRICE_ID
-        value: "price_1Tf9LJDjGoun5RObhGBUOPFo"
+      - key: PADDLE_PRO_MONTHLY_PRICE_ID
+        sync: false
 
       # ── Job search API (secret) ───────────────────────────────────────────────
       - key: RAPIDAPI_KEY
