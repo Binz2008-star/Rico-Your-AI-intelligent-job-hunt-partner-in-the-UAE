@@ -7,6 +7,7 @@ via deferred imports to avoid eager loading of heavy dependencies.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -89,6 +90,85 @@ def _has_user_data(payload: Dict[str, Any]) -> bool:
 
 # ── Public service functions ──────────────────────────────────────────────────
 
+@dataclass(frozen=True)
+class ChatPreflight:
+    """Result of the transport-independent chat preflight.
+
+    ``terminal`` is a ready-to-return response for a message resolved
+    deterministically (status follow-up, policy gateway) or blocked by the
+    AI-message entitlement gate — in which case the AI provider must NOT be
+    called. ``gate`` is the entitlement check carried forward for the
+    remaining-messages banner. Shared by the JSON (send_message) and SSE
+    (streaming) transports so both apply identical policy + entitlement
+    decisions; streaming changes only the response transport (#1078).
+    """
+    terminal: Dict[str, Any] | None
+    gate: Any | None
+
+
+def run_chat_preflight(ctx: RicoSessionContext, message: str) -> ChatPreflight:
+    """Status follow-up → Policy Gateway → AI-message gate. Transport-independent.
+
+    Any transport (JSON or SSE) must run this before touching the AI provider so
+    unsupported-tool, clarification, account-service, and over-quota outcomes are
+    identical regardless of how the client fetched the turn.
+    """
+    from src.services.operation_state import build_status_response, is_status_followup
+    from src.services.subscription_gating import check_ai_message_allowed
+    from src.rico.policy import classify_request
+
+    if is_status_followup(message):
+        status_response = build_status_response(ctx.user_id)
+        if status_response is not None:
+            return ChatPreflight(terminal=status_response, gate=None)
+
+    # Handles unsupported external tools and subscription queries deterministically
+    # before any AI or legacy routing touches the message.
+    policy = classify_request(message, has_auth=(ctx.auth_type == "authenticated"))
+    if policy.route == "unsupported":
+        return ChatPreflight(terminal=_unsupported_tool_response(policy), gate=None)
+    if policy.route == "clarification" and str(policy.reason).startswith("conflicting_domains:"):
+        return ChatPreflight(terminal=_mixed_tool_clarification_response(policy, message), gate=None)
+    if policy.route == "account_service":
+        return ChatPreflight(terminal=_account_service_response(ctx), gate=None)
+
+    # ── AI message-limit gate (only applies to AI-routed messages) ───────────
+    # Checked after deterministic policy routes so capped users can still reach
+    # unsupported-tool clarifications and account_service responses.
+    gate = check_ai_message_allowed(ctx)
+    if gate and not gate.allowed:
+        return ChatPreflight(terminal=gate.to_response(), gate=gate)
+
+    return ChatPreflight(terminal=None, gate=gate)
+
+
+def should_stream_ai(ctx: RicoSessionContext, message: str, profile: Any | None) -> bool:
+    """Whether a message should be token-streamed as conversational AI.
+
+    Mirrors send_message's transport-independent routing so the SSE path streams
+    exactly the messages the JSON path answers with conversational AI. Structured
+    or deterministic outcomes (document actions, explicit job listings → job
+    cards / sign-up CTA, legacy classifier) return False and are served by
+    send_message unchanged — only the transport differs (#1078). Callers MUST
+    run run_chat_preflight first; this decides transport, not policy/entitlement.
+    """
+    from src.rico_chat_api import RicoChatAPI as _RicoChatAPI
+    if _RicoChatAPI.is_document_action_message(message):
+        return False
+    from src.rico.intent.gates import is_explicit_job_listing_request
+    if is_explicit_job_listing_request(message):
+        return False
+    decision = _intent_router.route(
+        message=message,
+        user_id=ctx.user_id,
+        profile_context_present=profile is not None,
+    )
+    # Public/guest sessions with no profile: the legacy classifier loops on the
+    # onboarding welcome, so conversational AI is used instead (matches send_message).
+    _force_ai = (not decision.should_use_ai) and profile is None and not ctx.can_persist_profile
+    return bool(decision.should_use_ai or _force_ai)
+
+
 def send_message(
     ctx: RicoSessionContext,
     message: str,
@@ -96,35 +176,11 @@ def send_message(
     language: str | None = None,
 ) -> Dict[str, Any]:
     """Policy Gateway → IntentRouter → legacy classifier."""
-    from src.services.operation_state import build_status_response, is_status_followup
-    from src.services.subscription_gating import check_ai_message_allowed
-
-    if is_status_followup(message):
-        status_response = build_status_response(ctx.user_id)
-        if status_response is not None:
-            return status_response
-
-    # ── Policy Gateway pre-filter ─────────────────────────────────────────────
-    # Handles unsupported external tools and subscription queries deterministically
-    # before any AI or legacy routing touches the message.
-    from src.rico.policy import classify_request
-    policy = classify_request(message, has_auth=(ctx.auth_type == "authenticated"))
-
-    if policy.route == "unsupported":
-        return _unsupported_tool_response(policy)
-
-    if policy.route == "clarification" and str(policy.reason).startswith("conflicting_domains:"):
-        return _mixed_tool_clarification_response(policy, message)
-
-    if policy.route == "account_service":
-        return _account_service_response(ctx)
-
-    # ── AI message-limit gate (only applies to AI-routed messages) ───────────
-    # Checked after deterministic policy routes so capped users can still reach
-    # unsupported-tool clarifications and account_service responses.
-    gate = check_ai_message_allowed(ctx)
-    if gate and not gate.allowed:
-        return gate.to_response()
+    # Shared, transport-independent preflight: status / policy / entitlement gate.
+    pre = run_chat_preflight(ctx, message)
+    if pre.terminal is not None:
+        return pre.terminal
+    gate = pre.gate
 
     # ── Profile fetch (deferred until past gate to avoid DB hit for capped users) ──
     from src.repositories.profile_repo import get_profile
