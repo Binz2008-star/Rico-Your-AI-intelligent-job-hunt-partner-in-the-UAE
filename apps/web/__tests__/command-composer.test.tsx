@@ -57,6 +57,9 @@ const T: Record<string, string> = {
     cmdUploadCvAriaLabel: "Upload CV",
     cmdAtelierPlaceholder: "Write to Rico…",
     cmdAtelierHint: "ENTER TO SEND · CTRL+K FOCUS · CTRL+J NEW",
+    cmdComposerHintKeys: "⌘K COMMANDS",
+    cmdComposerHintSlash: "/FIND /TAILOR /TRACK",
+    cmdComposerReset: "reset",
     cmdPlaceholderChecking: "Connecting...",
     cmdPlaceholderReady: "Message Rico",
     cmdHint: "Enter to send · Shift+Enter for new line",
@@ -105,11 +108,12 @@ describe("1. Atelier surface — authenticated", () => {
         expect(screen.getByTestId("atelier-composer")).toBeTruthy();
     });
 
-    it("shows the Atelier hint line", () => {
+    it("shows the Atelier hints row (C3 content)", () => {
         render(<CommandComposer {...makeProps()} />);
-        expect(screen.getByTestId("composer-hint").textContent).toBe(
-            "ENTER TO SEND · CTRL+K FOCUS · CTRL+J NEW"
-        );
+        const hint = screen.getByTestId("composer-hint").textContent ?? "";
+        expect(hint).toContain("⌘K COMMANDS");
+        expect(hint).toContain("/FIND /TAILOR /TRACK");
+        expect(hint).toContain("reset");
     });
 
     it("uses the Atelier placeholder", () => {
@@ -381,6 +385,111 @@ describe("12. Upload, quota, and permission states", () => {
         render(<CommandComposer {...makeProps({ input: "hi", messagesRemaining: 0 })} />);
         const btn = screen.getByTestId("send-button") as HTMLButtonElement;
         expect(btn.disabled).toBe(true);
+    });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * 14. Slice C3 — decorative lime slash glyph (G1)
+ * ════════════════════════════════════════════════════════════════════════════ */
+describe("14. C3 — slash glyph", () => {
+    it("renders a decorative aria-hidden slash glyph in the paper row", () => {
+        render(<CommandComposer {...makeProps()} />);
+        const glyph = screen.getByTestId("composer-slash-glyph");
+        expect(glyph.getAttribute("aria-hidden")).toBe("true");
+        expect(glyph.textContent).toBe("/");
+        expect(glyph.tagName).toBe("SPAN"); // not interactive
+    });
+
+    it("does NOT render the glyph on the public surface", () => {
+        render(
+            <CommandComposer
+                {...makeProps({ isAuthenticated: false, chatAudience: "public" })}
+            />
+        );
+        expect(screen.queryByTestId("composer-slash-glyph")).toBeNull();
+    });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * 15. Slice C3 — hints row + ↻ reset (G2)
+ * ════════════════════════════════════════════════════════════════════════════ */
+describe("15. C3 — hints row", () => {
+    it("shows the EN command hints and the reset control", () => {
+        render(<CommandComposer {...makeProps()} />);
+        const hint = screen.getByTestId("composer-hint").textContent ?? "";
+        expect(hint).toContain("⌘K COMMANDS");
+        expect(hint).toContain("/FIND /TAILOR /TRACK");
+        const reset = screen.getByTestId("composer-reset");
+        expect(reset.textContent).toContain("reset");
+    });
+
+    it("shows the AR command hints under language=ar", () => {
+        const arT = (key: string) => {
+            const AR: Record<string, string> = {
+                ...T,
+                cmdComposerHintKeys: "⌘K أوامر",
+                cmdComposerHintSlash: "/ابحث /خصّص /تتبّع",
+                cmdComposerReset: "إعادة تعيين",
+            };
+            return AR[key] ?? key;
+        };
+        render(
+            <CommandComposer
+                {...makeProps({ language: "ar", t: arT as (key: TranslationKey) => string })}
+            />
+        );
+        const hint = screen.getByTestId("composer-hint").textContent ?? "";
+        expect(hint).toContain("⌘K أوامر");
+        expect(hint).toContain("/ابحث /خصّص /تتبّع");
+        expect(screen.getByTestId("composer-reset").textContent).toContain("إعادة تعيين");
+    });
+
+    it("↻ reset calls the EXISTING onNewChat handler", () => {
+        const onNewChat = vi.fn();
+        render(<CommandComposer {...makeProps({ onNewChat })} />);
+        fireEvent.click(screen.getByTestId("composer-reset"));
+        expect(onNewChat).toHaveBeenCalledTimes(1);
+    });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * 16. Slice C3 — square send/stop buttons (G3)
+ * ════════════════════════════════════════════════════════════════════════════ */
+describe("16. C3 — square send/stop", () => {
+    it("send button is a square (rounded-lg present, rounded-full absent)", () => {
+        render(<CommandComposer {...makeProps({ input: "hi" })} />);
+        const btn = screen.getByTestId("send-button");
+        expect(btn.className).toContain("rounded-lg");
+        expect(btn.className).not.toContain("rounded-full");
+    });
+
+    it("cancel button is a square (rounded-lg present, rounded-full absent)", () => {
+        render(<CommandComposer {...makeProps({ thinking: true })} />);
+        const btn = screen.getByTestId("cancel-button");
+        expect(btn.className).toContain("rounded-lg");
+        expect(btn.className).not.toContain("rounded-full");
+    });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * 17. Slice C3 — gradient fade above the composer (G4)
+ * ════════════════════════════════════════════════════════════════════════════ */
+describe("17. C3 — gradient fade", () => {
+    it("renders a pointer-events-none aria-hidden fade overlay", () => {
+        render(<CommandComposer {...makeProps()} />);
+        const fade = screen.getByTestId("composer-fade");
+        expect(fade.getAttribute("aria-hidden")).toBe("true");
+        expect(fade.className).toContain("pointer-events-none");
+        expect(fade.className).toContain("absolute");
+    });
+
+    it("does NOT render the fade on the public surface", () => {
+        render(
+            <CommandComposer
+                {...makeProps({ isAuthenticated: false, chatAudience: "public" })}
+            />
+        );
+        expect(screen.queryByTestId("composer-fade")).toBeNull();
     });
 });
 

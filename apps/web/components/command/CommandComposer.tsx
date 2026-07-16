@@ -158,10 +158,21 @@ export function CommandComposer({
     if (isAuthenticated) {
         return (
             <div
-                className="shrink-0 px-3 pt-2 sm:px-5 sm:pt-3 pb-[calc(56px_+_0.75rem_+_env(safe-area-inset-bottom))] md:pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]"
+                className="relative shrink-0 px-3 pt-2 sm:px-5 sm:pt-3 pb-[calc(56px_+_0.75rem_+_env(safe-area-inset-bottom))] md:pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]"
                 data-testid="atelier-composer"
                 dir={isRTL ? "rtl" : "ltr"}
             >
+                {/* Gradient fade from paper above the sticky composer (slice C3).
+                    Route-scoped, decorative, non-interactive: pointer-events-none
+                    so it never intercepts clicks/scroll on the last transcript
+                    row; palette-driven so it works in dark and light themes. */}
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 bottom-full h-10"
+                    style={{ background: `linear-gradient(to top, ${c.bg}, transparent)` }}
+                    data-testid="composer-fade"
+                />
+
                 {/* Hidden file input */}
                 <input
                     id="cv-file-upload"
@@ -211,6 +222,23 @@ export function CommandComposer({
                         boxShadow: `0 2px 12px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12)`,
                     }}
                 >
+                    {/* Decorative lime slash glyph (slice C3) — not interactive */}
+                    <span
+                        aria-hidden="true"
+                        className="flex-shrink-0 select-none text-center"
+                        style={{
+                            width: 14,
+                            color: c.red,
+                            fontFamily: ATELIER_FONT.mono,
+                            fontSize: 17,
+                            lineHeight: "32px",
+                            marginBottom: 1,
+                        }}
+                        data-testid="composer-slash-glyph"
+                    >
+                        /
+                    </span>
+
                     {/* Attachment button (paperclip) */}
                     <label
                         htmlFor="cv-file-upload"
@@ -282,16 +310,16 @@ export function CommandComposer({
                             onClick={onCancel}
                             aria-label={t("cmdCancelRequest")}
                             title={t("cmdCancelRequest")}
-                            className="atl-composer-cancel flex-shrink-0 flex items-center justify-center rounded-full"
+                            className="atl-composer-cancel flex-shrink-0 flex items-center justify-center rounded-lg"
                             style={{
                                 width: 32,
                                 height: 32,
-                                background: c.red,
+                                background: c.ink,
                                 color: c.panel,
                                 border: "none",
                                 cursor: "pointer",
                                 marginBottom: 1,
-                                transition: "opacity 0.15s ease",
+                                transition: "background 0.15s ease, color 0.15s ease",
                             }}
                             data-testid="cancel-button"
                         >
@@ -316,11 +344,11 @@ export function CommandComposer({
                             disabled={sendDisabled}
                             aria-label={t("send")}
                             title={t("send")}
-                            className="atl-composer-send flex-shrink-0 flex items-center justify-center rounded-full"
+                            className="atl-composer-send flex-shrink-0 flex items-center justify-center rounded-lg"
                             style={{
                                 width: 32,
                                 height: 32,
-                                background: sendDisabled ? c.track : c.red,
+                                background: sendDisabled ? c.track : c.ink,
                                 color: sendDisabled ? c.ink40 : c.panel,
                                 border: "none",
                                 cursor: sendDisabled ? "default" : "pointer",
@@ -348,19 +376,41 @@ export function CommandComposer({
                     )}
                 </div>
 
-                {/* Hint line */}
+                {/* Hints row (slice C3): mono-caps command hints start-aligned,
+                    ↻ reset end-aligned (wired to the existing onNewChat). The
+                    /FIND /TAILOR /TRACK tokens are decorative labels only. */}
                 <div
-                    className="mt-2 text-center"
+                    className="mt-2 flex items-center justify-between gap-3"
                     style={{
                         fontFamily: ATELIER_FONT.mono,
                         fontSize: 10,
                         letterSpacing: isRTL ? 0 : "0.12em",
                         color: c.ink40,
                     }}
-                    aria-hidden="true"
                     data-testid="composer-hint"
                 >
-                    {t("cmdAtelierHint")}
+                    <span aria-hidden="true">
+                        {t("cmdComposerHintKeys")}
+                        {" · "}
+                        {t("cmdComposerHintSlash")}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={onNewChat}
+                        className="atl-composer-reset flex-shrink-0 cursor-pointer bg-transparent"
+                        style={{
+                            color: c.ink40,
+                            border: "none",
+                            padding: 0,
+                            font: "inherit",
+                            letterSpacing: "inherit",
+                            transition: "color 0.15s ease",
+                        }}
+                        data-testid="composer-reset"
+                    >
+                        <span aria-hidden="true">↻ </span>
+                        {t("cmdComposerReset")}
+                    </button>
                 </div>
 
                 {/* Scoped hover/focus styles */}
@@ -368,8 +418,9 @@ export function CommandComposer({
                     [data-testid="atelier-composer"] .atl-composer-attach:hover { color: ${c.red} !important; }
                     [data-testid="atelier-composer"] .atl-composer-textarea::placeholder { color: ${c.ink40}; }
                     [data-testid="atelier-composer"] .atl-composer-textarea:focus { outline: none; }
-                    [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):hover { opacity: 0.85 !important; }
-                    [data-testid="atelier-composer"] .atl-composer-cancel:hover { opacity: 0.85 !important; }
+                    [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):hover { background: ${c.red} !important; }
+                    [data-testid="atelier-composer"] .atl-composer-cancel:hover { background: ${c.red} !important; }
+                    [data-testid="atelier-composer"] .atl-composer-reset:hover { color: ${c.red} !important; }
                 ` }} />
             </div>
         );
