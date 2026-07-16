@@ -137,6 +137,11 @@ services:
         value: "https://ricohunt.com,https://www.ricohunt.com,http://localhost:3000"
       - key: JWT_TTL_HOURS
         value: "24"
+      # Trusted reverse-proxy hops for X-Forwarded-For parsing (rate-limit client
+      # IP). Render fronts the app with a single edge proxy → "1". Increase only if
+      # additional trusted proxies are placed in front. See src/api/rate_limit.py.
+      - key: RICO_TRUSTED_PROXY_HOPS
+        value: "1"
 
       # ── Safety / automation gates ─────────────────────────────────────────────
       - key: RICO_ENABLE_AUTO_APPLY

@@ -34,20 +34,46 @@ def _storage_uri() -> str:
 
 # ── Client identity ───────────────────────────────────────────────────────────
 
+def _trusted_proxy_hops() -> int:
+    """Number of trusted reverse-proxy hops in front of this app.
+
+    Defaults to 1 (Render's single edge proxy). Clamped to >= 1; falls back to
+    1 on any parse error so a misconfigured env var can never disable the limit.
+    """
+    try:
+        return max(1, int(os.getenv("RICO_TRUSTED_PROXY_HOPS", "1")))
+    except (TypeError, ValueError):
+        return 1
+
+
 def client_ip_key(request: Request) -> str:
     """Resolve the real client IP for rate-limiting.
 
     Behind Render's proxy the TCP peer is the load balancer, so ``request.client.host`` is
     identical for every user — using it would collapse all clients into a single bucket
     (so one noisy client could 429 everyone, or the limit could be effectively bypassed).
-    Render forwards the originating client in ``X-Forwarded-For``; use its first entry when
-    present, falling back to the direct peer (correct for local/dev with no proxy).
+
+    ``X-Forwarded-For`` is a client-supplied, comma-separated chain to which each proxy
+    *appends* the peer it saw. The LEFTMOST entry is therefore attacker-controlled — a
+    client can send ``X-Forwarded-For: 1.2.3.4`` and Render will append the real peer to
+    the RIGHT, so trusting the leftmost entry lets an attacker forge a new bucket per request
+    and bypass every per-IP limit (login brute-force, register, password-reset, chat, upload).
+
+    We instead trust the entry ``N`` hops from the RIGHT, where ``N`` = the number of trusted
+    proxies (``RICO_TRUSTED_PROXY_HOPS``, default 1). With Render's single edge proxy the
+    rightmost entry is the real client IP as seen by the outermost trusted proxy, and an
+    attacker cannot spoof it because Render overwrites/appends past any forged entries. If the
+    chain has fewer entries than expected hops (dev/misconfig) or no header is present, fall
+    back to the direct peer.
     """
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        hops = _trusted_proxy_hops()
+        if len(parts) >= hops:
+            return parts[-hops]
+        # Fewer forwarded entries than expected trusted hops → misconfig/dev:
+        # fall back to the direct peer rather than trust an attacker-forged head.
     return get_remote_address(request)
 
 
