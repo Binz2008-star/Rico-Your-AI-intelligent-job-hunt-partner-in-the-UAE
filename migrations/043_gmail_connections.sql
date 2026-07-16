@@ -20,6 +20,13 @@
 --     NOT the rico_users UUID.
 
 -- One current Gmail account connection per Rico user.
+--
+-- recurring_sync_consent_at (nullable, default NULL) is a SEPARATE opt-in from
+-- the OAuth read grant: the OAuth consent authorizes read-only access for a
+-- user-initiated sync, but it is NOT consent to recurring background/fleet
+-- sync. The cron fleet sweep only touches connections where this is non-NULL
+-- (see src/repositories/gmail_repo.list_active_connections). Manual,
+-- user-initiated sync does not require it. See design doc §3 "Sync Modes".
 CREATE TABLE IF NOT EXISTS gmail_connections (
     id                           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id                      TEXT        NOT NULL,
@@ -29,6 +36,7 @@ CREATE TABLE IF NOT EXISTS gmail_connections (
     encrypted_refresh_token      TEXT        NOT NULL,
     token_encryption_key_version TEXT,
     status                       TEXT        NOT NULL DEFAULT 'active',
+    recurring_sync_consent_at    TIMESTAMPTZ,
     last_connected_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_refresh_at              TIMESTAMPTZ,
     last_sync_at                 TIMESTAMPTZ,
@@ -36,6 +44,12 @@ CREATE TABLE IF NOT EXISTS gmail_connections (
     created_at                   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at                   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Idempotent add for any environment that applied an earlier revision of this
+-- migration before the consent column existed (CREATE TABLE IF NOT EXISTS above
+-- would skip an already-present table, so guarantee the column separately).
+ALTER TABLE gmail_connections
+    ADD COLUMN IF NOT EXISTS recurring_sync_consent_at TIMESTAMPTZ;
 
 -- Unique ACTIVE connection per user+provider (revoked/tombstoned rows may
 -- accumulate as history without blocking a reconnect).
@@ -48,6 +62,11 @@ CREATE INDEX IF NOT EXISTS idx_gmail_connections_status
 
 CREATE INDEX IF NOT EXISTS idx_gmail_connections_last_sync
     ON gmail_connections (last_sync_at);
+
+-- Fleet-sweep hot path: active + consented, ordered by staleness.
+CREATE INDEX IF NOT EXISTS idx_gmail_connections_sweep
+    ON gmail_connections (last_sync_at)
+    WHERE status = 'active' AND recurring_sync_consent_at IS NOT NULL;
 
 -- Immutable record of manual and scheduled sync attempts.
 CREATE TABLE IF NOT EXISTS gmail_sync_runs (

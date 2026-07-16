@@ -435,3 +435,197 @@ def test_dismiss_marks_item(auth_client, monkeypatch):
     set_status.assert_called_once_with(
         _USER, "22222222-2222-2222-2222-222222222222", "dismissed"
     )
+
+
+# ── Recurring-sync consent (BLOCKER 2) ────────────────────────────────────────
+# The OAuth read grant is NOT consent to recurring background/fleet sync. The
+# fleet sweep must select only connections that granted a separate consent;
+# manual user-initiated sync must still work without it.
+
+
+def test_consent_requires_auth(client):
+    r = client.post(f"{GMAIL}/consent", json={"granted": True})
+    assert r.status_code == 401
+
+
+def test_consent_grant_round_trip(auth_client):
+    # Consent is deliberately NOT gated by the sync flag (flag off by default),
+    # so a user can manage it independently of whether sync is enabled.
+    with patch(
+        "src.repositories.gmail_repo.get_connection", return_value=_active_connection()
+    ), patch(
+        "src.repositories.gmail_repo.set_recurring_sync_consent", return_value=True
+    ) as set_consent, patch(
+        "src.repositories.gmail_repo.insert_audit_event", return_value=True
+    ) as audit:
+        r = auth_client.post(f"{GMAIL}/consent", json={"granted": True})
+    assert r.status_code == 200
+    assert r.json() == {"recurring_sync_consent": True}
+    set_consent.assert_called_once_with(_USER, True)  # identity from JWT, not body
+    assert audit.call_args.args[1] == "recurring_sync_consent_granted"
+
+
+def test_consent_revoke_round_trip(auth_client):
+    with patch(
+        "src.repositories.gmail_repo.get_connection", return_value=_active_connection()
+    ), patch(
+        "src.repositories.gmail_repo.set_recurring_sync_consent", return_value=True
+    ) as set_consent, patch(
+        "src.repositories.gmail_repo.insert_audit_event", return_value=True
+    ) as audit:
+        r = auth_client.post(f"{GMAIL}/consent", json={"granted": False})
+    assert r.status_code == 200
+    assert r.json() == {"recurring_sync_consent": False}
+    set_consent.assert_called_once_with(_USER, False)
+    assert audit.call_args.args[1] == "recurring_sync_consent_revoked"
+
+
+def test_consent_409_when_not_connected(auth_client):
+    with patch("src.repositories.gmail_repo.get_connection", return_value=None):
+        r = auth_client.post(f"{GMAIL}/consent", json={"granted": True})
+    assert r.status_code == 409
+
+
+# ── Consent enforcement at the repo/query layer ───────────────────────────────
+
+
+class _FakeCursor:
+    def __init__(self, capture, rows):
+        self._capture = capture
+        self._rows = rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self._capture.append((sql, params))
+
+    def fetchall(self):
+        return list(self._rows)
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    @property
+    def rowcount(self):
+        return len(self._rows)
+
+
+class _FakeConn:
+    def __init__(self, capture, rows):
+        self._capture = capture
+        self._rows = rows
+
+    def cursor(self):
+        return _FakeCursor(self._capture, self._rows)
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+
+def test_fleet_sweep_query_requires_consent(monkeypatch):
+    """list_active_connections (the fleet-sweep source) must filter to rows that
+    granted recurring-sync consent — never every active connection."""
+    from src.repositories import gmail_repo
+
+    capture: list = []
+    monkeypatch.setattr(
+        gmail_repo, "get_db_connection", lambda: _FakeConn(capture, [])
+    )
+    gmail_repo.list_active_connections()
+    assert capture, "expected a query to be executed"
+    sql = capture[0][0]
+    assert "recurring_sync_consent_at IS NOT NULL" in sql
+    assert "status = 'active'" in sql
+
+
+def test_set_recurring_sync_consent_grant_and_revoke(monkeypatch):
+    """Grant sets the consent timestamp to NOW(); revoke sets it to NULL."""
+    from src.repositories import gmail_repo
+
+    capture: list = []
+    # One fake row so rowcount > 0 → the repo reports the update succeeded.
+    monkeypatch.setattr(
+        gmail_repo, "get_db_connection", lambda: _FakeConn(capture, [("row",)])
+    )
+
+    assert gmail_repo.set_recurring_sync_consent(_USER, True) is True
+    grant_sql, grant_params = capture[-1]
+    assert "recurring_sync_consent_at = CASE WHEN" in grant_sql
+    assert grant_params[0] is True  # granted → NOW()
+    assert grant_params[1] == _USER  # user-scoped
+
+    assert gmail_repo.set_recurring_sync_consent(_USER, False) is True
+    _, revoke_params = capture[-1]
+    assert revoke_params[0] is False  # revoked → NULL
+
+
+def test_fleet_sweep_processes_only_returned_connections(monkeypatch):
+    """run_fleet_sweep must only touch what list_active_connections returns
+    (which is consent-filtered) — one consented user in, one sync out."""
+    from src.services import gmail_sync_service
+
+    monkeypatch.setenv("RICO_ENABLE_GMAIL_SYNC", "true")
+    consented = _active_connection(recurring_sync_consent_at="2026-07-10T00:00:00Z")
+    with patch(
+        "src.repositories.gmail_repo.list_active_connections",
+        return_value=[consented],
+    ), patch(
+        "src.services.gmail_sync_service.run_user_sync",
+        return_value={"status": "completed", "queued_for_review": 0},
+    ) as run_sync:
+        summary = gmail_sync_service.run_fleet_sweep()
+    assert summary["users_processed"] == 1
+    run_sync.assert_called_once()
+    assert run_sync.call_args.kwargs["mode"] == "sweep"
+
+
+def test_manual_sync_does_not_require_recurring_consent(monkeypatch):
+    """A user-initiated sync is an explicit action — it must run even when the
+    connection has no recurring-sync consent."""
+    from src.services import gmail_sync_service
+
+    monkeypatch.setenv("RICO_ENABLE_GMAIL_SYNC", "true")
+    conn = {
+        "id": "conn-1",
+        "user_id": "u@test.com",
+        "encrypted_refresh_token": "enc",
+        "status": "active",
+        "recurring_sync_consent_at": None,  # NO recurring consent
+    }
+    with patch("src.repositories.gmail_repo.get_connection", return_value=conn), patch(
+        "src.services.gmail_sync_service.decrypt_token", return_value="refresh"
+    ), patch(
+        "src.services.gmail_sync_service.credentials_from_refresh_token"
+    ), patch(
+        "src.services.gmail_sync_service._refresh_credentials"
+    ), patch(
+        "src.services.gmail_sync_service._build_gmail_service"
+    ), patch(
+        "src.services.gmail_sync_service._fetch_messages_bounded",
+        return_value=([], "done"),
+    ), patch(
+        "src.repositories.gmail_repo.create_sync_run", return_value="run-1"
+    ), patch(
+        "src.repositories.gmail_repo.finish_sync_run"
+    ), patch(
+        "src.repositories.gmail_repo.touch_last_sync"
+    ), patch(
+        "src.repositories.gmail_repo.insert_audit_event"
+    ), patch(
+        "src.services.gmail_sync_service._load_user_applications", return_value=[]
+    ), patch(
+        "src.gmail_importer._build_application_index", return_value=None
+    ):
+        result = gmail_sync_service.run_user_sync("u@test.com", mode="manual")
+    # Proceeded to completion despite no recurring consent (not short-circuited).
+    assert result["status"] == "completed"

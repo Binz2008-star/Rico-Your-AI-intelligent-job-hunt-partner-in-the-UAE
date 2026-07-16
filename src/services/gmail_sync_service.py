@@ -444,7 +444,13 @@ def run_fleet_sweep(
     message_cap: int = SWEEP_MESSAGE_CAP,
     time_budget_seconds: float = SWEEP_TIME_BUDGET_SECONDS,
 ) -> Dict[str, Any]:
-    """Bounded sweep over all active connections (cron-guarded endpoint).
+    """Bounded sweep over active connections that OPTED IN to recurring sync
+    (cron-guarded endpoint).
+
+    Consent gate (BLOCKER 2): list_active_connections only returns rows with
+    recurring_sync_consent granted — the OAuth read grant alone is never treated
+    as consent to recurring background sync. Manual, user-initiated sync
+    (run_user_sync) does not consult this and is unaffected.
 
     Per-user failures are isolated — one broken mailbox never stops the fleet.
     """

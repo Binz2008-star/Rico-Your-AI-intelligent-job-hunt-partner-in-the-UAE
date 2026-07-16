@@ -75,6 +75,8 @@ CHECKS: list[tuple[str, str, object]] = [
     ("043", "table", "gmail_audit_events"),
     ("043", "index", "uq_gmail_connections_active"),
     ("043", "constraint", "uq_gmail_review_items_user_message"),
+    # Per-user recurring-sync consent (fleet-sweep opt-in) — amended into 043.
+    ("043", "column", ("gmail_connections", "recurring_sync_consent_at")),
 ]
 
 

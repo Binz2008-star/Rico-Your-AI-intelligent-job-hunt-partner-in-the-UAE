@@ -26,6 +26,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
 from src.api.deps import get_current_user_id, require_cron_secret
 from src.api.rate_limit import LIMIT_INTEGRATIONS, LIMIT_INTEGRATIONS_SYNC, limiter
@@ -34,6 +35,13 @@ from src.repositories import gmail_repo
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/integrations/gmail", tags=["integrations"])
+
+
+class RecurringSyncConsentBody(BaseModel):
+    """Body for POST /consent. `granted` is the only field — identity is never
+    read from the body (JWT-only)."""
+
+    granted: bool
 
 _NOT_ENABLED_DETAIL = (
     "Gmail sync is not enabled on this deployment (RICO_ENABLE_GMAIL_SYNC=false)."
@@ -183,6 +191,41 @@ def gmail_disconnect(
 
     disconnected, revoked = disconnect(user_id)
     return {"disconnected": disconnected, "revoked_at_google": revoked}
+
+
+# ── Recurring-sync consent ────────────────────────────────────────────────────
+
+
+@router.post("/consent")
+@limiter.limit(LIMIT_INTEGRATIONS)
+def gmail_recurring_sync_consent(
+    request: Request,
+    body: RecurringSyncConsentBody,
+    user_id: str = Depends(get_current_user_id),
+) -> Dict[str, Any]:
+    """Grant or revoke recurring (fleet) sync consent for the current JWT user.
+
+    This is SEPARATE from the OAuth read grant (BLOCKER 2 / design §3): OAuth
+    read consent does NOT authorize recurring background sync — only rows with
+    this consent set are swept by /sync-all. Deliberately NOT gated by
+    RICO_ENABLE_GMAIL_SYNC: revoking is a privacy-reducing action that must
+    always be available, and granting merely records intent the fleet sweep
+    honors once sync is enabled. Requires an existing connection; identity is
+    JWT-only (the body carries the action, never a user id)."""
+    connection = gmail_repo.get_connection(user_id)
+    if not connection:
+        raise HTTPException(status_code=409, detail="Gmail is not connected.")
+    if not gmail_repo.set_recurring_sync_consent(user_id, body.granted):
+        raise HTTPException(status_code=500, detail="Could not update sync consent.")
+    gmail_repo.insert_audit_event(
+        user_id,
+        "recurring_sync_consent_granted"
+        if body.granted
+        else "recurring_sync_consent_revoked",
+        "ok",
+        connection_id=connection.get("id"),
+    )
+    return {"recurring_sync_consent": body.granted}
 
 
 # ── Sync ──────────────────────────────────────────────────────────────────────

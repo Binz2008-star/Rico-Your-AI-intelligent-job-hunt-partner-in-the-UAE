@@ -920,6 +920,18 @@ export async function syncGmail(): Promise<{ status: string; detail?: string }> 
   );
 }
 
+/** Grant or revoke recurring (fleet) sync consent — separate from the OAuth
+ * read grant. Manual `syncGmail()` never requires this; only the background
+ * fleet sweep honors it. */
+export async function setGmailRecurringSyncConsent(
+  granted: boolean,
+): Promise<{ recurring_sync_consent: boolean }> {
+  return requestJson<{ recurring_sync_consent: boolean }>(
+    "/api/v1/integrations/gmail/consent",
+    { method: "POST", body: JSON.stringify({ granted }) },
+  );
+}
+
 export async function getGmailReviewItems(
   signal?: AbortSignal,
 ): Promise<{ items: GmailReviewItem[] }> {

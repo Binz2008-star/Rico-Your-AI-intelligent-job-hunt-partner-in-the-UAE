@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 _CONNECTION_COLS = (
     "id, user_id, provider, provider_account_email, scopes, "
     "encrypted_refresh_token, token_encryption_key_version, status, "
-    "last_connected_at, last_refresh_at, last_sync_at, last_error, "
-    "created_at, updated_at"
+    "recurring_sync_consent_at, last_connected_at, last_refresh_at, "
+    "last_sync_at, last_error, created_at, updated_at"
 )
 
 
@@ -40,12 +40,13 @@ def _connection_row_to_dict(row: Any) -> Dict[str, Any]:
         "encrypted_refresh_token": row[5],
         "token_encryption_key_version": row[6],
         "status": row[7],
-        "last_connected_at": row[8],
-        "last_refresh_at": row[9],
-        "last_sync_at": row[10],
-        "last_error": row[11],
-        "created_at": row[12],
-        "updated_at": row[13],
+        "recurring_sync_consent_at": row[8],
+        "last_connected_at": row[9],
+        "last_refresh_at": row[10],
+        "last_sync_at": row[11],
+        "last_error": row[12],
+        "created_at": row[13],
+        "updated_at": row[14],
     }
 
 
@@ -85,7 +86,14 @@ def get_connection(user_id: str, provider: str = "gmail") -> Optional[Dict[str, 
 
 
 def list_active_connections(limit: int = 500) -> List[Dict[str, Any]]:
-    """All active connections — used by the cron fleet sweep."""
+    """Active connections that opted in to recurring sync — for the cron fleet
+    sweep ONLY.
+
+    The OAuth read grant is not consent to recurring background sync, so the
+    sweep is restricted to rows where ``recurring_sync_consent_at`` is set
+    (see design doc §3 "Sync Modes" and BLOCKER 2). Manual, user-initiated
+    sync does not use this method and does not require the consent.
+    """
     conn = get_db_connection()
     if not conn:
         return []
@@ -95,6 +103,7 @@ def list_active_connections(limit: int = 500) -> List[Dict[str, Any]]:
                 f"""SELECT {_CONNECTION_COLS}
                     FROM gmail_connections
                     WHERE status = 'active'
+                      AND recurring_sync_consent_at IS NOT NULL
                     ORDER BY last_sync_at ASC NULLS FIRST
                     LIMIT %s""",
                 (limit,),
@@ -252,6 +261,45 @@ def tombstone_connection(user_id: str, provider: str = "gmail") -> bool:
         return updated > 0
     except Exception:
         logger.exception("gmail_repo_tombstone_connection_failed user_id=%s", user_id)
+        _safe_rollback(conn)
+        return False
+    finally:
+        conn.close()
+
+
+def set_recurring_sync_consent(
+    user_id: str, granted: bool, provider: str = "gmail"
+) -> bool:
+    """Grant or revoke recurring (fleet) sync consent for the user's connection.
+
+    Consent is SEPARATE from the OAuth read grant — granting sets
+    ``recurring_sync_consent_at = NOW()``; revoking sets it back to NULL,
+    which immediately excludes the connection from the next fleet sweep
+    (list_active_connections). Only non-revoked rows are touched; imported
+    history and the encrypted token are untouched either way.
+
+    Returns True when a connection row was updated (i.e. the user had a
+    non-revoked connection to consent on).
+    """
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE gmail_connections
+                   SET recurring_sync_consent_at = CASE WHEN %s THEN NOW() ELSE NULL END,
+                       updated_at = NOW()
+                   WHERE user_id = %s AND provider = %s AND status != 'revoked'""",
+                (bool(granted), user_id, provider),
+            )
+            updated = cur.rowcount
+        conn.commit()
+        return updated > 0
+    except Exception:
+        logger.exception(
+            "gmail_repo_set_recurring_sync_consent_failed user_id=%s", user_id
+        )
         _safe_rollback(conn)
         return False
     finally:
