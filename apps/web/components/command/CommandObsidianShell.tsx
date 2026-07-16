@@ -74,6 +74,7 @@ export function CommandObsidianShell({
     children,
     leftRail,
     busy = false,
+    replying = false,
     leftOpen = true,
     rightOpen = true,
     onToggleLeft,
@@ -84,6 +85,8 @@ export function CommandObsidianShell({
     leftRail?: React.ReactNode;
     /** True while Rico is thinking/streaming — drives the top-bar status. */
     busy?: boolean;
+    /** A streamed reply is actively rendering (slice C2) — REPLYING status. */
+    replying?: boolean;
     leftOpen?: boolean;
     rightOpen?: boolean;
     onToggleLeft?: () => void;
@@ -184,10 +187,10 @@ export function CommandObsidianShell({
                 >
                     <span
                         aria-hidden="true"
-                        className={`h-1.5 w-1.5 rounded-full ${busy ? "animate-pulse" : ""}`}
-                        style={{ background: busy ? c.red : c.track }}
+                        className={`h-1.5 w-1.5 rounded-full ${busy || replying ? "animate-pulse" : ""}`}
+                        style={{ background: busy || replying ? c.red : c.track }}
                     />
-                    {busy ? t("cmdStatusWorking") : t("cmdStatusReady")}
+                    {replying ? t("cmdStatusReplying") : busy ? t("cmdStatusWorking") : t("cmdStatusReady")}
                 </span>
                 <span className="ms-2 inline-flex items-center overflow-hidden rounded-[3px]" style={{ border: `1px solid ${c.hair}` }}>
                     <button

@@ -184,18 +184,45 @@ describe("C1 no-regression — real CommandPage over network fixtures", () => {
         expect(log.queryByText(/^Salam — checking your profile now\.$/)).not.toBeInTheDocument();
     });
 
-    it("stop/cancel aborts a hung stream → real timeout error with Retry", async () => {
+    it("deliberate Stop preserves partial streamed content and shows the stopped row + Retry (C2)", async () => {
+        let sse!: ReturnType<typeof manualSSE>;
+        streamHandlers.push((init) => {
+            sse = manualSSE(init?.signal);
+            return sse.response;
+        });
+        const log = await mountAuthenticated();
+
+        await sendText("Hello Rico");
+        await screen.findByTestId("cancel-button");
+
+        // Partial streamed content arrives, then the user deliberately stops.
+        sse.push({ type: "token", text: "Here is the start of a long answer" });
+        await log.findByText("Here is the start of a long answer");
+        fireEvent.click(screen.getByTestId("cancel-button"));
+
+        // Canonical stopped presentation — NOT the timeout error:
+        await screen.findByTestId("transcript-stopped-row");
+        await log.findByText(/you stopped this reply/i);
+        expect(log.queryByText(/taking longer than usual/i)).not.toBeInTheDocument();
+        // Partial content is preserved and finalized (caret gone):
+        expect(log.getByText("Here is the start of a long answer")).toBeInTheDocument();
+        expect(screen.queryByTestId("transcript-streaming-caret")).not.toBeInTheDocument();
+        // Real Retry affordance:
+        await screen.findByLabelText(/retry/i);
+        expect(screen.queryByTestId("cancel-button")).not.toBeInTheDocument();
+    });
+
+    it("stop before any token yields the no-partial stopped row (C2)", async () => {
         streamHandlers.push((init) => manualSSE(init?.signal).response); // hangs until abort
         const log = await mountAuthenticated();
 
         await sendText("Hello Rico");
-        const stop = await screen.findByTestId("cancel-button");
-        fireEvent.click(stop);
+        fireEvent.click(await screen.findByTestId("cancel-button"));
 
-        // Real AbortError path: timeout-style message flagged retryable
-        await log.findByText(/taking longer than usual/i);
+        await screen.findByTestId("transcript-stopped-row");
+        await log.findByText(/^You stopped this reply\.$/);
+        expect(log.queryByText(/taking longer than usual/i)).not.toBeInTheDocument();
         await screen.findByLabelText(/retry/i);
-        expect(screen.queryByTestId("cancel-button")).not.toBeInTheDocument();
     });
 
     it("retry after a network error resends the same text and succeeds", async () => {
