@@ -49,13 +49,14 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
         price_monthly: 21.50,
         currency: "USD",
         description: "Smart AI job hunting for active UAE professionals.",
+        // Must match src/subscription_plans.py RICO_MONTHLY_PLAN.features (issue #1067).
         features: [
-            "Unlimited CV analysis",
+            "300 AI messages per month",
+            "20 CV & profile optimizations per month",
             "Smart AI role recommendations",
             "Advanced match scoring",
             "Saved searches",
             "Priority support",
-            "Higher daily job limits",
         ],
         entitlements: {
             monthly_ai_message_limit: 300,
@@ -80,13 +81,15 @@ const PLAN_DESC_KEY: Record<string, TranslationKey> = {
     "Smart AI job hunting for active UAE professionals.": "planProDesc",
 };
 
+// Keys MUST equal the backend feature strings (src/subscription_plans.py) so
+// API-returned plans localize correctly (issue #1067).
 const PLAN_FEATURE_KEY: Record<string, TranslationKey> = {
-    "Unlimited CV analysis": "planFeatureUnlimitedCV",
+    "300 AI messages per month": "planFeatureAiMessages",
+    "20 CV & profile optimizations per month": "planFeatureCvAnalysis",
     "Smart AI role recommendations": "planFeatureSmartRec",
     "Advanced match scoring": "planFeatureAdvancedScoring",
     "Saved searches": "planFeatureSavedSearches",
     "Priority support": "planFeaturePrioritySupport",
-    "Higher daily job limits": "planFeatureHigherLimits",
 };
 
 // ── Internal sub-components ───────────────────────────────────────────────────
@@ -374,9 +377,9 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
             name: t("planProName"),
             description: t("planProDesc"),
             features: [
-                t("planFeatureUnlimitedCV"), t("planFeatureSmartRec"),
-                t("planFeatureAdvancedScoring"), t("planFeatureSavedSearches"),
-                t("planFeaturePrioritySupport"), t("planFeatureHigherLimits"),
+                t("planFeatureAiMessages"), t("planFeatureCvAnalysis"),
+                t("planFeatureSmartRec"), t("planFeatureAdvancedScoring"),
+                t("planFeatureSavedSearches"), t("planFeaturePrioritySupport"),
             ],
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -288,20 +288,13 @@ export const translations = {
     subscriptionPortalFailed: "Failed to open subscription portal. Please try again.",
     planProName: "Pro",
     planProDesc: "Smart AI job hunting for active UAE professionals.",
-    planPremiumName: "Premium",
-    planPremiumDesc: "Full automation and premium AI recommendations.",
-    planFeatureUnlimitedCV: "Unlimited CV analysis",
+    // Rico Monthly bullets — must match src/subscription_plans.py (issue #1067).
+    planFeatureAiMessages: "300 AI messages per month",
+    planFeatureCvAnalysis: "20 CV & profile optimizations per month",
     planFeatureSmartRec: "Smart AI role recommendations",
     planFeatureAdvancedScoring: "Advanced match scoring",
     planFeatureSavedSearches: "Saved searches",
     planFeaturePrioritySupport: "Priority support",
-    planFeatureHigherLimits: "Higher daily job limits",
-    planFeatureEverythingPro: "Everything in Pro",
-    planFeatureAutoApply: "Auto-apply system",
-    planFeaturePriorityAI: "Priority AI ranking",
-    planFeatureAdvancedAuto: "Advanced job automation",
-    planFeaturePremiumPipelines: "Premium job pipelines",
-    planFeatureRecruiter: "Recruiter visibility (coming soon)",
 
     // Landing page
     landingIntelligenceCvProfileExtraction: "CV profile extraction",
@@ -333,25 +326,6 @@ export const translations = {
     landingLiveMatch3Role: "Backend Automation Architect",
     landingLiveMatch3Signal: "Compensation momentum",
 
-    // Subscription fallback plans
-    fallbackProName: "Pro",
-    fallbackProDescription:
-      "Smart AI job hunting for active UAE professionals.",
-    fallbackProFeature1: "Unlimited CV analysis",
-    fallbackProFeature2: "Smart AI role recommendations",
-    fallbackProFeature3: "Advanced match scoring",
-    fallbackProFeature4: "Saved searches",
-    fallbackProFeature5: "Priority support",
-    fallbackProFeature6: "Higher daily job limits",
-    fallbackPremiumName: "Premium",
-    fallbackPremiumDescription:
-      "Full automation and premium AI recommendations.",
-    fallbackPremiumFeature1: "Everything in Pro",
-    fallbackPremiumFeature2: "Auto-apply system",
-    fallbackPremiumFeature3: "Priority AI ranking",
-    fallbackPremiumFeature4: "Advanced job automation",
-    fallbackPremiumFeature5: "Premium job pipelines",
-    fallbackPremiumFeature6: "Recruiter visibility (coming soon)",
     pricingMonthShort: "/mo",
 
     // Landing page hero
@@ -379,32 +353,6 @@ export const translations = {
     landingSectionPricingBody:
       "Start free with 50 AI messages and 10 saved jobs. Upgrade when you need more.",
     landingSectionStartFree: "Start free",
-
-    // Landing page pricing block
-    landingPricingPopular: "Popular",
-    landingPricingPro: "Pro",
-    landingPricingProPrice: "AED 29",
-    landingPricingPerMonth: "/month",
-    landingPricingProFeature1: "300 AI messages per month",
-    landingPricingProFeature2: "100 saved jobs",
-    landingPricingProFeature3: "20 profile optimisations per month",
-    landingPricingProFeature4: "Smart AI role recommendations",
-    landingPricingProFeature5: "Advanced match scoring",
-    landingPricingUpgradeToPro: "Upgrade to Pro",
-    landingPricingPremium: "Premium",
-    landingPricingPremiumPrice: "AED 49",
-    landingPricingPremiumFeature1: "Everything in Pro",
-    landingPricingPremiumFeature2: "Auto-apply system",
-    landingPricingPremiumFeature3: "Priority AI ranking",
-    landingPricingPremiumFeature4: "Advanced job automation",
-    landingPricingPremiumFeature5: "Premium job pipelines",
-    landingPricingPremiumFeature6: "1500 AI messages per month",
-    landingPricingPremiumFeature7: "Unlimited saved jobs",
-    landingPricingPremiumFeature8: "100 profile optimisations per month",
-    landingPricingPremiumFeature9: "Premium recommendations",
-    landingPricingUpgradeToPremium: "Upgrade to Premium",
-    landingPricingFreePlanDesc:
-      "50 AI messages · 10 saved jobs · 1 profile optimisation/mo",
 
     // Landing page footer
     landingFooterTerms: "Terms",
@@ -1539,20 +1487,13 @@ export const translations = {
     subscriptionPortalFailed: "فشل فتح بوابة الاشتراك. يرجى المحاولة مرة أخرى.",
     planProName: "برو",
     planProDesc: "بحث ذكي عن وظائف في الإمارات للمحترفين النشطين.",
-    planPremiumName: "بريميوم",
-    planPremiumDesc: "أتمتة كاملة وتوصيات ذكاء اصطناعي متميزة.",
-    planFeatureUnlimitedCV: "تحليل سيرة ذاتية غير محدود",
+    // Rico Monthly bullets — must match src/subscription_plans.py (issue #1067).
+    planFeatureAiMessages: "٣٠٠ رسالة ذكاء اصطناعي شهريًا",
+    planFeatureCvAnalysis: "٢٠ تحسينًا للسيرة والملف الشخصي شهريًا",
     planFeatureSmartRec: "توصيات ذكية للأدوار المناسبة",
     planFeatureAdvancedScoring: "تقييم تطابق متقدم",
     planFeatureSavedSearches: "عمليات البحث المحفوظة",
     planFeaturePrioritySupport: "دعم ذو أولوية",
-    planFeatureHigherLimits: "حدود وظائف يومية أعلى",
-    planFeatureEverythingPro: "كل مزايا برو",
-    planFeatureAutoApply: "نظام التقديم التلقائي",
-    planFeaturePriorityAI: "ترتيب ذكاء اصطناعي بأولوية",
-    planFeatureAdvancedAuto: "أتمتة متقدمة للوظائف",
-    planFeaturePremiumPipelines: "مسارات وظائف متميزة",
-    planFeatureRecruiter: "ظهور للمُجنِّدين (قريبًا)",
 
     // Landing page
     landingIntelligenceCvProfileExtraction:
@@ -1585,24 +1526,6 @@ export const translations = {
     landingLiveMatch3Role: "مهندس أتمتة الخلفية",
     landingLiveMatch3Signal: "زخم التعويض",
 
-    // Subscription fallback plans
-    fallbackProName: "احترافي",
-    fallbackProDescription:
-      "البحث الذكي عن الوظائف باستخدام الذكاء الاصطناعي للمحترفين النشطين في الإمارات.",
-    fallbackProFeature1: "تحليل سيرة ذاتية غير محدود",
-    fallbackProFeature2: "توصيات أدوار ذكية بالذكاء الاصطناعي",
-    fallbackProFeature3: "نظام مطابقة متقدم",
-    fallbackProFeature4: "عمليات بحث محفوظة",
-    fallbackProFeature5: "دعم أولوية",
-    fallbackProFeature6: "حدود وظائف يومية أعلى",
-    fallbackPremiumName: "مميز",
-    fallbackPremiumDescription: "أتمتة كاملة وتوصيات مميزة بالذكاء الاصطناعي.",
-    fallbackPremiumFeature1: "كل ما في الاحترافي",
-    fallbackPremiumFeature2: "نظام التقديم التلقائي",
-    fallbackPremiumFeature3: "ترتيب أولوية الذكاء الاصطناعي",
-    fallbackPremiumFeature4: "أتمتة وظائف متقدمة",
-    fallbackPremiumFeature5: "خطوط وظائف مميزة",
-    fallbackPremiumFeature6: "رؤية المسؤولين عن التوظيف (قريبًا)",
     pricingMonthShort: "/شهر",
 
     // Landing page hero
@@ -1628,32 +1551,6 @@ export const translations = {
     landingSectionPricingBody:
       "ابدأ مجانًا مع 50 رسالة ذكاء اصطناعي و 10 وظائف محفوظة. ترق عندما تحتاج المزيد.",
     landingSectionStartFree: "ابدأ مجانًا",
-
-    // Landing page pricing block
-    landingPricingPopular: "الأكثر شعبية",
-    landingPricingPro: "احترافي",
-    landingPricingProPrice: "29 درهم",
-    landingPricingPerMonth: "/شهر",
-    landingPricingProFeature1: "300 رسالة ذكاء اصطناعي شهريًا",
-    landingPricingProFeature2: "100 وظيفة محفوظة",
-    landingPricingProFeature3: "20 تحسين ملف شخصي شهريًا",
-    landingPricingProFeature4: "توصيات أدوار ذكية بالذكاء الاصطناعي",
-    landingPricingProFeature5: "نظام مطابقة متقدم",
-    landingPricingUpgradeToPro: "ترقية إلى احترافي",
-    landingPricingPremium: "مميز",
-    landingPricingPremiumPrice: "49 درهم",
-    landingPricingPremiumFeature1: "كل ما في الاحترافي",
-    landingPricingPremiumFeature2: "نظام التقديم التلقائي",
-    landingPricingPremiumFeature3: "ترتيب أولوية الذكاء الاصطناعي",
-    landingPricingPremiumFeature4: "أتمتة وظائف متقدمة",
-    landingPricingPremiumFeature5: "خطوط وظائف مميزة",
-    landingPricingPremiumFeature6: "1500 رسالة ذكاء اصطناعي شهريًا",
-    landingPricingPremiumFeature7: "وظائف محفوظة غير محدودة",
-    landingPricingPremiumFeature8: "100 تحسين ملف شخصي شهريًا",
-    landingPricingPremiumFeature9: "توصيات مميزة",
-    landingPricingUpgradeToPremium: "ترقية إلى مميز",
-    landingPricingFreePlanDesc:
-      "50 رسالة ذكاء اصطناعي · 10 وظائف محفوظة · 1 تحسين ملف شخصي/شهر",
 
     // Landing page footer
     landingFooterTerms: "الشروط",
