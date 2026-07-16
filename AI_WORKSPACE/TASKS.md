@@ -2115,20 +2115,37 @@ Task            TASK-20260716-001 (this entry)
   - Test-order pollution fixed (auth test 500 → pass)
   - 26 connector tests pass, 540 vitest pass, frontend build green
   - GitHub required CI all green on head `dd595a3b`
-- What is incomplete: owner review and approval; merge (owner-gated)
-- Known blockers: none (Google restricted-scope verification is post-merge)
+- What is incomplete: the 3 P1 review blockers below; independent security/privacy
+  review; isolated migration-043 verification; limited real-account OAuth test.
+  #1055 is a real GitHub **Draft** (converted back per the containment decision).
+- Known blockers (P1, logged on #1055 @ `dd595a3b` — MUST fix before merge):
+  1. **Privacy/revocation:** with `RICO_ENABLE_GMAIL_SYNC` off, `/status` reports
+     `connected:false` even when an active connection/encrypted token still exists —
+     it hides a live connection the user cannot see or manage.
+  2. **Consent/scope:** `/sync-all` → `run_fleet_sweep()` → `list_active_connections()`
+     selects EVERY `status='active'` row; migration 043 has no per-user daily/
+     background-sync consent field. OAuth read-consent is not, by itself, an opt-in
+     to recurring fleet sync (secret-gated + master-flag-off is good, but there is no
+     per-user consent boundary once enabled).
+  3. **Trust/idempotency:** review-item approval is a non-atomic check-then-mutate
+     sequence (concurrent approvals can double-apply / race).
 - Validation already run:
   - `pytest tests/test_gmail_connector_m0.py` → 26/26 passed
-  - `pytest tests/test_gmail_pagination_bounds.py` → 8/8 passed
+  - `pytest tests/test_gmail_pagination_bounds.py` → 8/8 passed (bounded-pagination fix)
   - `pytest tests/unit/test_migration_drift_checks.py` → 5/5 passed
-  - `npm run build` → 41/41 pages generated
-  - `npm test -- --run` → 540/540 passed
-  - `pytest tests/` → 6996 passed, 19 failed (all pre-existing on main)
-  - GitHub CI (pytest, build, vitest, Playwright, Postgres, Vercel) → all green
-- Validation still required: none (owner review is next)
-- Deployment/CI/Neon/Vercel state to check next: none until owner approves merge
-- Next exact action: owner reviews PR #1055; on approval, merge; then provision
-  secrets + apply migration 043 + enable flag (separate steps, owner-gated)
+  - `npm run build` → 41/41 pages · `npm test -- --run` → 540/540 · CI green
+- **Merge gates (all required before leaving Draft / merging):**
+  - Fix the 3 P1 blockers above (add tests for each).
+  - Independent security/privacy review (not the author).
+  - Isolated migration-043 verification on a throwaway Neon branch (apply + drift check).
+  - Limited real-account OAuth test with a small tester allowlist.
+- **Activation gates (SEPARATE — only after merge, owner-gated, do NOT bundle with merge):**
+  - Google restricted-scope verification / CASA for `gmail.readonly` on the public domain.
+  - Provision `GMAIL_TOKEN_ENCRYPTION_KEY` + Google OAuth creds in Render.
+  - Apply migration 043 to Neon production.
+  - Add a per-user recurring-sync consent field/flow before enabling `/sync-all`.
+  - Flip `RICO_ENABLE_GMAIL_SYNC=true` last, per-cohort.
+- Next exact action: address the 3 P1 blockers + evidence the merge gates; keep Draft.
 - Stop condition: do not merge, deploy, apply migration, provision secrets, or
   enable `RICO_ENABLE_GMAIL_SYNC` without explicit owner approval
 - Rollback plan: revert commits `dd595a3b`..`afc36288` on the branch; no

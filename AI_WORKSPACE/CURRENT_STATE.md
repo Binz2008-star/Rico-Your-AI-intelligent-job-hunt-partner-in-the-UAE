@@ -40,16 +40,20 @@
 > all verified) · #1060 Atelier `/command` re-skin + reply rendering · #1059 the
 > DEC docs · #1061 composer gradient fade.
 >
-> **Open PRs:** #1062 Atelier MATCH job cards (CI green-ish; merging) · #1055
-> **Gmail M0 read-only connector** (draft — first-party OAuth, migration 043,
-> Fernet tokens, `RICO_ENABLE_GMAIL_SYNC=false`; awaiting Google restricted-scope
-> verification) · #1025 **Memory Engine M1** (draft — reconciled with main,
-> shadow-only, flag OFF, paused pending evidence).
+> **Open PRs:** #1062 Atelier MATCH job cards (CI-green but **HELD** — design work
+> frozen under the containment posture until source-of-truth is unified; owner also
+> logged Atelier colour/AR/test gaps on it) · #1055 **Gmail M0 read-only connector**
+> (real **Draft** — first-party OAuth, migration 043, Fernet tokens,
+> `RICO_ENABLE_GMAIL_SYNC=false`; **3 P1 review blockers open** + awaiting Google
+> restricted-scope verification — see `TASKS.md TASK-20260716-001`) · #1025
+> **Memory Engine M1** (draft — reconciled with main, shadow-only, flag OFF, paused
+> pending evidence).
 >
-> **Coordination note:** a parallel editor ("Windsurf") has **uncommitted** local
-> edits to `TASKS.md` (a Gmail M0 task entry) and `ENGINEERING_ROADMAP.md`, plus an
-> untracked `03-design-preview-1-.pdf`; those were left untouched by this sync
-> (this commit touches only `CURRENT_STATE.md`).
+> **Coordination note:** the parallel-editor ("Windsurf") edits to `TASKS.md` (the
+> Gmail M0 task) and `ENGINEERING_ROADMAP.md` (Phase-4 Gmail entry) were
+> **incorporated into the reconciliation PR #1063** (merged `cd5a54af`), not left
+> uncommitted — Windsurf should not re-push them. The owner's local
+> `03-design-preview-1-.pdf` remains untracked (reference archive).
 >
 > **Not activated / paused:** Paddle billing (pending Sandbox secret rotation +
 > isolated lifecycle test) · Gmail sync (flag OFF) · Memory M1 (flag OFF). Docs-only

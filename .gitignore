@@ -1,13 +1,18 @@
 # Environment variables with sensitive data.
-# Broad *.env catch-all so NO env file (e.g. rico-job-automation-api.env,
-# production.env) can ever be committed by accident; only *.example templates
-# are allowed through. Keep the explicit lines below for clarity/tooling.
+# Block EVERY env-file variant so nothing with real credentials can be committed
+# by accident — names ending in .env (rico-job-automation-api.env, production.env),
+# .env.* suffixes (.env.production, .env.development, .env.staging), and any
+# other-extension variant (service.env.bak, config.env.backup). Only *.example
+# templates are allowed through (negations MUST stay after the ignore patterns).
 *.env
-!*.env.example
-!.env.example
 .env
-.env.local
-.env.*.local
+.env.*
+*.env.*
+# ── keep committed example templates trackable ──────────────────────────────
+!.env.example
+!*.env.example
+!.env.*.example
+!*.env.*.example
 
 # Docker Compose overrides for local development
 docker-compose.override.yml
