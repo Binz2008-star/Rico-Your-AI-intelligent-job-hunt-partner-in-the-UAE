@@ -117,6 +117,46 @@ def _verify_paddle_signature(
 # Webhook endpoint
 # ---------------------------------------------------------------------------
 
+# Paddle webhook events are small JSON (a few KB). Cap the unauthenticated body
+# well below any legitimate size so a network client cannot force each worker to
+# buffer a large payload before the signature is even checked. (#1073)
+_MAX_WEBHOOK_BODY_BYTES = 256 * 1024  # 256 KB
+
+
+async def _read_bounded_body(request: Request, max_bytes: int) -> bytes:
+    """Read the request body, rejecting anything over ``max_bytes`` with 413.
+
+    Rejects an over-limit declared Content-Length immediately, and also counts
+    the actually-streamed bytes so a missing/false length or chunked transfer
+    cannot bypass the cap. Returns the exact bytes for HMAC verification — never
+    parsed or re-serialized before the signature is checked. (#1073)
+    """
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:
+            declared_len = int(declared)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Content-Length"
+            )
+        if declared_len > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail="Webhook body too large",
+            )
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail="Webhook body too large",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @router.post("/paddle/webhook", include_in_schema=False)
 async def paddle_webhook(request: Request) -> JSONResponse:
     """Receive and process Paddle webhook events.
@@ -125,7 +165,7 @@ async def paddle_webhook(request: Request) -> JSONResponse:
     - Guards idempotency via paddle_webhook_events table.
     - Always returns 200 to Paddle (prevents unneeded retries for non-retryable errors).
     """
-    raw_body = await request.body()
+    raw_body = await _read_bounded_body(request, _MAX_WEBHOOK_BODY_BYTES)
     sig_header = request.headers.get("Paddle-Signature")
 
     if not _verify_paddle_signature(raw_body, sig_header):
