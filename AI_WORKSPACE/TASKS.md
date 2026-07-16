@@ -78,7 +78,7 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
-### TASK-20260715-001 — Atelier slice 4b: /command message bubbles + empty state
+### TASK-20260715-002 — Atelier slice 4b: /command message bubbles + empty state
 
 Status: review
 Owner: Claude (WRITER; Coder pass, owner-directed)
@@ -93,7 +93,7 @@ Atelier direction (typography-first per the in-repo reference
 
 #### Continuity Block
 
-- Task ID: TASK-20260715-001
+- Task ID: TASK-20260715-002
 - GitHub issue/PR: draft PR from `feat/atelier-command-message-bubbles-empty-state`
 - Branch: `feat/atelier-command-message-bubbles-empty-state`
 - Base branch: main
@@ -2020,5 +2020,151 @@ Three compounding issues:
 - Risks: `_force_ai` gate is additive; authenticated users and public users with profiles
   are unaffected. Rollback: revert `_force_ai` conditional in `send_message`.
 - Open: #653 sidebar retry still draft; unrelated to BUG-05.
+
+---
+
+### TASK-20260716-001 — Gmail M0 read-only connector
+
+Status: review
+Owner: Windsurf (REVIEWER → WRITER for blocker fixes)
+Branch: `feat/gmail-readonly-connector-m0`
+Issue/PR: #1055 (draft)
+
+#### Objective
+
+First-party OAuth Gmail read-only connector (M0): connect, bounded inbox sync,
+recruiter-thread detection wired into existing review machinery. Everything OFF
+by default behind `RICO_ENABLE_GMAIL_SYNC=false`.
+
+#### Roadmap traceability
+
+```text
+Vision          AI_WORKSPACE/PROJECT_BRIEF.md — UAE-focused career companion
+   ↓
+Epic            Career Operating System
+   ↓
+Milestone       Email Integration
+   ↓
+Phase           4 — Lifecycle Intelligence
+   ↓
+PR              #1055 — Gmail read-only connector M0
+   ↓
+Task            TASK-20260716-001 (this entry)
+```
+
+#### Continuity Block
+
+- Task ID: TASK-20260716-001
+- GitHub issue/PR: #1055 (draft)
+- Branch: `feat/gmail-readonly-connector-m0`
+- Base branch: main (`f2267b37`)
+- Last safe commit SHA: `f2267b37` (main at branch cut)
+- Current head SHA: `dd595a3b`
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: `src/gmail_importer.py`, `src/services/gmail_sync_service.py`,
+  `src/services/gmail_oauth.py`, `src/services/token_crypto.py`,
+  `src/api/routers/integrations_gmail.py`, `src/repositories/gmail_repo.py`,
+  `migrations/043_gmail_connections.sql`, `scripts/check_migration_drift.py`,
+  `render.yaml`, `src/api/app.py`, `src/api/rate_limit.py`,
+  `tests/test_gmail_connector_m0.py`, `tests/test_users_auth.py`
+- Files changed:
+  - `scripts/check_migration_drift.py` — registered 043 signature objects
+  - `src/services/gmail_sync_service.py` — bounded pagination (`_fetch_messages_bounded`)
+  - `tests/test_gmail_pagination_bounds.py` — 8 new pagination/budget tests
+  - `tests/test_users_auth.py` — JWT_SECRET 32+ chars in production-mode test
+  - `.github/workflows/gmail-sync.yml` — removed (fleet activation is later PR)
+  - All other files are from the original PR branch
+- Files intentionally not touched: `requirements.txt` (deps already present),
+  `docs/integrations/gmail-readonly-connector.md` (design doc, not code)
+- What is complete:
+  - Branch re-anchored on main `f2267b37`
+  - `gmail-sync.yml` removed
+  - Migration 043 drift checks registered + 5 regression tests pass
+  - Bounded listing: deadline, 10-page cap, 500-candidate cap, repeated-token guard
+  - 8 pagination/budget tests pass
+  - Test-order pollution fixed (auth test 500 → pass)
+  - 26 connector tests pass, 540 vitest pass, frontend build green
+  - GitHub required CI all green on head `dd595a3b`
+- What is incomplete: owner review and approval; merge (owner-gated)
+- Known blockers: none (Google restricted-scope verification is post-merge)
+- Validation already run:
+  - `pytest tests/test_gmail_connector_m0.py` → 26/26 passed
+  - `pytest tests/test_gmail_pagination_bounds.py` → 8/8 passed
+  - `pytest tests/unit/test_migration_drift_checks.py` → 5/5 passed
+  - `npm run build` → 41/41 pages generated
+  - `npm test -- --run` → 540/540 passed
+  - `pytest tests/` → 6996 passed, 19 failed (all pre-existing on main)
+  - GitHub CI (pytest, build, vitest, Playwright, Postgres, Vercel) → all green
+- Validation still required: none (owner review is next)
+- Deployment/CI/Neon/Vercel state to check next: none until owner approves merge
+- Next exact action: owner reviews PR #1055; on approval, merge; then provision
+  secrets + apply migration 043 + enable flag (separate steps, owner-gated)
+- Stop condition: do not merge, deploy, apply migration, provision secrets, or
+  enable `RICO_ENABLE_GMAIL_SYNC` without explicit owner approval
+- Rollback plan: revert commits `dd595a3b`..`afc36288` on the branch; no
+  production impact (flag is OFF, migration not applied)
+
+---
+
+### TASK-20260716-002 — Career Memory Engine M1 (shadow, flag OFF)
+
+Status: blocked (paused — hold as draft pending shadow evidence)
+Owner: Claude (reconciled with main; independent review pending)
+Branch: `feat/memory-engine-m1`
+Issue/PR: #1025 (draft)
+
+#### Objective
+
+Additive career-memory substrate (M1): migration 042 (`career_memory_events` /
+`career_memory_facts`), a shadow `MemoryWriter` inside `agent_runtime.handle_action`
+(after the legacy write, own try/except — cannot change the action result), no
+`MemoryReader`, feature flag `RICO_MEMORY_ENGINE_ENABLED=false` + kill switch +
+circuit breaker. No user-visible behavior change.
+
+#### Roadmap traceability
+
+```text
+Vision          AI_WORKSPACE/PROJECT_BRIEF.md — trusted Career Operating System
+   ↓
+Epic            Career Operating System
+   ↓
+Milestone       Professional Memory
+   ↓
+Phase           4 — Lifecycle Intelligence
+   ↓
+PR              #1025 — Career Memory Engine M1 (shadow)
+   ↓
+Task            TASK-20260716-002 (this entry)
+```
+
+#### Continuity Block
+
+- Task ID: TASK-20260716-002
+- GitHub issue/PR: #1025 (draft)
+- Branch: `feat/memory-engine-m1`
+- Base branch: main
+- Last safe commit SHA: `b37ad583` (merge of origin/main into the branch, 0 conflicts)
+- Uncommitted changes present: no
+- Status: blocked (paused as draft — owner directive: do not activate until
+  shadow evidence proves the stored memory is reliable; no `MemoryReader` and no
+  change to Rico's answers before then)
+- Files inspected: `migrations/042_career_memory_engine.sql`,
+  `src/services/memory_writer.py` (path per branch: repo layer + fact history),
+  `src/agent/runtime.py`, `src/api/app.py`, `scripts/check_migration_drift.py`,
+  `tests/test_memory_engine_m1.py`
+- Validation already run: `test_memory_engine_m1` 38/38; legacy memory + runtime
+  suites 74/74; postgres integration correctly gated (skipped without DATABASE_URL);
+  migration 042 confirmed next-free (after 041); drift signatures match objects
+- Invariants verified: flag OFF default + kill switch + circuit breaker; shadow-only
+  (write never raises); no `MemoryReader` anywhere; `public:*` sessions never merge
+  into accounts. Caveat: `_EXCLUDED_KEY_RE` matches payload KEYS not values (safe
+  today because the shadow payload is minimized to action/title/company/job_key/surface)
+- Next exact action: keep DRAFT + flag OFF; independent review; measure shadow
+  writes (failures/duplication/drift) before any MemoryReader or activation
+- Stop condition: do not merge, activate the flag, or add a MemoryReader without
+  explicit owner approval + shadow-evidence review
+- Rollback plan: revert PR; migration 042 is additive (code tolerates the schema);
+  flag OFF means no runtime path exercises it
 
 ---

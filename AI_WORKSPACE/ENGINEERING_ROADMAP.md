@@ -114,11 +114,26 @@ Wire chat to what is already persisted — almost no new logic, just connection.
   not yet reachable from chat.
 - Constraint: reuse existing lifecycle reads; verify-first; synthetic data only.
 
-### Phase 4 — Lifecycle Intelligence ⬜
+### Phase 4 — Lifecycle Intelligence 🔵 (Gmail M0 in build)
 
 Rico stops being only a keeper and starts following up with the user, e.g.
 "You applied 6 days ago — prepare a follow-up email?" / "You opened this job
 three times — want to apply?"
+
+- In build: **#1055** — Gmail read-only connector M0 (first-party OAuth,
+  `gmail.readonly` scope, Fernet-encrypted refresh tokens, bounded inbox sync,
+  propose-only review items, `RICO_ENABLE_GMAIL_SYNC=false`).
+  Design doc: `docs/integrations/gmail-readonly-connector.md`.
+  Milestone: Email Integration. M1 = AI-drafted follow-ups (no `gmail.compose`).
+  M2 = Outlook via Microsoft Graph.
+
+```text
+EPIC        Career Operating System
+  └ Milestone   Email Integration
+      └ Phase       Lifecycle Intelligence (Phase 4)
+          └ PR          #1055 — Gmail read-only connector M0
+              └ Task        Gmail-M0-connector
+```
 
 ### Phase 5 — UX Facelift ⬜
 
