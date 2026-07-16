@@ -208,3 +208,69 @@ def test_public_chat_registered_quota_gate_blocks(client, monkeypatch):
 def test_public_chat_requires_session_or_email(client):
     res = client.post("/api/v1/rico/chat/public", json={"message": "hello"})
     assert res.status_code == 422
+
+
+# ── FIX 3: DOCX decompression bomb ────────────────────────────────────────────
+
+class _FakeInfo:
+    def __init__(self, size):
+        self.file_size = size
+
+
+def test_parse_docx_rejects_decompression_bomb(monkeypatch):
+    import src.cv_parser as cv_parser
+
+    class _BombZip:
+        def __init__(self, *a, **k):
+            pass
+
+        def infolist(self):
+            # 500 MB declared uncompressed — well over the 200 MB cap.
+            return [_FakeInfo(500 * 1024 * 1024)]
+
+    monkeypatch.setattr(cv_parser.zipfile, "ZipFile", _BombZip)
+
+    parser = cv_parser.CVParser()
+    # Tiny compressed payload, huge declared inflation → rejected (empty text),
+    # and crucially python-docx is never invoked to inflate it.
+    assert parser._parse_docx(b"tiny-bytes") == ""
+
+
+def test_parse_docx_rejects_high_ratio_bomb(monkeypatch):
+    import src.cv_parser as cv_parser
+
+    class _RatioZip:
+        def __init__(self, *a, **k):
+            pass
+
+        def infolist(self):
+            # 15 MB inflated from ~10 bytes → ratio far above the ceiling, and
+            # total above the 10 MB floor that guards the ratio branch.
+            return [_FakeInfo(15 * 1024 * 1024)]
+
+    monkeypatch.setattr(cv_parser.zipfile, "ZipFile", _RatioZip)
+
+    parser = cv_parser.CVParser()
+    assert parser._parse_docx(b"0123456789") == ""
+
+
+def test_parse_docx_accepts_normal_document():
+    from docx import Document
+
+    from src.cv_parser import CVParser
+
+    # Build a real, small, legitimate .docx in memory.
+    doc = Document()
+    doc.add_paragraph("Jane Candidate")
+    doc.add_paragraph("Senior Backend Engineer with 8 years experience.")
+    buf = io.BytesIO()
+    doc.save(buf)
+    data = buf.getvalue()
+
+    # Sanity: it is a real zip and small.
+    assert zipfile.is_zipfile(io.BytesIO(data))
+    assert len(data) < 1024 * 1024
+
+    text = CVParser()._parse_docx(data)
+    assert "Jane Candidate" in text
+    assert "Senior Backend Engineer" in text
