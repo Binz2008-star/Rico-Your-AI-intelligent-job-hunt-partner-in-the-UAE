@@ -28,6 +28,116 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260716-001 — Atelier V3 is the sole production-wide visual system (marketing, auth, workspace, /command); "Atelier at Night" is its dark mode
+
+Status: accepted
+Date: 2026-07-16
+Owner: Roben (owner)
+Related task: TASK-20260714-001 (Atelier full-site migration)
+
+#### Context
+
+Two prior decisions split Rico's visual identity and then held it in a
+two-system limbo: `DEC-20260708-003` scoped **Atelier to marketing and Nocturne
+to the authenticated workspace** and explicitly forbade merging them;
+`DEC-20260709-006` accepted Atelier Console as the *candidate* workspace
+direction but for **preview/exploration only**, keeping Nocturne in production
+and Rico carrying two workspace design languages. Since then the Atelier system
+has matured to **V3** and the owner has decided Rico ships as **one coherent
+product**, not a collection of separately-styled surfaces. This decision
+retires the split and the preview-only limbo. It is a **design-system
+reconciliation only** — no production API, auth, upload, billing, persistence,
+streaming, or agent contract changes, and it authorizes no UI code by itself
+(Stage 1 is documentation; implementation follows the migration order below in
+separately-reviewed PRs).
+
+#### Decision
+
+1. **Atelier V3 is the single, sole current visual system across the entire
+   product** — public marketing, auth, the authenticated Career Workspace, and
+   **/command**. There is no longer a per-surface-class design split.
+2. **Dark mode is "Atelier at Night"** — the same Atelier V3 **semantic tokens**
+   rendered dark, not a separate design language. Any dark surface derives from
+   the shared token set; no parallel dark palette is authored.
+3. **This supersedes `DEC-20260708-003`** (the Atelier/marketing ÷
+   Nocturne/workspace boundary) and **supersedes `DEC-20260709-006`** (the
+   preview-only, two-systems-coexist stance). The "authenticated workspace =
+   Nocturne" boundary and the "Atelier is preview-only" limitation no longer
+   apply.
+4. **/command remains the canonical conversation route.** `/rico-preview`,
+   `/design-gallery`, and `/design-preview` remain **internal reference only**
+   (`noindex`, demo/sample data, actions disabled, not linked from production
+   navigation) — reference surfaces, never production.
+5. **Nocturne is historical/archive.** All Nocturne references (dark navy / gold
+   / aura tokens and classes) are marked historical; they are removed only in the
+   final migration step, one-for-one with the Atelier-at-Night replacement so
+   reverts stay clean (No Dead UI rule). Duplicate reference archives are
+   recorded (see below) so no live surface silently depends on them.
+6. **Migration order (foundation-first, /command last):**
+   1. **Foundation** — Atelier V3 semantic tokens + "Atelier at Night" dark set
+      as the single source of truth (`apps/web/app/_atelier/atelier-tokens.css`
+      and the workspace-theme context).
+   2. **Shared shell & controls** — the app shell, nav, and shared control
+      primitives adopt the V3 tokens.
+   3. **Low-risk workspace routes** — settings/profile/applications/jobs and
+      similar, per-route, smallest-PR-each.
+   4. **/command last** — the highest-traffic, highest-risk conversation surface
+      migrates only after the rest is stable. The in-flight `/command` slices
+      keep their **structure and behavior** and are **re-skinned** from Obsidian
+      acid-lime to the Atelier Console tokens (paper light + Atelier at Night,
+      sun-red) — a visual token swap, not a functional rebuild (see note).
+   5. **Visual QA** — EN/AR + RTL, light/dark, desktop/mobile parity pass across
+      all migrated routes.
+   6. **Remove legacy Nocturne tokens** — delete the archived Nocturne token set
+      once no surface references it.
+7. **Every production contract is preserved.** API, auth, upload, billing,
+   persistence, streaming, and agent-action contracts are unchanged by any step;
+   this is a visual-token migration only. Lovable / design-gallery / rico-preview
+   are **visual reference only** and never a source of behavior.
+
+**Duplicate reference archives (recorded, reference-only — not production):**
+`apps/web/app/design-gallery/` (+ `design-gallery/atelier/atelier.css`,
+`components/design-gallery/atelier-console/`), `apps/web/app/rico-preview/`,
+`apps/web/app/design-preview/`, and the design handoffs under
+`design-handoffs/reviewed/` (`rico-design-reference`, `command-concept-sandbox`,
+`2026-07-16-command-obsidian-v4`). These are internal `noindex` reference
+surfaces / handoff material; no production route may depend on them.
+
+**The Command Obsidian program (C1–C6) → Atelier re-skin (owner decision,
+2026-07-16):** the owner reviewed the Atelier design package (`/design-preview`)
+and decided **`/command` uses the Atelier Console skin** — the same paper +
+sun-red tokens as the rest of the product, with **Atelier at Night** for dark
+mode. **Obsidian's dark acid-lime is historical reference only.** The completed
+`/command` work is **preserved**: C1 (route-scoped token foundation), C2 (real
+event/transcript adapter), C3 (composer parity), and C4 (job intelligence MATCH
+cards) keep their **structure and behavior** — this is a **visual token re-skin,
+not a functional rebuild**. Because C1 already routes `/command` through the
+shared workspace-theme token context, the re-skin is primarily a token-value
+swap (Obsidian acid-lime / dark-canvas → Atelier paper light + Atelier-at-Night
+sun-red), sourced from the existing Atelier Console (`/rico-preview`,
+`/design-gallery`). **C4–C6 do not continue under Obsidian styling.** "Command
+Obsidian" as a visual identity is retired to historical reference; the program
+continues as the `/command` step of the Atelier V3 migration.
+
+#### Consequences
+
+- Positive: one coherent product identity end-to-end; a single semantic-token
+  source of truth; "merge the two systems" is now the goal, not a rejected
+  proposal; dark mode is derived, not duplicated.
+- Negative/trade-off: a real migration cost across every production route, and a
+  transition window where migrated (Atelier V3) and not-yet-migrated (legacy
+  Nocturne) routes coexist until the order completes.
+
+#### Follow-up
+
+- [ ] Execute the migration order above as separately-reviewed, smallest-PR-each
+      changes (Stage 2+). This decision authorizes no UI code.
+- [x] Confirm the `/command` skin — **owner decided 2026-07-16: Atelier Console
+      (paper + Atelier at Night, sun-red); Obsidian acid-lime is historical
+      reference only.** The completed C2/C3/C4 structure is preserved and
+      re-skinned via tokens.
+- [ ] Remove the archived Nocturne token set in the final step once unreferenced.
+
 ### DEC-20260713-005 — Replace Stripe with Paddle Billing; single-plan Rico Monthly USD 21.50/month
 
 Status: accepted
@@ -370,10 +480,19 @@ safe manual/WhatsApp mode, no security exposures). Full audit record:
 
 ### DEC-20260709-006 — Atelier Console is the candidate authenticated-workspace direction (preview/exploration only)
 
-Status: accepted
+Status: superseded (by DEC-20260716-001)
 Date: 2026-07-09
 Owner: Roben
 Related task: Atelier Console gallery reference (#924)
+
+> **Superseded by DEC-20260716-001 (2026-07-16):** this decision's
+> preview/exploration-only stance — Atelier as *candidate* workspace direction
+> while Nocturne stays in production and Rico carries two workspace design
+> languages — is retired. Atelier V3 is now the sole production-wide system
+> (dark mode "Atelier at Night"), production `/command` and the authenticated
+> workspace included. Retained for history only. (`/design-gallery` and
+> `/rico-preview` remain internal reference-only, as this decision already
+> required.)
 
 #### Context
 
@@ -550,17 +669,20 @@ until explicitly reprioritized. The TanStack implementation is not to be ported.
 
 ### DEC-20260708-003 — Design-system boundary: Atelier for marketing, Nocturne for the workspace
 
-Status: accepted (amended in part by DEC-20260709-006)
+Status: superseded (by DEC-20260716-001)
 Date: 2026-07-08
 Owner: Roben
 Related task: design-handoffs review (command-concept-sandbox)
 
-> **Amended by DEC-20260709-006 (2026-07-09):** the "authenticated workspace =
-> Nocturne" boundary below is amended for **preview/exploration only** — Atelier
-> Console is now the candidate workspace direction behind internal preview
-> surfaces (`/design-gallery`, `/rico-preview`). Nocturne remains the current
-> **production** workspace design until a separate approved replacement PR. This
-> boundary still governs all shipped/production surfaces.
+> **Superseded by DEC-20260716-001 (2026-07-16):** the Atelier/marketing ÷
+> Nocturne/workspace split below is retired. **Atelier V3 is now the sole
+> production-wide visual system** across marketing, auth, the authenticated
+> workspace, and `/command`; dark mode is "Atelier at Night" on the same
+> semantic tokens; Nocturne is historical/archive. This decision is retained for
+> history only.
+>
+> (Was previously amended for preview/exploration only by DEC-20260709-006,
+> which is itself now superseded by DEC-20260716-001.)
 
 #### Context
 
