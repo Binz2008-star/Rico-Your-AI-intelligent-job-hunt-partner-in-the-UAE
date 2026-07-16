@@ -12315,25 +12315,28 @@ class RicoChatAPI:
         try:
             from src.subscription_plans import RICO_MONTHLY_PLAN, resolve_effective_user_plan
             current_plan = resolve_effective_user_plan(user_id).subscription.plan.value
-            price_aed = RICO_MONTHLY_PLAN.price_monthly
+            price_usd = RICO_MONTHLY_PLAN.price_monthly
         except Exception:
             current_plan = "free"
-            price_aed = 79
+            price_usd = 21.50
 
+        # Entitlements must match src/subscription_plans.py (issue #1067): USD is
+        # the authoritative charge, AED 79 is a display reference, and no
+        # "unlimited"/premium promise may exceed the enforced limits.
         plans_msg = (
             f"ريكو يوفر خطة واحدة:\n"
-            f"• **Rico Monthly** — {price_aed} درهم/شهرياً (محادثات ذكاء اصطناعي غير محدودة، تنبيهات ذات أولوية، تحسين السيرة الذاتية، بحث محفوظ)\n\n"
+            f"• **Rico Monthly** — {price_usd:.2f} دولار شهريًا (ما يعادل تقريبًا 79 درهمًا): 300 رسالة ذكاء اصطناعي شهريًا، 100 وظيفة محفوظة، 20 تحسينًا للسيرة والملف الشخصي شهريًا، تنبيهات وظائف، بحث محفوظ\n\n"
             "اشترك على ricohunt.com/subscription أو اسألني للتفاصيل."
             if self._is_arabic_text(message) else
             f"Rico has one plan:\n"
-            f"• **Rico Monthly** — AED {price_aed}/month (unlimited AI chats, priority alerts, CV optimization, saved searches)\n\n"
+            f"• **Rico Monthly** — USD {price_usd:.2f}/month (approximately AED 79): 300 AI messages/month, 100 saved jobs, 20 CV & profile optimizations/month, job alerts, saved searches\n\n"
             "Subscribe at ricohunt.com/subscription or ask me for details."
         )
         return {
             "type": "subscription.show_plans",
             "message": plans_msg,
             "plans": [
-                {"name": "Rico Monthly", "price_aed": price_aed, "period": "monthly"},
+                {"name": "Rico Monthly", "price_usd": round(price_usd, 2), "period": "monthly"},
             ],
             "current_plan": current_plan,
             "next_action": "choose_plan_or_continue",
