@@ -351,6 +351,19 @@ def client():
     return tc
 
 
+@pytest.fixture(scope="module")
+def admin_client():
+    """Authenticated ADMIN test client (role=admin) for privileged-tool paths (#1093)."""
+    from fastapi.testclient import TestClient
+    from src.api.app import app
+    from src.api.auth import create_access_token
+
+    token = create_access_token({"sub": "agent-admin@example.com", "role": "admin"})
+    tc = TestClient(app, raise_server_exceptions=False)
+    tc.cookies.set("access_token", token)
+    return tc
+
+
 class TestAgentChatEndpoint:
     def test_unauthenticated_returns_401(self):
         from fastapi.testclient import TestClient
@@ -526,10 +539,10 @@ class TestAgentSchemas:
 class TestOrchestratorNoArgTools:
     """Orchestrator must call no-argument tools without passing the job dict."""
 
-    def test_trigger_pipeline_action_succeeds(self, client):
-        """trigger_pipeline via action path must not crash with TypeError (too many args)."""
+    def test_trigger_pipeline_action_succeeds(self, admin_client):
+        """trigger_pipeline via action path (admin) must not crash with TypeError (too many args)."""
         with patch("src.services.pipeline_service.trigger", return_value=None):
-            r = client.post("/api/v1/agent/chat", json={
+            r = admin_client.post("/api/v1/agent/chat", json={
                 "message": "run now",
                 "action": {"type": "trigger_pipeline", "label": "Trigger"},
             })
@@ -537,10 +550,10 @@ class TestOrchestratorNoArgTools:
         body = r.json()
         assert body["success"] is True
 
-    def test_trigger_pipeline_action_already_running_returns_failure(self, client):
-        """Already-running pipeline should return success=False, not a server crash."""
+    def test_trigger_pipeline_action_already_running_returns_failure(self, admin_client):
+        """Already-running pipeline (admin) should return success=False, not a server crash."""
         with patch("src.services.pipeline_service.trigger", side_effect=RuntimeError("already running")):
-            r = client.post("/api/v1/agent/chat", json={
+            r = admin_client.post("/api/v1/agent/chat", json={
                 "message": "run now",
                 "action": {"type": "trigger_pipeline", "label": "Trigger"},
             })
@@ -555,7 +568,7 @@ class TestOrchestratorNoArgTools:
 
         action = AgentAction(type="trigger_pipeline", label="Trigger")
         with patch("src.services.pipeline_service.trigger", return_value=None) as mock_trigger:
-            result = _execute_action(action, user_email="test@example.com")
+            result = _execute_action(action, user_email="test@example.com", actor_is_admin=True)
         assert result.success is True
         # trigger() itself takes no args — confirm it was called with no positional args
         mock_trigger.assert_called_once_with()
