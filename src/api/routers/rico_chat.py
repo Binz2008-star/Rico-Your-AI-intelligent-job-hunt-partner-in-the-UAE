@@ -1476,8 +1476,9 @@ async def rico_upload_cv(
                 "doc_image_ocr_failed user=%s filename=%s chars=%d request_ref=%s",
                 resolved_user_id, safe_name, len(extracted or ""), request_ref,
             )
-            # Store the image context even without text so follow-up actions
-            # ("extract text", "describe image") know an image was uploaded.
+            # Store the image context even without text so follow-up messages
+            # ("extract text", "describe image") know an image was uploaded and
+            # can answer honestly instead of "no document on record".
             try:
                 from src.repositories.uploaded_document_repo import set_last_uploaded_document
                 set_last_uploaded_document(
@@ -1491,7 +1492,20 @@ async def rico_upload_cv(
                 )
             except Exception:
                 pass
-            return _classification_response(classification, safe_name)
+            # Honest OCR-failure response: no readable text exists, so none of
+            # the image actions (Describe / Extract text / Save as target job /
+            # Score against my CV) can be honored — offer NONE of them, and say
+            # plainly what happened and what the user can do instead.
+            resp = _classification_response(classification, safe_name)
+            resp["message"] = (
+                f"I received your image ({safe_name}), but I couldn't extract any readable "
+                "text from it. I can't visually describe images or retry the text "
+                "extraction on my own yet. If it shows a job posting or document, try a "
+                "clearer screenshot — or paste the text directly into the chat."
+            )
+            resp["extracted_text"] = ""
+            resp["suggested_actions"] = []
+            return resp
 
         # Identity documents: hard block — never echo content.
         if doc_type == "identity_document":

@@ -66,7 +66,14 @@ def build_attachment_analysis(classification: Any, filename: str | None = None) 
 
     warnings: list[str] = []
     if document_type == "image":
-        warnings.append("Image uploaded — text extraction pending. Use the actions below to read or describe it.")
+        # Honest: this analysis is only built for the image type on the
+        # OCR-failure path (successful OCR reclassifies to the text's real
+        # type), so no readable text exists and no follow-up actions are
+        # offered. Never promise "actions below" or a pending extraction.
+        warnings.append(
+            "No readable text could be extracted from this image. "
+            "Paste the text directly into the chat if you want Rico to work with it."
+        )
     elif purpose == RicoAttachmentPurpose.unknown_document:
         warnings.append("Rico is not sure what this document is — confirm before acting on it.")
     if confidence < 0.5:

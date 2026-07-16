@@ -83,10 +83,15 @@ class TestAttachmentAnalysisImageWarnings:
         stub.file_format = "image"
         return stub
 
-    def test_image_has_image_specific_warning(self):
+    def test_image_has_honest_ocr_failure_warning(self):
+        """The image warning must be honest: OCR failed (this analysis is only
+        built on the OCR-failure path) — no 'pending' claim, no promise of
+        follow-up actions that don't exist."""
         result = build_attachment_analysis(self._image_classification())
-        warning_text = " ".join(result.warnings)
-        assert "Image uploaded" in warning_text or "text extraction pending" in warning_text.lower()
+        warning_text = " ".join(result.warnings).lower()
+        assert "no readable text could be extracted" in warning_text
+        assert "pending" not in warning_text
+        assert "actions below" not in warning_text
 
     def test_image_does_not_say_not_sure(self):
         result = build_attachment_analysis(self._image_classification())
@@ -190,63 +195,109 @@ class TestDocumentActionImageWithoutText:
         assert result.get("message") == "AI-generated summary"
 
 
-# ── 4. Router path: image upload → OCR fails → context stored ────────────────
+# ── 4. Router path (REAL TestClient multipart): image upload → OCR fails ─────
 
-class TestRouterImageOCRFailure:
-    """Test the real rico_chat upload router path when OCR fails on an image.
+class TestRouterImageOCRFailureMultipart:
+    """REAL route-level tests: POST /api/v1/rico/upload-cv via FastAPI
+    TestClient with a multipart JPEG whose OCR returns no text.
 
-    No real AI, Neon, or external OCR calls — extract_text_from_image is mocked
-    to return None (simulating no provider configured or OCR failure).
+    No real AI, Neon, or external OCR calls — classify_document and
+    extract_text_from_image are mocked at the service boundary; the router,
+    request parsing, persistence call, and response shaping are all real.
     """
 
-    def test_image_ocr_failure_stores_context_and_returns_classification(self):
-        """Image upload with failed OCR:
-        - set_last_uploaded_document called once with extracted_text='',
-          document_type='image', source='image', and the real filename
-        - response is an honest image classification (not a CV preview, not an error)
-        """
-        from src.api.routers.rico_chat import _classification_response
-        from src.services.document_classifier import ClassificationResult
+    _JPEG_MAGIC = b"\xff\xd8\xff\xe0" + b"\x00" * 100
 
-        # Simulate the OCR-failure path in the router
-        classification = ClassificationResult(
+    @staticmethod
+    def _image_classification():
+        from src.services.document_classifier import ClassificationResult
+        return ClassificationResult(
             document_type="image",
-            display_label="Image",
             confidence=1.0,
             confidence_scores={"image": 1.0},
+            suggested_actions=[
+                {"label": "Describe this image", "kind": "chat_continue",
+                 "message": "Describe what's in this image."},
+                {"label": "Extract text (OCR)", "kind": "chat_continue",
+                 "message": "Extract any visible text from this image."},
+                {"label": "Save as target job", "kind": "chat_continue",
+                 "message": "Save this as a target job in my pipeline."},
+                {"label": "Score against my CV", "kind": "chat_continue",
+                 "message": "Score this against my CV."},
+            ],
+            display_label="Image",
             file_format="image",
-            suggested_actions=["Describe this image", "Extract text (OCR)"],
         )
 
-        # Mock set_last_uploaded_document and verify it's called with correct params
-        with patch(
-            "src.repositories.uploaded_document_repo.set_last_uploaded_document"
-        ) as mock_set:
-            # Simulate what the router does on OCR failure (lines 1460-1472)
-            mock_set(
-                "test-user-1",
-                extracted_text="",
-                filename="screenshot.jpg",
-                document_type="image",
-                display_label=classification.display_label or "Image",
-                source="image",
-                request_ref="test-ref",
+    def test_multipart_image_ocr_failure_honest_response_and_stored_context(self):
+        """Image upload where OCR fails:
+        - 200 with an HONEST message (couldn't extract text; no fake promise)
+        - NO Describe/OCR/save/score suggested actions (unsupported without text)
+        - durable context stored once with empty text + the real filename
+        - no extracted text echoed anywhere in the response
+        """
+        import io as _io
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+
+        with (
+            patch(
+                "src.services.document_classifier.classify_document",
+                return_value=self._image_classification(),
+            ),
+            patch(
+                "src.services.image_extractor.extract_text_from_image",
+                return_value=None,
+            ),
+            patch(
+                "src.repositories.uploaded_document_repo.set_last_uploaded_document"
+            ) as mock_set_durable,
+            patch(
+                "src.api.routers.rico_chat._resolve_upload_user_id",
+                return_value="test-user-1",
+            ),
+            patch(
+                "src.api.routers.rico_chat.is_valid_public_user_id",
+                return_value=False,
+            ),
+            patch("src.services.subscription_gating.enforce_document_quota"),
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            response = client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("job-screenshot.jpg", _io.BytesIO(self._JPEG_MAGIC), "image/jpeg")},
             )
 
-            # Verify the call
-            assert mock_set.called, "set_last_uploaded_document must be called on OCR failure"
-            call_kwargs = mock_set.call_args
-            assert call_kwargs.kwargs.get("extracted_text") == ""
-            assert call_kwargs.kwargs.get("filename") == "screenshot.jpg"
-            assert call_kwargs.kwargs.get("document_type") == "image"
-            assert call_kwargs.kwargs.get("source") == "image"
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+        body = response.json()
 
-        # Verify the response is an honest classification
-        resp = _classification_response(classification, "screenshot.jpg")
-        assert resp["ok"] is True
-        assert resp["status"] == "classified"
-        assert resp["filename"] == "screenshot.jpg"
-        assert "agentic_ui" in resp, "Response must include agentic_ui for action buttons"
+        assert body["ok"] is True
+        assert body["document_type"] == "image"
+        # Honest OCR-failure message — plain about the failure and the way forward.
+        msg = body["message"]
+        assert "couldn't extract" in msg.lower()
+        assert "job-screenshot.jpg" in msg
+        assert "what would you like me to do with it" not in msg.lower()
+        # No unsupported actions when extracted text is empty.
+        assert body.get("suggested_actions") == []
+        body_str = str(body).lower()
+        for forbidden in (
+            "describe this image",
+            "extract text (ocr)",
+            "save as target job",
+            "score against my cv",
+        ):
+            assert forbidden not in body_str, f"unsupported action leaked: {forbidden}"
+        assert body.get("extracted_text") == ""
+
+        # Durable context stored exactly once with empty text + real filename.
+        mock_set_durable.assert_called_once()
+        kwargs = mock_set_durable.call_args.kwargs
+        assert kwargs.get("extracted_text") == ""
+        assert kwargs.get("filename") == "job-screenshot.jpg"
+        assert kwargs.get("document_type") == "image"
+        assert kwargs.get("source") == "image"
+        assert mock_set_durable.call_args.args[0] == "test-user-1"
 
     def test_image_ocr_failure_does_not_store_blank_when_no_filename(self):
         """If filename is somehow empty, the guard prevents a blank row."""
