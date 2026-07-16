@@ -8,7 +8,7 @@ Vercel from `apps/web/public/explainer/`.
 
 | File | Role |
 |------|------|
-| `index.html` | **Chooser** landing (`/explainer`). Links to the two options. |
+| `index.html` | **Chooser** (`/explainer`). Every load draws the next film from a randomized non-repeating cycle (option-2 / option-3 / option-3b, all three before any repeat — deck persisted in `localStorage`) and renders it in place so the URL stays on the chooser; reloads re-enter the rotation. Regression suite: `apps/web/__tests__/explainer-film-rotation.test.ts`. |
 | `option-1.html` | **LOCKED** signature cut. Approved by the owner — do **not** change without explicit owner sign-off. |
 | `option-2.html` | **Working copy** (identical to Option 1 today). All pending tweaks land here first, then get locked/promoted when approved. |
 | `shot_1.mp4` … `shot_10.mp4` | Optional self-hosted clips (see "Clips" below). Not committed yet. |
