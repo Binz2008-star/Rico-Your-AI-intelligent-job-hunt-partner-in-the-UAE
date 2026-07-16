@@ -787,6 +787,18 @@ export const translations = {
     cmdNoDirectApply: "Direct apply link unavailable — search for the role on the company site.",
     cmdGoogleJobsNote: "Google Jobs link — search result, not a direct apply page.",
     cmdAltLinkNote: "Primary link blocked — using alternate link.",
+    cmdMatchWhy: "WHY IT FITS YOU",
+    cmdMatchGaps: "HONEST GAPS",
+    cmdMatchPicks: "RICO PICKS",
+    cmdMatchFit: "FIT",
+    cmdMatchSave: "Save",
+    cmdMatchSkip: "Skip",
+    // Accessibility format strings — interpolated at render time so screen-reader
+    // labels are localized (not hardcoded EN). `cmdJobAtCompany` is the shared
+    // "{title} at {company}" join reused as {job} inside the aria templates.
+    cmdJobAtCompany: "{title} at {company}",
+    cmdAriaJobMatch: "Job match: {job}",
+    cmdAriaJobAction: "{label}: {job}",
     cmdWorkingSavingProfile: "Saving your profile…",
     cmdCvProfileError: "Could not confirm profile. Please try again.",
     cmdCvUploading: "Uploading CV",
@@ -2024,6 +2036,18 @@ export const translations = {
     cmdNoDirectApply: "رابط التقديم المباشر غير متاح — ابحث عن الوظيفة في موقع الشركة.",
     cmdGoogleJobsNote: "رابط Google Jobs — نتيجة بحث، وليس صفحة تقديم مباشرة.",
     cmdAltLinkNote: "الرابط الأساسي محظور — تم استخدام الرابط البديل.",
+    cmdMatchWhy: "لماذا تناسبك",
+    cmdMatchGaps: "ثغرات بصراحة",
+    cmdMatchPicks: "اختيار ريكو",
+    cmdMatchFit: "ملاءمة",
+    cmdMatchSave: "احفظ",
+    cmdMatchSkip: "تخطَّ",
+    // نصوص تنسيق لإمكانية الوصول — تُدرج وقت العرض كي تكون تسميات قارئ الشاشة
+    // مترجمة (وليست إنجليزية ثابتة). ‏cmdJobAtCompany هو الوصلة المشتركة
+    // "{title} لدى {company}" المُعاد استخدامها كـ {job} داخل قوالب aria.
+    cmdJobAtCompany: "{title} لدى {company}",
+    cmdAriaJobMatch: "وظيفة مطابقة: {job}",
+    cmdAriaJobAction: "{label}: {job}",
     cmdWorkingSavingProfile: "جارٍ حفظ ملفك الشخصي...",
     cmdCvProfileError: "تعذّر تأكيد الملف الشخصي. يرجى المحاولة مرة أخرى.",
     cmdCvUploading: "جارٍ رفع السيرة الذاتية",
