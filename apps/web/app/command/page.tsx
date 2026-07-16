@@ -25,7 +25,7 @@ import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, execu
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
-import { buildCopyText, getJobFallbackActions } from "@/lib/job-fallback";
+import { buildCopyText, getJobFallbackActions, resolveJobLink } from "@/lib/job-fallback";
 import { buildAuthHref } from "@/lib/redirect";
 import type { ExecuteAllowedAction, RicoAgenticUi, RicoAttachmentAnalysis, RicoChatAction, RicoProposedChange } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
@@ -545,54 +545,15 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
     const topReason = match.match_reasons?.[0] ?? match.why ?? "";
     const vStatus = match.verification_status;
 
-    const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
-    const _isGoogleIntermediary = (u: string): boolean => {
-        if (!u) return false;
-        try {
-            const p = new URL(u);
-            const h = p.hostname.replace(/^www\./, "");
-            return h === "jobs.google.com" || (h === "google.com" && p.pathname.includes("/search"));
-        } catch { return false; }
-    };
-    const applyUrl = clean(match.apply_url);
-    const sourceUrl = (() => { const u = clean(match.source_url); return _isGoogleIntermediary(u) ? "" : u; })();
-    const altUrl = (() => { const u = clean(match.alt_link); return _isGoogleIntermediary(u) ? "" : u; })();
-
-    // Determine which link button(s) to show — conditional on what the provider returned.
-    // apply_url = direct apply page (highest trust)
-    // source_url = job listing page (medium trust, shown as secondary button when differs from apply)
-    // alt_link   = Google Jobs fallback (lowest trust, only when primary blocked)
-    // Neither    = show "Link unavailable" text — never invent a URL
-    const isBadPrimary =
-        vStatus === "login_required" ||
-        vStatus === "rate_limited" ||
-        vStatus === "aggregator_untrusted" ||
-        vStatus === "google_intermediary";
-
-    // Primary link: apply_url when clean, fall back to alt_link when primary is bad
-    let linkHref = "";
-    let linkLabel = "";
-    let linkTestId = "";
-    if (applyUrl && !isBadPrimary) {
-        linkHref = applyUrl;
-        linkLabel = t("cmdApply");
-        linkTestId = "job-link-apply";
-    } else if (sourceUrl && !isBadPrimary) {
-        linkHref = sourceUrl;
-        linkLabel = t("cmdViewSource");
-        linkTestId = "job-link-source";
-    } else if (vStatus === "google_intermediary" && altUrl) {
-        linkHref = altUrl;
-        linkLabel = t("cmdApplySearch");
-        linkTestId = "job-link-alt";
-    } else if (isBadPrimary && (altUrl || sourceUrl)) {
-        linkHref = altUrl || sourceUrl;
-        linkLabel = t("cmdApplyAlt");
-        linkTestId = "job-link-alt";
-    }
-    // Secondary source link — shown when source_url exists and differs from the primary link
-    const showSource = !!sourceUrl && sourceUrl !== linkHref && !isBadPrimary && !!applyUrl;
-    // linkHref="" → "Link unavailable" badge shown below, no <a> rendered
+    // Which link (if any) to surface — SHARED with JobMatchCardAtelier via
+    // resolveJobLink so the apply/source/alt/unavailable decision and BUG-03
+    // trust gating are single-sourced and cannot drift between the two cards.
+    // apply_url = direct apply (highest trust); source_url = listing page
+    // (secondary, shown when it differs); alt_link = Google Jobs fallback
+    // (lowest, only when the primary is blocked); neither → "link unavailable".
+    const { linkHref, linkLabelKey, linkTestId, sourceUrl, altUrl, isBadPrimary, showSource } =
+        resolveJobLink(match);
+    const linkLabel = linkLabelKey ? t(linkLabelKey) : "";
 
     return (
         <article
