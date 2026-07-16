@@ -74,3 +74,9 @@ ACTION_TO_TOOL: dict[str, str] = {
 }
 
 VALID_ACTION_TYPES = frozenset(ACTION_TO_TOOL)
+
+# Tools that perform a global / system-wide side effect and must only run for an
+# authenticated admin actor — regardless of the surface (HTTP action, agent-chat
+# action, or NL-detected intent). Enforced at every execution chokepoint
+# (runtime + orchestrator) with a fail-closed default. See #1093.
+PRIVILEGED_TOOLS = frozenset({"trigger_pipeline"})

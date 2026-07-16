@@ -29,7 +29,7 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
-from src.agent.orchestrator.intent_detector import ACTION_TO_TOOL, VALID_ACTION_TYPES
+from src.agent.orchestrator.intent_detector import ACTION_TO_TOOL, PRIVILEGED_TOOLS, VALID_ACTION_TYPES
 from src.agent.registry import tool_registry
 from src.agent.types import RuntimeResult
 from src.repositories.audit_repo import IDEMPOTENT_ACTION_TYPES, is_duplicate, log_action
@@ -73,6 +73,7 @@ class AgentRuntime:
         source: str = "api",
         dry_run: bool = False,
         pre_approved: bool = False,
+        actor_is_admin: bool = False,
     ) -> RuntimeResult:
         """
         Execute a single named action on behalf of a user.
@@ -108,6 +109,24 @@ class AgentRuntime:
                 message=f"Unknown action '{action}'. Supported: {sorted(VALID_ACTION_TYPES)}",
                 action=action, job_key=job_key, source=source, user_id=user_id,
                 error=f"unknown_action:{action}",
+                duration_ms=int((time.monotonic() - wall_start) * 1000),
+            )
+
+        # 1b. Privileged-tool authorization (#1093). Admin-only tools (the global
+        #     pipeline) must never run for a non-admin actor, on any surface.
+        #     actor_is_admin defaults False (fail-closed): any caller that does not
+        #     supply verified admin context is treated as non-admin. The admin HTTP
+        #     /pipeline/trigger route calls the service directly, not this path.
+        if ACTION_TO_TOOL[action] in PRIVILEGED_TOOLS and not actor_is_admin:
+            logger.warning(
+                "runtime_privileged_denied action=%s user=%s source=%s",
+                action, user_id, source,
+            )
+            return RuntimeResult(
+                ok=False,
+                message="This action requires an administrator.",
+                action=action, job_key=job_key, source=source, user_id=user_id,
+                error="admin_required",
                 duration_ms=int((time.monotonic() - wall_start) * 1000),
             )
 
