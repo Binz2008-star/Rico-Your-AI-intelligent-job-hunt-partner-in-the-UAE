@@ -740,23 +740,25 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
         # lines are ignored by SSE clients per spec.
         yield ": connected\n\n"
         try:
-            # For non-conversational intents (job search, CV ops) fall back to
-            # the full JSON response so structured data (job cards, profile preview)
-            # arrives correctly. Only pure conversational replies are streamed.
-            from src.services.chat_service import _intent_router  # type: ignore[attr-defined]
+            # Shared, transport-independent preflight: identical policy +
+            # entitlement decision to the JSON /chat path. A deterministic or
+            # over-quota outcome is emitted as a single done event and the AI
+            # provider is never called (#1078).
+            pre = chat_service.run_chat_preflight(ctx, payload.message)
+            if pre.terminal is not None:
+                yield f'data: {_json.dumps({"type":"done","response":pre.terminal})}\n\n'
+                return
+
+            # For non-conversational intents (job search, CV ops) fall back to the
+            # full JSON response so structured data (job cards, profile preview)
+            # arrives correctly. Only pure conversational replies are token-streamed.
             profile = get_profile(user_id)
-            decision = _intent_router.route(
-                message=payload.message,
-                user_id=user_id,
-                profile_context_present=profile is not None,
-            )
-            if not decision.should_use_ai:
-                # Non-streaming path: emit full response as a single "done" event
+            if not chat_service.should_stream_ai(ctx, payload.message, profile):
                 result = chat_service.send_message(ctx=ctx, message=payload.message, language=payload.language)
                 yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
                 return
 
-            # Streaming AI path
+            # Streaming conversational-AI path (already past the entitlement gate).
             api = RicoChatAPI(persist=ctx.can_persist_profile)
             user_context = api._build_openai_context(profile, user_id=user_id)
             profile_context_str = (
@@ -767,24 +769,44 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
             from src.rico_env import get_ai_provider
             provider = get_ai_provider()
 
-            full_text = []
-            for chunk in call_openai_stream(
-                payload.message,
-                profile_context=profile_context_str,
-                provider=provider,
-                conversation_history=conversation_history,
-                language=payload.language,
-            ):
-                full_text.append(chunk)
-                yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'
-
-            # Persist the final assembled message
-            assembled = "".join(full_text)
+            # Record the user turn BEFORE the provider call so the monthly usage
+            # count is durable even if the client disconnects mid-stream — a
+            # provider invocation must never be free of a usage record (#1078).
             api._append_chat(user_id, "user", payload.message)
-            api._append_chat(user_id, "assistant", assembled)
 
-            yield f'data: {_json.dumps({"type":"done","response":{"message":assembled,"type":"conversational","response_source":"stream"}})}\n\n'
-        except Exception as exc:
+            full_text: list[str] = []
+            try:
+                for chunk in call_openai_stream(
+                    payload.message,
+                    profile_context=profile_context_str,
+                    provider=provider,
+                    conversation_history=conversation_history,
+                    language=payload.language,
+                ):
+                    full_text.append(chunk)
+                    yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'
+            finally:
+                # Persist whatever assistant text streamed — even on early client
+                # disconnect (GeneratorExit) — so the transcript matches usage.
+                assembled = "".join(full_text)
+                if assembled:
+                    try:
+                        api._append_chat(user_id, "assistant", assembled)
+                    except Exception:
+                        logger.debug("chat_stream: assistant persist failed user=%s", user_id, exc_info=True)
+
+            done_response = {"message": assembled, "type": "conversational", "response_source": "stream"}
+            if (
+                pre.gate is not None
+                and pre.gate.allowed
+                and pre.gate.remaining is not None
+                and pre.gate.remaining <= 10
+            ):
+                done_response["messages_remaining"] = pre.gate.remaining
+                if pre.gate.limit is not None:
+                    done_response["messages_limit"] = pre.gate.limit
+            yield f'data: {_json.dumps({"type":"done","response":done_response})}\n\n'
+        except Exception:
             logger.exception("chat_stream_error user=%s", user_id)
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
 
@@ -798,41 +820,74 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
 @router.post("/chat/stream/public")
 @limiter.limit("10/minute")
 def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) -> StreamingResponse:
-    """Unauthenticated SSE streaming chat for public/guest users."""
+    """Unauthenticated SSE streaming chat for public/guest users.
+
+    Identity + anti-dodge mirror /chat/public: an unverified email never adopts a
+    real account — it becomes a namespaced, non-persisting public identity used
+    only to hold a *registered* user to their monthly AI cap so they cannot dodge
+    it by streaming through the public endpoint. The per-IP rate limit above
+    bounds anonymous guest cost and is not resettable by rotating session_id (#1078).
+    """
     import json as _json
     from src.rico_openai_runtime import call_openai_stream
     from src.rico_chat_api import RicoChatAPI
     from src.repositories.profile_repo import get_profile
     from src.api.public_identity import is_safe_public_session_id
 
-    session_id = payload.session_id or ""
-    if not session_id or not is_safe_public_session_id(session_id):
-        def _err():
+    if not payload.email and not payload.session_id:
+        def _err_missing():
             yield f'data: {_json.dumps({"type":"error","message":"Invalid session."})}\n\n'
-        return StreamingResponse(_err(), media_type="text/event-stream", headers=SSE_HEADERS)
+        return StreamingResponse(_err_missing(), media_type="text/event-stream", headers=SSE_HEADERS)
 
-    user_id = f"public:{session_id}"
-    ctx = RicoSessionContext.for_public(user_id)
+    # Anti-dodge: a registered user routing through the public stream with their
+    # email is held to the SAME monthly AI cap as the authenticated path. The
+    # email is unverified (no JWT) so it grants NO account privilege — only the cap.
+    anti_dodge_terminal: dict[str, Any] | None = None
+    if payload.email:
+        from src.repositories.users_repo import get_user_by_email
+
+        registered = get_user_by_email(payload.email)
+        if registered:
+            from src.services.subscription_gating import check_ai_message_allowed_for_user
+
+            gate = check_ai_message_allowed_for_user(registered.email)
+            if gate and not gate.allowed:
+                anti_dodge_terminal = _strip_internal_fields(gate.to_response())
+        # Namespaced public identity that cannot read/write any real profile.
+        email_key = "e-" + hashlib.sha256(
+            payload.email.strip().lower().encode("utf-8")
+        ).hexdigest()[:40]
+        ctx = RicoSessionContext.for_public(email_key)
+    else:
+        session_id = payload.session_id or ""
+        if not is_safe_public_session_id(session_id):
+            def _err_bad():
+                yield f'data: {_json.dumps({"type":"error","message":"Invalid session."})}\n\n'
+            return StreamingResponse(_err_bad(), media_type="text/event-stream", headers=SSE_HEADERS)
+        ctx = RicoSessionContext.for_public(session_id[:64])
+
+    user_id = ctx.user_id
 
     def _event_stream():
         # See rico_chat_stream: immediate SSE comment flushes the response
         # start through buffering proxies before any heavy work runs.
         yield ": connected\n\n"
+        # Registered user over their cap — refuse before any provider work.
+        if anti_dodge_terminal is not None:
+            yield f'data: {_json.dumps({"type":"done","response":anti_dodge_terminal})}\n\n'
+            return
         try:
-            from src.services.chat_service import _intent_router  # type: ignore[attr-defined]
+            # Shared, transport-independent preflight (policy gateway etc.); public
+            # sessions are not per-user capped (the gate is authenticated-only).
+            pre = chat_service.run_chat_preflight(ctx, payload.message)
+            if pre.terminal is not None:
+                yield f'data: {_json.dumps({"type":"done","response":_strip_internal_fields(pre.terminal)})}\n\n'
+                return
+
             profile = get_profile(user_id)
-            decision = _intent_router.route(
-                message=payload.message,
-                user_id=user_id,
-                profile_context_present=profile is not None,
-            )
-            # Only take the legacy (non-streaming) path when the user has a profile.
-            # When profile is None the legacy classifier loops back to the onboarding
-            # welcome on every turn (no profile to persist for public sessions).
-            # Fall through to the AI streaming path so profileless guests get real replies.
-            if not decision.should_use_ai and profile is not None:
+            if not chat_service.should_stream_ai(ctx, payload.message, profile):
                 result = chat_service.send_message(ctx=ctx, message=payload.message, language=payload.language)
-                yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
+                yield f'data: {_json.dumps({"type":"done","response":_strip_internal_fields(result)})}\n\n'
                 return
 
             api = RicoChatAPI(persist=False)
@@ -844,20 +899,29 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
             from src.rico_env import get_ai_provider
             provider = get_ai_provider()
 
-            full_text = []
-            for chunk in call_openai_stream(
-                payload.message,
-                profile_context=profile_context_str,
-                provider=provider,
-                conversation_history=conversation_history,
-                language=payload.language,
-            ):
-                full_text.append(chunk)
-                yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'
-
-            assembled = "".join(full_text)
+            # Record the guest user turn before the provider call so a disconnect
+            # cannot erase the record of an incurred provider invocation (#1078).
             api._append_chat(user_id, "user", payload.message)
-            api._append_chat(user_id, "assistant", assembled)
+
+            full_text: list[str] = []
+            try:
+                for chunk in call_openai_stream(
+                    payload.message,
+                    profile_context=profile_context_str,
+                    provider=provider,
+                    conversation_history=conversation_history,
+                    language=payload.language,
+                ):
+                    full_text.append(chunk)
+                    yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'
+            finally:
+                assembled = "".join(full_text)
+                if assembled:
+                    try:
+                        api._append_chat(user_id, "assistant", assembled)
+                    except Exception:
+                        logger.debug("chat_stream_public: assistant persist failed user=%s", user_id, exc_info=True)
+
             yield f'data: {_json.dumps({"type":"done","response":{"message":assembled,"type":"conversational","response_source":"stream"}})}\n\n'
         except Exception:
             logger.exception("chat_stream_public_error user=%s", user_id)
