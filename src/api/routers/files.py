@@ -275,18 +275,36 @@ def delete_file(file_id: str, request: Request) -> dict[str, Any]:
     user = get_current_user(request)
     user_id = user["email"]
 
-    if file_id == "profile-cv":
-        raise HTTPException(status_code=400, detail="Upload a new CV to replace it.")
-
     if not _db.available:
         raise HTTPException(status_code=503, detail="Database unavailable")
+
+    # The synthetic 'profile-cv' card is the parsed CV grounding, not a stored
+    # row. Deleting it means "remove my CV data": purge the grounding so it no
+    # longer feeds matching/chat and cannot resurrect as an undeletable card.
+    # This previously returned 400, leaving users unable to delete their CV
+    # data at all — a privacy defect (#1083).
+    if file_id == "profile-cv":
+        _db.clear_cv_grounding(user_id)
+        logger.info("file_deleted_profile_cv user=%s cleared_cv_grounding=True", user_id)
+        return {"ok": True, "cleared_cv_grounding": True}
+
+    # Capture the document's type/primary flag before deletion so we can also
+    # purge the derived CV grounding when the *active* CV itself is removed —
+    # otherwise the deleted CV's extracted text keeps grounding chat/matching and
+    # list_files resurrects it as a synthetic card (#1083).
+    docs = _db.list_user_documents(user_id)
+    target = next((d for d in docs if str(d.get("id")) == str(file_id)), None)
 
     deleted = _db.delete_user_document(user_id, file_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="File not found")
 
-    logger.info("file_deleted user=%s id=%s", user_id, file_id)
-    return {"ok": True}
+    cleared = False
+    if target and target.get("doc_type") == "cv" and target.get("is_primary"):
+        cleared = _db.clear_cv_grounding(user_id)
+
+    logger.info("file_deleted user=%s id=%s cleared_cv_grounding=%s", user_id, file_id, cleared)
+    return {"ok": True, "cleared_cv_grounding": cleared}
 
 
 # ── Update label / type ───────────────────────────────────────────────────────

@@ -28,6 +28,56 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260716-002 — My Files uses a parsed-record model (Option 2), not raw file storage; deleting a CV purges its grounding
+
+Status: accepted
+Date: 2026-07-16
+Owner: Roben (owner) — delegated this pass's choice to Claude
+Related task: TASK-20260716-003 (#1083)
+
+#### Context
+
+#1083 found that "My Files" persists metadata rows, not uploaded bytes, and that
+deletion left CV-derived data still grounding Rico (a privacy/trust defect). The
+issue required choosing one honest model **before** implementation: (1) real
+encrypted object storage with an owner-approved retention/threat model, or (2) a
+parsed-record model that stops promising raw file storage. Rico is in low-cost
+MVP mode (Render Hobby; no new paid infra without owner approval), so
+provisioning per-user encrypted object storage is out of scope now.
+
+#### Decision
+
+Adopt **Option 2 (parsed-record model)**: Rico retains parsed/derived content,
+not the original uploaded files. CV-deletion retention rule: deleting the
+active/primary CV (or the synthetic `profile-cv` card) purges the raw CV
+grounding — `cv_text`, `cv_file_url`, `cv_structured`, and the
+`profile.cv_filename` / `profile.cv_extracted_at` keys — so a deleted CV no
+longer grounds matching/chat and cannot resurrect as an undeletable card. The
+user's structured profile facts (skills, experience, current role) are retained
+as the editable profile and cleared separately in Settings.
+
+This PR implements only the model-independent, privacy-critical slice (deletion
+completeness + no resurrection). The user-facing/legal parts below need owner
+ratification before they ship.
+
+#### Consequences
+
+- Positive: users can actually delete their CV data; a deleted CV stops grounding
+  chat/matching; the "cannot delete my CV" defect is fixed; no new paid storage.
+- Negative/trade-off: originals are genuinely not retrievable — UI copy and quota
+  language must stop implying raw "file storage" (owner-ratified follow-up).
+
+#### Follow-up (owner ratification required — NOT in this PR)
+- [ ] Reject or clearly mark cover-letter/"other" uploads whose bytes are
+      discarded; stop charging storage quota for a metadata-only shell.
+- [ ] UI disclosure: state originals are not retained; disclose retained derived
+      facts and offer a separate deletion/correction action.
+- [ ] Atomic CV switch: clear fields absent from the newly activated CV rather
+      than inheriting stale values (COALESCE in `upsert_profile`), with explicit
+      user confirmation.
+- [ ] Align quota/export/account-deletion language to this model; link legal copy
+      in #920.
+
 ### DEC-20260716-001 — Atelier V3 is the sole production-wide visual system (marketing, auth, workspace, /command); "Atelier at Night" is its dark mode
 
 Status: accepted

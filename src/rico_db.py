@@ -772,6 +772,40 @@ class RicoDB:
                 row = cur.fetchone()
         return row is not None
 
+    def clear_cv_grounding(self, user_id: str) -> bool:
+        """Remove the CV grounding derived from an uploaded CV (privacy, #1083).
+
+        Clears the raw extracted text and file record that ground matching/chat,
+        plus the JSONB keys that would otherwise resurrect an *undeletable*
+        synthetic 'profile-cv' card: the ``cv_text`` / ``cv_file_url`` /
+        ``cv_structured`` columns and the ``profile.cv_filename`` /
+        ``profile.cv_extracted_at`` keys. Structured profile facts (skills,
+        experience, current role) are intentionally retained — they are the
+        user's editable profile, cleared separately in Settings. Returns True if
+        a profile row was updated.
+        """
+        bundle = self.get_user_bundle(user_id)
+        if not bundle:
+            return False
+        db_user_id = str(bundle["id"])
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE rico_profiles
+                    SET cv_text = NULL,
+                        cv_file_url = NULL,
+                        cv_structured = '{}'::jsonb,
+                        profile = (profile - 'cv_filename' - 'cv_extracted_at'),
+                        updated_at = now()
+                    WHERE user_id = %s
+                    RETURNING user_id
+                    """,
+                    (db_user_id,),
+                )
+                row = cur.fetchone()
+        return row is not None
+
     def update_user_document(
         self,
         user_id: str,
