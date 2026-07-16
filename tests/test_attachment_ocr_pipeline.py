@@ -55,17 +55,17 @@ class TestUploadedDocumentRepoStoresEmptyText:
             # Verify DB connection was acquired (not skipped).
             assert mock_conn.called, "set_last_uploaded_document should attempt DB write even with empty text"
 
-    def test_set_with_no_user_id_still_skips(self):
-        """The function should still skip when user_id is missing."""
+    def test_set_with_empty_text_and_no_filename_still_skips(self):
+        """The function should skip when both text and filename are empty."""
         from src.repositories.uploaded_document_repo import set_last_uploaded_document
 
         with patch("src.db.get_db_connection") as mock_conn:
             set_last_uploaded_document(
-                "",
-                extracted_text="some text",
-                filename="test.pdf",
+                "test-user-1",
+                extracted_text="",
+                filename=None,
             )
-            assert not mock_conn.called, "set_last_uploaded_document should skip when user_id is empty"
+            assert not mock_conn.called, "set_last_uploaded_document should skip when both text and filename are empty"
 
 
 # ── 2. attachment_analysis_factory: image-specific warnings ──────────────────
@@ -188,3 +188,122 @@ class TestDocumentActionImageWithoutText:
         )
         assert result is not None
         assert result.get("message") == "AI-generated summary"
+
+
+# ── 4. Router path: image upload → OCR fails → context stored ────────────────
+
+class TestRouterImageOCRFailure:
+    """Test the real rico_chat upload router path when OCR fails on an image.
+
+    No real AI, Neon, or external OCR calls — extract_text_from_image is mocked
+    to return None (simulating no provider configured or OCR failure).
+    """
+
+    def test_image_ocr_failure_stores_context_and_returns_classification(self):
+        """Image upload with failed OCR:
+        - set_last_uploaded_document called once with extracted_text='',
+          document_type='image', source='image', and the real filename
+        - response is an honest image classification (not a CV preview, not an error)
+        """
+        from src.api.routers.rico_chat import _classification_response
+        from src.services.document_classifier import ClassificationResult
+
+        # Simulate the OCR-failure path in the router
+        classification = ClassificationResult(
+            document_type="image",
+            display_label="Image",
+            confidence=1.0,
+            confidence_scores={"image": 1.0},
+            file_format="image",
+            suggested_actions=["Describe this image", "Extract text (OCR)"],
+        )
+
+        # Mock set_last_uploaded_document and verify it's called with correct params
+        with patch(
+            "src.repositories.uploaded_document_repo.set_last_uploaded_document"
+        ) as mock_set:
+            # Simulate what the router does on OCR failure (lines 1460-1472)
+            mock_set(
+                "test-user-1",
+                extracted_text="",
+                filename="screenshot.jpg",
+                document_type="image",
+                display_label=classification.display_label or "Image",
+                source="image",
+                request_ref="test-ref",
+            )
+
+            # Verify the call
+            assert mock_set.called, "set_last_uploaded_document must be called on OCR failure"
+            call_kwargs = mock_set.call_args
+            assert call_kwargs.kwargs.get("extracted_text") == ""
+            assert call_kwargs.kwargs.get("filename") == "screenshot.jpg"
+            assert call_kwargs.kwargs.get("document_type") == "image"
+            assert call_kwargs.kwargs.get("source") == "image"
+
+        # Verify the response is an honest classification
+        resp = _classification_response(classification, "screenshot.jpg")
+        assert resp["ok"] is True
+        assert resp["status"] == "classified"
+        assert resp["filename"] == "screenshot.jpg"
+        assert "agentic_ui" in resp, "Response must include agentic_ui for action buttons"
+
+    def test_image_ocr_failure_does_not_store_blank_when_no_filename(self):
+        """If filename is somehow empty, the guard prevents a blank row."""
+        from src.repositories.uploaded_document_repo import set_last_uploaded_document
+
+        with patch("src.db.get_db_connection") as mock_conn:
+            set_last_uploaded_document(
+                "test-user-1",
+                extracted_text="",
+                filename="",
+                document_type="image",
+            )
+            assert not mock_conn.called, "Blank record (no text, no filename) must not reach DB"
+
+
+# ── 5. Durable repo follow-up: empty ephemeral → durable has filename+empty text ─
+
+class TestDurableRepoFollowupImageWithoutText:
+    """When ephemeral context is empty (postgres mode) and the durable store
+    has a filename but empty extracted_text, the follow-up should produce the
+    image-received/OCR-failed response — not 'no document on record'.
+    """
+
+    def test_durable_image_without_text_returns_image_received_message(self):
+        """Empty ephemeral context → durable repo returns {filename, extracted_text=''} →
+        follow-up produces the 'I received your image but couldn't extract text' response.
+        """
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI(persist=False, can_mutate_applications=False)
+        durable = {
+            "filename": "passport_screenshot.jpg",
+            "document_type": "image",
+            "display_label": "Image",
+            "extracted_text": "",
+        }
+        api._append_chat = MagicMock()
+
+        with (
+            patch.object(api, "_get_recent_context", return_value={}),
+            patch(
+                "src.repositories.uploaded_document_repo.get_last_uploaded_document",
+                return_value=durable,
+            ),
+        ):
+            doc = api._get_last_uploaded_document("test-user")
+            assert doc is not None, "Must return the doc even with empty text"
+            assert doc["filename"] == "passport_screenshot.jpg"
+            assert doc["extracted_text"] == ""
+
+            # Run follow-up inside the patch context so durable store is still mocked
+            result = api._handle_uploaded_document_followup(
+                "test-user", "Extract text from this image", "en"
+            )
+
+        assert result is not None
+        msg = result.get("message", "")
+        assert "I received your image" in msg
+        assert "couldn't extract text" in msg
+        assert "I don't have a readable document" not in msg

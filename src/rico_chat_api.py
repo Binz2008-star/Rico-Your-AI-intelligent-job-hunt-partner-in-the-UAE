@@ -11139,18 +11139,18 @@ class RicoChatAPI:
         Returns the document dict even when ``extracted_text`` is empty (image
         uploaded but OCR failed/pending) so callers can distinguish "no document
         on record" from "image uploaded, text not yet extracted". Returns
-        ``None`` only when no document record exists at all.
+        ``None`` only when no meaningful record exists (no filename and no text).
         """
         try:
             doc = (self._get_recent_context(user_id) or {}).get("last_uploaded_document")
-            if isinstance(doc, dict) and doc.get("filename"):
+            if isinstance(doc, dict) and (doc.get("filename") or doc.get("extracted_text")):
                 return doc
         except Exception:
             pass
         try:
             from src.repositories.uploaded_document_repo import get_last_uploaded_document
             durable = get_last_uploaded_document(user_id)
-            if isinstance(durable, dict) and durable.get("filename"):
+            if isinstance(durable, dict) and (durable.get("filename") or durable.get("extracted_text")):
                 return durable
         except Exception:
             pass
