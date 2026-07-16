@@ -10,10 +10,12 @@
 | --- | --- |
 | Repository | `Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE` |
 | Snapshot date | 2026-07-16 |
-| Live-main baseline audited | `27df7ba6` (#1022 squash-merge); agents must fetch and report the exact current SHA at session start |
+| Live-main baseline audited | `4194736f` (2026-07-16 evening; agents must fetch and report the exact current SHA at session start) |
 | Control-plane PR #1010 | **MERGED** `b753885` (2026-07-13) — the reconciliation freeze it imposed is over |
-| Active objectives | Two owner-directed, non-overlapping tracks: (1) Atelier full-site migration **REOPENED by owner 2026-07-14** — Step 2 slice 4a via PR #1028; (2) Rico Intelligence Phase 1 — ADR-001 **ACCEPTED** on #1024; M1 shadow-write PR #1025 (stops before merge) |
-| Runtime writers | UI track: **Claude is writer on #1028** (owner directive; Windsurf reviewer-only). Memory track: #1025 draft only, no merge authority |
+| Operating posture (owner 2026-07-16) | **CONTAINMENT FIRST.** (1) Rotate/quarantine the local `rico-job-automation-api.env` secrets (owner action; never deploy from it — stale + Stripe). (2) Unify source of truth (this reconciliation). (3) **Freeze new-integration activation** — allow only security + docs fixes until unified; Atelier design completion (#1062 job cards ready but held) and Gmail/Memory activation resume after. See `CURRENT_STATE.md` (evening header) for the full merge log. |
+| Design system | **Atelier V3 is the sole production-wide system** (`DEC-20260716-001`, merged #1059). `/command` re-skinned to Atelier (paper + "Atelier at Night", sun-red) — re-skin + editorial serif replies merged (#1060) + composer gradient (#1061); MATCH job cards **ready, held** (#1062). "Command Obsidian" acid-lime retired to reference. C5/C6 collapse to a verification pass. |
+| Integrations (frozen, flag-OFF drafts) | **Gmail M0** `TASK-20260716-001` / #1055 (draft — first-party OAuth, migration 043, Fernet tokens, `RICO_ENABLE_GMAIL_SYNC=false`). **Memory M1** `TASK-20260716-002` / #1025 (draft — additive migration 042, shadow writer, `RICO_MEMORY_ENGINE_ENABLED=false`). Neither activates until owner-reviewed. |
+| New infra merged 2026-07-16 | Hermetic CI decision-regression harness (#1056, `tests/decision_regression/`); security hardening (#1058 — XFF rate-limit, `/chat/public` email-impersonation, DOCX bomb, weak session id); attachment-OCR/SSE/transcript fixes (#1046/#1050/#1051/#1052). `.gitignore` broadened to `*.env` catch-all. |
 | Production access state | **Teaser/access gate REMOVED** (`96b7efd`) — the full site is open; waitlist retired; landing plays one of 3 launch films at random (#1019) |
 | Billing | **Paddle merged** (#1008 `1b1748c` + follow-up fixes `d05ca08`/`30ebb7d`/`c11575d`, Sandbox mode). One plan "Rico Monthly" — **USD 21.50/mo is the authoritative price** (`403c28b`); AED 79 is a reference display note only. **#1022 MERGED** (`27df7ba6`) — Setup-level eventCallback fix production-verified (open/close/reopen smoke PASS). Paddle billing NOT activated in production (`NEXT_PUBLIC_BILLING_MODE=""`). Sandbox checkout URL configured in Paddle dashboard. Architecture debt: hardcoded fallbacks still present (separate PR planned) |
 | Invitation target | Branded secure email invitations; not started, not production-verified |
@@ -21,45 +23,41 @@
 ## Current execution lock
 
 ```text
-ACTIVE NOW (owner-directed, two non-overlapping tracks)
-1. Atelier full-site migration — REOPENED by owner 2026-07-14
-   (supersedes the #1023 closure record; docs flip is PR #1027, in review).
-   Step 1 (preview-route hygiene, F-4) DONE via #1026 (merged 21ae19a7).
-   Step 2 slice 4a (Atelier CommandComposer): PR #1028 — the SOLE active
-   UI implementation PR. Claude is writer; Windsurf is reviewer-only.
-   #1029 is CLOSED without merge — technical reference only.
-2. Rico Intelligence Phase 1 — ADR-001 (Career Memory Engine) ACCEPTED
-   by owner on #1024 (rev 2, head ef66ebfa). M1 = PR #1025 (additive
-   schema + shadow MemoryWriter, flag RICO_MEMORY_ENGINE_ENABLED default
-   OFF). Owner scope: M1 ships as a draft and STOPS BEFORE MERGE.
+ACTIVE NOW (owner containment plan, 2026-07-16 evening — sequence, do not skip)
+1. SECURITY CONTAINMENT (owner action): rotate ALL credentials in the local
+   `rico-job-automation-api.env` (treat as exposed — plaintext export, ~23 live
+   fields), never deploy from it (stale + Stripe, not Paddle). Build a fresh
+   production env from `.env.example`. `.gitignore` now blocks any `*.env`.
+2. SOURCE-OF-TRUTH UNIFICATION (this reconciliation PR): AI_WORKSPACE caught up
+   to main; duplicate `TASK-20260715-001` fixed (4b → -002); Gmail + Memory
+   registered (`TASK-20260716-001/-002`); `DEC-20260716-001` merged (#1059).
+3. FREEZE new-integration activation; allow only security + docs fixes until (1)+(2)
+   are done. Atelier design completion (#1062 job cards — ready, HELD) and Gmail /
+   Memory activation resume only after.
 
-GATES
-- #1028 needs its EN/AR desktop+mobile visual gate before leaving draft,
-  then owner merge approval.
-- #1022 (Paddle split B — Setup-level eventCallback) **MERGED** `27df7ba6`
-  after Sandbox open/close/reopen smoke PASS. Full payment/webhook/entitlement
-  testing deferred to isolated staging track (separate Render + Neon branch).
-- Migrations 040/041 (Paddle) application state on Neon production is NOT
-  verified in this snapshot; verify drift check before relying on them.
+DONE (Atelier /command, in main)
+- Re-skin to Atelier (paper + Atelier at Night, sun-red) + editorial serif reply
+  rendering (#1060); composer gradient fade (#1061). Obsidian acid-lime retired.
+- Decision harness (#1056), security hardening (#1058), attachment/SSE/transcript
+  fixes (#1046/#1050/#1051/#1052) all merged. Billing unchanged: Paddle merged,
+  NOT activated; env/config Stripe-vs-Paddle mismatch = owner cleanup item.
 
-HOLD
-- #996 mixed-scope pitch/explainer/waitlist bundle
-- #988 CI bot-comment housekeeping
-- #967 pre-launch gate/waitlist (obsolete in intent — the site is now open;
-  requires an owner decision to close or repurpose)
-- #965 journey-state seed (owner ruling: becomes a Memory Engine projection)
+HELD / FROZEN (ready or paused, do NOT merge/activate without owner review)
+- #1062 Atelier MATCH job cards — CI-green, held until containment done (design).
+- #1055 Gmail M0 (`TASK-20260716-001`) — draft, flag OFF; needs independent
+  security/privacy review + isolated migration-043 + limited real-account OAuth test.
+- #1025 Memory M1 (`TASK-20260716-002`) — draft, flag OFF; keep as draft pending
+  shadow evidence; no MemoryReader.
 
-REVIEW QUEUE
-- #1027 docs reopen (merge to make main's program doc match owner direction)
-- #1024 ADR-001 decision artifact (accepted; merge records it)
-- #989 subscription-audit follow-ups (reconcile against merged #1008)
-- #1002 settings "Discuss with Rico" honesty labels
-- #1016 /queue auth guard (guard-only; coordinate merge-then-migrate vs
-  supersede with a full /queue Atelier PR per program Step 3)
+CLOSED 2026-07-16 (board cleanup, owner plan step 4)
+- #967 pre-launch gate (superseded — site open) · #996 mixed pitch/explainer/waitlist
+  (split-or-close) · #989 subscription fallback (stale vs Paddle) · issues #960/#963
+  (completed — CV dedup migration 037 / onboarding CV persistence migration 038).
 
 REFERENCE ONLY / DO NOT RESUME
 - #1029 (closed composer attempt), #961, #935, #872, #873
-- #997/#987/#985/#968 are no longer open — do not resurrect
+- Uploaded design packages (rico-design-reference*.zip, lovable-source) = visual
+  reference ARCHIVE only — never port their pricing (AED tiers), auth, or mock logic.
 ```
 
 ## Recent main reality (de8ce666 → 27df7ba6, 2026-07-14 → 07-16)

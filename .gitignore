@@ -1,4 +1,10 @@
-# Environment variables with sensitive data
+# Environment variables with sensitive data.
+# Broad *.env catch-all so NO env file (e.g. rico-job-automation-api.env,
+# production.env) can ever be committed by accident; only *.example templates
+# are allowed through. Keep the explicit lines below for clarity/tooling.
+*.env
+!*.env.example
+!.env.example
 .env
 .env.local
 .env.*.local
