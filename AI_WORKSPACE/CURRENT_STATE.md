@@ -1,6 +1,65 @@
 # Current State
 
-> **Reconciliation header — 2026-07-16 (latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-16 (evening; latest; supersedes all headers below).**
+> `main` HEAD `4194736f`. This header catches the operating record up to a fast
+> design push (owner note: "the design advanced quickly but the operating log
+> didn't keep up").
+>
+> **DESIGN-SYSTEM PIVOT — `DEC-20260716-001` (merged, #1059).** Atelier V3 is now
+> the **sole production-wide visual system** (marketing, auth, workspace, and
+> `/command`); dark mode is **"Atelier at Night"** on the same semantic tokens.
+> Supersedes the Atelier/Nocturne split (`DEC-20260708-003`) and the preview-only
+> stance (`DEC-20260709-006`). The `/command` "Command Obsidian" acid-lime program
+> is **retired to historical reference**: after the owner reviewed the Atelier
+> `/design-preview` package, `/command` was re-skinned to the Atelier Console
+> (paper + Atelier at Night, **sun-red** accent) — C1–C4 **structure preserved**,
+> a visual **token re-skin** not a rebuild.
+>
+> **`/command` is now an end-to-end Atelier surface (in `main`):** the route
+> palette swapped Obsidian→Atelier via `commandAtelierTheme.ts` (`obsidianTheme.ts`
+> deleted); the **editorial reply rendering** shipped (owner spec) — user turns =
+> compact dark bubbles (sans), assistant turns = editorial **serif prose** with a
+> hairline left rail + blink caret, "Thinking…" serif-italic shimmer (no spinner),
+> ghost Copy/Regenerate; plus the composer **gradient fade** and the Atelier
+> **MATCH job cards** (ScorePip tiers, WHY-IT-FITS/HONEST-GAPS, all apply/save/skip
+> actions preserved). Files: `components/command/{commandAtelierTheme,RicoReply,
+> JobMatchCardAtelier}.tsx`, `CommandTranscriptStep.tsx`, `CommandComposer.tsx`,
+> `app/command/page.tsx`, `tailwind.config` (ink/paper/rule/sun tokens + caret
+> keyframe). C3's Obsidian composer PR (#1057) was **closed** (superseded); its one
+> Atelier-appropriate element (gradient fade) salvaged. C5 (right rail) / C6
+> (mobile/RTL) collapse to a **verification pass** — those surfaces already
+> re-skinned through the shared palette in #1060.
+>
+> **Merged to `main` on 2026-07-16 (this push):** #1046 attachment-OCR trust fix
+> (prod-smoked) · #1050 SSE transport hardening (prod-verified) · #1051 + #1052
+> streaming/transcript id-collision fixes · #1053 render-blocking font removed ·
+> #1048 C2 transcript adapter · #1056 **hermetic CI decision-regression harness**
+> (`tests/decision_regression/`, wired into `qa-tests.yml`; caught + fixed an ELF
+> exec-detection gap) · #1058 **security hardening** (XFF rate-limit bypass,
+> `/chat/public` email-impersonation, DOCX decompression bomb, weak session id —
+> all verified) · #1060 Atelier `/command` re-skin + reply rendering · #1059 the
+> DEC docs · #1061 composer gradient fade.
+>
+> **Open PRs:** #1062 Atelier MATCH job cards (CI-green but **HELD** — design work
+> frozen under the containment posture until source-of-truth is unified; owner also
+> logged Atelier colour/AR/test gaps on it) · #1055 **Gmail M0 read-only connector**
+> (real **Draft** — first-party OAuth, migration 043, Fernet tokens,
+> `RICO_ENABLE_GMAIL_SYNC=false`; **3 P1 review blockers open** + awaiting Google
+> restricted-scope verification — see `TASKS.md TASK-20260716-001`) · #1025
+> **Memory Engine M1** (draft — reconciled with main, shadow-only, flag OFF, paused
+> pending evidence).
+>
+> **Coordination note:** the parallel-editor ("Windsurf") edits to `TASKS.md` (the
+> Gmail M0 task) and `ENGINEERING_ROADMAP.md` (Phase-4 Gmail entry) were
+> **incorporated into the reconciliation PR #1063** (merged `cd5a54af`), not left
+> uncommitted — Windsurf should not re-push them. The owner's local
+> `03-design-preview-1-.pdf` remains untracked (reference archive).
+>
+> **Not activated / paused:** Paddle billing (pending Sandbox secret rotation +
+> isolated lifecycle test) · Gmail sync (flag OFF) · Memory M1 (flag OFF). Docs-only
+> sync; no `apps/web`/`src` runtime change in this header.
+>
+> **Reconciliation header — 2026-07-16 (superseded by the header above).**
 > `main` HEAD `2248a7ad`. Owner directives this session: open-budget autonomous
 > execution (cost rules retired), OPERATING_RULES ceremony waived, mission = trusted
 > Career Operating System (order: #1046 → #1048 C2 → C3–C6 → #1025 M1 → intelligence

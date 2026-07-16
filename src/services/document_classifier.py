@@ -24,6 +24,9 @@ _MAGIC_TABLE: list[tuple[bytes, str]] = [
     (b"BM",              "image"),       # BMP
     (b"\xd0\xcf\x11\xe0", "compound"),  # Compound Doc — .doc or .msg
     (b"MZ",              "executable"),  # DOS/Windows EXE/DLL — always rejected
+    (b"\x7fELF",         "executable"),  # Linux/ELF binary — Render runs Linux, so
+                                          # reject these too (surfaced by the decision
+                                          # regression harness, tests/decision_regression)
 ]
 _WEBP_RIFF   = b"RIFF"
 _WEBP_MARKER = b"WEBP"

@@ -1,0 +1,44 @@
+# Golden dataset — Rico document classifier (src/services/document_classifier.py).
+# One JSON object per line. Fields:
+#   id            unique slug
+#   expected      required document_type
+#   synth         how to build the input bytes (see harness.build_classifier_input)
+#   min_confidence (optional) floor on the classifier's confidence
+#   hard          true = encodes a real production incident or security invariant;
+#                 must never regress regardless of the aggregate accuracy floor
+#   note/tags     documentation
+#
+# Adding a case: append one line. Adding a NEW decision family: add an adapter in
+# harness.py + a goldens file + a test. Keep inputs library-free (text / magic bytes).
+#
+# ── SECURITY / PRODUCTION-INCIDENT INVARIANTS (hard) ──────────────────────────
+{"id": "image_png_not_cv", "expected": "image", "hard": true, "min_confidence": 0.99, "synth": {"kind": "magic", "magic": "png", "pad": 4096}, "note": "#1046: a PNG upload must classify as image, never routed into CV extraction", "tags": ["security", "incident-1046"]}
+{"id": "image_jpg_not_cv", "expected": "image", "hard": true, "min_confidence": 0.99, "synth": {"kind": "magic", "magic": "jpg", "pad": 4096}, "note": "#1046: JPEG upload must classify as image", "tags": ["incident-1046"]}
+{"id": "image_gif_not_cv", "expected": "image", "hard": true, "synth": {"kind": "magic", "magic": "gif", "pad": 4096}, "note": "#1046: GIF upload must classify as image"}
+{"id": "identity_passport_en", "expected": "identity_document", "hard": true, "min_confidence": 0.9, "synth": {"kind": "text", "filename": "doc.txt", "text": "Passport number: A1234567\nPlace of birth: Dubai\nIssuing authority: GDRFA\nMachine readable zone present."}, "note": "#1047: an identity document must be classified so the upload route hard-blocks it", "tags": ["security", "incident-1047"]}
+{"id": "identity_emirates_id_en", "expected": "identity_document", "hard": true, "min_confidence": 0.9, "synth": {"kind": "text", "filename": "doc.txt", "text": "Emirates ID\nEID number: 784-1990-1234567-1\nNational ID number\nIssuing authority: Federal Authority for Identity."}, "note": "#1047: Emirates ID must be blocked", "tags": ["security", "incident-1047"]}
+{"id": "identity_passport_ar", "expected": "identity_document", "hard": true, "synth": {"kind": "text", "filename": "doc.txt", "text": "رقم جواز السفر: A1234567\nالهوية الإماراتية\nرقم بطاقة الهوية: 784"}, "note": "#1047: Arabic identity document must be blocked (bilingual coverage)", "tags": ["security", "incident-1047", "ar"]}
+{"id": "executable_mz_rejected", "expected": "executable", "hard": true, "min_confidence": 0.99, "synth": {"kind": "magic", "magic": "mz", "pad": 2048}, "note": "security: PE/DOS executable must be rejected, never parsed", "tags": ["security"]}
+{"id": "executable_elf_rejected", "expected": "executable", "hard": true, "min_confidence": 0.99, "synth": {"kind": "magic", "magic": "elf", "pad": 2048}, "note": "security: ELF executable must be rejected", "tags": ["security"]}
+#
+# ── CV (résumé) ───────────────────────────────────────────────────────────────
+{"id": "cv_standard_en", "expected": "cv", "min_confidence": 0.15, "synth": {"kind": "text", "filename": "resume.txt", "text": "Curriculum Vitae\nProfessional summary: senior HSE manager.\nWork experience: 8 years.\nEducation: BSc Engineering, university.\nTechnical skills: risk assessment, NEBOSH. References available."}, "note": "canonical CV — must classify as cv (keyword-ratio confidence is naturally modest; floor catches a collapse, not the normal value)"}
+{"id": "cv_keywords_en", "expected": "cv", "synth": {"kind": "text", "filename": "cv.txt", "text": "Career objective and professional experience.\nEmployment history across three companies.\nAreas of expertise and competencies. Nationality: UAE. Date of birth: 1990. LinkedIn.com/in/example"}, "note": "CV via secondary signal bank"}
+#
+# ── Job description ───────────────────────────────────────────────────────────
+{"id": "job_description_en", "expected": "job_description", "min_confidence": 0.15, "synth": {"kind": "text", "filename": "jd.txt", "text": "Job title: Safety Officer. About the role and about the company.\nKey responsibilities: you will lead audits.\nRequirements: must have NEBOSH. How to apply: apply now before the application deadline."}, "note": "canonical job posting"}
+#
+# ── Cover letter ──────────────────────────────────────────────────────────────
+{"id": "cover_letter_en", "expected": "cover_letter", "synth": {"kind": "text", "filename": "cover.txt", "text": "Dear Hiring Manager,\nI am writing to apply for the position. I believe my experience is a strong fit and I would welcome the opportunity.\nYours sincerely, A. Candidate."}, "note": "canonical cover letter"}
+#
+# ── Offer letter ──────────────────────────────────────────────────────────────
+{"id": "offer_letter_en", "expected": "offer_letter", "synth": {"kind": "text", "filename": "offer.txt", "text": "We are pleased to offer you employment. This is an offer of employment.\nStart date: 1 August. Base salary and total compensation are detailed. Probation period applies. Please sign and countersign."}, "note": "canonical offer letter"}
+#
+# ── Application confirmation (BUG-19 override) ────────────────────────────────
+{"id": "application_confirmation_en", "expected": "application_confirmation", "min_confidence": 0.8, "synth": {"kind": "text", "filename": "conf.txt", "text": "Thank you for applying. Your application was sent to the employer. Application id: 99213. Your application is under review."}, "note": "BUG-19: >=2 confirmation signals win over larger banks"}
+#
+# ── No-text (scan/screenshot with no text layer) ──────────────────────────────
+{"id": "no_text_whitespace", "expected": "no_text", "min_confidence": 0.8, "synth": {"kind": "repeat", "filename": "scan.txt", "text": " ", "times": 2000}, "note": "#674 residual: a text-format file with no readable text must be no_text, never a poor-quality CV"}
+#
+# ── Unknown (no signal) ───────────────────────────────────────────────────────
+{"id": "unknown_prose", "expected": "unknown", "synth": {"kind": "repeat", "filename": "note.txt", "text": "the quick brown fox jumps over the lazy dog. ", "times": 6}, "note": "generic prose with no document signal — must not be force-fit to a type"}

@@ -877,7 +877,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
 
     Supports two user identification modes:
     - session_id: for anonymous visitors (user_id = public:{session_id})
-    - email: for users who completed Jotform onboarding (user_id = email)
+    - email: a namespaced, non-persisting public identity (user_id =
+      public:e-{hash}). An unverified email never adopts a real account — it
+      cannot read/write that account's profile or chat history. It is used only
+      as an anti-dodge key so a registered user cannot escape their monthly AI
+      cap by routing through the public endpoint.
     """
     start_time = time.time()
     request_ref = generate_error_ref()
@@ -887,40 +891,40 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
         raise HTTPException(status_code=422, detail="Either session_id or email must be provided")
 
     try:
-        # Build session context: email-identified users can persist profile; anonymous cannot
+        # Build session context. An unverified email is NEVER allowed to adopt a real
+        # account identity: doing so would let anyone who knows a victim's email read that
+        # victim's profile PII into the AI context, persist attacker turns into the victim's
+        # chat history, and burn the victim's quota. Instead the email becomes a namespaced,
+        # non-persisting public identity — its only privileged use is the anti-dodge quota gate.
         if payload.email:
             from src.repositories.users_repo import get_user_by_email
 
             registered = get_user_by_email(payload.email)
-            # Canonicalize to the stored email for a registered user so usage counting and
-            # profile persistence use the same identity key as the authenticated /chat path
-            # (and so casing/whitespace variants can't mint a fresh usage bucket).
-            email_identity = registered.email if registered else payload.email
-            ctx = RicoSessionContext(
-                user_id=email_identity,
-                auth_type="public",
-                can_persist_profile=True,
-                can_view_private_jobs=False,
-                rate_limit_tier="standard",
-            )
             # A registered user must not dodge their monthly AI-message cap by routing through
             # the public endpoint with their email. Enforce the same cap the authenticated
-            # /chat path applies. auth_type stays "public" deliberately: the email is unverified
-            # (no JWT), so we must NOT grant authenticated-only privileges (private-job
-            # visibility, account/subscription disclosure) on the strength of an unverified
-            # email — only the usage limit is applied here.
+            # /chat path applies, keyed on the stored email. The email is unverified (no JWT),
+            # so we grant NO authenticated-only privilege (profile persistence, private-job
+            # visibility, account/subscription disclosure) — only the usage limit is applied.
             if registered:
                 from src.services.subscription_gating import (
                     check_ai_message_allowed_for_user,
                 )
 
-                gate = check_ai_message_allowed_for_user(email_identity)
+                gate = check_ai_message_allowed_for_user(registered.email)
                 if gate and not gate.allowed:
                     _metrics.record_request((time.time() - start_time) * 1000)
                     return RicoChatResponse(
                         **_strip_internal_fields(gate.to_response()),
                         trace_id=request_ref,
                     )
+
+            # Namespaced public session that cannot read/write any real profile. The hash
+            # keeps distinct emails in distinct public buckets without ever exposing the raw
+            # email as a user_id, and for_public() forces can_persist_profile=False.
+            email_key = "e-" + hashlib.sha256(
+                payload.email.strip().lower().encode("utf-8")
+            ).hexdigest()[:40]
+            ctx = RicoSessionContext.for_public(email_key)
         else:
             ctx = RicoSessionContext.for_public(payload.session_id[:64])
 
