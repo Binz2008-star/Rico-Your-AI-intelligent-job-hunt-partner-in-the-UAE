@@ -697,6 +697,16 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
         return RicoChatResponse(**error_response, trace_id=request_ref)
 
 
+# SSE response headers: no-transform stops intermediaries re-encoding the
+# stream; X-Accel-Buffering disables proxy buffering (nginx-style, harmless
+# elsewhere). Connection is hop-by-hop and managed by the ASGI server — never
+# set it manually. Content-Length must stay absent (chunked streaming).
+SSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+}
+
+
 @router.post("/chat/stream")
 @limiter.limit(LIMIT_CHAT)
 def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingResponse:
@@ -718,12 +728,17 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
     except HTTPException as exc:
         def _err():
             yield f'data: {_json.dumps({"type":"error","message":"Unauthorized"})}\n\n'
-        return StreamingResponse(_err(), media_type="text/event-stream")
+        return StreamingResponse(_err(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     user_id = user["email"]
     ctx = RicoSessionContext.for_authenticated(user_id)
 
     def _event_stream():
+        # SSE comment line first: starts the chunked body immediately so
+        # proxies flush headers and hold the connection open through the
+        # first-token wait (cold provider calls can take seconds). Comment
+        # lines are ignored by SSE clients per spec.
+        yield ": connected\n\n"
         try:
             # For non-conversational intents (job search, CV ops) fall back to
             # the full JSON response so structured data (job cards, profile preview)
@@ -776,7 +791,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
     return StreamingResponse(
         _event_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers=SSE_HEADERS,
     )
 
 
@@ -794,12 +809,15 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
     if not session_id or not is_safe_public_session_id(session_id):
         def _err():
             yield f'data: {_json.dumps({"type":"error","message":"Invalid session."})}\n\n'
-        return StreamingResponse(_err(), media_type="text/event-stream")
+        return StreamingResponse(_err(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     user_id = f"public:{session_id}"
     ctx = RicoSessionContext.for_public(user_id)
 
     def _event_stream():
+        # See rico_chat_stream: immediate SSE comment flushes the response
+        # start through buffering proxies before any heavy work runs.
+        yield ": connected\n\n"
         try:
             from src.services.chat_service import _intent_router  # type: ignore[attr-defined]
             profile = get_profile(user_id)
@@ -848,7 +866,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
     return StreamingResponse(
         _event_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers=SSE_HEADERS,
     )
 
 
