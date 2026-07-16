@@ -158,10 +158,19 @@ export function CommandComposer({
     if (isAuthenticated) {
         return (
             <div
-                className="shrink-0 px-3 pt-2 sm:px-5 sm:pt-3 pb-[calc(56px_+_0.75rem_+_env(safe-area-inset-bottom))] md:pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]"
+                className="relative shrink-0 px-3 pt-2 sm:px-5 sm:pt-3 pb-[calc(56px_+_0.75rem_+_env(safe-area-inset-bottom))] md:pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]"
                 data-testid="atelier-composer"
                 dir={isRTL ? "rtl" : "ltr"}
             >
+                {/* Gradient fade from the paper surface above the sticky composer
+                    (Atelier spec). Route-scoped, decorative, non-interactive — the
+                    transcript scrolls behind and dissolves into the paper. */}
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 bottom-full h-10"
+                    style={{ background: `linear-gradient(to top, ${c.bg}, transparent)` }}
+                    data-testid="composer-fade"
+                />
                 {/* Hidden file input */}
                 <input
                     id="cv-file-upload"
