@@ -1,10 +1,12 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTranslation } from "@/lib/translations";
 import type { ApplicationDraft } from "@/lib/api";
+import { useTranslation } from "@/lib/translations";
+import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 interface ApplicationDraftCardProps {
@@ -15,17 +17,14 @@ interface ApplicationDraftCardProps {
 
 type Tab = "cover_letter" | "cv";
 
-export function ApplicationDraftCard({
-    draft,
-    onApprove,
-    onReject,
-}: ApplicationDraftCardProps) {
+export function ApplicationDraftCard({ draft, onApprove, onReject }: ApplicationDraftCardProps) {
     const [tab, setTab] = useState<Tab>("cover_letter");
     const [approving, setApproving] = useState(false);
     const [rejecting, setRejecting] = useState(false);
     const [done, setDone] = useState<"approved" | "rejected" | null>(null);
     const { language } = useLanguage();
     const t = useTranslation(language);
+    const c = useWorkspaceTheme();
 
     async function handleApprove() {
         setApproving(true);
@@ -50,94 +49,99 @@ export function ApplicationDraftCard({
     if (done === "rejected") return null;
 
     return (
-        <div
-            className={cn(
-                "rounded-xl border border-overlay/10 bg-surface/80 backdrop-blur-sm transition-all",
-                done === "approved" && "border-green-500/30 bg-green-500/5 opacity-60",
-            )}
+        <article
+            className={cn("overflow-hidden rounded-[6px] border transition-opacity", done === "approved" && "opacity-60")}
+            style={{
+                borderColor: done === "approved" ? "rgba(34,197,94,0.35)" : c.hair,
+                background: c.panel,
+                color: c.ink,
+                fontFamily: ATELIER_FONT.body,
+            }}
         >
-            {/* Header */}
-            <div className="flex items-start justify-between gap-3 px-5 py-4">
+            <header className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
                 <div className="min-w-0">
-                    <h3 className="truncate text-base font-semibold text-text-primary">
+                    <h3 className="truncate text-lg" style={{ fontFamily: ATELIER_FONT.serif, color: c.ink }}>
                         {draft.job_title}
                     </h3>
-                    <p className="mt-0.5 truncate text-sm text-text-secondary">
-                        {draft.company}
-                    </p>
+                    <p className="mt-1 truncate text-sm" style={{ color: c.ink55 }}>{draft.company}</p>
                 </div>
-                {done === "approved" ? (
-                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-semibold text-green-400">
-                        <MaterialIcon icon="task_alt" size={14} />
-                        {t("draftApproved")}
-                    </span>
-                ) : (
-                    <span className="shrink-0 rounded-full bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold">
-                        {t("draftAwaitingReview")}
-                    </span>
-                )}
+                <span
+                    className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
+                    style={{
+                        borderColor: done === "approved" ? "rgba(34,197,94,0.35)" : c.hair,
+                        color: done === "approved" ? "rgb(34,197,94)" : c.red,
+                        background: done === "approved" ? "rgba(34,197,94,0.08)" : c.activeBg,
+                    }}
+                >
+                    <MaterialIcon icon={done === "approved" ? "task_alt" : "schedule"} size={13} />
+                    {done === "approved" ? t("draftApproved") : t("draftAwaitingReview")}
+                </span>
+            </header>
+
+            <div className="flex border-y px-4 sm:px-5" style={{ borderColor: c.hair }} role="tablist">
+                {(["cover_letter", "cv"] as Tab[]).map((tabKey) => {
+                    const selected = tab === tabKey;
+                    return (
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={selected}
+                            key={tabKey}
+                            onClick={() => setTab(tabKey)}
+                            className="me-5 border-b-2 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2"
+                            style={{ borderColor: selected ? c.red : "transparent", color: selected ? c.ink : c.ink40 }}
+                        >
+                            {tabKey === "cover_letter" ? t("draftCoverLetter") : t("draftTailoredCv")}
+                        </button>
+                    );
+                })}
             </div>
 
-            {/* Tab switcher */}
-            <div className="flex border-b border-overlay/10 px-5">
-                {(["cover_letter", "cv"] as Tab[]).map((tabKey) => (
-                    <button
-                        key={tabKey}
-                        onClick={() => setTab(tabKey)}
-                        className={cn(
-                            "me-4 border-b-2 pb-2 text-sm font-medium transition-colors",
-                            tab === tabKey
-                                ? "border-gold text-gold"
-                                : "border-transparent text-text-tertiary hover:text-text-secondary",
-                        )}
-                    >
-                        {tabKey === "cover_letter" ? t("draftCoverLetter") : t("draftTailoredCv")}
-                    </button>
-                ))}
-            </div>
-
-            {/* Content */}
-            <div className="max-h-64 overflow-y-auto px-5 py-4">
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-text-secondary">
+            <div className="max-h-64 overflow-y-auto px-4 py-5 sm:px-5" style={{ background: c.activeBg }}>
+                <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-6" style={{ color: c.ink70 }}>
                     {tab === "cover_letter" ? draft.cover_letter : draft.tailored_cv}
                 </pre>
             </div>
 
-            {/* Actions */}
             {done !== "approved" && (
-                <div className="flex items-center gap-3 border-t border-overlay/10 px-5 py-4">
+                <footer className="flex flex-col gap-3 border-t px-4 py-4 sm:flex-row sm:items-center sm:px-5" style={{ borderColor: c.hair }}>
                     {draft.apply_url && (
                         <a
                             href={draft.apply_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline"
+                            className="text-xs font-medium underline-offset-4 hover:underline"
+                            style={{ color: c.ink55 }}
                         >
-                            {t("draftViewPosting")}
+                            {t("draftViewPosting")} ↗
                         </a>
                     )}
-                    <div className="ms-auto flex gap-2">
+                    <div className="flex gap-2 sm:ms-auto">
                         <button
+                            type="button"
                             onClick={handleReject}
                             disabled={rejecting || approving}
                             aria-label={t("draftDecline")}
-                            className="flex items-center gap-1.5 rounded-lg border border-overlay/10 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:border-red-500/30 hover:bg-red-500/5 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 disabled:opacity-40"
+                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-[4px] border px-3 py-2 text-sm font-semibold transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-40 sm:flex-none"
+                            style={{ borderColor: c.hair, color: c.ink70, background: c.panel }}
                         >
                             <MaterialIcon icon="close" size={15} />
                             {t("draftDecline")}
                         </button>
                         <button
+                            type="button"
                             onClick={handleApprove}
                             disabled={approving || rejecting}
                             aria-label={t("draftApprove")}
-                            className="flex items-center gap-1.5 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-[#0a0a1a] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 disabled:opacity-40"
+                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-[4px] px-4 py-2 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-40 sm:flex-none"
+                            style={{ background: c.red }}
                         >
                             <MaterialIcon icon="task_alt" size={15} />
                             {approving ? t("draftApproving") : t("draftApprove")}
                         </button>
                     </div>
-                </div>
+                </footer>
             )}
-        </div>
+        </article>
     );
 }

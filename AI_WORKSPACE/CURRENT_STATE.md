@@ -1,6 +1,27 @@
 # Current State
 
-> **Reconciliation header — 2026-07-11, #962 merged (latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-15 (latest; supersedes all headers below).**
+> `main` HEAD `de8ce666` (four dashboard-only `[skip ci]` commits on `21ae19a7` = #1026).
+> Since the 2026-07-11 header below, a large merge train landed (2026-07-13/14): **#1010**
+> control plane (`b753885`); **#1008 Paddle Billing** end-to-end (`1b1748c`, Sandbox mode,
+> one plan "Rico Monthly" at **USD 21.50/mo authoritative** — AED 79 is display reference)
+> plus direct checkout fixes (`d05ca08`/`30ebb7d`/`c11575d`); **teaser gate removed —
+> the full site is OPEN** (`96b7efd`) and the waitlist retired with 3 random opening films
+> (**#1019**); Atelier migrations **#1012** `/applications`, **#1013** `/profile`,
+> **#1015** `/upload`, **#1017** foundation (route matrix, canonical nav, `/dashboard`
+> unblocked), **#1020** `/command` → WorkspaceShell (shell only), **#1021** `/subscription`
+> Atelier UI; **#1023** recorded a program closure that the owner then **superseded by
+> reopening the full-site Atelier migration on 2026-07-14** (docs flip in draft #1027);
+> **#1026** made internal preview routes 404 in production (F-4). Two active tracks now:
+> UI (**#1028** CommandComposer slice 4a — sole implementation PR, Claude writer) and
+> intelligence (**ADR-001 ACCEPTED** on #1024; M1 shadow-write draft #1025, stops before
+> merge). Open gates: #1028 EN/AR visual gate; #1022 real-browser Paddle Sandbox smoke;
+> live Sandbox checkout error diagnosis; migration 040/041 production proof. Authoritative
+> snapshot: `PROJECT_STATUS.md` (2026-07-15); handoff:
+> `HANDOFFS/2026-07-15-control-plane-refresh.md`. Docs-only sync; no `apps/web`/`src`
+> runtime change in this header.
+>
+> **Reconciliation header — 2026-07-11, #962 merged (superseded by the header above).**
 > `main` HEAD `60978ae…`. Since the header below: **#962** (safe login return path) merged as
 > **#981** (`c7aea42…`) — login honors a validated internal `?next=` via `resolveNextPath`
 > (rejects external/`//`/non-`/`), returns a completed guest to the page they were bounced from,

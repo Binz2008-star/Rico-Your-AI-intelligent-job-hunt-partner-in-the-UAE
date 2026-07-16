@@ -95,8 +95,8 @@ test.describe("/command composer stability", () => {
   test.describe.configure({ mode: "serial" });
 
   for (const scenario of [
-    { name: "desktop English", language: "en", viewport: { width: 1366, height: 768 } },
-    { name: "mobile Arabic", language: "ar", viewport: { width: 390, height: 844 } },
+    { name: "desktop English", language: "en", viewport: { width: 1366, height: 768 }, hint: /ENTER TO SEND/ },
+    { name: "mobile Arabic", language: "ar", viewport: { width: 390, height: 844 }, hint: /للإرسال/ },
   ] as const) {
     test(`keeps the composer anchored during pending response on ${scenario.name}`, async ({ page }) => {
       await page.setViewportSize(scenario.viewport);
@@ -107,9 +107,9 @@ test.describe("/command composer stability", () => {
 
       await page.goto("/command");
 
-      const composerHint = page.locator("#command-input-hint");
+      const composerHint = page.getByTestId("composer-hint");
       const messagePane = page.locator('[role="log"]');
-      const textarea = page.locator('textarea[aria-label="Message Rico"]');
+      const textarea = page.getByTestId("composer-textarea");
 
       await expect(textarea).toBeEnabled();
       await textarea.fill("Find HSE jobs in Dubai");
@@ -133,8 +133,8 @@ test.describe("/command composer stability", () => {
 
       expect(Math.abs(composerAfter - composerBefore)).toBeLessThanOrEqual(2);
       expect(Math.abs(paneAfter - paneBefore)).toBeLessThanOrEqual(2);
-      await expect(composerHint).toHaveClass(/text-text-secondary/);
-      expect(await contrastRatio(page, "#command-input-hint")).toBeGreaterThanOrEqual(4.5);
+      await expect(composerHint).toHaveText(scenario.hint);
+      expect(await contrastRatio(page, '[data-testid="composer-hint"]')).toBeGreaterThanOrEqual(4.5);
       await expect(page.getByText(/openai|deepseek|provider/i)).toHaveCount(0);
     });
   }
@@ -145,9 +145,9 @@ test.describe("/command composer stability", () => {
     await page.goto("/command");
 
     const slowBanner = page.getByTestId("command-slow-banner");
-    const composerHint = page.locator("#command-input-hint");
+    const composerHint = page.getByTestId("composer-hint");
     const messagePane = page.locator('[role="log"]');
-    const textarea = page.locator('textarea[aria-label="Message Rico"]');
+    const textarea = page.getByTestId("composer-textarea");
 
     await expect(textarea).toBeEnabled();
     await textarea.fill("Find HSE jobs in Dubai");
@@ -170,7 +170,7 @@ test.describe("/command composer stability", () => {
     const header = page.getByTestId("command-mobile-header");
     const brand = page.getByTestId("command-mobile-brand");
     const authSlot = page.getByTestId("command-mobile-auth-slot");
-    const textarea = page.locator('textarea[aria-label="Message Rico"]');
+    const textarea = page.getByTestId("composer-textarea");
 
     const headerBefore = await header.boundingBox();
     const brandBefore = await brand.boundingBox();

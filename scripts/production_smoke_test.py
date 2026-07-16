@@ -1,14 +1,31 @@
 """
 Production smoke test script for API endpoints.
 Tests against https://rico-job-automation-api.onrender.com
+
+Usage:
+  export RICO_SMOKE_TEST_EMAIL="your-test-account@example.com"
+  export RICO_SMOKE_TEST_PASSWORD="your-test-account-password"
+  python scripts/production_smoke_test.py
+
+Never commit credentials. Both env vars are required.
 """
 import requests
 import json
+import os
 import sys
 
-BASE_URL = "https://rico-job-automation-api.onrender.com"
-TEST_EMAIL = "smoke_test_2026@ricohunt.com"
-TEST_PASSWORD = "SmokeTest2026!"
+BASE_URL = os.environ.get("RICO_SMOKE_API_BASE", "https://rico-job-automation-api.onrender.com")
+TEST_EMAIL = os.environ.get("RICO_SMOKE_TEST_EMAIL")
+TEST_PASSWORD = os.environ.get("RICO_SMOKE_TEST_PASSWORD")
+
+if not TEST_EMAIL or not TEST_PASSWORD:
+    missing = []
+    if not TEST_EMAIL:
+        missing.append("RICO_SMOKE_TEST_EMAIL")
+    if not TEST_PASSWORD:
+        missing.append("RICO_SMOKE_TEST_PASSWORD")
+    print(f"ERROR: {', '.join(missing)} environment variable(s) not set. Aborting.", file=sys.stderr)
+    sys.exit(2)
 
 def print_result(test_name, status_code, response_keys, pass_fail, error=None):
     print(f"\n{test_name}")
@@ -20,7 +37,7 @@ def print_result(test_name, status_code, response_keys, pass_fail, error=None):
 
 def main():
     results = []
-    
+
     # Test 1: Register test user
     print("=" * 60)
     print("TEST 1: POST /api/v1/auth/register")
@@ -45,7 +62,7 @@ def main():
         print_result("Register", "N/A", [], "FAIL", str(e))
         results.append(("Register", False))
         token = None
-    
+
     # Test 2: Login (if register failed or for token refresh)
     print("\n" + "=" * 60)
     print("TEST 2: POST /api/v1/auth/login")
@@ -77,13 +94,13 @@ def main():
     except Exception as e:
         print_result("Login", "N/A", [], "FAIL", str(e))
         results.append(("Login", False))
-    
+
     if not token:
         print("\n❌ CRITICAL: No auth token obtained. Cannot continue with authenticated tests.")
         return 1
-    
+
     headers = {"Cookie": f"access_token={token}"}
-    
+
     # Test 3: GET /api/v1/me
     print("\n" + "=" * 60)
     print("TEST 3: GET /api/v1/me")
@@ -104,7 +121,7 @@ def main():
     except Exception as e:
         print_result("GET /me", "N/A", [], "FAIL", str(e))
         results.append(("GET /me", False))
-    
+
     # Test 4: GET /api/v1/rico/profile
     print("\n" + "=" * 60)
     print("TEST 4: GET /api/v1/rico/profile")
@@ -125,7 +142,7 @@ def main():
     except Exception as e:
         print_result("GET /rico/profile", "N/A", [], "FAIL", str(e))
         results.append(("GET /rico/profile", False))
-    
+
     # Test 5: GET /api/v1/rico/chat/history?limit=6
     print("\n" + "=" * 60)
     print("TEST 5: GET /api/v1/rico/chat/history?limit=6")
@@ -146,7 +163,7 @@ def main():
     except Exception as e:
         print_result("GET /rico/chat/history", "N/A", [], "FAIL", str(e))
         results.append(("GET /rico/chat/history", False))
-    
+
     # Test 6: POST /api/v1/rico/chat with message "hello"
     print("\n" + "=" * 60)
     print("TEST 6: POST /api/v1/rico/chat with message 'hello'")
@@ -171,7 +188,7 @@ def main():
     except Exception as e:
         print_result("POST /rico/chat", "N/A", [], "FAIL", str(e))
         results.append(("POST /rico/chat", False))
-    
+
     # Test 7: GET /api/v1/jobs?page=1&limit=20&min_score=0
     print("\n" + "=" * 60)
     print("TEST 7: GET /api/v1/jobs?page=1&limit=20&min_score=0")
@@ -196,7 +213,7 @@ def main():
     except Exception as e:
         print_result("GET /jobs", "N/A", [], "FAIL", str(e))
         results.append(("GET /jobs", False))
-    
+
     # Summary
     print("\n" + "=" * 60)
     print("SUMMARY")
@@ -207,7 +224,7 @@ def main():
         status = "✓ PASS" if result else "✗ FAIL"
         print(f"  {status}: {test_name}")
     print(f"\nTotal: {passed}/{total} passed")
-    
+
     return 0 if passed == total else 1
 
 if __name__ == "__main__":

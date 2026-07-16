@@ -78,6 +78,213 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260715-001 — Atelier slice 4b: /command message bubbles + empty state
+
+Status: review
+Owner: Claude (WRITER; Coder pass, owner-directed)
+Branch: `feat/atelier-command-message-bubbles-empty-state`
+Issue/PR: draft PR (this slice); program: `ATELIER_FULL_SITE_MIGRATION.md` Step 2
+
+#### Objective
+
+Migrate only the /command message bubbles and empty state to the approved
+Atelier direction (typography-first per the in-repo reference
+`components/ui/rico/RicoMessageBubble.tsx`), authenticated surface only.
+
+#### Continuity Block
+
+- Task ID: TASK-20260715-001
+- GitHub issue/PR: draft PR from `feat/atelier-command-message-bubbles-empty-state`
+- Branch: `feat/atelier-command-message-bubbles-empty-state`
+- Base branch: main
+- Last safe commit SHA: baa427c (main @ branch cut; slice 4a merge)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: `app/command/page.tsx` (message map, empty state, chrome),
+  `components/ui/rico/RicoMessageBubble.tsx` + `RicoMarkdownContent.tsx`,
+  `components/workspace/theme.ts`, `components/atelier-kit/tokens.ts`,
+  `e2e/command-composer-stability.spec.ts`, `__tests__/command-*`
+- Files changed: `components/command/CommandMessages.tsx` (new — Atelier row,
+  mark, markdown scope, empty state); `app/command/page.tsx` (wrapper swap
+  only); `__tests__/command-message-bubbles.test.tsx` (new); this entry
+- Files intentionally not touched: composer (#1028), chat API/streaming,
+  job/action cards + `--rico-*` globals (4c), thinking/error states (4c),
+  right rail (4d), mobile header + canvas background (4e), public surface
+- What is complete: implementation; vitest 427/427; build green; composer
+  e2e 4/4; visual gate 6 shots (EN/AR × desktop/mobile + empty ×2), 0px
+  horizontal overflow measured on all
+- What is incomplete: owner review of draft PR; merge (owner-gated)
+- Known blockers: none
+- Validation already run: `npm run build`; `npx vitest run` (full);
+  `playwright test e2e/command-composer-stability.spec.ts` (chromium)
+- Validation still required: owner visual approval on the PR; final-head CI
+- Next exact action: owner reviews draft PR; on approval, merge; then 4c
+- Stop condition: any change requested to job/tool cards or streaming states
+  belongs to 4c — do not widen this PR
+- Rollback plan: revert the single squash commit; no data/backend impact
+
+### TASK-20260715-001 — Atelier migration: slice 4a — CommandComposer
+
+Status: review
+Owner: Claude (WRITER)
+Branch: `feat/atelier-command-composer`
+Issue/PR: #1028 (draft)
+
+#### Objective
+
+Rebuild PR #1028 as a real Atelier Command Composer migration (slice 4a only).
+Replace the legacy extraction with a focused presentational `CommandComposer`
+component that uses `WorkspaceThemeContext` palette tokens, adds the required
+keyboard shortcuts (Enter, Shift+Enter, IME, Ctrl+K, Ctrl+J, Escape), and adds
+29 tests covering all 13 required cases. Minimal diff in `page.tsx`.
+
+#### Context
+
+- Relevant files: `apps/web/components/command/CommandComposer.tsx`,
+  `apps/web/app/command/page.tsx`, `apps/web/lib/translations.ts`,
+  `apps/web/__tests__/command-composer.test.tsx`
+- Relevant docs: `AI_WORKSPACE/ATELIER_FULL_SITE_MIGRATION.md`
+- Existing behavior: all handlers and state live in `CommandPage` and are passed
+  as props; no backend, streaming, or auth changes
+
+#### Constraints
+
+- Do not touch: other slices (empty state, message bubbles, tool cards, right
+  rail, mobile header), backend/streaming/auth/billing
+- No other routes touched
+- Public/guest composer surface is unchanged in slice 4a
+
+#### Acceptance criteria
+
+- [x] Atelier authenticated surface: panel bg, ink, sun-red, mono hint
+- [x] Public/guest surface unchanged
+- [x] Enter sends, Shift+Enter newlines, IME guard, Ctrl+K, Ctrl+J, Escape
+- [x] RTL mirroring for Arabic
+- [x] 29 tests across 13 required cases — all green
+- [x] `page.tsx` diff minimal: import, hidden-input removal, component swap
+- [x] `npm run build` exit 0
+- [x] Full vitest suite 416/416 green
+- [ ] Playwright screenshots EN/AR desktop/mobile captured
+- [ ] Owner visual review and approval
+
+#### Required verification
+
+- [x] Unit tests: `npx vitest run __tests__/command-composer.test.tsx` → 29/29
+- [x] Full suite: `npx vitest run` → 416/416
+- [x] Frontend build: `npm run build` → exit 0
+- [ ] Playwright screenshots: EN desktop, EN mobile, AR desktop, AR mobile
+- [ ] Owner visual review
+
+#### Continuity Block
+
+- Task ID: TASK-20260715-001
+- GitHub issue/PR: #1028 (draft — do not merge)
+- Branch: `feat/atelier-command-composer`
+- Base branch: main
+- Last safe commit SHA: 21ae19a7 (origin/main at branch reset)
+- Current head SHA: fa6c6e24
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: `apps/web/components/workspace/theme.ts`,
+  `apps/web/components/atelier-kit/tokens.ts`,
+  `apps/web/components/atelier-kit/primitives.tsx`,
+  `apps/web/components/workspace/WorkspaceShell.tsx`,
+  `apps/web/app/_atelier/atelier-tokens.css`,
+  `apps/web/app/command/page.tsx`,
+  `apps/web/lib/translations.ts`
+- Files changed:
+  `apps/web/components/command/CommandComposer.tsx` (new — Atelier component);
+  `apps/web/app/command/page.tsx` (import + hidden-input removal + swap);
+  `apps/web/lib/translations.ts` (cmdAtelierPlaceholder + cmdAtelierHint EN/AR);
+  `apps/web/__tests__/command-composer.test.tsx` (new — 29 tests)
+- Files intentionally not touched: backend, streaming, auth, billing, other routes,
+  message bubbles, empty state, tool cards, right rail, mobile header
+- What is complete: component built, wired, tested, built, committed, force-pushed;
+  backup branch `backup/pr-1028-legacy-extraction` pushed; PR #1028 branch updated
+- What is incomplete: Playwright screenshots; owner visual review; PR description
+  update (GitHub MCP write access denied — owner must update PR #1028 description manually)
+- Known blockers: GitHub MCP 403 on PR update (token read-only); owner must update
+  PR title/description manually or grant write access
+- Validation already run:
+  `npx vitest run __tests__/command-composer.test.tsx` → 29/29 ✅
+  `npx vitest run` → 416/416 ✅
+  `npm run build` → exit 0 ✅
+- Validation still required: Playwright visual smoke (EN/AR desktop/mobile)
+- Deployment/CI/Neon/Vercel state to check next: PR CI checks on fa6c6e24
+- Next exact action: capture Playwright screenshots for EN desktop, EN mobile,
+  AR desktop, AR mobile against local dev server, then add to PR
+- Stop condition: do not merge without owner visual approval and Playwright screenshots
+- Rollback plan: `git revert fa6c6e24` or reset branch to 21ae19a7
+
+---
+
+### TASK-20260714-001 — Atelier full-site migration REOPENED: refreshed gap matrix + next-PR routing
+
+Status: review
+Owner: Claude (WRITER; Planner pass)
+Branch: `claude/atelier-fullsite-reopen`
+Issue/PR: this docs PR (draft); execution then follows Steps 1→8
+
+#### Objective
+
+Owner reopened the full-site Atelier migration (supersedes the 2026-07-14 program
+closure). Flip `ATELIER_FULL_SITE_MIGRATION.md` from CLOSED/DEFERRED to REOPENED,
+re-audit the route matrix against live `main`, and route execution to the next
+existing in-flight Atelier PR without duplicating work.
+
+#### Context
+
+- Target: **every** production user-facing route on the approved Atelier design,
+  not the original seven surfaces.
+- `main` advanced past the Phase-0 audit base `c11575d` → re-audited @ `5cf9a6f`.
+- Existing in-flight PRs mapped: #1026 (Step 1 preview hygiene, VALID — next),
+  #1016 (Step 3 `/queue` guard-only), #1022 (Step 7 Paddle runtime).
+- Out of scope (owner): #1024/#1025 memory engine; abandoned M1 postgres branch.
+
+#### Constraints
+
+- Docs-only in this PR; no route/component/backend/billing/Neon changes.
+- Preserve completed routes; do not rebuild unless a per-route audit proves
+  residual legacy UI.
+- No direct push to `main`; small draft PRs cut from latest `main`.
+
+#### Acceptance criteria
+
+- [x] Program status flipped to REOPENED with owner directive recorded.
+- [x] Route matrix re-audited from the live tree @ `5cf9a6f` (33 `page.tsx`).
+- [x] Legacy-shell census recorded (`AppShell`, `DashboardShell` consumers).
+- [x] Next existing Atelier PR identified (#1026, Step 1) and validity checked.
+
+#### Required verification
+
+- [x] Route audit: `find app -name page.tsx` + per-route shell grep + `next.config.js` redirects.
+- [x] PR validity: #1026 base=`main`, Vercel preview green (bot checks are noise).
+- [ ] Integration tests: n/a (docs-only).
+- [ ] Frontend build: n/a (no `apps/web` code change).
+
+#### Continuity Block
+
+- Task ID: TASK-20260714-001
+- GitHub issue/PR: docs PR (draft)
+- Branch: `claude/atelier-fullsite-reopen`
+- Base branch: main
+- Last safe commit SHA: 5cf9a6f (live origin/main; owner-verified)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: all 33 `apps/web/app/**/page.tsx` routes, `next.config.js`
+  redirects, open PR list (#1016/#1022/#1024/#1025/#1026 + unrelated), PR #1026 detail+status
+- Files changed: `AI_WORKSPACE/ATELIER_FULL_SITE_MIGRATION.md` (REOPEN status +
+  refreshed matrix + in-flight PR map); `AI_WORKSPACE/TASKS.md` (this entry)
+- Files intentionally not touched: all `apps/web` route/component code; backend;
+  #1024/#1025 memory work; abandoned `claude/m1-postgres-integration-tests-*` branch
+- What is complete: reopen recorded; live gap matrix; next-PR routing to #1026
+- What is incomplete: Steps 1→8 execution (starting by finishing #1026)
+- Known blockers: none for this docs PR
+- Validation already run: route/shell audit; #1026 base+status check
+- Validation still required: owner ack of matrix; then execute Step 1 via #1026
+
 ### TASK-20260713-002 — Atelier migration program: parity matrix + first route PR (/applications)
 
 Status: review

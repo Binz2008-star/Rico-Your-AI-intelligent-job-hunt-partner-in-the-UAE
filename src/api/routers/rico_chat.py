@@ -1398,6 +1398,27 @@ async def rico_upload_cv(
                 text_classification = await loop.run_in_executor(
                     None, classify_document, extracted.encode("utf-8"), "image-text.txt"
                 )
+                # Security: if the reclassified text is an identity document,
+                # reject immediately — BEFORE any durable persistence, memory
+                # persistence, extracted-text response, or preview logging.
+                # An image of a passport with successful OCR must never have its
+                # text stored or echoed.
+                if text_classification.document_type == "identity_document":
+                    _metrics.record_request((time.time() - start_time) * 1000)
+                    logger.warning(
+                        "doc_image_identity_blocked user=%s filename=%s request_ref=%s",
+                        resolved_user_id, safe_name, request_ref,
+                    )
+                    return {
+                        "ok": False,
+                        "status": "rejected",
+                        "document_type": "identity_document",
+                        "message": (
+                            "This document appears to be a passport or identity document. "
+                            "For your security it was not saved and your profile was not changed. "
+                            "Please upload a CV or resume instead."
+                        ),
+                    }
                 # Remember the transcription so follow-up chat ("save as target
                 # job", "score against my CV") can reference the screenshot.
                 # Durable store first — survives Render restarts, multiple
