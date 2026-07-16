@@ -33,6 +33,7 @@
  * safety, or API code lives here.
  */
 
+import { atelierFraunces } from "@/components/atelier-kit/fonts";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { COMMAND_ATELIER } from "@/components/command/commandAtelierTheme";
 import { WORKSPACE_NAV } from "@/components/workspace/WorkspaceShell";
@@ -49,6 +50,21 @@ const EYEBROW: React.CSSProperties = {
     textTransform: "uppercase",
     letterSpacing: "0.22em",
 };
+
+/* Atelier editorial token layer (slice C3): the reply surface (RicoReply /
+   RicoUserBubble / RicoThinking) styles through Tailwind utilities backed by
+   CSS vars — `rgb(var(--ink) / <alpha-value>)` — so alpha modifiers such as
+   from-ink/50 resolve. We therefore emit the vars as "r g b" channels derived
+   from the JS palette (the single source of truth) rather than hex, keeping
+   light / "Atelier at Night" automatic with zero duplicated color values.
+   The 7 palette slots consumed here are always 6-digit hex in COMMAND_ATELIER. */
+function hexChannels(hex: string): string {
+    const h = hex.replace("#", "").trim();
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `${r} ${g} ${b}`;
+}
 
 /* Canonical top-bar panel glyphs (PanelLeft / PanelRight, 1.6px strokes). */
 function PanelIcon({ side }: { side: "start" | "end" }) {
@@ -122,8 +138,23 @@ export function CommandObsidianShell({
             data-obsidian-mode={dark ? "dark" : "light"}
             dir={isAr ? "rtl" : "ltr"}
             lang={language}
-            className="relative flex h-[100dvh] min-h-0 flex-col overflow-hidden"
-            style={{ background: c.bg, color: c.ink, fontFamily: ATELIER_FONT.body, colorScheme: dark ? "dark" : "light" }}
+            className={`relative flex h-[100dvh] min-h-0 flex-col overflow-hidden ${atelierFraunces.variable}`}
+            style={{
+                background: c.bg,
+                color: c.ink,
+                fontFamily: ATELIER_FONT.body,
+                colorScheme: dark ? "dark" : "light",
+                // Atelier editorial token layer — derived from the JS palette so
+                // the reply surface (RicoReply/RicoUserBubble/RicoThinking) and any
+                // bg-ink/text-paper/border-rule/from-ink/50 utilities resolve.
+                ["--ink" as string]: hexChannels(c.ink),
+                ["--ink-soft" as string]: hexChannels(c.ink70),
+                ["--ink-mute" as string]: hexChannels(c.ink55),
+                ["--paper" as string]: hexChannels(c.bg),
+                ["--paper-2" as string]: hexChannels(c.panel),
+                ["--rule" as string]: hexChannels(c.hair),
+                ["--sun" as string]: hexChannels(c.red),
+            } as React.CSSProperties}
         >
             {/* ── Scoped canvas layers (canonical body::before/::after, route-local) ── */}
             <div
@@ -345,6 +376,8 @@ export function CommandObsidianShell({
                 [data-testid="command-obsidian-shell"] a:focus-visible,
                 [data-testid="command-obsidian-shell"] button:focus-visible { outline: 2px solid ${c.red}; outline-offset: 2px; border-radius: 4px; }
                 [data-testid="command-obsidian-shell"] ::selection { background: ${c.red}; color: ${c.bg}; }
+                [data-testid="command-obsidian-shell"] .serif { font-family: var(--font-fraunces-landing), Georgia, serif; }
+                [data-testid="command-obsidian-shell"] .serif-italic { font-family: var(--font-fraunces-landing), Georgia, serif; font-style: italic; }
                 [lang="ar"][data-testid="command-obsidian-shell"] * { letter-spacing: 0 !important; }
             ` }} />
         </div>

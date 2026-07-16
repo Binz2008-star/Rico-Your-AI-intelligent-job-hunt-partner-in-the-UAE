@@ -10,6 +10,21 @@ const config: Config = {
     theme: {
         extend: {
             colors: {
+                // ── Atelier editorial token layer (route-scoped to /command) ──
+                // Backed by CSS custom properties the CommandObsidianShell sets
+                // from its JS WorkspacePalette (channels: "r g b"), so light /
+                // "Atelier at Night" both resolve automatically and Tailwind's
+                // `/<alpha>` modifier works (e.g. from-ink/50, via-ink/20).
+                // Only consumed by the /command reply surface (RicoReply /
+                // RicoUserBubble / RicoThinking); no other route defines these vars.
+                ink: "rgb(var(--ink) / <alpha-value>)",
+                "ink-soft": "rgb(var(--ink-soft) / <alpha-value>)",
+                "ink-mute": "rgb(var(--ink-mute) / <alpha-value>)",
+                paper: "rgb(var(--paper) / <alpha-value>)",
+                "paper-2": "rgb(var(--paper-2) / <alpha-value>)",
+                rule: "rgb(var(--rule) / <alpha-value>)",
+                sun: "rgb(var(--sun) / <alpha-value>)",
+
                 // Rico AI Design System v4 — Premium UAE Career
                 // Primary:   Gold/Amber  — brand, CTAs
                 // Secondary: Indigo      — actions, interactive (professional)
@@ -198,6 +213,8 @@ const config: Config = {
                 "label-caps": ["12px", { lineHeight: "1.0", letterSpacing: "0.15em", fontWeight: "400" }],
             },
             animation: {
+                // Atelier editorial blink caret (step-end so it snaps, not fades)
+                caret: "caret 1s step-end infinite",
                 float: "float 14s ease-in-out infinite",
                 "float-delayed": "float 16s ease-in-out infinite -4s",
                 "pulse-gold": "pulse-gold 8s ease-in-out infinite",
@@ -214,6 +231,10 @@ const config: Config = {
                 "ring-reveal": "ring-reveal 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) 0.15s backwards",
             },
             keyframes: {
+                caret: {
+                    "0%,49%": { opacity: "1" },
+                    "50%,100%": { opacity: "0" },
+                },
                 float: {
                     "0%, 100%": { transform: "translateY(0px) rotate(0deg)" },
                     "50%": { transform: "translateY(-30px) rotate(0.8deg)" },

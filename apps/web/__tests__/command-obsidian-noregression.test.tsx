@@ -184,6 +184,40 @@ describe("C1 no-regression — real CommandPage over network fixtures", () => {
         expect(log.queryByText(/^Salam — checking your profile now\.$/)).not.toBeInTheDocument();
     });
 
+    it("C3 editorial reply rendering — user ink bubble, Thinking shimmer, serif prose + Copy", async () => {
+        let sse!: ReturnType<typeof manualSSE>;
+        streamHandlers.push((init) => {
+            sse = manualSSE(init?.signal);
+            return sse.response;
+        });
+        const log = await mountAuthenticated();
+
+        await sendText("Hello Rico");
+
+        // User turn → dark ink bubble (RicoUserBubble), not the old mono gutter.
+        const userTurn = await log.findByText("Hello Rico");
+        expect(userTurn.className).toContain("bg-ink");
+
+        // Submitted, no text yet → the serif-italic "Thinking…" shimmer.
+        await log.findByText(/thinking/i);
+
+        // Streamed tokens → serif editorial prose owned by RicoReply.
+        sse.push({ type: "token", text: "Salam, checking your profile." });
+        const reply = await log.findByText(/Salam, checking your profile\./);
+        expect(reply.className).toContain("serif");
+        // The blink caret is present only while the real stream appends.
+        expect(screen.getByTestId("transcript-streaming-caret")).toBeInTheDocument();
+
+        // Done → caret gone, the ghost Copy affordance appears (RicoReply owns Copy).
+        sse.push({ type: "done", response: { response: "Salam — all set.", type: "chat" } });
+        sse.close();
+        const settled = await log.findByText(/Salam — all set\./);
+        await waitFor(() => expect(screen.queryByTestId("transcript-streaming-caret")).not.toBeInTheDocument());
+        // The settled reply carries RicoReply's ghost Copy affordance.
+        const replyRow = settled.closest('[data-testid="transcript-rico-row"]') as HTMLElement;
+        expect(within(replyRow).getByText(/^Copy$/)).toBeInTheDocument();
+    });
+
     it("deliberate Stop preserves partial streamed content and shows the stopped row + Retry (C2)", async () => {
         let sse!: ReturnType<typeof manualSSE>;
         streamHandlers.push((init) => {
