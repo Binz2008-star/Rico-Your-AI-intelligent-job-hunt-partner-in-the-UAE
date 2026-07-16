@@ -111,3 +111,100 @@ def test_trusted_proxy_hops_clamped_and_default():
     os.environ["RICO_TRUSTED_PROXY_HOPS"] = "not-an-int"
     assert _trusted_proxy_hops() == 1  # parse error → default 1
     os.environ.pop("RICO_TRUSTED_PROXY_HOPS", None)
+
+
+# ── FIX 2: unauthenticated cross-account impersonation via email ──────────────
+
+class _FakeUser:
+    def __init__(self, email):
+        self.email = email
+
+
+def test_public_chat_email_never_adopts_account_identity(client, monkeypatch):
+    import src.repositories.users_repo as users_repo
+    import src.services.subscription_gating as gating
+    from src.services import chat_service
+
+    victim_email = "victim@example.com"
+
+    # get_user_by_email returns a registered victim account.
+    monkeypatch.setattr(
+        users_repo, "get_user_by_email", lambda email: _FakeUser(victim_email)
+    )
+
+    # Quota gate must still be consulted for the registered user (anti-dodge).
+    gate_calls = []
+
+    class _Gate:
+        allowed = True
+
+    def _fake_gate(user_key):
+        gate_calls.append(user_key)
+        return _Gate()
+
+    monkeypatch.setattr(gating, "check_ai_message_allowed_for_user", _fake_gate)
+
+    # Capture the session context handed to the chat service.
+    captured = {}
+
+    def _fake_send_message(ctx, message, operation_id=None, language=None):
+        captured["ctx"] = ctx
+        return {"message": "ok", "type": "conversational", "intent": "conversational"}
+
+    monkeypatch.setattr(chat_service, "send_message", _fake_send_message)
+
+    res = client.post(
+        "/api/v1/rico/chat/public",
+        json={"email": victim_email, "message": "hello"},
+    )
+    assert res.status_code == 200
+
+    ctx = captured["ctx"]
+    expected_key = "e-" + hashlib.sha256(victim_email.encode("utf-8")).hexdigest()[:40]
+    # Namespaced public identity — NOT the victim's email.
+    assert ctx.user_id == f"public:{expected_key}"
+    assert ctx.user_id != victim_email
+    assert victim_email not in ctx.user_id
+    # An unverified email must never persist into a real profile.
+    assert ctx.can_persist_profile is False
+    assert ctx.auth_type == "public"
+    # Quota gate was still enforced for the registered user (keyed on stored email).
+    assert gate_calls == [victim_email]
+
+
+def test_public_chat_registered_quota_gate_blocks(client, monkeypatch):
+    import src.repositories.users_repo as users_repo
+    import src.services.subscription_gating as gating
+    from src.services import chat_service
+
+    monkeypatch.setattr(
+        users_repo, "get_user_by_email", lambda email: _FakeUser("capped@example.com")
+    )
+
+    class _BlockedGate:
+        allowed = False
+
+        def to_response(self):
+            return {"message": "quota exceeded", "type": "limit", "success": False}
+
+    monkeypatch.setattr(
+        gating, "check_ai_message_allowed_for_user", lambda k: _BlockedGate()
+    )
+
+    # send_message must NOT be reached once the gate blocks.
+    def _boom(*a, **k):  # pragma: no cover - must not run
+        raise AssertionError("send_message called despite blocked quota gate")
+
+    monkeypatch.setattr(chat_service, "send_message", _boom)
+
+    res = client.post(
+        "/api/v1/rico/chat/public",
+        json={"email": "capped@example.com", "message": "hello"},
+    )
+    assert res.status_code == 200
+    assert res.json().get("message") == "quota exceeded"
+
+
+def test_public_chat_requires_session_or_email(client):
+    res = client.post("/api/v1/rico/chat/public", json={"message": "hello"})
+    assert res.status_code == 422
