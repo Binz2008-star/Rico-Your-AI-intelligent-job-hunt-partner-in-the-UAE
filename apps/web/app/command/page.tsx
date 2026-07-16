@@ -2,10 +2,11 @@
 
 import { CommandComposer } from "@/components/command/CommandComposer";
 import { CommandConversationRail } from "@/components/command/CommandConversationRail";
-import { AtelierMarkdownScope, CommandEmptyState, CommandMessageRow } from "@/components/command/CommandMessages";
+import { AtelierMarkdownScope, CommandEmptyState } from "@/components/command/CommandMessages";
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
-import { AtelierCardScope, AtelierWorkingIndicator } from "@/components/command/CommandStates";
+import { AtelierCardScope } from "@/components/command/CommandStates";
+import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
@@ -965,9 +966,17 @@ export default function CommandPage() {
     // 45-second hard timeout.  Nulled in the sendMessage finally block.
     const abortRef = useRef<AbortController | null>(null);
 
-    /** Cancel any in-flight request and reset UI to idle state. */
+    // Set by cancelRequest so the AbortError handler can distinguish a
+    // DELIBERATE user Stop (canonical stopped row; partial streamed content
+    // preserved) from the 45s hard timeout (error row + Retry). Slice C2.
+    const stopRequestedRef = useRef(false);
+
+    /** Cancel any in-flight request and reset UI to idle state. The stopped
+     *  presentation itself is appended by the AbortError handler in
+     *  sendMessage, which also finalizes any partial streamed message. */
     const cancelRequest = useCallback(() => {
         if (abortRef.current) {
+            stopRequestedRef.current = true;
             abortRef.current.abort();
             abortRef.current = null;
         }
@@ -975,12 +984,8 @@ export default function CommandPage() {
         setThinking(false);
         setSlowHint(false);
         setOperationState(null);
-        setMessages((prev) => [
-            ...prev,
-            { id: nextId(), role: "rico" as const, text: t("cmdCancelRequest") },
-        ]);
         textareaRef.current?.focus();
-    }, [t]);
+    }, []);
 
     // Keyboard shortcuts: Esc cancels an in-flight request (same action as the
     // composer's Cancel button); Ctrl/Cmd+K focuses the composer. Both are pure
@@ -1114,7 +1119,23 @@ export default function CommandPage() {
         savePublicHistory(sessionIdRef, messages);
     }, [chatAudience, useMock, historyState, thinking, messages]);
 
+    // Canonical auto-follow (slice C2): the transcript stays pinned to the
+    // bottom while the user is within 96px of it; scrolling up releases the
+    // pin so streaming output never yanks the reader back down.
+    const pinnedToBottomRef = useRef(true);
+    useEffect(() => {
+        const pane = messagesContainerRef.current;
+        if (!pane) return;
+        const onScroll = () => {
+            const distance = pane.scrollHeight - pane.scrollTop - pane.clientHeight;
+            pinnedToBottomRef.current = distance < 96;
+        };
+        pane.addEventListener("scroll", onScroll, { passive: true });
+        return () => pane.removeEventListener("scroll", onScroll);
+    }, [chatAudience]);
+
     const scrollBottom = useCallback(() => {
+        if (!pinnedToBottomRef.current) return;
         const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
         const scrollMessagesPane = () => {
             const pane = messagesContainerRef.current;
@@ -1159,6 +1180,7 @@ export default function CommandPage() {
 
         const controller = new AbortController();
         abortRef.current = controller;  // expose for cancelRequest()
+        stopRequestedRef.current = false; // fresh request — no deliberate stop yet
         // Hard 45-second timeout — aborts the stream and triggers the AbortError
         // catch block below, which shows a user-readable message (BUG #4).
         const timeoutId = setTimeout(() => controller.abort(), 45_000);
@@ -1195,11 +1217,13 @@ export default function CommandPage() {
         // rendered. Prevents a late stream/network failure from appending a
         // stale "Something went wrong" message below successful job cards (#325).
         let responseApplied = false;
+        // Hoisted out of the try so the AbortError handler can finalize a
+        // partial streamed message on a deliberate user Stop (slice C2).
+        const streamId = nextId();
+        let streamStarted = false;
 
         try {
             // Use SSE streaming for conversational messages; fall back to JSON for errors
-            const streamId = nextId();
-            let streamStarted = false;
 
             function applyDoneResponse(res: ChatApiResponse) {
                 responseApplied = true;
@@ -1315,6 +1339,30 @@ export default function CommandPage() {
             }
             if (err instanceof Error) {
                 if (err.name === "AbortError") {
+                    // DELIBERATE user Stop (canonical, slice C2) — distinct from
+                    // the 45s hard timeout below: preserve any partial streamed
+                    // content and append the truthful stopped row with Retry.
+                    // Never auto-retried, even for job-search intents.
+                    if (stopRequestedRef.current) {
+                        if (streamStarted) {
+                            setMessages((prev) =>
+                                prev.map((msg) =>
+                                    msg.id === streamId ? { ...msg, streaming: false } : msg,
+                                ),
+                            );
+                        }
+                        setMessages((prev) => [
+                            ...prev,
+                            {
+                                id: nextId(),
+                                role: "rico" as const,
+                                type: "stopped",
+                                text: streamStarted ? t("cmdStoppedByUser") : t("cmdStoppedNoPartial"),
+                                retryText: trimmed,
+                            },
+                        ]);
+                        return;
+                    }
                     // For job-search queries, retry once with a longer timeout
                     // before giving up so cold-start Render delays don't drop results.
                     // Standalone retry-only guard (not the chip classifier) so profile
@@ -1771,6 +1819,12 @@ export default function CommandPage() {
         ]);
     }
 
+    // A streamed reply is actively rendering. Drives the REPLYING status and
+    // keeps the composer's Stop control available through the whole stream —
+    // without this, `thinking` flips false on the first token and a mid-stream
+    // deliberate Stop would be impossible (slice C2).
+    const streamingActive = messages.some((m) => m.streaming === true);
+
     if (sessionExpired) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -1789,6 +1843,7 @@ export default function CommandPage() {
         <CommandChrome
             audience={chatAudience}
             busy={thinking}
+            replying={streamingActive}
             leftOpen={leftRailOpen}
             rightOpen={rightRailOpen}
             onToggleLeft={() => setLeftRailOpen((v) => !v)}
@@ -1969,10 +2024,10 @@ export default function CommandPage() {
                             const atelierCards = chatAudience === "authenticated";
 
                             return (
-                                <CommandMessageRow
+                                <CommandTranscriptStep
                                     key={m.id}
                                     authenticated={chatAudience === "authenticated"}
-                                    role={m.role}
+                                    message={m}
                                     isFirstInGroup={isFirstInGroup}
                                     isStructured={isStructured}
                                 >
@@ -2277,8 +2332,8 @@ export default function CommandPage() {
                                     {/* Copy / Retry row — copy is offered on every settled Rico turn;
                                         retry only on turns marked isError (network/timeout/generic send
                                         failures), and resends the exact original user text. */}
-                                    {!m.streaming && m.role === "rico" && (m.text || (m.isError && m.retryText)) && (
-                                        <AtelierCardScope authenticated={atelierCards}>
+                                        {!m.streaming && m.role === "rico" && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-2 flex items-center gap-3">
                                                 {m.text && (
                                                     <button
@@ -2291,7 +2346,7 @@ export default function CommandPage() {
                                                         {copiedId === m.id ? t("cmdCopied") : t("cmdCopy")}
                                                     </button>
                                                 )}
-                                                {m.isError && m.retryText && (
+                                                {(m.isError || m.type === "stopped") && m.retryText && (
                                                     <button
                                                         type="button"
                                                         onClick={() => sendMessage(m.retryText!)}
@@ -2304,16 +2359,16 @@ export default function CommandPage() {
                                                     </button>
                                                 )}
                                             </div>
-                                        </AtelierCardScope>
-                                    )}
-                                </CommandMessageRow>
+                                            </AtelierCardScope>
+                                        )}
+                                </CommandTranscriptStep>
                             );
                         })}
 
                         {thinking && (
                             <div className="flex min-h-12 flex-col gap-2">
                                 {chatAudience === "authenticated"
-                                    ? <AtelierWorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
+                                    ? <TranscriptWorkingRow operationMessage={operationState?.message} fallback={t("cmdWorking")} />
                                     : <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />}
                                 {operationState?.state === "searching" && (
                                     <AtelierCardScope authenticated={chatAudience === "authenticated"}>
@@ -2335,7 +2390,7 @@ export default function CommandPage() {
                         onInputChange={setInput}
                         textareaRef={textareaRef}
                         fileInputRef={fileInputRef}
-                        thinking={thinking}
+                        thinking={thinking || streamingActive}
                         chatAudience={chatAudience}
                         hasPendingPermission={hasPendingPermission}
                         messagesRemaining={messagesRemaining}
@@ -2383,6 +2438,7 @@ export default function CommandPage() {
 function CommandChrome({
     audience,
     busy,
+    replying,
     leftOpen,
     rightOpen,
     onToggleLeft,
@@ -2393,6 +2449,8 @@ function CommandChrome({
 }: {
     audience: "checking" | "public" | "authenticated";
     busy: boolean;
+    /** A streamed reply is actively rendering — drives the REPLYING status. */
+    replying: boolean;
     leftOpen: boolean;
     rightOpen: boolean;
     onToggleLeft: () => void;
@@ -2411,6 +2469,7 @@ function CommandChrome({
     return (
         <CommandObsidianShell
             busy={busy}
+            replying={replying}
             leftOpen={leftOpen}
             rightOpen={rightOpen}
             onToggleLeft={onToggleLeft}

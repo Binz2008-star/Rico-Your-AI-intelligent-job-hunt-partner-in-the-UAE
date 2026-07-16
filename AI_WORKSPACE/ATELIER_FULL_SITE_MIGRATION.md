@@ -268,8 +268,12 @@ Slice plan (each its own draft PR from latest `main`, full per-PR gate;
 presentation-only — no backend/Neon/Paddle/Profile changes, no fabricated
 progress states; public/guest surface unchanged unless a slice scopes it):
 
-- **C1 — Obsidian foundation** → **Draft #1043, not ready for merge** (owner
-  second-pass correction 2026-07-16): route-scoped tokens, dark canvas +
+- **C1 — Obsidian foundation** → **#1043 MERGED** (squash `3219a7f6`,
+  2026-07-16; owner visual review approved). Production verified: ricohunt.com
+  serves the merge SHA's deployment (`web-dinbnrgd6`); read-only authenticated
+  /command shell smoke PASS (obsidian canvas, top bar + status, truthful
+  conversation rail with real user-turn count, right rail, composer; zero
+  console errors). Content as corrected through the owner's second pass: route-scoped tokens, dark canvas +
   texture/aura, top status bar, 260/720/300 proportions, rail toggles, PLUS
   the corrections: truthful **CommandConversationRail** in the canonical
   Sessions position (New chat · current conversation · Clear history · real
@@ -282,7 +286,9 @@ progress states; public/guest surface unchanged unless a slice scopes it):
   `MOCKED VISUAL EVIDENCE — NOT FUNCTIONAL SMOKE`. Status: **C1 visual shell
   in Draft; functional evidence partial; transcript interaction parity
   missing; canonical flow parity not implemented.**
-- **C2 — real Command event/presentation adapter** (pending; owner directive —
+- **C2 — real Command event/presentation adapter** (**IN PROGRESS** —
+  `feat/command-obsidian-2-transcript`, cut from main `3219a7f6` after the C1
+  production verification; owner directive —
   NOT a typography-only repaint): map existing production truth onto the
   canonical transcript grammar using existing handlers only. No hidden
   chain-of-thought; no fabricated PLAN/TOOL steps; no fake sessions.
