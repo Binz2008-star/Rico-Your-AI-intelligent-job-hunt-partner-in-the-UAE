@@ -8,6 +8,7 @@ import { CommandObsidianShell } from "@/components/command/CommandObsidianShell"
 import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
 import { AtelierCardScope } from "@/components/command/CommandStates";
 import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
+import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
@@ -2129,16 +2130,24 @@ export default function CommandPage() {
                                                         {t("cmdShowOld")} {m.matches.length} {m.matches.length === 1 ? t("cmdMatch") : t("cmdMatches")} {t("cmdStaleNote")}
                                                     </summary>
                                                     <div className="mt-2 space-y-2 opacity-70">
-                                                        {m.matches.map((match, i) => (
-                                                            <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
-                                                        ))}
+                                                        {m.matches.map((match, i) =>
+                                                            atelierCards ? (
+                                                                <JobMatchCardAtelier key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                            ) : (
+                                                                <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                            ),
+                                                        )}
                                                     </div>
                                                 </details>
                                             ) : (
                                                 <div className="mt-2 space-y-2">
-                                                    {m.matches.map((match, i) => (
-                                                        <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
-                                                    ))}
+                                                    {m.matches.map((match, i) =>
+                                                        atelierCards ? (
+                                                            <JobMatchCardAtelier key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                        ) : (
+                                                            <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                        ),
+                                                    )}
                                                 </div>
                                             )}
                                         </AtelierCardScope>
