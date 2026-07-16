@@ -1,10 +1,11 @@
 /**
- * PR 3 — /command chrome contract (Atelier full-site migration program).
+ * /command chrome contract — PR 3 (Atelier program), re-pointed by slice C1 of
+ * the Command Obsidian program (owner directive 2026-07-16).
  *
  * Authenticated (and the transient "checking" state) render inside the
- * WorkspaceShell rail in its full-height app variant, dark-first; the
+ * route-scoped CommandObsidianShell (dark "Obsidian night" first); the
  * public/guest audience keeps the approved reference chrome (top bar + chat
- * column, no workspace shell). Chat behavior itself is untouched by PR 3.
+ * column, no shell). Chat behavior itself is untouched by the chrome.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,9 +24,14 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
-vi.mock("@/components/workspace/WorkspaceShell", () => ({
-  WorkspaceShell: ({ children, variant, defaultDark }: any) => (
-    <div data-testid="workspace-shell" data-variant={variant ?? "document"} data-defaultdark={String(defaultDark ?? false)}>
+vi.mock("@/components/command/CommandObsidianShell", () => ({
+  CommandObsidianShell: ({ children, busy, leftOpen, rightOpen }: any) => (
+    <div
+      data-testid="command-obsidian-shell"
+      data-busy={String(busy ?? false)}
+      data-leftopen={String(leftOpen ?? true)}
+      data-rightopen={String(rightOpen ?? true)}
+    >
       {children}
     </div>
   ),
@@ -49,8 +55,8 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
-describe("/command chrome — WorkspaceShell app variant (PR 3)", () => {
-  it("authenticated audience renders inside the WorkspaceShell app variant, dark-first", async () => {
+describe("/command chrome — CommandObsidianShell (slice C1)", () => {
+  it("authenticated audience renders inside the Obsidian shell with rails open and idle status", async () => {
     fetchMock.mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes("/api/v1/me")) {
@@ -61,12 +67,13 @@ describe("/command chrome — WorkspaceShell app variant (PR 3)", () => {
 
     render(<CommandPage />);
 
-    const shell = await screen.findByTestId("workspace-shell");
-    expect(shell).toHaveAttribute("data-variant", "app");
-    expect(shell).toHaveAttribute("data-defaultdark", "true");
+    const shell = await screen.findByTestId("command-obsidian-shell");
+    expect(shell).toHaveAttribute("data-busy", "false");
+    expect(shell).toHaveAttribute("data-leftopen", "true");
+    expect(shell).toHaveAttribute("data-rightopen", "true");
   });
 
-  it("public audience keeps the reference chrome — no WorkspaceShell", async () => {
+  it("public audience keeps the reference chrome — no Obsidian shell", async () => {
     fetchMock.mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes("/api/v1/me")) {
@@ -78,7 +85,7 @@ describe("/command chrome — WorkspaceShell app variant (PR 3)", () => {
     render(<CommandPage />);
 
     expect(await screen.findByText("Sign up free")).toBeInTheDocument();
-    expect(screen.queryByTestId("workspace-shell")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("command-obsidian-shell")).not.toBeInTheDocument();
   });
 
   it("the transient checking state already sits in the shell (no layout jump on auth resolve)", async () => {
@@ -88,7 +95,7 @@ describe("/command chrome — WorkspaceShell app variant (PR 3)", () => {
     render(<CommandPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("workspace-shell")).toBeInTheDocument();
+      expect(screen.getByTestId("command-obsidian-shell")).toBeInTheDocument();
     });
   });
 });

@@ -240,10 +240,69 @@ rail, 4e — remaining Command chrome":
   ShortlistRail reference; session-derived, display-only) + supporting
   workspace panels (MissionContextBar)** → **#1038 MERGED** (`eff8e66`).
 
-**/command Atelier migration: implementation COMPLETE through 4e.**
-Next: **Profile Dashboard Atelier** slice (hero + editorial sections +
-single edit-profile flow), then the **final visual-QA pass** (desktop
-spacing, mobile, RTL, light/dark, token drift).
+**/command status — corrected by owner directive (2026-07-16). Do NOT record
+/command as "Fully Atelier" or visually complete:**
+
+- existing functional migration slices 4a–4e: **merged** (above)
+- current Rico business behavior: **preserved**
+- owner-approved Obsidian visual parity: **pending**
+- Command migration completion: **OPEN until the recording-based parity gate
+  passes** (see the Command Obsidian program below)
+
+Profile Dashboard Atelier shipped as **#1041 MERGED** (`d6fa60a`); its real
+authenticated production smoke remains **pending owner verification** (does
+not block Command work).
+
+### Command Obsidian program (owner-approved, 2026-07-16 — route-specific)
+
+Owner executive design correction: production `/command` must reach visual
+parity with the dark acid-lime **"Obsidian" three-column operator console**
+in the owner's recording (`Recording 2026-07-16 004205.mp4`). This applies to
+`/command` only — it does **not** convert Profile or the rest of Rico to this
+language. Canonical source priority, reviewed file inventory, the Phase-1
+component mismatch matrix, and risks live in
+`design-handoffs/reviewed/2026-07-16-command-obsidian-v4/` (single source —
+do not fork). The raw ZIP stays uncommitted in `design-handoffs/incoming/`.
+
+Slice plan (each its own draft PR from latest `main`, full per-PR gate;
+presentation-only — no backend/Neon/Paddle/Profile changes, no fabricated
+progress states; public/guest surface unchanged unless a slice scopes it):
+
+- **C1 — Obsidian foundation** → **Draft #1043, not ready for merge** (owner
+  second-pass correction 2026-07-16): route-scoped tokens, dark canvas +
+  texture/aura, top status bar, 260/720/300 proportions, rail toggles, PLUS
+  the corrections: truthful **CommandConversationRail** in the canonical
+  Sessions position (New chat · current conversation · Clear history · real
+  history loading/error; general nav relocated to compact top-bar icons; no
+  fabricated sessions — **multi-session history is a separately scoped
+  backend capability gap**), an interactive **no-regression suite** over the
+  real mounted CommandPage (send, streaming tokens, completion, stop/cancel,
+  retry, New chat, Clear history, panel/language/theme toggles — network-
+  boundary fixtures, real SSE), and all synthetic screenshots stamped
+  `MOCKED VISUAL EVIDENCE — NOT FUNCTIONAL SMOKE`. Status: **C1 visual shell
+  in Draft; functional evidence partial; transcript interaction parity
+  missing; canonical flow parity not implemented.**
+- **C2 — real Command event/presentation adapter** (pending; owner directive —
+  NOT a typography-only repaint): map existing production truth onto the
+  canonical transcript grammar using existing handlers only. No hidden
+  chain-of-thought; no fabricated PLAN/TOOL steps; no fake sessions.
+  Detailed adapter contracts and the multi-session architecture proposal are
+  intentionally NOT in the C1 PR — they arrive as a separate docs-only
+  review after C1 is stable. Multi-session history remains a capability gap.
+  **Stop-vs-timeout distinction remains open** (deliberate-Stop presentation,
+  partial-stream preservation — C2 scope).
+- **C3 — composer parity.** **C4 — job intelligence cards.**
+- **C5 — right-rail content parity.** **C6 — mobile drawers + RTL +
+  route-scoped typography + final recording-parity visual gate.**
+
+Gate: the **19-flow functional acceptance matrix** in the reviewed manifest's
+`parity-audit.md` must be fully covered (mounted-component or real
+authenticated smoke — stamped synthetic screenshots never count as functional
+proof) before `/command` may be declared complete.
+
+Superseded/closed: **#1042** (superseded slice-4c re-cut) — do not reopen or
+reuse. Old Atelier `/command` branches must not be reused; each slice starts
+from a fresh branch off latest `main`.
 
 Execution order otherwise follows Steps 2→8 above; each step/slice ships as its own
 small draft PR cut from latest `main` with the full per-PR gate (vitest + build +

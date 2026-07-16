@@ -29,7 +29,7 @@ import { atelierFraunces } from "@/components/atelier-kit/fonts";
 import { Mono } from "@/components/atelier-kit/primitives";
 import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
 
-type NavItem = { key: string; href: string; label: { en: string; ar: string }; icon: React.ReactNode };
+export type NavItem = { key: string; href: string; label: { en: string; ar: string }; icon: React.ReactNode };
 
 /* 1.6px stroked line icons (reference style). */
 const ic = (paths: React.ReactNode) => (
@@ -38,7 +38,9 @@ const ic = (paths: React.ReactNode) => (
     </svg>
 );
 
-const NAV: NavItem[] = [
+/* Exported for CommandObsidianShell (/command-only chrome) so both shells
+   share one nav source of truth. */
+export const WORKSPACE_NAV: NavItem[] = [
     { key: "command", href: "/command", label: { en: "Command", ar: "الأوامر" }, icon: ic(<><path d="M4 5h16M4 12h10M4 19h16" /></>) },
     { key: "profile", href: "/profile", label: { en: "Profile", ar: "الملف" }, icon: ic(<><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>) },
     { key: "applications", href: "/applications", label: { en: "Applications", ar: "الطلبات" }, icon: ic(<><path d="M4 4h16v5H4zM4 10h16v5H4zM4 16h16v4H4z" /></>) },
@@ -82,7 +84,7 @@ export function WorkspaceShell({
 
     const NavList = (
         <nav className="flex flex-col gap-1">
-            {NAV.map((item) => {
+            {WORKSPACE_NAV.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
                 return (
                     <Link
