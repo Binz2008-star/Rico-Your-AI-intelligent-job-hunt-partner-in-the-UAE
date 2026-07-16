@@ -8,8 +8,11 @@
  *      the previous one (reload ≠ replay).
  *   3. The rotation persists in localStorage so it spans visits/reloads;
  *      corrupted or unavailable storage degrades to a valid random pick.
- *   4. The film renders in place (document.write) so the URL stays on the
- *      chooser; a hard redirect is only the fetch-failure fallback.
+ *   4. The chooser navigates to the real film URL tagged #rico-rotation;
+ *      the film masks its address bar back to the chooser
+ *      (history.replaceState), so a reload re-enters the rotation.
+ *   5. After a film's single pass, the visitor lands on the landing page
+ *      (`/?after-film=1`); Skip/Join keep targeting /signup.
  *
  * These tests execute the REAL inline script shipped in index.html — the
  * script exports its internals on `window.__ricoFilmChooser` and skips its
@@ -69,6 +72,34 @@ describe("explainer film chooser — rotation set", () => {
             expect(existsSync(file), `${film} missing on disk`).toBe(true);
         }
     });
+});
+
+describe("rotation films — after the film comes the landing page", () => {
+    // Owner directive 2026-07-16: a film's single pass must end by handing
+    // the visitor to the landing (`/?after-film=1`), not by looping, while
+    // Skip/Join keep targeting /signup.
+    for (const film of REQUIRED_FILMS) {
+        const name = film.replace("/explainer/", "");
+        const html = readFileSync(resolve(EXPLAINER_DIR, name), "utf8");
+
+        it(`${name} ends its pass at the landing, not a loop`, () => {
+            expect(html).toMatch(/window\.location\.href\s*=\s*'\/\?after-film=1'/);
+            // advance() must terminate into goLanding instead of wrapping to 0.
+            expect(html).toMatch(/function advance\(\)\{[^}]*goLanding\(\); return;/);
+            expect(html).not.toMatch(/function advance\(\)\{[^}]*if\(n>=scenes\.length\) n=0;/);
+        });
+
+        it(`${name} keeps its Skip/Join CTA on /signup`, () => {
+            expect(html).toContain("var REGISTER_URL = 'https://ricohunt.com/signup'");
+        });
+
+        it(`${name} masks its URL back to the chooser when arriving from the rotation`, () => {
+            expect(html).toContain("location.hash==='#rico-rotation'");
+            expect(html).toMatch(
+                /history\.replaceState\(null,'','\/explainer\/index\.html'\+location\.search\)/,
+            );
+        });
+    }
 });
 
 describe("explainer film chooser — non-repeating cycle", () => {
@@ -197,58 +228,32 @@ describe("explainer film chooser — storage resilience", () => {
     });
 });
 
-describe("explainer film chooser — in-place render keeps the chooser URL", () => {
-    it("writes the fetched film into the current document (no redirect)", async () => {
+describe("explainer film chooser — navigation carries the rotation tag", () => {
+    it("replaces to the real film URL tagged #rico-rotation, preserving the query", () => {
         const chooser = loadChooser();
-        const doc = { open: vi.fn(), write: vi.fn(), close: vi.fn() };
         const win = {
-            document: doc,
-            location: { replace: vi.fn(), search: "", hash: "" },
-            fetch: vi.fn().mockResolvedValue({
-                ok: true,
-                text: () => Promise.resolve("<!DOCTYPE html><html>film</html>"),
-            }),
+            document: {},
+            location: { replace: vi.fn(), search: "?utm=x", hash: "#ignored" },
         };
 
         chooser.showFilm(win, "/explainer/option-3.html");
-        await new Promise((r) => setTimeout(r, 0));
-
-        expect(win.fetch).toHaveBeenCalledWith("/explainer/option-3.html", {
-            credentials: "same-origin",
-        });
-        expect(doc.open).toHaveBeenCalled();
-        expect(doc.write).toHaveBeenCalledWith("<!DOCTYPE html><html>film</html>");
-        expect(doc.close).toHaveBeenCalled();
-        expect(win.location.replace).not.toHaveBeenCalled();
-    });
-
-    it("falls back to a hard redirect when the film fails to load", async () => {
-        const chooser = loadChooser();
-        const doc = { open: vi.fn(), write: vi.fn(), close: vi.fn() };
-        const win = {
-            document: doc,
-            location: { replace: vi.fn(), search: "?utm=x", hash: "#top" },
-            fetch: vi.fn().mockResolvedValue({ ok: false, status: 404 }),
-        };
-
-        chooser.showFilm(win, "/explainer/option-2.html");
-        await new Promise((r) => setTimeout(r, 0));
 
         expect(win.location.replace).toHaveBeenCalledWith(
-            "/explainer/option-2.html?utm=x#top",
+            "/explainer/option-3.html?utm=x#rico-rotation",
         );
-        expect(doc.write).not.toHaveBeenCalled();
     });
 
-    it("falls back to a hard redirect when fetch is unavailable", () => {
+    it("plain visit → film URL with just the rotation tag", () => {
         const chooser = loadChooser();
         const win = {
-            document: { open: vi.fn(), write: vi.fn(), close: vi.fn() },
+            document: {},
             location: { replace: vi.fn(), search: "", hash: "" },
         };
 
-        chooser.showFilm(win, "/explainer/option-3b.html");
+        chooser.showFilm(win, "/explainer/option-2.html");
 
-        expect(win.location.replace).toHaveBeenCalledWith("/explainer/option-3b.html");
+        expect(win.location.replace).toHaveBeenCalledWith(
+            "/explainer/option-2.html#rico-rotation",
+        );
     });
 });

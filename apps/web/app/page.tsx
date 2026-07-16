@@ -16,7 +16,7 @@
 
 import LandingPageV2 from "@/components/LandingPageV2";
 import { useAuth } from "@/hooks/useAuth";
-import { goToOpeningFilm } from "@/lib/openingFilm";
+import { claimAfterFilmLanding, goToOpeningFilm } from "@/lib/openingFilm";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -29,6 +29,11 @@ export default function HomePage() {
         if (!ready) return;
         if (user) {
             router.replace("/command");
+            return;
+        }
+        // Arriving from a film that just finished (`/?after-film=1`) → the
+        // landing renders once; the marker is consumed so a reload rotates.
+        if (claimAfterFilmLanding()) {
             return;
         }
         // Guest → cinematic opening, on every visit. The chooser advances the
