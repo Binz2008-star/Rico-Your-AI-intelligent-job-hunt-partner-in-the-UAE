@@ -1,5 +1,42 @@
 # Current State
 
+> **Reconciliation header — 2026-07-16 (latest; supersedes all headers below).**
+> `main` HEAD `2248a7ad`. Owner directives this session: open-budget autonomous
+> execution (cost rules retired), OPERATING_RULES ceremony waived, mission = trusted
+> Career Operating System (order: #1046 → #1048 C2 → C3–C6 → #1025 M1 → intelligence
+> engines: memory, goals, trusted sources, initiative, decisions, digital twin), and
+> email integration as FIRST-PARTY OAUTH (not MCP), drafts-only, approval-gated.
+> **Merged + production-verified today:** **#1046** attachment OCR trust fix
+> (`b74004a8`; synthetic prod smoke PASS: failed-OCR image is remembered across turns
+> by filename, honest fallback, no fabricated actions, no `extracted_text` field);
+> **#1050** SSE transport hardening (`64611eeb`; prod-verified headers
+> `no-cache, no-transform`, `: connected` early flush, 200 chunked); **#1051** +
+> **#1052** streaming transcript integrity (welcome AND history id collisions —
+> returning users' first streamed reply corrupted then DELETED an old history row;
+> reserved negative id namespace; history-load race + 8s cap; RicoMarkdownContent
+> memoized — full transcript re-parsed per token before); **#1053** render-blocking
+> Material Symbols stylesheet removed (3 icons on /about → inline SVGs).
+> **C2 #1048 (Command Obsidian transcript):** reconciled with main (merge `9c432ed7`
+> + welcome-fix cherry-pick `daa3d54b`), CI fully green, guest surface live-verified
+> on the Vercel preview (streams, EN/AR RTL, zero console errors), stamped mocked-auth
+> evidence frames delivered (ready/streaming/stopped+Retry/completed+progress/AR/mobile).
+> **Open gate: owner visual approval — merge blocked on it.** C3 composer parity in
+> build on `feat/command-obsidian-3-composer` (stacked on C2). **Memory M1 #1025:**
+> reconciled with main (`b37ad583`, 0 conflicts), migration 042 confirmed next-free
+> after 041, invariants re-audited (flag OFF, shadow-only, no MemoryReader, public-
+> session merge blocked); caveat on PR: sensitive-data filter matches keys not values.
+> **Gmail connector M0 in build** on `feat/gmail-readonly-connector-m0` per
+> `docs/integrations/gmail-readonly-connector.md` (readonly scope only, migration 043,
+> Fernet-encrypted refresh tokens via new `GMAIL_TOKEN_ENCRYPTION_KEY`, cron-secret
+> sweep + BackgroundTask sync — no queue infra, `RICO_ENABLE_GMAIL_SYNC=false`);
+> M1 drafts will live in existing `application_drafts` (NO `gmail.compose` — doubles
+> restricted-scope/CASA burden for no gain); M2 = Outlook/Graph. Blockers tracked:
+> Google restricted-scope verification (testing mode caps 100 users); Paddle stays
+> disabled pending Sandbox webhook-secret rotation + isolated lifecycle test.
+> Bottleneck-sweep backlog remaining: guest first-paint dead state on /command,
+> bundle code-splitting. Docs-only sync; no `apps/web`/`src` runtime change.
+
+
 > **Reconciliation header — 2026-07-15 (latest; supersedes all headers below).**
 > `main` HEAD `de8ce666` (four dashboard-only `[skip ci]` commits on `21ae19a7` = #1026).
 > Since the 2026-07-11 header below, a large merge train landed (2026-07-13/14): **#1010**
