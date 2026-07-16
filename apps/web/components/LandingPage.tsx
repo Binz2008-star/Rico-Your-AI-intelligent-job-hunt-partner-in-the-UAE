@@ -96,8 +96,8 @@ export default function LandingPage() {
         freeBtn: isAr ? "ابدأ مجاناً" : "Start free",
 
         proName: isAr ? "ريكو الشهرية" : "Rico Monthly",
-        proF1: isAr ? "١٥٠٠ رسالة ذكاء اصطناعي" : "1500 AI messages",
-        proF2: isAr ? "وظائف محفوظة بلا حدود" : "Unlimited saved jobs",
+        proF1: isAr ? "٣٠٠ رسالة ذكاء اصطناعي" : "300 AI messages",
+        proF2: isAr ? "١٠٠ وظيفة محفوظة" : "100 saved jobs",
         proBtn: isAr ? "اشترك الآن" : "Get Rico Monthly",
 
         // Trust block

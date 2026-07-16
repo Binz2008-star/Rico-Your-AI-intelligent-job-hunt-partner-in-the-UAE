@@ -56,13 +56,16 @@ RICO_MONTHLY_PLAN = SubscriptionPlan(
     price_monthly=_price_from_env("RICO_PRO_PRICE_USD", 21.50),
     currency="USD",
     description="Smart AI job hunting for active UAE professionals.",
+    # Human-readable marketing bullets. These MUST NOT promise more than the
+    # entitlements enforced below (issue #1067): no "unlimited", no premium/
+    # automation tier, and numeric claims map to the enforced limits.
     features=[
-        "Unlimited CV analysis",
+        "300 AI messages per month",
+        "20 CV & profile optimizations per month",
         "Smart AI role recommendations",
         "Advanced match scoring",
         "Saved searches",
         "Priority support",
-        "Higher daily job limits",
     ],
     entitlements=SubscriptionEntitlements(
         monthly_ai_message_limit=300,
