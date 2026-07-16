@@ -504,11 +504,19 @@ class TestRicoPublicChatSubscriptionGate:
         assert r.status_code == 200, r.text
         mock_send.assert_called_once()
         ctx = mock_send.call_args.kwargs["ctx"]
-        # Security invariant: an unverified email is NOT promoted to authenticated.
+        # Security invariant: an unverified email is NOT promoted to authenticated,
+        # and — critically — NEVER adopts the registered account's identity. The
+        # chat runs as a namespaced, non-persisting public session so it cannot read
+        # or write the account's profile/history. The anti-dodge cap is still enforced
+        # (the gate above was keyed on the registered email), not by impersonation.
+        import hashlib
+        expected = "public:e-" + hashlib.sha256(b"member@x.com").hexdigest()[:40]
         assert ctx.auth_type == "public"
         assert ctx.can_view_private_jobs is False
-        # Identity canonicalized to the registered email for consistent usage counting.
-        assert ctx.user_id == "member@x.com"
+        assert ctx.can_persist_profile is False
+        # Mixed-case "Member@X.com" canonicalizes (strip+lower) to the same bucket.
+        assert ctx.user_id == expected
+        assert ctx.user_id != "member@x.com"
 
     def test_unregistered_email_is_not_gated(self, client):
         with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
@@ -520,12 +528,19 @@ class TestRicoPublicChatSubscriptionGate:
                 json={"message": "find me jobs", "email": "stranger@x.com"},
             )
         assert r.status_code == 200, r.text
-        # No account => no cap lookup, request proceeds as anonymous public.
+        # No account => no cap lookup, request proceeds as a namespaced public session.
         mock_gate.assert_not_called()
         mock_send.assert_called_once()
         ctx = mock_send.call_args.kwargs["ctx"]
+        # An unverified email — even one with no matching account — never becomes the
+        # user_id: it is hashed into a non-persisting public bucket so it cannot read
+        # or write any profile/history keyed on that raw email.
+        import hashlib
+        expected = "public:e-" + hashlib.sha256(b"stranger@x.com").hexdigest()[:40]
         assert ctx.auth_type == "public"
-        assert ctx.user_id == "stranger@x.com"
+        assert ctx.can_persist_profile is False
+        assert ctx.user_id == expected
+        assert ctx.user_id != "stranger@x.com"
 
     def test_anonymous_session_is_not_gated(self, client):
         with patch("src.services.subscription_gating.check_ai_message_allowed_for_user") as mock_gate, \
