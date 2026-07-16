@@ -161,15 +161,23 @@ export function AboutContent() {
               <p>{isAr ? "نحن فريق صغير ونقرأ كل رسالة." : "We're a small team and we read every message."}</p>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <a href="mailto:info@ricohunt.com" className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white transition-colors hover:bg-white/10">
-                  <span className="material-symbols-outlined text-base text-[#f5a623]">mail</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="m22 7-10 6L2 7" />
+                  </svg>
                   info@ricohunt.com
                 </a>
                 <a href="https://wa.me/971585989080?text=Hi%2C%20I%27d%20like%20to%20know%20more%20about%20Rico%20Hunt" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white transition-colors hover:bg-white/10">
-                  <span className="material-symbols-outlined text-base text-[#f5a623]">chat</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
                   WhatsApp
                 </a>
                 <a href="https://www.linkedin.com/company/eco-technology-environment-protection-services-l-l-c/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white transition-colors hover:bg-white/10">
-                  <span className="material-symbols-outlined text-base text-[#f5a623]">business</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="2" y="7" width="20" height="14" rx="2" />
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                  </svg>
                   {isAr ? "لينكدإن الشركة" : "Company LinkedIn"}
                 </a>
                 <Link href="/contact" className="inline-flex items-center gap-2 rounded-lg bg-[#f5a623] px-4 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-opacity hover:opacity-90">
