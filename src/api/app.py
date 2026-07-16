@@ -30,6 +30,7 @@ from src.api.rate_limit import limiter, rate_limit_exceeded_handler
 from src.api.routers.actions import router as actions_router
 from src.api.routers.agent import router as agent_router
 from src.api.routers.applications import router as applications_router
+from src.api.routers.integrations_gmail import router as integrations_gmail_router
 from src.api.routers.link_verification import router as link_verification_router
 from src.api.routers.rico_chat import router as rico_chat_router
 from src.api.routers.jobs import router as jobs_router
@@ -329,6 +330,7 @@ app.include_router(link_verification_router)
 app.include_router(stats_router)
 app.include_router(settings_router)
 app.include_router(email_alerts_router)
+app.include_router(integrations_gmail_router)
 app.include_router(onboarding_router)
 app.include_router(pipeline_router)
 app.include_router(subscription_router)
