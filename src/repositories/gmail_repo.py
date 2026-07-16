@@ -580,6 +580,48 @@ def set_review_item_status(user_id: str, item_id: str, review_status: str) -> bo
         conn.close()
 
 
+def claim_review_item_for_approval(
+    user_id: str, item_id: str
+) -> Optional[Dict[str, Any]]:
+    """Atomically claim a pending review item for approval (BLOCKER 3).
+
+    Single conditional UPDATE that flips ``review_status`` pending → approved
+    and RETURNS the row ONLY if it was still pending. This is the concurrency
+    gate for approval: two racing requests both target the same row, but the
+    DB serializes the UPDATE, so exactly one sees ``rowcount == 1`` and gets the
+    row back — the loser gets ``None`` (no row matched the ``= 'pending'``
+    predicate) and must no-op. This makes the application-status apply run
+    exactly once, replacing the old non-atomic read-check-then-mutate that could
+    double-apply under concurrent approvals.
+
+    Returns the claimed row as a dict, or None if it was not pending (already
+    resolved, not found, or wrong user).
+    """
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""UPDATE gmail_review_items
+                    SET review_status = 'approved', updated_at = NOW()
+                    WHERE user_id = %s AND id = %s AND review_status = 'pending'
+                    RETURNING {_REVIEW_COLS}""",
+                (user_id, item_id),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return _review_row_to_dict(row) if row else None
+    except Exception:
+        logger.exception(
+            "gmail_repo_claim_review_item_for_approval_failed user_id=%s", user_id
+        )
+        _safe_rollback(conn)
+        return None
+    finally:
+        conn.close()
+
+
 # ── Audit events ──────────────────────────────────────────────────────────────
 
 

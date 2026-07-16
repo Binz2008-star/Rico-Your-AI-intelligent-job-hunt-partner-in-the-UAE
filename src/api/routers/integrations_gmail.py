@@ -296,40 +296,61 @@ def approve_review_item(
 ) -> Dict[str, Any]:
     """Apply the proposed application status for a matched review item.
 
-    The status is normalized to the SaaS vocabulary and applied through
-    applications_repo.update_status for the JWT user only."""
+    Approval is ATOMIC (BLOCKER 3): rather than read → check pending → mutate in
+    separate steps (which two concurrent approvals could both pass, double-
+    applying the status), the item is claimed with a single conditional UPDATE
+    that flips pending → approved and returns the row only if it was still
+    pending. A concurrent second call loses the claim, gets nothing, and no-ops.
+    The claimed status is then applied via applications_repo.update_status —
+    which is itself idempotent (setting a status to a value is a no-op replay) —
+    so the effective apply happens exactly once. If the apply fails, the claim
+    is reverted to pending so it can be retried.
+
+    The status is normalized to the SaaS vocabulary and applied for the JWT
+    user only."""
     _require_enabled()
     from src.repositories import applications_repo
     from src.services.gmail_sync_service import normalize_status
 
+    # Validate before spending the atomic claim (cheap 404/422 paths).
     item = gmail_repo.get_review_item(user_id, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Review item not found.")
     if item.get("review_status") != "pending":
         raise HTTPException(status_code=409, detail="Review item already resolved.")
-
-    matched_job_id = item.get("matched_job_id")
-    if not matched_job_id:
+    if not item.get("matched_job_id"):
         raise HTTPException(
             status_code=422,
             detail="This item is not matched to a tracked application — dismiss it instead.",
         )
-    status = normalize_status(item.get("proposed_status"))
-    if status not in applications_repo._VALID_STATUSES:
+    if normalize_status(item.get("proposed_status")) not in applications_repo._VALID_STATUSES:
         raise HTTPException(
-            status_code=422, detail=f"Proposed status '{status}' is not applicable."
+            status_code=422,
+            detail=(
+                f"Proposed status '{normalize_status(item.get('proposed_status'))}' "
+                "is not applicable."
+            ),
         )
 
+    # Atomic claim: pending → approved, returns the row only if we won the race.
+    claimed = gmail_repo.claim_review_item_for_approval(user_id, item_id)
+    if not claimed:
+        # Another concurrent approval already claimed it — do not double-apply.
+        raise HTTPException(status_code=409, detail="Review item already resolved.")
+
+    matched_job_id = claimed.get("matched_job_id")
+    status = normalize_status(claimed.get("proposed_status"))
     ok = applications_repo.update_status(
         {"job_id": matched_job_id},
         status,
         user_id=user_id,
-        notes=f"Approved from Gmail review: {(item.get('subject_snippet') or '')[:80]}",
+        notes=f"Approved from Gmail review: {(claimed.get('subject_snippet') or '')[:80]}",
     )
     if not ok:
+        # Compensating action: release the claim so the item can be retried.
+        gmail_repo.set_review_item_status(user_id, item_id, "pending")
         raise HTTPException(status_code=500, detail="Could not update the application.")
 
-    gmail_repo.set_review_item_status(user_id, item_id, "approved")
     gmail_repo.insert_audit_event(
         user_id,
         "review_item_approved",

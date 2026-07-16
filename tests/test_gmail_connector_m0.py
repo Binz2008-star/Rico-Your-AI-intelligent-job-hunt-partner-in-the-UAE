@@ -365,10 +365,11 @@ def test_approve_applies_normalized_status(auth_client, monkeypatch):
     with patch(
         "src.repositories.gmail_repo.get_review_item", return_value=_pending_item()
     ), patch(
+        "src.repositories.gmail_repo.claim_review_item_for_approval",
+        return_value=_pending_item(),
+    ) as claim, patch(
         "src.repositories.applications_repo.update_status", return_value=True
     ) as update_status, patch(
-        "src.repositories.gmail_repo.set_review_item_status", return_value=True
-    ) as set_status, patch(
         "src.repositories.gmail_repo.insert_audit_event", return_value=True
     ):
         r = auth_client.post(
@@ -383,9 +384,46 @@ def test_approve_applies_normalized_status(auth_client, monkeypatch):
     assert args[0] == {"job_id": "job-key-1"}
     assert args[1] == "interview"
     assert kwargs["user_id"] == _USER  # identity from JWT, never from the body
-    set_status.assert_called_once_with(
-        _USER, "22222222-2222-2222-2222-222222222222", "approved"
+    # Approval goes through the atomic claim, not a bare status write.
+    claim.assert_called_once_with(
+        _USER, "22222222-2222-2222-2222-222222222222"
     )
+
+
+def test_double_approve_applies_status_exactly_once(auth_client, monkeypatch):
+    """BLOCKER 3: two concurrent approvals of the same item must apply the
+    application status exactly once. The atomic claim admits only the first
+    caller; the second loses the race and 409s without re-applying."""
+    monkeypatch.setenv("RICO_ENABLE_GMAIL_SYNC", "true")
+    item_id = "22222222-2222-2222-2222-222222222222"
+
+    # Both requests read the item as still pending (worst-case race). The atomic
+    # claim resolves the race: it returns the row for the first caller and None
+    # for the second (the row is no longer pending in the DB).
+    claim_results = [_pending_item(), None]
+
+    def claim_side_effect(user_id, iid):
+        return claim_results.pop(0)
+
+    with patch(
+        "src.repositories.gmail_repo.get_review_item", return_value=_pending_item()
+    ), patch(
+        "src.repositories.gmail_repo.claim_review_item_for_approval",
+        side_effect=claim_side_effect,
+    ), patch(
+        "src.repositories.applications_repo.update_status", return_value=True
+    ) as update_status, patch(
+        "src.repositories.gmail_repo.set_review_item_status", return_value=True
+    ) as revert, patch(
+        "src.repositories.gmail_repo.insert_audit_event", return_value=True
+    ):
+        first = auth_client.post(f"{GMAIL}/review-items/{item_id}/approve")
+        second = auth_client.post(f"{GMAIL}/review-items/{item_id}/approve")
+
+    assert first.status_code == 200
+    assert second.status_code == 409  # lost the atomic claim → no-op
+    assert update_status.call_count == 1  # status applied EXACTLY once
+    revert.assert_not_called()  # the successful apply never reverts the claim
 
 
 def test_approve_404_on_unknown_item(auth_client, monkeypatch):
