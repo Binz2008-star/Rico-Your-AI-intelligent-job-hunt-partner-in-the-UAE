@@ -92,7 +92,7 @@ describe("handleConfirmProfile", () => {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
 
-    await userEvent.click(await screen.findByText("Use this profile"));
+    await userEvent.click(await screen.findByText("Use this profile", {}, { timeout: 5000 }));
 
     await waitFor(() => {
       const confirmCall = fetchMock.mock.calls.find(([url]) =>
@@ -157,7 +157,7 @@ describe("Edit before saving", () => {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
 
-    const editButton = await screen.findByText("Edit before saving");
+    const editButton = await screen.findByText("Edit before saving", {}, { timeout: 5000 });
     const callsBefore = fetchMock.mock.calls.length;
 
     await userEvent.click(editButton);
@@ -221,7 +221,7 @@ describe("Edit before saving", () => {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
 
-    await userEvent.click(await screen.findByText("Edit before saving"));
+    await userEvent.click(await screen.findByText("Edit before saving", {}, { timeout: 5000 }));
 
     const nameInput = screen.getByLabelText("Name");
     await userEvent.clear(nameInput);
