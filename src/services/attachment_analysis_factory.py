@@ -35,6 +35,7 @@ _PURPOSE_MAP: dict[str, RicoAttachmentPurpose] = {
     "company_profile": RicoAttachmentPurpose.company_profile,
     "public_comment": RicoAttachmentPurpose.public_comment,
     "application_confirmation": RicoAttachmentPurpose.application_evidence,
+    "image": RicoAttachmentPurpose.unknown_document,
 }
 
 
@@ -64,7 +65,16 @@ def build_attachment_analysis(classification: Any, filename: str | None = None) 
     summary = f"Detected as {display_label} ({pct}% confidence)."
 
     warnings: list[str] = []
-    if purpose == RicoAttachmentPurpose.unknown_document:
+    if document_type == "image":
+        # Honest: this analysis is only built for the image type on the
+        # OCR-failure path (successful OCR reclassifies to the text's real
+        # type), so no readable text exists and no follow-up actions are
+        # offered. Never promise "actions below" or a pending extraction.
+        warnings.append(
+            "No readable text could be extracted from this image. "
+            "Paste the text directly into the chat if you want Rico to work with it."
+        )
+    elif purpose == RicoAttachmentPurpose.unknown_document:
         warnings.append("Rico is not sure what this document is — confirm before acting on it.")
     if confidence < 0.5:
         warnings.append("Low classification confidence.")
