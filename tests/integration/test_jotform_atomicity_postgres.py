@@ -1,16 +1,18 @@
 """
-Jotform onboarding webhook — real-Postgres atomicity (#1089).
+Jotform onboarding webhook — real-Postgres atomicity (#1089). Jotform-specific.
 
 The handler claims the submission and writes user + profile + settings + the
 'processed' status in ONE transaction (RicoDB._transaction). A required-persistence
 failure therefore rolls the WHOLE thing back — including the idempotency claim —
-leaving NO partial rows, and the provider retry can immediately re-claim the same
-submission. No DELETE compensation and no lease.
+leaving NO partial rows, and the provider retry can immediately re-claim.
+No DELETE compensation, no lease, no migration.
 
-Proves:
-  * a mid-write failure leaves no claim row and no user row;
+Proves, per failure point:
+  * user-write failure     → no webhook claim, no user;
+  * profile-write failure  → no user / profile / claim partial state;
+  * settings-write failure → no user / profile / settings / claim partial state;
   * an immediate retry after rollback succeeds and marks 'processed';
-  * a processed submission stays deduplicated (no double user row);
+  * a successful submission is deduplicated afterward (no double user row);
   * a terminal (missing-user) path commits its status exactly once.
 
 Requires a real Postgres via RICO_TEST_DATABASE_URL; skips cleanly when unset.
@@ -97,52 +99,79 @@ def _sid():
     return "itest-jf-" + uuid.uuid4().hex[:16]
 
 
+def _payload(sid, email):
+    return {"submissionID": sid, "email": email, "consent": True}
+
+
 class TestJotformAtomicity:
-    def test_write_failure_rolls_back_no_partial_rows(self):
+    # ── each required write, when it fails, rolls the whole transaction back ──
+
+    def test_user_write_failure_leaves_no_claim(self):
         from src.rico_jotform_webhook import handle_jotform_submission
 
-        sid = _sid()
-        email = f"{sid}@example.com"
-        payload = {"submissionID": sid, "email": email, "consent": True}
+        sid = _sid(); email = f"{sid}@example.com"
         try:
-            with patch("src.rico_db.RicoDB.upsert_settings", side_effect=RuntimeError("settings boom")):
-                with pytest.raises(RuntimeError, match="settings boom"):
-                    handle_jotform_submission(payload)
-            # The whole transaction rolled back: no claim row, no user row.
-            assert _webhook_rows(sid) == []
+            with patch("src.rico_db.RicoDB.upsert_user", side_effect=RuntimeError("user boom")):
+                with pytest.raises(RuntimeError, match="user boom"):
+                    handle_jotform_submission(_payload(sid, email))
+            assert _webhook_rows(sid) == []      # claim rolled back
             assert _user_count(email) == 0
         finally:
             _cleanup(sid, email)
 
-    def test_retry_after_rollback_succeeds(self):
+    def test_profile_write_failure_leaves_no_partial_state(self):
         from src.rico_jotform_webhook import handle_jotform_submission
 
-        sid = _sid()
-        email = f"{sid}@example.com"
-        payload = {"submissionID": sid, "email": email, "consent": True}
+        sid = _sid(); email = f"{sid}@example.com"
         try:
             with patch("src.rico_db.RicoDB.upsert_profile", side_effect=RuntimeError("profile boom")):
+                with pytest.raises(RuntimeError, match="profile boom"):
+                    handle_jotform_submission(_payload(sid, email))
+            assert _webhook_rows(sid) == []      # claim + user rolled back
+            assert _user_count(email) == 0
+        finally:
+            _cleanup(sid, email)
+
+    def test_settings_write_failure_leaves_no_partial_state(self):
+        from src.rico_jotform_webhook import handle_jotform_submission
+
+        sid = _sid(); email = f"{sid}@example.com"
+        try:
+            with patch("src.rico_db.RicoDB.upsert_settings", side_effect=RuntimeError("settings boom")):
+                with pytest.raises(RuntimeError, match="settings boom"):
+                    handle_jotform_submission(_payload(sid, email))
+            assert _webhook_rows(sid) == []      # claim + user + profile rolled back
+            assert _user_count(email) == 0
+        finally:
+            _cleanup(sid, email)
+
+    # ── retry + dedup ─────────────────────────────────────────────────────────
+
+    def test_immediate_retry_after_rollback_succeeds(self):
+        from src.rico_jotform_webhook import handle_jotform_submission
+
+        sid = _sid(); email = f"{sid}@example.com"
+        try:
+            with patch("src.rico_db.RicoDB.upsert_settings", side_effect=RuntimeError("settings boom")):
                 with pytest.raises(RuntimeError):
-                    handle_jotform_submission(payload)
-            assert _webhook_rows(sid) == []  # claim rolled back
+                    handle_jotform_submission(_payload(sid, email))
+            assert _webhook_rows(sid) == []
             with patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
-                r = handle_jotform_submission(payload)  # immediate retry
+                r = handle_jotform_submission(_payload(sid, email))  # immediate retry
             assert r["status"] == "ok"
             assert _webhook_rows(sid) == ["processed"]
             assert _user_count(email) == 1
         finally:
             _cleanup(sid, email)
 
-    def test_processed_submission_deduplicated(self):
+    def test_successful_retry_is_deduplicated(self):
         from src.rico_jotform_webhook import handle_jotform_submission
 
-        sid = _sid()
-        email = f"{sid}@example.com"
-        payload = {"submissionID": sid, "email": email, "consent": True}
+        sid = _sid(); email = f"{sid}@example.com"
         try:
             with patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
-                r1 = handle_jotform_submission(payload)
-                r2 = handle_jotform_submission(payload)
+                r1 = handle_jotform_submission(_payload(sid, email))
+                r2 = handle_jotform_submission(_payload(sid, email))
             assert r1["status"] == "ok"
             assert r2["status"] == "ignored" and r2["reason"] == "duplicate"
             assert _webhook_rows(sid) == ["processed"]
@@ -159,7 +188,7 @@ class TestJotformAtomicity:
             r = handle_jotform_submission(payload)
             assert r["status"] == "accepted"
             rows = _webhook_rows(sid)
-            assert len(rows) == 1  # committed exactly once
+            assert len(rows) == 1          # committed exactly once
             assert rows[0] != "processing"  # a terminal status
         finally:
             _cleanup(sid, f"{sid}-noemail")
