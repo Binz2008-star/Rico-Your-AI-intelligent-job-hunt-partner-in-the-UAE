@@ -1200,6 +1200,42 @@ class TestVersionRoute:
             "deployed_at": "2026-05-23T00:00:00Z",
         }
 
+    def test_stale_deployed_at_does_not_make_current_commit_look_old(self, client, monkeypatch):
+        """Regression for #1065: a stale deployed_at must not make a current deploy look old.
+
+        deployed_at is static env metadata that can lag main by weeks. The
+        authoritative deploy signals are commit (compared to origin/main) and
+        started_at (process boot). This sets deployed_at to an ancient date while
+        the commit is current and asserts commit/started_at are unaffected — so
+        operator tooling that reads commit + started_at never concludes a current
+        deploy is stale.
+        """
+        from datetime import datetime
+
+        monkeypatch.setenv("GIT_COMMIT", "cur9ent")
+        monkeypatch.setenv("RICO_ENV", "test")
+        # Deliberately ancient static metadata — the kind that lags main by weeks.
+        monkeypatch.setenv("DEPLOYED_AT", "2020-01-01T00:00:00Z")
+
+        r = client.get("/api/v1/version")
+        assert r.status_code == 200
+        body = r.json()
+
+        # commit is the authoritative version signal — driven by the live env,
+        # never by the stale deployed_at value.
+        assert body["commit"] == "cur9ent"
+
+        # started_at is a real, recent boot timestamp (this decade), proving the
+        # process is live regardless of the stale deployed_at.
+        started_at = datetime.fromisoformat(body["started_at"])
+        assert started_at.year >= 2025
+
+        # The stale build metadata is preserved for backward compatibility but is
+        # clearly older than the process boot — it is not the live deploy signal.
+        deployed_at = datetime.fromisoformat(body["deployed_at"].replace("Z", "+00:00"))
+        assert deployed_at.year == 2020
+        assert deployed_at < started_at
+
 
 class TestRicoProfileRoute:
     def test_unauthenticated_returns_401(self, client):

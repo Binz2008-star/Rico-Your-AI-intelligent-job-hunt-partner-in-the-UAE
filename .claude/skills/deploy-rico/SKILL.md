@@ -16,7 +16,7 @@ The driver is `.claude/skills/deploy-rico/check.sh`.
 | Check | Endpoint | Purpose |
 |---|---|---|
 | GitHub commit | `git fetch origin main` | Source of truth for expected commit |
-| Render `/version` | `rico-job-automation-api.onrender.com/version` | Deployed commit, env, app name |
+| Render `/version` | `rico-job-automation-api.onrender.com/version` | Deployed commit, env, app name, `started_at` (process boot) |
 | Render `/health` | `rico-job-automation-api.onrender.com/health` | Backend liveness |
 | Vercel proxy | `ricohunt.com/proxy/health` | Frontend → backend proxy rewrite working |
 | Vercel root | `ricohunt.com/` | Frontend itself is up |
@@ -61,7 +61,8 @@ Exit codes: `0` = all checks passed and Render is current. `1` = stale, unhealth
 ═══════════════════════════════════════════════════
 
 ── Render backend (https://rico-job-automation-api.onrender.com) ──
-[  OK  ] GET /version  →  app=ricohunt  env=production  commit=e3fcfb7  deployed_at=2026-06-06T21:00:00Z
+[  OK  ] GET /version  →  app=ricohunt  env=production  commit=e3fcfb7  started_at=2026-06-06T22:41:12Z
+[ INFO ]   build metadata (static, may be stale): deployed_at=2026-05-23T00:00:00Z  — not the deploy time; commit + started_at are authoritative
 [  OK  ] GET /health   →  HTTP 200  status=ok
 
 ── Vercel frontend (https://ricohunt.com) ──
@@ -85,6 +86,7 @@ Exit codes: `0` = all checks passed and Render is current. `1` = stale, unhealth
 - **Render free tier sleeps** after 15 min of inactivity. The first request may time out or return a cold-start error. Wait 30s and re-run — if health comes back green, the service is fine.
 - **Network policy in isolated containers** (this execution environment) blocks outbound to Render and Vercel. The script will show WARN/FAIL for all remote checks. Run from a local machine or a CI runner with public internet access for real results.
 - **`/version` `commit` field is `"unknown"`** when Render deployed without a `COMMIT_SHA` env var set. This is a Render config issue, not a code issue. The health check is still valid.
+- **`deployed_at` is static build metadata, not the deploy time.** It comes from an env var (`DEPLOYED_AT`/`BUILD_TIME`) that operators rarely update, so it can lag `origin/main` by weeks (it has). Never conclude a deploy is old from `deployed_at`. The authoritative "is this deploy current?" signals are `commit` (compared to `origin/main`) and `started_at` (process boot time, which resets on every deploy).
 - **`/proxy/health` returns 403 or 404** when the Vercel project env `NEXT_PUBLIC_RICO_API` is not set or the proxy rewrite is misconfigured. Check `apps/web/next.config.js` and Vercel project settings.
 
 ---

@@ -91,10 +91,16 @@ VERSION_JSON="$(fetch_json "$RENDER_API/version" 15)"
 DEPLOYED_COMMIT="$(echo "$VERSION_JSON" | jq_field - commit)"
 DEPLOYED_ENV="$(echo "$VERSION_JSON"    | jq_field - environment)"
 DEPLOYED_APP="$(echo "$VERSION_JSON"    | jq_field - app)"
+STARTED_AT="$(echo "$VERSION_JSON"      | jq_field - started_at)"
+# deployed_at is static env metadata (DEPLOYED_AT/BUILD_TIME) that operators
+# rarely update — it has lagged main by weeks. It is NOT the live deploy time.
+# The authoritative "is this deploy current?" signals are commit (compared below)
+# and started_at (process boot time, which resets on every deploy).
 DEPLOYED_AT="$(echo "$VERSION_JSON"     | jq_field - deployed_at)"
 
 if [[ -n "$DEPLOYED_APP" ]]; then
-    _log "[$PASS] GET /version  →  app=$DEPLOYED_APP  env=$DEPLOYED_ENV  commit=${DEPLOYED_COMMIT:-unknown}  deployed_at=${DEPLOYED_AT:-—}"
+    _log "[$PASS] GET /version  →  app=$DEPLOYED_APP  env=$DEPLOYED_ENV  commit=${DEPLOYED_COMMIT:-unknown}  started_at=${STARTED_AT:-—}"
+    _log "[$INFO]   build metadata (static, may be stale): deployed_at=${DEPLOYED_AT:-—}  — not the deploy time; commit + started_at are authoritative"
 else
     _log "[$FAIL] GET /version  →  no response or parse error"
     DEPLOYED_COMMIT=""
@@ -213,6 +219,7 @@ if [[ $JSON_MODE -eq 1 ]]; then
     OUT_PROXY_STATUS="${PROXY_STATUS:-error}" \
     OUT_FRONTEND_CODE="${FRONTEND_CODE}" \
     OUT_ENV="${DEPLOYED_ENV:-unknown}" \
+    OUT_STARTED_AT="${STARTED_AT:-}" \
     OUT_DEPLOYED_AT="${DEPLOYED_AT:-}" \
     python3 -c "
 import json, os
@@ -226,7 +233,11 @@ data = {
     'proxy_health':       os.environ.get('OUT_PROXY_STATUS',  'error'),
     'frontend_code':      os.environ.get('OUT_FRONTEND_CODE', '000'),
     'deployed_env':       os.environ.get('OUT_ENV',           'unknown'),
-    'deployed_at':        os.environ.get('OUT_DEPLOYED_AT',   ''),
+    # started_at (process boot) is the authoritative live-deploy signal alongside
+    # commit. deployed_at_static is env-driven build metadata that may be stale —
+    # kept for backward compatibility, but never treat it as the deploy time.
+    'started_at':         os.environ.get('OUT_STARTED_AT',    ''),
+    'deployed_at_static': os.environ.get('OUT_DEPLOYED_AT',   ''),
 }
 print(json.dumps(data, indent=2))
 "
