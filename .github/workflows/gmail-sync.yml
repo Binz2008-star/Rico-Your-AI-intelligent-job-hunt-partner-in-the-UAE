@@ -1,0 +1,53 @@
+name: "Gmail Sync Sweep (manual)"
+
+# Gmail read-only connector fleet sweep. Dispatch-only for now — the daily
+# schedule stays commented out until RICO_ENABLE_GMAIL_SYNC is activated in
+# production and Google OAuth verification status is clear.
+#
+# The endpoint is cron-guarded (X-Cron-Secret) and additionally returns 503
+# while RICO_ENABLE_GMAIL_SYNC is falsy on the backend, so dispatching this
+# workflow before activation is safe and does nothing.
+on:
+  workflow_dispatch:
+  # schedule:              # enabled in a later PR once the flag is activated
+  #   - cron: '30 5 * * *'  # 05:30 UTC daily
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gmail-sync
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Gmail Sync Fleet Sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Trigger sweep
+        env:
+          API_URL: ${{ secrets.RICO_API_URL }}
+          CRON_SECRET: ${{ secrets.RICO_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::RICO_API_URL and RICO_CRON_SECRET secrets are required."
+            exit 1
+          fi
+          BASE="${API_URL%/}"
+          echo "Triggering Gmail sync fleet sweep"
+          HTTP=$(curl -sS -o /tmp/resp.json -w "%{http_code}" -X POST \
+            -H "X-Cron-Secret: ${CRON_SECRET}" \
+            "${BASE}/api/v1/integrations/gmail/sync-all")
+          echo "HTTP ${HTTP}"
+          cat /tmp/resp.json || true
+          echo
+          if [ "${HTTP}" = "503" ]; then
+            echo "Gmail sync is not enabled on the backend (expected before activation)."
+            exit 0
+          fi
+          if [ "${HTTP}" != "200" ]; then
+            echo "::error::Sweep failed with HTTP ${HTTP}"
+            exit 1
+          fi
