@@ -11,7 +11,7 @@
  * sends would advance the counter and mask the collision.
  */
 
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders as render } from "./test-utils";
@@ -141,5 +141,78 @@ describe("first streamed turn after a fresh page load", () => {
         sse.close();
         await screen.findByText(/Charlie Done\./);
         expect(screen.getByText(/Welcome back, Ahmed/).textContent).toBe(welcomeText);
+    });
+});
+
+// NOTE: this describe must run AFTER the fresh-page-load one below — that test
+// needs the module id counter untouched (0). This one tolerates a warm counter
+// (8 history rows give collision margin on unfixed code).
+describe("first streamed turn for a returning user with history", () => {
+    it("does not corrupt or delete history rows (history/stream id collision)", async () => {
+        // History rows used to take ids 0..N from the forEach index while
+        // nextId() restarts at 1 on a fresh load — so the first streamed
+        // reply's tokens were appended into an old history row, and
+        // applyDoneResponse's filter then deleted that row permanently.
+        const HISTORY = Array.from({ length: 8 }, (_, i) => ({
+            role: i % 2 === 0 ? "user" : "assistant",
+            content: `History message number ${i} — landmark`,
+        }));
+        fetchMock.mockImplementation(async (input, init) => {
+            const url = String(input);
+            const method = (init?.method ?? "GET").toUpperCase();
+            if (url.includes("/api/v1/me")) {
+                return jsonResponse({ authenticated: true, role: "user", email: "u@u.com", name: "Ahmed" });
+            }
+            if (url.includes("/rico/chat/history")) {
+                if (method === "DELETE") return jsonResponse({});
+                return jsonResponse({ messages: HISTORY, total: HISTORY.length, has_more: false });
+            }
+            if (url.includes("/rico/chat/stream")) {
+                const handler = streamHandlers.shift();
+                if (!handler) throw new Error("No stream fixture queued for this send");
+                return handler(init);
+            }
+            return jsonResponse({}, 404);
+        });
+
+        render(<CommandPage />);
+        await screen.findByText(/History message number 7/);
+        // Scope to the transcript log — the conversation rail truthfully
+        // mirrors the first user turn as its title, so unscoped text queries
+        // would double-match.
+        const log = within(screen.getByRole("log", { name: /chat messages/i }));
+
+        let sse!: ReturnType<typeof manualSSE>;
+        streamHandlers.push((init) => {
+            sse = manualSSE(init?.signal);
+            return sse.response;
+        });
+
+        const user = userEvent.setup();
+        await user.type(screen.getByRole("textbox"), "New question from a returning user");
+        await user.click(screen.getByLabelText("Send"));
+        await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).includes("/rico/chat/stream"))).toBe(true));
+
+        sse.push({ type: "token", text: "Xray" });
+        await log.findByText(/Xray/);
+        sse.push({ type: "token", text: " Yankee" });
+        sse.push({ type: "token", text: " Zulu" });
+        await log.findByText(/Xray Yankee Zulu/);
+
+        // Every history row must still exist exactly once, byte-identical.
+        for (let i = 0; i < HISTORY.length; i++) {
+            const rows = log.getAllByText(new RegExp(`History message number ${i} — landmark`));
+            expect(rows).toHaveLength(1);
+            expect(rows[0].textContent).not.toContain("Yankee");
+        }
+
+        sse.push({ type: "done", response: { response: "Xray Yankee Zulu Done.", type: "chat" } });
+        sse.close();
+        await log.findByText(/Zulu Done\./);
+
+        // done must not have deleted any history row (the old filter bug).
+        for (let i = 0; i < HISTORY.length; i++) {
+            expect(log.getAllByText(new RegExp(`History message number ${i} — landmark`))).toHaveLength(1);
+        }
     });
 });

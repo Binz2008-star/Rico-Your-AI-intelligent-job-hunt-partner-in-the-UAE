@@ -1048,7 +1048,13 @@ export default function CommandPage() {
 
         (async () => {
             try {
-                const history = await fetchChatHistory(20);
+                // Hard 8s cap: a hung history fetch otherwise leaves
+                // historyState "pending" forever (no welcome, no transcript).
+                const history = await Promise.race([
+                    fetchChatHistory(20),
+                    new Promise<never>((_, reject) =>
+                        window.setTimeout(() => reject(new Error("history timeout")), 8000)),
+                ]);
                 if (cancelled) return;
                 if (history.messages.length > 0) {
                     // Deduplicate by (role, content) pairs to avoid double-rendering
@@ -1059,14 +1065,21 @@ export default function CommandPage() {
                         const key = `${msg.role}:${msg.content}`;
                         if (seen.has(key)) return;
                         seen.add(key);
+                        // History ids live in a reserved negative namespace
+                        // (welcome is -1) so nextId()-generated ids (1, 2, …)
+                        // can never collide with them. A collision makes the
+                        // per-token map-append write streamed text into an old
+                        // history row, which applyDoneResponse then deletes.
                         if (msg.role === "user") {
-                            mappedMessages.push({ id: idx, role: "user", text: msg.content });
+                            mappedMessages.push({ id: -(idx + 2), role: "user", text: msg.content });
                         } else {
                             // Parse JSON assistant payloads (job_matches, etc.) into rich messages
-                            mappedMessages.push(parseHistoryContent(msg.content, idx) as Message);
+                            mappedMessages.push(parseHistoryContent(msg.content, -(idx + 2)) as Message);
                         }
                     });
-                    setMessages(mappedMessages);
+                    // If the user already started chatting while history was in
+                    // flight, prepend history instead of wiping their live turns.
+                    setMessages((prev) => (prev.length > 0 ? [...mappedMessages, ...prev] : mappedMessages));
                     promptSentRef.current = true;
                     setHistoryState("has_history");
                     setInitialContentReady(true);
@@ -1095,7 +1108,8 @@ export default function CommandPage() {
         ensureSessionId(sessionIdRef);
         const stored = loadPublicHistory(sessionIdRef);
         if (stored.length > 0) {
-            setMessages(stored.map((m, idx) => ({ id: idx, role: m.role, text: m.text })));
+            // Same reserved negative namespace as the authenticated loader.
+            setMessages(stored.map((m, idx) => ({ id: -(idx + 2), role: m.role, text: m.text })));
             promptSentRef.current = true;
             setHistoryState("has_history");
             setInitialContentReady(true);
