@@ -21,7 +21,6 @@ import { CommandObsidianShell } from "@/components/command/CommandObsidianShell"
 import { COMMAND_OBSIDIAN } from "@/components/command/obsidianTheme";
 import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { fireEvent, render, screen } from "@testing-library/react";
-import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -139,5 +138,49 @@ describe("CommandObsidianShell (slice C1)", () => {
         render(<CommandObsidianShell>x</CommandObsidianShell>);
         expect(document.body.getAttribute("style")).toBeNull();
         expect(document.documentElement.getAttribute("style")).toBeNull();
+    });
+
+    // ── Desktop account/logout control (hotfix) ────────────────────────────
+
+    it("shows the account menu button and opens it with Profile, Settings, Log out when onLogout is provided", () => {
+        const onLogout = vi.fn();
+        render(<CommandObsidianShell onLogout={onLogout}>x</CommandObsidianShell>);
+        const accountBtn = screen.getByLabelText(/Account/i);
+        expect(accountBtn).toBeInTheDocument();
+        // Menu not open yet
+        expect(screen.queryByTestId("command-obsidian-account-menu")).toBeNull();
+        fireEvent.click(accountBtn);
+        const menu = screen.getByTestId("command-obsidian-account-menu");
+        expect(menu).toBeInTheDocument();
+        expect(menu).toContainElement(screen.getByRole("menuitem", { name: /Profile/i }));
+        expect(menu).toContainElement(screen.getByRole("menuitem", { name: /Settings/i }));
+        expect(menu).toContainElement(screen.getByTestId("command-obsidian-logout"));
+    });
+
+    it("clicking Log out calls onLogout exactly once and closes the menu", () => {
+        const onLogout = vi.fn();
+        render(<CommandObsidianShell onLogout={onLogout}>x</CommandObsidianShell>);
+        fireEvent.click(screen.getByLabelText(/Account/i));
+        const logoutBtn = screen.getByTestId("command-obsidian-logout");
+        fireEvent.click(logoutBtn);
+        expect(onLogout).toHaveBeenCalledTimes(1);
+        // Menu should have closed
+        expect(screen.queryByTestId("command-obsidian-account-menu")).toBeNull();
+    });
+
+    it("does not render the account menu when onLogout is not provided (public/checking desktop)", () => {
+        render(<CommandObsidianShell>x</CommandObsidianShell>);
+        expect(screen.queryByTestId("command-obsidian-account")).toBeNull();
+        expect(screen.queryByLabelText(/Account/i)).toBeNull();
+    });
+
+    it("account menu contains links to /profile and /settings", () => {
+        const onLogout = vi.fn();
+        render(<CommandObsidianShell onLogout={onLogout}>x</CommandObsidianShell>);
+        fireEvent.click(screen.getByLabelText(/Account/i));
+        const profileLink = screen.getByRole("menuitem", { name: /Profile/i });
+        const settingsLink = screen.getByRole("menuitem", { name: /Settings/i });
+        expect(profileLink).toHaveAttribute("href", "/profile");
+        expect(settingsLink).toHaveAttribute("href", "/settings");
     });
 });
