@@ -67,6 +67,51 @@ _EXCLUDED_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Value-level secret scan (ADR §8 hardening). The key filter above only inspects
+# field NAMES; this scans field VALUES so secret/credential/PAN material is
+# rejected even when it arrives under an innocuous key. Any match rejects the
+# WHOLE write (never a trim), mirroring the key-filter contract. Scoped to
+# payload / fact values — provenance pointers (source_record_id / source_uri)
+# are opaque labels and are not scanned here.
+#
+# Patterns are deliberately high-precision so they cannot fire on the minimized
+# job-action payload (16-char hex job_key, human-text title/company): every
+# pattern requires a credential-shaped structure that free-text career fields
+# never take.
+_SECRET_VALUE_PATTERNS = (
+    # PEM / private-key blocks.
+    ("private_key_block",
+     re.compile(r"-----BEGIN [A-Z0-9 ]*(?:PRIVATE KEY|CERTIFICATE|RSA)")),
+    # JWT: three base64url segments (`eyJ...` header).
+    ("jwt",
+     re.compile(r"\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}")),
+    # Explicit bearer token.
+    ("bearer_token",
+     re.compile(r"\bBearer\s+[A-Za-z0-9._~+/\-]{16,}", re.IGNORECASE)),
+    # Provider secret-key prefixes (OpenAI/Stripe `sk_`/`sk-`).
+    ("secret_key_prefix",
+     re.compile(r"\bsk[-_][A-Za-z0-9]{16,}")),
+    # Webhook signing secret (`whsec_...`).
+    ("webhook_secret",
+     re.compile(r"\bwhsec_[A-Za-z0-9]{16,}")),
+    # IBAN-shaped: 2 letters + 2 check digits + 11–30 alphanumerics.
+    ("iban",
+     re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b")),
+    # Card-shaped PAN: 13–19 digits, optional single space/dash grouping.
+    ("card_number",
+     re.compile(r"\b\d(?:[ -]?\d){12,18}\b")),
+    # Long opaque credential: a 40+ char unbroken token run (base64/hex API
+    # keys, session secrets). Human career text always contains spaces well
+    # before this length; the canonical job_key is a 16-char hex digest.
+    ("opaque_token",
+     re.compile(r"[A-Za-z0-9+/_-]{40,}")),
+)
+
+# The shadow write mirrors ONLY these non-sensitive job-action fields
+# (payload minimization, ADR §8). Enforced at write time so a future widening
+# of the payload cannot silently ship a broader object into memory.
+_SHADOW_PAYLOAD_KEYS = frozenset({"action", "title", "company", "job_key", "surface"})
+
 # Circuit breaker: after this many consecutive repo failures the writer stops
 # trying for _BREAKER_COOLDOWN_S seconds. Protects the action path (and the
 # database) from a persistently broken engine without any deploy.
@@ -229,6 +274,34 @@ class MemoryWriter:
                     return found
         return None
 
+    @classmethod
+    def _scan_secret_values(cls, payload: Any, _path: str = "") -> Optional[str]:
+        """Return a label like 'jwt@<path>' when any VALUE looks like a secret.
+
+        Complements the key filter: catches secret/credential/PAN material even
+        when it arrives under an innocuous key. String / numeric leaves are
+        matched against _SECRET_VALUE_PATTERNS; dict and list nodes are walked
+        recursively. Booleans are ignored (bool is an int subclass but never a
+        secret). Any hit rejects the whole write.
+        """
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                key_path = f"{_path}.{key}" if _path else str(key)
+                found = cls._scan_secret_values(value, key_path)
+                if found:
+                    return found
+        elif isinstance(payload, (list, tuple)):
+            for i, item in enumerate(payload):
+                found = cls._scan_secret_values(item, f"{_path}[{i}]")
+                if found:
+                    return found
+        elif isinstance(payload, (str, int, float)) and not isinstance(payload, bool):
+            text = str(payload)
+            for label, pattern in _SECRET_VALUE_PATTERNS:
+                if pattern.search(text):
+                    return f"{label}@{_path or '<root>'}"
+        return None
+
     # ── Writes ───────────────────────────────────────────────────────────────
 
     def record_event(
@@ -265,11 +338,11 @@ class MemoryWriter:
             self._count("skipped_breaker_open")
             return MemoryWriteResult(status="skipped_breaker_open")
 
-        offending = self._check_exclusion(payload)
+        offending = self._check_exclusion(payload) or self._scan_secret_values(payload)
         if offending:
             self._count("rejected_excluded")
             logger.warning(
-                "memory_engine_excluded_payload event_type=%s key=%s — write dropped",
+                "memory_engine_excluded_payload event_type=%s match=%s — write dropped",
                 event_type, offending,
             )
             return MemoryWriteResult(status="rejected_excluded")
@@ -350,11 +423,14 @@ class MemoryWriter:
             self._count("skipped_breaker_open")
             return MemoryWriteResult(status="skipped_breaker_open")
 
-        offending = self._check_exclusion({fact_key: value})
+        offending = (
+            self._check_exclusion({fact_key: value})
+            or self._scan_secret_values({fact_key: value})
+        )
         if offending:
             self._count("rejected_excluded")
             logger.warning(
-                "memory_engine_excluded_payload fact_key=%s key=%s — write dropped",
+                "memory_engine_excluded_payload fact_key=%s match=%s — write dropped",
                 fact_key, offending,
             )
             return MemoryWriteResult(status="rejected_excluded")
@@ -459,6 +535,17 @@ class MemoryWriter:
                 "job_key": str(job.get("id") or job.get("job_key") or ""),
                 "surface": str(surface or ""),
             }
+            # Payload minimization is a hard invariant: refuse (don't trim) if
+            # the payload ever carries a field outside the sanctioned set, so a
+            # future edit cannot silently widen what memory learns from actions.
+            extra = set(payload) - _SHADOW_PAYLOAD_KEYS
+            if extra:
+                self._count("rejected_excluded")
+                logger.warning(
+                    "memory_engine_shadow_payload_widened action=%s extra=%s — write dropped",
+                    action, sorted(extra),
+                )
+                return
             result = self.record_event(
                 external_user_id=external_user_id,
                 event_type=f"job_action.{action}",
