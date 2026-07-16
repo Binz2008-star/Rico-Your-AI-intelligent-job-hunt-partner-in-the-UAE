@@ -6,8 +6,8 @@
  * `design-handoffs/reviewed/2026-07-16-command-obsidian-v4/`).
  *
  * Route-scoped chrome for the AUTHENTICATED `/command` surface only, replacing
- * WorkspaceShell there: the recording's dark operator console — obsidian
- * canvas with grid grain + acid-lime aura, a full-width h-12 top status bar
+ * WorkspaceShell there: the dark operator console — warm-dark canvas with
+ * grid grain + sun-red aura, a full-width h-12 top status bar
  * (panel toggles · Rico · workspace eyebrow · compact icon nav · live status ·
  * EN/ع · theme), a collapsible 260px start rail carrying the `leftRail`
  * content (the canonical Sessions position — CommandConversationRail; general
@@ -15,10 +15,11 @@
  * correction), and a flexible console area whose children (transcript column
  * + CommandRail) come from CommandPage unchanged.
  *
- * Theme delivery: provides COMMAND_OBSIDIAN through the existing
+ * Theme delivery: provides COMMAND_ATELIER (Atelier re-skin, DEC-20260716-001;
+ * replaces the historical Obsidian acid-lime palette) through the existing
  * WorkspaceThemeContext, so every merged 4a–4e surface (composer, message
  * rows, state cards, right rail, MissionContextBar) repaints with zero
- * component changes. Local light/dark island, dark ("Obsidian night") first —
+ * component changes. Local light/dark island, dark ("Atelier at Night") first —
  * the global Nocturne ThemeContext is never touched, and no global
  * `:root`/`body` styling is added (the prototype's body::before/::after
  * texture is re-implemented here as scoped, pointer-events-none layers).
@@ -33,7 +34,7 @@
  */
 
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
-import { COMMAND_OBSIDIAN } from "@/components/command/obsidianTheme";
+import { COMMAND_ATELIER } from "@/components/command/commandAtelierTheme";
 import { WORKSPACE_NAV } from "@/components/workspace/WorkspaceShell";
 import { WorkspaceThemeContext } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -99,8 +100,8 @@ export function CommandObsidianShell({
     const t = useTranslation(language);
     const pathname = usePathname();
     const isAr = language === "ar";
-    const [dark, setDark] = useState(true); // "Obsidian night" default
-    const c = dark ? COMMAND_OBSIDIAN.dark : COMMAND_OBSIDIAN.light;
+    const [dark, setDark] = useState(true); // "Atelier at Night" default
+    const c = dark ? COMMAND_ATELIER.dark : COMMAND_ATELIER.light;
 
     const [accountOpen, setAccountOpen] = useState(false);
     const accountRef = useRef<HTMLDivElement>(null);
@@ -343,7 +344,7 @@ export function CommandObsidianShell({
                 [data-testid="command-obsidian-shell"] .obs-ghost:hover { background-color: ${c.activeBg}; color: ${c.ink}; }
                 [data-testid="command-obsidian-shell"] a:focus-visible,
                 [data-testid="command-obsidian-shell"] button:focus-visible { outline: 2px solid ${c.red}; outline-offset: 2px; border-radius: 4px; }
-                [data-testid="command-obsidian-shell"] ::selection { background: ${c.red}; color: ${dark ? "#0a0b0d" : "#f4f5f0"}; }
+                [data-testid="command-obsidian-shell"] ::selection { background: ${c.red}; color: ${c.bg}; }
                 [lang="ar"][data-testid="command-obsidian-shell"] * { letter-spacing: 0 !important; }
             ` }} />
         </div>

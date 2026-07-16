@@ -2428,9 +2428,9 @@ export default function CommandPage() {
  * chat column; no sidebar — matches the design-reference screenshots).
  * Authenticated (and the transient "checking" state, so auth resolution
  * causes no layout jump) lives in the route-scoped CommandObsidianShell:
- * obsidian canvas, top status bar, collapsible 260px nav rail, and the
- * COMMAND_OBSIDIAN palette delivered through the same workspace-theme
- * context the 4a–4e surfaces already consume.
+ * warm-dark canvas, top status bar, collapsible 260px nav rail, and the
+ * COMMAND_ATELIER palette (Atelier re-skin, DEC-20260716-001) delivered
+ * through the same workspace-theme context the 4a–4e surfaces already consume.
  * Chat behavior, streaming, attachments, safety, and EN/AR are untouched.
  */
 function CommandChrome({
