@@ -75,22 +75,23 @@ Merged/landed since the previous 2026-07-13 snapshot — agents must not plan fr
 
 ## Open PR control
 
-Fresh snapshot 2026-07-15 (12 open PRs) — `OPEN_PR_TRIAGE_2026-07-13.md` is retained as the historical 07-13 snapshot:
+Fresh snapshot 2026-07-16 evening (6 open PRs). The pre-Atelier-pivot 07-15 table
+is superseded; only these are open:
 
 | PR | Subject | Classification |
 | ---: | --- | --- |
-| #1028 | Atelier CommandComposer (Step 2 slice 4a) | **ACTIVE** — sole UI implementation PR; visual gate before leaving draft |
-| #1027 | docs: reopen full-site Atelier migration, refreshed gap matrix | REVIEW |
-| #1025 | Memory Engine M1 — additive schema + shadow MemoryWriter | ACTIVE-DRAFT — owner scope: stops before merge |
-| #1024 | ADR-001 Career Memory Engine + Phase 1 program file | REVIEW — ADR accepted at `ef66ebfa` |
-| #1022 | Paddle Setup-level eventCallback (split B of #1018) | **MERGED** `27df7ba6` — production-verified |
-| #1016 | /queue auth guard | REVIEW — coordinate with program Step 3 |
-| #1002 | settings honesty labels | REVIEW |
-| #989 | subscription-audit follow-ups | REVIEW — reconcile with merged #1008 |
-| #996 | pitch/explainer/waitlist bundle | HOLD — mixed scope |
-| #988 | hide noisy bot comments workflow | HOLD — non-launch housekeeping |
-| #967 | pre-launch gate/waitlist | HOLD — intent obsolete (site is open); owner decision to close |
-| #965 | journey-state seed | HOLD — superseded in direction by ADR-001 |
+| #1062 | Atelier MATCH job cards | **HELD** — CI-green; design frozen under containment; owner logged colour/AR/test gaps |
+| #1055 | Gmail M0 read-only connector | **DRAFT** — flag OFF; 3 P1 review blockers + separate merge/activation gates (`TASK-20260716-001`) |
+| #1025 | Memory Engine M1 (shadow) | **DRAFT** — flag OFF; paused pending shadow evidence (`TASK-20260716-002`) |
+| #1002 | settings honesty labels | draft — small; review after containment |
+| #988 | hide noisy bot comments workflow | housekeeping |
+| #965 | journey-state seed | draft — superseded in direction by Memory Engine; close candidate |
+
+**Merged since the 07-15 table:** #1048/#1060/#1061 (Atelier `/command`), #1056/#1058
+(decision harness + security hardening), #1046/#1050/#1051/#1052/#1053, #1059
+(`DEC-20260716-001`), #1063 (this reconciliation). #1028 (slice-4a composer) merged
+long ago, then the whole `/command` re-skinned to Atelier — superseded.
+**Closed (board cleanup):** #967, #996, #989 + issues #960/#963.
 
 An open PR is not permission to resume it.
 
@@ -130,16 +131,19 @@ Do not reorder or combine billing/auth/email/database/design work into one PR.
 
 ## Safe agent allocation
 
-| Session | Allowed default role |
-| --- | --- |
-| UI implementation account | WRITER only via #1028 (or the next claimed program slice after it merges) |
-| Backend/billing implementation account | WRITER for one claimed backend/billing/invitation PR only |
-| Independent account | REVIEWER or RELEASE |
-| Windsurf/OneSurf/local tooling | focused verifier; **reviewer-only on #1028**; no foreign-branch edits |
-| Codex | review signal only |
-| Lovable | design/reference only unless explicitly assigned a production UI PR |
+Under the containment posture (2026-07-16) the only writer work allowed is
+**security + docs/reconciliation**. Feature/design/integration writing is frozen.
 
-Parallel writers are allowed only for explicitly recorded non-overlapping tracks with separate files/contracts and no shared migration or auth surface. The two active tracks (#1028 UI, #1025 memory) satisfy this: no shared files, no shared migrations.
+| Session | Allowed default role (containment) |
+| --- | --- |
+| Claude | WRITER for the containment reconciliation (#1068) + security fixes only |
+| Windsurf / Codex / local tooling | REVIEWER — e.g. the #1055 Gmail review; no foreign-branch feature edits |
+| Any implementation account | no new feature/design/integration writing until containment closes |
+| Lovable | design/reference only |
+
+No parallel feature writers during containment. When containment closes and feature
+work resumes, record each non-overlapping track (separate files/contracts, no shared
+migration or auth surface) before starting.
 
 ## Stop conditions
 
@@ -156,15 +160,18 @@ Stop and report instead of guessing when:
 ## Next exact action
 
 ```text
-1. Owner: merge the #1027 docs reopen so main's program doc matches direction;
-   merge #1024 to record the accepted ADR-001.
-2. UI track: run the #1028 EN/AR desktop+mobile visual gate; on pass, owner
-   merge approval; then cut slice 4b from latest main.
-3. Billing track: #1022 MERGED and production-verified. Next: rotate exposed
-   Paddle Sandbox webhook secret (security PR); then isolated staging track
-   for full payment/webhook/entitlement testing. Architecture debt (remove
-   hardcoded fallbacks) as a separate PR after security work.
-4. Memory track: finish #1025 to its stop-before-merge boundary; owner review.
-5. Housekeeping: owner decision on #967 (obsolete intent) and the REVIEW queue
-   (#989, #1002, #1016).
+Containment sequence (owner priority 2026-07-16 — do not skip):
+1. #1068 — finish the source-of-truth reconciliation (this PR): make CURRENT_STATE,
+   PROJECT_STATUS, ROADMAP, and TASKS agree on active/held/next; Gmail Draft + gates;
+   *.env ignore coverage. Docs/security only.
+2. Owner: rotate ALL credentials in the local rico-job-automation-api.env (treat as
+   exposed); build a fresh Paddle production env from .env.example. Never deploy from
+   the stale Stripe file.
+3. #1066 (retire old Stripe tooling + stale Render env file) and #1067 (align paid-plan
+   promises with implemented limits) — after secret rotation.
+4. Still FROZEN until the above close: #1062 (Atelier job cards — fix the logged
+   colour/AR/test gaps first), #1055 Gmail (fix 3 P1 blockers + gates), #1025 Memory.
+5. Then resume Atelier completion + integrations as small provable PRs, and the full
+   production gate (CV, logout/login persistence, attachments, applications, billing
+   sandbox, AR + mobile).
 ```

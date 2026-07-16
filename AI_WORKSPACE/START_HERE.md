@@ -28,20 +28,26 @@ If any source disagrees, do not guess from conversation history. Declare `REVIEW
 ## Current execution lock
 
 ```text
-ACTIVE NOW (2026-07-15; #1010 merged b753885 — see PROJECT_STATUS.md)
-Two owner-directed, non-overlapping tracks:
-1. Atelier full-site migration — REOPENED by owner 2026-07-14.
-   Step 2 slice 4a = PR #1028 (sole active UI implementation PR;
-   Claude writer, Windsurf reviewer-only). Docs flip = PR #1027.
-2. Rico Intelligence Phase 1 — ADR-001 ACCEPTED (#1024).
-   M1 shadow-write PR #1025 (draft; owner scope: stops before merge).
+ACTIVE NOW (2026-07-16 evening; main 4194736f+ — see PROJECT_STATUS.md for detail)
+POSTURE = CONTAINMENT. Only security + docs/reconciliation writing is allowed;
+feature/design/integration writing is FROZEN. Sequence (do not skip):
+1. #1068 — finish the source-of-truth reconciliation (docs only).
+2. Owner: rotate ALL credentials in the local rico-job-automation-api.env
+   (treat as exposed); build a fresh Paddle env from .env.example. Never deploy
+   from the stale Stripe file.
+3. #1066 (retire old Stripe tooling + stale Render env) + #1067 (paid-plan
+   promises vs implemented limits) — after secret rotation.
+Then unfreeze: finish Atelier + integrations as small provable PRs.
 
-FACTS since the 07-13 snapshot: teaser gate REMOVED — the full site is
-OPEN; waitlist retired; Paddle billing merged (#1008, Sandbox mode,
-USD 21.50/mo authoritative); #1022 gated on a real browser Sandbox smoke.
+FROZEN / HELD (do NOT merge or activate without owner review):
+- #1062 Atelier job cards (CI-green; owner logged colour/AR/test gaps)
+- #1055 Gmail M0 (Draft, flag OFF, 3 P1 blockers — TASK-20260716-001)
+- #1025 Memory M1 (Draft, flag OFF — TASK-20260716-002)
 
-Merges, deploys, Neon changes, and billing activation remain
-owner-approval gated.
+DONE (in main): /command is full Atelier (paper + Atelier at Night, editorial
+serif replies) — DEC-20260716-001 merged; the old "Command Obsidian" acid-lime
+is retired. Slice-4a composer #1028 merged long ago and is superseded by the
+full Atelier /command. Merges, deploys, Neon, billing activation stay owner-gated.
 ```
 
 ## Required daily opening
