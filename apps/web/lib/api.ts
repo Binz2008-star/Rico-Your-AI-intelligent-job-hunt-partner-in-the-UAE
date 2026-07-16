@@ -846,6 +846,98 @@ export async function telegramOptOut(): Promise<TelegramStatusResponse> {
   });
 }
 
+// ── Gmail read-only connector (M0) ───────────────────────────────────────────
+// Backend: src/api/routers/integrations_gmail.py. Read-only by design — the
+// connector requests gmail.readonly only; Rico cannot send, delete, or modify
+// email. When RICO_ENABLE_GMAIL_SYNC is off, connect/sync return 503 and
+// `enabled` is false in the status payload (card shows a "coming soon" state).
+
+export interface GmailStatusResponse {
+  enabled: boolean;
+  connected: boolean;
+  provider_email: string | null;
+  scopes: string[];
+  needs_reauth: boolean;
+  last_sync_at: string | null;
+}
+
+export interface GmailReviewItem {
+  id: string;
+  gmail_message_id: string;
+  subject_snippet: string | null;
+  sender: string | null;
+  received_at: string | null;
+  classified_status: string | null;
+  classification_confidence: number | null;
+  company_hint: string | null;
+  matched_job_id: string | null;
+  matched_company: string | null;
+  matched_title: string | null;
+  match_confidence: number | null;
+  proposed_status: string | null;
+  review_status: string;
+  created_at: string | null;
+}
+
+export async function getGmailStatus(
+  signal?: AbortSignal,
+): Promise<GmailStatusResponse> {
+  return requestJson<GmailStatusResponse>("/api/v1/integrations/gmail/status", {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function getGmailConnectUrl(): Promise<{ auth_url: string }> {
+  return requestJson<{ auth_url: string }>("/api/v1/integrations/gmail/connect", {
+    method: "GET",
+  });
+}
+
+export async function disconnectGmail(): Promise<{
+  disconnected: boolean;
+  revoked_at_google: boolean;
+}> {
+  return requestJson<{ disconnected: boolean; revoked_at_google: boolean }>(
+    "/api/v1/integrations/gmail/disconnect",
+    { method: "POST" },
+  );
+}
+
+export async function syncGmail(): Promise<{ status: string; detail?: string }> {
+  return requestJson<{ status: string; detail?: string }>(
+    "/api/v1/integrations/gmail/sync",
+    { method: "POST" },
+  );
+}
+
+export async function getGmailReviewItems(
+  signal?: AbortSignal,
+): Promise<{ items: GmailReviewItem[] }> {
+  return requestJson<{ items: GmailReviewItem[] }>(
+    "/api/v1/integrations/gmail/review-items",
+    { method: "GET", signal },
+  );
+}
+
+export async function approveGmailReviewItem(
+  itemId: string,
+): Promise<{ ok: boolean; applied_status: string; job_id: string }> {
+  return requestJson<{ ok: boolean; applied_status: string; job_id: string }>(
+    `/api/v1/integrations/gmail/review-items/${encodeURIComponent(itemId)}/approve`,
+    { method: "POST" },
+  );
+}
+
+export async function dismissGmailReviewItem(
+  itemId: string,
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(
+    `/api/v1/integrations/gmail/review-items/${encodeURIComponent(itemId)}/dismiss`,
+    { method: "POST" },
+  );
+}
+
 // ── Password reset ────────────────────────────────────────────────────────────
 
 export async function forgotPassword(
