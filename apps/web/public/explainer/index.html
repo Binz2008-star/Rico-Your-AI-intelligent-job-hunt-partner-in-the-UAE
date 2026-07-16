@@ -18,17 +18,96 @@
   a{color:#C9A84C}
 </style>
 <script>
-(function(){
-  /* Use absolute paths because Vercel may serve /explainer without a trailing
-     slash. Relative paths would then resolve to /option-*.html and return 404. */
+(function (win) {
+  "use strict";
+  /* Owner directive 2026-07-16: the three approved films rotate as a
+     randomized non-repeating cycle — every film plays once before any film
+     repeats. The shuffled deck persists in localStorage so the cycle spans
+     visits, sessions and reloads.
+
+     Absolute paths because Vercel may serve /explainer without a trailing
+     slash; relative paths would then resolve to /option-*.html and 404. */
   var FILMS = [
     '/explainer/option-2.html',
     '/explainer/option-3.html',
     '/explainer/option-3b.html'
   ];
-  var pick = FILMS[Math.floor(Math.random()*FILMS.length)];
-  location.replace(pick + location.search + location.hash);
-})();
+  var DECK_KEY = 'rico-film-deck-v1';
+  var LAST_KEY = 'rico-film-last-v1';
+
+  function shuffle(list, random) {
+    var a = list.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  /* Draw the next film from the persisted deck; reshuffle when exhausted.
+     A fresh deck never opens with the film that closed the previous cycle,
+     so an immediate reload never replays the same film back-to-back.
+     Storage failures (privacy modes) degrade to a plain random pick. */
+  function nextFilm(storage, random) {
+    var deck = [];
+    var last = null;
+    try {
+      last = storage.getItem(LAST_KEY);
+      var parsed = JSON.parse(storage.getItem(DECK_KEY) || '[]');
+      if (Array.isArray(parsed)) {
+        deck = parsed.filter(function (f) { return FILMS.indexOf(f) !== -1; });
+      }
+    } catch (e) { /* corrupted or unavailable storage → fresh deck */ }
+
+    if (!deck.length) {
+      deck = shuffle(FILMS, random);
+      if (deck.length > 1 && deck[0] === last) {
+        deck.push(deck.shift());
+      }
+    }
+    var pick = deck.shift();
+    try {
+      storage.setItem(DECK_KEY, JSON.stringify(deck));
+      storage.setItem(LAST_KEY, pick);
+    } catch (e) { /* pick still plays; the next visit reshuffles */ }
+    return pick;
+  }
+
+  /* Render the chosen film in place: the address bar stays on the chooser,
+     so reloading or revisiting re-enters the rotation instead of staying
+     locked to the previously selected option URL. The films are fully
+     self-contained (inline CSS/JS, absolute CTA URLs, clip paths relative
+     to /explainer/), so swapping the document body is safe. Falls back to
+     a hard redirect if fetch is unavailable or the film fails to load. */
+  function showFilm(w, url) {
+    function hardNav() {
+      w.location.replace(url + w.location.search + w.location.hash);
+    }
+    if (typeof w.fetch !== 'function') { hardNav(); return; }
+    w.fetch(url, { credentials: 'same-origin' })
+      .then(function (res) {
+        if (!res.ok) { throw new Error('HTTP ' + res.status); }
+        return res.text();
+      })
+      .then(function (html) {
+        var doc = w.document;
+        doc.open();
+        doc.write(html);
+        doc.close();
+      })
+      .catch(hardNav);
+  }
+
+  /* Exposed for the vitest regression suite (explainer-film-rotation);
+     harmless in production. */
+  win.__ricoFilmChooser = { FILMS: FILMS, nextFilm: nextFilm, showFilm: showFilm };
+
+  if (!win.document) { return; } /* test harness — exports only, no boot */
+
+  var storage = null;
+  try { storage = win.localStorage; } catch (e) { /* privacy mode */ }
+  showFilm(win, nextFilm(storage, Math.random));
+})(window);
 </script>
 </head>
 <body>
