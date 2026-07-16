@@ -70,7 +70,9 @@ def opt_in(user_id: str, frequency: str | None = None) -> bool:
             if freq not in _VALID_FREQUENCIES:
                 freq = "daily"
             updates["email_alert_frequency"] = freq
-        upsert_profile(user_id=user_id, updates=updates)
+        # Consent is durable state: require DB persistence so a swallowed DB
+        # failure returns False rather than a false success (#1082).
+        upsert_profile(user_id=user_id, updates=updates, require_db=True)
         # Best-effort token mint — an opt-in must still succeed if the token
         # table is missing (e.g. migration 033 not yet applied).
         ensure_unsubscribe_token(user_id)
@@ -88,7 +90,9 @@ def opt_out(user_id: str) -> bool:
     later re-subscribe reuses the same link. Returns True on success.
     """
     try:
-        upsert_profile(user_id=user_id, updates={"can_receive_email_alerts": False})
+        # Opt-out MUST persist durably; a mirror-only write would leave the
+        # persisted roster opted-in and still deliver later (#1082).
+        upsert_profile(user_id=user_id, updates={"can_receive_email_alerts": False}, require_db=True)
         logger.info("email_notifications.opt_out user=%s", user_id)
         return True
     except Exception:
