@@ -29,15 +29,19 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 ---
 
-## Where Rico is right now (2026-07-11)
+## Where Rico is right now (2026-07-16 evening)
+
+> This snapshot is authoritative alongside `PROJECT_STATUS.md` (the control panel);
+> if they ever disagree, `PROJECT_STATUS.md` + live `main` win. The older
+> 2026-07-11 / #963 / #1008-draft / `241b85d` snapshot is **historical** (superseded).
 
 | Question | Answer |
 | --- | --- |
-| **Where is Rico?** | Release verification for #963: the onboarding CV persistence implementation is merged as `241b85d…`, CI-green, and Vercel-ready. |
-| **Where is it going?** | Verify the deployed backend/authenticated flow, then resume the approved per-route Atelier migration and separately scoped hardening. |
-| **What is blocked?** | No new runtime/design objective may start until the #963 release gate (migration 038 schema proof + authenticated smoke) passes. Render version already matches `241b85d…`. **#1008 (Paddle billing)** is draft — blocked on migrations 040+041, `PADDLE_*` env vars, and owner approval to set `BILLING_MODE=paddle`. |
-| **What is completed?** | Phases 0–1, #969 document idempotency foundation, and #963 implementation. Production verification of #963 is pending. |
-| **What comes next?** | Complete release verification; then select one objective only: #962 or the next owner-approved design route. |
+| **Where is Rico?** | `main` `4194736f`+. `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
+| **Posture (owner 2026-07-16)?** | **CONTAINMENT.** Security-first → source-of-truth unification (#1068) → then resume. Only security + docs writing allowed now. |
+| **What is blocked / frozen?** | New-integration activation is frozen. #1062 (Atelier job cards — HELD, has logged colour/AR/test gaps), #1055 Gmail M0 (Draft, flag OFF, 3 P1 blockers), #1025 Memory M1 (Draft, flag OFF). Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets. |
+| **What is completed (recent)?** | Atelier `/command` (#1048/#1060/#1061), decision-regression harness (#1056), security hardening (#1058), attachment/SSE/transcript fixes, `DEC-20260716-001` (#1059), operational reconciliation (#1063). |
+| **What comes next?** | #1068 (this reconciliation) → owner secret rotation → #1066 (retire Stripe tooling / stale Render env) + #1067 (paid-plan promises vs limits) → then unfreeze Atelier completion + integrations as small provable PRs. |
 
 Production is stable: Render backend healthy (`/health` ok, providers configured),
 Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
@@ -114,11 +118,26 @@ Wire chat to what is already persisted — almost no new logic, just connection.
   not yet reachable from chat.
 - Constraint: reuse existing lifecycle reads; verify-first; synthetic data only.
 
-### Phase 4 — Lifecycle Intelligence ⬜
+### Phase 4 — Lifecycle Intelligence 🔵 (Gmail M0 in build)
 
 Rico stops being only a keeper and starts following up with the user, e.g.
 "You applied 6 days ago — prepare a follow-up email?" / "You opened this job
 three times — want to apply?"
+
+- In build: **#1055** — Gmail read-only connector M0 (first-party OAuth,
+  `gmail.readonly` scope, Fernet-encrypted refresh tokens, bounded inbox sync,
+  propose-only review items, `RICO_ENABLE_GMAIL_SYNC=false`).
+  Design doc: `docs/integrations/gmail-readonly-connector.md`.
+  Milestone: Email Integration. M1 = AI-drafted follow-ups (no `gmail.compose`).
+  M2 = Outlook via Microsoft Graph.
+
+```text
+EPIC        Career Operating System
+  └ Milestone   Email Integration
+      └ Phase       Lifecycle Intelligence (Phase 4)
+          └ PR          #1055 — Gmail read-only connector M0
+              └ Task        Gmail-M0-connector
+```
 
 ### Phase 5 — UX Facelift ⬜
 

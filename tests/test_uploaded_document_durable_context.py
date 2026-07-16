@@ -78,11 +78,35 @@ def test_set_upserts_transcript():
     assert "Yalla Pizza" in params[5]  # extracted_text param
 
 
-def test_set_noop_without_text():
+def test_set_noop_without_text_or_filename():
+    """Empty text AND no filename → no-op (prevents blank rows)."""
     conn = _FakeConn()
     with _patch_db(conn):
         repo.set_last_uploaded_document("u@test", extracted_text="   ")
     assert conn.cur.executed == []  # never touched the DB
+
+
+def test_set_stores_image_context_with_empty_text_and_filename():
+    """Empty text + real filename → upsert (OCR-failed image context)."""
+    conn = _FakeConn()
+    with _patch_db(conn):
+        repo.set_last_uploaded_document(
+            "u@test",
+            extracted_text="",
+            filename="screenshot.jpg",
+            document_type="image",
+            display_label="Image",
+            source="image",
+        )
+    assert conn.committed, "commit must occur for image-with-filename"
+    assert conn.closed, "connection must be closed"
+    sql, params = conn.cur.executed[0]
+    assert "INSERT INTO uploaded_document_context" in sql
+    assert "ON CONFLICT (user_id)" in sql
+    assert params[0] == "u@test"           # user_id
+    assert params[1] == "screenshot.jpg"   # filename
+    assert params[2] == "image"            # document_type
+    assert params[5] == ""                 # extracted_text (empty)
 
 
 def test_set_noop_without_db():

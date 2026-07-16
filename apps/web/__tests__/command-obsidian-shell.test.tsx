@@ -1,9 +1,9 @@
 /**
  * CommandObsidianShell — slice C1 unit contracts.
  *
- *  1. Dark "Obsidian night" default: shell reports dark mode and provides the
- *     COMMAND_OBSIDIAN.dark palette through WorkspaceThemeContext (accent slot
- *     carries the acid-lime sun `#c8ff3f`), so 4a–4e children repaint with no
+ *  1. Dark "Atelier at Night" default: shell reports dark mode and provides the
+ *     COMMAND_ATELIER.dark palette through WorkspaceThemeContext (accent slot
+ *     carries the Atelier sun-red `#ee6a3a`), so 4a–4e children repaint with no
  *     component changes.
  *  2. Top bar: brand, workspace eyebrow, live status (READY idle / WORKING
  *     while busy), panel toggles wired to the callbacks.
@@ -18,7 +18,7 @@
  */
 
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
-import { COMMAND_OBSIDIAN } from "@/components/command/obsidianTheme";
+import { COMMAND_ATELIER } from "@/components/command/commandAtelierTheme";
 import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,7 +51,7 @@ beforeEach(() => {
 });
 
 describe("CommandObsidianShell (slice C1)", () => {
-    it("defaults to Obsidian night and provides the obsidian palette to children", () => {
+    it("defaults to Atelier at Night and provides the atelier palette to children", () => {
         render(
             <CommandObsidianShell>
                 <PaletteProbe />
@@ -59,8 +59,8 @@ describe("CommandObsidianShell (slice C1)", () => {
         );
         expect(screen.getByTestId("command-obsidian-shell")).toHaveAttribute("data-obsidian-mode", "dark");
         const probe = screen.getByTestId("palette-probe");
-        expect(probe).toHaveAttribute("data-accent", COMMAND_OBSIDIAN.dark.red); // #c8ff3f
-        expect(probe).toHaveAttribute("data-bg", COMMAND_OBSIDIAN.dark.bg); // #0a0b0d
+        expect(probe).toHaveAttribute("data-accent", COMMAND_ATELIER.dark.red); // #ee6a3a
+        expect(probe).toHaveAttribute("data-bg", COMMAND_ATELIER.dark.bg); // #16130e
     });
 
     it("shows the idle status when not busy and the working status while busy", () => {
@@ -115,7 +115,7 @@ describe("CommandObsidianShell (slice C1)", () => {
         );
     });
 
-    it("theme toggle flips to the light 'Obsidian at dawn' palette", () => {
+    it("theme toggle flips to the light 'Atelier day' palette", () => {
         render(
             <CommandObsidianShell>
                 <PaletteProbe />
@@ -123,7 +123,7 @@ describe("CommandObsidianShell (slice C1)", () => {
         );
         fireEvent.click(screen.getByLabelText("Light mode"));
         expect(screen.getByTestId("command-obsidian-shell")).toHaveAttribute("data-obsidian-mode", "light");
-        expect(screen.getByTestId("palette-probe")).toHaveAttribute("data-accent", COMMAND_OBSIDIAN.light.red);
+        expect(screen.getByTestId("palette-probe")).toHaveAttribute("data-accent", COMMAND_ATELIER.light.red);
     });
 
     it("mirrors Arabic onto the root (dir=rtl, lang=ar)", () => {

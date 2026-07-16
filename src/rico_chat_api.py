@@ -11135,18 +11135,22 @@ class RicoChatAPI:
         production: ``RicoMemoryStore`` is a no-op under
         ``RICO_MEMORY_BACKEND=postgres`` and is wiped by restarts / multiple
         instances, so the transcript saved at upload time only survives in the DB.
-        Returns ``None`` when no transcript with text is on record.
+
+        Returns the document dict even when ``extracted_text`` is empty (image
+        uploaded but OCR failed/pending) so callers can distinguish "no document
+        on record" from "image uploaded, text not yet extracted". Returns
+        ``None`` only when no meaningful record exists (no filename and no text).
         """
         try:
             doc = (self._get_recent_context(user_id) or {}).get("last_uploaded_document")
-            if isinstance(doc, dict) and str(doc.get("extracted_text") or "").strip():
+            if isinstance(doc, dict) and (doc.get("filename") or doc.get("extracted_text")):
                 return doc
         except Exception:
             pass
         try:
             from src.repositories.uploaded_document_repo import get_last_uploaded_document
             durable = get_last_uploaded_document(user_id)
-            if isinstance(durable, dict) and str(durable.get("extracted_text") or "").strip():
+            if isinstance(durable, dict) and (durable.get("filename") or durable.get("extracted_text")):
                 return durable
         except Exception:
             pass
@@ -11253,16 +11257,30 @@ class RicoChatAPI:
         label = str((doc or {}).get("display_label") or (doc or {}).get("document_type") or "document")
         _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
 
-        if not text:
-            # A document action with no readable transcript on record. Be honest —
-            # never hijack into a CV draft, never claim to have read something.
+        if not doc:
+            # No document on record at all — ask the user to upload something.
             reply = (
-                "لا يوجد لدي مستند مقروء منك حتى الآن. ارفع لقطة شاشة واضحة أو ملف PDF "
+                "لا يوجد لدي مستند مقروء منك حتى الآن. ارفق لقطة شاشة واضحة أو ملف PDF "
                 "وسأقرأه ثم أساعدك في تلخيصه أو استخراج أهم المعلومات منه."
                 if _is_ar else
                 "I don't have a readable document from you yet. Upload a clear "
                 "screenshot or a PDF and I'll read it, then I can summarize it or "
                 "pull out the key information for you."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply, "success": True}
+
+        if not text:
+            # Image was uploaded but OCR didn't extract text — be honest and helpful.
+            fname = str(doc.get("filename") or "the image")
+            reply = (
+                f"تم استلام الصورة **{fname}** لكن لم أتمكن من قراءة النص تلقائياً. "
+                "قد يكون السبب: عدم وضوح الصورة، أو أن الصورة لا تحتوي على نص قابل للقراءة. "
+                "حاول رفع لقطة شاشة أوضح، أو صف لي ما تحتويه الصورة وسأساعدك."
+                if _is_ar else
+                f"I received your image **{fname}** but couldn't extract text from it automatically. "
+                "This can happen when the image is unclear or contains no readable text. "
+                "Try uploading a clearer screenshot, or describe what's in the image and I'll help you."
             )
             self._append_chat(user_id, "assistant", reply)
             return {"type": "document_context", "message": reply, "success": True}

@@ -1,7 +1,18 @@
-# Environment variables with sensitive data
+# Environment variables with sensitive data.
+# Block EVERY env-file variant so nothing with real credentials can be committed
+# by accident — names ending in .env (rico-job-automation-api.env, production.env),
+# .env.* suffixes (.env.production, .env.development, .env.staging), and any
+# other-extension variant (service.env.bak, config.env.backup). Only *.example
+# templates are allowed through (negations MUST stay after the ignore patterns).
+*.env
 .env
-.env.local
-.env.*.local
+.env.*
+*.env.*
+# ── keep committed example templates trackable ──────────────────────────────
+!.env.example
+!*.env.example
+!.env.*.example
+!*.env.*.example
 
 # Docker Compose overrides for local development
 docker-compose.override.yml
@@ -135,3 +146,6 @@ bandit_out.json
 .env.locust
 
 rico-job-automation-api.env
+
+# Decision regression harness run artifacts (harness + goldens are versioned)
+tests/decision_regression/reports/*.json

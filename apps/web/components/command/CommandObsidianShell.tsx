@@ -6,8 +6,8 @@
  * `design-handoffs/reviewed/2026-07-16-command-obsidian-v4/`).
  *
  * Route-scoped chrome for the AUTHENTICATED `/command` surface only, replacing
- * WorkspaceShell there: the recording's dark operator console — obsidian
- * canvas with grid grain + acid-lime aura, a full-width h-12 top status bar
+ * WorkspaceShell there: the dark operator console — warm-dark canvas with
+ * grid grain + sun-red aura, a full-width h-12 top status bar
  * (panel toggles · Rico · workspace eyebrow · compact icon nav · live status ·
  * EN/ع · theme), a collapsible 260px start rail carrying the `leftRail`
  * content (the canonical Sessions position — CommandConversationRail; general
@@ -15,10 +15,11 @@
  * correction), and a flexible console area whose children (transcript column
  * + CommandRail) come from CommandPage unchanged.
  *
- * Theme delivery: provides COMMAND_OBSIDIAN through the existing
+ * Theme delivery: provides COMMAND_ATELIER (Atelier re-skin, DEC-20260716-001;
+ * replaces the historical Obsidian acid-lime palette) through the existing
  * WorkspaceThemeContext, so every merged 4a–4e surface (composer, message
  * rows, state cards, right rail, MissionContextBar) repaints with zero
- * component changes. Local light/dark island, dark ("Obsidian night") first —
+ * component changes. Local light/dark island, dark ("Atelier at Night") first —
  * the global Nocturne ThemeContext is never touched, and no global
  * `:root`/`body` styling is added (the prototype's body::before/::after
  * texture is re-implemented here as scoped, pointer-events-none layers).
@@ -32,8 +33,9 @@
  * safety, or API code lives here.
  */
 
+import { atelierFraunces } from "@/components/atelier-kit/fonts";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
-import { COMMAND_OBSIDIAN } from "@/components/command/obsidianTheme";
+import { COMMAND_ATELIER } from "@/components/command/commandAtelierTheme";
 import { WORKSPACE_NAV } from "@/components/workspace/WorkspaceShell";
 import { WorkspaceThemeContext } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -48,6 +50,21 @@ const EYEBROW: React.CSSProperties = {
     textTransform: "uppercase",
     letterSpacing: "0.22em",
 };
+
+/* Atelier editorial token layer (slice C3): the reply surface (RicoReply /
+   RicoUserBubble / RicoThinking) styles through Tailwind utilities backed by
+   CSS vars — `rgb(var(--ink) / <alpha-value>)` — so alpha modifiers such as
+   from-ink/50 resolve. We therefore emit the vars as "r g b" channels derived
+   from the JS palette (the single source of truth) rather than hex, keeping
+   light / "Atelier at Night" automatic with zero duplicated color values.
+   The 7 palette slots consumed here are always 6-digit hex in COMMAND_ATELIER. */
+function hexChannels(hex: string): string {
+    const h = hex.replace("#", "").trim();
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `${r} ${g} ${b}`;
+}
 
 /* Canonical top-bar panel glyphs (PanelLeft / PanelRight, 1.6px strokes). */
 function PanelIcon({ side }: { side: "start" | "end" }) {
@@ -74,6 +91,7 @@ export function CommandObsidianShell({
     children,
     leftRail,
     busy = false,
+    replying = false,
     leftOpen = true,
     rightOpen = true,
     onToggleLeft,
@@ -85,6 +103,8 @@ export function CommandObsidianShell({
     leftRail?: React.ReactNode;
     /** True while Rico is thinking/streaming — drives the top-bar status. */
     busy?: boolean;
+    /** A streamed reply is actively rendering (slice C2) — REPLYING status. */
+    replying?: boolean;
     leftOpen?: boolean;
     rightOpen?: boolean;
     onToggleLeft?: () => void;
@@ -96,8 +116,8 @@ export function CommandObsidianShell({
     const t = useTranslation(language);
     const pathname = usePathname();
     const isAr = language === "ar";
-    const [dark, setDark] = useState(true); // "Obsidian night" default
-    const c = dark ? COMMAND_OBSIDIAN.dark : COMMAND_OBSIDIAN.light;
+    const [dark, setDark] = useState(true); // "Atelier at Night" default
+    const c = dark ? COMMAND_ATELIER.dark : COMMAND_ATELIER.light;
 
     const [accountOpen, setAccountOpen] = useState(false);
     const accountRef = useRef<HTMLDivElement>(null);
@@ -118,8 +138,23 @@ export function CommandObsidianShell({
             data-obsidian-mode={dark ? "dark" : "light"}
             dir={isAr ? "rtl" : "ltr"}
             lang={language}
-            className="relative flex h-[100dvh] min-h-0 flex-col overflow-hidden"
-            style={{ background: c.bg, color: c.ink, fontFamily: ATELIER_FONT.body, colorScheme: dark ? "dark" : "light" }}
+            className={`relative flex h-[100dvh] min-h-0 flex-col overflow-hidden ${atelierFraunces.variable}`}
+            style={{
+                background: c.bg,
+                color: c.ink,
+                fontFamily: ATELIER_FONT.body,
+                colorScheme: dark ? "dark" : "light",
+                // Atelier editorial token layer — derived from the JS palette so
+                // the reply surface (RicoReply/RicoUserBubble/RicoThinking) and any
+                // bg-ink/text-paper/border-rule/from-ink/50 utilities resolve.
+                ["--ink" as string]: hexChannels(c.ink),
+                ["--ink-soft" as string]: hexChannels(c.ink70),
+                ["--ink-mute" as string]: hexChannels(c.ink55),
+                ["--paper" as string]: hexChannels(c.bg),
+                ["--paper-2" as string]: hexChannels(c.panel),
+                ["--rule" as string]: hexChannels(c.hair),
+                ["--sun" as string]: hexChannels(c.red),
+            } as React.CSSProperties}
         >
             {/* ── Scoped canvas layers (canonical body::before/::after, route-local) ── */}
             <div
@@ -200,10 +235,10 @@ export function CommandObsidianShell({
                 >
                     <span
                         aria-hidden="true"
-                        className={`h-1.5 w-1.5 rounded-full ${busy ? "animate-pulse" : ""}`}
-                        style={{ background: busy ? c.red : c.track }}
+                        className={`h-1.5 w-1.5 rounded-full ${busy || replying ? "animate-pulse" : ""}`}
+                        style={{ background: busy || replying ? c.red : c.track }}
                     />
-                    {busy ? t("cmdStatusWorking") : t("cmdStatusReady")}
+                    {replying ? t("cmdStatusReplying") : busy ? t("cmdStatusWorking") : t("cmdStatusReady")}
                 </span>
                 <span className="ms-2 inline-flex items-center overflow-hidden rounded-[3px]" style={{ border: `1px solid ${c.hair}` }}>
                     <button
@@ -340,7 +375,9 @@ export function CommandObsidianShell({
                 [data-testid="command-obsidian-shell"] .obs-ghost:hover { background-color: ${c.activeBg}; color: ${c.ink}; }
                 [data-testid="command-obsidian-shell"] a:focus-visible,
                 [data-testid="command-obsidian-shell"] button:focus-visible { outline: 2px solid ${c.red}; outline-offset: 2px; border-radius: 4px; }
-                [data-testid="command-obsidian-shell"] ::selection { background: ${c.red}; color: ${dark ? "#0a0b0d" : "#f4f5f0"}; }
+                [data-testid="command-obsidian-shell"] ::selection { background: ${c.red}; color: ${c.bg}; }
+                [data-testid="command-obsidian-shell"] .serif { font-family: var(--font-fraunces-landing), Georgia, serif; }
+                [data-testid="command-obsidian-shell"] .serif-italic { font-family: var(--font-fraunces-landing), Georgia, serif; font-style: italic; }
                 [lang="ar"][data-testid="command-obsidian-shell"] * { letter-spacing: 0 !important; }
             ` }} />
         </div>

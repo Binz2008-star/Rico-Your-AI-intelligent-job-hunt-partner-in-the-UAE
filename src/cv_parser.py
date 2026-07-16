@@ -10,11 +10,19 @@ from __future__ import annotations
 import io
 import logging
 import re
+import zipfile
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# DOCX decompression-bomb guard: a small (<25 MB) malicious .docx is a zip that can
+# declare gigabytes of uncompressed content and OOM the worker when python-docx inflates
+# it. We inspect the zip's *declared* uncompressed sizes (central directory metadata — no
+# actual decompression) before opening the document and reject obvious bombs.
+_MAX_DOCX_UNCOMPRESSED = 200 * 1024 * 1024  # 200 MB total inflated cap
+_MAX_DOCX_RATIO = 200  # compressed→uncompressed ratio ceiling
 
 
 @dataclass
@@ -332,6 +340,27 @@ class CVParser:
             return data.decode("utf-8", errors="ignore")
 
     def _parse_docx(self, data: bytes) -> str:
+        # Reject decompression bombs before python-docx inflates the zip. Reading
+        # ZipInfo.file_size uses the central-directory metadata only — nothing is
+        # decompressed here, so an oversized declaration costs nothing to detect.
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(data))
+            total = sum(i.file_size for i in zf.infolist())
+            ratio = total / max(len(data), 1)
+            if total > _MAX_DOCX_UNCOMPRESSED or (
+                len(data) > 0 and ratio > _MAX_DOCX_RATIO and total > 10 * 1024 * 1024
+            ):
+                logger.warning(
+                    "cv_parser: rejecting DOCX (inflated=%d ratio=%.0f)", total, ratio
+                )
+                # Empty text → caller treats this as a needs-clearer-file response.
+                # Do NOT raise: a bomb must not crash the request path.
+                return ""
+        except zipfile.BadZipFile:
+            # Not a real zip (e.g. a mislabelled .docx) — fall through to the
+            # existing python-docx attempt + UTF-8 decode fallback below.
+            pass
+
         try:
             from docx import Document
             doc = Document(io.BytesIO(data))

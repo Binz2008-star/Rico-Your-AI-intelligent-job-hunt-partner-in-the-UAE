@@ -2,10 +2,12 @@
 
 import { CommandComposer } from "@/components/command/CommandComposer";
 import { CommandConversationRail } from "@/components/command/CommandConversationRail";
-import { AtelierMarkdownScope, CommandEmptyState, CommandMessageRow } from "@/components/command/CommandMessages";
+import { classifyMessage } from "@/components/command/CommandEventAdapter";
+import { AtelierMarkdownScope, CommandEmptyState } from "@/components/command/CommandMessages";
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
-import { AtelierCardScope, AtelierWorkingIndicator } from "@/components/command/CommandStates";
+import { AtelierCardScope } from "@/components/command/CommandStates";
+import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
@@ -33,23 +35,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { isRetryableJobSearchIntent, pickOperationState } from "./operationState";
-
-function ensureSessionId(sessionIdRef: React.MutableRefObject<string | null>): string {
-    if (typeof window === "undefined") return sessionIdRef.current || "ssr-session";
-    if (!sessionIdRef.current) {
-        let sid = localStorage.getItem("rico_sid");
-        if (!sid) {
-            sid = "web-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 9);
-            localStorage.setItem("rico_sid", sid);
-        }
-        sessionIdRef.current = sid;
-    }
-    return sessionIdRef.current;
-}
-
-function getSessionId(sessionIdRef: React.MutableRefObject<string | null>): string {
-    return ensureSessionId(sessionIdRef);
-}
+import { ensureSessionId, getSessionId } from "./sessionId";
 
 function prefersReducedMotion(): boolean {
     return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -158,6 +144,10 @@ type ChatAudience = "checking" | "authenticated" | "public";
 // Kept for import compatibility only; do not use outside CommandPage.
 let _id = 0;
 function nextId() { return ++_id; }
+// Welcome turns get a reserved negative id so they can never collide with
+// nextId()-generated ids (streamId in particular — see the fresh-page-load
+// token-append bug this guards against).
+const WELCOME_MESSAGE_ID = -1;
 
 const QUICK_ACTION_DEFS = [
     { key: "cmdQaFindJobs", prompt: "Find UAE jobs that match my CV and experience." },
@@ -921,6 +911,16 @@ export default function CommandPage() {
         (m) => m.role === "rico" && !m.permission_dismissed && !!m.agentic_ui?.permission_request,
     );
 
+    // Slice C3 — id of the last assistant (rico-role) turn. The Atelier
+    // editorial reply offers Regenerate only on the latest answer, and only
+    // when there is a real user prompt to resend (see the map below).
+    const lastAssistantId = React.useMemo(() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === "rico") return messages[i].id;
+        }
+        return null;
+    }, [messages]);
+
     useEffect(() => {
         if (typeof window !== "undefined") {
             document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
@@ -961,9 +961,17 @@ export default function CommandPage() {
     // 45-second hard timeout.  Nulled in the sendMessage finally block.
     const abortRef = useRef<AbortController | null>(null);
 
-    /** Cancel any in-flight request and reset UI to idle state. */
+    // Set by cancelRequest so the AbortError handler can distinguish a
+    // DELIBERATE user Stop (canonical stopped row; partial streamed content
+    // preserved) from the 45s hard timeout (error row + Retry). Slice C2.
+    const stopRequestedRef = useRef(false);
+
+    /** Cancel any in-flight request and reset UI to idle state. The stopped
+     *  presentation itself is appended by the AbortError handler in
+     *  sendMessage, which also finalizes any partial streamed message. */
     const cancelRequest = useCallback(() => {
         if (abortRef.current) {
+            stopRequestedRef.current = true;
             abortRef.current.abort();
             abortRef.current = null;
         }
@@ -971,12 +979,8 @@ export default function CommandPage() {
         setThinking(false);
         setSlowHint(false);
         setOperationState(null);
-        setMessages((prev) => [
-            ...prev,
-            { id: nextId(), role: "rico" as const, text: t("cmdCancelRequest") },
-        ]);
         textareaRef.current?.focus();
-    }, [t]);
+    }, []);
 
     // Keyboard shortcuts: Esc cancels an in-flight request (same action as the
     // composer's Cancel button); Ctrl/Cmd+K focuses the composer. Both are pure
@@ -1044,7 +1048,13 @@ export default function CommandPage() {
 
         (async () => {
             try {
-                const history = await fetchChatHistory(20);
+                // Hard 8s cap: a hung history fetch otherwise leaves
+                // historyState "pending" forever (no welcome, no transcript).
+                const history = await Promise.race([
+                    fetchChatHistory(20),
+                    new Promise<never>((_, reject) =>
+                        window.setTimeout(() => reject(new Error("history timeout")), 8000)),
+                ]);
                 if (cancelled) return;
                 if (history.messages.length > 0) {
                     // Deduplicate by (role, content) pairs to avoid double-rendering
@@ -1055,14 +1065,21 @@ export default function CommandPage() {
                         const key = `${msg.role}:${msg.content}`;
                         if (seen.has(key)) return;
                         seen.add(key);
+                        // History ids live in a reserved negative namespace
+                        // (welcome is -1) so nextId()-generated ids (1, 2, …)
+                        // can never collide with them. A collision makes the
+                        // per-token map-append write streamed text into an old
+                        // history row, which applyDoneResponse then deletes.
                         if (msg.role === "user") {
-                            mappedMessages.push({ id: idx, role: "user", text: msg.content });
+                            mappedMessages.push({ id: -(idx + 2), role: "user", text: msg.content });
                         } else {
                             // Parse JSON assistant payloads (job_matches, etc.) into rich messages
-                            mappedMessages.push(parseHistoryContent(msg.content, idx) as Message);
+                            mappedMessages.push(parseHistoryContent(msg.content, -(idx + 2)) as Message);
                         }
                     });
-                    setMessages(mappedMessages);
+                    // If the user already started chatting while history was in
+                    // flight, prepend history instead of wiping their live turns.
+                    setMessages((prev) => (prev.length > 0 ? [...mappedMessages, ...prev] : mappedMessages));
                     promptSentRef.current = true;
                     setHistoryState("has_history");
                     setInitialContentReady(true);
@@ -1091,7 +1108,8 @@ export default function CommandPage() {
         ensureSessionId(sessionIdRef);
         const stored = loadPublicHistory(sessionIdRef);
         if (stored.length > 0) {
-            setMessages(stored.map((m, idx) => ({ id: idx, role: m.role, text: m.text })));
+            // Same reserved negative namespace as the authenticated loader.
+            setMessages(stored.map((m, idx) => ({ id: -(idx + 2), role: m.role, text: m.text })));
             promptSentRef.current = true;
             setHistoryState("has_history");
             setInitialContentReady(true);
@@ -1110,7 +1128,23 @@ export default function CommandPage() {
         savePublicHistory(sessionIdRef, messages);
     }, [chatAudience, useMock, historyState, thinking, messages]);
 
+    // Canonical auto-follow (slice C2): the transcript stays pinned to the
+    // bottom while the user is within 96px of it; scrolling up releases the
+    // pin so streaming output never yanks the reader back down.
+    const pinnedToBottomRef = useRef(true);
+    useEffect(() => {
+        const pane = messagesContainerRef.current;
+        if (!pane) return;
+        const onScroll = () => {
+            const distance = pane.scrollHeight - pane.scrollTop - pane.clientHeight;
+            pinnedToBottomRef.current = distance < 96;
+        };
+        pane.addEventListener("scroll", onScroll, { passive: true });
+        return () => pane.removeEventListener("scroll", onScroll);
+    }, [chatAudience]);
+
     const scrollBottom = useCallback(() => {
+        if (!pinnedToBottomRef.current) return;
         const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
         const scrollMessagesPane = () => {
             const pane = messagesContainerRef.current;
@@ -1155,6 +1189,7 @@ export default function CommandPage() {
 
         const controller = new AbortController();
         abortRef.current = controller;  // expose for cancelRequest()
+        stopRequestedRef.current = false; // fresh request — no deliberate stop yet
         // Hard 45-second timeout — aborts the stream and triggers the AbortError
         // catch block below, which shows a user-readable message (BUG #4).
         const timeoutId = setTimeout(() => controller.abort(), 45_000);
@@ -1191,11 +1226,13 @@ export default function CommandPage() {
         // rendered. Prevents a late stream/network failure from appending a
         // stale "Something went wrong" message below successful job cards (#325).
         let responseApplied = false;
+        // Hoisted out of the try so the AbortError handler can finalize a
+        // partial streamed message on a deliberate user Stop (slice C2).
+        const streamId = nextId();
+        let streamStarted = false;
 
         try {
             // Use SSE streaming for conversational messages; fall back to JSON for errors
-            const streamId = nextId();
-            let streamStarted = false;
 
             function applyDoneResponse(res: ChatApiResponse) {
                 responseApplied = true;
@@ -1311,6 +1348,30 @@ export default function CommandPage() {
             }
             if (err instanceof Error) {
                 if (err.name === "AbortError") {
+                    // DELIBERATE user Stop (canonical, slice C2) — distinct from
+                    // the 45s hard timeout below: preserve any partial streamed
+                    // content and append the truthful stopped row with Retry.
+                    // Never auto-retried, even for job-search intents.
+                    if (stopRequestedRef.current) {
+                        if (streamStarted) {
+                            setMessages((prev) =>
+                                prev.map((msg) =>
+                                    msg.id === streamId ? { ...msg, streaming: false } : msg,
+                                ),
+                            );
+                        }
+                        setMessages((prev) => [
+                            ...prev,
+                            {
+                                id: nextId(),
+                                role: "rico" as const,
+                                type: "stopped",
+                                text: streamStarted ? t("cmdStoppedByUser") : t("cmdStoppedNoPartial"),
+                                retryText: trimmed,
+                            },
+                        ]);
+                        return;
+                    }
                     // For job-search queries, retry once with a longer timeout
                     // before giving up so cold-start Render delays don't drop results.
                     // Standalone retry-only guard (not the chip classifier) so profile
@@ -1428,11 +1489,16 @@ export default function CommandPage() {
                 }
                 const msg = buildWelcomeMessage(language, userName);
                 welcomeMessageRef.current = msg;
-                setMessages([{ id: 1, role: "rico", text: msg }]);
+                // Reserved sentinel id: nextId() yields positive ints only. A
+                // hardcoded id of 1 collides with the first streamId on a fresh
+                // page load (_id = 0 → streamId = 1, since queued setMessages
+                // updaters run after streamId is taken), making every token
+                // map-append into the welcome row as well as the stream row.
+                setMessages([{ id: WELCOME_MESSAGE_ID, role: "rico", text: msg }]);
                 setInitialContentReady(true);
                 return;
             }
-            setMessages([{ id: 1, role: "rico", text: t("cmdWelcomePublic") }]);
+            setMessages([{ id: WELCOME_MESSAGE_ID, role: "rico", text: t("cmdWelcomePublic") }]);
             setInitialContentReady(true);
         }, 0);
         return () => window.clearTimeout(timeoutId);
@@ -1762,6 +1828,12 @@ export default function CommandPage() {
         ]);
     }
 
+    // A streamed reply is actively rendering. Drives the REPLYING status and
+    // keeps the composer's Stop control available through the whole stream —
+    // without this, `thinking` flips false on the first token and a mid-stream
+    // deliberate Stop would be impossible (slice C2).
+    const streamingActive = messages.some((m) => m.streaming === true);
+
     if (sessionExpired) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -1780,6 +1852,7 @@ export default function CommandPage() {
         <CommandChrome
             audience={chatAudience}
             busy={thinking}
+            replying={streamingActive}
             leftOpen={leftRailOpen}
             rightOpen={rightRailOpen}
             onToggleLeft={() => setLeftRailOpen((v) => !v)}
@@ -1959,13 +2032,40 @@ export default function CommandPage() {
                             // only; the right rail is slice 4e.
                             const atelierCards = chatAudience === "authenticated";
 
+                            // ── Slice C3: Atelier editorial reply rendering ──
+                            // On the authenticated surface, the USER turn and the
+                            // plain-TEXT Rico turn are rendered by CommandTranscriptStep
+                            // (RicoUserBubble / RicoReply). For those two cases the page
+                            // suppresses its inline text (the bubble/serif prose owns it)
+                            // and, for the Rico text turn, its own Copy/Retry row
+                            // (RicoReply owns Copy + Regenerate). Cards, fail, and stopped
+                            // rows keep their existing inline rendering.
+                            const authKind = chatAudience === "authenticated" ? classifyMessage(m) : null;
+                            const isEditorialUser = authKind === "you";
+                            const isEditorialRicoText = authKind === "rico";
+                            // Regenerate target: the exact text that produced this answer —
+                            // an explicit retryText if present, else the nearest preceding
+                            // user turn. Absent (e.g. the welcome turn) → no Regenerate.
+                            const regenText = (() => {
+                                if (m.role !== "rico") return null;
+                                if (m.retryText) return m.retryText;
+                                for (let j = idx - 1; j >= 0; j--) {
+                                    if (messages[j].role === "user") return messages[j].text;
+                                }
+                                return null;
+                            })();
+                            const canRegenerate =
+                                isEditorialRicoText && m.id === lastAssistantId && !m.streaming && !!regenText;
+
                             return (
-                                <CommandMessageRow
+                                <CommandTranscriptStep
                                     key={m.id}
                                     authenticated={chatAudience === "authenticated"}
-                                    role={m.role}
+                                    message={m}
                                     isFirstInGroup={isFirstInGroup}
                                     isStructured={isStructured}
+                                    canRegenerate={canRegenerate}
+                                    onRegenerate={regenText ? () => sendMessage(regenText) : undefined}
                                 >
 
                                     {/* Search result caption — 4d: Atelier ink on the
@@ -1987,8 +2087,11 @@ export default function CommandPage() {
                                     )}
 
                                     {/* Message text — markdown ink scope (4b); nested cards
-                                        get their own AtelierCardScope wraps (4c/4d). */}
-                                    {m.text && (
+                                        get their own AtelierCardScope wraps (4c/4d).
+                                        C3: suppressed for the authenticated user turn and
+                                        plain-text Rico turn — RicoUserBubble / RicoReply own
+                                        the text there (card/fail/stopped/public unchanged). */}
+                                    {m.text && !isEditorialUser && !isEditorialRicoText && (
                                         m.role === "rico"
                                             ? (
                                                 <AtelierMarkdownScope authenticated={chatAudience === "authenticated"}>
@@ -2267,9 +2370,11 @@ export default function CommandPage() {
 
                                     {/* Copy / Retry row — copy is offered on every settled Rico turn;
                                         retry only on turns marked isError (network/timeout/generic send
-                                        failures), and resends the exact original user text. */}
-                                    {!m.streaming && m.role === "rico" && (m.text || (m.isError && m.retryText)) && (
-                                        <AtelierCardScope authenticated={atelierCards}>
+                                        failures), and resends the exact original user text.
+                                        C3: suppressed for the plain-text Rico turn — RicoReply owns
+                                        Copy + Regenerate there (card/fail/stopped rows keep this row). */}
+                                        {!m.streaming && m.role === "rico" && !isEditorialRicoText && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-2 flex items-center gap-3">
                                                 {m.text && (
                                                     <button
@@ -2282,7 +2387,7 @@ export default function CommandPage() {
                                                         {copiedId === m.id ? t("cmdCopied") : t("cmdCopy")}
                                                     </button>
                                                 )}
-                                                {m.isError && m.retryText && (
+                                                {(m.isError || m.type === "stopped") && m.retryText && (
                                                     <button
                                                         type="button"
                                                         onClick={() => sendMessage(m.retryText!)}
@@ -2295,16 +2400,16 @@ export default function CommandPage() {
                                                     </button>
                                                 )}
                                             </div>
-                                        </AtelierCardScope>
-                                    )}
-                                </CommandMessageRow>
+                                            </AtelierCardScope>
+                                        )}
+                                </CommandTranscriptStep>
                             );
                         })}
 
                         {thinking && (
                             <div className="flex min-h-12 flex-col gap-2">
                                 {chatAudience === "authenticated"
-                                    ? <AtelierWorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
+                                    ? <TranscriptWorkingRow operationMessage={operationState?.message} fallback={t("cmdWorking")} />
                                     : <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />}
                                 {operationState?.state === "searching" && (
                                     <AtelierCardScope authenticated={chatAudience === "authenticated"}>
@@ -2326,7 +2431,7 @@ export default function CommandPage() {
                         onInputChange={setInput}
                         textareaRef={textareaRef}
                         fileInputRef={fileInputRef}
-                        thinking={thinking}
+                        thinking={thinking || streamingActive}
                         chatAudience={chatAudience}
                         hasPendingPermission={hasPendingPermission}
                         messagesRemaining={messagesRemaining}
@@ -2366,14 +2471,15 @@ export default function CommandPage() {
  * chat column; no sidebar — matches the design-reference screenshots).
  * Authenticated (and the transient "checking" state, so auth resolution
  * causes no layout jump) lives in the route-scoped CommandObsidianShell:
- * obsidian canvas, top status bar, collapsible 260px nav rail, and the
- * COMMAND_OBSIDIAN palette delivered through the same workspace-theme
- * context the 4a–4e surfaces already consume.
+ * warm-dark canvas, top status bar, collapsible 260px nav rail, and the
+ * COMMAND_ATELIER palette (Atelier re-skin, DEC-20260716-001) delivered
+ * through the same workspace-theme context the 4a–4e surfaces already consume.
  * Chat behavior, streaming, attachments, safety, and EN/AR are untouched.
  */
 function CommandChrome({
     audience,
     busy,
+    replying,
     leftOpen,
     rightOpen,
     onToggleLeft,
@@ -2384,6 +2490,8 @@ function CommandChrome({
 }: {
     audience: "checking" | "public" | "authenticated";
     busy: boolean;
+    /** A streamed reply is actively rendering — drives the REPLYING status. */
+    replying: boolean;
     leftOpen: boolean;
     rightOpen: boolean;
     onToggleLeft: () => void;
@@ -2402,6 +2510,7 @@ function CommandChrome({
     return (
         <CommandObsidianShell
             busy={busy}
+            replying={replying}
             leftOpen={leftOpen}
             rightOpen={rightOpen}
             onToggleLeft={onToggleLeft}

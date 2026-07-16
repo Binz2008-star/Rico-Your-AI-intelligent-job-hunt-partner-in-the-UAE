@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
@@ -113,7 +114,11 @@ interface RicoMarkdownContentProps {
   children: string;
 }
 
-export function RicoMarkdownContent({ children }: RicoMarkdownContentProps) {
+// Memoized: children is a plain string, so the shallow compare is exact.
+// Every SSE token (20-60/sec while streaming) and every composer keystroke
+// re-renders the whole transcript in CommandPage — without memo, every
+// settled message re-runs the full react-markdown/remark parse each time.
+export const RicoMarkdownContent = React.memo(function RicoMarkdownContent({ children }: RicoMarkdownContentProps) {
   return (
     <div className="whitespace-normal text-[14px] leading-relaxed text-[var(--rico-fg-2)]">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={md} skipHtml>
@@ -121,4 +126,4 @@ export function RicoMarkdownContent({ children }: RicoMarkdownContentProps) {
       </ReactMarkdown>
     </div>
   );
-}
+});

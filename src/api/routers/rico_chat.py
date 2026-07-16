@@ -697,6 +697,16 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
         return RicoChatResponse(**error_response, trace_id=request_ref)
 
 
+# SSE response headers: no-transform stops intermediaries re-encoding the
+# stream; X-Accel-Buffering disables proxy buffering (nginx-style, harmless
+# elsewhere). Connection is hop-by-hop and managed by the ASGI server — never
+# set it manually. Content-Length must stay absent (chunked streaming).
+SSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+}
+
+
 @router.post("/chat/stream")
 @limiter.limit(LIMIT_CHAT)
 def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingResponse:
@@ -718,12 +728,17 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
     except HTTPException as exc:
         def _err():
             yield f'data: {_json.dumps({"type":"error","message":"Unauthorized"})}\n\n'
-        return StreamingResponse(_err(), media_type="text/event-stream")
+        return StreamingResponse(_err(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     user_id = user["email"]
     ctx = RicoSessionContext.for_authenticated(user_id)
 
     def _event_stream():
+        # SSE comment line first: starts the chunked body immediately so
+        # proxies flush headers and hold the connection open through the
+        # first-token wait (cold provider calls can take seconds). Comment
+        # lines are ignored by SSE clients per spec.
+        yield ": connected\n\n"
         try:
             # For non-conversational intents (job search, CV ops) fall back to
             # the full JSON response so structured data (job cards, profile preview)
@@ -776,7 +791,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
     return StreamingResponse(
         _event_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers=SSE_HEADERS,
     )
 
 
@@ -794,12 +809,15 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
     if not session_id or not is_safe_public_session_id(session_id):
         def _err():
             yield f'data: {_json.dumps({"type":"error","message":"Invalid session."})}\n\n'
-        return StreamingResponse(_err(), media_type="text/event-stream")
+        return StreamingResponse(_err(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     user_id = f"public:{session_id}"
     ctx = RicoSessionContext.for_public(user_id)
 
     def _event_stream():
+        # See rico_chat_stream: immediate SSE comment flushes the response
+        # start through buffering proxies before any heavy work runs.
+        yield ": connected\n\n"
         try:
             from src.services.chat_service import _intent_router  # type: ignore[attr-defined]
             profile = get_profile(user_id)
@@ -848,7 +866,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
     return StreamingResponse(
         _event_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers=SSE_HEADERS,
     )
 
 
@@ -859,7 +877,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
 
     Supports two user identification modes:
     - session_id: for anonymous visitors (user_id = public:{session_id})
-    - email: for users who completed Jotform onboarding (user_id = email)
+    - email: a namespaced, non-persisting public identity (user_id =
+      public:e-{hash}). An unverified email never adopts a real account — it
+      cannot read/write that account's profile or chat history. It is used only
+      as an anti-dodge key so a registered user cannot escape their monthly AI
+      cap by routing through the public endpoint.
     """
     start_time = time.time()
     request_ref = generate_error_ref()
@@ -869,40 +891,40 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
         raise HTTPException(status_code=422, detail="Either session_id or email must be provided")
 
     try:
-        # Build session context: email-identified users can persist profile; anonymous cannot
+        # Build session context. An unverified email is NEVER allowed to adopt a real
+        # account identity: doing so would let anyone who knows a victim's email read that
+        # victim's profile PII into the AI context, persist attacker turns into the victim's
+        # chat history, and burn the victim's quota. Instead the email becomes a namespaced,
+        # non-persisting public identity — its only privileged use is the anti-dodge quota gate.
         if payload.email:
             from src.repositories.users_repo import get_user_by_email
 
             registered = get_user_by_email(payload.email)
-            # Canonicalize to the stored email for a registered user so usage counting and
-            # profile persistence use the same identity key as the authenticated /chat path
-            # (and so casing/whitespace variants can't mint a fresh usage bucket).
-            email_identity = registered.email if registered else payload.email
-            ctx = RicoSessionContext(
-                user_id=email_identity,
-                auth_type="public",
-                can_persist_profile=True,
-                can_view_private_jobs=False,
-                rate_limit_tier="standard",
-            )
             # A registered user must not dodge their monthly AI-message cap by routing through
             # the public endpoint with their email. Enforce the same cap the authenticated
-            # /chat path applies. auth_type stays "public" deliberately: the email is unverified
-            # (no JWT), so we must NOT grant authenticated-only privileges (private-job
-            # visibility, account/subscription disclosure) on the strength of an unverified
-            # email — only the usage limit is applied here.
+            # /chat path applies, keyed on the stored email. The email is unverified (no JWT),
+            # so we grant NO authenticated-only privilege (profile persistence, private-job
+            # visibility, account/subscription disclosure) — only the usage limit is applied.
             if registered:
                 from src.services.subscription_gating import (
                     check_ai_message_allowed_for_user,
                 )
 
-                gate = check_ai_message_allowed_for_user(email_identity)
+                gate = check_ai_message_allowed_for_user(registered.email)
                 if gate and not gate.allowed:
                     _metrics.record_request((time.time() - start_time) * 1000)
                     return RicoChatResponse(
                         **_strip_internal_fields(gate.to_response()),
                         trace_id=request_ref,
                     )
+
+            # Namespaced public session that cannot read/write any real profile. The hash
+            # keeps distinct emails in distinct public buckets without ever exposing the raw
+            # email as a user_id, and for_public() forces can_persist_profile=False.
+            email_key = "e-" + hashlib.sha256(
+                payload.email.strip().lower().encode("utf-8")
+            ).hexdigest()[:40]
+            ctx = RicoSessionContext.for_public(email_key)
         else:
             ctx = RicoSessionContext.for_public(payload.session_id[:64])
 
@@ -1472,7 +1494,43 @@ async def rico_upload_cv(
                 resp["source"] = "image"
                 return resp
             _metrics.record_request((time.time() - start_time) * 1000)
-            return _classification_response(classification, safe_name)
+            logger.info(
+                "doc_image_ocr_failed user=%s filename=%s chars=%d request_ref=%s",
+                resolved_user_id, safe_name, len(extracted or ""), request_ref,
+            )
+            # Store the image context even without text so follow-up messages
+            # ("extract text", "describe image") know an image was uploaded and
+            # can answer honestly instead of "no document on record".
+            try:
+                from src.repositories.uploaded_document_repo import set_last_uploaded_document
+                set_last_uploaded_document(
+                    resolved_user_id,
+                    extracted_text="",
+                    filename=safe_name,
+                    document_type="image",
+                    display_label=classification.display_label or "Image",
+                    source="image",
+                    request_ref=request_ref,
+                )
+            except Exception:
+                pass
+            # Honest OCR-failure response: no readable text exists, so none of
+            # the image actions (Describe / Extract text / Save as target job /
+            # Score against my CV) can be honored — offer NONE of them, and say
+            # plainly what happened and what the user can do instead.
+            resp = _classification_response(classification, safe_name)
+            resp["message"] = (
+                f"I received your image ({safe_name}), but I couldn't extract any readable "
+                "text from it. I can't visually describe images or retry the text "
+                "extraction on my own yet. If it shows a job posting or document, try a "
+                "clearer screenshot — or paste the text directly into the chat."
+            )
+            # No extracted_text field at all: the vision-fallback contract
+            # (tests/unit/test_upload_image_vision.py) requires its absence when
+            # OCR produced nothing — an empty-string field would be noise.
+            resp.pop("extracted_text", None)
+            resp["suggested_actions"] = []
+            return resp
 
         # Identity documents: hard block — never echo content.
         if doc_type == "identity_document":

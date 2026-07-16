@@ -212,7 +212,7 @@ Legacy-shell import census on `main` (production routes only): `AppShell` →
 | Owner step | Existing PR | State | Verdict |
 | --- | --- | --- | --- |
 | Step 1 — preview-route hygiene (F-4) | **#1026** `fix/protect-internal-preview-routes` | **MERGED** `21ae19a7` (squash) | **DONE** — verified locally (focused 20/20, vitest 387/387, prod build green, prod-mode smoke 5×404 + `/`,`/login` 200) and "Deploy to Production" workflow success. Direct production curl not runnable from CI env (network policy blocks `ricohunt.com`). |
-| Step 2 — `/command` composer (slice 4a) | **#1028** `feat/atelier-command-composer` | **DRAFT** — sole active Step-2 implementation PR | **ACTIVE** — Atelier paper/ink composer + sun-red controls in workspace theme tokens; 29/29 composer + 416/416 vitest + build green. Visual gate (EN/AR desktop+mobile Playwright) required before it leaves draft. **Claude is writer** (owner directive); Windsurf reviewer-only. |
+| Step 2 — `/command` composer (slice 4a) | **#1028** `feat/atelier-command-composer` | **MERGED** | **DONE (superseded).** The composer merged; since then the whole `/command` re-skinned to the product-wide **Atelier** system (`DEC-20260716-001`, #1059): re-skin + editorial serif replies (#1060) + gradient composer (#1061). The old acid-lime "Command Obsidian" direction is retired to reference. Remaining `/command` work (job cards #1062) is HELD under the containment freeze. |
 | Step 2 — `/command` composer (reference) | **#1029** (editorial-console composer) | **CLOSED, no merge** | **Technical reference only** — do not reopen or re-cut. Superseded by #1028. |
 | Step 3 — `/queue` | **#1016** `claude/queue-auth-guard` | DRAFT, guard-only (keeps `AppShell`) | Coordinate: merge-then-migrate, or supersede with full `/queue` Atelier PR |
 | Step 7 — Paddle runtime | **#1022** `fix/paddle-event-callback` | DRAFT (split B of #1018) | Real Sandbox browser smoke gates merge |
@@ -268,8 +268,12 @@ Slice plan (each its own draft PR from latest `main`, full per-PR gate;
 presentation-only — no backend/Neon/Paddle/Profile changes, no fabricated
 progress states; public/guest surface unchanged unless a slice scopes it):
 
-- **C1 — Obsidian foundation** → **Draft #1043, not ready for merge** (owner
-  second-pass correction 2026-07-16): route-scoped tokens, dark canvas +
+- **C1 — Obsidian foundation** → **#1043 MERGED** (squash `3219a7f6`,
+  2026-07-16; owner visual review approved). Production verified: ricohunt.com
+  serves the merge SHA's deployment (`web-dinbnrgd6`); read-only authenticated
+  /command shell smoke PASS (obsidian canvas, top bar + status, truthful
+  conversation rail with real user-turn count, right rail, composer; zero
+  console errors). Content as corrected through the owner's second pass: route-scoped tokens, dark canvas +
   texture/aura, top status bar, 260/720/300 proportions, rail toggles, PLUS
   the corrections: truthful **CommandConversationRail** in the canonical
   Sessions position (New chat · current conversation · Clear history · real
@@ -282,7 +286,9 @@ progress states; public/guest surface unchanged unless a slice scopes it):
   `MOCKED VISUAL EVIDENCE — NOT FUNCTIONAL SMOKE`. Status: **C1 visual shell
   in Draft; functional evidence partial; transcript interaction parity
   missing; canonical flow parity not implemented.**
-- **C2 — real Command event/presentation adapter** (pending; owner directive —
+- **C2 — real Command event/presentation adapter** (**IN PROGRESS** —
+  `feat/command-obsidian-2-transcript`, cut from main `3219a7f6` after the C1
+  production verification; owner directive —
   NOT a typography-only repaint): map existing production truth onto the
   canonical transcript grammar using existing handlers only. No hidden
   chain-of-thought; no fabricated PLAN/TOOL steps; no fake sessions.
@@ -310,8 +316,10 @@ Playwright smoke + EN/AR/RTL + desktop/mobile screenshots + Vercel preview).
 
 ### Program authority (owner directive, 2026-07-14)
 
-- **#1028 is the sole active Step-2 slice-4a implementation PR.** Do not open
-  parallel `/command` implementation PRs; one active slice at a time.
+- **#1028 (slice-4a composer) is MERGED and superseded** by the full Atelier
+  `/command` re-skin (`DEC-20260716-001`; #1060/#1061). `/command` work is now
+  FROZEN under the containment posture — do not open parallel `/command`
+  implementation PRs; one active slice at a time when work resumes.
 - **#1029 is closed without merge** and may be used only as a technical reference.
 - Remaining phases **derive from the repository's existing Atelier tokens, approved
   migrated surfaces, and the WorkspaceShell/AuthShell patterns** — with EN/AR/RTL,

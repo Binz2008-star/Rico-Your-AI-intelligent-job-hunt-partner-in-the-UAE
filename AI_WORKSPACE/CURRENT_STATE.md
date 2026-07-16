@@ -1,5 +1,101 @@
 # Current State
 
+> **Reconciliation header — 2026-07-16 (evening; latest; supersedes all headers below).**
+> `main` HEAD `4194736f`. This header catches the operating record up to a fast
+> design push (owner note: "the design advanced quickly but the operating log
+> didn't keep up").
+>
+> **DESIGN-SYSTEM PIVOT — `DEC-20260716-001` (merged, #1059).** Atelier V3 is now
+> the **sole production-wide visual system** (marketing, auth, workspace, and
+> `/command`); dark mode is **"Atelier at Night"** on the same semantic tokens.
+> Supersedes the Atelier/Nocturne split (`DEC-20260708-003`) and the preview-only
+> stance (`DEC-20260709-006`). The `/command` "Command Obsidian" acid-lime program
+> is **retired to historical reference**: after the owner reviewed the Atelier
+> `/design-preview` package, `/command` was re-skinned to the Atelier Console
+> (paper + Atelier at Night, **sun-red** accent) — C1–C4 **structure preserved**,
+> a visual **token re-skin** not a rebuild.
+>
+> **`/command` is now an end-to-end Atelier surface (in `main`):** the route
+> palette swapped Obsidian→Atelier via `commandAtelierTheme.ts` (`obsidianTheme.ts`
+> deleted); the **editorial reply rendering** shipped (owner spec) — user turns =
+> compact dark bubbles (sans), assistant turns = editorial **serif prose** with a
+> hairline left rail + blink caret, "Thinking…" serif-italic shimmer (no spinner),
+> ghost Copy/Regenerate; plus the composer **gradient fade** and the Atelier
+> **MATCH job cards** (ScorePip tiers, WHY-IT-FITS/HONEST-GAPS, all apply/save/skip
+> actions preserved). Files: `components/command/{commandAtelierTheme,RicoReply,
+> JobMatchCardAtelier}.tsx`, `CommandTranscriptStep.tsx`, `CommandComposer.tsx`,
+> `app/command/page.tsx`, `tailwind.config` (ink/paper/rule/sun tokens + caret
+> keyframe). C3's Obsidian composer PR (#1057) was **closed** (superseded); its one
+> Atelier-appropriate element (gradient fade) salvaged. C5 (right rail) / C6
+> (mobile/RTL) collapse to a **verification pass** — those surfaces already
+> re-skinned through the shared palette in #1060.
+>
+> **Merged to `main` on 2026-07-16 (this push):** #1046 attachment-OCR trust fix
+> (prod-smoked) · #1050 SSE transport hardening (prod-verified) · #1051 + #1052
+> streaming/transcript id-collision fixes · #1053 render-blocking font removed ·
+> #1048 C2 transcript adapter · #1056 **hermetic CI decision-regression harness**
+> (`tests/decision_regression/`, wired into `qa-tests.yml`; caught + fixed an ELF
+> exec-detection gap) · #1058 **security hardening** (XFF rate-limit bypass,
+> `/chat/public` email-impersonation, DOCX decompression bomb, weak session id —
+> all verified) · #1060 Atelier `/command` re-skin + reply rendering · #1059 the
+> DEC docs · #1061 composer gradient fade.
+>
+> **Open PRs:** #1062 Atelier MATCH job cards (CI-green but **HELD** — design work
+> frozen under the containment posture until source-of-truth is unified; owner also
+> logged Atelier colour/AR/test gaps on it) · #1055 **Gmail M0 read-only connector**
+> (real **Draft** — first-party OAuth, migration 043, Fernet tokens,
+> `RICO_ENABLE_GMAIL_SYNC=false`; **3 P1 review blockers open** + awaiting Google
+> restricted-scope verification — see `TASKS.md TASK-20260716-001`) · #1025
+> **Memory Engine M1** (draft — reconciled with main, shadow-only, flag OFF, paused
+> pending evidence).
+>
+> **Coordination note:** the parallel-editor ("Windsurf") edits to `TASKS.md` (the
+> Gmail M0 task) and `ENGINEERING_ROADMAP.md` (Phase-4 Gmail entry) were
+> **incorporated into the reconciliation PR #1063** (merged `cd5a54af`), not left
+> uncommitted — Windsurf should not re-push them. The owner's local
+> `03-design-preview-1-.pdf` remains untracked (reference archive).
+>
+> **Not activated / paused:** Paddle billing (pending Sandbox secret rotation +
+> isolated lifecycle test) · Gmail sync (flag OFF) · Memory M1 (flag OFF). Docs-only
+> sync; no `apps/web`/`src` runtime change in this header.
+>
+> **Reconciliation header — 2026-07-16 (superseded by the header above).**
+> `main` HEAD `2248a7ad`. Owner directives this session: open-budget autonomous
+> execution (cost rules retired), OPERATING_RULES ceremony waived, mission = trusted
+> Career Operating System (order: #1046 → #1048 C2 → C3–C6 → #1025 M1 → intelligence
+> engines: memory, goals, trusted sources, initiative, decisions, digital twin), and
+> email integration as FIRST-PARTY OAUTH (not MCP), drafts-only, approval-gated.
+> **Merged + production-verified today:** **#1046** attachment OCR trust fix
+> (`b74004a8`; synthetic prod smoke PASS: failed-OCR image is remembered across turns
+> by filename, honest fallback, no fabricated actions, no `extracted_text` field);
+> **#1050** SSE transport hardening (`64611eeb`; prod-verified headers
+> `no-cache, no-transform`, `: connected` early flush, 200 chunked); **#1051** +
+> **#1052** streaming transcript integrity (welcome AND history id collisions —
+> returning users' first streamed reply corrupted then DELETED an old history row;
+> reserved negative id namespace; history-load race + 8s cap; RicoMarkdownContent
+> memoized — full transcript re-parsed per token before); **#1053** render-blocking
+> Material Symbols stylesheet removed (3 icons on /about → inline SVGs).
+> **C2 #1048 (Command Obsidian transcript):** reconciled with main (merge `9c432ed7`
+> + welcome-fix cherry-pick `daa3d54b`), CI fully green, guest surface live-verified
+> on the Vercel preview (streams, EN/AR RTL, zero console errors), stamped mocked-auth
+> evidence frames delivered (ready/streaming/stopped+Retry/completed+progress/AR/mobile).
+> **Open gate: owner visual approval — merge blocked on it.** C3 composer parity in
+> build on `feat/command-obsidian-3-composer` (stacked on C2). **Memory M1 #1025:**
+> reconciled with main (`b37ad583`, 0 conflicts), migration 042 confirmed next-free
+> after 041, invariants re-audited (flag OFF, shadow-only, no MemoryReader, public-
+> session merge blocked); caveat on PR: sensitive-data filter matches keys not values.
+> **Gmail connector M0 in build** on `feat/gmail-readonly-connector-m0` per
+> `docs/integrations/gmail-readonly-connector.md` (readonly scope only, migration 043,
+> Fernet-encrypted refresh tokens via new `GMAIL_TOKEN_ENCRYPTION_KEY`, cron-secret
+> sweep + BackgroundTask sync — no queue infra, `RICO_ENABLE_GMAIL_SYNC=false`);
+> M1 drafts will live in existing `application_drafts` (NO `gmail.compose` — doubles
+> restricted-scope/CASA burden for no gain); M2 = Outlook/Graph. Blockers tracked:
+> Google restricted-scope verification (testing mode caps 100 users); Paddle stays
+> disabled pending Sandbox webhook-secret rotation + isolated lifecycle test.
+> Bottleneck-sweep backlog remaining: guest first-paint dead state on /command,
+> bundle code-splitting. Docs-only sync; no `apps/web`/`src` runtime change.
+
+
 > **Reconciliation header — 2026-07-15 (latest; supersedes all headers below).**
 > `main` HEAD `de8ce666` (four dashboard-only `[skip ci]` commits on `21ae19a7` = #1026).
 > Since the 2026-07-11 header below, a large merge train landed (2026-07-13/14): **#1010**

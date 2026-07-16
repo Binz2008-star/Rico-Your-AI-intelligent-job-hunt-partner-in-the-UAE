@@ -39,10 +39,16 @@ def set_last_uploaded_document(
 ) -> None:
     """Upsert the latest uploaded-document transcript for a user (one row per user).
 
-    No-op when there is no user_id or no extracted text. Never raises.
+    No-op when there is no user_id, or when both text and filename are empty
+    (prevents a meaningless blank record from overwriting a valid prior context).
+    Stores empty text when a real filename is present (OCR failed on an image)
+    so follow-up actions ("extract text", "describe image") can reference the
+    upload instead of reporting "no document on record".
+    Never raises.
     """
     text = (extracted_text or "").strip()
-    if not user_id or not text:
+    safe_filename = (filename or "").strip()
+    if not user_id or (not text and not safe_filename):
         return
     from src.db import get_db_connection
 
