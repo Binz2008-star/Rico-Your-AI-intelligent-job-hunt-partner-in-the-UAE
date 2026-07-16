@@ -8,9 +8,11 @@ export default function robots(): MetadataRoute.Robots {
             {
                 // Default: allow crawl of all public pages
                 userAgent: "*",
-                allow: ["/", "/jobs", "/about", "/faq", "/contact", "/signup", "/login", "/privacy", "/terms", "/refund-policy"],
+                allow: ["/", "/about", "/faq", "/contact", "/signup", "/login", "/privacy", "/terms", "/refund-policy"],
                 disallow: [
                     "/command",
+                    "/jobs",
+                    "/saved-searches",
                     "/dashboard",
                     "/profile",
                     "/settings",
