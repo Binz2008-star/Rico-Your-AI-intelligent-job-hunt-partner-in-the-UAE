@@ -853,11 +853,20 @@ export async function telegramOptOut(): Promise<TelegramStatusResponse> {
 // `enabled` is false in the status payload (card shows a "coming soon" state).
 
 export interface GmailStatusResponse {
+  /** Whether background/manual Gmail sync is enabled on this deployment
+   * (RICO_ENABLE_GMAIL_SYNC). Gates connect/sync actions — NOT visibility. */
+  sync_enabled: boolean;
+  /** Deprecated alias of `sync_enabled`, kept for backward compatibility. */
   enabled: boolean;
+  /** Truthful: an active connection row exists, independent of `sync_enabled`.
+   * A connected user can always disconnect, even while sync is disabled. */
   connected: boolean;
   provider_email: string | null;
   scopes: string[];
   needs_reauth: boolean;
+  /** Whether the user granted recurring (fleet) sync consent, separate from
+   * the OAuth read grant. */
+  recurring_sync_consent?: boolean;
   last_sync_at: string | null;
 }
 

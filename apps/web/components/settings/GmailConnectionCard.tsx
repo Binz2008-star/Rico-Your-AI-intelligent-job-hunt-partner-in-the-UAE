@@ -6,10 +6,13 @@
  * Follows the Telegram opt-in block pattern in SettingsAtelier (notifications
  * panel): palette-driven styling, busy-ref guards, parent-provided toasts.
  *
- * States:
- *   • disabled (RICO_ENABLE_GMAIL_SYNC off, or status unavailable) → "coming soon"
- *   • not connected → "Connect Gmail" (navigates to the Google consent URL)
- *   • connected as <email> → "Sync now" + "Disconnect", last-synced line
+ * States (connection state is shown INDEPENDENTLY of the sync flag — the flag
+ * gates sync, never visibility/revocation):
+ *   • not connected + sync off (RICO_ENABLE_GMAIL_SYNC) → "coming soon"
+ *   • not connected + sync on → "Connect Gmail" (Google consent URL)
+ *   • connected as <email> + sync on → "Sync now" + "Disconnect", last-synced
+ *   • connected as <email> + sync off → "connected, sync currently disabled"
+ *     with "Disconnect" still available (Sync/Connect disabled)
  *   • needs re-auth → warning + "Reconnect"
  *
  * Permission copy is deliberately plain: read-only — Rico cannot send, delete,
@@ -112,19 +115,24 @@ export function GmailConnectionCard({
             notify?.(t("gmailDisconnected"), "success");
         });
 
-    const enabled = Boolean(status?.enabled);
+    // The flag gates SYNC, not visibility. A connected user must always see the
+    // live connection (and be able to disconnect it) even while sync is off.
+    const syncEnabled = Boolean(status?.sync_enabled ?? status?.enabled);
     const connected = Boolean(status?.connected);
     const needsReauth = Boolean(status?.needs_reauth);
 
     const stateLine = (() => {
         if (!loaded) return "…";
-        if (!enabled) return t("gmailComingSoon");
         if (needsReauth) return t("gmailNeedsReauth");
         if (connected) {
-            return status?.provider_email
+            const base = status?.provider_email
                 ? t("gmailConnectedAs").replace("{email}", status.provider_email)
                 : t("gmailConnected");
+            // Connected but sync paused: show the connection, note sync is off.
+            return syncEnabled ? base : `${base} — ${t("gmailSyncDisabled")}`;
         }
+        // Not connected: distinguish "feature not enabled yet" from "connect me".
+        if (!syncEnabled) return t("gmailComingSoon");
         return t("gmailNotConnected");
     })();
 
@@ -141,8 +149,8 @@ export function GmailConnectionCard({
     const solidBtn: React.CSSProperties = {
         background: palette.ink,
         color: palette.bg,
-        opacity: busy || !enabled ? 0.55 : 1,
-        cursor: busy || !enabled ? "default" : "pointer",
+        opacity: busy || !syncEnabled ? 0.55 : 1,
+        cursor: busy || !syncEnabled ? "default" : "pointer",
     };
     const outlineBtn: React.CSSProperties = {
         background: "transparent",
@@ -191,7 +199,7 @@ export function GmailConnectionCard({
                     <button
                         type="button"
                         onClick={handleConnect}
-                        disabled={busy || !enabled}
+                        disabled={busy || !syncEnabled}
                         className={btnClass}
                         style={solidBtn}
                     >
@@ -202,7 +210,7 @@ export function GmailConnectionCard({
                     <button
                         type="button"
                         onClick={handleConnect}
-                        disabled={busy || !enabled}
+                        disabled={busy || !syncEnabled}
                         className={btnClass}
                         style={solidBtn}
                     >
@@ -213,7 +221,7 @@ export function GmailConnectionCard({
                     <button
                         type="button"
                         onClick={handleSync}
-                        disabled={busy || !enabled}
+                        disabled={busy || !syncEnabled}
                         className={btnClass}
                         style={solidBtn}
                     >

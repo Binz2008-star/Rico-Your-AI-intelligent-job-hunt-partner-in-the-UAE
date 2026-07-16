@@ -64,27 +64,41 @@ def _frontend_settings_url(result: str) -> str:
 def gmail_status(
     request: Request, user_id: str = Depends(get_current_user_id)
 ) -> Dict[str, Any]:
-    """Connection state for the current JWT user. Works even while the flag is
-    off so the settings card can render a "coming soon" state."""
+    """Truthful connection state for the current JWT user.
+
+    Privacy/revocation contract (docs §3): the connection state is reported
+    INDEPENDENTLY of the sync feature flag. A user who is connected must always
+    be able to see that and revoke it, even while RICO_ENABLE_GMAIL_SYNC is off
+    (the flag gates *sync*, not *visibility*). ``sync_enabled`` carries the flag
+    so the UI can render "connected, sync currently disabled — you can
+    disconnect". The encrypted refresh token is never included in the payload.
+    """
     from src.services.gmail_sync_service import gmail_sync_enabled
 
-    enabled = gmail_sync_enabled()
-    connection = gmail_repo.get_connection(user_id) if enabled else None
+    sync_enabled = gmail_sync_enabled()
+    # Always resolve the real connection — never hide it behind the flag.
+    connection = gmail_repo.get_connection(user_id)
     if not connection:
         return {
-            "enabled": enabled,
+            "sync_enabled": sync_enabled,
+            # Back-compat alias for older clients that read `enabled`.
+            "enabled": sync_enabled,
             "connected": False,
             "provider_email": None,
             "scopes": [],
             "needs_reauth": False,
+            "recurring_sync_consent": False,
             "last_sync_at": None,
         }
     return {
-        "enabled": enabled,
+        "sync_enabled": sync_enabled,
+        "enabled": sync_enabled,
         "connected": connection.get("status") == "active",
         "provider_email": connection.get("provider_account_email"),
         "scopes": connection.get("scopes") or [],
         "needs_reauth": connection.get("status") == "needs_reauth",
+        "recurring_sync_consent": connection.get("recurring_sync_consent_at")
+        is not None,
         "last_sync_at": (
             connection["last_sync_at"].isoformat()
             if connection.get("last_sync_at")

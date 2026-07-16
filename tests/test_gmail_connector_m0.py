@@ -147,17 +147,48 @@ def test_status_requires_auth(client):
 
 
 def test_status_shape_flag_off(auth_client):
+    # No connection row (DB unavailable in tests) → not connected, sync off.
     r = auth_client.get(f"{GMAIL}/status")
     assert r.status_code == 200
     body = r.json()
     assert body == {
+        "sync_enabled": False,
         "enabled": False,
         "connected": False,
         "provider_email": None,
         "scopes": [],
         "needs_reauth": False,
+        "recurring_sync_consent": False,
         "last_sync_at": None,
     }
+
+
+def test_status_reports_connection_even_when_flag_off(auth_client):
+    """Privacy/revocation (BLOCKER 1): a user with a live connection must see it
+    and be able to revoke it even while RICO_ENABLE_GMAIL_SYNC is off — /status
+    is truthful independent of the flag; the flag only gates sync."""
+    # Flag stays OFF (default fixture), but an active connection row exists.
+    with patch(
+        "src.repositories.gmail_repo.get_connection",
+        return_value=_active_connection(),
+    ):
+        r = auth_client.get(f"{GMAIL}/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["connected"] is True            # visible despite the flag being off
+    assert body["sync_enabled"] is False        # sync itself stays disabled
+    assert body["enabled"] is False             # back-compat alias tracks the flag
+    assert body["provider_email"] == "someone@gmail.com"
+    assert body["needs_reauth"] is False
+
+    # Disconnect must remain available while the flag is off (it is ungated).
+    with patch(
+        "src.services.gmail_oauth.disconnect", return_value=(True, False)
+    ) as dc:
+        d = auth_client.post(f"{GMAIL}/disconnect")
+    assert d.status_code == 200
+    assert d.json()["disconnected"] is True
+    dc.assert_called_once()
 
 
 def test_status_shape_connected(auth_client, monkeypatch):
