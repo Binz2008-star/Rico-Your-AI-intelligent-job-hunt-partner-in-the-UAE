@@ -78,7 +78,9 @@ def opt_in(user_id: str, telegram_chat_id: str | None = None) -> bool:
         updates: dict[str, Any] = {"can_receive_telegram_notifications": True}
         if telegram_chat_id:
             updates["telegram_chat_id"] = str(telegram_chat_id)
-        upsert_profile(user_id=user_id, updates=updates)
+        # Consent is durable state: require DB persistence so a swallowed DB
+        # failure surfaces as False here instead of a false success (#1082).
+        upsert_profile(user_id=user_id, updates=updates, require_db=True)
         logger.info("telegram_notifications.opt_in user=%s chat_id=%s", user_id, telegram_chat_id)
         return True
     except Exception:
@@ -94,7 +96,9 @@ def opt_out(user_id: str) -> bool:
     Returns True on success.
     """
     try:
-        upsert_profile(user_id=user_id, updates={"can_receive_telegram_notifications": False})
+        # Opt-out MUST persist durably; a JSON-mirror-only write would leave the
+        # user opted-in in Neon and still reachable by a later worker (#1082).
+        upsert_profile(user_id=user_id, updates={"can_receive_telegram_notifications": False}, require_db=True)
         logger.info("telegram_notifications.opt_out user=%s", user_id)
         return True
     except Exception:
