@@ -40,7 +40,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const EYEBROW: React.CSSProperties = {
     fontFamily: ATELIER_FONT.mono,
@@ -78,6 +78,7 @@ export function CommandObsidianShell({
     rightOpen = true,
     onToggleLeft,
     onToggleRight,
+    onLogout,
 }: {
     children: React.ReactNode;
     /** Content of the start rail — the canonical Sessions position. */
@@ -88,6 +89,8 @@ export function CommandObsidianShell({
     rightOpen?: boolean;
     onToggleLeft?: () => void;
     onToggleRight?: () => void;
+    /** Called when the user clicks Log out in the desktop account menu. */
+    onLogout?: () => void;
 }) {
     const { language, setLanguage } = useLanguage();
     const t = useTranslation(language);
@@ -95,6 +98,19 @@ export function CommandObsidianShell({
     const isAr = language === "ar";
     const [dark, setDark] = useState(true); // "Obsidian night" default
     const c = dark ? COMMAND_OBSIDIAN.dark : COMMAND_OBSIDIAN.light;
+
+    const [accountOpen, setAccountOpen] = useState(false);
+    const accountRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!accountOpen) return;
+        function handle(e: MouseEvent) {
+            if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
+                setAccountOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handle);
+        return () => document.removeEventListener("mousedown", handle);
+    }, [accountOpen]);
 
     return (
         <div
@@ -221,6 +237,69 @@ export function CommandObsidianShell({
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
                     )}
                 </button>
+                {/* Compact account menu — desktop logout control (hotfix for
+                    authenticated desktop having no Logout after CommandObsidianShell
+                    replaced WorkspaceShell chrome). Reuses the existing handleLogout
+                    passed via onLogout; no duplicated auth/token-clearing logic. */}
+                {onLogout && (
+                    <div className="relative ms-2" ref={accountRef} data-testid="command-obsidian-account">
+                        <button
+                            type="button"
+                            onClick={() => setAccountOpen((v) => !v)}
+                            aria-label={isAr ? "الحساب" : "Account"}
+                            aria-expanded={accountOpen}
+                            aria-haspopup="menu"
+                            className="obs-ghost inline-flex items-center justify-center rounded-md"
+                            style={{ width: 28, height: 24, border: `1px solid ${c.hair}`, color: c.ink70, background: "transparent", cursor: "pointer" }}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="8" r="4" />
+                                <path d="M4 20a8 8 0 0 1 16 0" />
+                            </svg>
+                        </button>
+                        {accountOpen && (
+                            <div
+                                role="menu"
+                                className="absolute end-0 top-[calc(100%+4px)] z-50 w-44 rounded-lg py-1"
+                                style={{ background: c.panel, border: `1px solid ${c.hair}`, boxShadow: "0 8px 24px rgba(0,0,0,0.35)" }}
+                                data-testid="command-obsidian-account-menu"
+                            >
+                                <Link
+                                    href="/profile"
+                                    role="menuitem"
+                                    onClick={() => setAccountOpen(false)}
+                                    className="obs-ghost flex w-full items-center gap-2.5 px-3 py-2 text-[12px]"
+                                    style={{ color: c.ink70, textDecoration: "none" }}
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 20a8 8 0 0 1 16 0" /></svg>
+                                    {t("profileTitle")}
+                                </Link>
+                                <Link
+                                    href="/settings"
+                                    role="menuitem"
+                                    onClick={() => setAccountOpen(false)}
+                                    className="obs-ghost flex w-full items-center gap-2.5 px-3 py-2 text-[12px]"
+                                    style={{ color: c.ink70, textDecoration: "none" }}
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+                                    {t("settings")}
+                                </Link>
+                                <div style={{ borderTop: `1px solid ${c.hair}` }} className="my-1" />
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setAccountOpen(false); onLogout(); }}
+                                    className="obs-ghost flex w-full items-center gap-2.5 px-3 py-2 text-[12px]"
+                                    style={{ color: c.ink70, background: "transparent", border: "none", cursor: "pointer" }}
+                                    data-testid="command-obsidian-logout"
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+                                    {t("logout")}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
                 <button
                     type="button"
                     onClick={onToggleRight}
@@ -253,7 +332,8 @@ export function CommandObsidianShell({
                 </div>
             </WorkspaceThemeContext.Provider>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 [data-testid="command-obsidian-shell"] .obs-nav { transition: background-color .15s ease, color .15s ease; }
                 [data-testid="command-obsidian-shell"] .obs-nav:hover { background-color: ${c.activeBg}; color: ${c.ink}; }
                 [data-testid="command-obsidian-shell"] .obs-ghost { transition: background-color .15s ease, color .15s ease; }
