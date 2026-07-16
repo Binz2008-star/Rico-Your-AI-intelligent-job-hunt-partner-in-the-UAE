@@ -24,19 +24,46 @@ import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { JobMatch } from "@/lib/api";
-import { buildCopyText, getJobFallbackActions } from "@/lib/job-fallback";
+import { buildCopyText, getJobFallbackActions, resolveJobLink } from "@/lib/job-fallback";
 import { useTranslation } from "@/lib/translations";
 import React, { useState } from "react";
 
 type VerificationStatus = JobMatch["verification_status"];
 
+/**
+ * Interpolate a localized format string (e.g. "Job match: {title} at {company}"
+ * or the RTL "{label}: {title} لدى {company}") with the given values. Keeps
+ * every screen-reader label localized instead of a hardcoded English join.
+ */
+function fmt(template: string, vars: Record<string, string>): string {
+    return template.replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? `{${k}}`);
+}
+
+/** Convert a 0–1 Tailwind alpha to the two-hex-digit suffix for a hex colour. */
+const A = {
+    /** /40 → ~0.40 */ b40: "66",
+    /** /50 → ~0.50 */ b50: "80",
+    /** /30 → ~0.30 */ b30: "4d",
+    /** /20 → ~0.20 */ b20: "33",
+    /** /10 → ~0.10 */ b10: "1a",
+} as const;
+
 export function SourceQualityBadge({ status }: { status: VerificationStatus }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
+    const c = useWorkspaceTheme();
     if (!status) return null;
     if (status === "live_verified") {
+        // Verified badge carries the Atelier accent (sun-red) from the palette —
+        // NOT the retired `gold` token. Palette-driven inline style so it reads
+        // `c.red` directly, independent of any channel-remap wrapper.
         return (
-            <span title={t("cmdBadgeVerifiedTitle")} className="text-[9px] px-1.5 py-0.5 rounded border border-gold/40 text-gold shrink-0">
+            <span
+                title={t("cmdBadgeVerifiedTitle")}
+                data-testid="job-badge-verified"
+                className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+                style={{ border: `1px solid ${c.red}${A.b40}`, color: c.red }}
+            >
                 {t("cmdBadgeVerifiedLabel")}
             </span>
         );
@@ -93,9 +120,14 @@ export function SourceQualityBadge({ status }: { status: VerificationStatus }) {
 export function JobFallbackActions({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
+    const c = useWorkspaceTheme();
     const [copied, setCopied] = useState(false);
 
     const actions = getJobFallbackActions({ title: match.title, company: match.company, employer_url: match.employer_url });
+
+    // Localized "{title} at {company}" join reused in every fallback aria-label.
+    const atCompany = fmt(t("cmdJobAtCompany"), { title: match.title ?? "", company: match.company ?? "" });
+    const ariaFor = (label: string) => fmt(t("cmdAriaJobAction"), { label, job: atCompany });
 
     const labelFor: Record<string, string> = {
         company_website: t("cmdFallbackCompanyWebsite"),
@@ -119,8 +151,12 @@ export function JobFallbackActions({ match, onAction }: { match: JobMatch; onAct
         }
     };
 
+    // Neutral link/copy chips. Focus ring is palette-driven (sun-red) via an
+    // inline `--tw-ring-color`, which Tailwind's `focus-visible:ring-2` reads —
+    // no hard-coded `gold` ring. The var is harmless until the ring width shows.
     const linkClass =
-        "rounded-md border border-border-soft bg-surface-glass px-2.5 py-1.5 text-[10px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface";
+        "rounded-md border border-border-soft bg-surface-glass px-2.5 py-1.5 text-[10px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-surface";
+    const ringStyle = { ["--tw-ring-color" as string]: `${c.red}${A.b50}` } as React.CSSProperties;
 
     return (
         <div className="flex flex-col gap-1.5" data-testid="job-fallback-actions">
@@ -135,8 +171,9 @@ export function JobFallbackActions({ match, onAction }: { match: JobMatch; onAct
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 data-testid={`job-fallback-${a.key}`}
-                                aria-label={`${labelFor[a.key]}: ${match.title} at ${match.company}`}
+                                aria-label={ariaFor(labelFor[a.key])}
                                 className={linkClass}
+                                style={ringStyle}
                             >
                                 {labelFor[a.key]}
                             </a>
@@ -149,7 +186,9 @@ export function JobFallbackActions({ match, onAction }: { match: JobMatch; onAct
                                 type="button"
                                 onClick={handleCopy}
                                 data-testid={`job-fallback-${a.key}`}
+                                aria-label={ariaFor(labelFor[a.key])}
                                 className={linkClass}
+                                style={ringStyle}
                             >
                                 {labelFor[a.key]}
                             </button>
@@ -161,7 +200,14 @@ export function JobFallbackActions({ match, onAction }: { match: JobMatch; onAct
                             type="button"
                             onClick={() => onAction(`Save ${match.title} at ${match.company} to my pipeline`)}
                             data-testid={`job-fallback-${a.key}`}
-                            className="rounded-md border border-gold/30 bg-gold/10 px-2.5 py-1.5 text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
+                            aria-label={ariaFor(labelFor[a.key])}
+                            className="rounded-md px-2.5 py-1.5 text-[10px] font-medium transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
+                            style={{
+                                border: `1px solid ${c.red}${A.b30}`,
+                                background: `${c.red}${A.b10}`,
+                                color: c.red,
+                                ...ringStyle,
+                            }}
                         >
                             {labelFor[a.key]}
                         </button>
@@ -258,38 +304,18 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
 
     const vStatus = match.verification_status;
 
-    // ── Link resolution — identical decision tree to JobMatchCard (BUG-03 safe).
-    const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
-    const _isGoogleIntermediary = (u: string): boolean => {
-        if (!u) return false;
-        try {
-            const p = new URL(u);
-            const h = p.hostname.replace(/^www\./, "");
-            return h === "jobs.google.com" || (h === "google.com" && p.pathname.includes("/search"));
-        } catch { return false; }
-    };
-    const applyUrl = clean(match.apply_url);
-    const sourceUrl = (() => { const u = clean(match.source_url); return _isGoogleIntermediary(u) ? "" : u; })();
-    const altUrl = (() => { const u = clean(match.alt_link); return _isGoogleIntermediary(u) ? "" : u; })();
-    const isBadPrimary =
-        vStatus === "login_required" ||
-        vStatus === "rate_limited" ||
-        vStatus === "aggregator_untrusted" ||
-        vStatus === "google_intermediary";
+    // ── Link resolution — SHARED with the public JobMatchCard via resolveJobLink
+    // so the apply/source/alt/unavailable decision (BUG-03 trust gating) can
+    // never drift between the two cards. Labels come back as translation keys.
+    const { linkHref, linkLabelKey, linkTestId, sourceUrl, altUrl, isBadPrimary, showSource } =
+        resolveJobLink(match);
+    const linkLabel = linkLabelKey ? t(linkLabelKey) : "";
 
-    let linkHref = "";
-    let linkLabel = "";
-    let linkTestId = "";
-    if (applyUrl && !isBadPrimary) {
-        linkHref = applyUrl; linkLabel = t("cmdApply"); linkTestId = "job-link-apply";
-    } else if (sourceUrl && !isBadPrimary) {
-        linkHref = sourceUrl; linkLabel = t("cmdViewSource"); linkTestId = "job-link-source";
-    } else if (vStatus === "google_intermediary" && altUrl) {
-        linkHref = altUrl; linkLabel = t("cmdApplySearch"); linkTestId = "job-link-alt";
-    } else if (isBadPrimary && (altUrl || sourceUrl)) {
-        linkHref = altUrl || sourceUrl; linkLabel = t("cmdApplyAlt"); linkTestId = "job-link-alt";
-    }
-    const showSource = !!sourceUrl && sourceUrl !== linkHref && !isBadPrimary && !!applyUrl;
+    // Localized screen-reader strings — the "{title} at {company}" join is the
+    // shared translated fragment reused across every aria-label (EN + AR).
+    const atCompany = fmt(t("cmdJobAtCompany"), { title: match.title ?? "", company: match.company ?? "" });
+    const ariaMatch = fmt(t("cmdAriaJobMatch"), { job: atCompany });
+    const ariaFor = (label: string) => fmt(t("cmdAriaJobAction"), { label, job: atCompany });
 
     const EYEBROW: React.CSSProperties = {
         fontFamily: ATELIER_FONT.mono,
@@ -308,7 +334,7 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
     return (
         <article
             className="mt-2 rounded-xl px-3.5 py-3"
-            aria-label={`Job match: ${match.title} at ${match.company}`}
+            aria-label={ariaMatch}
             data-testid="opportunity-card"
             style={{
                 background: c.panel,
@@ -387,7 +413,7 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                         target="_blank"
                         rel="noopener noreferrer"
                         data-testid={linkTestId}
-                        aria-label={`${linkLabel}: ${match.title} at ${match.company}`}
+                        aria-label={ariaFor(linkLabel)}
                         onClick={() => setLinkOpened(true)}
                         className="rounded-md px-3 py-1.5 text-[11px] font-semibold transition-opacity hover:opacity-90"
                         style={{ background: c.ink, color: c.bg }}
@@ -405,7 +431,7 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                         target="_blank"
                         rel="noopener noreferrer"
                         data-testid="job-link-source"
-                        aria-label={`View source: ${match.title} at ${match.company}`}
+                        aria-label={ariaFor(t("cmdViewSource"))}
                         className="rounded-md px-3 py-1.5 text-[11px] transition-opacity hover:opacity-80"
                         style={{ border: `1px solid ${c.hair}`, color: c.ink70 }}
                     >

@@ -793,6 +793,12 @@ export const translations = {
     cmdMatchFit: "FIT",
     cmdMatchSave: "Save",
     cmdMatchSkip: "Skip",
+    // Accessibility format strings — interpolated at render time so screen-reader
+    // labels are localized (not hardcoded EN). `cmdJobAtCompany` is the shared
+    // "{title} at {company}" join reused as {job} inside the aria templates.
+    cmdJobAtCompany: "{title} at {company}",
+    cmdAriaJobMatch: "Job match: {job}",
+    cmdAriaJobAction: "{label}: {job}",
     cmdWorkingSavingProfile: "Saving your profile…",
     cmdCvProfileError: "Could not confirm profile. Please try again.",
     cmdCvUploading: "Uploading CV",
@@ -2036,6 +2042,12 @@ export const translations = {
     cmdMatchFit: "ملاءمة",
     cmdMatchSave: "احفظ",
     cmdMatchSkip: "تخطَّ",
+    // نصوص تنسيق لإمكانية الوصول — تُدرج وقت العرض كي تكون تسميات قارئ الشاشة
+    // مترجمة (وليست إنجليزية ثابتة). ‏cmdJobAtCompany هو الوصلة المشتركة
+    // "{title} لدى {company}" المُعاد استخدامها كـ {job} داخل قوالب aria.
+    cmdJobAtCompany: "{title} لدى {company}",
+    cmdAriaJobMatch: "وظيفة مطابقة: {job}",
+    cmdAriaJobAction: "{label}: {job}",
     cmdWorkingSavingProfile: "جارٍ حفظ ملفك الشخصي...",
     cmdCvProfileError: "تعذّر تأكيد الملف الشخصي. يرجى المحاولة مرة أخرى.",
     cmdCvUploading: "جارٍ رفع السيرة الذاتية",
