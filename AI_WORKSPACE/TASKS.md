@@ -2217,7 +2217,11 @@ Task            TASK-20260716-002 (this entry)
 
 ### TASK-20260716-003 — Opening-film chooser: rotate on every guest visit, non-repeating 3-film cycle
 
-Status: review (draft PR — HELD pending owner exception record per containment note on #1085)
+Status: review → merge authorized. Containment exception RECORDED: the owner
+(Binz2008-star) explicitly authorized merging #1085 via direct in-session
+instruction ("Ok do it", 2026-07-16, after the review notes were addressed
+and CI was green), taking it ahead of secret rotation / #1066 / #1067 / #1068
+in merge order. Production deploy of main via Vercel follows automatically.
 Owner: Claude (owner directive delivered in-session, 2026-07-16)
 Branch: `claude/rico-film-rotation-fix-g7tua4`
 Issue/PR: #1085 (draft)
