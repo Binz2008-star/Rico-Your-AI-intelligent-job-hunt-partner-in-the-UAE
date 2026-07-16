@@ -24,6 +24,7 @@ import {
     type TranscriptRowKind,
 } from "@/components/command/CommandEventAdapter";
 import { CommandMessageRow } from "@/components/command/CommandMessages";
+import { RicoReply, RicoThinking, RicoUserBubble } from "@/components/command/RicoReply";
 import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
@@ -82,17 +83,25 @@ export function CommandTranscriptStep({
     message,
     isFirstInGroup,
     isStructured,
+    canRegenerate = false,
+    onRegenerate,
     children,
 }: {
     authenticated: boolean;
     message: TranscriptMessageLike;
     isFirstInGroup: boolean;
     isStructured: boolean;
+    /** Slice C3: this is the last assistant text turn AND there is a real
+     *  user prompt to resend — shows RicoReply's Regenerate ghost action. */
+    canRegenerate?: boolean;
+    /** Reuses the page's existing send/retry path (never a new endpoint). */
+    onRegenerate?: () => void;
     children: React.ReactNode;
 }) {
     const c = useWorkspaceTheme();
     const { language } = useLanguage();
     const t = useTranslation(language);
+    const isAr = language === "ar";
 
     if (!authenticated) {
         /* Public/guest surface — pre-C2 presentation, byte-identical. */
@@ -145,31 +154,36 @@ export function CommandTranscriptStep({
     );
 
     if (kind === "you") {
+        /* Atelier editorial user turn (C3): a compact dark ink bubble,
+           end-aligned. The user turn text is always plain (the page wraps
+           `message.text` in a div for `children`), so we render the string
+           directly through the bubble primitive. */
         return (
             <div
                 data-testid="transcript-you-row"
-                className={`flex items-start gap-4 ${isFirstInGroup ? "mt-6" : "mt-2"} animate-in fade-in motion-reduce:animate-none`}
+                className={`${isFirstInGroup ? "mt-6" : "mt-2"} animate-in fade-in motion-reduce:animate-none`}
             >
-                <TranscriptGutter label={t("cmdGutterYou")} ink />
-                <div
-                    dir="auto"
-                    className="min-w-0 flex-1 break-words whitespace-pre-wrap text-[21px] leading-[1.3] tracking-tight"
-                    style={{ color: c.ink, fontFamily: ATELIER_FONT.serif, fontWeight: 500 }}
-                >
-                    {children}
-                </div>
+                <RicoUserBubble text={message.text ?? ""} />
             </div>
         );
     }
 
     if (kind === "stopped") {
+        /* Truthful stopped row (C2). Restyled to the editorial serif-italic
+           muted treatment with the same hairline left rail as RicoReply /
+           RicoThinking; behavior + testid + children (stopped copy + Retry)
+           are unchanged. */
         return (
             <div
                 data-testid="transcript-stopped-row"
-                className={`flex items-start gap-4 ${isFirstInGroup ? "mt-5" : "mt-2"}`}
+                className={`relative ps-3 ${isFirstInGroup ? "mt-5" : "mt-2"}`}
             >
-                <TranscriptGutter label={t("cmdGutterRico")} />
-                <div dir="auto" className="min-w-0 flex-1 text-[13.5px] italic leading-relaxed" style={{ color: c.ink55 }}>
+                <span
+                    aria-hidden="true"
+                    className="absolute inset-y-1 start-0 w-px"
+                    style={{ background: `linear-gradient(to bottom, ${c.ink55}, ${c.ink40}, transparent)` }}
+                />
+                <div dir="auto" className="serif-italic min-w-0 text-[13.5px] leading-relaxed" style={{ color: c.ink55 }}>
                     {children}
                 </div>
             </div>
@@ -194,13 +208,38 @@ export function CommandTranscriptStep({
         );
     }
 
-    /* rico text turns and card turns share the row shell; cards keep their
-       existing inner presentation (4c/4d) untouched. */
+    if (kind === "rico") {
+        /* Atelier editorial plain-text reply (C3): serif prose with a hairline
+           left rail, a blink caret while a real stream appends, and ghost
+           Copy / Regenerate once settled. The page suppresses its inline
+           markdown + copy/retry row for this case, so RicoReply owns the text
+           and Copy. Any non-text extras a plain turn may still carry (e.g.
+           options/help buttons) arrive through `children` and render below the
+           prose. Real CHECK/RUN progress rows are preserved above it. */
+        return (
+            <div className={`flex flex-col gap-2 ${isFirstInGroup ? "mt-6" : "mt-2"}`}>
+                {progressRows}
+                <div data-testid="transcript-rico-row" className="animate-in fade-in motion-reduce:animate-none">
+                    <RicoReply
+                        text={message.text ?? ""}
+                        streaming={message.streaming === true}
+                        canRegenerate={canRegenerate}
+                        onRegenerate={onRegenerate}
+                        isAr={isAr}
+                    />
+                    {children}
+                </div>
+            </div>
+        );
+    }
+
+    /* Card turns keep their existing inner presentation (4c/4d) untouched
+       behind the RICO gutter; card restyles are their own slice scope. */
     return (
         <div className={`flex flex-col gap-2 ${isFirstInGroup ? "mt-5" : "mt-2"}`}>
             {progressRows}
             <div
-                data-testid={kind === "card" ? "transcript-card-row" : "transcript-rico-row"}
+                data-testid="transcript-card-row"
                 className="flex items-start gap-4 animate-in fade-in motion-reduce:animate-none"
             >
                 <TranscriptGutter label={t("cmdGutterRico")} hot={message.streaming === true} />
@@ -222,14 +261,16 @@ export function CommandTranscriptStep({
 }
 
 /** The live working row — real state only: an active operationState renders a
- *  RUN row with its safe label; plain thinking renders the canonical waiting
- *  cursor. Rendered by the page only while `thinking` is true. */
+ *  RUN row with its safe label; plain thinking renders the Atelier serif-italic
+ *  "Thinking…" shimmer (C3). Rendered by the page only while `thinking` is true. */
 export function TranscriptWorkingRow({
     operationMessage,
-    fallback,
 }: {
     operationMessage: string | null | undefined;
-    fallback: string;
+    /** Accepted for call-site compatibility; the plain-thinking state now
+     *  self-labels via RicoThinking's role="status" "Thinking…" text, so no
+     *  separate sr-only fallback is rendered (it would double-announce). */
+    fallback?: string;
 }) {
     const c = useWorkspaceTheme();
     const { language } = useLanguage();
@@ -265,11 +306,13 @@ export function TranscriptWorkingRow({
         );
     }
 
+    /* Submitted, no operation label yet → the Atelier serif-italic "Thinking…"
+       shimmer (C3), replacing the old block-cursor waiting state. Keeps the
+       transcript-waiting-row testid; RicoThinking's role="status" carries the
+       accessible announcement. */
     return (
-        <div data-testid="transcript-waiting-row" className="mt-2 flex items-center gap-4 opacity-60" role="status">
-            <TranscriptGutter label="…" />
-            <span aria-hidden="true" className="inline-block h-[16px] w-[7px] animate-pulse" style={{ background: c.ink }} />
-            <span className="sr-only">{fallback}</span>
+        <div data-testid="transcript-waiting-row" className="mt-2">
+            <RicoThinking isAr={language === "ar"} />
         </div>
     );
 }

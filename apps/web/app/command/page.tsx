@@ -2,6 +2,7 @@
 
 import { CommandComposer } from "@/components/command/CommandComposer";
 import { CommandConversationRail } from "@/components/command/CommandConversationRail";
+import { classifyMessage } from "@/components/command/CommandEventAdapter";
 import { AtelierMarkdownScope, CommandEmptyState } from "@/components/command/CommandMessages";
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
@@ -909,6 +910,16 @@ export default function CommandPage() {
     const hasPendingPermission = messages.some(
         (m) => m.role === "rico" && !m.permission_dismissed && !!m.agentic_ui?.permission_request,
     );
+
+    // Slice C3 — id of the last assistant (rico-role) turn. The Atelier
+    // editorial reply offers Regenerate only on the latest answer, and only
+    // when there is a real user prompt to resend (see the map below).
+    const lastAssistantId = React.useMemo(() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === "rico") return messages[i].id;
+        }
+        return null;
+    }, [messages]);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -2021,6 +2032,31 @@ export default function CommandPage() {
                             // only; the right rail is slice 4e.
                             const atelierCards = chatAudience === "authenticated";
 
+                            // ── Slice C3: Atelier editorial reply rendering ──
+                            // On the authenticated surface, the USER turn and the
+                            // plain-TEXT Rico turn are rendered by CommandTranscriptStep
+                            // (RicoUserBubble / RicoReply). For those two cases the page
+                            // suppresses its inline text (the bubble/serif prose owns it)
+                            // and, for the Rico text turn, its own Copy/Retry row
+                            // (RicoReply owns Copy + Regenerate). Cards, fail, and stopped
+                            // rows keep their existing inline rendering.
+                            const authKind = chatAudience === "authenticated" ? classifyMessage(m) : null;
+                            const isEditorialUser = authKind === "you";
+                            const isEditorialRicoText = authKind === "rico";
+                            // Regenerate target: the exact text that produced this answer —
+                            // an explicit retryText if present, else the nearest preceding
+                            // user turn. Absent (e.g. the welcome turn) → no Regenerate.
+                            const regenText = (() => {
+                                if (m.role !== "rico") return null;
+                                if (m.retryText) return m.retryText;
+                                for (let j = idx - 1; j >= 0; j--) {
+                                    if (messages[j].role === "user") return messages[j].text;
+                                }
+                                return null;
+                            })();
+                            const canRegenerate =
+                                isEditorialRicoText && m.id === lastAssistantId && !m.streaming && !!regenText;
+
                             return (
                                 <CommandTranscriptStep
                                     key={m.id}
@@ -2028,6 +2064,8 @@ export default function CommandPage() {
                                     message={m}
                                     isFirstInGroup={isFirstInGroup}
                                     isStructured={isStructured}
+                                    canRegenerate={canRegenerate}
+                                    onRegenerate={regenText ? () => sendMessage(regenText) : undefined}
                                 >
 
                                     {/* Search result caption — 4d: Atelier ink on the
@@ -2049,8 +2087,11 @@ export default function CommandPage() {
                                     )}
 
                                     {/* Message text — markdown ink scope (4b); nested cards
-                                        get their own AtelierCardScope wraps (4c/4d). */}
-                                    {m.text && (
+                                        get their own AtelierCardScope wraps (4c/4d).
+                                        C3: suppressed for the authenticated user turn and
+                                        plain-text Rico turn — RicoUserBubble / RicoReply own
+                                        the text there (card/fail/stopped/public unchanged). */}
+                                    {m.text && !isEditorialUser && !isEditorialRicoText && (
                                         m.role === "rico"
                                             ? (
                                                 <AtelierMarkdownScope authenticated={chatAudience === "authenticated"}>
@@ -2329,8 +2370,10 @@ export default function CommandPage() {
 
                                     {/* Copy / Retry row — copy is offered on every settled Rico turn;
                                         retry only on turns marked isError (network/timeout/generic send
-                                        failures), and resends the exact original user text. */}
-                                        {!m.streaming && m.role === "rico" && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
+                                        failures), and resends the exact original user text.
+                                        C3: suppressed for the plain-text Rico turn — RicoReply owns
+                                        Copy + Regenerate there (card/fail/stopped rows keep this row). */}
+                                        {!m.streaming && m.role === "rico" && !isEditorialRicoText && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
                                             <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-2 flex items-center gap-3">
                                                 {m.text && (
@@ -2428,9 +2471,9 @@ export default function CommandPage() {
  * chat column; no sidebar — matches the design-reference screenshots).
  * Authenticated (and the transient "checking" state, so auth resolution
  * causes no layout jump) lives in the route-scoped CommandObsidianShell:
- * obsidian canvas, top status bar, collapsible 260px nav rail, and the
- * COMMAND_OBSIDIAN palette delivered through the same workspace-theme
- * context the 4a–4e surfaces already consume.
+ * warm-dark canvas, top status bar, collapsible 260px nav rail, and the
+ * COMMAND_ATELIER palette (Atelier re-skin, DEC-20260716-001) delivered
+ * through the same workspace-theme context the 4a–4e surfaces already consume.
  * Chat behavior, streaming, attachments, safety, and EN/AR are untouched.
  */
 function CommandChrome({
