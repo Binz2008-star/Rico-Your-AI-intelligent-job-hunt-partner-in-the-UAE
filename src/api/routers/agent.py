@@ -23,4 +23,4 @@ def agent_chat(
     Process a natural-language message or execute a direct action.
     All actions are audit-logged and idempotency-checked before execution.
     """
-    return process(req.message, req.action, user_email=user.get("email", "anonymous"))
+    return process(req.message, req.action, user_email=user.get("email", "anonymous"), actor_is_admin=(user.get("role") == "admin"))

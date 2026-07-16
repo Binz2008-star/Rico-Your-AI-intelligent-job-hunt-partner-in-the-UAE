@@ -45,5 +45,6 @@ def run_action(
         job=sanitized_job or None,
         source=req.source,
         dry_run=req.dry_run,
+        actor_is_admin=(user.get("role") == "admin"),
     )
     return ActionResponse(**result.to_dict())
