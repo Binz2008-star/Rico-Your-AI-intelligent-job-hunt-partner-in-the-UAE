@@ -158,6 +158,10 @@ type ChatAudience = "checking" | "authenticated" | "public";
 // Kept for import compatibility only; do not use outside CommandPage.
 let _id = 0;
 function nextId() { return ++_id; }
+// Welcome turns get a reserved negative id so they can never collide with
+// nextId()-generated ids (streamId in particular — see the fresh-page-load
+// token-append bug this guards against).
+const WELCOME_MESSAGE_ID = -1;
 
 const QUICK_ACTION_DEFS = [
     { key: "cmdQaFindJobs", prompt: "Find UAE jobs that match my CV and experience." },
@@ -1428,11 +1432,16 @@ export default function CommandPage() {
                 }
                 const msg = buildWelcomeMessage(language, userName);
                 welcomeMessageRef.current = msg;
-                setMessages([{ id: 1, role: "rico", text: msg }]);
+                // Reserved sentinel id: nextId() yields positive ints only. A
+                // hardcoded id of 1 collides with the first streamId on a fresh
+                // page load (_id = 0 → streamId = 1, since queued setMessages
+                // updaters run after streamId is taken), making every token
+                // map-append into the welcome row as well as the stream row.
+                setMessages([{ id: WELCOME_MESSAGE_ID, role: "rico", text: msg }]);
                 setInitialContentReady(true);
                 return;
             }
-            setMessages([{ id: 1, role: "rico", text: t("cmdWelcomePublic") }]);
+            setMessages([{ id: WELCOME_MESSAGE_ID, role: "rico", text: t("cmdWelcomePublic") }]);
             setInitialContentReady(true);
         }, 0);
         return () => window.clearTimeout(timeoutId);
