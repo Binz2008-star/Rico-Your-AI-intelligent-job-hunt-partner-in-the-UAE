@@ -44,6 +44,20 @@
     return a;
   }
 
+  /* A legitimate persisted deck is a remainder of one shuffled cycle: only
+     approved films, no duplicates, never longer than the cycle. Anything
+     else (retired films, duplicate entries, wrong types) is corrupt and is
+     rebuilt wholesale — a duplicate entry would otherwise replay the same
+     film twice in a row, breaking the non-repeating guarantee. */
+  function isValidDeck(parsed) {
+    if (!Array.isArray(parsed) || parsed.length > FILMS.length) { return false; }
+    for (var i = 0; i < parsed.length; i++) {
+      if (FILMS.indexOf(parsed[i]) === -1) { return false; }
+      if (parsed.indexOf(parsed[i]) !== i) { return false; }
+    }
+    return true;
+  }
+
   /* Draw the next film from the persisted deck; reshuffle when exhausted.
      A fresh deck never opens with the film that closed the previous cycle,
      so an immediate reload never replays the same film back-to-back.
@@ -54,9 +68,7 @@
     try {
       last = storage.getItem(LAST_KEY);
       var parsed = JSON.parse(storage.getItem(DECK_KEY) || '[]');
-      if (Array.isArray(parsed)) {
-        deck = parsed.filter(function (f) { return FILMS.indexOf(f) !== -1; });
-      }
+      if (isValidDeck(parsed)) { deck = parsed; }
     } catch (e) { /* corrupted or unavailable storage → fresh deck */ }
 
     if (!deck.length) {
@@ -100,7 +112,7 @@
 
   /* Exposed for the vitest regression suite (explainer-film-rotation);
      harmless in production. */
-  win.__ricoFilmChooser = { FILMS: FILMS, nextFilm: nextFilm, showFilm: showFilm };
+  win.__ricoFilmChooser = { FILMS: FILMS, isValidDeck: isValidDeck, nextFilm: nextFilm, showFilm: showFilm };
 
   if (!win.document) { return; } /* test harness — exports only, no boot */
 

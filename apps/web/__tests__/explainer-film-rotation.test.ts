@@ -32,6 +32,7 @@ const REQUIRED_FILMS = [
 type StorageLike = { getItem(k: string): string | null; setItem(k: string, v: string): void };
 type Chooser = {
     FILMS: string[];
+    isValidDeck(parsed: unknown): boolean;
     nextFilm(storage: StorageLike | null, random: () => number): string;
     showFilm(win: unknown, url: string): void;
 };
@@ -128,7 +129,7 @@ describe("explainer film chooser — storage resilience", () => {
         expect(sorted(cycle)).toEqual(sorted(REQUIRED_FILMS));
     });
 
-    it("drops retired films found in a stale persisted deck", () => {
+    it("rebuilds a stale persisted deck containing retired films", () => {
         const chooser = loadChooser();
         const storage = memoryStorage();
         storage.map.set(
@@ -139,6 +140,46 @@ describe("explainer film chooser — storage resilience", () => {
         for (let i = 0; i < 6; i++) {
             expect(REQUIRED_FILMS).toContain(chooser.nextFilm(storage, Math.random));
         }
+    });
+
+    it("rebuilds a deck with duplicate valid entries — a duplicate must not cause an immediate repeat", () => {
+        const chooser = loadChooser();
+        const storage = memoryStorage();
+        // A corrupt deck like [option-2, option-2] would replay option-2
+        // back-to-back if accepted verbatim.
+        storage.map.set(
+            "rico-film-deck-v1",
+            JSON.stringify([REQUIRED_FILMS[0], REQUIRED_FILMS[0]]),
+        );
+        storage.map.set("rico-film-last-v1", REQUIRED_FILMS[0]);
+
+        const draws = Array.from({ length: 6 }, () =>
+            chooser.nextFilm(storage, Math.random),
+        );
+
+        // The rebuilt rotation must not open with the film that just played…
+        expect(draws[0]).not.toBe(REQUIRED_FILMS[0]);
+        // …and must restore full non-repeating cycles with no adjacent repeats.
+        expect(sorted(draws.slice(0, 3))).toEqual(sorted(REQUIRED_FILMS));
+        expect(sorted(draws.slice(3, 6))).toEqual(sorted(REQUIRED_FILMS));
+        for (let i = 1; i < draws.length; i++) {
+            expect(draws[i]).not.toBe(draws[i - 1]);
+        }
+    });
+
+    it("accepts only a unique subset of the approved films as a persisted deck", () => {
+        const { isValidDeck } = loadChooser();
+
+        expect(isValidDeck([])).toBe(true);
+        expect(isValidDeck([REQUIRED_FILMS[1]])).toBe(true);
+        expect(isValidDeck([...REQUIRED_FILMS])).toBe(true);
+
+        expect(isValidDeck([REQUIRED_FILMS[0], REQUIRED_FILMS[0]])).toBe(false); // duplicate
+        expect(isValidDeck(["/explainer/option-1.html"])).toBe(false); // retired film
+        expect(isValidDeck([...REQUIRED_FILMS, REQUIRED_FILMS[0]])).toBe(false); // longer than one cycle
+        expect(isValidDeck("not-an-array")).toBe(false);
+        expect(isValidDeck(null)).toBe(false);
+        expect(isValidDeck([42])).toBe(false);
     });
 
     it("still returns a valid film when storage throws (privacy mode)", () => {

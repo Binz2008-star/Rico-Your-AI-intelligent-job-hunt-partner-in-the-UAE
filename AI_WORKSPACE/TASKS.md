@@ -2214,3 +2214,55 @@ Task            TASK-20260716-002 (this entry)
   flag OFF means no runtime path exercises it
 
 ---
+
+### TASK-20260716-003 — Opening-film chooser: rotate on every guest visit, non-repeating 3-film cycle
+
+Status: review (draft PR — HELD pending owner exception record per containment note on #1085)
+Owner: Claude (owner directive delivered in-session, 2026-07-16)
+Branch: `claude/rico-film-rotation-fix-g7tua4`
+Issue/PR: #1085 (draft)
+
+#### Objective
+
+Guests opening ricohunt.com get the launch film on EVERY visit (retire the
+once-per-browser-session gate), rotating exactly option-2 / option-3 /
+option-3b in a randomized non-repeating cycle (all three before any repeat),
+with reload/revisit re-entering the chooser instead of staying locked to the
+previously selected option URL. Preserve the authenticated `/command`
+redirect, `/signup` CTAs, SEO prerender, and all film content.
+
+#### Roadmap traceability
+
+```text
+Vision          AI_WORKSPACE/PROJECT_BRIEF.md — trusted Career Operating System
+   ↓
+Epic            Official-site opening experience (launch films)
+   ↓
+Milestone       Public launch funnel — /explainer rotation
+   ↓
+PR              #1085 — fix(landing): film chooser runs every guest visit
+   ↓
+Task            TASK-20260716-003 (this entry)
+```
+
+#### Continuity Block
+
+- Task ID: TASK-20260716-003
+- GitHub issue/PR: #1085 (draft)
+- Branch: `claude/rico-film-rotation-fix-g7tua4`
+- Base branch: main (`5cb1fd13`)
+- Status: review — Draft/HELD; owner to record containment exception and merge
+  order relative to secret rotation, #1066/#1067, #1068 before any merge; no
+  production deploy (Vercel PREVIEW auto-deploys on push, as with every PR)
+- Files touched: `apps/web/public/explainer/index.html` (chooser: persisted
+  shuffle deck + in-place render), `apps/web/app/page.tsx`,
+  `apps/web/lib/openingFilm.ts`, `apps/web/__tests__/landing-opening-film.test.tsx`,
+  `apps/web/__tests__/explainer-film-rotation.test.ts` (new),
+  `apps/web/public/explainer/README.md`
+- Constraints honored: no billing/auth-implementation/Gmail/Memory/Atelier/film-content
+  changes; film URLs remain a closed hardcoded allowlist inside the chooser
+- Validation already run: vitest full suite green; `next build` green; real-Chromium
+  smoke (6 visits = 2 full non-repeating cycles, URL stays on chooser, film renders);
+  persisted-deck validation hardened (unique-valid-subset only) with regression tests
+- Next exact action: owner manual smoke on the Vercel preview + record the
+  exception/merge order; PR stays draft until then
