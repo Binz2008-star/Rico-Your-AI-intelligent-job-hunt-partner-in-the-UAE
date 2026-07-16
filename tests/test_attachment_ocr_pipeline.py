@@ -288,7 +288,9 @@ class TestRouterImageOCRFailureMultipart:
             "score against my cv",
         ):
             assert forbidden not in body_str, f"unsupported action leaked: {forbidden}"
-        assert body.get("extracted_text") == ""
+        # Vision-fallback contract: no extracted_text field at all when OCR
+        # produced nothing (tests/unit/test_upload_image_vision.py).
+        assert "extracted_text" not in body
 
         # Durable context stored exactly once with empty text + real filename.
         mock_set_durable.assert_called_once()

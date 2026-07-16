@@ -1503,7 +1503,10 @@ async def rico_upload_cv(
                 "extraction on my own yet. If it shows a job posting or document, try a "
                 "clearer screenshot — or paste the text directly into the chat."
             )
-            resp["extracted_text"] = ""
+            # No extracted_text field at all: the vision-fallback contract
+            # (tests/unit/test_upload_image_vision.py) requires its absence when
+            # OCR produced nothing — an empty-string field would be noise.
+            resp.pop("extracted_text", None)
             resp["suggested_actions"] = []
             return resp
 
