@@ -684,14 +684,12 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     from src.rico_jotform_webhook import handle_jotform_submission as _handle
-    try:
-        return _handle(normalized)
-    except Exception as exc:
-        logger.error("jotform_submission_failed: %s", exc, exc_info=True)
-        return {
-            "status": "accepted",
-            "message": "Submission received; DB write pending when service recovers",
-        }
+    # Do NOT mask a required-persistence failure as 200 "accepted": the handler
+    # runs claim + user/profile/settings/processed in ONE transaction that rolls
+    # back on failure, so the exception must propagate → the webhook route
+    # decorator returns 500 → the provider retries → the retry re-claims the same
+    # submission and re-processes atomically (#1089).
+    return _handle(normalized)
 
 
 def _resolve_db_user_id(user_id: str):

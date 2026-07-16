@@ -1009,17 +1009,17 @@ class TestJotformWebhookRobustness:
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
-    def test_db_error_returns_200_not_500(self, client):
-        """Even when the DB write fails, the router must return 200."""
+    def test_db_error_returns_500_for_retry(self, client):
+        """#1089: a required-persistence failure must return 500 so the provider
+        retries — not a false 200 'accepted'. The handler's single transaction
+        rolled back (claim + writes), so the retry can immediately re-claim."""
         payload = {"pretty": {"email": "x@example.com"}}
         with patch(
             "src.rico_jotform_webhook.handle_jotform_submission",
             side_effect=RuntimeError("RicoDB unavailable: DATABASE_URL or psycopg2 missing"),
         ):
             r = client.post("/api/v1/rico/webhooks/jotform", json=payload)
-        assert r.status_code == 200
-        body = r.json()
-        assert body["status"] == "accepted"
+        assert r.status_code == 500
 
     def test_invalid_json_returns_200(self, client):
         r = client.post(
@@ -1087,16 +1087,18 @@ class TestJotformWebhookRobustness:
         result = handle_jotform_submission({"formID": "261277622782059", "consent": "yes"})
         assert result["status"] == "accepted"
 
-    def test_service_returns_accepted_on_db_error(self):
+    def test_service_propagates_db_error_for_retry(self):
+        # #1089: the wrapper must NOT mask a required-persistence failure as
+        # 'accepted'; it propagates so the route returns 500 and the provider retries.
+        import pytest
         from src.services.chat_service import handle_jotform_submission
         payload = {"pretty": {"email": "x@example.com"}}
         with patch(
             "src.rico_jotform_webhook.handle_jotform_submission",
             side_effect=RuntimeError("DB down"),
         ):
-            result = handle_jotform_submission(payload)
-        assert result["status"] == "accepted"
-        assert "pending" in result["message"]
+            with pytest.raises(RuntimeError, match="DB down"):
+                handle_jotform_submission(payload)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

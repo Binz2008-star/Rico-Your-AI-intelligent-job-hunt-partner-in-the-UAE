@@ -192,29 +192,9 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
     user_id = mapped["user"].get("external_user_id")
 
     db = RicoDB()
-    try:
-        first_delivery = db.register_webhook_event(
-            provider="jotform",
-            submission_id=submission_id,
-            form_id=form_id,
-            external_user_id=user_id,
-            metadata={"form_id": form_id},
-        )
-    except Exception:
-        logger.exception(
-            "jotform_webhook: idempotency registration failed form_id=%s submission=%s",
-            form_id, submission_id,
-        )
-        return {"status": "error", "reason": "idempotency_unavailable"}
 
-    if not first_delivery:
-        logger.info(
-            "jotform_webhook: duplicate submission_id=%s — skipping", submission_id
-        )
-        return {"status": "ignored", "reason": "duplicate"}
-
-    # Identity resolution: check for existing profiles matching identity signals
-    # This runs before user_id check so phone/telegram-only submissions can be resolved
+    # ── Read-only identity resolution (OUTSIDE the write transaction) ──────────
+    # Runs before user_id check so phone/telegram-only submissions can resolve.
     signal = _build_identity_signal(mapped)
     candidates = find_identity_candidates(signal)
     resolution = map_identity_flow(signal, candidates)
@@ -222,103 +202,104 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     logger.info(
         "jotform_webhook: identity resolution submission=%s action=%s confidence=%s matched_user_id=%s",
-        submission_id,
-        resolution.action,
-        resolution.confidence,
-        resolution.matched_user_id,
+        submission_id, resolution.action, resolution.confidence, resolution.matched_user_id,
     )
 
     if resolution.action == "merge" and resolution.matched_user_id:
         user_id = resolution.matched_user_id
         mapped["user"]["external_user_id"] = resolution.matched_user_id
-        # Proceed to upsert with matched profile - skip user_id check below
-    elif resolution.action == "ask_user":
-        db.mark_webhook_event_processed(
+
+    # ── ONE write transaction: claim the submission + its terminal write commit
+    #    together, or all roll back together. Because the claim is rolled back on
+    #    any failure, the provider's retry can immediately re-claim the same
+    #    submission — no DELETE compensation, no lease, no stale reclaim (#1089).
+    #    A required-persistence failure propagates → route returns 500 → retry.
+    with db._transaction() as conn:
+        first_delivery = db.register_webhook_event(
             provider="jotform",
             submission_id=submission_id,
-            status="pending_identity_confirmation",
-            metadata={
-                "external_user_id": user_id,
-                "identity_resolution": resolution_meta,
-            },
+            form_id=form_id,
+            external_user_id=user_id,
+            metadata={"form_id": form_id},
+            conn=conn,
         )
-        return {
-            "status": "accepted",
-            "reason": "pending_identity_confirmation",
-            "identity_resolution": resolution_meta,
-        }
+        if not first_delivery:
+            logger.info("jotform_webhook: duplicate submission_id=%s — skipping", submission_id)
+            return {"status": "ignored", "reason": "duplicate"}
 
-    elif resolution.action == "ignore":
-        db.mark_webhook_event_processed(
-            provider="jotform",
-            submission_id=submission_id,
-            status="ignored_identity_signal",
-            metadata={
-                "external_user_id": user_id,
+        if resolution.action == "ask_user":
+            db.mark_webhook_event_processed(
+                provider="jotform",
+                submission_id=submission_id,
+                status="pending_identity_confirmation",
+                metadata={"external_user_id": user_id, "identity_resolution": resolution_meta},
+                conn=conn,
+            )
+            return {
+                "status": "accepted",
+                "reason": "pending_identity_confirmation",
                 "identity_resolution": resolution_meta,
-            },
-        )
-        return {
-            "status": "ignored",
-            "reason": "weak_identity_signal",
-            "identity_resolution": resolution_meta,
-        }
+            }
 
-    # Only check user_id if identity resolution didn't set it via merge
-    if not user_id:
+        if resolution.action == "ignore":
+            db.mark_webhook_event_processed(
+                provider="jotform",
+                submission_id=submission_id,
+                status="ignored_identity_signal",
+                metadata={"external_user_id": user_id, "identity_resolution": resolution_meta},
+                conn=conn,
+            )
+            return {
+                "status": "ignored",
+                "reason": "weak_identity_signal",
+                "identity_resolution": resolution_meta,
+            }
+
+        if not user_id:
+            logger.info(
+                "jotform_webhook: no stable user_id in submission=%s — skipping DB write",
+                submission_id,
+            )
+            db.mark_webhook_event_processed(
+                provider="jotform",
+                submission_id=submission_id,
+                status="ignored_missing_user",
+                conn=conn,
+            )
+            return {"status": "accepted", "message": "No identifiable user field provided"}
+
+        # Normal persistence — claim + user + profile + settings + processed status
+        # all in ONE transaction.
         logger.info(
-            "jotform_webhook: no stable user_id in submission=%s — skipping DB write",
-            submission_id,
+            "jotform_webhook: processing form_id=%s submission=%s user_id=%s consent=%s",
+            mapped.get("form_id"), mapped.get("submission_id"), user_id, mapped.get("consent"),
         )
+        user = db.upsert_user(mapped["user"], conn=conn)
+        db_user_id = str(user["id"])
+        db.upsert_profile(db_user_id, mapped["profile"], cv_file_url=mapped.get("cv_file_url"), conn=conn)
+        db.upsert_settings(db_user_id, mapped["settings"], conn=conn)
         db.mark_webhook_event_processed(
             provider="jotform",
             submission_id=submission_id,
-            status="ignored_missing_user",
-        )
-        return {"status": "accepted", "message": "No identifiable user field provided"}
-
-    logger.info(
-        "jotform_webhook: processing form_id=%s submission=%s user_id=%s consent=%s",
-        mapped.get("form_id"), mapped.get("submission_id"), user_id, mapped.get("consent"),
-    )
-
-    user = db.upsert_user(mapped["user"])
-    db_user_id = str(user["id"])
-
-    try:
-        db.upsert_profile(db_user_id, mapped["profile"], cv_file_url=mapped.get("cv_file_url"))
-    except Exception as exc:
-        logger.error(
-            "jotform_webhook: upsert_profile failed db_user_id=%s: %s", db_user_id, exc
+            user_id=db_user_id,
+            status="processed",
+            metadata={"external_user_id": user_id},
+            conn=conn,
         )
 
-    try:
-        db.upsert_settings(db_user_id, mapped["settings"])
-    except Exception as exc:
-        logger.error(
-            "jotform_webhook: upsert_settings failed db_user_id=%s: %s", db_user_id, exc
-        )
-
+    # ── Onboarding status: best-effort, OUTSIDE the required transaction. It is
+    #    NOT part of the atomic claim/user/profile/settings unit — a follow-up
+    #    (#1089) will make onboarding status durable. Do not describe it as atomic.
     if mapped.get("consent"):
         try:
             from src.repositories.onboarding_repo import mark_onboarding_complete
             mark_onboarding_complete(user_id)
-            logger.info(
-                "jotform_webhook: onboarding marked complete user_id=%s", user_id
-            )
+            logger.info("jotform_webhook: onboarding marked complete user_id=%s", user_id)
         except Exception as exc:
             logger.warning(
-                "jotform_webhook: mark_onboarding_complete failed user_id=%s: %s",
-                user_id, exc,
+                "jotform_webhook: mark_onboarding_complete failed user_id=%s: %s", user_id, exc
             )
 
-    db.mark_webhook_event_processed(
-        provider="jotform",
-        submission_id=submission_id,
-        user_id=db_user_id,
-        status="processed",
-        metadata={"external_user_id": user_id},
-    )
     logger.info(
         "jotform_webhook: ok form_id=%s submission=%s db_user_id=%s",
         mapped.get("form_id"), mapped.get("submission_id"), db_user_id,
