@@ -1,6 +1,18 @@
-"""
-Production smoke test for subscription endpoints.
-Tests against https://rico-job-automation-api.onrender.com
+"""Read-only billing preflight for the current manual/Paddle contract.
+
+Replaces the retired Stripe checkout smoke. Validates the LIVE billing surface
+WITHOUT creating a charge or exercising a checkout/webhook lifecycle:
+
+  1. GET  /api/v1/billing/config      (unauthenticated) — billing mode + sandbox flag
+  2. POST /api/v1/auth/login          — obtain a session cookie
+  3. GET  /api/v1/subscription/plans  — single paid plan (Rico Monthly, USD)
+  4. GET  /api/v1/subscription/me     — authenticated subscription status
+
+Stripe is fully removed (DEC-20260713-005). Paddle is the paid-subscription
+source of truth; BILLING_MODE=manual is the safe default until explicit owner
+activation. Any real checkout/webhook lifecycle test is isolated Paddle Sandbox
+work and is intentionally NOT performed here — this preflight never opens a
+checkout, never posts to a webhook, and never creates a charge.
 
 Usage:
   export RICO_SMOKE_TEST_EMAIL="your-test-account@example.com"
@@ -27,6 +39,7 @@ if not TEST_EMAIL or not TEST_PASSWORD:
     print(f"ERROR: {', '.join(missing)} environment variable(s) not set. Aborting.", file=sys.stderr)
     sys.exit(2)
 
+
 def print_result(test_name, status_code, response_data, pass_fail, error=None):
     print(f"\n{test_name}")
     print(f"  Status Code: {status_code}")
@@ -36,12 +49,34 @@ def print_result(test_name, status_code, response_data, pass_fail, error=None):
     if error:
         print(f"  Error: {error}")
 
+
 def main():
     results = []
 
-    # Step 1: Login to get token
+    # Step 1: GET /api/v1/billing/config  (unauthenticated, no secrets exposed)
     print("=" * 60)
-    print("STEP 1: Login")
+    print("STEP 1: GET /api/v1/billing/config (public)")
+    print("=" * 60)
+    try:
+        response = requests.get(f"{BASE_URL}/api/v1/billing/config", timeout=10)
+        status_code = response.status_code
+        data = response.json() if response.text else {}
+        # Non-secret config flags: billing_mode + paddle_active + sandbox.
+        expected_keys = {"billing_mode", "paddle_active", "sandbox"}
+        if status_code == 200 and expected_keys.issubset(set(data.keys())):
+            pass_fail = "PASS"
+            results.append(("GET /billing/config", True))
+        else:
+            pass_fail = "FAIL"
+            results.append(("GET /billing/config", False))
+        print_result("GET /billing/config", status_code, data, pass_fail)
+    except Exception as e:
+        print_result("GET /billing/config", "N/A", None, "FAIL", str(e))
+        results.append(("GET /billing/config", False))
+
+    # Step 2: Login to get session cookie
+    print("\n" + "=" * 60)
+    print("STEP 2: Login")
     print("=" * 60)
     try:
         response = requests.post(
@@ -73,34 +108,45 @@ def main():
         token = None
 
     if not token:
-        print("\n❌ CRITICAL: No auth token obtained. Cannot continue.")
+        print("\nCRITICAL: No auth token obtained. Cannot continue authenticated checks.")
         return 1
 
     headers = {"Cookie": f"access_token={token}"}
 
-    # Step 2: GET /api/v1/subscription/plans
+    # Step 3: GET /api/v1/subscription/plans — single Paddle plan (Rico Monthly, USD)
     print("\n" + "=" * 60)
-    print("STEP 2: GET /api/v1/subscription/plans")
+    print("STEP 3: GET /api/v1/subscription/plans")
     print("=" * 60)
     try:
         response = requests.get(f"{BASE_URL}/api/v1/subscription/plans", headers=headers, timeout=10)
         status_code = response.status_code
         data = response.json() if response.text else {}
-        expected_keys = {"plans"}
-        if status_code == 200 and expected_keys.issubset(set(data.keys())):
+        plans = data.get("plans", []) if isinstance(data, dict) else []
+        plan_keys = [p.get("plan") for p in plans]
+        currencies = {p.get("currency") for p in plans}
+        # Current contract: single paid plan (Rico Monthly / "pro"), priced in USD.
+        # Premium is retired — its presence here is a regression, not a pass.
+        single_plan_ok = (
+            status_code == 200
+            and "plans" in (data if isinstance(data, dict) else {})
+            and "pro" in plan_keys
+            and "premium" not in plan_keys
+            and currencies == {"USD"}
+        )
+        if single_plan_ok:
             pass_fail = "PASS"
-            results.append(("GET /subscription/plans", True))
+            results.append(("GET /subscription/plans (single USD plan)", True))
         else:
             pass_fail = "FAIL"
-            results.append(("GET /subscription/plans", False))
+            results.append(("GET /subscription/plans (single USD plan)", False))
         print_result("GET /subscription/plans", status_code, data, pass_fail)
     except Exception as e:
         print_result("GET /subscription/plans", "N/A", None, "FAIL", str(e))
-        results.append(("GET /subscription/plans", False))
+        results.append(("GET /subscription/plans (single USD plan)", False))
 
-    # Step 3: GET /api/v1/subscription/me
+    # Step 4: GET /api/v1/subscription/me — authenticated status (no charge)
     print("\n" + "=" * 60)
-    print("STEP 3: GET /api/v1/subscription/me")
+    print("STEP 4: GET /api/v1/subscription/me")
     print("=" * 60)
     try:
         response = requests.get(f"{BASE_URL}/api/v1/subscription/me", headers=headers, timeout=10)
@@ -118,72 +164,6 @@ def main():
         print_result("GET /subscription/me", "N/A", None, "FAIL", str(e))
         results.append(("GET /subscription/me", False))
 
-    # Step 4: POST /api/v1/subscription/checkout with plan=pro
-    print("\n" + "=" * 60)
-    print("STEP 4: POST /api/v1/subscription/checkout with plan=pro")
-    print("=" * 60)
-    try:
-        response = requests.post(
-            f"{BASE_URL}/api/v1/subscription/checkout",
-            headers=headers,
-            json={"plan": "pro"},
-            timeout=10
-        )
-        status_code = response.status_code
-        data = response.json() if response.text else {}
-
-        # Check for expected Stripe checkout response
-        is_stripe = (
-            status_code == 200 and
-            data.get("provider") == "stripe" and
-            data.get("status") == "ready" and
-            data.get("checkout_url", "").startswith("https://checkout.stripe.com/")
-        )
-
-        if is_stripe:
-            pass_fail = "PASS"
-            results.append(("POST /subscription/checkout (pro)", True))
-        else:
-            pass_fail = "FAIL"
-            results.append(("POST /subscription/checkout (pro)", False))
-        print_result("POST /subscription/checkout (pro)", status_code, data, pass_fail)
-    except Exception as e:
-        print_result("POST /subscription/checkout (pro)", "N/A", None, "FAIL", str(e))
-        results.append(("POST /subscription/checkout (pro)", False))
-
-    # Step 5: POST /api/v1/subscription/checkout with plan=premium
-    print("\n" + "=" * 60)
-    print("STEP 5: POST /api/v1/subscription/checkout with plan=premium")
-    print("=" * 60)
-    try:
-        response = requests.post(
-            f"{BASE_URL}/api/v1/subscription/checkout",
-            headers=headers,
-            json={"plan": "premium"},
-            timeout=10
-        )
-        status_code = response.status_code
-        data = response.json() if response.text else {}
-
-        # Check for expected Stripe checkout response
-        is_stripe = (
-            status_code == 200 and
-            data.get("provider") == "stripe" and
-            data.get("status") == "ready" and
-            data.get("checkout_url", "").startswith("https://checkout.stripe.com/")
-        )
-
-        if is_stripe:
-            pass_fail = "PASS"
-            results.append(("POST /subscription/checkout (premium)", True))
-        else:
-            pass_fail = "FAIL"
-            results.append(("POST /subscription/checkout (premium)", False))
-        print_result("POST /subscription/checkout (premium)", status_code, data, pass_fail)
-    except Exception as e:
-        print_result("POST /subscription/checkout (premium)", "N/A", None, "FAIL", str(e))
-        results.append(("POST /subscription/checkout (premium)", False))
-
     # Summary
     print("\n" + "=" * 60)
     print("SUMMARY")
@@ -191,11 +171,15 @@ def main():
     passed = sum(1 for _, result in results if result)
     total = len(results)
     for test_name, result in results:
-        status = "✓ PASS" if result else "✗ FAIL"
-        print(f"  {status}: {test_name}")
+        status = "PASS" if result else "FAIL"
+        print(f"  [{status}] {test_name}")
     print(f"\nTotal: {passed}/{total} passed")
+    print("\nNote: this preflight is read-only. Checkout, webhook, and activation")
+    print("lifecycle testing is isolated Paddle Sandbox work — see")
+    print("AI_WORKSPACE/HANDOFFS/paddle_billing_setup_rollback.md.")
 
     return 0 if passed == total else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
