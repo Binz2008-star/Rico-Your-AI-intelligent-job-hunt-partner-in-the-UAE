@@ -34,23 +34,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { isRetryableJobSearchIntent, pickOperationState } from "./operationState";
-
-function ensureSessionId(sessionIdRef: React.MutableRefObject<string | null>): string {
-    if (typeof window === "undefined") return sessionIdRef.current || "ssr-session";
-    if (!sessionIdRef.current) {
-        let sid = localStorage.getItem("rico_sid");
-        if (!sid) {
-            sid = "web-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 9);
-            localStorage.setItem("rico_sid", sid);
-        }
-        sessionIdRef.current = sid;
-    }
-    return sessionIdRef.current;
-}
-
-function getSessionId(sessionIdRef: React.MutableRefObject<string | null>): string {
-    return ensureSessionId(sessionIdRef);
-}
+import { ensureSessionId, getSessionId } from "./sessionId";
 
 function prefersReducedMotion(): boolean {
     return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
