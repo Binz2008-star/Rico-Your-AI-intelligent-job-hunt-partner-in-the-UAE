@@ -39,14 +39,34 @@ def _client_with_token(email: str) -> tuple:
     return tc
 
 
+def _wire_canonical_methods(db: MagicMock, recs_for) -> None:
+    """Model the #1092 canonical DB-boundary contract from a per-uid recs fn."""
+    def _filtered(uid, status=None):
+        return [r for r in recs_for(uid) if not status or r.get("status") == status]
+
+    db.get_applications_page.side_effect = (
+        lambda uid, status=None, limit=None, offset=0:
+            _filtered(uid, status)[offset:(offset + limit) if limit is not None else None]
+    )
+    db.count_applications.side_effect = (
+        lambda uid, status=None: len(_filtered(uid, status))
+    )
+    db.find_recommendation.side_effect = (
+        lambda uid, jk: next((r for r in recs_for(uid) if r.get("job_id") == jk), None)
+    )
+    db.get_application_stats.side_effect = (
+        lambda uid: {"total": len(recs_for(uid))}
+    )
+
+
 def _mock_db_for(user_id: str, recs: list) -> MagicMock:
     db = MagicMock()
     db.available = True
     db._exact_auth_lookup_enabled = False  # prevent SQL auth resolver; use get_user_bundle path
     db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"} if uid == user_id else None
-    db.get_recommendations.return_value = recs
     db.get_recommendation_stats.return_value = {"total": len(recs)}
     db.update_recommendation_status.return_value = True
+    _wire_canonical_methods(db, lambda uid: recs)
     return db
 
 
@@ -134,10 +154,10 @@ class TestApplicationsRouteIsolation:
             db.available = True
             db._exact_auth_lookup_enabled = False
             db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
-            db.get_recommendations.side_effect = lambda uid, **kw: (
+            _wire_canonical_methods(db, lambda uid: (
                 alice_recs if uid == "uuid-alice@rico.ai" else
                 bob_recs if uid == "uuid-bob@rico.ai" else []
-            )
+            ))
             return db
 
         tc_alice = _client_with_token("alice@rico.ai")
@@ -166,7 +186,7 @@ class TestApplicationsRouteIsolation:
         db._exact_auth_lookup_enabled = False
         db.get_user_bundle.return_value = None
         db.upsert_user.return_value = {"id": "new-uuid"}
-        db.get_recommendations.return_value = []
+        _wire_canonical_methods(db, lambda uid: [])
         tc = _client_with_token("newuser@rico.ai")
         with patch("src.repositories.applications_repo._db", return_value=db):
             r = tc.get("/api/v1/applications")
@@ -175,14 +195,15 @@ class TestApplicationsRouteIsolation:
         db.upsert_user.assert_called_once()
 
     def test_jwt_user_id_passed_to_repo_not_none(self):
-        """The route must never call get_all without user_id."""
+        """The route must never call the repo without the JWT-derived user_id."""
         tc = _client_with_token("alice@rico.ai")
-        with patch("src.api.routers.applications.get_all") as mock_get_all:
-            mock_get_all.return_value = []
+        with patch("src.api.routers.applications.get_page") as mock_get_page:
+            mock_get_page.return_value = {
+                "applications": [], "total": 0, "page": 1, "limit": 50, "pages": 1,
+            }
             tc.get("/api/v1/applications")
-        assert mock_get_all.called
-        call_kwargs = mock_get_all.call_args[1]
-        assert call_kwargs.get("user_id") == "alice@rico.ai"
+        assert mock_get_page.called
+        assert mock_get_page.call_args[0][0] == "alice@rico.ai"
 
 
 class TestStatsRouteIsolation:
@@ -322,7 +343,7 @@ class TestApplicationsRepoFallbackRemoval:
         db._exact_auth_lookup_enabled = False
         db.get_user_bundle.return_value = None
         db.upsert_user.return_value = {"id": "new-uuid"}
-        db.get_recommendations.return_value = []
+        _wire_canonical_methods(db, lambda uid: [])
         with patch("src.repositories.applications_repo._db", return_value=db):
             result = get_all(user_id="newuser@rico.ai")
         assert result == []
@@ -382,10 +403,10 @@ class TestApplicationsRepoFallbackRemoval:
             db = MagicMock()
             db._exact_auth_lookup_enabled = False
             db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
-            db.get_recommendations.side_effect = lambda uid, **kw: (
+            _wire_canonical_methods(db, lambda uid: (
                 alice_recs if uid == "uuid-alice@rico.ai" else
                 bob_recs if uid == "uuid-bob@rico.ai" else []
-            )
+            ))
             return db
 
         with patch("src.repositories.applications_repo._db", side_effect=_db_factory):

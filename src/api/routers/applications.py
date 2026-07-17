@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.api.deps import get_current_user_id
 from src.applications import VALID_STATUSES
-from src.repositories.applications_repo import create, create_manual, find_by_job_id, get_all, get_stats, update_status
+from src.repositories.applications_repo import create, create_manual, find_by_job_id, get_page, get_stats, update_status
 from src.schemas.applications import (
     ApplicationCreateRequest,
     ApplicationListResponse,
@@ -136,19 +136,10 @@ def list_applications(
             detail=f"Invalid status. Valid values: {sorted(VALID_STATUSES)}",
         )
 
-    all_apps: List[Dict[str, Any]] = get_all(user_id=user_id)
-    if status:
-        all_apps = [a for a in all_apps if a.get("status") == status]
-
-    total = len(all_apps)
-    offset = (page - 1) * limit
-    return {
-        "applications": all_apps[offset : offset + limit],
-        "total": total,
-        "page": page,
-        "limit": limit,
-        "pages": max(1, -(-total // limit)),
-    }
+    # Canonical DB-boundary pagination (#1092): filtering, counting, and
+    # slicing run in the database, so total/pages reflect every logical
+    # record — not a capped in-memory snapshot.
+    return get_page(user_id, page=page, limit=limit, status=status)
 
 
 @router.patch("/{job_id}", response_model=StatusUpdateResponse)

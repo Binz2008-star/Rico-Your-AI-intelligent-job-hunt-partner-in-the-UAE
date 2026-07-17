@@ -23,6 +23,26 @@ from src.rico_agent import RicoAgent, RicoProfile, RicoAgentSettings
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+def _wire_canonical_methods(db, recs_for):
+    """Model the #1092 canonical DB-boundary contract from a per-uid recs fn."""
+    def _filtered(uid, status=None):
+        return [r for r in recs_for(uid) if not status or r.get("status") == status]
+
+    db.get_applications_page.side_effect = (
+        lambda uid, status=None, limit=None, offset=0:
+            _filtered(uid, status)[offset:(offset + limit) if limit is not None else None]
+    )
+    db.count_applications.side_effect = (
+        lambda uid, status=None: len(_filtered(uid, status))
+    )
+    db.find_recommendation.side_effect = (
+        lambda uid, jk: next((r for r in recs_for(uid) if r.get("job_id") == jk), None)
+    )
+    db.get_application_stats.side_effect = (
+        lambda uid: {"total": len(recs_for(uid))}
+    )
+
+
 def _mock_db_for_user(recommendations, available=True):
     """Return a mock RicoDB that serves per-user recommendations."""
     db = MagicMock()
@@ -38,6 +58,7 @@ def _mock_db_for_user(recommendations, available=True):
         "offer": 0,
     }
     db.update_recommendation_status.return_value = True
+    _wire_canonical_methods(db, lambda uid: recommendations)
     return db
 
 
@@ -179,10 +200,10 @@ class TestUserApplicationsIsolation:
         db._exact_auth_lookup_enabled = False
         db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
         # get_recommendations is called with the resolved UUID
-        db.get_recommendations.side_effect = lambda uid, **kw: (
+        _wire_canonical_methods(db, lambda uid: (
             alice_recs if uid == "uuid-alice@rico.ai" else
             bob_recs if uid == "uuid-bob@rico.ai" else []
-        )
+        ))
 
         with patch("src.repositories.applications_repo._db", return_value=db):
             alice_apps = applications_repo.get_all(user_id="alice@rico.ai")
@@ -212,10 +233,10 @@ class TestUserApplicationsIsolation:
         db.available = True
         db._exact_auth_lookup_enabled = False
         db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
-        db.get_recommendations.side_effect = lambda uid, **kw: (
+        _wire_canonical_methods(db, lambda uid: (
             alice_recs if uid == "uuid-alice@rico.ai" else
             bob_recs if uid == "uuid-bob@rico.ai" else []
-        )
+        ))
 
         with patch("src.repositories.applications_repo._db", return_value=db):
             alice_stats = applications_repo.get_stats(user_id="alice@rico.ai")
@@ -239,10 +260,10 @@ class TestUserApplicationsIsolation:
         db.available = True
         db._exact_auth_lookup_enabled = False
         db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
-        db.get_recommendations.side_effect = lambda uid, **kw: (
+        _wire_canonical_methods(db, lambda uid: (
             alice_recs if uid == "uuid-alice@rico.ai" else
             bob_recs if uid == "uuid-bob@rico.ai" else []
-        )
+        ))
 
         with patch("src.repositories.applications_repo._db", return_value=db):
             found_for_alice = applications_repo.find_by_job_id("j2", user_id="alice@rico.ai")
@@ -420,14 +441,14 @@ class TestAuthenticatedRouteFailClosed:
         tc = TestClient(app, raise_server_exceptions=False)
         tc.cookies.set("access_token", token)
 
-        with patch("src.api.routers.applications.get_all") as mock_get_all:
-            mock_get_all.return_value = []
+        with patch("src.api.routers.applications.get_page") as mock_get_page:
+            mock_get_page.return_value = {
+                "applications": [], "total": 0, "page": 1, "limit": 50, "pages": 1,
+            }
             tc.get("/api/v1/applications")
 
-        assert mock_get_all.called
-        call_kwargs = mock_get_all.call_args[1]
-        assert "user_id" in call_kwargs
-        assert call_kwargs["user_id"] == "alice@rico.ai"
+        assert mock_get_page.called
+        assert mock_get_page.call_args[0][0] == "alice@rico.ai"
 
     def test_applications_stats_route_passes_user_id(self):
         """The authenticated /api/v1/applications/stats route must always pass user_id to repo."""
@@ -518,7 +539,7 @@ class TestCanonicalApplicationsSource:
         db.available = True
         db._exact_auth_lookup_enabled = False
         db.get_user_bundle.return_value = {"id": "uuid-carol"}
-        db.get_recommendations.return_value = recs
+        _wire_canonical_methods(db, lambda uid: recs)
 
         token = create_access_token({"sub": "carol@rico.ai", "role": "user"})
         tc = TestClient(app, raise_server_exceptions=False)
@@ -544,7 +565,7 @@ class TestCanonicalApplicationsSource:
         db.available = True
         db._exact_auth_lookup_enabled = False
         db.get_user_bundle.return_value = {"id": "uuid-dave"}
-        db.get_recommendations.return_value = recs
+        _wire_canonical_methods(db, lambda uid: recs)
 
         api = RicoChatAPI(persist=False)
         api.memory = MagicMock()

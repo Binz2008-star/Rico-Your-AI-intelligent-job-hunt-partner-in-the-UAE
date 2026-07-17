@@ -1242,35 +1242,184 @@ class RicoDB:
             with conn.cursor() as cur:
                 cur.execute(sql, params + [limit, offset])
                 rows = cur.fetchall()
-        result: List[Dict[str, Any]] = []
-        for r in rows:
-            job = dict(r["job"]) if isinstance(r["job"], dict) else {}
-            result.append({
-                "job_id": r["job_key"],
-                "title": job.get("title", ""),
-                "company": job.get("company", ""),
-                "location": job.get("location", ""),
-                "link": (
-                    job.get("link")
-                    or job.get("apply_url")
-                    or job.get("job_apply_link")
-                    or job.get("apply_link")
-                    or ""
-                ),
-                "apply_url": (
-                    job.get("apply_url")
-                    or job.get("job_apply_link")
-                    or job.get("apply_link")
-                    or job.get("link")
-                    or ""
-                ),
-                "score": r["rico_score"] or r["repo_score"] or 0,
-                "status": r["status"],
-                "notes": r["explanation"] or "",
-                "date_applied": r["created_at"].isoformat() if r["created_at"] else None,
-                "date_updated": r["updated_at"].isoformat() if r["updated_at"] else None,
-            })
-        return result
+        return [self._shape_recommendation_row(r) for r in rows]
+
+    @staticmethod
+    def _shape_recommendation_row(r: Dict[str, Any]) -> Dict[str, Any]:
+        job = dict(r["job"]) if isinstance(r["job"], dict) else {}
+        return {
+            "job_id": r["job_key"],
+            "title": job.get("title", ""),
+            "company": job.get("company", ""),
+            "location": job.get("location", ""),
+            "link": (
+                job.get("link")
+                or job.get("apply_url")
+                or job.get("job_apply_link")
+                or job.get("apply_link")
+                or ""
+            ),
+            "apply_url": (
+                job.get("apply_url")
+                or job.get("job_apply_link")
+                or job.get("apply_link")
+                or job.get("link")
+                or ""
+            ),
+            "score": r["rico_score"] or r["repo_score"] or 0,
+            "status": r["status"],
+            "notes": r["explanation"] or "",
+            "date_applied": r["created_at"].isoformat() if r["created_at"] else None,
+            "date_updated": r["updated_at"].isoformat() if r["updated_at"] else None,
+        }
+
+    # ── Canonical application set (#1092) ────────────────────────────────────
+    #
+    # (user_id, job_key) is unique (migrations 011/035), but several write
+    # paths derive job_key independently, so the same real-world job can exist
+    # under more than one job_key. The CANONICAL set collapses those physical
+    # rows with ONE deterministic rule, applied identically to pages, totals,
+    # stats, and quota counts so they can never disagree:
+    #
+    #   A row is canonical iff it is the newest (updated_at DESC, id DESC)
+    #   within BOTH its location-identity group (title, company, location)
+    #   and its url-identity group (title, company, apply-url). Rows with no
+    #   title AND no company are always canonical; the url rule only applies
+    #   when the row has a non-empty apply url. Chains of duplicates collapse
+    #   to the single newest row.
+    #
+    # Pagination is a documented stable offset over (updated_at DESC, id DESC):
+    # newest first with a unique tiebreak. A row inserted or touched between
+    # page reads shifts later offsets, so a client may see an item REPEATED on
+    # a subsequent page — items are never silently skipped by an insert.
+
+    _CANONICAL_APPS_CTE = """
+        WITH recs AS (
+            SELECT id, job_key, job, repo_score, rico_score, explanation,
+                   status, created_at, updated_at,
+                   lower(btrim(coalesce(job->>'title', '')))    AS norm_title,
+                   lower(btrim(coalesce(job->>'company', '')))  AS norm_company,
+                   lower(btrim(coalesce(job->>'location', ''))) AS norm_location,
+                   lower(btrim(coalesce(
+                       nullif(job->>'apply_url', ''),
+                       nullif(job->>'job_apply_link', ''),
+                       nullif(job->>'apply_link', ''),
+                       nullif(job->>'link', ''),
+                       ''
+                   ))) AS norm_url
+            FROM rico_job_recommendations
+            WHERE user_id = %s
+        ),
+        ranked AS (
+            SELECT *,
+                   CASE WHEN norm_title = '' AND norm_company = '' THEN 1
+                        ELSE row_number() OVER (
+                            PARTITION BY norm_title, norm_company, norm_location
+                            ORDER BY updated_at DESC, id DESC)
+                   END AS rn_location,
+                   CASE WHEN norm_title = '' AND norm_company = '' THEN 1
+                        WHEN norm_url = '' THEN 1
+                        ELSE row_number() OVER (
+                            PARTITION BY norm_title, norm_company, norm_url
+                            ORDER BY updated_at DESC, id DESC)
+                   END AS rn_url
+            FROM recs
+        ),
+        canonical AS (
+            SELECT * FROM ranked WHERE rn_location = 1 AND rn_url = 1
+        )
+    """
+
+    def get_applications_page(
+        self,
+        user_id: str,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """One page of the canonical application set, newest first.
+
+        ``limit=None`` returns the complete canonical set (no 200-row cap).
+        """
+        params: List[Any] = [user_id]
+        where = ""
+        if status:
+            where = "WHERE status = %s"
+            params.append(status)
+        sql = (
+            self._CANONICAL_APPS_CTE
+            + f"SELECT * FROM canonical {where} "
+            + "ORDER BY updated_at DESC, id DESC"
+        )
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+        sql += " OFFSET %s"
+        params.append(offset)
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+        return [self._shape_recommendation_row(r) for r in rows]
+
+    def count_applications(self, user_id: str, status: Optional[str] = None) -> int:
+        """Total logical applications in the canonical set (optionally by status)."""
+        params: List[Any] = [user_id]
+        where = ""
+        if status:
+            where = "WHERE status = %s"
+            params.append(status)
+        sql = self._CANONICAL_APPS_CTE + f"SELECT COUNT(*) AS cnt FROM canonical {where}"
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                row = cur.fetchone()
+        return int(row["cnt"] if isinstance(row, dict) else row[0])
+
+    def get_application_stats(self, user_id: str) -> Dict[str, Any]:
+        """Status counts over the SAME canonical set the pages are served from."""
+        sql = (
+            self._CANONICAL_APPS_CTE
+            + "SELECT status, COUNT(*) AS cnt FROM canonical GROUP BY status"
+        )
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id,))
+                rows = cur.fetchall()
+        total = sum(r["cnt"] for r in rows)
+        by_status = {r["status"]: r["cnt"] for r in rows}
+        return {
+            "total": total,
+            "by_status": by_status,
+            "applied": by_status.get("applied", 0),
+            "saved": by_status.get("saved", 0),
+            "interview": by_status.get("interview", 0),
+            "rejected": by_status.get("rejected", 0),
+            "offer": by_status.get("offer", 0),
+            "follow_up_due": by_status.get("follow_up_due", 0),
+        }
+
+    def find_recommendation(self, user_id: str, job_key: str) -> Optional[Dict[str, Any]]:
+        """Fetch ONE owned row directly by job_key — no page scan, no row cap.
+
+        Queries the physical row: every stored job_key stays directly
+        addressable for PATCH even when the canonical view collapses it as a
+        duplicate for listing purposes.
+        """
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, job_key, job, repo_score, rico_score, explanation,
+                           status, created_at, updated_at
+                    FROM rico_job_recommendations
+                    WHERE user_id = %s AND job_key = %s
+                    LIMIT 1
+                    """,
+                    (user_id, job_key),
+                )
+                row = cur.fetchone()
+        return self._shape_recommendation_row(row) if row else None
 
     def upsert_recommendation(
         self,
