@@ -1508,8 +1508,11 @@ async def rico_upload_cv(
         enforce_document_quota(resolved_user_id, "cv")
 
     try:
-        # Reject clearly-oversized files BEFORE reading the whole body into memory,
-        # using the multipart-declared size when available (coarse hard cap).
+        # Layered size enforcement (#1080): the app-level ingress middleware
+        # caps the raw request body before multipart parsing; the declared-size
+        # check below rejects cheaply when the client is honest; and the
+        # bounded read enforces the cap on the actual bytes without ever
+        # materializing more than the limit plus one chunk.
         declared_size = getattr(file, "size", None)
         if isinstance(declared_size, int) and declared_size > _MAX_UPLOAD_BYTES:
             raise HTTPException(
@@ -1517,7 +1520,12 @@ async def rico_upload_cv(
                 detail=_too_large_message(_MAX_DOC_BYTES, is_image=False),
             )
 
-        data = await file.read()
+        from src.api.upload_limits import read_upload_bounded
+        data = await read_upload_bounded(
+            file,
+            _MAX_UPLOAD_BYTES,
+            detail=_too_large_message(_MAX_DOC_BYTES, is_image=False),
+        )
         if not data:
             raise HTTPException(status_code=422, detail="Uploaded file is empty")
 

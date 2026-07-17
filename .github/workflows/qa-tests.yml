@@ -59,6 +59,7 @@ jobs:
             tests/test_journey_route.py \
             tests/test_tc8_interview_prep_grounding.py \
             tests/test_user_documents_dedup.py \
+            tests/test_1080_bounded_upload_reads.py \
             tests/test_908_rc4_prevent_noncv_active_cv.py \
             tests/test_963_onboarding_cv_persistence.py \
             tests/test_paddle_billing.py \
