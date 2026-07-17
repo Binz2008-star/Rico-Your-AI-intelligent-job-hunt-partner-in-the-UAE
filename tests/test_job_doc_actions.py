@@ -20,6 +20,7 @@ generic AI reply that ignores the document). This test file verifies:
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -238,6 +239,89 @@ class TestJobSearchNotInterceptedAsJobDoc:
         )
         assert result is None
         api._append_chat.assert_not_called()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Production-path regression (BUG-24): drive the real message-processing
+# entrypoint _process_message_inner — the method that actually runs the
+# job-doc intercept at line ~6409 before job-search classification — and prove
+# a job-search prompt reaches the job-search ROUTER (_handle_active_user),
+# never the job-document scoring method, with no missing-job-document reply.
+# ──────────────────────────────────────────────────────────────────────────────
+
+_MISSING_DOC_EN = "don't have an uploaded job document"
+_MISSING_DOC_AR = "لا يوجد لدي مستند"
+
+_JOB_SEARCH_EN = "Find UAE jobs that match my CV and experience."
+_JOB_SEARCH_AR = "ابحث عن وظائف في الإمارات تناسب سيرتي الذاتية"
+
+
+def _api_for_process(last_doc: "dict[str, Any] | None") -> RicoChatAPI:
+    """A RicoChatAPI wired so _process_message_inner reaches the authenticated
+    job-search router (_handle_active_user) for a job-search message, with the
+    job-doc intercept (_handle_uploaded_document_followup / _handle_job_doc_action)
+    running FOR REAL so the BUG-24 guard is exercised end to end."""
+    api = _make_api()
+    api._append_chat = MagicMock()
+    # Deterministic early-return stubs so routing reaches the job path.
+    api._handle_file_list_query = MagicMock(return_value=None)
+    api._get_recent_upload_document_reply = MagicMock(return_value=None)
+    api._get_last_uploaded_document = MagicMock(return_value=last_doc)
+    # A complete profile so the minimum-profile gate is satisfied.
+    api._resolve_profile = MagicMock(return_value={
+        "user_id": "u1", "target_roles": ["Data Analyst"],
+        "preferred_cities": ["Dubai"], "years_experience": 5, "skills": ["python"],
+    })
+    # Seams we assert on: the search router (must run) and the scorer (must not).
+    api._handle_active_user = MagicMock(
+        return_value={"type": "job_results", "message": "Here are UAE roles", "matches": []}
+    )
+    api._score_uploaded_job_against_cv = MagicMock(
+        return_value={"type": "score", "message": "SHOULD NOT RUN"}
+    )
+    api._save_uploaded_job_to_pipeline = MagicMock(
+        return_value={"type": "save_job", "message": "SHOULD NOT RUN"}
+    )
+    return api
+
+
+class TestJobSearchReachesSearchRouterThroughProcessMessageInner:
+    @pytest.mark.parametrize("message", [_JOB_SEARCH_EN, _JOB_SEARCH_AR])
+    @pytest.mark.parametrize("last_doc", [None, _doc_with_text()], ids=["no_doc", "stale_job_doc"])
+    @patch("src.rico_chat_api.evaluate_minimum_profile", return_value=(True, []))
+    @patch("src.rico_chat_api.is_onboarding_complete", return_value=True)
+    def test_job_search_invokes_search_router_not_scoring(
+        self, _mock_onb, _mock_gate, last_doc, message,
+    ):
+        api = _api_for_process(last_doc)
+        result = api._process_message_inner("u1", message, None)
+
+        # The job-search router path is invoked …
+        api._handle_active_user.assert_called_once()
+        # … and the job-document scoring / save methods are NOT.
+        api._score_uploaded_job_against_cv.assert_not_called()
+        api._save_uploaded_job_to_pipeline.assert_not_called()
+        # … and the response is the search result, never the missing-doc reply
+        # (a stale uploaded job description must not hijack the search).
+        blob = json.dumps(result, ensure_ascii=False)
+        assert _MISSING_DOC_EN not in blob
+        assert _MISSING_DOC_AR not in blob
+
+    @patch("src.rico_chat_api.evaluate_minimum_profile", return_value=(True, []))
+    @patch("src.rico_chat_api.is_onboarding_complete", return_value=True)
+    def test_genuine_score_still_scores_and_never_reaches_search_router(
+        self, _mock_onb, _mock_gate,
+    ):
+        # A genuine "score this job description against my CV" with a real job
+        # document present must still be intercepted by the scorer and must NOT
+        # be routed to the job-search router.
+        api = _api_for_process(_doc_with_text())
+        result = api._process_message_inner(
+            "u1", "Score this job description against my current CV.", None
+        )
+        api._score_uploaded_job_against_cv.assert_called_once()
+        api._handle_active_user.assert_not_called()
+        assert result == {"type": "score", "message": "SHOULD NOT RUN"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

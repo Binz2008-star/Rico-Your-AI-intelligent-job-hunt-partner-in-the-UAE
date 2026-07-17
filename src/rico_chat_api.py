@@ -11475,27 +11475,25 @@ class RicoChatAPI:
         if not is_track and not is_save and not is_score:
             return None
 
-        # BUG-24: "Find UAE jobs that match my CV" is a JOB SEARCH, not a
-        # job-document score/save action — but _JOB_DOC_SCORE_RE ("match … cv")
-        # over-matches search phrasing, so this intercept used to answer
-        # "I don't have an uploaded job document yet." for a plain search.
-        # Defer to the SAME canonical classifier the real search router keys on
-        # (classify_intent → the job_search_* intents in _JOB_SEARCH_INTENTS).
-        # This is the precise discriminator: a genuine "Save this as a target
-        # job" classifies as save_job and a "Score this against my CV" as
-        # unknown, so neither is affected — only true job-search intents (EN +
-        # AR, incl. colloquial phrasing the classifier already handles) fall
-        # through to the job-search path. No parallel intent model is added.
-        try:
-            from src.agent.intelligence.intent_classifier import classify_intent
-            from src.rico.intent.gates import _JOB_SEARCH_INTENTS
+        # BUG-24: only the SCORE regex over-matches search phrasing — "Find UAE
+        # jobs that MATCH my CV" reads as "score this job against my CV", so this
+        # intercept used to answer "I don't have an uploaded job document yet."
+        # for a plain job search. Save/track phrasing is precise (a real search
+        # never matches them), so a false intercept can only come from a lone
+        # score match. In that case, defer to the SAME public predicate the
+        # production search router keys on — chat_service forces the real search
+        # path on is_explicit_job_listing_request(message) — so a genuine job
+        # search falls through to the job-search path here rather than the
+        # job-document scoring flow. Genuine "score this against my CV" is not an
+        # explicit job-listing request, so it still scores. Reuses the canonical
+        # public guard (already used in process_message); no parallel model.
+        from src.rico.intent.gates import is_explicit_job_listing_request
 
-            if classify_intent(message or "").intent in _JOB_SEARCH_INTENTS:
-                return None
-        except Exception:
-            # Classifier unavailable → keep the original save/score behavior
-            # rather than swallow a genuine job-doc action.
-            pass
+        if (
+            is_score and not is_save and not is_track
+            and is_explicit_job_listing_request(message or "")
+        ):
+            return None
 
         _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
         doc = self._get_last_uploaded_document(user_id)
