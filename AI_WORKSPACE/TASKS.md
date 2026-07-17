@@ -2490,10 +2490,28 @@ Three compounding issues:
 
 ### TASK-20260716-001 — Gmail M0 read-only connector
 
-Status: review
-Owner: Windsurf (REVIEWER → WRITER for blocker fixes)
-Branch: `feat/gmail-readonly-connector-m0`
-Issue/PR: #1055 (draft)
+Status: MERGED (2026-07-17) — code on `main`, INACTIVE in production
+        (`RICO_ENABLE_GMAIL_SYNC=false`, migration 043 NOT applied to Neon)
+Owner: Windsurf (REVIEWER → WRITER for blocker fixes);
+       post-merge reconciliation by Claude (2026-07-17)
+Branch: `feat/gmail-readonly-connector-m0` (merged, head `a10a6493`)
+Issue/PR: #1055 — MERGED 2026-07-17T08:32:45Z by Binz2008-star,
+          merge commit `bcd71c2`, 19 files (+3497/-3), 15 commits
+
+#### Post-merge reconciliation (audited on `main` `900972c`, merge commit `bcd71c2`)
+
+The three P1 review blockers were tracked against the pre-merge draft head
+(`dd595a3b`); the branch then advanced to `a10a6493` (15 commits) before merge.
+Audited the exact MERGED code + tests on `main` `900972c` (not the PR body or the
+old ledger). Result: blockers 1 and 3 are RESOLVED in the merged head; blocker 2
+is PARTIALLY RESOLVED — the backend privacy gate is fully implemented, but fleet
+activation remains blocked by a missing user-facing consent flow (recorded as a
+separate pre-fleet task, TASK-20260717-009). Migration 043 is NOT applied to
+production (the migration is not in the startup auto-apply list —
+`migrations/043_gmail_connections.sql:7-11`) and `RICO_ENABLE_GMAIL_SYNC` remains
+`false`, so nothing in this feature is live. Validation:
+`pytest tests/test_gmail_connector_m0.py` → 36 passed. This reconciliation is
+docs-only — no code, migration, secret, or flag was touched.
 
 #### Objective
 
@@ -2524,9 +2542,10 @@ Task            TASK-20260716-001 (this entry)
 - Branch: `feat/gmail-readonly-connector-m0`
 - Base branch: main (`f2267b37`)
 - Last safe commit SHA: `f2267b37` (main at branch cut)
-- Current head SHA: `dd595a3b`
+- Current head SHA: `a10a6493` (final branch head, merged into main as `bcd71c2`)
+- Audited-on SHA (post-merge reconciliation): `900972c` (main after #1145)
 - Uncommitted changes present: no
-- Status: review
+- Status: merged (inactive in production — flag OFF, migration 043 not applied)
 - Files inspected: `src/gmail_importer.py`, `src/services/gmail_sync_service.py`,
   `src/services/gmail_oauth.py`, `src/services/token_crypto.py`,
   `src/api/routers/integrations_gmail.py`, `src/repositories/gmail_repo.py`,
@@ -2551,41 +2570,132 @@ Task            TASK-20260716-001 (this entry)
   - Test-order pollution fixed (auth test 500 → pass)
   - 26 connector tests pass, 540 vitest pass, frontend build green
   - GitHub required CI all green on head `dd595a3b`
-- What is incomplete: the 3 P1 review blockers below; independent security/privacy
-  review; isolated migration-043 verification; limited real-account OAuth test.
-  #1055 is a real GitHub **Draft** (converted back per the containment decision).
-- Known blockers (P1, logged on #1055 @ `dd595a3b` — MUST fix before merge):
-  1. **Privacy/revocation:** with `RICO_ENABLE_GMAIL_SYNC` off, `/status` reports
-     `connected:false` even when an active connection/encrypted token still exists —
-     it hides a live connection the user cannot see or manage.
-  2. **Consent/scope:** `/sync-all` → `run_fleet_sweep()` → `list_active_connections()`
-     selects EVERY `status='active'` row; migration 043 has no per-user daily/
-     background-sync consent field. OAuth read-consent is not, by itself, an opt-in
-     to recurring fleet sync (secret-gated + master-flag-off is good, but there is no
-     per-user consent boundary once enabled).
-  3. **Trust/idempotency:** review-item approval is a non-atomic check-then-mutate
-     sequence (concurrent approvals can double-apply / race).
-- Validation already run:
+- What is incomplete (post-merge): the user-facing recurring-sync consent control
+  (blocker 2 UI half — TASK-20260717-009); independent security/privacy review;
+  isolated migration-043 verification on a throwaway Neon branch; limited
+  real-account OAuth test with a tester allowlist. These are activation gates, not
+  merge blockers — the code is on `main`, inactive.
+- Blocker verdicts (audited on `main` `900972c` / merge commit `bcd71c2` — code +
+  tests, not comments; the 3 P1 blockers were originally logged on `dd595a3b`):
+  1. **Privacy/revocation — RESOLVED.** `/status` resolves the real connection
+     unconditionally and reports `connected` independent of the flag
+     (`src/api/routers/integrations_gmail.py:88`, `:101-115`; repo
+     `src/repositories/gmail_repo.py:64`), and `/disconnect` is deliberately
+     ungated (`integrations_gmail.py:182-193`). Frontend keeps a live connection
+     visible and Disconnect always enabled while the flag is off
+     (`apps/web/components/settings/GmailConnectionCard.tsx:118-133` and
+     `:231-241` — Disconnect `disabled={busy}` only, never the flag). Regression:
+     `test_status_reports_connection_even_when_flag_off`
+     (`tests/test_gmail_connector_m0.py:166-191`) — asserts `connected:true` +
+     `sync_enabled:false` + Disconnect 200 with the flag off.
+  2. **Consent/scope — PARTIALLY RESOLVED.** *Backend privacy gate implemented;
+     fleet activation remains blocked by missing user-facing consent flow.*
+     Backend substrate complete: consent column `recurring_sync_consent_at`
+     (`migrations/043_gmail_connections.sql:39`, idempotent add `:51-52`,
+     consent-scoped sweep index `:66-69`); JWT-scoped grant/revoke
+     `POST /consent` (`integrations_gmail.py:199-228`) →
+     `set_recurring_sync_consent` (`gmail_repo.py:270-306`); the fleet query
+     selects only consented rows — `list_active_connections`
+     `WHERE status = 'active' AND recurring_sync_consent_at IS NOT NULL`
+     (`gmail_repo.py:88-117`). Tests: `test_fleet_sweep_query_requires_consent`
+     (`tests/test_gmail_connector_m0.py:573`), `test_consent_grant_round_trip` /
+     `test_consent_revoke_round_trip` (`:489`, `:506`),
+     `test_manual_sync_does_not_require_recurring_consent` (`:630`).
+     **GAP (still open):** the Settings UI exposes NO control to grant or revoke
+     this recurring-sync consent — `GmailConnectionCard.tsx` renders only
+     Connect / Sync / Disconnect and never imports the existing
+     `setGmailRecurringSyncConsent` helper (`apps/web/lib/api.ts:968`). Tracked as
+     separate pre-fleet task **TASK-20260717-009**. NOT implemented here (docs-only).
+  3. **Trust/idempotency — RESOLVED.** Approval is a single atomic conditional
+     claim — `claim_review_item_for_approval` runs one
+     `UPDATE ... SET review_status='approved' WHERE user_id=%s AND id=%s AND
+     review_status='pending' RETURNING ...` so exactly one racer wins
+     (`gmail_repo.py:583-622`); the router claims before applying and reverts the
+     claim on apply failure (`integrations_gmail.py:336`, `:349-352`), and the
+     status apply is itself idempotent. Regression:
+     `test_double_approve_applies_status_exactly_once` — second racer 409s,
+     `update_status.call_count == 1`, revert not called
+     (`tests/test_gmail_connector_m0.py:393-426`).
+- Validation already run (pre-merge):
   - `pytest tests/test_gmail_connector_m0.py` → 26/26 passed
   - `pytest tests/test_gmail_pagination_bounds.py` → 8/8 passed (bounded-pagination fix)
   - `pytest tests/unit/test_migration_drift_checks.py` → 5/5 passed
   - `npm run build` → 41/41 pages · `npm test -- --run` → 540/540 · CI green
-- **Merge gates (all required before leaving Draft / merging):**
-  - Fix the 3 P1 blockers above (add tests for each).
-  - Independent security/privacy review (not the author).
-  - Isolated migration-043 verification on a throwaway Neon branch (apply + drift check).
-  - Limited real-account OAuth test with a small tester allowlist.
-- **Activation gates (SEPARATE — only after merge, owner-gated, do NOT bundle with merge):**
+- Validation re-run (post-merge reconciliation, `main` `900972c`):
+  - `pytest tests/test_gmail_connector_m0.py` → 36/36 passed
+- **Merge gates — SATISFIED (merged 2026-07-17).** For the record: blockers 1 and
+  3 were fixed with tests; blocker 2's backend gate was fixed with tests (its UI
+  half is a pre-fleet activation gate, TASK-20260717-009). Independent
+  security/privacy review, isolated migration-043 verification, and a real-account
+  OAuth test were NOT bundled into the merge and remain owner-gated activation
+  prerequisites below.
+- **Activation gates (SEPARATE — the feature is INACTIVE until every one is met;
+  owner-gated; nothing here is unblocked by the merge):**
   - Google restricted-scope verification / CASA for `gmail.readonly` on the public domain.
   - Provision `GMAIL_TOKEN_ENCRYPTION_KEY` + Google OAuth creds in Render.
-  - Apply migration 043 to Neon production.
-  - Add a per-user recurring-sync consent field/flow before enabling `/sync-all`.
+  - Apply migration 043 to Neon production (NOT applied as of `900972c`).
+  - **User-facing recurring-sync consent flow before enabling `/sync-all`** — the
+    backend gate exists, but no Settings control does; blocks any fleet sweep.
+    Tracked as TASK-20260717-009.
+  - Independent (non-author) security/privacy review + isolated migration-043
+    verification on a throwaway Neon branch + limited real-account OAuth test.
   - Flip `RICO_ENABLE_GMAIL_SYNC=true` last, per-cohort.
-- Next exact action: address the 3 P1 blockers + evidence the merge gates; keep Draft.
-- Stop condition: do not merge, deploy, apply migration, provision secrets, or
-  enable `RICO_ENABLE_GMAIL_SYNC` without explicit owner approval
-- Rollback plan: revert commits `dd595a3b`..`afc36288` on the branch; no
-  production impact (flag is OFF, migration not applied)
+- Next exact action: none for M0 code (merged). Before any fleet activation, land
+  TASK-20260717-009 and clear the remaining activation gates above, owner-gated.
+- Stop condition: do not deploy/activate, apply migration 043, provision secrets,
+  add a fleet workflow, or enable `RICO_ENABLE_GMAIL_SYNC` without explicit owner
+  approval.
+- Rollback plan: revert merge commit `bcd71c2` on `main`; no production impact
+  either way (flag is OFF, migration 043 not applied).
+
+---
+
+### TASK-20260717-009 — Gmail recurring-sync consent: user-facing Settings control
+
+Status: scoped (pre-fleet activation gate for #1055 / Gmail M0)
+Owner: unassigned
+Branch: TBD
+Issue/PR: TBD
+
+#### Objective
+
+Add a user-facing control in the Gmail Settings card to grant and revoke the
+separate recurring/fleet-sync consent that the backend already gates on. Without
+it, no user can opt in, so the fleet sweep (`/sync-all`) can never legitimately
+process anyone — this blocks fleet activation even after the flag is flipped.
+
+#### Context
+
+- Discovered by the post-merge reconciliation of #1055 (audited on `main`
+  `900972c`). Backend privacy gate is fully implemented; only the UI is missing.
+- Precise classification: *backend privacy gate implemented; fleet activation
+  remains blocked by missing user-facing consent flow.*
+- Backend already in place (do NOT rebuild):
+  - Column: `recurring_sync_consent_at` — `migrations/043_gmail_connections.sql:39`
+  - Endpoint: `POST /api/v1/integrations/gmail/consent` (JWT-scoped) —
+    `src/api/routers/integrations_gmail.py:199-228`
+  - Repo setter: `set_recurring_sync_consent` — `src/repositories/gmail_repo.py:270-306`
+  - Fleet filter: `list_active_connections` (consented rows only) —
+    `src/repositories/gmail_repo.py:88-117`
+  - Frontend API helper ALREADY EXISTS but is unused by the card:
+    `setGmailRecurringSyncConsent` — `apps/web/lib/api.ts:968`
+  - `GmailStatusResponse.recurring_sync_consent` is already returned by `/status`.
+- Gap to close: `apps/web/components/settings/GmailConnectionCard.tsx` renders only
+  Connect / Sync / Disconnect. Add a clear grant/revoke control (e.g. a toggle)
+  that reads `status.recurring_sync_consent`, calls `setGmailRecurringSyncConsent`,
+  and refreshes status. EN + AR copy; plain language that this authorizes recurring
+  background sync (distinct from the read grant and from manual sync).
+
+#### Constraints
+
+- Scope is UI + wiring only — no backend, migration, secret, or flag changes.
+- Only meaningful once a connection exists (mirror the backend 409-when-not-connected).
+- Revoke must always be available (privacy-reducing action), consistent with Disconnect.
+
+- Next exact action: implement the toggle in `GmailConnectionCard.tsx`, wire to
+  `setGmailRecurringSyncConsent`, add EN/AR strings, add a vitest for grant/revoke.
+- Stop condition: this task does NOT enable sync, apply migration 043, or add a
+  fleet workflow — those remain separate owner-gated activation gates.
 
 ---
 
