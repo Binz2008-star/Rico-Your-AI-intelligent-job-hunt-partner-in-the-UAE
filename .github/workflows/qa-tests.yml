@@ -49,6 +49,8 @@ jobs:
             tests/test_tc2_target_role_propagation.py \
             tests/test_tc2_tc8_wiring.py \
             tests/test_job_result_integrity.py \
+            tests/test_764_durable_mutation_truth.py \
+            tests/test_1082_consent_fail_closed.py \
             tests/test_tc8_interview_prep_grounding.py \
             tests/test_user_documents_dedup.py \
             tests/test_908_rc4_prevent_noncv_active_cv.py \

@@ -124,9 +124,10 @@ def test_profile_patch_calls_upsert_profile_with_extended_fields(monkeypatch):
         request.state.user_id = user["email"]
         return user
 
-    def mock_upsert_profile(user_id, updates):
+    def mock_upsert_profile(user_id, updates, **kwargs):
         captured["user_id"] = user_id
         captured["updates"] = updates
+        captured["require_db"] = kwargs.get("require_db")
         # Return RicoProfile as production does
         return RicoProfile(user_id=user_id, email=user_id, **updates)
 

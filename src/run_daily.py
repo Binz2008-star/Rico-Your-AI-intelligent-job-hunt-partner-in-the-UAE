@@ -193,6 +193,15 @@ def _notify_users_via_telegram(matches: list) -> None:
     Failures for individual users are logged and swallowed — one bad send must
     not abort the remaining recipients or the pipeline.
     """
+    # Global user-alert kill switch (#1082): scheduled per-user Telegram alerts
+    # are OFF unless explicitly enabled. Distinct from the admin/public bot
+    # flags (RICO_TELEGRAM_PUBLIC_ALERTS) — this gates only the per-user
+    # roster sender while consent enforcement is remediated.
+    enabled = os.getenv("RICO_ENABLE_USER_TELEGRAM_ALERTS", "false").strip().lower() in {"1", "true", "yes", "on"}
+    if not enabled:
+        logger.info("telegram_user_alerts_skipped reason=kill_switch_off (RICO_ENABLE_USER_TELEGRAM_ALERTS)")
+        return
+
     if not matches:
         logger.info("telegram_user_alerts_skipped reason=no_matches")
         return

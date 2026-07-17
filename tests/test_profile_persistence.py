@@ -44,6 +44,27 @@ def _reset_rate_limiter():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _mirror_persistence_mode(monkeypatch):
+    """Run the PATCH endpoint against the repo's mirror path in DB-less envs.
+
+    The durable-write contract (#764) makes PATCH /api/v1/rico/profile pass
+    require_db=True, which correctly fails closed when no database exists. This
+    suite asserts field-merge persistence through the real repo (mirror path in
+    unit-only environments), so the flag is stripped here; the strict
+    fail-closed contract itself is covered by
+    tests/test_764_durable_mutation_truth.py.
+    """
+    import src.api.routers.rico_chat as rico_chat_router
+    from src.repositories.profile_repo import upsert_profile as _real_upsert
+
+    def _upsert_mirror_ok(user_id, updates, **kwargs):
+        kwargs.pop("require_db", None)
+        return _real_upsert(user_id, updates, **kwargs)
+
+    monkeypatch.setattr(rico_chat_router, "upsert_profile", _upsert_mirror_ok)
+
+
 def test_profile_name_persists_through_db():
     """Test that name field persists after upsert and retrieval."""
     user_id = "test_persistence@example.com"

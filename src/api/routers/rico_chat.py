@@ -1334,7 +1334,19 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
 
     profile_for_warnings = None
     if updates:
-        profile_for_warnings = upsert_profile(user_id, updates)
+        # Durable-truth contract (#764): a user-directed profile write must
+        # persist to the canonical DB or fail the request. require_db=True
+        # raises instead of silently falling back to the process-local mirror,
+        # and the mirror is only updated after the DB commit — so a failure
+        # here leaves no phantom state and the client gets a retryable error.
+        try:
+            profile_for_warnings = upsert_profile(user_id, updates, require_db=True)
+        except Exception:
+            logger.exception("profile_update persistence failed user=%s", user_id)
+            raise HTTPException(
+                status_code=503,
+                detail="Profile update could not be saved. Please try again.",
+            )
         confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
             MutationResult(success=True),
             verifier=lambda: _profile_updates_visible(user_id, updates),

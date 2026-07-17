@@ -200,9 +200,10 @@ class TestRicoProfileUpdateRouteExists:
     def test_profile_patch_route_returns_200_and_updates_fields(self, auth_client):
         captured = {}
 
-        def spy_upsert(user_id, updates):
+        def spy_upsert(user_id, updates, **kwargs):
             captured["user_id"] = user_id
             captured["updates"] = updates
+            captured["require_db"] = kwargs.get("require_db")
             return {"ok": True}
 
         payload = {
@@ -235,9 +236,10 @@ class TestRicoProfileUpdateRouteExists:
     def test_profile_patch_route_accepts_name(self, auth_client):
         captured = {}
 
-        def spy_upsert(user_id, updates):
+        def spy_upsert(user_id, updates, **kwargs):
             captured["user_id"] = user_id
             captured["updates"] = updates
+            captured["require_db"] = kwargs.get("require_db")
             return {"ok": True}
 
         with patch("src.api.routers.rico_chat.upsert_profile", side_effect=spy_upsert), \
