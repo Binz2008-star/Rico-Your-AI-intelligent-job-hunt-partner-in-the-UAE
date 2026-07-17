@@ -546,3 +546,54 @@ class TestUploadConfirmResponseSecrecy:
         assert r.status_code == 200
         assert r.json().get("status") == "profile_updated"
         assert sid not in r.text
+
+
+class TestGuestCapabilityCookieHostOnly:
+    """#1070 hardening: the capability cookie must be HOST-ONLY (no Domain), so
+    it is not exposed to *.ricohunt.com subdomains and round-trips on whatever
+    host served it (regression guard for the production-smoke continuity failure
+    caused by a Domain=.ricohunt.com cookie not returning to the backend host)."""
+
+    @staticmethod
+    def _guest_proof_set_cookies(resp) -> list[str]:
+        return [
+            v for k, v in resp.headers.multi_items()
+            if k.lower() == "set-cookie" and v.startswith(f"{GUEST_PROOF_COOKIE}=")
+        ]
+
+    def test_minted_capability_cookie_is_host_only(self):
+        client = TestClient(app)
+        with patch("src.api.routers.rico_chat.chat_service") as mock_chat, patch(
+            "src.api.routers.rico_chat.RicoSessionContext"
+        ) as mock_ctx_cls:
+            _mock_chat(mock_chat)
+            ctx = MagicMock()
+            ctx.user_id = "public:g-hostonly-123"
+            mock_ctx_cls.for_public.return_value = ctx
+            r = client.post(
+                "/api/v1/rico/chat/public",
+                json={"message": "hello", "session_id": "web-anything00001"},
+            )
+        assert r.status_code == 200
+        cookies = self._guest_proof_set_cookies(r)
+        assert len(cookies) == 1, cookies
+        attrs = cookies[0].lower()
+        assert "domain=" not in attrs        # HOST-ONLY: no Domain attribute
+        assert "httponly" in attrs
+        assert "path=/" in attrs
+
+    def test_cleared_capability_cookie_is_host_only(self):
+        client = TestClient(app)
+        client.cookies.set(GUEST_PROOF_COOKIE, "garbage.token")
+        r = client.post(
+            "/api/v1/rico/chat/public",
+            json={"message": "hello", "session_id": "web-anything00001"},
+        )
+        assert r.status_code == 403
+        cookies = self._guest_proof_set_cookies(r)
+        assert len(cookies) == 1, cookies
+        attrs = cookies[0].lower()
+        # The clearing cookie must mirror set() attributes (host-only) so the
+        # browser actually removes it.
+        assert "domain=" not in attrs
+        assert "max-age=0" in attrs or f'{GUEST_PROOF_COOKIE}=""' in cookies[0]

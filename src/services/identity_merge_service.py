@@ -78,6 +78,19 @@ def _merge_lock_key(public_user_id: str) -> int:
     return int(h[:16], 16) % (2**63 - 1)
 
 
+def _redact(public_user_id: str | None) -> str:
+    """Short, non-reversible tag for logs (#1070 hardening).
+
+    The guest ``public_user_id`` embeds the server-minted SID; it is no longer a
+    bearer credential, but per the guest-identity contract raw guest SIDs must
+    never reach logs. Emit a stable hashed tag instead so operators can still
+    correlate events without the SID appearing in plaintext.
+    """
+    if not public_user_id:
+        return "-"
+    return "guest:" + hashlib.sha256(public_user_id.encode("utf-8")).hexdigest()[:12]
+
+
 def is_empty_value(value: Any) -> bool:
     """Return True for None, empty string, empty list, or empty dict."""
     if value is None:
@@ -335,7 +348,7 @@ def merge_public_identity_into_auth(
 
     public_user_id = authoritative_public_id
     if not is_valid_public_user_id(public_user_id):
-        logger.warning("merge_rejected reason=not_public_source public_user_id=%s", public_user_id)
+        logger.warning("merge_rejected reason=not_public_source public_user_id=%s", _redact(public_user_id))
         return False
     if public_user_id == auth_user_id:
         logger.warning("merge_rejected reason=same_user_id")
@@ -360,7 +373,7 @@ def merge_public_identity_into_auth(
                 logger.warning(
                     "merge_rejected reason=concurrent_merge_in_progress "
                     "public_user_id=%s auth_user_id=%s lock_key=%s",
-                    public_user_id, auth_user_id, lock_key,
+                    _redact(public_user_id), auth_user_id, lock_key,
                 )
                 return False
 
@@ -369,7 +382,7 @@ def merge_public_identity_into_auth(
             auth_db_id = _get_db_user_id(cur, auth_user_id)
 
             if not guest_db_id:
-                logger.warning("merge_rejected reason=guest_not_found public_user_id=%s", public_user_id)
+                logger.warning("merge_rejected reason=guest_not_found public_user_id=%s", _redact(public_user_id))
                 return False
             if not auth_db_id:
                 logger.warning("merge_rejected reason=auth_not_found auth_user_id=%s", auth_user_id)
@@ -391,12 +404,12 @@ def merge_public_identity_into_auth(
                 if str(prior_owner) == str(auth_db_id):
                     logger.info(
                         "merge_idempotent_replay public_user_id=%s auth_user_id=%s",
-                        public_user_id, auth_user_id,
+                        _redact(public_user_id), auth_user_id,
                     )
                     return True
                 logger.warning(
                     "merge_rejected reason=already_claimed public_user_id=%s",
-                    public_user_id,
+                    _redact(public_user_id),
                 )
                 return False
 
@@ -440,12 +453,12 @@ def merge_public_identity_into_auth(
                 if owner == str(auth_db_id):
                     logger.info(
                         "merge_idempotent_replay public_user_id=%s auth_user_id=%s",
-                        public_user_id, auth_user_id,
+                        _redact(public_user_id), auth_user_id,
                     )
                     return True
                 logger.warning(
                     "merge_rejected reason=already_claimed public_user_id=%s",
-                    public_user_id,
+                    _redact(public_user_id),
                 )
                 return False
 
@@ -464,7 +477,7 @@ def merge_public_identity_into_auth(
         conn.commit()
         logger.info(
             "merge_success public_user_id=%s auth_user_id=%s",
-            public_user_id,
+            _redact(public_user_id),
             auth_user_id,
         )
         return True
@@ -473,7 +486,7 @@ def merge_public_identity_into_auth(
         conn.rollback()
         logger.exception(
             "merge_failed public_user_id=%s auth_user_id=%s",
-            public_user_id,
+            _redact(public_user_id),
             auth_user_id,
         )
         return False
