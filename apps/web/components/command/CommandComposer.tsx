@@ -357,14 +357,15 @@ export function CommandComposer({
                     )}
                 </div>
 
-                {/* Hint line */}
+                {/* Hint line — ink70, not ink40: on the light workspace paper the
+                    hint must clear WCAG 4.5:1 (e2e command-composer-stability). */}
                 <div
                     className="mt-2 text-center"
                     style={{
                         fontFamily: ATELIER_FONT.mono,
                         fontSize: 10,
                         letterSpacing: isRTL ? 0 : "0.12em",
-                        color: c.ink40,
+                        color: c.ink70,
                     }}
                     aria-hidden="true"
                     data-testid="composer-hint"

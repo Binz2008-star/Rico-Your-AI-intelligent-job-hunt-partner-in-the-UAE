@@ -28,17 +28,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders as render } from "./test-utils";
 
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
-import { COMMAND_ATELIER } from "@/components/command/commandAtelierTheme";
-import { WorkspaceThemeContext, type WorkspacePalette } from "@/components/workspace/theme";
+import { WORKSPACE_THEME, WorkspaceThemeContext, type WorkspacePalette } from "@/components/workspace/theme";
 import type { JobMatch } from "@/lib/api";
 
 function renderCard(match: JobMatch, onAction = vi.fn()) {
-    return renderCardTheme(match, COMMAND_ATELIER.dark, onAction);
+    return renderCardTheme(match, WORKSPACE_THEME.dark, onAction);
 }
 
 function renderCardTheme(
     match: JobMatch,
-    palette: WorkspacePalette = COMMAND_ATELIER.dark,
+    palette: WorkspacePalette = WORKSPACE_THEME.dark,
     onAction = vi.fn(),
 ) {
     render(
@@ -171,16 +170,16 @@ describe("JobMatchCardAtelier MATCH structure", () => {
  * GAP 1 — the authenticated Atelier card must carry the Atelier **sun-red**
  * accent from the workspace palette (`c.red`), NOT the retired `gold` token, on
  * the subcomponents the reviewer flagged: the Verified badge, the fallback
- * focus ring, and the fallback Save action. Verified in BOTH Atelier day
- * (light, #cf3d17) and Atelier at Night (dark, #ee6a3a).
+ * focus ring, and the fallback Save action. Verified in BOTH the shared
+ * workspace light (#C6492E) and dark (#E0895A) palettes.
  *
  * jsdom serializes standard colour props to `rgb()/rgba()` and stores custom
  * properties (`--tw-ring-color`) verbatim — so the ring assertion pins the
  * exact sun-red hex, and the badge/Save assertions pin the sun-red RGB channel.
  */
 describe.each([
-    ["Atelier day (light)", COMMAND_ATELIER.light, "rgb(207, 61, 23)", "#cf3d17"],
-    ["Atelier at Night (dark)", COMMAND_ATELIER.dark, "rgb(238, 106, 58)", "#ee6a3a"],
+    ["workspace light", WORKSPACE_THEME.light, "rgb(198, 73, 46)", "#C6492E"],
+    ["workspace dark", WORKSPACE_THEME.dark, "rgb(224, 137, 90)", "#E0895A"],
 ] as const)("JobMatchCardAtelier accent = Atelier sun-red — %s", (_label, palette, rgb, hex) => {
     // "rgb(207, 61, 23)" → "rgba(207, 61, 23," — the alpha-agnostic channel prefix.
     const channel = rgb.replace("rgb(", "rgba(").replace(")", ",");

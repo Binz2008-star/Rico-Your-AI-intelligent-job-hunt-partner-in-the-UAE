@@ -28,6 +28,55 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260717-001 — `/command` is unified with the shared WorkspaceShell; light-first default, dark by choice (implements DEC-20260716-001 for `/command`)
+
+Status: accepted
+Date: 2026-07-17
+Owner: Roben (owner directive 2026-07-17)
+Related task/PR: TASK-20260717-008 / PR #1145
+
+#### Context
+
+Under DEC-20260716-001, Atelier V3 is the sole product-wide visual system and
+"Atelier at Night" is its dark **mode**. The authenticated `/command` route,
+however, still shipped as a separate island: a copied `COMMAND_ATELIER` palette
+with drifted token values, a `/command`-only **forced-dark default**, bespoke
+canvas layers, and a duplicated top bar re-implementing chrome that every other
+page gets from `WorkspaceShell`. This kept `/command` off the shared token
+source and off the site-wide light-first default.
+
+#### Decision
+
+`/command` composes the shared `WorkspaceShell` (`variant="app"`) and draws all
+core colors from the single `WORKSPACE_THEME` source:
+
+1. **Light-first default, dark by user choice** — `/command` defaults light like
+   every other workspace surface; dark is "Atelier at Night" via the same shared
+   sidebar toggle, not a route-forced default. This retires the `/command`-only
+   forced-dark default aspect of the prior implementation while keeping DEC-001's
+   Atelier V3 / Atelier-at-Night model intact.
+2. **Single token source** — the copied `commandAtelierTheme.ts` is deleted; the
+   reply-surface CSS-var layer is derived from the active shared palette.
+3. **Shared chrome** — sidebar, brand, EN/عربي, and theme toggle come from
+   `WorkspaceShell` (identical to Profile/Applications/Upload/Settings/
+   Subscription). Only genuinely route-scoped controls remain (console status
+   bar, Sessions rail, desktop logout menu).
+
+Scope is visual/system unification only — **zero** chat behavior, endpoint,
+payload, streaming, persistence, auth, or quota change. The Sessions-rail
+position (owner correction 2026-07-16) is preserved. `MobileCommandHeader` /
+`MobileBottomNav` are intentionally out of scope (shared with public/legacy
+surfaces; a separate follow-up).
+
+#### Consequences
+
+- Positive: one coherent product surface; `/command` no longer drifts from the
+  shared palette or the site-wide default; future theme changes propagate.
+- Trade-off: users used to `/command` opening dark now see light first (dark is
+  one shared-toggle click away).
+- Rollback: revert the single PR #1145 commit (restores the copied theme + prior
+  shell); frontend-only, no state/API/config change.
+
 ### DEC-20260716-002 — My Files uses a parsed-record model (Option 2), not raw file storage; deleting a CV purges its grounding
 
 Status: accepted

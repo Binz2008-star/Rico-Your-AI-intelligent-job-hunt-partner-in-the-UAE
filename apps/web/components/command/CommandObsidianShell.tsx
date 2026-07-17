@@ -1,47 +1,44 @@
 "use client";
 
 /**
- * CommandObsidianShell — slice C1 of the Command Obsidian program
- * (owner directive 2026-07-16; canonical source:
- * `design-handoffs/reviewed/2026-07-16-command-obsidian-v4/`).
+ * CommandObsidianShell — /command console chrome, hosted INSIDE the shared
+ * WorkspaceShell (visual-consistency correction, owner directive 2026-07-17).
  *
- * Route-scoped chrome for the AUTHENTICATED `/command` surface only, replacing
- * WorkspaceShell there: the dark operator console — warm-dark canvas with
- * grid grain + sun-red aura, a full-width h-12 top status bar
- * (panel toggles · Rico · workspace eyebrow · compact icon nav · live status ·
- * EN/ع · theme), a collapsible 260px start rail carrying the `leftRail`
- * content (the canonical Sessions position — CommandConversationRail; general
- * app navigation deliberately does NOT occupy it, per the owner's 2026-07-16
- * correction), and a flexible console area whose children (transcript column
- * + CommandRail) come from CommandPage unchanged.
+ * Historically this was a self-contained dark "operator console" with its own
+ * copied palette (COMMAND_ATELIER), its own top bar duplicating the brand,
+ * nav, language and theme controls, and scoped grain/aura canvas layers — so
+ * /command read as a separate product from the rest of the workspace. It now
+ * composes `WorkspaceShell variant="app"`: the sidebar, navigation, EN/عربي
+ * and light/dark controls, palette (WORKSPACE_THEME) and light-first default
+ * are byte-identical to Profile / Applications / Upload / Settings /
+ * Subscription. Dark stays a user choice via the shared sidebar toggle — it is
+ * no longer a /command-only forced default.
  *
- * Theme delivery: provides COMMAND_ATELIER (Atelier re-skin, DEC-20260716-001;
- * replaces the historical Obsidian acid-lime palette) through the existing
- * WorkspaceThemeContext, so every merged 4a–4e surface (composer, message
- * rows, state cards, right rail, MissionContextBar) repaints with zero
- * component changes. Local light/dark island, dark ("Atelier at Night") first —
- * the global Nocturne ThemeContext is never touched, and no global
- * `:root`/`body` styling is added (the prototype's body::before/::after
- * texture is re-implemented here as scoped, pointer-events-none layers).
+ * What remains route-scoped (this file) is only what /command genuinely needs:
+ *  - a slim console bar (lg+): Sessions/shortlist panel toggles, the live
+ *    READY / WORKING / REPLYING status, and the desktop account/logout menu
+ *    (WorkspaceShell has no logout control);
+ *  - the collapsible 260px Sessions rail (`leftRail` —
+ *    CommandConversationRail);
+ *  - the Atelier editorial token layer: Tailwind utilities used by the reply
+ *    surface (RicoReply / RicoUserBubble / RicoThinking — bg-ink, text-paper,
+ *    border-rule, from-ink/50 …) resolve through CSS vars emitted here from
+ *    the ACTIVE shared workspace palette, so both modes stay automatic with
+ *    zero duplicated color values.
  *
  * Desktop (lg+) chrome only, matching the surface it replaces: below lg the
- * page keeps MobileCommandHeader + MobileBottomNav exactly as before (they
- * still render at all widths for chat behavior parity — this shell's bars are
- * hidden below lg). Mobile drawer parity is slice C6.
+ * page keeps MobileCommandHeader + MobileBottomNav exactly as before.
  *
  * ZERO chat-behavior change: no handler, message, streaming, attachment,
  * safety, or API code lives here.
  */
 
-import { atelierFraunces } from "@/components/atelier-kit/fonts";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
-import { COMMAND_ATELIER } from "@/components/command/commandAtelierTheme";
-import { WORKSPACE_NAV } from "@/components/workspace/WorkspaceShell";
-import { WorkspaceThemeContext } from "@/components/workspace/theme";
+import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
+import { WORKSPACE_THEME, useWorkspaceTheme } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const EYEBROW: React.CSSProperties = {
@@ -51,19 +48,38 @@ const EYEBROW: React.CSSProperties = {
     letterSpacing: "0.22em",
 };
 
-/* Atelier editorial token layer (slice C3): the reply surface (RicoReply /
-   RicoUserBubble / RicoThinking) styles through Tailwind utilities backed by
-   CSS vars — `rgb(var(--ink) / <alpha-value>)` — so alpha modifiers such as
-   from-ink/50 resolve. We therefore emit the vars as "r g b" channels derived
-   from the JS palette (the single source of truth) rather than hex, keeping
-   light / "Atelier at Night" automatic with zero duplicated color values.
-   The 7 palette slots consumed here are always 6-digit hex in COMMAND_ATELIER. */
-function hexChannels(hex: string): string {
-    const h = hex.replace("#", "").trim();
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    return `${r} ${g} ${b}`;
+/* Atelier editorial token layer: the reply surface styles through Tailwind
+   utilities backed by CSS vars — `rgb(var(--ink) / <alpha-value>)`. The shared
+   WORKSPACE_THEME expresses its soft shades as rgba() strings, so translucent
+   tokens are composited over the page background to flat "r g b" channels
+   (visually identical, and alpha modifiers like from-ink/50 keep working). */
+function parseColor(color: string): { r: number; g: number; b: number; a: number } | null {
+    const hex = color.trim().match(/^#([0-9a-f]{6})$/i);
+    if (hex) {
+        const h = hex[1];
+        return {
+            r: parseInt(h.slice(0, 2), 16),
+            g: parseInt(h.slice(2, 4), 16),
+            b: parseInt(h.slice(4, 6), 16),
+            a: 1,
+        };
+    }
+    const fn = color
+        .trim()
+        .match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i);
+    if (fn) {
+        return { r: +fn[1], g: +fn[2], b: +fn[3], a: fn[4] === undefined ? 1 : +fn[4] };
+    }
+    return null;
+}
+
+function channels(color: string, over: string): string {
+    const fg = parseColor(color);
+    if (!fg) return "0 0 0";
+    const bg = parseColor(over);
+    if (fg.a >= 1 || !bg) return `${fg.r} ${fg.g} ${fg.b}`;
+    const mix = (f: number, b: number) => Math.round(fg.a * f + (1 - fg.a) * b);
+    return `${mix(fg.r, bg.r)} ${mix(fg.g, bg.g)} ${mix(fg.b, bg.b)}`;
 }
 
 /* Canonical top-bar panel glyphs (PanelLeft / PanelRight, 1.6px strokes). */
@@ -87,21 +103,11 @@ function PanelIcon({ side }: { side: "start" | "end" }) {
     );
 }
 
-export function CommandObsidianShell({
-    children,
-    leftRail,
-    busy = false,
-    replying = false,
-    leftOpen = true,
-    rightOpen = true,
-    onToggleLeft,
-    onToggleRight,
-    onLogout,
-}: {
+export function CommandObsidianShell(props: {
     children: React.ReactNode;
     /** Content of the start rail — the canonical Sessions position. */
     leftRail?: React.ReactNode;
-    /** True while Rico is thinking/streaming — drives the top-bar status. */
+    /** True while Rico is thinking/streaming — drives the console status. */
     busy?: boolean;
     /** A streamed reply is actively rendering (slice C2) — REPLYING status. */
     replying?: boolean;
@@ -112,12 +118,31 @@ export function CommandObsidianShell({
     /** Called when the user clicks Log out in the desktop account menu. */
     onLogout?: () => void;
 }) {
-    const { language, setLanguage } = useLanguage();
+    return (
+        <WorkspaceShell variant="app">
+            <CommandConsole {...props} />
+        </WorkspaceShell>
+    );
+}
+
+function CommandConsole({
+    children,
+    leftRail,
+    busy = false,
+    replying = false,
+    leftOpen = true,
+    rightOpen = true,
+    onToggleLeft,
+    onToggleRight,
+    onLogout,
+}: Parameters<typeof CommandObsidianShell>[0]) {
+    const { language } = useLanguage();
     const t = useTranslation(language);
-    const pathname = usePathname();
     const isAr = language === "ar";
-    const [dark, setDark] = useState(true); // "Atelier at Night" default
-    const c = dark ? COMMAND_ATELIER.dark : COMMAND_ATELIER.light;
+    const c = useWorkspaceTheme();
+    // The shared shell owns the light/dark island; infer the active mode for
+    // the data attribute consumers (tests, debugging) key off.
+    const dark = c.bg === WORKSPACE_THEME.dark.bg;
 
     const [accountOpen, setAccountOpen] = useState(false);
     const accountRef = useRef<HTMLDivElement>(null);
@@ -138,54 +163,30 @@ export function CommandObsidianShell({
             data-obsidian-mode={dark ? "dark" : "light"}
             dir={isAr ? "rtl" : "ltr"}
             lang={language}
-            className={`relative flex h-[100dvh] min-h-0 flex-col overflow-hidden ${atelierFraunces.variable}`}
+            className="relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
             style={{
                 background: c.bg,
                 color: c.ink,
-                fontFamily: ATELIER_FONT.body,
                 colorScheme: dark ? "dark" : "light",
-                // Atelier editorial token layer — derived from the JS palette so
-                // the reply surface (RicoReply/RicoUserBubble/RicoThinking) and any
-                // bg-ink/text-paper/border-rule/from-ink/50 utilities resolve.
-                ["--ink" as string]: hexChannels(c.ink),
-                ["--ink-soft" as string]: hexChannels(c.ink70),
-                ["--ink-mute" as string]: hexChannels(c.ink55),
-                ["--paper" as string]: hexChannels(c.bg),
-                ["--paper-2" as string]: hexChannels(c.panel),
-                ["--rule" as string]: hexChannels(c.hair),
-                ["--sun" as string]: hexChannels(c.red),
+                // Atelier editorial token layer — derived from the shared
+                // workspace palette so the reply surface and any bg-ink /
+                // text-paper / border-rule / from-ink/50 utilities resolve.
+                ["--ink" as string]: channels(c.ink, c.bg),
+                ["--ink-soft" as string]: channels(c.ink70, c.bg),
+                ["--ink-mute" as string]: channels(c.ink55, c.bg),
+                ["--paper" as string]: channels(c.bg, c.bg),
+                ["--paper-2" as string]: channels(c.panel, c.bg),
+                ["--rule" as string]: channels(c.hair, c.bg),
+                ["--sun" as string]: channels(c.red, c.bg),
             } as React.CSSProperties}
         >
-            {/* ── Scoped canvas layers (canonical body::before/::after, route-local) ── */}
-            <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 z-0"
-                style={{
-                    opacity: 0.05,
-                    backgroundImage: `linear-gradient(to right, ${c.ink55} 1px, transparent 1px), linear-gradient(to bottom, ${c.ink55} 1px, transparent 1px)`,
-                    backgroundSize: "64px 64px",
-                    maskImage: "radial-gradient(ellipse at 50% 30%, black 30%, transparent 75%)",
-                    WebkitMaskImage: "radial-gradient(ellipse at 50% 30%, black 30%, transparent 75%)",
-                }}
-            />
-            <div
-                aria-hidden="true"
-                className="pointer-events-none absolute left-1/2 z-0 -translate-x-1/2"
-                style={{
-                    top: "-20vh",
-                    width: "90vw",
-                    height: "60vh",
-                    opacity: dark ? 0.2 : 0.08,
-                    background: `radial-gradient(ellipse at center, ${c.red} 0%, transparent 60%)`,
-                    filter: "blur(60px)",
-                }}
-            />
-
-            {/* ── Top status bar (lg+; mobile keeps MobileCommandHeader) ── */}
+            {/* ── Console bar (lg+; mobile keeps MobileCommandHeader). Brand, nav,
+                language and theme controls live in the shared workspace sidebar —
+                only command-specific controls remain here. ── */}
             <header
                 data-testid="command-obsidian-topbar"
-                className="relative z-20 hidden h-12 shrink-0 items-center gap-3 px-4 backdrop-blur md:px-6 lg:flex"
-                style={{ background: `${c.bg}D9`, borderBottom: `1px solid ${c.hair}` }}
+                className="relative z-20 hidden h-11 shrink-0 items-center gap-3 px-4 md:px-6 lg:flex"
+                style={{ background: c.rail, borderBottom: `1px solid ${c.hair}` }}
             >
                 <button
                     type="button"
@@ -197,37 +198,9 @@ export function CommandObsidianShell({
                 >
                     <PanelIcon side="start" />
                 </button>
-                <Link
-                    href="/dashboard"
-                    className="text-[15px] leading-none tracking-tight"
-                    style={{ color: c.ink, fontFamily: ATELIER_FONT.serif, textDecoration: "none" }}
-                >
-                    Rico
-                </Link>
                 <span className="hidden sm:inline" style={{ ...EYEBROW, color: c.ink55, letterSpacing: isAr ? "0.04em" : "0.22em" }}>
                     {t("cmdWorkspaceTag")}
                 </span>
-                {/* Compact icon nav — general app navigation relocated out of the
-                    Sessions rail position (owner correction 2026-07-16). */}
-                <nav aria-label={t("cmdNavRailTitle")} className="ms-3 flex items-center gap-0.5" data-testid="command-obsidian-topnav">
-                    {WORKSPACE_NAV.map((item) => {
-                        const active = pathname === item.href || pathname.startsWith(item.href + "/");
-                        const label = isAr ? item.label.ar : item.label.en;
-                        return (
-                            <Link
-                                key={item.key}
-                                href={item.href}
-                                aria-label={label}
-                                title={label}
-                                aria-current={active ? "page" : undefined}
-                                className="obs-ghost inline-flex items-center justify-center rounded-md p-1.5"
-                                style={{ color: active ? c.red : c.ink55 }}
-                            >
-                                {item.icon}
-                            </Link>
-                        );
-                    })}
-                </nav>
                 <span
                     data-testid="command-obsidian-status"
                     className="ms-auto flex items-center gap-2"
@@ -240,42 +213,9 @@ export function CommandObsidianShell({
                     />
                     {replying ? t("cmdStatusReplying") : busy ? t("cmdStatusWorking") : t("cmdStatusReady")}
                 </span>
-                <span className="ms-2 inline-flex items-center overflow-hidden rounded-[3px]" style={{ border: `1px solid ${c.hair}` }}>
-                    <button
-                        type="button"
-                        onClick={() => setLanguage("en")}
-                        aria-pressed={!isAr}
-                        style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10, padding: "3px 7px", background: !isAr ? c.ink : "transparent", color: !isAr ? c.bg : c.ink55, border: "none", cursor: "pointer" }}
-                    >
-                        EN
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setLanguage("ar")}
-                        aria-pressed={isAr}
-                        style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10, padding: "3px 7px", background: isAr ? c.ink : "transparent", color: isAr ? c.bg : c.ink55, border: "none", cursor: "pointer" }}
-                    >
-                        عربي
-                    </button>
-                </span>
-                <button
-                    type="button"
-                    onClick={() => setDark((v) => !v)}
-                    aria-pressed={dark}
-                    aria-label={dark ? (isAr ? "الوضع الفاتح" : "Light mode") : (isAr ? "الوضع الداكن" : "Dark mode")}
-                    className="obs-ghost inline-flex items-center justify-center rounded-md"
-                    style={{ width: 28, height: 24, border: `1px solid ${c.hair}`, color: c.ink70, background: "transparent", cursor: "pointer" }}
-                >
-                    {dark ? (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
-                    ) : (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
-                    )}
-                </button>
-                {/* Compact account menu — desktop logout control (hotfix for
-                    authenticated desktop having no Logout after CommandObsidianShell
-                    replaced WorkspaceShell chrome). Reuses the existing handleLogout
-                    passed via onLogout; no duplicated auth/token-clearing logic. */}
+                {/* Compact account menu — desktop logout control (WorkspaceShell has
+                    no logout). Reuses the existing handleLogout passed via onLogout;
+                    no duplicated auth/token-clearing logic. */}
                 {onLogout && (
                     <div className="relative ms-2" ref={accountRef} data-testid="command-obsidian-account">
                         <button
@@ -296,7 +236,7 @@ export function CommandObsidianShell({
                             <div
                                 role="menu"
                                 className="absolute end-0 top-[calc(100%+4px)] z-50 w-44 rounded-lg py-1"
-                                style={{ background: c.panel, border: `1px solid ${c.hair}`, boxShadow: "0 8px 24px rgba(0,0,0,0.35)" }}
+                                style={{ background: c.panel, border: `1px solid ${c.hair}`, boxShadow: dark ? "0 8px 24px rgba(0,0,0,0.35)" : "0 8px 24px rgba(31,27,21,0.12)" }}
                                 data-testid="command-obsidian-account-menu"
                             >
                                 <Link
@@ -347,25 +287,20 @@ export function CommandObsidianShell({
                 </button>
             </header>
 
-            {/* ── Console body: start rail · children (transcript + right rail) ──
-                The palette provider wraps BOTH the left rail and the main area so
-                every consumer (conversation rail, composer, messages, right rail)
-                reads the same Obsidian palette. */}
-            <WorkspaceThemeContext.Provider value={c}>
-                <div className="relative z-10 flex min-h-0 flex-1">
-                    <aside
-                        data-testid="command-obsidian-leftrail"
-                        className={`${leftOpen ? "lg:flex lg:w-[260px]" : "lg:w-0"} hidden shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
-                        style={{ borderInlineEnd: leftOpen ? `1px solid ${c.hair}` : "none", background: `${c.rail}99` }}
-                    >
-                        {leftRail}
-                    </aside>
+            {/* ── Console body: start rail · children (transcript + right rail) ── */}
+            <div className="relative z-10 flex min-h-0 flex-1">
+                <aside
+                    data-testid="command-obsidian-leftrail"
+                    className={`${leftOpen ? "lg:flex lg:w-[260px]" : "lg:w-0"} hidden shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
+                    style={{ borderInlineEnd: leftOpen ? `1px solid ${c.hair}` : "none", background: c.rail }}
+                >
+                    {leftRail}
+                </aside>
 
-                    <main className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
-                        {children}
-                    </main>
-                </div>
-            </WorkspaceThemeContext.Provider>
+                <main className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+                    {children}
+                </main>
+            </div>
 
             <style dangerouslySetInnerHTML={{
                 __html: `

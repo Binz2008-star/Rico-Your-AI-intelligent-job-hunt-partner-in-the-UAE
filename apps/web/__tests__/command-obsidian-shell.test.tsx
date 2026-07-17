@@ -1,25 +1,25 @@
 /**
- * CommandObsidianShell — slice C1 unit contracts.
+ * CommandObsidianShell — console chrome hosted inside the shared WorkspaceShell
+ * (visual-consistency correction 2026-07-17).
  *
- *  1. Dark "Atelier at Night" default: shell reports dark mode and provides the
- *     COMMAND_ATELIER.dark palette through WorkspaceThemeContext (accent slot
- *     carries the Atelier sun-red `#ee6a3a`), so 4a–4e children repaint with no
- *     component changes.
- *  2. Top bar: brand, workspace eyebrow, live status (READY idle / WORKING
- *     while busy), panel toggles wired to the callbacks.
- *  3. Compact top-bar nav: shared WORKSPACE_NAV links render as icon links
- *     (general navigation does NOT occupy the Sessions rail position — owner
- *     correction 2026-07-16); /command is current page. The start rail renders
- *     the injected `leftRail` content; leftOpen=false collapses its width.
- *  4. Theme toggle flips to the light "Obsidian at dawn" palette.
- *  5. Arabic: dir=rtl + lang=ar on the root.
- *  6. Route-scoping: no global body/root mutation — canvas layers live inside
- *     the shell subtree.
+ *  1. LIGHT default matching every other workspace route: the shell reports
+ *     light mode and provides WORKSPACE_THEME.light through
+ *     WorkspaceThemeContext, so 4a–4e children repaint with no component
+ *     changes. No forced-dark Obsidian island.
+ *  2. Console bar: live status (READY idle / WORKING while busy), panel
+ *     toggles wired to the callbacks.
+ *  3. Navigation comes from the shared WorkspaceShell sidebar (same
+ *     WORKSPACE_NAV as Profile/Applications/Upload/Settings); /command is the
+ *     current page. The start rail renders the injected `leftRail` content;
+ *     leftOpen=false collapses its width.
+ *  4. The shared sidebar theme toggle flips to WORKSPACE_THEME.dark — dark is
+ *     a user option from the same theme system, not a /command default.
+ *  5. Arabic: dir=rtl + lang=ar on the console root.
+ *  6. Route-scoping: no global body/root mutation.
  */
 
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
-import { COMMAND_ATELIER } from "@/components/command/commandAtelierTheme";
-import { useWorkspaceTheme } from "@/components/workspace/theme";
+import { WORKSPACE_THEME, useWorkspaceTheme } from "@/components/workspace/theme";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -51,16 +51,16 @@ beforeEach(() => {
 });
 
 describe("CommandObsidianShell (slice C1)", () => {
-    it("defaults to Atelier at Night and provides the atelier palette to children", () => {
+    it("defaults to the shared workspace LIGHT palette like every other route", () => {
         render(
             <CommandObsidianShell>
                 <PaletteProbe />
             </CommandObsidianShell>,
         );
-        expect(screen.getByTestId("command-obsidian-shell")).toHaveAttribute("data-obsidian-mode", "dark");
+        expect(screen.getByTestId("command-obsidian-shell")).toHaveAttribute("data-obsidian-mode", "light");
         const probe = screen.getByTestId("palette-probe");
-        expect(probe).toHaveAttribute("data-accent", COMMAND_ATELIER.dark.red); // #ee6a3a
-        expect(probe).toHaveAttribute("data-bg", COMMAND_ATELIER.dark.bg); // #16130e
+        expect(probe).toHaveAttribute("data-accent", WORKSPACE_THEME.light.red); // #C6492E
+        expect(probe).toHaveAttribute("data-bg", WORKSPACE_THEME.light.bg); // #F1EADD
     });
 
     it("shows the idle status when not busy and the working status while busy", () => {
@@ -92,13 +92,10 @@ describe("CommandObsidianShell (slice C1)", () => {
         expect(screen.getByTestId("command-obsidian-leftrail").className).toContain("lg:w-0");
     });
 
-    it("renders the shared workspace nav as compact top-bar icons, /command current", () => {
+    it("renders the shared WorkspaceShell sidebar nav, /command current", () => {
         render(<CommandObsidianShell>x</CommandObsidianShell>);
-        const topnav = screen.getByTestId("command-obsidian-topnav");
-        expect(topnav).toBeInTheDocument();
         const command = screen.getByRole("link", { name: /command/i });
         expect(command).toHaveAttribute("aria-current", "page");
-        expect(topnav).toContainElement(command);
         expect(screen.getByRole("link", { name: /profile/i })).toHaveAttribute("href", "/profile");
         expect(screen.getByRole("link", { name: /applications/i })).toHaveAttribute("href", "/applications");
         expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute("href", "/settings");
@@ -115,15 +112,15 @@ describe("CommandObsidianShell (slice C1)", () => {
         );
     });
 
-    it("theme toggle flips to the light 'Atelier day' palette", () => {
+    it("shared sidebar theme toggle flips to the workspace dark palette", () => {
         render(
             <CommandObsidianShell>
                 <PaletteProbe />
             </CommandObsidianShell>,
         );
-        fireEvent.click(screen.getByLabelText("Light mode"));
-        expect(screen.getByTestId("command-obsidian-shell")).toHaveAttribute("data-obsidian-mode", "light");
-        expect(screen.getByTestId("palette-probe")).toHaveAttribute("data-accent", COMMAND_ATELIER.light.red);
+        fireEvent.click(screen.getByLabelText("Dark mode"));
+        expect(screen.getByTestId("command-obsidian-shell")).toHaveAttribute("data-obsidian-mode", "dark");
+        expect(screen.getByTestId("palette-probe")).toHaveAttribute("data-accent", WORKSPACE_THEME.dark.red);
     });
 
     it("mirrors Arabic onto the root (dir=rtl, lang=ar)", () => {

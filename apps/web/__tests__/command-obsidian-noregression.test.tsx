@@ -363,15 +363,16 @@ describe("C1 no-regression — real CommandPage over network fixtures", () => {
         await waitFor(() => expect(shell).toHaveAttribute("dir", "ltr"));
     });
 
-    it("theme toggle flips between Obsidian night and dawn", async () => {
+    it("theme toggle flips between workspace light (default) and dark", async () => {
         await mountAuthenticated();
         const shell = screen.getByTestId("command-obsidian-shell");
-        expect(shell).toHaveAttribute("data-obsidian-mode", "dark");
-
-        fireEvent.click(screen.getByLabelText("Light mode"));
+        // Light-first like every other workspace route; dark is a user option.
         expect(shell).toHaveAttribute("data-obsidian-mode", "light");
+
         fireEvent.click(screen.getByLabelText("Dark mode"));
         expect(shell).toHaveAttribute("data-obsidian-mode", "dark");
+        fireEvent.click(screen.getByLabelText("Light mode"));
+        expect(shell).toHaveAttribute("data-obsidian-mode", "light");
     });
 
     it("history-load failure surfaces truthfully in the conversation rail (welcome fallback unchanged)", async () => {

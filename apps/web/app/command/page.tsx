@@ -2430,16 +2430,17 @@ export default function CommandPage() {
 }
 
 /**
- * Command chrome — PR 3 of the Atelier program; re-skinned by slice C1 of the
- * Command Obsidian program (owner directive 2026-07-16).
+ * Command chrome — visual-consistency correction (owner directive 2026-07-17).
  *
  * Public/guest keeps the approved reference chrome untouched (top bar +
  * chat column; no sidebar — matches the design-reference screenshots).
  * Authenticated (and the transient "checking" state, so auth resolution
- * causes no layout jump) lives in the route-scoped CommandObsidianShell:
- * warm-dark canvas, top status bar, collapsible 260px nav rail, and the
- * COMMAND_ATELIER palette (Atelier re-skin, DEC-20260716-001) delivered
- * through the same workspace-theme context the 4a–4e surfaces already consume.
+ * causes no layout jump) lives in CommandObsidianShell, which now composes
+ * the shared WorkspaceShell: same sidebar, WORKSPACE_THEME palette, light
+ * default and user dark toggle as every other workspace route, plus the
+ * /command-only console bar (status, panel toggles, account menu) and the
+ * collapsible 260px Sessions rail — all delivered through the same
+ * workspace-theme context the 4a–4e surfaces already consume.
  * Chat behavior, streaming, attachments, safety, and EN/AR are untouched.
  */
 function CommandChrome({
