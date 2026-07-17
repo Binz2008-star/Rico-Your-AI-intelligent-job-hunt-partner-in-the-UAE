@@ -1,0 +1,26 @@
+name: Workflow Security Guards
+
+# #1084: static CI guards over .github/workflows — rejects secret-like
+# workflow_dispatch inputs, mutable branch action refs, privileged workflows
+# without least-privilege permissions, and unprotected destructive provider
+# jobs. Full commit-SHA action pinning is tracked separately in #127.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    name: workflow-security-guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --quiet pyyaml
+      - name: Run #1084 workflow security guards
+        run: python scripts/check_workflow_security.py

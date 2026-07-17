@@ -1,21 +1,34 @@
 name: Render Optimization Audit
 
+# #1084: READ-ONLY audit of the Render account. The credential comes ONLY from
+# the environment-scoped RENDER_API_KEY secret (no dispatch input — dispatch
+# inputs are not a secret transport) and the job fails closed when it is
+# absent. Any mutation lives in the separate, approval-gated cleanup workflow.
 on:
   workflow_dispatch:
-    inputs:
-      render_api_key:
-        description: 'Render API Key override (leave blank to use stored secret)'
-        required: false
+
+permissions:
+  contents: read
 
 jobs:
   audit:
-    name: Render Optimization Audit
+    name: Render Optimization Audit (read-only)
     runs-on: ubuntu-latest
+    # Protected environment = approval boundary + environment-scoped secret.
+    environment: production
     env:
-      RENDER_KEY: ${{ github.event.inputs.render_api_key || secrets.RENDER_API_KEY }}
+      RENDER_KEY: ${{ secrets.RENDER_API_KEY }}
       BACKEND_URL: https://rico-job-automation-api.onrender.com
 
     steps:
+      - name: 0. Fail closed without the environment secret
+        run: |
+          if [ -z "$RENDER_KEY" ]; then
+            echo "::error::RENDER_API_KEY is not configured on the production environment — refusing to run (fail closed, no network calls made)"
+            exit 1
+          fi
+          echo "Credential present (environment-scoped secret)."
+
       - name: 1. List all services
         run: |
           echo "=== ALL RENDER SERVICES ==="
@@ -69,7 +82,8 @@ jobs:
           try:
               data = json.loads(raw)
           except Exception:
-              print("Raw response:", raw[:500])
+              # #1084: never print an authenticated response body.
+              print("Unparseable authenticated response (body suppressed).")
               sys.exit(0)
           s = data.get("service", data)
           sd = s.get("serviceDetails", {}) or {}
@@ -108,10 +122,11 @@ jobs:
           try:
               data = json.loads(raw)
           except Exception:
-              print("Raw response:", raw[:300])
+              # #1084: never print an authenticated response body.
+              print("Unparseable authenticated response (body suppressed).")
               sys.exit(0)
           if not isinstance(data, list):
-              print("Unexpected response format:", type(data).__name__, str(data)[:300])
+              print("Unexpected response format:", type(data).__name__, "(body suppressed)")
               sys.exit(0)
           keys = sorted(e.get("envVar", e).get("key", "") for e in data)
           print("Total env vars:", len(keys))
@@ -123,6 +138,7 @@ jobs:
               "RAPIDAPI_KEY", "GITHUB_WEBHOOK_SECRET",
               "COOKIE_SECURE", "CORS_ORIGINS", "RESET_BASE_URL",
               "RICO_AI_PROVIDER", "RICO_ENV",
+              "GUEST_CAPABILITY_SECRET",
           ]
           print("")
           print("Critical key presence:")
@@ -147,10 +163,11 @@ jobs:
           try:
               data = json.loads(raw)
           except Exception:
-              print("Raw response:", raw[:300])
+              # #1084: never print an authenticated response body.
+              print("Unparseable authenticated response (body suppressed).")
               sys.exit(0)
           if not isinstance(data, list):
-              print("Unexpected:", str(data)[:300])
+              print("Unexpected response format (body suppressed).")
               sys.exit(0)
           print("Last", len(data), "deploys:")
           for d in data:
@@ -268,8 +285,9 @@ jobs:
               for item in data:
                   o = item.get("owner", item)
                   print("Owner:", o.get("name"), "| type=" + str(o.get("type")), "| id=" + str(o.get("id")))
-          except Exception as e:
-              print("Could not parse owners response:", e)
+          except Exception:
+              # #1084: never print an authenticated response body.
+              print("Unparseable authenticated response (body suppressed).")
           PYEOF
 
       - name: 11. Summary
@@ -298,3 +316,4 @@ jobs:
           echo "Vercel proxy: https://ricohunt.com/proxy/* -> $BACKEND_URL/*"
           echo ""
           echo "Note: 'suspended (idle)' is normal for Starter plan — service wakes on first request."
+          echo "Note: this workflow is READ-ONLY (#1084). Mutations live in render-cleanup2.yml behind environment approval."
