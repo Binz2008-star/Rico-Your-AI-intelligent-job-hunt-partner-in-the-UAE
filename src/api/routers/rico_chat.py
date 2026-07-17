@@ -41,7 +41,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.api.admin_guard import require_admin_user
 from src.api.deps import get_current_user, get_current_user_id
-from src.log_privacy import safe_fields, user_ref
+from src.log_privacy import safe_exc, safe_fields, user_ref
 from src.api.public_identity import (
     is_safe_public_session_id,
     is_valid_public_user_id,
@@ -690,12 +690,11 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception(
-            "chat_error user=%s message_len=%d error_type=%s error=%s request_ref=%s",
-            ctx.user_id if "ctx" in locals() else "unknown",
+        logger.error(
+            "chat_error user=%s message_len=%d err=%s request_ref=%s",
+            user_ref(ctx.user_id if "ctx" in locals() else "unknown"),
             len(payload.message) if "payload" in locals() else 0,
-            type(exc).__name__,
-            str(exc) or repr(exc),
+            safe_exc(exc),
             request_ref,
         )
         _metrics.record_request((time.time() - start_time) * 1000)
@@ -803,8 +802,14 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                 if assembled:
                     try:
                         api._append_chat(user_id, "assistant", assembled)
-                    except Exception:
-                        logger.debug("chat_stream: assistant persist failed user=%s", user_id, exc_info=True)
+                    except Exception as e:
+                        # #1076 delta: user_ref + exception TYPE only — the
+                        # guest bearer id and driver messages embedding chat
+                        # text must never reach logs (tracebacks included).
+                        logger.debug(
+                            "chat_stream: assistant persist failed user=%s err=%s",
+                            user_ref(user_id), safe_exc(e),
+                        )
 
             done_response = {"message": assembled, "type": "conversational", "response_source": "stream"}
             if (
@@ -817,8 +822,8 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                 if pre.gate.limit is not None:
                     done_response["messages_limit"] = pre.gate.limit
             yield f'data: {_json.dumps({"type":"done","response":done_response})}\n\n'
-        except Exception:
-            logger.exception("chat_stream_error user=%s", user_id)
+        except Exception as e:
+            logger.error("chat_stream_error user=%s err=%s", user_ref(user_id), safe_exc(e))
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
 
     return StreamingResponse(
@@ -949,12 +954,17 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
                 if assembled:
                     try:
                         api._append_chat(user_id, "assistant", assembled)
-                    except Exception:
-                        logger.debug("chat_stream_public: assistant persist failed user=%s", user_id, exc_info=True)
+                    except Exception as e:
+                        # #1076 delta: user_id here is the PUBLIC session
+                        # bearer id — ref + exception type only.
+                        logger.debug(
+                            "chat_stream_public: assistant persist failed user=%s err=%s",
+                            user_ref(user_id), safe_exc(e),
+                        )
 
             yield f'data: {_json.dumps({"type":"done","response":{"message":assembled,"type":"conversational","response_source":"stream"}})}\n\n'
-        except Exception:
-            logger.exception("chat_stream_public_error user=%s", user_id)
+        except Exception as e:
+            logger.error("chat_stream_public_error user=%s err=%s", user_ref(user_id), safe_exc(e))
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
 
     streaming_response = StreamingResponse(
@@ -1136,12 +1146,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest, response:
         _metrics.record_request((time.time() - start_time) * 1000)
         raise
     except Exception as exc:
-        logger.exception(
-            "chat_public_error user=%s message_len=%d error_type=%s error=%s request_ref=%s",
-            ctx.user_id if "ctx" in locals() else "unknown",
+        logger.error(
+            "chat_public_error user=%s message_len=%d err=%s request_ref=%s",
+            user_ref(ctx.user_id if "ctx" in locals() else "unknown"),
             len(payload.message) if "payload" in locals() else 0,
-            type(exc).__name__,
-            str(exc) or repr(exc),
+            safe_exc(exc),
             request_ref,
         )
         _metrics.record_request((time.time() - start_time) * 1000)
@@ -1407,8 +1416,13 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         # here leaves no phantom state and the client gets a retryable error.
         try:
             profile_for_warnings = upsert_profile(user_id, updates, require_db=True)
-        except Exception:
-            logger.exception("profile_update persistence failed user=%s", user_id)
+        except Exception as e:
+            # #1076 delta: no raw id, no traceback — psycopg2 error strings can
+            # re-emit the bound profile values this endpoint just tried to save.
+            logger.error(
+                "profile_update persistence failed user=%s err=%s",
+                user_ref(user_id), safe_exc(e),
+            )
             raise HTTPException(
                 status_code=503,
                 detail="Profile update could not be saved. Please try again.",
@@ -1428,7 +1442,7 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
             )
         logger.info("profile_update user=%s %s", user_ref(user_id), safe_fields(updates))
     else:
-        logger.warning("profile_update no fields user=%s", user_id)
+        logger.warning("profile_update no fields user=%s", user_ref(user_id))
         profile_for_warnings = get_profile(user_id)
 
     matching_fields_updated = bool({"target_roles", "preferred_cities"} & updates.keys())
@@ -1811,9 +1825,10 @@ async def rico_upload_cv(
             else:
                 raise TypeError(f"Unexpected CV parser result type: {type(parsed_raw)}")
         except Exception as exc:
-            logger.exception(
-                "cv_upload_parse_error ref=%s user=%s filename=%s bytes=%d error=%s",
-                request_ref, resolved_user_id, safe_name, len(data), str(exc),
+            logger.error(
+                "cv_upload_parse_error ref=%s user=%s filename_len=%d bytes=%d err=%s",
+                request_ref, user_ref(resolved_user_id), len(safe_name or ""),
+                len(data), safe_exc(exc),
             )
             # Use shared parse-quality contract to determine specific failure type
             from src.cv_parse_quality import validate_parse_quality, ParseOutcome
@@ -1999,11 +2014,11 @@ async def rico_upload_cv(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception(
-            "cv_upload_error user=%s filename=%s error=%s request_ref=%s",
-            resolved_user_id,
-            safe_name if "safe_name" in locals() else "unknown",
-            str(exc),
+        logger.error(
+            "cv_upload_error user=%s filename_len=%d err=%s request_ref=%s",
+            user_ref(resolved_user_id),
+            len(safe_name) if "safe_name" in locals() else 0,
+            safe_exc(exc),
             request_ref,
         )
         _metrics.record_request((time.time() - start_time) * 1000)
@@ -2234,9 +2249,9 @@ async def confirm_cv_profile(
                 # NEVER swallowed (the #975 blocker): fail the confirm with a
                 # non-2xx BEFORE any profile/onboarding mutation. No false
                 # success, no "CV saved" claim, no onboarding completion.
-                logger.exception(
-                    "cv_confirm_doc_save_failed user=%s error=%s request_ref=%s",
-                    resolved_user_id, str(_doc_exc), request_ref,
+                logger.error(
+                    "cv_confirm_doc_save_failed user=%s err=%s request_ref=%s",
+                    user_ref(resolved_user_id), safe_exc(_doc_exc), request_ref,
                 )
                 _metrics.record_request((time.time() - start_time) * 1000)
                 return JSONResponse(
@@ -2265,9 +2280,9 @@ async def confirm_cv_profile(
                 require_db=True,
             )
         except Exception as _profile_exc:
-            logger.exception(
-                "cv_confirm_profile_persist_failed user=%s error=%s request_ref=%s",
-                resolved_user_id, str(_profile_exc), request_ref,
+            logger.error(
+                "cv_confirm_profile_persist_failed user=%s err=%s request_ref=%s",
+                user_ref(resolved_user_id), safe_exc(_profile_exc), request_ref,
             )
             _metrics.record_request((time.time() - start_time) * 1000)
             return JSONResponse(
@@ -2318,11 +2333,11 @@ async def confirm_cv_profile(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception(
-            "cv_profile_confirm_error user=%s filename=%s error=%s request_ref=%s",
-            resolved_user_id,
-            payload.filename,
-            str(exc),
+        logger.error(
+            "cv_profile_confirm_error user=%s filename_len=%d err=%s request_ref=%s",
+            user_ref(resolved_user_id),
+            len(payload.filename or ""),
+            safe_exc(exc),
             request_ref,
         )
         _metrics.record_request((time.time() - start_time) * 1000)
