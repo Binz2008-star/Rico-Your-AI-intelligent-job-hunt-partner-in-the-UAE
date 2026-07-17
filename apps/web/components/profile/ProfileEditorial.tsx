@@ -216,6 +216,8 @@ interface Tone {
     success: string;
     successTint: string;
     destructive: string;
+    warning: string;
+    warningTint: string;
     shadow: string;
 }
 
@@ -231,6 +233,8 @@ function useTone(): Tone {
         success: isDark ? "#6FBE8F" : "#3C7A52",
         successTint: isDark ? "rgba(111,190,143,0.16)" : "rgba(60,122,82,0.14)",
         destructive: isDark ? "#D6552E" : "#B23A1A",
+        warning: isDark ? "#D99C4E" : "#A8702B",
+        warningTint: isDark ? "rgba(217,156,78,0.14)" : "rgba(168,112,43,0.12)",
         shadow: isDark
             ? "0 1px 0 rgba(224,137,90,0.05), 0 20px 40px -28px rgba(0,0,0,0.55)"
             : "0 1px 0 rgba(31,27,21,0.03), 0 20px 40px -32px rgba(31,27,21,0.20)",
@@ -720,6 +724,18 @@ export function ProfileEditorial({
                 .profile-editorial .profile-ed-action:focus-visible,
                 .profile-editorial .profile-ed-ghost:focus-visible { outline: 2px solid ${palette.red}; outline-offset: 2px; }
                 .profile-editorial .profile-ed-rail-link { transition: background .12s ease, color .12s ease; }
+                /* GuardrailWarnings ships dark-app amber tints (text-amber-100 /
+                   bg-amber-400/10) that are unreadable on the light editorial
+                   paper. Recolor its [role=alert] box for this palette — a
+                   warning-toned card with ink-legible text — in both themes. */
+                .profile-editorial .profile-ed-warnings [role="alert"] {
+                    border: 1px solid ${tone.warning}59;
+                    background: ${tone.warningTint};
+                    border-radius: 14px;
+                    padding: 14px 16px;
+                }
+                .profile-editorial .profile-ed-warnings [role="alert"] p { color: ${palette.ink}; }
+                .profile-editorial .profile-ed-warnings [role="alert"] li p + p { color: ${palette.ink70}; }
             ` }} />
 
             {/* unsaved-changes bar (design: sticky sun banner with Save / Discard) */}
@@ -753,7 +769,11 @@ export function ProfileEditorial({
                 </div>
             )}
 
-            <GuardrailWarnings warnings={profile.warnings} language={language} />
+            {profile.warnings && profile.warnings.length > 0 && (
+                <div className="profile-ed-warnings mb-6">
+                    <GuardrailWarnings warnings={profile.warnings} language={language} />
+                </div>
+            )}
 
             {/* hero identity plate */}
             <section

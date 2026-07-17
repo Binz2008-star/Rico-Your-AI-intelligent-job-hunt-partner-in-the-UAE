@@ -383,3 +383,27 @@ describe("profile editorial — documents", () => {
         await waitFor(() => expect(deleteUserFileMock).toHaveBeenCalledWith("f2"));
     });
 });
+
+describe("profile editorial — guardrail warnings", () => {
+    it("wraps the warnings alert in the palette-scoped container so its text is legible on the editorial paper", async () => {
+        fetchProfileMock.mockResolvedValue({
+            ...BASE_PROFILE,
+            warnings: [
+                { code: "min_score", field: "matching", message: "Minimum fit score is 60%.", suggestion: "Scores above 80% are strong matches." },
+            ],
+        });
+        await renderLoaded();
+
+        const alert = await screen.findByRole("alert");
+        expect(alert).toHaveTextContent("Minimum fit score is 60%.");
+        // The alert must sit inside .profile-ed-warnings, which the component's
+        // scoped CSS targets to override GuardrailWarnings' dark-app amber text.
+        expect(alert.closest(".profile-ed-warnings")).not.toBeNull();
+    });
+
+    it("renders no warnings container when there are none", async () => {
+        await renderLoaded();
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(document.querySelector(".profile-ed-warnings")).toBeNull();
+    });
+});
