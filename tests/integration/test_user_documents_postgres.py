@@ -357,13 +357,27 @@ class TestConcurrentRouteUpload:
     covered elsewhere; this test is specifically about the DB race)."""
 
     class _FakeUpload:
+        """Models the real UploadFile read API: read(size) returns successive
+        chunks and b"" at EOF (required by the #1080 bounded reader)."""
+
         def __init__(self, data: bytes, filename: str = "cv.pdf"):
             self._data = data
+            self._pos = 0
             self.filename = filename
             self.size = None
 
-        async def read(self) -> bytes:
-            return self._data
+        async def read(self, size: int = -1) -> bytes:
+            if self._pos >= len(self._data):
+                return b""
+            if size is None or size < 0:
+                chunk = self._data[self._pos:]
+            else:
+                chunk = self._data[self._pos:self._pos + size]
+            self._pos += len(chunk)
+            return chunk
+
+        async def close(self) -> None:
+            return None
 
     def test_concurrent_upload_route_never_500s_on_duplicate_race(self, db: RicoDB):
         from src.api.routers import files as files_mod

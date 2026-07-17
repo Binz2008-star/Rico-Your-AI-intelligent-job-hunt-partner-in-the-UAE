@@ -195,15 +195,15 @@ async def upload_file(
             ),
         )
 
-    data = await file.read()
-    if len(data) > _MAX_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                "This file is too large. You can upload documents up to 25MB. "
-                "If your file is larger, please compress it or upload a lighter PDF version."
-            ),
-        )
+    from src.api.upload_limits import read_upload_bounded
+    data = await read_upload_bounded(
+        file,
+        _MAX_BYTES,
+        detail=(
+            "This file is too large. You can upload documents up to 25MB. "
+            "If your file is larger, please compress it or upload a lighter PDF version."
+        ),
+    )
     if not data:
         raise HTTPException(status_code=422, detail="Uploaded file is empty")
     if not data.startswith(_PDF_MAGIC):

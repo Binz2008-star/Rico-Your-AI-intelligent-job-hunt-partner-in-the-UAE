@@ -287,6 +287,14 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+# Ingress request-body cap (#1080): rejects oversized declared lengths before
+# the body is pulled AND counts received bytes so chunked/missing/false
+# Content-Length payloads stop at the cap. The request body is only pulled
+# (lazily) through this middleware's wrapped `receive`, so the cap applies
+# before Starlette's multipart parser can spool an unbounded payload.
+from src.api.upload_limits import BodySizeLimitMiddleware  # noqa: E402
+app.add_middleware(BodySizeLimitMiddleware)
+
 _DEFAULT_CORS_ORIGINS = ",".join(
     [
         "http://localhost:3000",

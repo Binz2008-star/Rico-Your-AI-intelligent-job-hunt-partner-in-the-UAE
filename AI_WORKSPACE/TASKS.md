@@ -103,6 +103,90 @@ Issue/PR: #1076 residual delta (found by the 2026-07-17 reconciliation; #1137 cl
 - Next action: owner review (queue position: before #1139 per owner order)
 - Rollback: revert the squash commit — log text only, no behavior change
 
+### TASK-20260717-003 — #1080: enforce multipart upload limits before full buffering
+
+Status: review
+Owner: Claude (WRITER; Coder pass, owner-directed "full ownership" of the
+2026-07-17 reconciliation-audit remediation sequence)
+Branch: `fix/1080-bounded-upload-reads`
+Issue/PR: #1080
+
+#### Objective
+
+Stop unauthenticated/oversized uploads from forcing full-body buffering:
+cap the raw request body at the app ingress before multipart parsing, and
+replace unbounded `file.read()` with bounded chunked reads on both upload
+surfaces.
+
+#### Context
+
+- Relevant files: `src/api/upload_limits.py` (new), `src/api/app.py`,
+  `src/api/routers/rico_chat.py`, `src/api/routers/files.py`
+- Existing behavior: both routes checked the multipart-declared `file.size`
+  then called `await file.read()` — the advertised 25 MB/10 MB limits were
+  enforced only after the complete payload was materialized.
+
+#### Constraints
+
+- Keep the global 25 MB document cap and the 10 MB image rule (applied after
+  bounded magic-byte detection) exactly as advertised.
+- Friendly 413 messages unchanged.
+- No proxy/CDN changes (Render ingress is outside this repo).
+
+#### Acceptance criteria
+
+- [x] Missing/understated/chunked Content-Length stops at the cap
+- [x] Peak bytes materialized bounded by limit + one chunk
+- [x] Rejection never invokes classifier/parser/quota work
+- [x] Temp file closed on rejection
+- [x] Normal uploads and friendly messages unchanged
+
+#### Required verification
+
+- [x] Unit tests: `tests/test_1080_bounded_upload_reads.py` — 11 passed
+      (wired into qa-tests.yml)
+- [x] Regression: full local unit suite diffed vs clean-main baseline —
+      only new failures were upload-route test fakes missing the real
+      `read(size)` API; fakes fixed to model UploadFile correctly
+- [ ] Frontend build: n/a
+- [ ] Production/deploy smoke: normal CV upload + oversized rejection
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-003
+- GitHub issue/PR: #1080; draft PR from `fix/1080-bounded-upload-reads`
+- Branch: `fix/1080-bounded-upload-reads`
+- Base branch: main
+- Last safe commit SHA: 5069447 (origin/main at branch cut)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: `src/api/routers/rico_chat.py` upload path,
+  `src/api/routers/files.py`, `src/api/app.py` middleware stack,
+  `tests/test_user_documents_dedup.py`, `tests/test_upload_size_limits.py`
+- Files changed: `src/api/upload_limits.py` — BodySizeLimitMiddleware +
+  read_upload_bounded; `src/api/app.py` — middleware registration;
+  `src/api/routers/rico_chat.py` + `files.py` — bounded reads;
+  `tests/test_1080_bounded_upload_reads.py` — 11-test suite;
+  `tests/test_user_documents_dedup.py` +
+  `tests/integration/test_user_documents_postgres.py` — upload fakes now
+  model the real read(size) API; `.github/workflows/qa-tests.yml` — suite
+  wired into CI
+- Files intentionally not touched: Render/proxy ingress config (outside
+  repo); concurrent-upload semaphore (rate limit already bounds request
+  count — residual noted in PR)
+- What is complete: ingress cap, bounded reads on both routes, tests
+- What is incomplete: infrastructure-level (proxy) cap is an ops follow-up
+- Known blockers: none
+- Validation already run: new suite 11 passed; dedup + size-limit suites
+  43 passed; full-suite diff vs baseline clean after fake fixes
+- Validation still required: CI on the PR head
+- Deployment/CI/Neon/Vercel state to check next: QA Tests on the PR
+- Next exact action: owner review of the draft PR
+- Stop condition: any legitimate ≤25 MB upload rejected by the ingress cap
+  → raise MULTIPART_OVERHEAD_BYTES instead of weakening the bound
+- Rollback plan: revert the squash commit — routes return to unbounded
+  read; no schema/data change
 
 ### TASK-20260715-002 — Atelier slice 4b: /command message bubbles + empty state
 
