@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardStats } from "@/components/DashboardStats";
+import { JourneyCard } from "@/components/JourneyCard";
 import { ProfileCompletionBanner } from "@/components/ProfileCompletionBanner";
 import { ProfileReadinessCard } from "@/components/ProfileReadinessCard";
 import { ProfileSummaryCard } from "@/components/ProfileSummaryCard";
@@ -29,6 +30,14 @@ export function DashboardContent() {
                         {t("dashboardOpenCommand")}
                     </span>
                 </StatusCard>
+            </section>
+
+            {/* Career Journey — stage, counts, today's plan */}
+            <section>
+                <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
+                    {t("journeySectionTitle")}
+                </h2>
+                <JourneyCard />
             </section>
 
             {/* Job Pipeline Summary */}
