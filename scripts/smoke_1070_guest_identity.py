@@ -515,8 +515,9 @@ def cleanup() -> None:
             )
             print(f"  rico_users: {cur.rowcount} rows")
             try:
+                # Schema (migrations/017): tokens key by user_email.
                 cur.execute(
-                    "DELETE FROM email_verification_tokens WHERE email = ANY(%s)",
+                    "DELETE FROM email_verification_tokens WHERE user_email = ANY(%s)",
                     ([EMAIL_A, EMAIL_B],),
                 )
                 print(f"  email_verification_tokens: {cur.rowcount} rows")

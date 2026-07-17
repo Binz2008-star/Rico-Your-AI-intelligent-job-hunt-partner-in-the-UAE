@@ -28,4 +28,9 @@ jobs:
       - name: Run #1070 production smoke gate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Cookies carry Domain=.ricohunt.com in production, so the smoke must
+          # enter through the browser origin (Vercel /proxy rewrite) — hitting
+          # the Render host directly makes every compliant cookie jar reject
+          # the capability cookie (proven in run 29580348509).
+          SMOKE_BASE_URL: https://ricohunt.com/proxy
         run: python scripts/smoke_1070_guest_identity.py
