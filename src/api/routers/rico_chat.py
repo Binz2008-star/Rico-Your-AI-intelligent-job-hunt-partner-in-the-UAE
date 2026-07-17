@@ -61,7 +61,7 @@ from src.rico_hf_client import generate_text, is_available as hf_ok
 from src.rico_openai_agent import RicoOpenAIAgent
 from src.services.matching_guardrails import build_matching_guardrail_warnings
 from src.services.cv_quality_warnings import build_cv_quality_warnings
-from src.services.log_redaction import safe_field_names, user_fingerprint
+from src.services.log_redaction import safe_error, safe_field_names, user_fingerprint
 from src.services.settings_service import get_settings
 from src.rico_openai_runtime import call_openai_minimal
 from src.schemas.actions import ActionRequest, ActionResponse, ExecutePermissionActionRequest
