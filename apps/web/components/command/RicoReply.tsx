@@ -28,6 +28,7 @@
 
 import { Check, Copy, RotateCcw } from "lucide-react";
 import { useCallback, useState } from "react";
+import { RicoReplyMarkdown } from "./RicoReplyMarkdown";
 
 export function RicoReply({ text, streaming = false, canRegenerate = false, onRegenerate, isAr = false }:
   { text: string; streaming?: boolean; canRegenerate?: boolean; onRegenerate?: () => void; isAr?: boolean }) {
@@ -37,12 +38,17 @@ export function RicoReply({ text, streaming = false, canRegenerate = false, onRe
   return (
     <div className="relative ps-3 animate-fade-up motion-reduce:animate-none" aria-live="polite" aria-busy={streaming || undefined}>
       <span aria-hidden className="absolute inset-y-1 start-0 w-px animate-rail-draw motion-reduce:animate-none bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
-      <p dir="auto" className="serif whitespace-pre-wrap text-[16.5px] leading-[1.65] text-ink">
-        {text}
+      {/* Structured answer: the same reply string rendered as safe markdown —
+          headings, lists, links, code, blockquotes, hierarchy — at a controlled
+          reading width. Markdown renders during streaming too (not a plain→
+          formatted swap at settle), so long answers don't jump on completion.
+          The `serif` class here keeps the transcript's prose contract. */}
+      <div dir="auto" className="serif max-w-[72ch] text-[16.5px] leading-[1.7] text-ink">
+        <RicoReplyMarkdown text={text} />
         {streaming && <span data-testid="transcript-streaming-caret" aria-hidden className="animate-caret motion-reduce:animate-none ms-0.5 inline-block h-[1em] w-[0.55ch] translate-y-[0.15em] bg-ink align-baseline" />}
-      </p>
+      </div>
       {!streaming && (
-        <div className="mt-2 flex gap-1 animate-fade-up motion-reduce:animate-none">
+        <div className="mt-3 flex gap-1.5 animate-fade-up motion-reduce:animate-none">
           <button type="button" onClick={copy} className="inline-flex h-7 items-center gap-1 rounded-sm border border-transparent px-2 text-[11px] uppercase tracking-[0.14em] text-ink-mute transition-colors hover:border-rule hover:text-ink focus-visible:border-rule focus-visible:text-ink focus-visible:outline-none">
             {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{copied ? (isAr ? "نُسخ" : "Copied") : (isAr ? "نسخ" : "Copy")}
           </button>
