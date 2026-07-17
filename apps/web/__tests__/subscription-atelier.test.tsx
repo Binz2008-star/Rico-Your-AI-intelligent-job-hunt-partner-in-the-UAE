@@ -1,16 +1,23 @@
 /**
  * subscription-atelier.test.tsx
  *
- * Targeted tests for the /subscription page migration to WorkspaceShell.
+ * Targeted tests for the /subscription page (WorkspaceShell + runtime billing
+ * config).
  *
  * Coverage:
  *  1. WorkspaceShell composition — SubscriptionPage renders WorkspaceShell when
  *     authorized, shows a loader when not.
  *  2. Upgrade button calls createPaddleCheckoutSession first (server session),
  *     then passes the returned session_token to openPaddleCheckout.
- *  3. Paddle receives the correct session token prefix in customData.
- *  4. Paddle checkout.error events surface as a Rico toast error message.
- *  5. No WhatsApp billing fallback is active (isManualBillingMode returns false).
+ *  3. Paddle checkout.error events surface as a Rico toast error message.
+ *  4. Runtime GET /api/v1/billing/config decides the mode: Paddle-active shows
+ *     the Paddle CTA (no WhatsApp link anywhere); explicit manual mode shows
+ *     the WhatsApp CTA; Paddle-active without a client token, or an
+ *     unreachable config, fails closed ("payment temporarily unavailable" —
+ *     never WhatsApp).
+ *  5. checkout.completed re-confirms with GET /api/v1/subscription/me before
+ *     any success is shown; a dismissed overlay does not.
+ *  6. Footer says prices are in USD (no "Prices in AED" copy).
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -71,13 +78,24 @@ vi.mock("@/components/ui/Toast", () => ({
   ToastContainer: () => null,
 }));
 
-// billing — always Paddle mode
-vi.mock("@/lib/billing", () => ({
-  isManualBillingMode: () => false,
-  isPaddleBillingMode: () => true,
-  buildWhatsAppUpgradeUrl: () => "https://wa.me/test",
-  buildWhatsAppManageUrl: () => "https://wa.me/manage",
-}));
+// billing — real resolveBillingUiMode, controllable Paddle client capability
+let mockHasPaddleClientConfig = true;
+vi.mock("@/lib/billing", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/billing")>();
+  return {
+    ...actual,
+    hasPaddleClientConfig: () => mockHasPaddleClientConfig,
+    // resolveBillingUiMode reads the module-local hasPaddleClientConfig, so
+    // reimplement it here against the controllable flag (same logic).
+    resolveBillingUiMode: (config: { billing_mode?: string; paddle_active?: boolean } | null) => {
+      if (!config) return "unavailable";
+      if (config.paddle_active) return mockHasPaddleClientConfig ? "paddle" : "unavailable";
+      return config.billing_mode === "manual" ? "manual" : "unavailable";
+    },
+    buildWhatsAppUpgradeUrl: () => "https://wa.me/test",
+    buildWhatsAppManageUrl: () => "https://wa.me/manage",
+  };
+});
 
 // API stubs
 const mockGetSubscriptionPlans = vi.fn().mockResolvedValue({
@@ -104,6 +122,9 @@ const mockCreatePaddleCheckoutSession = vi.fn().mockResolvedValue({
 });
 const mockCreatePaddleCustomerPortalSession = vi.fn();
 const mockRecordSubscriptionIntent = vi.fn().mockResolvedValue(undefined);
+const mockGetBillingConfig = vi.fn().mockResolvedValue({
+  billing_mode: "paddle", paddle_active: true, sandbox: true,
+});
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error { },
@@ -112,6 +133,7 @@ vi.mock("@/lib/api", () => ({
   createPaddleCheckoutSession: (...args: unknown[]) => mockCreatePaddleCheckoutSession(...args),
   createPaddleCustomerPortalSession: (...args: unknown[]) => mockCreatePaddleCustomerPortalSession(...args),
   recordSubscriptionIntent: (...args: unknown[]) => mockRecordSubscriptionIntent(...args),
+  getBillingConfig: (...args: unknown[]) => mockGetBillingConfig(...args),
 }));
 
 // Paddle — capture the eventCallback so tests can fire synthetic events
@@ -192,8 +214,10 @@ describe("SubscriptionAtelier — Paddle checkout flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capturedEventCallback = undefined;
-    mockCreatePaddleCheckoutSession.mockResolvedValue({ session_token: "sess_test_abc123xyz" });
-    mockOpenPaddleCheckout.mockResolvedValue(undefined);
+    mockHasPaddleClientConfig = true;
+    mockGetBillingConfig.mockResolvedValue({ billing_mode: "paddle", paddle_active: true, sandbox: true });
+    mockCreatePaddleCheckoutSession.mockResolvedValue({ session_token: "sess_test_abc123xyz", price_id: "pri_server_resolved" });
+    mockOpenPaddleCheckout.mockResolvedValue("closed");
   });
 
   it("calls createPaddleCheckoutSession before openPaddleCheckout on upgrade", async () => {
@@ -259,20 +283,134 @@ describe("SubscriptionAtelier — Paddle checkout flow", () => {
   });
 });
 
-describe("Billing mode — no WhatsApp fallback", () => {
-  it("isManualBillingMode returns false (Paddle is active)", async () => {
-    const { isManualBillingMode } = await import("@/lib/billing");
-    expect(isManualBillingMode()).toBe(false);
+describe("Runtime billing config — mode resolution and fail-closed behavior", () => {
+  const user = { user_id: "u1", name: "Test User", email: "test@rico.ai" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHasPaddleClientConfig = true;
+    mockGetBillingConfig.mockResolvedValue({ billing_mode: "paddle", paddle_active: true, sandbox: true });
+    mockCreatePaddleCheckoutSession.mockResolvedValue({ session_token: "sess_test_abc123xyz", price_id: "pri_server_resolved" });
+    mockOpenPaddleCheckout.mockResolvedValue("closed");
   });
 
-  it("SubscriptionAtelier does not render a WhatsApp link when Paddle mode is active", async () => {
-    const user = { user_id: "u1", name: "Test User", email: "test@rico.ai" };
+  it("fetches GET /api/v1/billing/config on mount", async () => {
+    render(React.createElement(SubscriptionAtelier, { user }));
+    await waitFor(() => expect(mockGetBillingConfig).toHaveBeenCalled());
+  });
+
+  it("Paddle-active config → Paddle CTA, no WhatsApp link anywhere", async () => {
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    // Wait for plans to load
     await screen.findByText(/upgradeTo/i);
 
-    const whatsappLinks = document.querySelectorAll('a[href*="wa.me"]');
-    expect(whatsappLinks.length).toBe(0);
+    expect(document.querySelectorAll('a[href*="wa.me"]').length).toBe(0);
+    expect(screen.queryByText(/continueOnWhatsApp/i)).toBeNull();
+  });
+
+  it("explicit manual config → WhatsApp CTA, no Paddle checkout call", async () => {
+    mockGetBillingConfig.mockResolvedValue({ billing_mode: "manual", paddle_active: false, sandbox: true });
+    render(React.createElement(SubscriptionAtelier, { user }));
+
+    const whatsappCta = await screen.findByText(/continueOnWhatsApp/i);
+    fireEvent.click(whatsappCta);
+
+    expect(mockCreatePaddleCheckoutSession).not.toHaveBeenCalled();
+    expect(mockOpenPaddleCheckout).not.toHaveBeenCalled();
+  });
+
+  it("Paddle-active config but missing client token → fail-closed, NEVER WhatsApp", async () => {
+    mockHasPaddleClientConfig = false;
+    render(React.createElement(SubscriptionAtelier, { user }));
+
+    await screen.findByTestId("payment-unavailable");
+
+    expect(screen.getAllByText(/paymentTemporarilyUnavailable/i).length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('a[href*="wa.me"]').length).toBe(0);
+    expect(screen.queryByText(/continueOnWhatsApp/i)).toBeNull();
+    expect(screen.queryByText(/upgradeTo/i)).toBeNull();
+  });
+
+  it("unreachable billing config → fail-closed, NEVER WhatsApp", async () => {
+    mockGetBillingConfig.mockRejectedValue(new Error("network down"));
+    render(React.createElement(SubscriptionAtelier, { user }));
+
+    await screen.findByTestId("payment-unavailable");
+
+    expect(document.querySelectorAll('a[href*="wa.me"]').length).toBe(0);
+    expect(screen.queryByText(/continueOnWhatsApp/i)).toBeNull();
+  });
+
+  it("uses the server-resolved price_id from the checkout session", async () => {
+    render(React.createElement(SubscriptionAtelier, { user }));
+
+    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    fireEvent.click(upgradeBtn);
+
+    await waitFor(() => expect(mockOpenPaddleCheckout).toHaveBeenCalled());
+    const [priceId] = mockOpenPaddleCheckout.mock.calls[0] as unknown as [string];
+    expect(priceId).toBe("pri_server_resolved");
+  });
+});
+
+describe("Backend confirmation — success is never declared locally", () => {
+  const user = { user_id: "u1", name: "Test User", email: "test@rico.ai" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHasPaddleClientConfig = true;
+    mockGetBillingConfig.mockResolvedValue({ billing_mode: "paddle", paddle_active: true, sandbox: true });
+    mockCreatePaddleCheckoutSession.mockResolvedValue({ session_token: "sess_test_abc123xyz", price_id: "pri_server_resolved" });
+  });
+
+  it("re-fetches GET /api/v1/subscription/me after checkout.completed", async () => {
+    mockOpenPaddleCheckout.mockResolvedValue("completed");
+    render(React.createElement(SubscriptionAtelier, { user }));
+
+    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    const callsBeforeCheckout = mockGetMySubscription.mock.calls.length;
+    fireEvent.click(upgradeBtn);
+
+    await waitFor(() => {
+      expect(mockGetMySubscription.mock.calls.length).toBeGreaterThan(callsBeforeCheckout);
+    });
+  });
+
+  it("does NOT re-fetch subscription state when the overlay is merely dismissed", async () => {
+    mockOpenPaddleCheckout.mockResolvedValue("closed");
+    render(React.createElement(SubscriptionAtelier, { user }));
+
+    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    const callsBeforeCheckout = mockGetMySubscription.mock.calls.length;
+    fireEvent.click(upgradeBtn);
+
+    await waitFor(() => expect(mockOpenPaddleCheckout).toHaveBeenCalled());
+    expect(mockGetMySubscription.mock.calls.length).toBe(callsBeforeCheckout);
+  });
+});
+
+describe("Pricing copy — USD, not AED", () => {
+  const user = { user_id: "u1", name: "Test User", email: "test@rico.ai" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHasPaddleClientConfig = true;
+    mockGetBillingConfig.mockResolvedValue({ billing_mode: "paddle", paddle_active: true, sandbox: true });
+  });
+
+  it("renders the USD footer key and no AED copy", async () => {
+    render(React.createElement(SubscriptionAtelier, { user }));
+    await screen.findByText(/upgradeTo/i);
+
+    expect(screen.getByText(/pricesInUSD/i)).toBeDefined();
+    expect(screen.queryByText(/pricesInAED/i)).toBeNull();
+    expect(screen.queryByText(/AED/)).toBeNull();
+  });
+
+  it("formats the monthly price with two decimals (USD 21.50)", async () => {
+    render(React.createElement(SubscriptionAtelier, { user }));
+    await screen.findByText(/upgradeTo/i);
+
+    expect(screen.getByText(/USD 21\.50/)).toBeDefined();
   });
 });

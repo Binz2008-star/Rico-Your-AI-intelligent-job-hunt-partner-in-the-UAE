@@ -132,12 +132,18 @@ export function initPaddle(): Promise<PaddleInstance> {
     return _initPromise;
 }
 
+/** Terminal outcome of an overlay checkout that did not error. */
+export type PaddleCheckoutOutcome = "completed" | "closed";
+
 /**
  * Open the Paddle overlay checkout for a given price ID.
  *
- * Returns a Promise that rejects if Paddle fires a checkout.error event,
- * so callers can surface a meaningful Rico error toast instead of the generic
- * Paddle "Something went wrong" overlay.
+ * Resolves "completed" when Paddle reports checkout.completed and "closed"
+ * when the user dismisses the overlay, so callers can re-confirm the
+ * subscription with the backend only after a real completion. Rejects if
+ * Paddle fires a checkout.error event, so callers can surface a meaningful
+ * Rico error toast instead of the generic Paddle "Something went wrong"
+ * overlay.
  *
  * SECURITY: checkoutSessionId must be a server-owned token from
  * createPaddleCheckoutSession() (POST /api/v1/billing/paddle/checkout-session),
@@ -154,10 +160,10 @@ export async function openPaddleCheckout(
     checkoutSessionId: string,
     userEmail?: string | null,
     language: "en" | "ar" = "en",
-): Promise<void> {
+): Promise<PaddleCheckoutOutcome> {
     const paddle = await initPaddle();
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<PaddleCheckoutOutcome>((resolve, reject) => {
         const settle = (fn: () => void): void => {
             _activeCheckoutListener = null;
             fn();
@@ -173,10 +179,10 @@ export async function openPaddleCheckout(
                     "Paddle checkout error";
                 settle(() => reject(new Error(detail)));
             } else if (event.name === "checkout.completed") {
-                settle(resolve);
+                settle(() => resolve("completed"));
             } else if (event.name === "checkout.closed") {
                 // User dismissed — not an error; resolve quietly.
-                settle(resolve);
+                settle(() => resolve("closed"));
             }
         };
 
