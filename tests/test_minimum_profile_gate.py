@@ -283,7 +283,7 @@ class TestOnboardingSubmitEndpoint:
         result, mock_status = self._invoke({"target_roles": ["Engineer"]}, partial)
         assert result["status"] == ONBOARDING_IN_PROGRESS
         assert len(result["missing_fields"]) > 0
-        mock_status.assert_called_once_with("u@test.com", ONBOARDING_IN_PROGRESS)
+        mock_status.assert_called_once_with("u@test.com", ONBOARDING_IN_PROGRESS, require_db=True)
 
     def test_complete_submit_returns_completed(self):
         result, mock_status = self._invoke(
@@ -297,7 +297,7 @@ class TestOnboardingSubmitEndpoint:
         )
         assert result["status"] == ONBOARDING_COMPLETED
         assert result["missing_fields"] == []
-        mock_status.assert_called_once_with("u@test.com", ONBOARDING_COMPLETED)
+        mock_status.assert_called_once_with("u@test.com", ONBOARDING_COMPLETED, require_db=True)
 
 
 # ---------------------------------------------------------------------------
