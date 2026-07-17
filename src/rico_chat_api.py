@@ -3571,6 +3571,11 @@ class RicoChatAPI:
             "usable_link": usable_link,
             "link_unavailable": link_unavailable,
             "link_unavailable_reason": link_unavailable_reason,
+            # Explicit apply-URL trust flag (#1121 contract): True only when a
+            # usable canonical link exists. A card with apply_verified=False is
+            # unverified informational — it must render the fallback CTA, never an
+            # Apply action nor a "direct application available" claim.
+            "apply_verified": bool(usable_link) and not link_unavailable,
             "verification_status": verification_status,
             "company_quality": company_quality,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
@@ -5631,6 +5636,32 @@ class RicoChatAPI:
                 arabic=arabic,
             )
 
+        # ── Job Result Integrity Gate (Rico owns the final trust decision) ──────
+        # Reject non-UAE / role-mismatched / title-vs-body-conflicting / unavailable
+        # / URL-invalid listings BEFORE any CV scoring, card formatting, or
+        # shortlist admission. A provider HTTP 200 does not make a record a
+        # trustworthy career opportunity; an empty *trustworthy* result is
+        # preferable to a corrupt one. Provider degradation never relaxes this gate.
+        integrity_rejections: dict[str, int] = {}
+        if all_matches:
+            try:
+                from src.job_integrity import filter_listings
+                _req_single, _req_phrase = self._requested_domain_terms(search_role)
+                _pre_integrity = len(all_matches)
+                all_matches, integrity_rejections = filter_listings(
+                    all_matches,
+                    requested_role=search_role,
+                    requested_terms=(_req_single, _req_phrase),
+                    uae_only=True,  # Rico is a UAE-market product
+                )
+                if integrity_rejections:
+                    logger.info(
+                        "job_integrity_gate role=%r kept=%d/%d rejected=%s",
+                        search_role, len(all_matches), _pre_integrity, integrity_rejections,
+                    )
+            except Exception as _integrity_err:
+                logger.warning("job_integrity_gate_error role=%r err=%s", search_role, _integrity_err)
+
         # Filter out already-applied jobs
         try:
             from src.applications import is_applied_batch, get_job_id
@@ -5874,6 +5905,14 @@ class RicoChatAPI:
             "broadened": len(all_matches) == 0,
             "rate_limited": rate_limited,
         }
+
+        # Safe aggregate summary of the integrity gate — counts only, never the
+        # per-record reasons or the corrupt listings themselves.
+        if integrity_rejections:
+            response["integrity_filtered"] = {
+                "total": sum(integrity_rejections.values()),
+                "by_reason": integrity_rejections,
+            }
 
         if rate_limited:
             response["rate_limit_notice"] = (

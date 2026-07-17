@@ -2335,3 +2335,89 @@ Remove the two flake modes without weakening the guard:
 - Files touched: `apps/web/__tests__/chat-confirm-profile.test.tsx` only
 - Validation: file passed 10/10 consecutive local runs post-fix
 - Next exact action: PR, CI green, merge under the in-session autonomy grant
+
+---
+
+### TASK-20260717-002 — Job Result Integrity Gate (incident #1121)
+
+Status: review
+Owner: model
+Branch: fix/job-result-integrity-gate
+Issue/PR: incident #1121 → Draft PR #1123 (this branch) → TASK-20260717-002
+
+Traceability: Issue #1121 (the real Job Result Integrity incident) → Draft PR
+#1123 → TASK-20260717-002. The PR "Addresses #1121" (not "Closes") and must not
+auto-close #1121 while Draft. #1118 is a DIFFERENT issue (the CV-parse quality
+gate for #1119) and is not tracked here.
+
+#### Hierarchy
+- Vision → Career Operating System
+- Epic → Rico Command Runtime Restoration
+- Milestone → Trusted Job Search
+- Phase → Job Result Integrity Gate
+- Issue → #1121 (production Job Result Integrity failure)
+- PR → Draft PR #1123, one objective: reject non-trustworthy listings before scoring/card/shortlist
+- Tests → provider-to-card integrity contract (`tests/test_job_result_integrity.py`)
+
+#### Incident
+Production surfaced a Totaljobs listing — title "Project Manager", body "Mental
+Health Practitioner / Recovery Service", location Manchester (UK), apply state
+Unavailable — in a UAE workflow. Withdraws the prior "job-search vertical is
+genuinely strong" assessment. Classes: non-UAE market leak; title/description
+role-family conflict; unavailable/dead apply link; no trust decision before
+scoring/shortlist admission.
+
+#### Objective
+Rico owns the final trust decision: a job may be CV-scored, carded, or shortlisted
+only after Market + Role + Listing + Freshness + Evidence integrity pass.
+
+#### Root cause
+`src/job_providers.py` forwards `country="ae"` only to JSearch; Adzuna is hard-
+scoped to its GB index (`ADZUNA_COUNTRY` default `gb`) and the cascade short-
+circuits on the first provider with items, with NO post-cascade market/role/
+availability filter before scoring. First layer that should have rejected the
+record: market/country normalization.
+
+#### Fix
+- `src/job_integrity.py` (new): `RejectionReason` + `validate_listing` +
+  `filter_listings` (market/role/title-body-conflict/availability/apply-url/
+  source-page/freshness/evidence). Role step: the REQUESTED role's own
+  occupational domain participates in the title/body comparison (protected-domain
+  review fix) — a valid Nurse/Mental-Health request is not falsely conflicted.
+  Protected-domain detection is bilingual (EN + Arabic vocabulary) so Arabic
+  listings are validated with Arabic signals, never skipped; sparse Arabic
+  evidence → `INSUFFICIENT_LISTING_EVIDENCE`. `filter_listings` tags each
+  accepted record `apply_verified` (True only with a usable http(s) URL).
+- `src/rico_chat_api.py`: run the gate in `_target_role_search_response` right
+  after fetch, before scoring/formatting/shortlist; surface a safe aggregate
+  `integrity_filtered` count only. `_format_match` surfaces `apply_verified` on
+  the card (tied to the resolved usable link) so a missing/invalid-link card
+  renders the fallback CTA and never an Apply action.
+- `src/job_providers.py`: drop Adzuna from the cascade when its configured index
+  ≠ the requested country (stops the GB short-circuit).
+
+#### Constraints
+- Do not touch PR #1119 files (`src/api/routers/rico_chat.py`, `src/cv_parser.py`,
+  `src/cv_parse_quality.py`, and their tests).
+- No new providers; no broadened search; no UI redesign; no migrations.
+- Context-durability (reload → recent_search_role loss) is a SEPARATE defect — not
+  in this PR.
+
+#### Acceptance criteria
+- [x] UAE search rejects UK/non-UAE listings even at high provider rank.
+- [x] title/body role-family conflict (Project Manager + Mental Health) rejected.
+- [x] protected-domain request (Nurse / Mental Health Practitioner) NOT falsely
+      conflicted; requested role's own domain participates in the comparison.
+- [x] unavailable listing / malformed apply URL never a recommendation; missing
+      URL kept as unverified (`apply_verified=false`), never an Apply action.
+- [x] valid UAE listing remains scoreable; rejected never scored/carded/shortlisted
+      (proven through the real `_target_role_search_response` path).
+- [x] Arabic listings validated with Arabic vocabulary (not skipped); conflicts
+      caught; insufficient Arabic evidence → INSUFFICIENT_LISTING_EVIDENCE.
+- [ ] PRE-MERGE BRANCH QUALITY SMOKE (branch/local, NOT production — production
+      runs main): five role searches, zero UK/mismatch/unavailable in top 10.
+
+#### Separate follow-up (do NOT implement here)
+- Search-context durability: `recent_search_role` non-durable under
+  `RICO_MEMORY_BACKEND=postgres`; multi-role option click triggers page reload;
+  refinement falls back to profile after reload. Tracked separately.
