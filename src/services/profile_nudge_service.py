@@ -3,12 +3,17 @@
 Sends a one-time follow-up email to users who:
   - Registered > 24 hours ago
   - Have never been sent a nudge (profile_nudge_sent_at IS NULL)
+  - Are active with a verified email (users.is_active AND users.email_verified)
+  - Have an explicit durable email-alert opt-in
+    (rico_agent_settings.settings->>'can_receive_email_alerts' IS TRUE, #1082)
   - Still have an incomplete profile: CV missing OR target_roles empty OR preferred_cities empty
   - Are NOT synthetic/test/internal recipients (see _is_synthetic_email)
 
+Gated at send time by the RICO_ENABLE_EMAIL_ALERTS kill switch (#1082).
 Invoked by the cron-guarded POST /api/v1/pipeline/profile-nudge endpoint.
 Requires migration 029 (profile_nudge_sent_at column on users).
-Idempotent: re-running never double-sends because sent_at is stamped before delivery.
+Idempotent: re-running never double-sends because sent_at is stamped before
+delivery; a failed send releases the stamp so delivery stays retryable.
 Synthetic recipients are also stamped so the cron never retries them.
 
 Schema facts:
@@ -88,6 +93,13 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
     from src.rico_db import RicoDB
     from src.services.mailer import send_email
 
+    # Global email kill switch (#1082): the nudge is a non-essential user email
+    # sender, so it honors the same send-time switch as the alert digests.
+    import os
+    if os.getenv("RICO_ENABLE_EMAIL_ALERTS", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+        logger.info("profile_nudge_sweep: disabled (RICO_ENABLE_EMAIL_ALERTS not set) — no send")
+        return {"status": "disabled", "nudges_sent": 0, "nudges_failed": 0, "skipped": 0}
+
     db = RicoDB()
     if not getattr(db, "available", False):
         logger.warning("profile_nudge_sweep: DB unavailable — skipping")
@@ -128,9 +140,14 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
                     ON ru.external_user_id = u.email
                 LEFT JOIN rico_profiles rp
                     ON rp.user_id = ru.id
+                JOIN rico_agent_settings s
+                    ON s.user_id = ru.id
+                   AND (s.settings->>'can_receive_email_alerts')::boolean IS TRUE
                 WHERE u.created_at < NOW() - %s
                   AND u.profile_nudge_sent_at IS NULL
                   AND u.email IS NOT NULL
+                  AND u.is_active IS TRUE
+                  AND u.email_verified IS TRUE
                 ORDER BY u.created_at ASC
                 LIMIT 200
             """, (timedelta(hours=NUDGE_DELAY_HOURS),))
@@ -226,6 +243,22 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
         else:
             failed += 1
             logger.warning("profile_nudge_sweep: email failed user_id=%s", user_id)
+            # The pre-send stamp is an idempotency claim, not a delivery
+            # receipt (#1082): a failed send must stay retryable, so release
+            # the claim. A crash between send and this release leaves the row
+            # stamped (no double-send risk, one lost nudge — the safe side).
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE users SET profile_nudge_sent_at = NULL WHERE id = %s",
+                        (user_id,),
+                    )
+                conn.commit()
+            except Exception as exc:
+                logger.warning(
+                    "profile_nudge_sweep: stamp-release failed user_id=%s: %s", user_id, exc
+                )
+                conn.rollback()
 
     conn.close()
     return {
