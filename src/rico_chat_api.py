@@ -485,6 +485,18 @@ _UAE_WIDE_SEARCH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Scope / broadening adverbs and command fillers that are never, on their own, a
+# job role. Combined with _LOCATION_TERMS, this lets the message-role precedence
+# guard tell a real explicit role ("HSE Manager") from a pure UAE-wide refinement
+# whose classifier may mis-extract a location phrase as a "role" (e.g. "all over
+# UAE" → extracted_role "all over UAE"). Purely negative — not a role parser.
+_NON_ROLE_SCOPE_WORDS: frozenset[str] = frozenset({
+    "all", "over", "across", "around", "anywhere", "everywhere", "entire",
+    "whole", "wide", "the", "a", "an", "in", "of", "for", "to",
+    "search", "find", "look", "show", "get",
+    "jobs", "job", "roles", "role", "positions", "position", "vacancies", "vacancy",
+})
+
 # Cover-letter command: "make me a cover [letter]", "write a cover letter",
 # "draft a cover letter" — route to the cover-letter clarification flow before
 # the intent classifier, which returns "unknown" for bare "cover" forms.
@@ -2976,6 +2988,40 @@ class RicoChatAPI:
     def _is_live_job_search_request(message: str) -> bool:
         """True when user explicitly asks for live/current/UAE/openings jobs."""
         return bool(RicoChatAPI._LIVE_SEARCH_RE.search(message))
+
+    @staticmethod
+    def _message_names_explicit_role(message: str, has_cv: bool) -> bool:
+        """True when the CURRENT message itself names an explicit target role.
+
+        Reuses the shared intent classifier (NOT a second role parser): an
+        explicit single-role search, a multi-role search, or an explicit role
+        change all carry a role extracted from the message. Message-role
+        precedence means that when this is True, profile / previous-search
+        fallbacks (e.g. the "expand to all of UAE" refinement) must NOT hijack
+        the request — the explicit role(s) win.
+        """
+        try:
+            result = classify_intent(message, has_cv_profile=has_cv)
+        except Exception:
+            return False
+        legacy = _map_intent_to_legacy(result.intent)
+        if legacy == "job_search_multi_role":
+            roles = (getattr(result, "entities", None) or {}).get("roles") or []
+            return any(str(r).strip() for r in roles)
+        if legacy in ("job_search_explicit", "role_change"):
+            role = (getattr(result, "extracted_role", "") or "").strip()
+            if not role:
+                return False
+            # Reject a "role" that is only location + scope/filler words
+            # ("all over UAE", "the emirates") — that is a UAE-wide refinement,
+            # not a real explicit role, so the refinement path must still run.
+            tokens = [t for t in role.lower().split() if t]
+            meaningful = [
+                t for t in tokens
+                if t not in _LOCATION_TERMS and t not in _NON_ROLE_SCOPE_WORDS
+            ]
+            return bool(meaningful)
+        return False
 
     @staticmethod
     def _looks_like_generic_job_request(message: str) -> bool:
@@ -5842,7 +5888,22 @@ class RicoChatAPI:
 
         self._append_chat(user_id, "assistant", response)
         mark_completed(user_id, operation_id, len(formatted))
-        if formatted:
+        # Defect 1 continuity contract: a TECHNICALLY COMPLETED search — including
+        # one that truthfully returned zero jobs — becomes the current search
+        # context. A degraded/failed/unconfigured provider must NOT overwrite the
+        # last completed context. (Degraded/failed provider paths already returned
+        # earlier via _provider_degraded_response / search_error, so they never
+        # reach here; the remaining distinction is completed-with-results vs
+        # completed-empty vs a no-provider skip.)
+        _outcome = self._classify_search_outcome(
+            provider=fetch_provider,
+            rate_limited=rate_limited,
+            quota_exhausted=quota_exhausted,
+            error=fetch_error,
+            matches=formatted,
+        )
+        response["search_outcome"] = _outcome
+        if self._search_outcome_is_completed(_outcome):
             self._store_search_matches_context(
                 user_id, formatted,
                 search_role=search_role,
@@ -6987,7 +7048,16 @@ class RicoChatAPI:
         # ── UAE-wide search expansion ─────────────────────────────────────────
         # "look all over UAE", "search all UAE", "all over UAE" — expand a
         # previous role search to the whole country or ask for a role.
-        if _UAE_WIDE_SEARCH_RE.search(message):
+        #
+        # Precedence guard (DEFECT 1): this is a pure location-broadening
+        # refinement that intentionally reuses the previous-search / profile
+        # role. It must NOT fire when the CURRENT message also names its own
+        # explicit role(s) — e.g. "show me HSE, sustainability, or operations
+        # manager jobs anywhere in the UAE". In that case the "anywhere in the
+        # UAE" phrase is just a scope, not a request to reuse the saved role;
+        # fall through so classify_intent's multi-role / explicit branches
+        # search the roles the user actually typed (UAE is the default scope).
+        if _UAE_WIDE_SEARCH_RE.search(message) and not self._message_names_explicit_role(message, has_cv):
             _prior_role_uae = ""
             try:
                 _rctx = self._get_recent_context(user_id)
@@ -10070,6 +10140,51 @@ class RicoChatAPI:
         )
 
     # ── New intent-specific handlers ─────────────────────────────────────────
+
+    # Search-outcome states (Defect 1 continuity contract). Only a TECHNICALLY
+    # COMPLETED search — a real provider returning a definitive answer, with OR
+    # without jobs — may become the current search context (recent_search_role /
+    # recent_search_location). A degraded / failed / unconfigured provider must
+    # never overwrite the last completed context. A rejected/clarified request
+    # never reaches the search boundary at all.
+    _COMPLETED_SEARCH_OUTCOMES: tuple[str, ...] = (
+        "COMPLETED_WITH_RESULTS",
+        "COMPLETED_EMPTY",
+    )
+
+    @staticmethod
+    def _classify_search_outcome(
+        *,
+        provider: str,
+        rate_limited: bool,
+        quota_exhausted: bool,
+        error: str,
+        matches: list[Any],
+    ) -> str:
+        """Classify a provider FetchResult (+ final match list) into an outcome.
+
+        Uses the existing FetchResult signals — never ``bool(matches)`` alone —
+        so a provider that ran and truthfully returned zero jobs (COMPLETED_EMPTY)
+        is distinguished from one that was rate-limited / quota-exhausted /
+        errored / never configured (degraded or failed). ``no_providers_configured``
+        is a local/test skip, not a real query, so it is treated as degraded.
+        """
+        if matches:
+            # Jobs from any source (incl. the legacy scraper fallback) → completed.
+            return "COMPLETED_WITH_RESULTS"
+        if rate_limited or quota_exhausted:
+            return "PROVIDER_DEGRADED"
+        if error and error != "no_providers_configured":
+            return "PROVIDER_FAILED"
+        if not provider or provider == "none":
+            # No provider actually ran — nothing was technically searched.
+            return "PROVIDER_DEGRADED"
+        return "COMPLETED_EMPTY"  # a real provider returned zero jobs
+
+    @classmethod
+    def _search_outcome_is_completed(cls, outcome: str) -> bool:
+        """True when *outcome* is a technically completed search (results or empty)."""
+        return outcome in cls._COMPLETED_SEARCH_OUTCOMES
 
     def _store_search_matches_context(
         self, user_id: str, formatted: list[dict[str, Any]],
@@ -19515,11 +19630,16 @@ class RicoChatAPI:
         # Persist recognised roles + exclusion guard so a follow-up selection
         # searches directly (bypassing taxonomy rejection) and so future searches
         # this session can honour the "do not search …" constraint.
+        #
+        # NOTE (Defect 1 continuity): do NOT set recent_search_role to the primary
+        # here. The current search context must only advance when a search
+        # TECHNICALLY COMPLETES — the primary's own _target_role_search_response
+        # sets recent_search_role iff its search completes (results or empty), and
+        # leaves the prior completed context intact if the provider is degraded.
         try:
             ctx = self._get_recent_context(user_id)
             ctx["multi_role_candidates"] = roles
             ctx["excluded_roles"] = excluded_roles
-            ctx["recent_search_role"] = primary
             self._store_recent_context(user_id, ctx)
         except Exception:
             pass
