@@ -50,6 +50,7 @@ jobs:
             tests/test_tc2_tc8_wiring.py \
             tests/test_job_result_integrity.py \
             tests/test_764_durable_mutation_truth.py \
+            tests/test_1076_log_redaction.py \
             tests/test_1082_consent_fail_closed.py \
             tests/test_1070_guest_identity_binding.py \
             tests/test_1084_workflow_guards.py \
