@@ -80,7 +80,7 @@ def get_deletion_generation(*, account_id: str) -> int:
         conn.close()
 
 
-def purge_account_memory(*, account_id: str) -> Dict[str, Any]:
+def purge_account_memory(*, account_id: str, missing_ok: bool = False) -> Dict[str, Any]:
     """Erase ALL memory rows for ONE account and advance its deletion boundary.
 
     One transaction: lock the deletion-state row (FOR UPDATE), bump the
@@ -88,6 +88,11 @@ def purge_account_memory(*, account_id: str) -> Dict[str, Any]:
     write that captured the previous generation is either deleted here (it
     committed first) or refused by ``_admit_write`` (it commits after) — no
     resurrection path exists. Rows of every other account are untouched.
+
+    ``missing_ok=True`` tolerates an unprovisioned engine (migration 042 not
+    applied — Postgres error 42P01 undefined_table): with no tables there can
+    be no engine rows, so the purge is a successful no-op reported with
+    ``provisioned: False``. Every other failure still raises.
 
     Returns a deletion receipt (no content): account_id, new generation,
     per-storage-class deleted counts, purged_at.
@@ -136,6 +141,7 @@ def purge_account_memory(*, account_id: str) -> Dict[str, Any]:
         conn.commit()
         return {
             "account_id": account_id,
+            "provisioned": True,
             "deletion_generation": int(gen_row[0]),
             "events_deleted": events_deleted,
             "facts_deleted": facts_deleted,
@@ -146,6 +152,15 @@ def purge_account_memory(*, account_id: str) -> Dict[str, Any]:
             conn.rollback()
         except Exception:
             pass
+        if missing_ok and getattr(exc, "pgcode", None) == "42P01":
+            return {
+                "account_id": account_id,
+                "provisioned": False,
+                "deletion_generation": None,
+                "events_deleted": 0,
+                "facts_deleted": 0,
+                "purged_at": None,
+            }
         raise CareerMemoryRepoError(str(exc)) from exc
     finally:
         conn.close()

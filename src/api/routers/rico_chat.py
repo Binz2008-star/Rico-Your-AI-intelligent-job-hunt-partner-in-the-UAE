@@ -1065,13 +1065,54 @@ def rico_chat_history(
     }
 
 
-@router.delete("/chat/history", status_code=204)
+@router.delete("/chat/history")
 @limiter.limit(LIMIT_CHAT)
-def rico_clear_chat_history(request: Request) -> None:
-    """Delete all chat history for the authenticated user (chat messages only)."""
+def rico_clear_chat_history(request: Request) -> dict[str, Any]:
+    """Delete all chat history for the authenticated user (chat scope).
+
+    Truthful-erasure contract (#1088): erases DB chat rows, the local chat
+    copy, AND the derived conversation-memory entries through the shared
+    erasure orchestrator. Returns a content-free deletion receipt; a store
+    that cannot be verifiably erased yields a retryable 503 — never a
+    success claim.
+    """
     user = get_current_user(request)
     user_id = user["email"]
-    chat_service.clear_chat_history(user_id)
+    from src.services.erasure_service import ErasureError, erase_conversation_data
+
+    try:
+        return erase_conversation_data(user_id)
+    except ErasureError:
+        logger.exception("clear_chat_history: erasure failed user=%s", user_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Chat history could not be fully deleted. Please try again.",
+        )
+
+
+@router.delete("/memory")
+@limiter.limit(LIMIT_CHAT)
+def rico_clear_memory(request: Request) -> dict[str, Any]:
+    """Delete Rico's derived memory for the authenticated user (memory scope).
+
+    Erases the legacy derived-memory store and purges the career-memory
+    engine (deletion-generation bump + per-account row deletion) through the
+    shared erasure orchestrator (#1088). Works regardless of the
+    memory-engine feature flag. Returns a content-free deletion receipt;
+    failure yields a retryable 503, never a success claim.
+    """
+    user = get_current_user(request)
+    user_id = user["email"]
+    from src.services.erasure_service import ErasureError, erase_memory_data
+
+    try:
+        return erase_memory_data(user_id)
+    except ErasureError:
+        logger.exception("clear_memory: erasure failed user=%s", user_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Rico memory could not be fully deleted. Please try again.",
+        )
 
 
 # ============================================================================

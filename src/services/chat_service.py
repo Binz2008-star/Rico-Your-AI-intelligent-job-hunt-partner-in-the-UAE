@@ -930,30 +930,15 @@ def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = No
     return result
 
 
-def clear_chat_history(user_id: str) -> None:
-    """Delete all chat history rows for a user (chat only — profile/applications unaffected)."""
-    db_uid = _resolve_db_user_id(user_id)
-    if db_uid:
-        try:
-            from src.rico_db import RicoDB
-            db = RicoDB()
-            if db.available:
-                conn = db.connect()
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute("DELETE FROM rico_chat_history WHERE user_id = %s", (db_uid,))
-                    conn.commit()
-                finally:
-                    conn.close()
-        except Exception as exc:
-            logger.warning("chat_service: clear_chat_history failed for user=%s: %s", user_id, exc)
+def clear_chat_history(user_id: str) -> dict:
+    """Delete all chat data for a user (chat scope — profile/applications unaffected).
 
-    # Best-effort: clear the local JSON chat file as well
-    try:
-        from src.rico_memory import RicoMemoryStore
-        store = RicoMemoryStore()
-        chat_path = store._chat_path(user_id)
-        if chat_path.exists():
-            chat_path.unlink()
-    except Exception:
-        pass
+    Delegates to the shared erasure orchestrator (#1088): DB chat rows, the
+    local chat copy, and the derived conversation-memory entries are erased
+    together, and failure RAISES (ErasureError) instead of being swallowed —
+    a clear that could not be verified must never look successful.
+    Returns the content-free deletion receipt.
+    """
+    from src.services.erasure_service import erase_conversation_data
+
+    return erase_conversation_data(user_id)

@@ -63,6 +63,7 @@ jobs:
             tests/test_uploaded_document_durable_context.py \
             tests/test_attachment_analysis_factory.py \
             tests/decision_regression/ \
+            tests/test_clear_chat_history.py \
             -v --tb=short
 
   # Real-Postgres coverage for the user_documents single-primary invariant
@@ -117,6 +118,7 @@ jobs:
             tests/integration/test_cv_upload_artifacts_postgres.py \
             tests/integration/test_jotform_atomicity_postgres.py \
             tests/integration/test_career_memory_deletion_postgres.py \
+            tests/integration/test_erasure_wiring_postgres.py \
             -v --tb=short
 
   playwright:
