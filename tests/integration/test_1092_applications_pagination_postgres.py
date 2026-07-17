@@ -366,3 +366,116 @@ class TestInsertBetweenPageReads:
             "no pre-existing item may be skipped by a concurrent insert"
         overlap = set(page1) & set(later_pages)
         assert len(overlap) <= 1, "at most the boundary item repeats per insert"
+
+
+# ── Owner-required determinism proofs (review conditions on PR #1144) ────────
+
+class TestOrderingDeterminism:
+    def test_duplicate_timestamps_page_deterministically_via_id_tiebreak(self, db):
+        """60 rows sharing ONE identical updated_at: ordering must be stable
+        (id DESC tie-break), identical across repeated reads, and paging must
+        still reach every row exactly once."""
+        uid = _mk_user(db)
+        from psycopg2.extras import Json
+        conn = db.connect(ensure_schema=False)
+        try:
+            with conn.cursor() as cur:
+                for i in range(60):
+                    cur.execute(
+                        """
+                        INSERT INTO rico_job_recommendations
+                            (user_id, job_key, job, status, created_at, updated_at)
+                        VALUES (%s, %s, %s, 'saved',
+                                '2026-07-01T12:00:00Z', '2026-07-01T12:00:00Z')
+                        """,
+                        (uid, f"tie-{i:03d}",
+                         Json({"title": f"Role {i}", "company": f"C{i}", "location": "Dubai"})),
+                    )
+            conn.commit()
+        finally:
+            conn.close()
+
+        def _full_order():
+            out = []
+            offset = 0
+            while True:
+                page = db.get_applications_page(uid, limit=25, offset=offset)
+                if not page:
+                    break
+                out.extend(a["job_id"] for a in page)
+                offset += 25
+            return out
+
+        first = _full_order()
+        assert len(first) == 60 and len(set(first)) == 60, "exactly-once despite ties"
+        for _ in range(3):
+            assert _full_order() == first, "identical order on every read (id DESC tie-break)"
+
+    def test_duplicate_identities_with_duplicate_timestamps_dedup_deterministically(self, db):
+        """Two physical rows, same identity AND same updated_at: the canonical
+        winner must be the same row on every read (id DESC decides)."""
+        uid = _mk_user(db)
+        from psycopg2.extras import Json
+        conn = db.connect(ensure_schema=False)
+        try:
+            with conn.cursor() as cur:
+                for key in ("dup-a", "dup-b"):
+                    cur.execute(
+                        """
+                        INSERT INTO rico_job_recommendations
+                            (user_id, job_key, job, status, created_at, updated_at)
+                        VALUES (%s, %s, %s, 'saved',
+                                '2026-07-01T12:00:00Z', '2026-07-01T12:00:00Z')
+                        """,
+                        (uid, key,
+                         Json({"title": "Same Role", "company": "Same Co", "location": "Dubai"})),
+                    )
+            conn.commit()
+        finally:
+            conn.close()
+
+        winners = {db.get_applications_page(uid)[0]["job_id"] for _ in range(5)}
+        assert len(winners) == 1, "tie between duplicate identities must resolve identically every time"
+        assert db.count_applications(uid) == 1
+
+    def test_offset_beyond_total_returns_empty_last_page(self, db):
+        uid = _mk_user(db)
+        _seed(db, uid, [
+            {"job_key": f"e-{i}", "title": f"R{i}", "company": f"C{i}"} for i in range(7)
+        ])
+        assert db.get_applications_page(uid, limit=5, offset=5) != []
+        assert db.get_applications_page(uid, limit=5, offset=10) == []
+        assert db.get_applications_page(uid, limit=5, offset=500) == []
+
+    def test_list_count_stats_quota_all_agree_on_one_canonical_rule(self, db):
+        """The unified-dedup condition: pages, count, stats, and the quota
+        count must agree on a dataset that mixes duplicates, ties, and
+        multiple statuses."""
+        uid = _mk_user(db)
+        rows = [
+            {"job_key": f"m-{i:03d}", "title": f"R{i}", "company": f"C{i % 9}",
+             "status": "saved" if i % 3 else "applied"}
+            for i in range(120)
+        ]
+        # duplicates of the first 15 identities under different keys
+        rows += [
+            {"job_key": f"mdup-{i:03d}", "title": f"R{i}", "company": f"C{i % 9}",
+             "status": "saved" if i % 3 else "applied"}
+            for i in range(15)
+        ]
+        _seed(db, uid, rows)
+
+        paged = []
+        offset = 0
+        while True:
+            page = db.get_applications_page(uid, limit=30, offset=offset)
+            if not page:
+                break
+            paged.extend(page)
+            offset += 30
+
+        stats = db.get_application_stats(uid)
+        assert len(paged) == db.count_applications(uid) == stats["total"] == 120
+        assert sum(stats["by_status"].values()) == stats["total"]
+        assert db.count_applications(uid, status="saved") == stats["saved"]
+        assert stats["saved"] == sum(1 for a in paged if a["status"] == "saved")
