@@ -1,0 +1,31 @@
+name: "#1070 Guest Identity Production Smoke (branch-scoped)"
+
+# Owner-approved release gate for #1070 (PR #1132). Lives ONLY on the
+# smoke/1070-production-gate branch — it never lands on main and the branch is
+# deleted once the gate is reported. Runs the ten-point smoke list against the
+# live backend with synthetic users and deletes every row it creates.
+on:
+  push:
+    branches: [smoke/1070-production-gate]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-1070
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: "#1070 production smoke"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --quiet requests psycopg2-binary
+      - name: Run #1070 production smoke gate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/smoke_1070_guest_identity.py
