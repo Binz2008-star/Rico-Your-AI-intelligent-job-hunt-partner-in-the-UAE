@@ -5888,7 +5888,22 @@ class RicoChatAPI:
 
         self._append_chat(user_id, "assistant", response)
         mark_completed(user_id, operation_id, len(formatted))
-        if formatted:
+        # Defect 1 continuity contract: a TECHNICALLY COMPLETED search — including
+        # one that truthfully returned zero jobs — becomes the current search
+        # context. A degraded/failed/unconfigured provider must NOT overwrite the
+        # last completed context. (Degraded/failed provider paths already returned
+        # earlier via _provider_degraded_response / search_error, so they never
+        # reach here; the remaining distinction is completed-with-results vs
+        # completed-empty vs a no-provider skip.)
+        _outcome = self._classify_search_outcome(
+            provider=fetch_provider,
+            rate_limited=rate_limited,
+            quota_exhausted=quota_exhausted,
+            error=fetch_error,
+            matches=formatted,
+        )
+        response["search_outcome"] = _outcome
+        if self._search_outcome_is_completed(_outcome):
             self._store_search_matches_context(
                 user_id, formatted,
                 search_role=search_role,
@@ -10125,6 +10140,51 @@ class RicoChatAPI:
         )
 
     # ── New intent-specific handlers ─────────────────────────────────────────
+
+    # Search-outcome states (Defect 1 continuity contract). Only a TECHNICALLY
+    # COMPLETED search — a real provider returning a definitive answer, with OR
+    # without jobs — may become the current search context (recent_search_role /
+    # recent_search_location). A degraded / failed / unconfigured provider must
+    # never overwrite the last completed context. A rejected/clarified request
+    # never reaches the search boundary at all.
+    _COMPLETED_SEARCH_OUTCOMES: tuple[str, ...] = (
+        "COMPLETED_WITH_RESULTS",
+        "COMPLETED_EMPTY",
+    )
+
+    @staticmethod
+    def _classify_search_outcome(
+        *,
+        provider: str,
+        rate_limited: bool,
+        quota_exhausted: bool,
+        error: str,
+        matches: list[Any],
+    ) -> str:
+        """Classify a provider FetchResult (+ final match list) into an outcome.
+
+        Uses the existing FetchResult signals — never ``bool(matches)`` alone —
+        so a provider that ran and truthfully returned zero jobs (COMPLETED_EMPTY)
+        is distinguished from one that was rate-limited / quota-exhausted /
+        errored / never configured (degraded or failed). ``no_providers_configured``
+        is a local/test skip, not a real query, so it is treated as degraded.
+        """
+        if matches:
+            # Jobs from any source (incl. the legacy scraper fallback) → completed.
+            return "COMPLETED_WITH_RESULTS"
+        if rate_limited or quota_exhausted:
+            return "PROVIDER_DEGRADED"
+        if error and error != "no_providers_configured":
+            return "PROVIDER_FAILED"
+        if not provider or provider == "none":
+            # No provider actually ran — nothing was technically searched.
+            return "PROVIDER_DEGRADED"
+        return "COMPLETED_EMPTY"  # a real provider returned zero jobs
+
+    @classmethod
+    def _search_outcome_is_completed(cls, outcome: str) -> bool:
+        """True when *outcome* is a technically completed search (results or empty)."""
+        return outcome in cls._COMPLETED_SEARCH_OUTCOMES
 
     def _store_search_matches_context(
         self, user_id: str, formatted: list[dict[str, Any]],
@@ -19570,11 +19630,16 @@ class RicoChatAPI:
         # Persist recognised roles + exclusion guard so a follow-up selection
         # searches directly (bypassing taxonomy rejection) and so future searches
         # this session can honour the "do not search …" constraint.
+        #
+        # NOTE (Defect 1 continuity): do NOT set recent_search_role to the primary
+        # here. The current search context must only advance when a search
+        # TECHNICALLY COMPLETES — the primary's own _target_role_search_response
+        # sets recent_search_role iff its search completes (results or empty), and
+        # leaves the prior completed context intact if the provider is degraded.
         try:
             ctx = self._get_recent_context(user_id)
             ctx["multi_role_candidates"] = roles
             ctx["excluded_roles"] = excluded_roles
-            ctx["recent_search_role"] = primary
             self._store_recent_context(user_id, ctx)
         except Exception:
             pass

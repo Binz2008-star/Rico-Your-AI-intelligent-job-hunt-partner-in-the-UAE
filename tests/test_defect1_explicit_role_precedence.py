@@ -335,3 +335,194 @@ def test_classify_intent_is_deterministic_for_the_guard():
         assert getattr(first, "entities", None) == getattr(second, "entities", None)
         assert first.extracted_role == second.extracted_role
         assert first.confidence == second.confidence
+
+
+# ===========================================================================
+# Search-context CONTINUITY contract (Defect 1, outcome-aware):
+#   1. A technically completed search (results OR truthfully empty) becomes the
+#      current search context.
+#   2. A provider degraded/failed/unconfigured must NOT overwrite the last
+#      completed context.
+#   3. A pending, unconfirmed role never becomes the current context.
+#   4. A pure location refinement reuses the latest technically completed role.
+#   5. Profile ranks but never rewrites an explicit current request.
+# recent_search_role is written only on a completed outcome — never on
+# bool(matches) alone.
+# ===========================================================================
+from unittest.mock import patch  # noqa: E402
+from src.jsearch_client import FetchResult  # noqa: E402
+
+
+class _OutcomeHarness(ChatHarness):
+    """Drive the real path while dictating each search's *provider outcome*.
+
+    ``outcomes`` is a per-call queue of:
+      "RESULTS"          → real provider, ≥1 job   (COMPLETED_WITH_RESULTS)
+      "EMPTY"            → real provider, 0 jobs    (COMPLETED_EMPTY)
+      "DEGRADED"         → rate-limited, 0 jobs     (PROVIDER_DEGRADED, truthful)
+      "NO_PROVIDER"      → nothing configured/ran   (PROVIDER_DEGRADED)
+    The legacy scraper fallback is stubbed empty so EMPTY/DEGRADED outcomes are
+    not masked by it.
+    """
+
+    def __init__(self, outcomes: list[str]) -> None:
+        super().__init__()
+        self._outcomes = list(outcomes)
+        self._i = 0
+        self.searched_locations: list[str] = []
+
+    def _search(self, role: str, location: str = "", **_kw: Any) -> FetchResult:
+        self.searched_roles.append(role)
+        self.searched_locations.append(location or "")
+        oc = self._outcomes[min(self._i, len(self._outcomes) - 1)]
+        self._i += 1
+        if oc == "RESULTS":
+            return FetchResult(
+                items=[{"title": role, "company": "ACME",
+                        "apply_url": "https://acme.example/jobs/1", "location": "Dubai, UAE"}],
+                provider="jsearch",
+            )
+        if oc == "EMPTY":
+            return FetchResult(items=[], provider="jsearch")
+        if oc == "DEGRADED":
+            return FetchResult(items=[], provider="jsearch", rate_limited=True)
+        if oc == "NO_PROVIDER":
+            return FetchResult(items=[], provider="none", error="no_providers_configured")
+        raise AssertionError(f"unknown outcome {oc!r}")
+
+    def say(self, user_id: str, message: str, language=None):
+        with patch("src.rico_repo_adapter.RicoSystem.run_for_profile",
+                   return_value={"matches": []}):
+            return super().say(user_id, message, language=language)
+
+
+def _recent_role(h: ChatHarness, user: str = "u@test"):
+    return (h._rctx.get(user) or {}).get("recent_search_role")
+
+
+def _seed_outcome(h: _OutcomeHarness) -> None:
+    h.seed("u@test", cv_status="parsed", cv_filename="cv.pdf",
+           target_roles=[PROFILE_ROLE], skills=["hse", "environment", "sustainability"],
+           years_experience=8, preferred_cities=["Dubai"], current_role="Environmental Manager")
+
+
+# --- outcome classifier unit (never bool(matches) alone) --------------------
+@pytest.mark.parametrize("kwargs,expected", [
+    (dict(provider="jsearch", rate_limited=False, quota_exhausted=False, error="", matches=[{"t": 1}]), "COMPLETED_WITH_RESULTS"),
+    (dict(provider="jsearch", rate_limited=False, quota_exhausted=False, error="", matches=[]), "COMPLETED_EMPTY"),
+    (dict(provider="jsearch", rate_limited=True, quota_exhausted=False, error="", matches=[]), "PROVIDER_DEGRADED"),
+    (dict(provider="jsearch", rate_limited=False, quota_exhausted=True, error="", matches=[]), "PROVIDER_DEGRADED"),
+    (dict(provider="none", rate_limited=False, quota_exhausted=False, error="all_providers_unavailable", matches=[]), "PROVIDER_FAILED"),
+    (dict(provider="none", rate_limited=False, quota_exhausted=False, error="no_providers_configured", matches=[]), "PROVIDER_DEGRADED"),
+])
+def test_classify_search_outcome_states(kwargs, expected):
+    assert RicoChatAPI._classify_search_outcome(**kwargs) == expected
+    assert RicoChatAPI._search_outcome_is_completed(expected) is expected.startswith("COMPLETED")
+
+
+# --- Test 3: selecting Operations Manager becomes current even on 0 results --
+def test_selected_operations_manager_becomes_current_even_zero_results():
+    h = _OutcomeHarness(["RESULTS", "EMPTY"])   # B primary HSE=results, C ops=empty
+    _seed_outcome(h)
+    h.say("u@test", "Show me any HSE, sustainability, or operations manager jobs anywhere in the UAE")
+    before = len(h.searched_roles)
+    res = h.say("u@test", "Search operations manager")
+    assert h.searched_roles[before:] == ["Operations Manager"]        # executed
+    assert res.get("search_outcome") == "COMPLETED_EMPTY"             # truthful, technically completed
+    assert _recent_role(h) == "Operations Manager"                    # became current context
+
+
+# --- Test 4: selecting Sustainability becomes current even on 0 results ------
+def test_selected_sustainability_becomes_current_even_zero_results():
+    h = _OutcomeHarness(["RESULTS", "EMPTY"])
+    _seed_outcome(h)
+    h.say("u@test", "Show me any HSE, sustainability, or operations manager jobs anywhere in the UAE")
+    before = len(h.searched_roles)
+    res = h.say("u@test", "Search sustainability")
+    assert h.searched_roles[before:] == ["Sustainability"]
+    assert res.get("search_outcome") == "COMPLETED_EMPTY"
+    assert _recent_role(h) == "Sustainability"
+
+
+# --- Test 5: provider-degraded does NOT overwrite last completed role --------
+def test_provider_degraded_does_not_overwrite_last_completed_role():
+    h = _OutcomeHarness(["RESULTS", "DEGRADED"])   # C ops=results, D sustainability=degraded
+    _seed_outcome(h)
+    h.say("u@test", "Search operations manager")
+    assert _recent_role(h) == "Operations Manager"
+    res = h.say("u@test", "Search sustainability")
+    # degradation is reported truthfully…
+    assert res.get("type") == "provider_degraded"
+    # …and the last technically completed role is preserved.
+    assert _recent_role(h) == "Operations Manager"
+    before = len(h.searched_roles)
+    h.say("u@test", "Search all across the UAE")
+    assert h.searched_roles[before:] == ["Operations Manager"]        # refinement reuses completed role
+
+
+def test_no_provider_run_does_not_overwrite_last_completed_role():
+    h = _OutcomeHarness(["RESULTS", "NO_PROVIDER"])
+    _seed_outcome(h)
+    h.say("u@test", "Search operations manager")
+    assert _recent_role(h) == "Operations Manager"
+    res = h.say("u@test", "Search sustainability")
+    assert res.get("search_outcome") == "PROVIDER_DEGRADED"           # nothing actually ran
+    assert _recent_role(h) == "Operations Manager"                    # context untouched
+
+
+# --- Test 1 (continuity): explicit search overrides prior context, 0 results -
+def test_explicit_completed_empty_search_overrides_prior_context():
+    h = _OutcomeHarness(["RESULTS", "EMPTY"])
+    _seed_outcome(h)
+    h.say("u@test", "Search operations manager")                      # completed w/ results
+    assert _recent_role(h) == "Operations Manager"
+    res = h.say("u@test", "Find Environmental Manager jobs in the UAE")  # explicit, 0 results
+    assert res.get("search_outcome") == "COMPLETED_EMPTY"
+    assert _recent_role(h) == "Environmental Manager"                 # explicit request wins even empty
+
+
+# --- Test 6: pending Accountant never becomes current, never profile ---------
+def test_pending_accountant_never_becomes_current_context():
+    h = _OutcomeHarness(["RESULTS", "RESULTS"])
+    _seed_outcome(h)
+    h.say("u@test", "Search operations manager")                      # current = Operations Manager
+    assert _recent_role(h) == "Operations Manager"
+    res = h.say("u@test", "Find accountant jobs in Dubai")            # off-profile → clarification
+    assert res.get("type") == "clarification"
+    pending = (h._rctx.get("u@test") or {}).get("_pending_role_confirmation")
+    assert pending == {"role": "Accountant", "location": "Dubai"}     # pending, not executed
+    assert _recent_role(h) == "Operations Manager"                    # NOT Accountant, NOT Environmental Manager
+    before = len(h.searched_roles)
+    h.say("u@test", "Search all across the UAE")
+    assert h.searched_roles[before:] == ["Operations Manager"]        # refinement ignores the pending role
+
+
+# --- Test 7: pure UAE refinement reuses the latest COMPLETED role ------------
+def test_uae_refinement_reuses_latest_completed_role_location_only():
+    h = _OutcomeHarness(["RESULTS", "RESULTS"])
+    _seed_outcome(h)
+    h.say("u@test", "Find HSE Manager jobs in Dubai")                 # completed, current = HSE Manager
+    assert _recent_role(h) == "HSE Manager"
+    before = len(h.searched_roles)
+    res = h.say("u@test", "Search all across the UAE")
+    assert h.searched_roles[before:] == ["HSE Manager"]              # same role, no new role invented
+    assert h.searched_locations[before:] == [""]                    # nationwide (UAE default)
+    assert "UAE" in (res.get("message") or "")
+
+
+# --- Test 10: strong-title filter & adjacent-role opt-in gate unchanged ------
+def test_strong_title_filter_and_adjacent_opt_in_unchanged():
+    # Off-profile explicit role still triggers the opt-in confirmation gate
+    # (adjacent-role opt-in policy preserved) — never auto-searched, never
+    # rewritten to the profile role.
+    h = _OutcomeHarness(["RESULTS"])
+    _seed_outcome(h)
+    res = h.say("u@test", "Find accountant jobs in Dubai")
+    assert res.get("type") == "clarification"
+    assert "accountant" in (res.get("message") or "").lower()
+    assert "Environmental Manager" not in (res.get("message") or "")
+    # The strong-title matcher itself is unchanged and still title-only.
+    assert RicoChatAPI._job_matches_requested_domain(
+        {"title": "Senior Accountant"}, {"accountant"}, set()) is True
+    assert RicoChatAPI._job_matches_requested_domain(
+        {"title": "Environmental Manager"}, {"accountant"}, set()) is False
