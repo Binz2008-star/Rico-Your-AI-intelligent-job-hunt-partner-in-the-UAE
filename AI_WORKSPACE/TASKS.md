@@ -2270,3 +2270,41 @@ Task            TASK-20260716-003 (this entry)
   persisted-deck validation hardened (unique-valid-subset only) with regression tests
 - Next exact action: owner manual smoke on the Vercel preview + record the
   exception/merge order; PR stays draft until then
+
+---
+
+### TASK-20260716-004 — After the films comes the landing page (+ film-boot robustness fix)
+
+Status: merge authorized — owner (Binz2008-star) explicitly said "merge"
+in-session (2026-07-16) after CI went green and the Vercel preview was up;
+containment exception recorded, same basis as TASK-20260716-003 / #1085.
+Owner: Claude
+Branch: `claude/rico-film-rotation-fix-g7tua4` (restarted from main after #1085 merged)
+Issue/PR: follow-up to #1085
+
+#### Objective
+
+1. A rotation film's single pass ends by handing the visitor to the landing
+   page (`/?after-film=1` → landing renders once, marker stripped, next "/"
+   entry rotates again) instead of looping forever. Skip/Join keep /signup.
+2. Robustness fix discovered while verifying: replace the chooser's
+   fetch + document.write film render (merged in #1085) with a real
+   navigation tagged `#rico-rotation` + in-film `history.replaceState` mask.
+   A parser-inserted end-of-body script waits on pending stylesheets, so a
+   stalled fonts CDN froze the written film entirely; native navigation has
+   no such dependency and keeps the same reload-re-enters-rotation behavior.
+
+#### Continuity Block
+
+- Task ID: TASK-20260716-004
+- Files touched: `apps/web/public/explainer/index.html`,
+  `apps/web/public/explainer/option-2.html` / `option-3.html` / `option-3b.html`
+  (goLanding at end of pass + #rico-rotation URL mask; visuals/copy/CTAs untouched),
+  `apps/web/app/page.tsx`, `apps/web/lib/openingFilm.ts` (claimAfterFilmLanding),
+  `apps/web/__tests__/landing-opening-film.test.tsx`,
+  `apps/web/__tests__/explainer-film-rotation.test.ts`,
+  `apps/web/public/explainer/README.md`
+- Validation already run: vitest 600/600; next build green; real-Chromium E2E:
+  "/" → film plays (scene active = script live, URL masked to chooser) →
+  fast-forward → landing renders once with marker stripped → reload → next film
+- Next exact action: owner merge word; production deploy via Vercel on merge

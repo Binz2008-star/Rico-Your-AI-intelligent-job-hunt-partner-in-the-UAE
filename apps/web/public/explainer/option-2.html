@@ -383,6 +383,10 @@ body.cut-c .sub{font-size:clamp(1.1rem,2vw,1.6rem)} body.cut-c .kicker::before{d
 <script>
 (function(){
   "use strict";
+  /* Arriving from the rotation chooser (#rico-rotation): mask the address
+     bar back to the chooser so a reload re-enters the rotation instead of
+     replaying this option. Direct/deep links keep their real URL. */
+  if(location.hash==='#rico-rotation'){ try{ history.replaceState(null,'','/explainer/index.html'+location.search); }catch(_){ } }
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* Where Skip and the CTA send people — the live registration/waitlist.
@@ -473,7 +477,11 @@ body.cut-c .sub{font-size:clamp(1.1rem,2vw,1.6rem)} body.cut-c .kicker::before{d
     audioScene(i);
     sceneStart = performance.now();
   }
-  function advance(){ var n=idx+1; if(n>=scenes.length) n=0; show(n); hop=setTimeout(advance, DUR[n]); }
+  /* Owner directive 2026-07-16: after the film's single pass, hand the
+     visitor to the landing page. The ?after-film=1 marker tells "/" to
+     render the landing once instead of re-running the film chooser. */
+  function goLanding(){ try{ clearTimeout(hop); }catch(_){} window.location.href = '/?after-film=1'; }
+  function advance(){ var n=idx+1; if(n>=scenes.length){ goLanding(); return; } show(n); hop=setTimeout(advance, DUR[n]); }
   function tick(){ var within=performance.now()-sceneStart; var elapsed=OFFSET[idx]+Math.min(within,DUR[idx]); progressEl.style.width=(100*elapsed/TOTAL).toFixed(2)+'%'; requestAnimationFrame(tick); }
 
   // ── Particles (CTA) ──────────────────────────────────────────────
