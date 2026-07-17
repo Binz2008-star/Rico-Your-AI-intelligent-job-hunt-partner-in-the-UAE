@@ -293,7 +293,23 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
         from src.repositories.users_repo import update_last_login
         update_last_login(user_info["id"])
 
-    token = create_access_token({"sub": user_info["email"], "role": user_info["role"]})
+    claims: Dict[str, Any] = {"sub": user_info["email"], "role": user_info["role"]}
+    if user_info.get("id"):
+        # DB-backed account: stamp the current auth_version so a later
+        # password reset / logout-all revokes this token (#1072).
+        from src.repositories.users_repo import AuthStoreUnavailable, get_auth_snapshot
+        try:
+            status, snapshot = get_auth_snapshot(user_info["email"])
+            claims["av"] = snapshot["auth_version"] if status == "found" and snapshot else 1
+        except AuthStoreUnavailable:
+            logger.warning("login_auth_version_unavailable — minting av=1")
+            claims["av"] = 1
+    else:
+        # Env-fallback admin: no DB row, cannot participate in DB revocation.
+        # deps.get_current_user rejects this marker in production unless
+        # ALLOW_ENV_AUTH_FALLBACK is explicitly set.
+        claims["auth"] = "env"
+    token = create_access_token(claims)
     response.set_cookie(
         key=_COOKIE_NAME,
         value=token,
@@ -326,11 +342,41 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
 
 @router.post("/logout")
 def logout(response: Response) -> Dict[str, str]:
+    """Log out THIS device only: clears the browser cookie. Tokens on other
+    devices stay valid until expiry — use /logout-all to revoke them (#1072)."""
     response.delete_cookie(
         key=_COOKIE_NAME,
         **_cookie_delete_kwargs(),
     )
     return {"message": "Logged out"}
+
+
+@router.post("/logout-all")
+def logout_all(request: Request, response: Response) -> Dict[str, str]:
+    """Log out EVERY device: bumps the account's auth_version so all
+    previously issued tokens are rejected, then clears this browser's cookie.
+
+    Truthful failure: if the revocation bump cannot be performed (store down,
+    migration 045 missing, or an env-fallback admin with no DB row) this
+    returns 503 — it never claims other sessions were revoked when they were
+    not.
+    """
+    from src.api.deps import get_current_user
+    from src.repositories.users_repo import increment_auth_version
+
+    user = get_current_user(request)
+    new_version = increment_auth_version(user["email"])
+    if new_version is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not revoke other sessions — please try again",
+        )
+    response.delete_cookie(
+        key=_COOKIE_NAME,
+        **_cookie_delete_kwargs(),
+    )
+    logger.info("logout_all_success auth_version=%d", new_version)
+    return {"message": "Logged out on all devices"}
 
 
 @router.get("/me")

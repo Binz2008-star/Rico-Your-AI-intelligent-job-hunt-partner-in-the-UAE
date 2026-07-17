@@ -13,10 +13,39 @@ from fastapi import HTTPException, Request
 from src.api.auth import decode_access_token
 
 
+def _env_auth_fallback_allowed() -> bool:
+    return os.getenv("ALLOW_ENV_AUTH_FALLBACK", "").lower() in ("1", "true", "yes")
+
+
+def _token_auth_version(payload: Dict[str, Any]) -> int:
+    """Token's auth-version claim; legacy tokens (no claim) count as version 1."""
+    try:
+        return int(payload.get("av") or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
 def get_current_user(request: Request) -> Dict[str, Any]:
     """
-    Validate the JWT cookie. Raises HTTP 401 if missing or invalid.
-    Returns dict with ``email`` and ``role`` (defaults to "user" for legacy tokens).
+    Validate the JWT cookie AND the live account state (#1072).
+
+    Beyond signature/expiry, tokens are checked against the users table:
+    the account must still exist and be active, the token's auth-version
+    claim ("av") must match the account's current auth_version (password
+    reset / logout-all bump it, revoking older tokens), and the ROLE comes
+    from the DB — never from a stale token claim.
+
+    Fail-closed: if the user store is configured but unreachable, requests
+    are rejected with a retryable 503 rather than authorized from stale
+    claims. When no user store is configured at all (dev/test without
+    DATABASE_URL), there are no DB accounts to revoke and the token's own
+    claims are used, as before.
+
+    Env-fallback admin tokens (claim auth="env") cannot participate in DB
+    revocation; in production they are rejected unless
+    ALLOW_ENV_AUTH_FALLBACK is explicitly set.
+
+    Raises HTTP 401 if missing/invalid/revoked, 503 if the store is down.
     Usage: route(user: dict = Depends(get_current_user))
     """
     cached_user = getattr(request.state, "current_user", None)
@@ -33,10 +62,40 @@ def get_current_user(request: Request) -> Dict[str, Any]:
     payload = decode_access_token(token)
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    user = {
-        "email": payload["sub"],
-        "role":  payload.get("role", "user"),   # legacy tokens have no role → default "user"
-    }
+
+    email = payload["sub"]
+    token_role = payload.get("role", "user")   # legacy tokens have no role → default "user"
+
+    if payload.get("auth") == "env":
+        from src.api.auth import _is_production
+        if _is_production() and not _env_auth_fallback_allowed():
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        user = {"email": email, "role": token_role}
+    else:
+        from src.db import is_db_available
+        if not is_db_available():
+            # No user store configured (dev/test) — nothing to revoke against.
+            user = {"email": email, "role": token_role}
+        else:
+            from src.repositories.users_repo import AuthStoreUnavailable, get_auth_snapshot
+            try:
+                status, snapshot = get_auth_snapshot(email)
+            except AuthStoreUnavailable:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Authentication temporarily unavailable — please retry",
+                )
+            if status != "found" or snapshot is None:
+                raise HTTPException(status_code=401, detail="Invalid or expired token")
+            if not snapshot["is_active"]:
+                raise HTTPException(status_code=401, detail="Account is deactivated")
+            if _token_auth_version(payload) != snapshot["auth_version"]:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Session expired. Please sign in again.",
+                )
+            user = {"email": email, "role": snapshot["role"] or "user"}
+
     request.state.current_user = user
     request.state.user_id = user["email"]
     return user

@@ -79,6 +79,10 @@ CHECKS: list[tuple[str, str, object]] = [
     ("043", "column", ("gmail_connections", "recurring_sync_consent_at")),
     # Guest merge single-owner claim (#1070)
     ("044", "table", "guest_identity_claims"),
+    # Stale-JWT invalidation auth version (#1072). Manual-apply in the owner's
+    # migration-045 window; until applied the code degrades loudly (revocation
+    # inert, logout-all 503) and this drift alert IS the reminder.
+    ("045", "column", ("users", "auth_version")),
     # Posting-history archive (Product Truth Sprint data-integrity foundation).
     # Expected to report drift after merge until the owner applies 046 — that
     # alert IS the reminder; the archive code no-ops until the table exists.
