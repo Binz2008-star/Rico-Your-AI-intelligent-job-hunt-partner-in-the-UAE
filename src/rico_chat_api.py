@@ -11475,6 +11475,28 @@ class RicoChatAPI:
         if not is_track and not is_save and not is_score:
             return None
 
+        # BUG-24: "Find UAE jobs that match my CV" is a JOB SEARCH, not a
+        # job-document score/save action — but _JOB_DOC_SCORE_RE ("match … cv")
+        # over-matches search phrasing, so this intercept used to answer
+        # "I don't have an uploaded job document yet." for a plain search.
+        # Defer to the SAME canonical classifier the real search router keys on
+        # (classify_intent → the job_search_* intents in _JOB_SEARCH_INTENTS).
+        # This is the precise discriminator: a genuine "Save this as a target
+        # job" classifies as save_job and a "Score this against my CV" as
+        # unknown, so neither is affected — only true job-search intents (EN +
+        # AR, incl. colloquial phrasing the classifier already handles) fall
+        # through to the job-search path. No parallel intent model is added.
+        try:
+            from src.agent.intelligence.intent_classifier import classify_intent
+            from src.rico.intent.gates import _JOB_SEARCH_INTENTS
+
+            if classify_intent(message or "").intent in _JOB_SEARCH_INTENTS:
+                return None
+        except Exception:
+            # Classifier unavailable → keep the original save/score behavior
+            # rather than swallow a genuine job-doc action.
+            pass
+
         _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
         doc = self._get_last_uploaded_document(user_id)
 

@@ -160,6 +160,87 @@ class TestHandleJobDocAction:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# BUG-24: a job SEARCH ("Find jobs that match my CV") must never be intercepted
+# as a job-DOCUMENT score/save action — it must fall through to the job-search
+# path. _JOB_DOC_SCORE_RE over-matches "match … cv", so the dispatcher defers to
+# the canonical is_explicit_job_listing_request classifier.
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestJobSearchNotInterceptedAsJobDoc:
+    @pytest.mark.parametrize("msg", [
+        "Find UAE jobs that match my CV and experience.",
+        "Find UAE jobs that match my CV and experience",
+        "find jobs matching my cv",
+        "show me jobs that fit my resume",
+        # Arabic explicit search phrasing
+        "ابحث عن وظائف في الإمارات تناسب سيرتي الذاتية",
+    ])
+    def test_job_search_falls_through_even_with_a_job_doc_present(self, msg: str):
+        api = _make_api()
+        # A stale job-description doc on record must NOT let a plain search be
+        # answered with the "no/има document" scoring path.
+        api._get_last_uploaded_document = MagicMock(return_value=_doc_with_text())
+        api._score_uploaded_job_against_cv = MagicMock(
+            return_value={"type": "score", "message": "SHOULD NOT BE CALLED"}
+        )
+        result = api._handle_job_doc_action("u1", msg, None)
+        assert result is None, f"{msg!r} is a job search and must fall through, not score"
+        api._score_uploaded_job_against_cv.assert_not_called()
+
+    def test_job_search_with_no_document_does_not_claim_missing_job_doc(self):
+        api = _make_api()
+        api._get_last_uploaded_document = MagicMock(return_value=None)
+        result = api._handle_job_doc_action(
+            "u1", "Find UAE jobs that match my CV and experience.", None
+        )
+        # Falls through (None) so the real job-search path runs; it must NOT
+        # short-circuit with the "I don't have an uploaded job document" reply.
+        assert result is None
+        api._append_chat.assert_not_called()
+
+    @pytest.mark.parametrize("msg", [
+        "Score this job description against my current CV.",
+        "score this against my resume",
+    ])
+    def test_genuine_score_intent_is_still_intercepted(self, msg: str):
+        api = _make_api()
+        doc = _doc_with_text()
+        api._get_last_uploaded_document = MagicMock(return_value=doc)
+        api._score_uploaded_job_against_cv = MagicMock(
+            return_value={"type": "score", "message": "fit analysis"}
+        )
+        result = api._handle_job_doc_action("u1", msg, None)
+        assert result is not None, f"{msg!r} is a genuine score action, not a search"
+        api._score_uploaded_job_against_cv.assert_called_once()
+
+    def test_genuine_save_intent_is_still_intercepted(self):
+        api = _make_api()
+        doc = _doc_with_text()
+        api._get_last_uploaded_document = MagicMock(return_value=doc)
+        api._save_uploaded_job_to_pipeline = MagicMock(
+            return_value={"type": "save_job", "message": "saved"}
+        )
+        result = api._handle_job_doc_action(
+            "u1", "Save this as a target job in my pipeline.", None
+        )
+        assert result is not None
+        api._save_uploaded_job_to_pipeline.assert_called_once()
+
+    def test_reachable_followup_entrypoint_falls_through_for_job_search(self):
+        """The actual production caller (_handle_uploaded_document_followup,
+        invoked at _process_message_inner line ~6409 BEFORE job-search
+        classification) must return None for a job-search prompt so the message
+        continues to the real search path — even when a stale job doc exists."""
+        api = _make_api()
+        api._get_last_uploaded_document = MagicMock(return_value=_doc_with_text())
+        result = api._handle_uploaded_document_followup(
+            "u1", "Find UAE jobs that match my CV and experience.", None
+        )
+        assert result is None
+        api._append_chat.assert_not_called()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # _save_uploaded_job_to_pipeline
 # ──────────────────────────────────────────────────────────────────────────────
 
