@@ -35,6 +35,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Mono } from "@/components/atelier-kit/primitives";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { PaddleBillingSection } from "@/components/billing/PaddleBillingSection";
+import { GmailConnectionCard } from "@/components/settings/GmailConnectionCard";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
 import { ToastContainer } from "@/components/ui/Toast";
@@ -675,6 +676,10 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Gmail read-only connector (M0) — flag-gated backend;
+                                renders a "coming soon" state until enabled. */}
+                            <GmailConnectionCard palette={palette} notify={toast} />
                         </div>
                     </Panel>
                 )}

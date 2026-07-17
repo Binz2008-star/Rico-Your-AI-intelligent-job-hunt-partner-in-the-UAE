@@ -204,6 +204,7 @@ class TestCookieSessionSettings:
             "COOKIE_DOMAIN": ".ricohunt.com",
             "APP_URL": "https://ricohunt.com",
             "RICO_ENV": "production",
+            "JWT_SECRET": "x" * 32,
         }
         with patch.dict(os.environ, env, clear=False), \
              patch("src.api.auth.verify_credentials", return_value={"email": "admin@test.com", "role": "admin"}):

@@ -95,6 +95,20 @@ services:
       - key: GITHUB_WEBHOOK_SECRET
         sync: false
 
+      # ── Gmail read-only connector (M0) ────────────────────────────────────────
+      # OFF by default. Secrets are set in the Render dashboard; the flag stays
+      # false until Google OAuth verification and rollout are approved.
+      - key: RICO_ENABLE_GMAIL_SYNC
+        value: "false"
+      - key: GMAIL_TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
+
       # ── Billing mode ─────────────────────────────────────────────────────────
       # Manual (WhatsApp-assisted) is the safe default. Paddle is activated only
       # by the owner setting BILLING_MODE=paddle in the Render dashboard — never

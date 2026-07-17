@@ -68,6 +68,15 @@ CHECKS: list[tuple[str, str, object]] = [
     ("040", "table", "paddle_checkout_sessions"),
     ("040", "column", ("paddle_subscriptions", "last_event_occurred_at")),
     ("041", "column", ("paddle_subscriptions", "past_due_since")),
+    # Gmail read-only connector M0 (migration 043)
+    ("043", "table", "gmail_connections"),
+    ("043", "table", "gmail_sync_runs"),
+    ("043", "table", "gmail_review_items"),
+    ("043", "table", "gmail_audit_events"),
+    ("043", "index", "uq_gmail_connections_active"),
+    ("043", "constraint", "uq_gmail_review_items_user_message"),
+    # Per-user recurring-sync consent (fleet-sweep opt-in) — amended into 043.
+    ("043", "column", ("gmail_connections", "recurring_sync_consent_at")),
 ]
 
 

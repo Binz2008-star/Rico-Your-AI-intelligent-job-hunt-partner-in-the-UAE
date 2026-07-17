@@ -92,6 +92,24 @@ export const translations = {
     account: "Account",
     changePassword: "Change password",
 
+    // Settings — Gmail read-only connector
+    gmailSectionTitle: "Gmail read-only sync",
+    gmailReadOnlyNote: "Read-only. Rico cannot send, delete, or modify your email.",
+    gmailComingSoon: "Coming soon — Gmail sync is not enabled yet.",
+    gmailSyncDisabled: "sync currently disabled",
+    gmailNotConnected: "Not connected",
+    gmailConnectedAs: "Connected as {email}",
+    gmailConnected: "Connected",
+    gmailNeedsReauth: "Needs re-authentication",
+    gmailLastSynced: "Last synced {time}",
+    gmailConnect: "Connect Gmail",
+    gmailReconnect: "Reconnect",
+    gmailSyncNow: "Sync now",
+    gmailDisconnect: "Disconnect",
+    gmailSyncStarted: "Sync started — Rico is reading recent job emails.",
+    gmailDisconnected: "Gmail disconnected.",
+    gmailActionFailed: "Gmail action failed — please try again.",
+
     // Forgot / Reset password
     forgotPasswordTitle: "Reset Password",
     forgotPasswordSubtitle: "Enter your email to receive reset instructions",
@@ -1326,6 +1344,24 @@ export const translations = {
     telegramChatIdHint: "حيث يرسل ريكو تنبيهات الوظائف",
     account: "الحساب",
     changePassword: "تغيير كلمة المرور",
+
+    // Settings — Gmail read-only connector
+    gmailSectionTitle: "مزامنة Gmail للقراءة فقط",
+    gmailReadOnlyNote: "للقراءة فقط. لا يستطيع ريكو إرسال بريدك أو حذفه أو تعديله.",
+    gmailComingSoon: "قريبًا — مزامنة Gmail غير مفعّلة بعد.",
+    gmailSyncDisabled: "المزامنة معطّلة حاليًا",
+    gmailNotConnected: "غير متصل",
+    gmailConnectedAs: "متصل باسم {email}",
+    gmailConnected: "متصل",
+    gmailNeedsReauth: "يتطلب إعادة تسجيل الدخول",
+    gmailLastSynced: "آخر مزامنة {time}",
+    gmailConnect: "ربط Gmail",
+    gmailReconnect: "إعادة الربط",
+    gmailSyncNow: "زامن الآن",
+    gmailDisconnect: "فصل",
+    gmailSyncStarted: "بدأت المزامنة — يقرأ ريكو رسائل الوظائف الأخيرة.",
+    gmailDisconnected: "تم فصل Gmail.",
+    gmailActionFailed: "فشل إجراء Gmail — حاول مرة أخرى.",
 
     // Forgot / Reset password
     forgotPasswordTitle: "إعادة تعيين كلمة المرور",
