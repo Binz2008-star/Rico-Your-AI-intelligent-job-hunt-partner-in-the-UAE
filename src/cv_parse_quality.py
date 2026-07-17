@@ -72,18 +72,9 @@ def validate_parse_quality(
     printable = sum(1 for c in text if c.isprintable() and not c.isspace())
     printable_ratio = printable / len(text) if text else 0.0
 
-    # Poor quality from parser → unreadable
-    if extraction_quality == "poor":
-        return ParseQualityResult(
-            outcome=ParseOutcome.UNREADABLE,
-            is_readable=False,
-            extracted_chars=extracted_chars,
-            printable_ratio=printable_ratio,
-            message="Extracted text quality is poor",
-        )
-
     # Conservative threshold: require both minimum chars AND reasonable printable ratio
     # This prevents binary garbage from passing even if it has enough "characters"
+    # Parser quality labels inform the decision but do not override these thresholds
     _MIN_READABLE_CHARS = 50
     _MIN_PRINTABLE_RATIO = 0.3  # At least 30% printable characters
 

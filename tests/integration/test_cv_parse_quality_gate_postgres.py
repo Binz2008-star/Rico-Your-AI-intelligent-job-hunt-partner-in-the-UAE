@@ -507,6 +507,82 @@ def test_scenario8_confirm_rejects_invalid_artifact():
     assert result.printable_ratio < 0.3
 
 
+# ── Boundary tests for parse-quality contract ───────────────────────────────
+
+def test_boundary_49_chars_rejected():
+    """49 readable chars → rejected"""
+    from src.cv_parse_quality import validate_parse_quality, ParseOutcome
+
+    text_49 = "x" * 49
+    result = validate_parse_quality(text=text_49, extracted_chars=49, extraction_quality="good")
+    assert result.outcome == ParseOutcome.UNREADABLE
+    assert result.is_readable is False
+
+
+def test_boundary_50_chars_accepted():
+    """50+ readable chars → accepted"""
+    from src.cv_parse_quality import validate_parse_quality, ParseOutcome
+
+    text_50 = "x" * 50
+    result = validate_parse_quality(text=text_50, extracted_chars=50, extraction_quality="good")
+    assert result.outcome == ParseOutcome.PARSED
+    assert result.is_readable is True
+
+
+def test_boundary_80_to_299_chars_accepted():
+    """readable 80–299 chars → accepted (contractually accepted)"""
+    from src.cv_parse_quality import validate_parse_quality, ParseOutcome
+
+    for char_count in [80, 150, 200, 299]:
+        text = "x" * char_count
+        result = validate_parse_quality(text=text, extracted_chars=char_count, extraction_quality="good")
+        assert result.outcome == ParseOutcome.PARSED, f"Failed at {char_count} chars"
+        assert result.is_readable is True
+
+
+def test_boundary_low_printable_above_300_chars_rejected():
+    """low-printable garbage above 300 chars → rejected"""
+    from src.cv_parse_quality import validate_parse_quality, ParseOutcome
+
+    # 400 chars but only 20% printable (below 30% threshold)
+    garbage = ("x" * 80) + ("\x00\x01\x02\x03" * 80)  # 80 printable + 320 non-printable
+    result = validate_parse_quality(text=garbage, extracted_chars=400, extraction_quality="good")
+    assert result.outcome == ParseOutcome.UNREADABLE
+    assert result.is_readable is False
+    assert result.printable_ratio < 0.3
+
+
+def test_boundary_arabic_readable_accepted():
+    """Arabic readable content → accepted"""
+    from src.cv_parse_quality import validate_parse_quality, ParseOutcome
+
+    arabic_text = "اسمي أحمد وأعمل مهندس برمجيات في دبي ولدي خبرة واسعة في تطوير الويب والتطبيقات"  # Arabic text with 50+ chars
+    result = validate_parse_quality(text=arabic_text, extracted_chars=len(arabic_text), extraction_quality="good")
+    assert result.outcome == ParseOutcome.PARSED
+    assert result.is_readable is True
+
+
+def test_boundary_english_readable_accepted():
+    """English readable content → accepted"""
+    from src.cv_parse_quality import validate_parse_quality, ParseOutcome
+
+    english_text = "My name is Ahmed and I work as a software engineer in Dubai"
+    result = validate_parse_quality(text=english_text, extracted_chars=len(english_text), extraction_quality="good")
+    assert result.outcome == ParseOutcome.PARSED
+    assert result.is_readable is True
+
+
+def test_boundary_poor_quality_with_50_chars_accepted():
+    """parser quality="poor" must not override 50-char threshold"""
+    from src.cv_parse_quality import validate_parse_quality, ParseOutcome
+
+    text_50 = "x" * 50
+    result = validate_parse_quality(text=text_50, extracted_chars=50, extraction_quality="poor")
+    # "poor" label alone must not reject if thresholds are met
+    assert result.outcome == ParseOutcome.PARSED
+    assert result.is_readable is True
+
+
 # ── Scenario 9: Retry and duplicate proof ───────────────────────────────────
 
 def test_scenario9_corrupt_upload_fails_valid_succeeds(client):
