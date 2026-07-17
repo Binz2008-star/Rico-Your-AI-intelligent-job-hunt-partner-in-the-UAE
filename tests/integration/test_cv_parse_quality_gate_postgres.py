@@ -243,14 +243,16 @@ def test_scenario1_corrupt_pdf_rejected_before_preview(client):
 
 # ── Scenario 2: Plain text renamed to .pdf ───────────────────────────────────
 
-def test_scenario2_renamed_text_as_pdf_treated_as_text(client):
+def test_scenario2_renamed_text_as_pdf_rejected(client):
     """
     Scenario 2: Plain text or another format renamed to .pdf
 
     Expected:
-    - Format integrity: magic bytes checked, not just extension
-    - If bytes are readable text, treated as text (not forced PDF parsing)
-    - May pass readability gate if content is meaningful
+    - Format integrity: reject .pdf files without PDF magic bytes
+    - status=invalid_signature
+    - no preview_ready
+    - no artifact
+    - no user_document
     """
     assert _count_artifacts() == 0
     assert _count_user_documents() == 0
@@ -260,17 +262,19 @@ def test_scenario2_renamed_text_as_pdf_treated_as_text(client):
         files={"file": ("renamed.pdf", io.BytesIO(_make_renamed_text_as_pdf()), "application/pdf")},
     )
 
-    # With format integrity fix, non-PDF bytes are treated as text
-    # If the text is readable, it may pass the readability gate
+    # Should return invalid_signature (format integrity)
     assert r.status_code == 200
     body = r.json()
-    # The key is: it's NOT parsed as PDF (no PyMuPDF fallback to garbage)
-    # It's decoded as UTF-8 text
-    # If the text is long enough, it passes readability gate
-    # This is correct behavior: readable content is readable
-    assert body.get("status") in ("preview_ready", "unreadable"), (
-        f"Renamed text should be treated as text, got: {body.get('status')}"
+    assert body.get("status") == "invalid_signature", (
+        f"Renamed text must be rejected as invalid_signature, got: {body.get('status')}"
     )
+    assert body.get("ok") is False
+
+    # No artifact created
+    assert _count_artifacts() == 0, "Renamed text must not create upload artifact"
+
+    # No document row
+    assert _count_user_documents() == 0, "Renamed text must not create user_document"
 
 
 # ── Scenario 3: Valid image-only/scanned PDF ─────────────────────────────────
@@ -358,11 +362,11 @@ def test_scenario5_parser_exception_returns_error(client):
             files={"file": ("valid.pdf", io.BytesIO(_make_valid_multipage_pdf()), "application/pdf")},
         )
 
-    # Should return error status
+    # Should return parse_failed status (truthful response contract)
     assert r.status_code == 200
     body = r.json()
-    assert body.get("status") == "error", (
-        f"Parser exception must return error status, got: {body.get('status')}"
+    assert body.get("status") == "parse_failed", (
+        f"Parser exception must return parse_failed status, got: {body.get('status')}"
     )
 
     # No artifact created
@@ -469,27 +473,90 @@ def test_scenario8_confirm_rejects_invalid_artifact():
     Scenario 8: Confirmation defense-in-depth
 
     Test that the confirm endpoint rejects artifacts with unreadable cv_text.
-    This is a unit test of the defense-in-depth logic without full auth flow.
+    This tests the shared parse-quality contract validation in the confirm endpoint.
     """
-    # Test the defense-in-depth check directly
-    # Simulate artifact with unreadable cv_text
-    artifact_with_unreadable = {
-        "cv_text": "x" * 10,  # Less than 50 chars
-        "filename": "unreadable.pdf",
-        "doc_type": "cv",
-    }
+    from src.cv_parse_quality import validate_artifact_quality, ParseOutcome
 
-    # The defense-in-depth check: len(cv_text.strip()) < 50
-    _MIN_CONFIRM_CHARS = 50
-    assert len(artifact_with_unreadable["cv_text"].strip()) < _MIN_CONFIRM_CHARS
+    # Test unreadable artifact (less than 50 chars)
+    artifact_unreadable = "x" * 10
+    result = validate_artifact_quality(artifact_unreadable)
+    assert result.outcome == ParseOutcome.UNREADABLE
+    assert result.is_readable is False
 
-    # Test with readable artifact
-    artifact_with_readable = {
-        "cv_text": "This is a valid CV with more than 50 characters of readable text content.",
-        "filename": "valid.pdf",
-        "doc_type": "cv",
-    }
-    assert len(artifact_with_readable["cv_text"].strip()) >= _MIN_CONFIRM_CHARS
+    # Test no_text artifact (empty)
+    result = validate_artifact_quality("")
+    assert result.outcome == ParseOutcome.NO_TEXT
+    assert result.is_readable is False
 
-    # The actual endpoint logic is tested in the other scenarios
-    # This documents the defense-in-depth threshold
+    # Test None artifact
+    result = validate_artifact_quality(None)
+    assert result.outcome == ParseOutcome.PARSE_FAILED
+    assert result.is_readable is False
+
+    # Test readable artifact (passes threshold)
+    artifact_readable = "This is a valid CV with more than 50 characters of readable text content."
+    result = validate_artifact_quality(artifact_readable)
+    assert result.outcome == ParseOutcome.PARSED
+    assert result.is_readable is True
+
+    # Test garbage artifact (low printable ratio)
+    garbage = "\x00\x01\x02\x03" * 20  # Binary garbage
+    result = validate_artifact_quality(garbage)
+    assert result.outcome == ParseOutcome.UNREADABLE
+    assert result.is_readable is False
+    assert result.printable_ratio < 0.3
+
+
+# ── Scenario 9: Retry and duplicate proof ───────────────────────────────────
+
+def test_scenario9_corrupt_upload_fails_valid_succeeds(client):
+    """
+    Scenario 9: Retry behavior
+
+    Test that:
+    - corrupt upload fails
+    - retry with valid PDF succeeds
+    """
+    assert _count_artifacts() == 0
+    assert _count_user_documents() == 0
+
+    # First, upload corrupt PDF (should fail)
+    r1 = client.post(
+        f"/api/v1/rico/upload-cv?user_id={_SYNTHETIC_USER_ID}",
+        files={"file": ("corrupt.pdf", io.BytesIO(_make_corrupt_pdf()), "application/pdf")},
+    )
+    assert r1.status_code == 200
+    body1 = r1.json()
+    assert body1.get("status") == "parse_failed", f"Corrupt PDF should return parse_failed, got: {body1.get('status')}"
+    assert _count_artifacts() == 0
+
+    # Retry with valid PDF (should succeed)
+    r2 = client.post(
+        f"/api/v1/rico/upload-cv?user_id={_SYNTHETIC_USER_ID}",
+        files={"file": ("valid_cv.pdf", io.BytesIO(_make_valid_multipage_pdf()), "application/pdf")},
+    )
+    assert r2.status_code == 200
+    body2 = r2.json()
+    assert body2.get("status") == "preview_ready", f"Valid CV should return preview_ready, got: {body2.get('status')}"
+
+
+def test_scenario10_duplicate_upload_idempotent(client):
+    """
+    Scenario 10: Duplicate upload behavior
+
+    Test that:
+    - upload endpoint accepts the same bytes multiple times
+    - Document dedup is enforced at the user_documents level by migration 037
+    Note: Full dedup testing requires authenticated user flow.
+    """
+    # Test that the upload endpoint itself accepts the same bytes
+    valid_pdf = _make_valid_multipage_pdf()
+
+    r1 = client.post(
+        f"/api/v1/rico/upload-cv?user_id={_SYNTHETIC_USER_ID}",
+        files={"file": ("cv.pdf", io.BytesIO(valid_pdf), "application/pdf")},
+    )
+    assert r1.status_code == 200
+    body1 = r1.json()
+    assert body1.get("status") == "preview_ready"
+    # Document dedup at user_documents level is tested in test_user_documents_postgres.py

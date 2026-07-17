@@ -1466,6 +1466,27 @@ async def rico_upload_cv(
             classification.file_format, request_ref,
         )
 
+        # ── Format integrity: reject .pdf files without PDF magic bytes ─────────
+        # A file renamed to .pdf must not be silently accepted if bytes are not PDF.
+        # This prevents garbage injection from fake PDFs.
+        if safe_name.lower().endswith(".pdf") and classification.file_format != "pdf":
+            _metrics.record_request((time.time() - start_time) * 1000)
+            logger.warning(
+                "cv_upload_format_mismatch user=%s filename=%s declared_format=pdf detected_format=%s request_ref=%s",
+                resolved_user_id, safe_name, classification.file_format, request_ref,
+            )
+            return {
+                "ok": False,
+                "status": "invalid_signature",
+                "document_type": doc_type,
+                "file_format": classification.file_format,
+                "filename": safe_name,
+                "message": (
+                    "This file is not a valid PDF. "
+                    "Please upload a text-based PDF or Word document."
+                ),
+            }
+
         # Executables (EXE/DLL): always rejected — never process.
         if classification.file_format == "executable":
             raise HTTPException(status_code=422, detail="Executable files are not accepted")
@@ -1709,9 +1730,21 @@ async def rico_upload_cv(
                 "cv_upload_parse_error ref=%s user=%s filename=%s bytes=%d error=%s",
                 request_ref, resolved_user_id, safe_name, len(data), str(exc),
             )
+            # Use shared parse-quality contract to determine specific failure type
+            from src.cv_parse_quality import validate_parse_quality, ParseOutcome
+
+            # Try to determine if this is a format vs parse issue
+            quality_result = validate_parse_quality(
+                text="",
+                extracted_chars=0,
+                extraction_quality=None,
+                parser_exception=exc,
+            )
+
+            status = "parse_failed" if quality_result.outcome == ParseOutcome.PARSE_FAILED else "error"
             return {
                 "ok": False,
-                "status": "error",
+                "status": status,
                 "error_ref": request_ref,
                 "message": (
                     f"Upload failed. Reference: {request_ref}. "
@@ -1736,15 +1769,22 @@ async def rico_upload_cv(
         )
 
         # Readability gate: require meaningful readable text before preview_ready
-        # Must not rely on file byte size alone (no_text guard is separate)
-        extracted_chars = parsed.get("extracted_chars", 0)
-        extraction_quality = parsed.get("extraction_quality", "unknown")
-        _MIN_READABLE_CHARS = 50  # Minimum meaningful characters for a readable CV
-        if extracted_chars < _MIN_READABLE_CHARS or extraction_quality == "poor":
+        # Use shared parse-quality contract for conservative validation
+        from src.cv_parse_quality import validate_parse_quality, ParseOutcome
+
+        quality_result = validate_parse_quality(
+            text=parsed.get("text", ""),
+            extracted_chars=parsed.get("extracted_chars", 0),
+            extraction_quality=parsed.get("extraction_quality", "unknown"),
+            parser_exception=None,  # Parser already succeeded here
+        )
+
+        if not quality_result.is_readable:
             _metrics.record_request((time.time() - start_time) * 1000)
             logger.info(
-                "cv_upload_unreadable user=%s filename=%s chars=%d quality=%s request_ref=%s",
-                resolved_user_id, safe_name, extracted_chars, extraction_quality, request_ref,
+                "cv_upload_unreadable user=%s filename=%s outcome=%s chars=%d printable_ratio=%.2f request_ref=%s",
+                resolved_user_id, safe_name, quality_result.outcome,
+                quality_result.extracted_chars, quality_result.printable_ratio, request_ref,
             )
             return {
                 "ok": False,
@@ -2022,15 +2062,17 @@ async def confirm_cv_profile(
         confirmed_cv_text: str | None = (artifact or {}).get("cv_text") or None
 
         # Confirmation defense-in-depth: reject artifacts with unreadable cv_text
-        # This is a safety net in case the upload gate is bypassed or a bug
-        # allows garbage through. Must not rely on client-supplied data.
+        # Use shared parse-quality contract for consistency
         if confirmed_cv_text is not None:
-            _MIN_CONFIRM_CHARS = 50
-            if len(confirmed_cv_text.strip()) < _MIN_CONFIRM_CHARS:
+            from src.cv_parse_quality import validate_artifact_quality
+
+            quality_result = validate_artifact_quality(confirmed_cv_text)
+            if not quality_result.is_readable:
                 logger.warning(
-                    "cv_confirm_unreadable_artifact user=%s upload_id=%s filename=%s chars=%d request_ref=%s",
+                    "cv_confirm_unreadable_artifact user=%s upload_id=%s filename=%s outcome=%s chars=%d printable_ratio=%.2f request_ref=%s",
                     resolved_user_id, payload.upload_id, payload.filename,
-                    len(confirmed_cv_text), request_ref,
+                    quality_result.outcome, quality_result.extracted_chars,
+                    quality_result.printable_ratio, request_ref,
                 )
                 return JSONResponse(
                     status_code=409,
