@@ -775,6 +775,48 @@ export async function getApplicationStats(
   return normalized;
 }
 
+// ── Journey ───────────────────────────────────────────────────────────────────
+
+export type JourneyStage =
+  | "discovery"
+  | "searching"
+  | "applying"
+  | "interviewing"
+  | "offer";
+
+export interface JourneySnapshot {
+  user_id: string;
+  state: JourneyStage;
+  saved_count: number;
+  prepared_count: number;
+  applied_count: number;
+  follow_up_due_count: number;
+  interviewing_count: number;
+  offer_count: number;
+}
+
+export interface JourneyPlanAction {
+  action: string;
+  message: string;
+  priority: "high" | "medium" | "low";
+}
+
+export interface JourneyToday {
+  journey: JourneySnapshot;
+  plan: {
+    user_id: string;
+    state: JourneyStage;
+    actions: JourneyPlanAction[];
+  };
+}
+
+export async function getJourneyToday(signal?: AbortSignal): Promise<JourneyToday> {
+  return requestJson<JourneyToday>("/api/v1/journey/today", {
+    method: "GET",
+    signal,
+  });
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 const MOCK_SETTINGS: SettingsResponse = {
