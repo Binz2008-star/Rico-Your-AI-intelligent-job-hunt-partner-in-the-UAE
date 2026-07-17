@@ -78,6 +78,77 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260717-008 — PR #1145: unify /command visuals with the shared WorkspaceShell
+
+Status: verified — **#1145 PRODUCTION PASS** (merged main @ `ecd29a66`, deployed;
+owner-confirmed on ricohunt.com 2026-07-17)
+Owner: Claude (release owner; owner directive 2026-07-17 — "اعمل ما تراه مناسب"
+after a completed read-only audit of #1145)
+Branch: `fix/command-atelier-visual-consistency` (merged)
+Issue/PR: #1145 (merged as squash commit `ecd29a66ac43301219ff04a3c5c7fe6b4711a33c`)
+
+#### Objective
+
+Visual/system unification only: make authenticated `/command` a clear part of
+the Rico Workspace (shared `WorkspaceShell variant="app"`, single
+`WORKSPACE_THEME` token source, light-first default with dark via the shared
+toggle) with **zero** chat-behavior change — no endpoint, payload, streaming,
+persistence, auth, or quota code touched. Implements DEC-20260717-001.
+
+#### What changed
+
+- `apps/web/components/command/CommandObsidianShell.tsx` — composes
+  `WorkspaceShell variant="app"`; keeps only route-scoped console bar
+  (status/panel toggles/account-logout), the 260px Sessions rail, and the
+  rgba-aware CSS-var reply-surface layer derived from the ACTIVE shared palette
+- `apps/web/components/command/commandAtelierTheme.ts` — **deleted** (copied
+  token source; no duplicated palette remains)
+- `apps/web/app/command/page.tsx` — chrome doc comment only, no logic change
+- 3 command vitest specs repinned to the new contract (light default, shared
+  palette, shared sidebar nav); composer hint raised ink40→ink70 for WCAG 4.5:1
+- `AI_WORKSPACE/DECISIONS.md` — DEC-20260717-001 recorded
+
+#### Verification
+
+- CI on head `75cd1432` (post-rebase onto main `282660dd`): all 9 checks green
+  (Setup, pytest, postgres-integration, frontend, playwright,
+  workflow-security-guards, Create/Delete Neon Branch, Vercel) — no failures
+- Local: `npx vitest run` 625/625; `npm run build` clean (`/command` 79.5 kB)
+- Zero review threads / zero pending reviews; `mergeable_state: clean`
+- Merged via squash with expected head SHA `75cd1432` → main now `ecd29a66`
+- **Production: PASS** — owner confirmed `ricohunt.com/command` serves `ecd29a66`
+  (light-first shared WorkspaceShell chrome, not the old forced-dark Obsidian
+  console) on 2026-07-17
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-008
+- GitHub PR: #1145 (merged)
+- Branch: `fix/command-atelier-visual-consistency` | Base: main @ `282660dd`
+- Last safe commit SHA (main before merge): `282660dd`
+- Current head SHA (main after merge): `ecd29a66`
+- Uncommitted changes present: no
+- Status: verified — PRODUCTION PASS (merge complete + owner-confirmed deploy)
+- Files changed: see "What changed" above (frontend-only)
+- Files intentionally not touched: `MobileCommandHeader` / `MobileBottomNav`
+  (shared with public/legacy surfaces — documented follow-up); all backend;
+  public/guest chrome
+- What is complete: rebase, DEC entry, CI green, Ready flip, squash-merge,
+  local-main sync to `ecd29a66`, owner-confirmed production deploy
+- What is incomplete: none
+- Known blockers: none (sandbox could not read production directly — private-repo
+  403, unauthenticated Vercel MCP, egress to ricohunt.com proxy-blocked — so the
+  production check was owner-run and confirmed PASS)
+- Validation already run: full CI on `75cd1432` green; local vitest+build clean;
+  owner-confirmed production PASS on ricohunt.com/command
+- Validation still required: none
+- Deployment/CI/Neon/Vercel state to check next: none
+- Next exact action: none — task closed
+- Stop condition: reached — production PASS confirmed
+- Rollback plan: revert squash commit `ecd29a66` — restores
+  `commandAtelierTheme.ts` and prior shell wholesale; no state/storage/API/env
+  change involved
+
 ### TASK-20260717-007 — PR #1143: Paddle-only subscription checkout; remove manual/WhatsApp payment path
 
 Status: verified — **#1143 PRODUCTION PASS** (merged main @ e903496, deployed)
