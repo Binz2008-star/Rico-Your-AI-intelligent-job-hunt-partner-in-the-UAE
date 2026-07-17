@@ -8,6 +8,17 @@ name: Deploy Render Backend
 on:
   push:
     branches: [main]
+    # Runtime path filter (#1086): docs/workspace/dashboard-only commits must
+    # not redeploy the backend or contaminate deployment evidence. Only paths
+    # that change what Render actually serves trigger an automatic deploy;
+    # workflow_dispatch stays available for on-demand redeploys of anything.
+    paths:
+      - "src/**"
+      - "migrations/**"
+      - "requirements.txt"
+      - "render.yaml"
+      - "Dockerfile.backend"
+      - ".github/workflows/deploy-render.yml"
   workflow_dispatch:
 
 # Only the latest commit on main needs to be live. If a newer push lands while

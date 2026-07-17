@@ -1,28 +1,43 @@
 name: Daily Job Bot Legacy
 
+# RETIRED FROM SCHEDULE (#1086): "Daily Job Bot Full" (daily.yml) is the ONE
+# canonical scheduled pipeline. This legacy workflow duplicated the same
+# 06:00/15:00 UTC crons, ran the same src.run_daily + src.follow_up against
+# the same production services with no shared lock, and pushed a regenerated
+# dashboard to main even when the pipeline failed. It is kept as a manual
+# fallback ONLY (workflow_dispatch) and shares the canonical concurrency
+# group so a manual run can never overlap the scheduled pipeline.
+#
+# Dashboard publication was removed from this workflow entirely — only the
+# canonical pipeline publishes, and never to main (see daily.yml).
+# Failure alerting is owned by error-notifications.yml (admin/dev channel);
+# the old user-chat failure ping violated the notification audience rules.
+
 on:
-  schedule:
-    - cron: "0 6 * * *" # 6:00 AM UTC
-    - cron: "0 15 * * *" # 3:00 PM UTC
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Same lock as daily.yml: queued, never concurrent, never cancelled mid-run.
+concurrency:
+  group: daily-job-bot
+  cancel-in-progress: false
+
 jobs:
   intelligence:
-    name: Intelligence Pipeline
+    name: Intelligence Pipeline (manual fallback)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
@@ -33,9 +48,14 @@ jobs:
           pip install -r requirements.txt
 
       - name: Write Gmail OAuth files
+        env:
+          GMAIL_CREDENTIALS_JSON: ${{ secrets.GMAIL_CREDENTIALS_JSON }}
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
         run: |
-          printf '%s' '${{ secrets.GMAIL_CREDENTIALS_JSON }}' > credentials.json
-          printf '%s' '${{ secrets.GMAIL_TOKEN_JSON }}' > token.json
+          mkdir -p data
+          printf '%s' "$GMAIL_CREDENTIALS_JSON" > data/gmail_credentials.json
+          printf '%s' "$GMAIL_TOKEN_JSON"       > data/gmail_token.json
+          chmod 600 data/gmail_credentials.json data/gmail_token.json
 
       - name: Run intelligence pipeline
         id: run_daily
@@ -54,32 +74,6 @@ jobs:
           RICO_TELEGRAM_PUBLIC_ALERTS: ${{ secrets.RICO_TELEGRAM_PUBLIC_ALERTS || 'true' }}
         run: python -m src.run_daily
 
-      - name: Notify pipeline failure
-        if: failure() && steps.run_daily.outcome == 'failure'
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          RICO_DEMO_MODE: ${{ secrets.RICO_DEMO_MODE || 'false' }}
-          RICO_TELEGRAM_PUBLIC_ALERTS: ${{ secrets.RICO_TELEGRAM_PUBLIC_ALERTS || 'true' }}
-        run: |
-          python -c "
-          import os, requests
-          demo_mode = os.getenv('RICO_DEMO_MODE', '').lower() in ('true', '1', 'yes')
-          public_alerts = os.getenv('RICO_TELEGRAM_PUBLIC_ALERTS', 'true').lower() in ('true', '1', 'yes')
-          if not demo_mode and public_alerts:
-              token   = os.getenv('TELEGRAM_BOT_TOKEN', '')
-              chat_id = os.getenv('TELEGRAM_CHAT_ID', '')
-              if token and chat_id:
-                  requests.post(
-                      f'https://api.telegram.org/bot{token}/sendMessage',
-                      json={'chat_id': chat_id,
-                            'text': '🔴 Daily pipeline failed — fetch/scoring error. Check GitHub Actions logs.'},
-                      timeout=10,
-                  )
-          else:
-              print('Pipeline failure notification suppressed (demo mode or public alerts disabled)')
-          "
-
       - name: Run follow-up reminders
         if: steps.run_daily.outcome == 'success'
         env:
@@ -89,21 +83,6 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python -m src.follow_up
 
-      - name: Deploy dashboard to GitHub Pages
+      - name: Clean up Gmail OAuth files
         if: always()
-        run: |
-          if [ ! -f dashboard.html ]; then
-            echo "dashboard.html not found — skipping deploy"
-            exit 0
-          fi
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
-          # Pull latest main BEFORE regenerating/committing: docs/index.html is
-          # fully regenerated every run, so committing first and rebasing after
-          # guarantees a conflict against any other run's dashboard commit.
-          git pull --rebase origin main
-          mkdir -p docs
-          cp dashboard.html docs/index.html
-          git add docs/index.html
-          git diff --staged --quiet || git commit -m "Update dashboard [skip ci]"
-          git push origin main || echo "Dashboard push failed — likely concurrent main update"
+        run: rm -f data/gmail_credentials.json data/gmail_token.json
