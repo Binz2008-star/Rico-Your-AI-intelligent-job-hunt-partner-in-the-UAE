@@ -78,6 +78,32 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260717-006 — #1076 delta: purge raw user/session ids from chat-stream and CV/profile exception logs
+
+Status: review
+Owner: Claude (WRITER; owner-approved single small security PR)
+Branch: `fix/1076-stream-log-delta`
+Issue/PR: #1076 residual delta (found by the 2026-07-17 reconciliation; #1137 closed superseded)
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-006
+- Branch: `fix/1076-stream-log-delta` | Base: main @ 6e95fd9
+- Files changed: `src/api/routers/rico_chat.py` (13 log sites: 5 reconciliation
+  sites + no-fields warning + 7 more logger.exception sites the new guard
+  itself caught — all now log_privacy.user_ref + safe_exc, no tracebacks, no
+  raw str(exc), CV filenames as lengths); `tests/test_1076_log_privacy.py`
+  (module-scoped static guards + caplog proof on the 503 path)
+- Intentionally not touched: ~65 raw `user=%s` sites in OTHER modules
+  (follow-up hardening, mirrored on the _QUERY_ALLOWLIST precedent); no new
+  helper (uses merged src/log_privacy.py); no policy-doc edit — the canonical
+  #1076 block in OPERATING_RULES.md already mandates exactly this
+- Validation run: extended suite 21/21; full local unit suite diffed against
+  a fresh clean-main baseline — zero new failures
+- Next action: owner review (queue position: before #1139 per owner order)
+- Rollback: revert the squash commit — log text only, no behavior change
+
+
 ### TASK-20260715-002 — Atelier slice 4b: /command message bubbles + empty state
 
 Status: review

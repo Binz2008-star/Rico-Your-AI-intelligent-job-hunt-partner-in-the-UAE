@@ -298,3 +298,81 @@ class TestStaticRegressionGuard:
         assert "subject[:70]" not in text
         assert "matched_application.get('company')" not in text
         assert "chars suppressed" in text
+
+
+# ── #1076 delta: chat-stream / profile-update raw-identifier sites ───────────
+#
+# The five residual sites found by the 2026-07-17 reconciliation (chat_stream,
+# chat_stream_public — where user_id is the PUBLIC session bearer id — and the
+# profile_update persistence-failure path) plus the no-fields warning in the
+# same function. Guards are scoped to src/api/routers/rico_chat.py; the
+# repo-wide sweep of remaining `user=%s` sites in other modules is tracked
+# follow-up hardening, mirroring _QUERY_ALLOWLIST.
+
+_RICO_CHAT = pathlib.Path("src/api/routers/rico_chat.py")
+
+
+class TestStreamLogDeltaGuard:
+    def test_no_raw_user_id_in_user_log_formats(self):
+        text = _RICO_CHAT.read_text(encoding="utf-8")
+        raw = re.compile(r'user=%s"\s*,\s*user_id\b')
+        violations = [
+            f"src/api/routers/rico_chat.py:{text.count(chr(10), 0, m.start()) + 1}"
+            for m in raw.finditer(text)
+        ]
+        assert violations == [], (
+            "raw user_id in a user=%s log format (use log_privacy.user_ref):\n"
+            + "\n".join(violations)
+        )
+
+    def test_no_logger_exception_carries_a_user_field(self):
+        # logger.exception appends the exception message, which can re-emit
+        # bound values; on any line that also logs a user field the pair is
+        # forbidden — use logger.error + user_ref + safe_exc instead.
+        text = _RICO_CHAT.read_text(encoding="utf-8")
+        bad = re.compile(r"logger\.exception\([^)]*user=%s", re.S)
+        assert not bad.search(text), (
+            "logger.exception with a user field in rico_chat.py — "
+            "use logger.error + user_ref + safe_exc"
+        )
+
+    def test_stream_persist_failures_no_longer_dump_tracebacks(self):
+        # exc_info=True on the persist-failure debug lines could re-emit chat
+        # text via driver exception strings at the end of the traceback.
+        text = _RICO_CHAT.read_text(encoding="utf-8")
+        assert "persist failed user=%s\", user_id, exc_info=True" not in text
+        for marker in ("chat_stream: assistant persist failed",
+                       "chat_stream_public: assistant persist failed"):
+            assert marker in text, f"expected remediated site still present: {marker}"
+
+
+class TestProfileUpdateFailurePathClean:
+    def test_persistence_failure_logs_ref_not_raw_id_or_values(self, caplog, monkeypatch):
+        from fastapi.testclient import TestClient
+        import src.api.routers.rico_chat as rico_chat_router
+        from src.api.app import app
+
+        def mock_get_user(request):
+            user = {"email": EMAIL, "role": "user"}
+            request.state.current_user = user
+            request.state.user_id = EMAIL
+            return user
+
+        monkeypatch.setattr(rico_chat_router, "get_current_user", mock_get_user)
+
+        def failing_upsert(user_id, updates, **kwargs):
+            raise RuntimeError(f"driver echoed {EMAIL} salary={SALARY}")
+
+        monkeypatch.setattr(rico_chat_router, "upsert_profile", failing_upsert)
+
+        client = TestClient(app)
+        with caplog.at_level(logging.DEBUG):
+            r = client.patch(
+                "/api/v1/rico/profile",
+                json={"current_role": "HSE Lead", "salary_expectation_aed": SALARY},
+            )
+        assert r.status_code == 503
+        assert "profile_update persistence failed" in caplog.text
+        assert "RuntimeError" in caplog.text
+        _assert_clean(caplog.text)
+        assert user_ref(EMAIL) in caplog.text
