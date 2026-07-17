@@ -326,7 +326,7 @@ class TestBytesParsing:
         assert result.extraction_quality == "poor"
 
     def test_pdf_magic_fallback(self, parser):
-        """PDF without PyMuPDF should fallback to UTF-8 decode."""
+        """Invalid PDF (no valid structure) should raise RuntimeError, not fallback to UTF-8 decode."""
         data = b"%PDF-1.4\nName: Test\nSkills: hse, compliance\n"
-        result = parser.parse_bytes(data, filename="cv.pdf")
-        assert "hse" in result.skills
+        with pytest.raises(RuntimeError, match="PDF parsing failed"):
+            parser.parse_bytes(data, filename="cv.pdf")

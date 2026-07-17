@@ -123,23 +123,30 @@ class TestStartCommand:
 
 class TestStopCommand:
     def test_stop_disables_notifications(self):
-        """Sending /stop sets telegram_notifications_enabled=False."""
+        """Sending /stop durably disables every row bound to the chat (#1082)."""
         from src.rico_telegram_webhook import _handle_stop
 
-        with patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert:
+        with patch(
+            "src.repositories.profile_repo.disable_telegram_alerts_for_chat",
+            return_value=1,
+        ) as mock_disable:
             result = _handle_stop({"chat": {"id": 12345}, "from": {"id": 12345}})
 
-        mock_upsert.assert_called_once_with("12345", {"telegram_notifications_enabled": False})
+        mock_disable.assert_called_once_with("12345")
         assert "/start" in result["reply"]
         assert result["chat_id"] == "12345"
 
     def test_stop_failure_does_not_raise(self):
         from src.rico_telegram_webhook import _handle_stop
 
-        with patch("src.rico_telegram_webhook.upsert_profile", side_effect=Exception("DB down")):
+        with patch(
+            "src.repositories.profile_repo.disable_telegram_alerts_for_chat",
+            side_effect=Exception("DB down"),
+        ):
             result = _handle_stop({"chat": {"id": 12345}, "from": {}})
 
         assert "chat_id" in result
+        assert "paused" not in result["reply"].lower()
 
 
 # ---------------------------------------------------------------------------

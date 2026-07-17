@@ -52,10 +52,22 @@ def _payload(
     return p
 
 
+def _wire_transaction(db: MagicMock) -> None:
+    """Make db._transaction() behave like a real context manager: yield a conn and
+    NOT suppress exceptions. A bare MagicMock __exit__ returns a truthy value, which
+    would swallow errors raised inside `with db._transaction() as conn:`.
+    """
+    cm = MagicMock()
+    cm.__enter__.return_value = MagicMock(name="conn")
+    cm.__exit__.return_value = False
+    db._transaction.return_value = cm
+
+
 def _mock_db(user_id="db-uuid-1") -> MagicMock:
     db = MagicMock()
     db.upsert_user.return_value = {"id": user_id}
     db.register_webhook_event.return_value = True
+    _wire_transaction(db)
     return db
 
 
@@ -246,20 +258,28 @@ class TestDbFailureIsolation:
              patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
             return handle_jotform_submission({"submissionID": "sub-dbisolation-1", "email": "u@x.com", "consent": True})
 
-    def test_upsert_profile_failure_still_returns_ok(self):
+    def test_upsert_profile_failure_rolls_back_and_raises(self):
+        # #1089: a profile-write failure aborts the whole transaction (the claim +
+        # the user write roll back) and propagates → route 500 → retry. The
+        # submission is never marked processed, so the retry can re-claim it.
         db = _mock_db()
         db.upsert_profile.side_effect = RuntimeError("profile table missing")
-        result = self._run_with_db(db)
-        assert result["status"] == "ok"
+        with pytest.raises(RuntimeError, match="profile table missing"):
+            self._run_with_db(db)
+        db.mark_webhook_event_processed.assert_not_called()
 
-    def test_upsert_settings_failure_still_returns_ok(self):
+    def test_upsert_settings_failure_rolls_back_and_raises(self):
+        # #1089: a settings-write failure aborts the transaction (claim + user +
+        # profile roll back) and propagates. Never marked processed.
         db = _mock_db()
         db.upsert_settings.side_effect = RuntimeError("settings table missing")
-        result = self._run_with_db(db)
-        assert result["status"] == "ok"
+        with pytest.raises(RuntimeError, match="settings table missing"):
+            self._run_with_db(db)
+        db.mark_webhook_event_processed.assert_not_called()
 
-    def test_upsert_user_failure_propagates(self):
-        """upsert_user failure must propagate — chat_service wraps it in a graceful 'accepted'."""
+    def test_upsert_user_failure_rolls_back_and_raises(self):
+        """upsert_user failure aborts the transaction (the claim rolls back) and
+        propagates → route 500 → the provider retry can immediately re-claim (#1089)."""
         from src.rico_jotform_webhook import handle_jotform_submission
         db = _mock_db()
         db.upsert_user.side_effect = RuntimeError("connection lost")
@@ -349,6 +369,7 @@ def _mock_db_idempotent(first_delivery: bool = True) -> MagicMock:
     db = MagicMock()
     db.upsert_user.return_value = {"id": "db-uuid-99"}
     db.register_webhook_event.return_value = first_delivery
+    _wire_transaction(db)
     return db
 
 
@@ -378,13 +399,12 @@ class TestSubmissionIdempotency:
                 {"submissionID": "sub-new-1", "email": "u@x.com", "consent": True}
             )
         assert result["status"] == "ok"
-        db.register_webhook_event.assert_called_once_with(
-            provider="jotform",
-            submission_id="sub-new-1",
-            form_id=None,
-            external_user_id="u@x.com",
-            metadata={"form_id": None},
-        )
+        db.register_webhook_event.assert_called_once()
+        _kw = db.register_webhook_event.call_args.kwargs
+        assert _kw["provider"] == "jotform"
+        assert _kw["submission_id"] == "sub-new-1"
+        assert _kw["external_user_id"] == "u@x.com"
+        assert "conn" in _kw  # claimed inside the caller-owned transaction (#1089)
         db.mark_webhook_event_processed.assert_called_once()
 
     def test_duplicate_submission_id_returns_ignored(self):
@@ -401,17 +421,16 @@ class TestSubmissionIdempotency:
         db.upsert_user.assert_not_called()
 
     def test_idempotency_db_failure_fails_closed(self):
-        """If DB raises on register_webhook_event, return error/idempotency_unavailable."""
+        """If DB raises on register_webhook_event, the transaction rolls back and the
+        error propagates (fail-closed → route 500 → retry); no user write occurs (#1089)."""
         from src.rico_jotform_webhook import handle_jotform_submission
         db = MagicMock()
+        _wire_transaction(db)
         db.register_webhook_event.side_effect = RuntimeError("DB down")
         with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
              patch.dict(os.environ, self._env(), clear=True):
-            result = handle_jotform_submission(
-                {"submissionID": "sub-err-1", "email": "u@x.com"}
-            )
-        assert result["status"] == "error"
-        assert result["reason"] == "idempotency_unavailable"
+            with pytest.raises(RuntimeError, match="DB down"):
+                handle_jotform_submission({"submissionID": "sub-err-1", "email": "u@x.com"})
         db.upsert_user.assert_not_called()
 
     def test_concurrent_duplicate_delivery_only_one_processed(self):
@@ -427,6 +446,7 @@ class TestSubmissionIdempotency:
             return call_count == 1
 
         db = MagicMock()
+        _wire_transaction(db)
         db.upsert_user.return_value = {"id": "db-uuid-concurrent"}
         db.register_webhook_event.side_effect = register_side_effect
 

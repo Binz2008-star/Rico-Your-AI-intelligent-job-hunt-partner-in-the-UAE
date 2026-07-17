@@ -80,11 +80,22 @@ The production connector should be explicitly read-only and user-scoped.
   - The sync fetches only recent messages or messages after the last successful cursor.
   - Results are summarized for the user without exposing raw email bodies unnecessarily.
 
-- Daily sync:
-  - Disabled by default behind a new environment flag proposed during implementation planning.
-  - Runs only for users with an active Gmail connection and an opt-in sync setting.
+- Daily / fleet sync:
+  - Disabled by default behind `RICO_ENABLE_GMAIL_SYNC` (default off).
+  - Runs only for users with an active Gmail connection **and** an explicit
+    recurring-sync opt-in. The OAuth read grant authorizes a user-initiated
+    read; it is **not** consent to recurring background/fleet sync. That
+    recurring-sync consent is a separate, per-user setting
+    (`gmail_connections.recurring_sync_consent_at`, granted/revoked via
+    `POST /api/v1/integrations/gmail/consent`), and the fleet sweep
+    (`run_fleet_sweep` → `list_active_connections`) selects only connections
+    where it is set. Manual, user-initiated sync (`POST .../sync`) does not
+    require it.
   - Uses rate limits and backoff so one user's mailbox does not block others.
   - Writes a sync run record for success, partial failure, or skipped states.
+  - Note: the fleet-sweep GitHub workflow was intentionally removed from M0
+    (`gmail-sync.yml`); when it is reintroduced in a later milestone, the sweep
+    must continue to honor the recurring-sync consent gate above.
 
 ### Audit Logging
 
@@ -248,6 +259,13 @@ Proposed authenticated routes:
   - Revokes Google token when possible.
   - Removes or tombstones the user's encrypted refresh token.
   - Records audit event.
+
+- `POST /api/v1/integrations/gmail/consent`
+  - Grants or revokes recurring (fleet) sync consent, separate from the OAuth
+    read grant (`{ "granted": true | false }`).
+  - Requires an existing connection; identity is JWT-only.
+  - Not gated by the sync flag — revoking must always be available; granting
+    records intent the fleet sweep honors only once sync is enabled.
 
 - `POST /api/v1/integrations/gmail/sync`
   - Starts a manual sync for the current JWT user.

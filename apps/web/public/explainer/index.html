@@ -18,17 +18,95 @@
   a{color:#C9A84C}
 </style>
 <script>
-(function(){
-  /* Use absolute paths because Vercel may serve /explainer without a trailing
-     slash. Relative paths would then resolve to /option-*.html and return 404. */
+(function (win) {
+  "use strict";
+  /* Owner directive 2026-07-16: the three approved films rotate as a
+     randomized non-repeating cycle — every film plays once before any film
+     repeats. The shuffled deck persists in localStorage so the cycle spans
+     visits, sessions and reloads.
+
+     Absolute paths because Vercel may serve /explainer without a trailing
+     slash; relative paths would then resolve to /option-*.html and 404. */
   var FILMS = [
     '/explainer/option-2.html',
     '/explainer/option-3.html',
     '/explainer/option-3b.html'
   ];
-  var pick = FILMS[Math.floor(Math.random()*FILMS.length)];
-  location.replace(pick + location.search + location.hash);
-})();
+  var DECK_KEY = 'rico-film-deck-v1';
+  var LAST_KEY = 'rico-film-last-v1';
+
+  function shuffle(list, random) {
+    var a = list.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  /* A legitimate persisted deck is a remainder of one shuffled cycle: only
+     approved films, no duplicates, never longer than the cycle. Anything
+     else (retired films, duplicate entries, wrong types) is corrupt and is
+     rebuilt wholesale — a duplicate entry would otherwise replay the same
+     film twice in a row, breaking the non-repeating guarantee. */
+  function isValidDeck(parsed) {
+    if (!Array.isArray(parsed) || parsed.length > FILMS.length) { return false; }
+    for (var i = 0; i < parsed.length; i++) {
+      if (FILMS.indexOf(parsed[i]) === -1) { return false; }
+      if (parsed.indexOf(parsed[i]) !== i) { return false; }
+    }
+    return true;
+  }
+
+  /* Draw the next film from the persisted deck; reshuffle when exhausted.
+     A fresh deck never opens with the film that closed the previous cycle,
+     so an immediate reload never replays the same film back-to-back.
+     Storage failures (privacy modes) degrade to a plain random pick. */
+  function nextFilm(storage, random) {
+    var deck = [];
+    var last = null;
+    try {
+      last = storage.getItem(LAST_KEY);
+      var parsed = JSON.parse(storage.getItem(DECK_KEY) || '[]');
+      if (isValidDeck(parsed)) { deck = parsed; }
+    } catch (e) { /* corrupted or unavailable storage → fresh deck */ }
+
+    if (!deck.length) {
+      deck = shuffle(FILMS, random);
+      if (deck.length > 1 && deck[0] === last) {
+        deck.push(deck.shift());
+      }
+    }
+    var pick = deck.shift();
+    try {
+      storage.setItem(DECK_KEY, JSON.stringify(deck));
+      storage.setItem(LAST_KEY, pick);
+    } catch (e) { /* pick still plays; the next visit reshuffles */ }
+    return pick;
+  }
+
+  /* Navigate to the real film document, tagged with #rico-rotation. The
+     film's own boot script sees the tag and history.replaceState()s its
+     address bar back to /explainer/index.html, so reloading or revisiting
+     re-enters the rotation instead of staying locked to the option URL.
+     (A fetch + document.write approach was tried first and reverted: a
+     parser-inserted end-of-body script waits on pending stylesheets, so a
+     stalled third-party fonts CDN froze the film entirely. A real
+     navigation parses natively and has no such dependency.) */
+  function showFilm(w, url) {
+    w.location.replace(url + w.location.search + '#rico-rotation');
+  }
+
+  /* Exposed for the vitest regression suite (explainer-film-rotation);
+     harmless in production. */
+  win.__ricoFilmChooser = { FILMS: FILMS, isValidDeck: isValidDeck, nextFilm: nextFilm, showFilm: showFilm };
+
+  if (!win.document) { return; } /* test harness — exports only, no boot */
+
+  var storage = null;
+  try { storage = win.localStorage; } catch (e) { /* privacy mode */ }
+  showFilm(win, nextFilm(storage, Math.random));
+})(window);
 </script>
 </head>
 <body>

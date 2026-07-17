@@ -49,7 +49,15 @@ def write_settings(
     user_id: str = Depends(get_current_user_id),
 ) -> Dict[str, Any]:
     data = {k: v for k, v in body.model_dump().items() if v is not None}
-    settings = update_settings(data, user_id=user_id)
+    # Durable-truth contract (#764): if the canonical DB write fails, return a
+    # retryable 503 instead of a 200 that echoes stale/default state.
+    try:
+        settings = update_settings(data, user_id=user_id)
+    except RuntimeError:
+        raise HTTPException(
+            status_code=503,
+            detail="Settings could not be saved. Please try again.",
+        )
     return _with_guardrail_warnings(settings, user_id)
 
 

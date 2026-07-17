@@ -85,7 +85,7 @@ const mockGetSubscriptionPlans = vi.fn().mockResolvedValue({
     id: "rico_monthly", plan: "pro", name: "Rico Monthly",
     price_monthly: 21.5, currency: "USD",
     description: "Smart AI job hunting for active UAE professionals.",
-    features: ["Unlimited CV analysis"],
+    features: ["300 AI messages per month"],
     entitlements: {
       monthly_ai_message_limit: 300, saved_jobs_limit: 100,
       profile_optimization_limit: 20, cv_storage_limit: 5,

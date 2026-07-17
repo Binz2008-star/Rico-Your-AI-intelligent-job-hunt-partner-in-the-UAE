@@ -16,6 +16,17 @@ from unittest.mock import MagicMock, patch, call
 from src.services.profile_nudge_service import _is_synthetic_email, run_profile_nudge_sweep
 
 
+@pytest.fixture(autouse=True)
+def _enable_email_kill_switch(monkeypatch):
+    """The sweep is OFF by default behind RICO_ENABLE_EMAIL_ALERTS (#1082).
+
+    These tests exercise the synthetic-recipient guard inside the sweep, so
+    the kill switch is enabled here; the off-by-default contract itself is
+    covered in tests/test_1082_consent_fail_closed.py.
+    """
+    monkeypatch.setenv("RICO_ENABLE_EMAIL_ALERTS", "true")
+
+
 # ── _is_synthetic_email unit tests ────────────────────────────────────────────
 
 class TestIsSyntheticEmail:

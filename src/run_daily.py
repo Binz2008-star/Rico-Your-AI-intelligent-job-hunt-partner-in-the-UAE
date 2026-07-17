@@ -193,6 +193,15 @@ def _notify_users_via_telegram(matches: list) -> None:
     Failures for individual users are logged and swallowed — one bad send must
     not abort the remaining recipients or the pipeline.
     """
+    # Global user-alert kill switch (#1082): scheduled per-user Telegram alerts
+    # are OFF unless explicitly enabled. Distinct from the admin/public bot
+    # flags (RICO_TELEGRAM_PUBLIC_ALERTS) — this gates only the per-user
+    # roster sender while consent enforcement is remediated.
+    enabled = os.getenv("RICO_ENABLE_USER_TELEGRAM_ALERTS", "false").strip().lower() in {"1", "true", "yes", "on"}
+    if not enabled:
+        logger.info("telegram_user_alerts_skipped reason=kill_switch_off (RICO_ENABLE_USER_TELEGRAM_ALERTS)")
+        return
+
     if not matches:
         logger.info("telegram_user_alerts_skipped reason=no_matches")
         return
@@ -704,6 +713,14 @@ def _run_feedback_loop(
 
 
 def _sync_gmail() -> None:
+    # Fail-closed: the legacy global Gmail importer is user-agnostic and not
+    # consent-scoped (it mutates the shared applications store and logs message
+    # metadata). It must never run unless explicitly enabled — the M0 first-party
+    # connector (#1055) is the supported, per-user path. Default off (#1087).
+    from src.rico_env import env_bool
+    if not env_bool("RICO_ENABLE_GMAIL_SYNC"):
+        logger.info("gmail_sync_skipped: RICO_ENABLE_GMAIL_SYNC disabled")
+        return
     try:
         from src.gmail_importer import run_import
         report = run_import(dry_run=False)

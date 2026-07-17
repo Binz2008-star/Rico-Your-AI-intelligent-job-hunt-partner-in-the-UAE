@@ -872,10 +872,18 @@ _ROLE_LIST_TAIL_CLAUSE_RE = re.compile(
 )
 
 # Trailing job-noun / location qualifier stripped from a captured role token:
-#   "Operations Technology Manager roles in UAE" -> "Operations Technology Manager"
+#   "Operations Technology Manager roles in UAE"          -> "Operations Technology Manager"
+#   "operations manager jobs anywhere in the UAE"         -> "operations manager"
+# A whole-country scope adverb ("anywhere"/"everywhere") may sit between the job
+# noun and "in <location>". Without consuming it, the last role in a multi-role
+# list ("… or operations manager jobs anywhere in the UAE") is left as
+# "operations manager jobs anywhere", whose leftover "jobs" trips the
+# non-role-word guard and the whole role family is silently dropped.
 _ROLE_TOKEN_TAIL_RE = re.compile(
     r"\s*\b(?:jobs?|roles?|positions?|openings?|vacancies?|work)?\b"
-    r"\s*\bin\s+[A-Za-z'’ .\-]+$"
+    r"\s*(?:\b(?:anywhere|everywhere)\b\s*)?"
+    r"\bin\s+[A-Za-z'’ .\-]+$"
+    r"|\s*\b(?:anywhere|everywhere)\b\s*$"
     r"|\s*\b(?:jobs?|roles?|positions?|openings?|vacancies?|work)\s*$",
     re.IGNORECASE,
 )

@@ -98,7 +98,15 @@ def auth_client():
 _CHAT_RESPONSE = {"type": "assistant", "message": "Hello from Rico"}
 _PUBLIC_UPLOAD_ID = "public:web-upload12345"
 _CV_PARSED = {
-    "text": "Sample CV text",
+    # Readable text >= the parse-quality gate's minimum (50 chars, printable).
+    # The fixture must satisfy the #1118 readability contract, since the upload
+    # route now gates on parsed["text"]/["extracted_chars"] before preview_ready.
+    "text": (
+        "John Doe — HSE Manager. Five years of UAE experience across health, "
+        "safety and environment. Skills: NEBOSH, ISO 14001, risk assessment, "
+        "safety audits, compliance. Email test@example.com."
+    ),
+    "extracted_chars": 186,
     "skills": ["hse"],
     "emails": ["test@example.com"],
     "phones": [],
@@ -192,9 +200,10 @@ class TestRicoProfileUpdateRouteExists:
     def test_profile_patch_route_returns_200_and_updates_fields(self, auth_client):
         captured = {}
 
-        def spy_upsert(user_id, updates):
+        def spy_upsert(user_id, updates, **kwargs):
             captured["user_id"] = user_id
             captured["updates"] = updates
+            captured["require_db"] = kwargs.get("require_db")
             return {"ok": True}
 
         payload = {
@@ -227,9 +236,10 @@ class TestRicoProfileUpdateRouteExists:
     def test_profile_patch_route_accepts_name(self, auth_client):
         captured = {}
 
-        def spy_upsert(user_id, updates):
+        def spy_upsert(user_id, updates, **kwargs):
             captured["user_id"] = user_id
             captured["updates"] = updates
+            captured["require_db"] = kwargs.get("require_db")
             return {"ok": True}
 
         with patch("src.api.routers.rico_chat.upsert_profile", side_effect=spy_upsert), \
@@ -1009,17 +1019,17 @@ class TestJotformWebhookRobustness:
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
-    def test_db_error_returns_200_not_500(self, client):
-        """Even when the DB write fails, the router must return 200."""
+    def test_db_error_returns_500_for_retry(self, client):
+        """#1089: a required-persistence failure must return 500 so the provider
+        retries — not a false 200 'accepted'. The handler's single transaction
+        rolled back (claim + writes), so the retry can immediately re-claim."""
         payload = {"pretty": {"email": "x@example.com"}}
         with patch(
             "src.rico_jotform_webhook.handle_jotform_submission",
             side_effect=RuntimeError("RicoDB unavailable: DATABASE_URL or psycopg2 missing"),
         ):
             r = client.post("/api/v1/rico/webhooks/jotform", json=payload)
-        assert r.status_code == 200
-        body = r.json()
-        assert body["status"] == "accepted"
+        assert r.status_code == 500
 
     def test_invalid_json_returns_200(self, client):
         r = client.post(
@@ -1087,16 +1097,18 @@ class TestJotformWebhookRobustness:
         result = handle_jotform_submission({"formID": "261277622782059", "consent": "yes"})
         assert result["status"] == "accepted"
 
-    def test_service_returns_accepted_on_db_error(self):
+    def test_service_propagates_db_error_for_retry(self):
+        # #1089: the wrapper must NOT mask a required-persistence failure as
+        # 'accepted'; it propagates so the route returns 500 and the provider retries.
+        import pytest
         from src.services.chat_service import handle_jotform_submission
         payload = {"pretty": {"email": "x@example.com"}}
         with patch(
             "src.rico_jotform_webhook.handle_jotform_submission",
             side_effect=RuntimeError("DB down"),
         ):
-            result = handle_jotform_submission(payload)
-        assert result["status"] == "accepted"
-        assert "pending" in result["message"]
+            with pytest.raises(RuntimeError, match="DB down"):
+                handle_jotform_submission(payload)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1199,6 +1211,42 @@ class TestVersionRoute:
             "environment": "test",
             "deployed_at": "2026-05-23T00:00:00Z",
         }
+
+    def test_stale_deployed_at_does_not_make_current_commit_look_old(self, client, monkeypatch):
+        """Regression for #1065: a stale deployed_at must not make a current deploy look old.
+
+        deployed_at is static env metadata that can lag main by weeks. The
+        authoritative deploy signals are commit (compared to origin/main) and
+        started_at (process boot). This sets deployed_at to an ancient date while
+        the commit is current and asserts commit/started_at are unaffected — so
+        operator tooling that reads commit + started_at never concludes a current
+        deploy is stale.
+        """
+        from datetime import datetime
+
+        monkeypatch.setenv("GIT_COMMIT", "cur9ent")
+        monkeypatch.setenv("RICO_ENV", "test")
+        # Deliberately ancient static metadata — the kind that lags main by weeks.
+        monkeypatch.setenv("DEPLOYED_AT", "2020-01-01T00:00:00Z")
+
+        r = client.get("/api/v1/version")
+        assert r.status_code == 200
+        body = r.json()
+
+        # commit is the authoritative version signal — driven by the live env,
+        # never by the stale deployed_at value.
+        assert body["commit"] == "cur9ent"
+
+        # started_at is a real, recent boot timestamp (this decade), proving the
+        # process is live regardless of the stale deployed_at.
+        started_at = datetime.fromisoformat(body["started_at"])
+        assert started_at.year >= 2025
+
+        # The stale build metadata is preserved for backward compatibility but is
+        # clearly older than the process boot — it is not the live deploy signal.
+        deployed_at = datetime.fromisoformat(body["deployed_at"].replace("Z", "+00:00"))
+        assert deployed_at.year == 2020
+        assert deployed_at < started_at
 
 
 class TestRicoProfileRoute:

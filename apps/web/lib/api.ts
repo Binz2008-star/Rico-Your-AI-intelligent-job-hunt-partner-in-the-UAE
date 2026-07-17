@@ -775,6 +775,48 @@ export async function getApplicationStats(
   return normalized;
 }
 
+// ── Journey ───────────────────────────────────────────────────────────────────
+
+export type JourneyStage =
+  | "discovery"
+  | "searching"
+  | "applying"
+  | "interviewing"
+  | "offer";
+
+export interface JourneySnapshot {
+  user_id: string;
+  state: JourneyStage;
+  saved_count: number;
+  prepared_count: number;
+  applied_count: number;
+  follow_up_due_count: number;
+  interviewing_count: number;
+  offer_count: number;
+}
+
+export interface JourneyPlanAction {
+  action: string;
+  message: string;
+  priority: "high" | "medium" | "low";
+}
+
+export interface JourneyToday {
+  journey: JourneySnapshot;
+  plan: {
+    user_id: string;
+    state: JourneyStage;
+    actions: JourneyPlanAction[];
+  };
+}
+
+export async function getJourneyToday(signal?: AbortSignal): Promise<JourneyToday> {
+  return requestJson<JourneyToday>("/api/v1/journey/today", {
+    method: "GET",
+    signal,
+  });
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 const MOCK_SETTINGS: SettingsResponse = {
@@ -844,6 +886,119 @@ export async function telegramOptOut(): Promise<TelegramStatusResponse> {
   return requestJson<TelegramStatusResponse>("/api/v1/settings/telegram/opt-out", {
     method: "POST",
   });
+}
+
+// ── Gmail read-only connector (M0) ───────────────────────────────────────────
+// Backend: src/api/routers/integrations_gmail.py. Read-only by design — the
+// connector requests gmail.readonly only; Rico cannot send, delete, or modify
+// email. When RICO_ENABLE_GMAIL_SYNC is off, connect/sync return 503 and
+// `enabled` is false in the status payload (card shows a "coming soon" state).
+
+export interface GmailStatusResponse {
+  /** Whether background/manual Gmail sync is enabled on this deployment
+   * (RICO_ENABLE_GMAIL_SYNC). Gates connect/sync actions — NOT visibility. */
+  sync_enabled: boolean;
+  /** Deprecated alias of `sync_enabled`, kept for backward compatibility. */
+  enabled: boolean;
+  /** Truthful: an active connection row exists, independent of `sync_enabled`.
+   * A connected user can always disconnect, even while sync is disabled. */
+  connected: boolean;
+  provider_email: string | null;
+  scopes: string[];
+  needs_reauth: boolean;
+  /** Whether the user granted recurring (fleet) sync consent, separate from
+   * the OAuth read grant. */
+  recurring_sync_consent?: boolean;
+  last_sync_at: string | null;
+}
+
+export interface GmailReviewItem {
+  id: string;
+  gmail_message_id: string;
+  subject_snippet: string | null;
+  sender: string | null;
+  received_at: string | null;
+  classified_status: string | null;
+  classification_confidence: number | null;
+  company_hint: string | null;
+  matched_job_id: string | null;
+  matched_company: string | null;
+  matched_title: string | null;
+  match_confidence: number | null;
+  proposed_status: string | null;
+  review_status: string;
+  created_at: string | null;
+}
+
+export async function getGmailStatus(
+  signal?: AbortSignal,
+): Promise<GmailStatusResponse> {
+  return requestJson<GmailStatusResponse>("/api/v1/integrations/gmail/status", {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function getGmailConnectUrl(): Promise<{ auth_url: string }> {
+  return requestJson<{ auth_url: string }>("/api/v1/integrations/gmail/connect", {
+    method: "GET",
+  });
+}
+
+export async function disconnectGmail(): Promise<{
+  disconnected: boolean;
+  revoked_at_google: boolean;
+}> {
+  return requestJson<{ disconnected: boolean; revoked_at_google: boolean }>(
+    "/api/v1/integrations/gmail/disconnect",
+    { method: "POST" },
+  );
+}
+
+export async function syncGmail(): Promise<{ status: string; detail?: string }> {
+  return requestJson<{ status: string; detail?: string }>(
+    "/api/v1/integrations/gmail/sync",
+    { method: "POST" },
+  );
+}
+
+/** Grant or revoke recurring (fleet) sync consent — separate from the OAuth
+ * read grant. Manual `syncGmail()` never requires this; only the background
+ * fleet sweep honors it. */
+export async function setGmailRecurringSyncConsent(
+  granted: boolean,
+): Promise<{ recurring_sync_consent: boolean }> {
+  return requestJson<{ recurring_sync_consent: boolean }>(
+    "/api/v1/integrations/gmail/consent",
+    { method: "POST", body: JSON.stringify({ granted }) },
+  );
+}
+
+export async function getGmailReviewItems(
+  signal?: AbortSignal,
+): Promise<{ items: GmailReviewItem[] }> {
+  return requestJson<{ items: GmailReviewItem[] }>(
+    "/api/v1/integrations/gmail/review-items",
+    { method: "GET", signal },
+  );
+}
+
+export async function approveGmailReviewItem(
+  itemId: string,
+): Promise<{ ok: boolean; applied_status: string; job_id: string }> {
+  return requestJson<{ ok: boolean; applied_status: string; job_id: string }>(
+    `/api/v1/integrations/gmail/review-items/${encodeURIComponent(itemId)}/approve`,
+    { method: "POST" },
+  );
+}
+
+export async function dismissGmailReviewItem(
+  itemId: string,
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(
+    `/api/v1/integrations/gmail/review-items/${encodeURIComponent(itemId)}/dismiss`,
+    { method: "POST" },
+  );
 }
 
 // ── Password reset ────────────────────────────────────────────────────────────

@@ -401,14 +401,17 @@ class TestJotformOnboarding:
             result = handle_jotform_submission(self._make_payload())
         assert result.get("status") in {"ok", "accepted"}
 
-    def test_onboarding_accepted_without_db(self):
+    def test_onboarding_propagates_db_error_for_retry(self):
+        # #1089: a required-persistence failure must propagate (→ HTTP 500 → provider
+        # retries), not be masked as a false 'accepted'.
+        import pytest
         from src.services.chat_service import handle_jotform_submission
         with patch(
             "src.rico_jotform_webhook.handle_jotform_submission",
             side_effect=Exception("DB unavailable"),
         ):
-            result = handle_jotform_submission(self._make_payload())
-        assert result.get("status") == "accepted"
+            with pytest.raises(Exception, match="DB unavailable"):
+                handle_jotform_submission(self._make_payload())
 
     def test_onboarding_skipped_when_no_user_data(self):
         from src.services.chat_service import handle_jotform_submission

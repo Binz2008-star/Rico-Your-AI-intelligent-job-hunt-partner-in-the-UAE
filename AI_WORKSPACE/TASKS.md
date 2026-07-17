@@ -2214,3 +2214,210 @@ Task            TASK-20260716-002 (this entry)
   flag OFF means no runtime path exercises it
 
 ---
+
+### TASK-20260716-003 — Opening-film chooser: rotate on every guest visit, non-repeating 3-film cycle
+
+Status: review → merge authorized. Containment exception RECORDED: the owner
+(Binz2008-star) explicitly authorized merging #1085 via direct in-session
+instruction ("Ok do it", 2026-07-16, after the review notes were addressed
+and CI was green), taking it ahead of secret rotation / #1066 / #1067 / #1068
+in merge order. Production deploy of main via Vercel follows automatically.
+Owner: Claude (owner directive delivered in-session, 2026-07-16)
+Branch: `claude/rico-film-rotation-fix-g7tua4`
+Issue/PR: #1085 (draft)
+
+#### Objective
+
+Guests opening ricohunt.com get the launch film on EVERY visit (retire the
+once-per-browser-session gate), rotating exactly option-2 / option-3 /
+option-3b in a randomized non-repeating cycle (all three before any repeat),
+with reload/revisit re-entering the chooser instead of staying locked to the
+previously selected option URL. Preserve the authenticated `/command`
+redirect, `/signup` CTAs, SEO prerender, and all film content.
+
+#### Roadmap traceability
+
+```text
+Vision          AI_WORKSPACE/PROJECT_BRIEF.md — trusted Career Operating System
+   ↓
+Epic            Official-site opening experience (launch films)
+   ↓
+Milestone       Public launch funnel — /explainer rotation
+   ↓
+PR              #1085 — fix(landing): film chooser runs every guest visit
+   ↓
+Task            TASK-20260716-003 (this entry)
+```
+
+#### Continuity Block
+
+- Task ID: TASK-20260716-003
+- GitHub issue/PR: #1085 (draft)
+- Branch: `claude/rico-film-rotation-fix-g7tua4`
+- Base branch: main (`5cb1fd13`)
+- Status: review — Draft/HELD; owner to record containment exception and merge
+  order relative to secret rotation, #1066/#1067, #1068 before any merge; no
+  production deploy (Vercel PREVIEW auto-deploys on push, as with every PR)
+- Files touched: `apps/web/public/explainer/index.html` (chooser: persisted
+  shuffle deck + in-place render), `apps/web/app/page.tsx`,
+  `apps/web/lib/openingFilm.ts`, `apps/web/__tests__/landing-opening-film.test.tsx`,
+  `apps/web/__tests__/explainer-film-rotation.test.ts` (new),
+  `apps/web/public/explainer/README.md`
+- Constraints honored: no billing/auth-implementation/Gmail/Memory/Atelier/film-content
+  changes; film URLs remain a closed hardcoded allowlist inside the chooser
+- Validation already run: vitest full suite green; `next build` green; real-Chromium
+  smoke (6 visits = 2 full non-repeating cycles, URL stays on chooser, film renders);
+  persisted-deck validation hardened (unique-valid-subset only) with regression tests
+- Next exact action: owner manual smoke on the Vercel preview + record the
+  exception/merge order; PR stays draft until then
+
+---
+
+### TASK-20260716-004 — After the films comes the landing page (+ film-boot robustness fix)
+
+Status: merge authorized — owner (Binz2008-star) explicitly said "merge"
+in-session (2026-07-16) after CI went green and the Vercel preview was up;
+containment exception recorded, same basis as TASK-20260716-003 / #1085.
+Owner: Claude
+Branch: `claude/rico-film-rotation-fix-g7tua4` (restarted from main after #1085 merged)
+Issue/PR: follow-up to #1085
+
+#### Objective
+
+1. A rotation film's single pass ends by handing the visitor to the landing
+   page (`/?after-film=1` → landing renders once, marker stripped, next "/"
+   entry rotates again) instead of looping forever. Skip/Join keep /signup.
+2. Robustness fix discovered while verifying: replace the chooser's
+   fetch + document.write film render (merged in #1085) with a real
+   navigation tagged `#rico-rotation` + in-film `history.replaceState` mask.
+   A parser-inserted end-of-body script waits on pending stylesheets, so a
+   stalled fonts CDN froze the written film entirely; native navigation has
+   no such dependency and keeps the same reload-re-enters-rotation behavior.
+
+#### Continuity Block
+
+- Task ID: TASK-20260716-004
+- Files touched: `apps/web/public/explainer/index.html`,
+  `apps/web/public/explainer/option-2.html` / `option-3.html` / `option-3b.html`
+  (goLanding at end of pass + #rico-rotation URL mask; visuals/copy/CTAs untouched),
+  `apps/web/app/page.tsx`, `apps/web/lib/openingFilm.ts` (claimAfterFilmLanding),
+  `apps/web/__tests__/landing-opening-film.test.tsx`,
+  `apps/web/__tests__/explainer-film-rotation.test.ts`,
+  `apps/web/public/explainer/README.md`
+- Validation already run: vitest 600/600; next build green; real-Chromium E2E:
+  "/" → film plays (scene active = script live, URL masked to chooser) →
+  fast-forward → landing renders once with marker stripped → reload → next film
+- Next exact action: owner merge word; production deploy via Vercel on merge
+
+---
+
+### TASK-20260717-001 — Stabilize flaky chat-confirm-profile vitest file (CI tax)
+
+Status: in review (owner granted execution autonomy in-session 2026-07-17 to finish outstanding work; test-only change)
+Owner: Claude
+Branch: `claude/rico-film-rotation-fix-g7tua4` (restarted from main after #1116 merged)
+Issue/PR: follow-up; flaked 3x on 2026-07-16 (#1085 and #1116 CI, plus one local run) always in `chat-confirm-profile.test.tsx`
+
+#### Objective
+
+Remove the two flake modes without weakening the guard:
+1. 5s default test timeout too tight for the full CommandPage render + CV
+   upload flow on loaded CI runners → per-test 15s timeout on the three
+   heavy tests.
+2. Raw `fetchMock.mock.calls.length` equality races with `useAuth`'s
+   per-mount `/api/v1/me` re-check (the Edit click mounts the editor panel)
+   → count only non-`/api/v1/me` calls, and additionally assert that
+   neither `/chat/public` nor `confirm-cv-profile` is ever called by Edit.
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-001
+- Files touched: `apps/web/__tests__/chat-confirm-profile.test.tsx` only
+- Validation: file passed 10/10 consecutive local runs post-fix
+- Next exact action: PR, CI green, merge under the in-session autonomy grant
+
+---
+
+### TASK-20260717-002 — Job Result Integrity Gate (incident #1121)
+
+Status: review
+Owner: model
+Branch: fix/job-result-integrity-gate
+Issue/PR: incident #1121 → Draft PR #1123 (this branch) → TASK-20260717-002
+
+Traceability: Issue #1121 (the real Job Result Integrity incident) → Draft PR
+#1123 → TASK-20260717-002. The PR "Addresses #1121" (not "Closes") and must not
+auto-close #1121 while Draft. #1118 is a DIFFERENT issue (the CV-parse quality
+gate for #1119) and is not tracked here.
+
+#### Hierarchy
+- Vision → Career Operating System
+- Epic → Rico Command Runtime Restoration
+- Milestone → Trusted Job Search
+- Phase → Job Result Integrity Gate
+- Issue → #1121 (production Job Result Integrity failure)
+- PR → Draft PR #1123, one objective: reject non-trustworthy listings before scoring/card/shortlist
+- Tests → provider-to-card integrity contract (`tests/test_job_result_integrity.py`)
+
+#### Incident
+Production surfaced a Totaljobs listing — title "Project Manager", body "Mental
+Health Practitioner / Recovery Service", location Manchester (UK), apply state
+Unavailable — in a UAE workflow. Withdraws the prior "job-search vertical is
+genuinely strong" assessment. Classes: non-UAE market leak; title/description
+role-family conflict; unavailable/dead apply link; no trust decision before
+scoring/shortlist admission.
+
+#### Objective
+Rico owns the final trust decision: a job may be CV-scored, carded, or shortlisted
+only after Market + Role + Listing + Freshness + Evidence integrity pass.
+
+#### Root cause
+`src/job_providers.py` forwards `country="ae"` only to JSearch; Adzuna is hard-
+scoped to its GB index (`ADZUNA_COUNTRY` default `gb`) and the cascade short-
+circuits on the first provider with items, with NO post-cascade market/role/
+availability filter before scoring. First layer that should have rejected the
+record: market/country normalization.
+
+#### Fix
+- `src/job_integrity.py` (new): `RejectionReason` + `validate_listing` +
+  `filter_listings` (market/role/title-body-conflict/availability/apply-url/
+  source-page/freshness/evidence). Role step: the REQUESTED role's own
+  occupational domain participates in the title/body comparison (protected-domain
+  review fix) — a valid Nurse/Mental-Health request is not falsely conflicted.
+  Protected-domain detection is bilingual (EN + Arabic vocabulary) so Arabic
+  listings are validated with Arabic signals, never skipped; sparse Arabic
+  evidence → `INSUFFICIENT_LISTING_EVIDENCE`. `filter_listings` tags each
+  accepted record `apply_verified` (True only with a usable http(s) URL).
+- `src/rico_chat_api.py`: run the gate in `_target_role_search_response` right
+  after fetch, before scoring/formatting/shortlist; surface a safe aggregate
+  `integrity_filtered` count only. `_format_match` surfaces `apply_verified` on
+  the card (tied to the resolved usable link) so a missing/invalid-link card
+  renders the fallback CTA and never an Apply action.
+- `src/job_providers.py`: drop Adzuna from the cascade when its configured index
+  ≠ the requested country (stops the GB short-circuit).
+
+#### Constraints
+- Do not touch PR #1119 files (`src/api/routers/rico_chat.py`, `src/cv_parser.py`,
+  `src/cv_parse_quality.py`, and their tests).
+- No new providers; no broadened search; no UI redesign; no migrations.
+- Context-durability (reload → recent_search_role loss) is a SEPARATE defect — not
+  in this PR.
+
+#### Acceptance criteria
+- [x] UAE search rejects UK/non-UAE listings even at high provider rank.
+- [x] title/body role-family conflict (Project Manager + Mental Health) rejected.
+- [x] protected-domain request (Nurse / Mental Health Practitioner) NOT falsely
+      conflicted; requested role's own domain participates in the comparison.
+- [x] unavailable listing / malformed apply URL never a recommendation; missing
+      URL kept as unverified (`apply_verified=false`), never an Apply action.
+- [x] valid UAE listing remains scoreable; rejected never scored/carded/shortlisted
+      (proven through the real `_target_role_search_response` path).
+- [x] Arabic listings validated with Arabic vocabulary (not skipped); conflicts
+      caught; insufficient Arabic evidence → INSUFFICIENT_LISTING_EVIDENCE.
+- [ ] PRE-MERGE BRANCH QUALITY SMOKE (branch/local, NOT production — production
+      runs main): five role searches, zero UK/mismatch/unavailable in top 10.
+
+#### Separate follow-up (do NOT implement here)
+- Search-context durability: `recent_search_role` non-durable under
+  `RICO_MEMORY_BACKEND=postgres`; multi-role option click triggers page reload;
+  refinement falls back to profile after reload. Tracked separately.

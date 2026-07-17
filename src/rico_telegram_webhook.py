@@ -83,6 +83,10 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
     linked = False
     if chat_id:
         try:
+            # Consent state is durable state (#1082): the link/enable write must
+            # commit to the canonical DB. require_db raises on DB unavailability
+            # or write failure instead of confirming from the process-local
+            # mirror, so the "now linked" reply below is never a false claim.
             upsert_profile(
                 bound_user_id,
                 {
@@ -90,6 +94,7 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
                     "telegram_notifications_enabled": True,
                     **({"telegram_username": username} if username else {}),
                 },
+                require_db=True,
             )
             linked = True
         except Exception as exc:
@@ -116,17 +121,31 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _handle_stop(message: Dict[str, Any]) -> Dict[str, Any]:
-    """Disable notifications for this Telegram user."""
+    """Durably disable notifications for every account bound to this Telegram chat."""
+    from src.repositories.profile_repo import disable_telegram_alerts_for_chat
+
     chat_id = str(message.get("chat", {}).get("id") or message.get("from", {}).get("id") or "")
-    user_id = chat_id  # for Telegram users, chat_id == Rico user_id
 
     stopped = False
     if chat_id:
         try:
-            upsert_profile(user_id, {"telegram_notifications_enabled": False})
+            # Opt-out is durable consent (#1082): disable EVERY rico_users row
+            # bound to this chat_id (native Telegram row and/or web-linked
+            # account) in one committed DB write, so the next roster excludes
+            # the chat entirely. Raises on DB failure — no committed row means
+            # no "Notifications paused" claim.
+            disabled = disable_telegram_alerts_for_chat(chat_id)
+            if disabled == 0:
+                # Chat never linked a row by chat_id (e.g. /stop before /start):
+                # persist an explicit opt-out row durably so consent survives.
+                upsert_profile(
+                    chat_id,
+                    {"telegram_chat_id": chat_id, "telegram_notifications_enabled": False},
+                    require_db=True,
+                )
             stopped = True
         except Exception as exc:
-            logger.warning("telegram_stop: upsert failed user=%s: %s", user_id, exc)
+            logger.warning("telegram_stop: durable opt-out failed chat_id=%s: %s", chat_id, exc)
 
     if stopped:
         reply = "Notifications paused. Send /start to re-enable them whenever you're ready."

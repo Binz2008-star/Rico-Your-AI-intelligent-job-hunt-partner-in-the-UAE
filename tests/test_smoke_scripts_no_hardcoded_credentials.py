@@ -1,10 +1,14 @@
 """Security regression test: smoke-test scripts must refuse to run without env vars.
 
-Verifies that scripts/subscription_smoke_test.py, scripts/production_smoke_test.py,
-and scripts/stripe_runtime_diagnostic.py all exit with code 2 and print the missing
-env var name when RICO_SMOKE_TEST_EMAIL or RICO_SMOKE_TEST_PASSWORD is not set.
+Verifies that scripts/subscription_smoke_test.py and scripts/production_smoke_test.py
+both exit with code 2 and print the missing env var name when RICO_SMOKE_TEST_EMAIL
+or RICO_SMOKE_TEST_PASSWORD is not set.
 
 This prevents credentials from being hard-coded back into the scripts.
+
+(scripts/stripe_runtime_diagnostic.py was retired with the Stripe flow —
+DEC-20260713-005 — and deleted; the manual/Paddle preflight now lives in
+scripts/subscription_smoke_test.py.)
 """
 import subprocess
 import sys
@@ -16,7 +20,6 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 SCRIPTS = [
     "subscription_smoke_test.py",
     "production_smoke_test.py",
-    "stripe_runtime_diagnostic.py",
 ]
 
 SENSITIVE_PATTERNS = [
@@ -67,16 +70,6 @@ class TestScriptsRefuseWithoutEnvVars:
 
     def test_production_smoke_refuses_without_password(self):
         result = _run_script("production_smoke_test.py", {"RICO_SMOKE_TEST_EMAIL": "x"})
-        assert result.returncode == 2
-        assert "RICO_SMOKE_TEST_PASSWORD" in result.stderr
-
-    def test_stripe_diagnostic_refuses_without_email(self):
-        result = _run_script("stripe_runtime_diagnostic.py", {"RICO_SMOKE_TEST_PASSWORD": "x"})
-        assert result.returncode == 2
-        assert "RICO_SMOKE_TEST_EMAIL" in result.stderr
-
-    def test_stripe_diagnostic_refuses_without_password(self):
-        result = _run_script("stripe_runtime_diagnostic.py", {"RICO_SMOKE_TEST_EMAIL": "x"})
         assert result.returncode == 2
         assert "RICO_SMOKE_TEST_PASSWORD" in result.stderr
 

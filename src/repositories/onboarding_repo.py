@@ -151,10 +151,21 @@ def get_onboarding_state_readonly(user_id: str) -> Optional[OnboardingState]:
                 pass
 
 
-def set_onboarding_status(user_id: str, status: str) -> None:
-    """Upsert the onboarding status for a user."""
+def set_onboarding_status(user_id: str, status: str, *, require_db: bool = False) -> None:
+    """Upsert the onboarding status for a user.
+
+    ``require_db`` (default ``False`` — preserves existing callers' best-effort
+    behavior) makes the write MANDATORY: DB unavailability or a write failure
+    raises ``OnboardingStateUnavailable`` instead of being swallowed, so the
+    caller can return a retryable non-2xx rather than claiming a completion
+    state that was never persisted (#764).
+    """
     conn = _get_conn()
     if not conn:
+        if require_db:
+            raise OnboardingStateUnavailable(
+                f"onboarding-state DB unavailable (require_db) user_id={user_id}"
+            )
         return
     try:
         _ensure_table(conn)
@@ -174,12 +185,16 @@ def set_onboarding_status(user_id: str, status: str) -> None:
                 (user_id, status, completed_at, now),
             )
         conn.commit()
-    except Exception:
+    except Exception as exc:
         logger.exception("onboarding_repo: set_status_failed user_id=%s status=%s", user_id, status)
         try:
             conn.rollback()
         except Exception:
             pass
+        if require_db:
+            raise OnboardingStateUnavailable(
+                f"onboarding-state write failed (require_db) user_id={user_id}"
+            ) from exc
     finally:
         conn.close()
 

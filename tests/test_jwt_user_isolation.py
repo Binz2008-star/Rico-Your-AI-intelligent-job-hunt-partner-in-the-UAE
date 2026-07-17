@@ -245,7 +245,7 @@ class TestSettingsRouteIsolation:
         """PUT /api/v1/settings must persist values returned by the next GET."""
         saved_rows = {}
 
-        def _upsert(data: dict, user_id: str | None = None) -> None:
+        def _upsert(data: dict, user_id: str | None = None, **kwargs) -> None:
             key = user_id or "default"
             saved_rows[key] = {**saved_rows.get(key, {}), **data}
 

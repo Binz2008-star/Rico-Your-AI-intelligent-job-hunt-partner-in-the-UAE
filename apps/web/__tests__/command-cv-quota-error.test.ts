@@ -36,11 +36,11 @@ const QUOTA_BODY = {
         plan: "pro",
         used: 5,
         limit: 5,
-        upgrade_hint: "Upgrade to Pro for up to 5 CVs, or Premium for unlimited",
+        upgrade_hint: "Upgrade to Rico Monthly for up to 5 CVs",
         doc_type: "cv",
         message:
             "You have reached your CV storage limit (5/5) on the Pro plan. " +
-            "Upgrade to Pro for up to 5 CVs, or Premium for unlimited.",
+            "Upgrade to Rico Monthly for up to 5 CVs.",
     },
 };
 

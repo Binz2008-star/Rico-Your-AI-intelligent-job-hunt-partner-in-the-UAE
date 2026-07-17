@@ -51,15 +51,22 @@ def read(user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
-def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
+def upsert(data: Dict[str, Any], user_id: Optional[str] = None, *, require_db: bool = False) -> None:
     """Insert or update the settings row for the given user.
 
     Only columns present in *data* are written; absent keys are left as-is.
     Array columns use explicit TEXT[] casts to avoid psycopg2 empty-list
     type-inference failures.
+
+    ``require_db`` (default ``False`` — preserves existing callers' best-effort
+    behavior) makes the write MANDATORY: DB unavailability or a write failure
+    raises RuntimeError instead of being swallowed, so user-directed settings
+    mutations can return a retryable non-2xx instead of a false success (#764).
     """
     conn = get_db_connection()
     if not conn:
+        if require_db:
+            raise RuntimeError(f"settings DB unavailable (require_db) user_id={user_id}")
         return
 
     # Map Python key → (SQL column, SQL cast expression)
@@ -114,7 +121,7 @@ def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
         with conn.cursor() as cur:
             cur.execute(sql, [user_id or "default"] + col_vals)
         conn.commit()
-    except Exception:
+    except Exception as exc:
         logger.exception("settings_repo_upsert_failed user_id=%s data_keys=%s", user_id, list(data.keys()))
         rollback = getattr(conn, "rollback", None)
         if callable(rollback):
@@ -122,5 +129,7 @@ def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
                 rollback()
             except Exception:
                 logger.exception("settings_repo_rollback_failed")
+        if require_db:
+            raise RuntimeError(f"settings write failed (require_db) user_id={user_id}") from exc
     finally:
         conn.close()

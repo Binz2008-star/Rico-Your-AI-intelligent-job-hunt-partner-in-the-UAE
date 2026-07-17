@@ -1,16 +1,21 @@
 /**
- * Official-site opening film — owner decision 2026-07-14.
+ * Official-site opening film — owner directive 2026-07-16.
  *
  * Contract:
- *   1. Guest, first open this session → hand off to /explainer (random film
- *      pick happens inside /explainer/index.html), session flag set, landing
- *      not shown (near-black cover instead).
- *   2. Guest, same-session return → landing renders, no film hand-off (no loop).
- *   3. Authenticated user → router.replace("/command") verbatim; no film.
- *   4. Auth not resolved yet → landing renders, nothing fires.
+ *   1. Guest visit → hand off to the film chooser (/explainer/index.html),
+ *      landing not shown (near-black cover instead).
+ *   2. EVERY guest visit hands off — repeated visits in the same browser
+ *      session go back through the chooser (no once-per-session gate).
+ *      The non-repeating film rotation itself lives in the chooser and is
+ *      covered by explainer-film-rotation.test.ts.
+ *   3. Arriving from a finished film (`/?after-film=1`) → the landing
+ *      renders once, the marker is stripped, no hand-off; the next clean
+ *      visit goes back through the chooser (owner directive 2026-07-16:
+ *      after the films comes the landing page).
+ *   4. Authenticated user → router.replace("/command") verbatim; no film.
+ *   5. Auth not resolved yet → landing renders, nothing fires.
  *
- * claimOpeningFilm runs REAL against jsdom sessionStorage; only the
- * navigation side effect (goToOpeningFilm) is mocked.
+ * Only the navigation side effect (goToOpeningFilm) is mocked.
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
@@ -40,10 +45,10 @@ vi.mock("@/lib/openingFilm", async (importOriginal) => {
 });
 
 import HomePage from "@/app/page";
-import { OPENING_FILM_SESSION_FLAG } from "@/lib/openingFilm";
 
 beforeEach(() => {
     window.sessionStorage.clear();
+    window.history.replaceState(null, "", "/");
     authState.current = { user: null, ready: false };
 });
 afterEach(() => {
@@ -51,24 +56,73 @@ afterEach(() => {
 });
 
 describe("official-site opening film", () => {
-    it("guest first open → film hand-off, flag set, landing hidden", async () => {
+    it("guest visit → film hand-off, landing hidden", async () => {
         authState.current = { user: null, ready: true };
         render(<HomePage />);
 
-        await waitFor(() => expect(goToFilm).toHaveBeenCalledTimes(1));
-        expect(window.sessionStorage.getItem(OPENING_FILM_SESSION_FLAG)).toBe("1");
+        await waitFor(() => expect(goToFilm).toHaveBeenCalled());
         expect(screen.queryByTestId("landing-v2")).toBeNull();
         expect(routerReplace).not.toHaveBeenCalled();
     });
 
-    it("guest same-session return → landing renders, no second hand-off (no loop)", async () => {
-        window.sessionStorage.setItem(OPENING_FILM_SESSION_FLAG, "1");
+    it("repeated guest visits → chooser runs every time, not once per session", async () => {
+        authState.current = { user: null, ready: true };
+
+        const first = render(<HomePage />);
+        await waitFor(() => expect(goToFilm).toHaveBeenCalled());
+        const callsAfterFirstVisit = goToFilm.mock.calls.length;
+        first.unmount();
+
+        // Second visit in the same browser session (same storage state).
+        render(<HomePage />);
+        await waitFor(() =>
+            expect(goToFilm.mock.calls.length).toBeGreaterThan(callsAfterFirstVisit),
+        );
+        expect(screen.queryByTestId("landing-v2")).toBeNull();
+        expect(routerReplace).not.toHaveBeenCalled();
+    });
+
+    it("legacy once-per-session flag in storage no longer blocks the hand-off", async () => {
+        // Visitors from before this fix still carry the old flag; it must be inert.
+        window.sessionStorage.setItem("rico-opening-film-shown", "1");
+        authState.current = { user: null, ready: true };
+        render(<HomePage />);
+
+        await waitFor(() => expect(goToFilm).toHaveBeenCalled());
+        expect(screen.queryByTestId("landing-v2")).toBeNull();
+    });
+
+    it("arriving from a finished film → landing renders once, marker stripped, no hand-off", async () => {
+        window.history.replaceState(null, "", "/?after-film=1");
         authState.current = { user: null, ready: true };
         render(<HomePage />);
 
         expect(await screen.findByTestId("landing-v2")).toBeInTheDocument();
         expect(goToFilm).not.toHaveBeenCalled();
         expect(routerReplace).not.toHaveBeenCalled();
+        // Marker consumed: a reload of the now-clean URL rotates to the next film.
+        expect(window.location.search).toBe("");
+    });
+
+    it("after the after-film landing, the next clean visit hands off again", async () => {
+        window.history.replaceState(null, "", "/?after-film=1");
+        authState.current = { user: null, ready: true };
+        const first = render(<HomePage />);
+        expect(await screen.findByTestId("landing-v2")).toBeInTheDocument();
+        first.unmount();
+
+        render(<HomePage />); // fresh visit, marker already stripped
+        await waitFor(() => expect(goToFilm).toHaveBeenCalled());
+        expect(screen.queryByTestId("landing-v2")).toBeNull();
+    });
+
+    it("authenticated user with the after-film marker → /command, marker irrelevant", async () => {
+        window.history.replaceState(null, "", "/?after-film=1");
+        authState.current = { user: { email: "u@rico.ai" }, ready: true };
+        render(<HomePage />);
+
+        await waitFor(() => expect(routerReplace).toHaveBeenCalledWith("/command"));
+        expect(goToFilm).not.toHaveBeenCalled();
     });
 
     it("authenticated user → /command verbatim, never the film", async () => {
@@ -77,9 +131,6 @@ describe("official-site opening film", () => {
 
         await waitFor(() => expect(routerReplace).toHaveBeenCalledWith("/command"));
         expect(goToFilm).not.toHaveBeenCalled();
-        // The flag stays unclaimed — a same-session logout landing on "/" may
-        // still get the opening film once.
-        expect(window.sessionStorage.getItem(OPENING_FILM_SESSION_FLAG)).toBeNull();
     });
 
     it("auth unresolved → landing renders, nothing fires yet", () => {
@@ -89,6 +140,5 @@ describe("official-site opening film", () => {
         expect(screen.getByTestId("landing-v2")).toBeInTheDocument();
         expect(goToFilm).not.toHaveBeenCalled();
         expect(routerReplace).not.toHaveBeenCalled();
-        expect(window.sessionStorage.getItem(OPENING_FILM_SESSION_FLAG)).toBeNull();
     });
 });

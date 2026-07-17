@@ -281,9 +281,12 @@ def record_profile_optimization_usage(user_id: str) -> None:
 
 # ── Document storage quota ─────────────────────────────────────────────────────
 
+# No Premium tier exists (issue #1067): Rico Monthly is the only paid plan, and
+# it does not offer unlimited storage. Hints state the enforced Rico Monthly
+# ceiling only.
 _UPGRADE_HINTS: dict[str, str] = {
-    "cv_storage_limit": "Upgrade to Pro for up to 5 CVs, or Premium for unlimited",
-    "other_document_limit": "Upgrade to Pro for up to 10 documents, or Premium for unlimited",
+    "cv_storage_limit": "Upgrade to Rico Monthly for up to 5 CVs",
+    "other_document_limit": "Upgrade to Rico Monthly for up to 10 documents",
 }
 
 

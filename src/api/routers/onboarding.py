@@ -62,7 +62,18 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
         raise HTTPException(status_code=422, detail="No onboarding fields provided")
 
     from src.repositories.profile_repo import get_profile, upsert_profile
-    upsert_profile(user_id, updates)
+    # Durable-truth contract (#764): onboarding data must persist to the
+    # canonical DB or this endpoint must fail retryably. A swallowed DB failure
+    # returning "completed" would strand the user's onboarding on the next
+    # device/session.
+    try:
+        upsert_profile(user_id, updates, require_db=True)
+    except Exception:
+        logger.exception("onboarding_submit: profile persistence failed user_id=%s", user_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Onboarding could not be saved. Please try again.",
+        )
     logger.info("onboarding_submit: profile updated user_id=%s fields=%s", user_id, list(updates.keys()))
 
     # Re-read merged profile and evaluate minimum gate to decide status.
@@ -77,7 +88,18 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
 
     from src.repositories.onboarding_repo import set_onboarding_status
     new_status = ONBOARDING_COMPLETED if gate_ok else ONBOARDING_IN_PROGRESS
-    set_onboarding_status(user_id, new_status)
+    # The status write is equally mandatory: profile and status are separate
+    # transactions, so a status failure after a committed profile write returns
+    # 503 and the client retries — the re-submit is idempotent (same upserts),
+    # making the partial state explicit and recoverable rather than silent.
+    try:
+        set_onboarding_status(user_id, new_status, require_db=True)
+    except Exception:
+        logger.exception("onboarding_submit: status persistence failed user_id=%s", user_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Onboarding could not be saved. Please try again.",
+        )
 
     return {
         "status": new_status,

@@ -651,7 +651,11 @@ class TestPaddleWebhookFailureSemantics(unittest.TestCase):
         async def _fake_body():
             return body
 
+        async def _fake_stream():
+            yield body
+
         mock_request.body = _fake_body
+        mock_request.stream = _fake_stream
         mock_request.headers = {"Paddle-Signature": "ts=1;h1=x"}
 
         import asyncio as _asyncio

@@ -248,6 +248,22 @@ def _adzuna_enabled() -> bool:
     )
 
 
+def _adzuna_serves_country(country: str) -> bool:
+    """True only when Adzuna's configured index matches the requested market.
+
+    Adzuna is country-scoped by URL path and its coverage does NOT include the
+    UAE (default ``ADZUNA_COUNTRY=gb``). Querying it for a UAE search returns
+    GB-market listings (e.g. Manchester/Antrim) that must never surface in a
+    UAE workflow, so Adzuna is dropped from the cascade whenever the requested
+    country differs from the index it is configured to serve. This prevents the
+    cascade from short-circuiting on out-of-market Adzuna results before the
+    UAE-capable JSearch provider is reached.
+    """
+    requested = (country or "").strip().lower()
+    configured = os.getenv("ADZUNA_COUNTRY", "gb").strip().lower()
+    return bool(requested) and requested == configured
+
+
 def _normalize_adzuna(item: Dict[str, Any]) -> Dict[str, Any]:
     """Map a raw Adzuna result into Rico's normalized job dict."""
     company = ""
@@ -403,7 +419,7 @@ def search_jobs(
 
     cascade = [
         ("jooble", _provider_configured("jooble"), lambda: _jooble_search(role, location)),
-        ("adzuna", _adzuna_enabled(), lambda: _adzuna_search(role, location)),
+        ("adzuna", _adzuna_enabled() and _adzuna_serves_country(country), lambda: _adzuna_search(role, location)),
         ("jsearch", _provider_configured("jsearch"), lambda: _jsearch_search(role, location, country)),
     ]
     # Whether any provider is configured at all. This separates a genuinely

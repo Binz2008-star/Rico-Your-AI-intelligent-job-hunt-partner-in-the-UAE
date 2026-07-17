@@ -90,6 +90,7 @@ class TestOptIn:
         mock_upsert.assert_called_once_with(
             user_id="user@example.com",
             updates={"can_receive_telegram_notifications": True, "telegram_chat_id": "99999"},
+            require_db=True,
         )
 
     def test_opt_in_without_chat_id(self):
@@ -124,6 +125,7 @@ class TestOptOut:
         mock_upsert.assert_called_once_with(
             user_id="user@example.com",
             updates={"can_receive_telegram_notifications": False},
+            require_db=True,
         )
 
     def test_opt_out_returns_false_on_error(self):

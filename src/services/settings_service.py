@@ -43,11 +43,16 @@ def update_settings(data: Dict[str, Any], user_id: Optional[str] = None) -> Dict
     """
     Persist a subset of settings. Unknown keys are silently dropped.
     Returns the new full effective settings dict.
+
+    Durable-truth contract (#764): a user-directed settings mutation must reach
+    the canonical DB or raise. Skipping the write when the DB is unavailable and
+    then returning defaults from ``get_settings`` would present a false success
+    for a mutation that never persisted, so the repo write is mandatory here.
     """
     clean = {k: v for k, v in data.items() if k in _ALLOWED_KEYS}
 
-    if is_db_available():
-        settings_repo.upsert(clean, user_id=user_id)
+    if clean:
+        settings_repo.upsert(clean, user_id=user_id, require_db=True)
 
     return get_settings(user_id=user_id)
 

@@ -772,6 +772,40 @@ class RicoDB:
                 row = cur.fetchone()
         return row is not None
 
+    def clear_cv_grounding(self, user_id: str) -> bool:
+        """Remove the CV grounding derived from an uploaded CV (privacy, #1083).
+
+        Clears the raw extracted text and file record that ground matching/chat,
+        plus the JSONB keys that would otherwise resurrect an *undeletable*
+        synthetic 'profile-cv' card: the ``cv_text`` / ``cv_file_url`` /
+        ``cv_structured`` columns and the ``profile.cv_filename`` /
+        ``profile.cv_extracted_at`` keys. Structured profile facts (skills,
+        experience, current role) are intentionally retained — they are the
+        user's editable profile, cleared separately in Settings. Returns True if
+        a profile row was updated.
+        """
+        bundle = self.get_user_bundle(user_id)
+        if not bundle:
+            return False
+        db_user_id = str(bundle["id"])
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE rico_profiles
+                    SET cv_text = NULL,
+                        cv_file_url = NULL,
+                        cv_structured = '{}'::jsonb,
+                        profile = (profile - 'cv_filename' - 'cv_extracted_at'),
+                        updated_at = now()
+                    WHERE user_id = %s
+                    RETURNING user_id
+                    """,
+                    (db_user_id,),
+                )
+                row = cur.fetchone()
+        return row is not None
+
     def update_user_document(
         self,
         user_id: str,
@@ -867,16 +901,26 @@ class RicoDB:
         form_id: Optional[str] = None,
         external_user_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        conn=None,
     ) -> bool:
         """Atomically register a webhook delivery.
 
         Returns True only for the first delivery of a provider/submission_id pair.
-        Returns False for duplicates. This is safe against concurrent retries
-        because PostgreSQL enforces the unique constraint.
+        Returns False for duplicates. Safe against concurrent retries because
+        PostgreSQL enforces the unique constraint.
+
+        Pass ``conn`` to join a caller-owned transaction (e.g. the Jotform handler
+        claims the submission in the SAME transaction as the user/profile/settings
+        writes, so a failure rolls the claim back and the provider retry can
+        immediately re-claim — #1089). When ``conn`` is omitted this opens, commits
+        and closes its own connection exactly as before.
         """
         if not submission_id or submission_id == "?":
             return True
-        with self._transaction() as conn:
+        should_close = conn is None
+        if conn is None:
+            conn = self.connect()
+        try:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -888,7 +932,19 @@ class RicoDB:
                     (provider, form_id, submission_id, external_user_id, Json(metadata or {})),
                 )
                 row = cur.fetchone()
-        return row is not None
+            if should_close:
+                conn.commit()
+            return row is not None
+        except Exception:
+            if should_close:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            raise
+        finally:
+            if should_close:
+                self._return_or_close(conn)
 
     def mark_webhook_event_processed(
         self,
@@ -898,10 +954,21 @@ class RicoDB:
         user_id: Optional[str] = None,
         status: str = "processed",
         metadata: Optional[Dict[str, Any]] = None,
+        conn=None,
     ) -> None:
+        """Set a webhook event's terminal status.
+
+        Pass ``conn`` to run inside a caller-owned transaction (so the status is
+        committed together with — or rolled back alongside — the writes it
+        describes). When ``conn`` is omitted this opens/commits/closes its own
+        connection exactly as before.
+        """
         if not submission_id or submission_id == "?":
             return
-        with self._transaction() as conn:
+        should_close = conn is None
+        if conn is None:
+            conn = self.connect()
+        try:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -914,6 +981,18 @@ class RicoDB:
                     """,
                     (user_id, status, Json(metadata or {}), provider, submission_id),
                 )
+            if should_close:
+                conn.commit()
+        except Exception:
+            if should_close:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            raise
+        finally:
+            if should_close:
+                self._return_or_close(conn)
 
     def upsert_user(self, payload: Dict[str, Any], conn=None) -> Dict[str, Any]:
         external_user_id = payload.get("external_user_id") or payload.get("email") or payload.get("telegram_username") or str(uuid.uuid4())
