@@ -28,6 +28,82 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260717-001 — Billing/quota checks fail closed with retryable 503; no unsigned grace cache in v1
+
+Status: accepted
+Date: 2026-07-17
+Owner: Roben (owner) — recorded by Claude per the #1096 issue text and the 2026-07-17 reconciliation audit
+Related task: #1096 remediation (branch per issue; see AUDITS/2026-07-17-read-only-reconciliation-seven-issue-workspace.md)
+
+#### Context
+
+#1096 found that subscription-state and usage-counter read failures were coerced
+to "Free plan" and "zero usage", which is neither truthful nor safe. The
+reconciliation audit flagged the availability trade-off: strict fail-closed
+means a subscription-DB outage temporarily blocks gated features for legitimate
+users.
+
+#### Decision
+
+Adopt the issue's mandated semantics as the v1 contract: unavailable canonical
+subscription/usage state returns a retryable 503 (or an explicit unknown-state
+response), never a fabricated Free plan or zero usage. Unknown usage is never
+coerced to 0; gates deny with a retryable error. A last-known-entitlement grace
+cache is explicitly deferred: if ever introduced it must be signed, versioned,
+TTL-bounded, expose staleness, and never broaden high-impact automation
+(issue item 6). No unsigned/unbounded cache is acceptable.
+
+#### Consequences
+
+- Positive: truthful billing state; no quota bypass during outages; support can
+  distinguish "no subscription" from "store unavailable".
+- Negative/trade-off: a subscription-DB outage degrades gated features for paid
+  users until recovery (surfaced as retryable errors, not silent downgrade).
+
+#### Follow-up
+
+- [ ] Implement in the #1096 remediation PR (typed outcomes + gate changes + tests).
+- [ ] Revisit the signed grace cache only if outage frequency justifies it.
+
+### DEC-20260717-002 — Next.js upgrades to the patched 15.x line per #1102; nested postcss requires an explicit override decision before merge
+
+Status: accepted
+Date: 2026-07-17
+Owner: Roben (owner) — recorded by Claude per the #1102 issue text and the 2026-07-17 reconciliation audit
+Related task: #1102 remediation (branch per issue)
+
+#### Context
+
+`next 14.2.35` (final 14.2 release) carries high-severity advisories reachable
+through this app's App Router/RSC usage and `/proxy/*` rewrites. Issue #1102
+verified `next 15.5.20` supports the current React 18.3.1 / Node runtime and
+that Axios has no source imports. The reconciliation audit corrected an earlier
+local report that misread the Next 15 target as architecture drift — the 15.x
+upgrade IS the issue's required work.
+
+#### Decision
+
+Upgrade `apps/web` to the patched Next 15 line verified by audit (15.5.20 at
+issue time) in a bounded, reviewed major-upgrade PR; remove unused Axios. The
+nested `postcss 8.4.31` pinned inside Next is NOT fixed by bumping the
+top-level `postcss` dependency; the upgrade PR must either add a tested
+override that removes the vulnerable copy or record an accepted-risk entry
+with reachability rationale and expiry. The full #1102 close gate (tests,
+build on exact lockfile, browser regression incl. Arabic/RTL, `/proxy/*`
+protocol tests, Vercel preview smoke) must run before merge.
+
+#### Consequences
+
+- Positive: clears the high-severity production audit findings; drops an unused
+  multipart stack (Axios/form-data).
+- Negative/trade-off: major framework upgrade risk; requires the full close
+  gate before any production decision.
+
+#### Follow-up
+
+- [ ] Execute in the #1102 remediation PR with the close-gate evidence attached.
+- [ ] Record the nested-postcss override or accepted-risk decision in that PR.
+
 ### DEC-20260716-002 — My Files uses a parsed-record model (Option 2), not raw file storage; deleting a CV purges its grounding
 
 Status: accepted
