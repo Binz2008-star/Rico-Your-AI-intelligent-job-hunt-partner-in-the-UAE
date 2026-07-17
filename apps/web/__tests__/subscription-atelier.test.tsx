@@ -218,7 +218,7 @@ describe("SubscriptionAtelier — Paddle checkout flow", () => {
   it("calls createPaddleCheckoutSession before openPaddleCheckout on upgrade", async () => {
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    const upgradeBtn = await screen.findByText(/subscribeWithPaddle/i);
     fireEvent.click(upgradeBtn);
 
     await waitFor(() => {
@@ -237,7 +237,7 @@ describe("SubscriptionAtelier — Paddle checkout flow", () => {
   it("passes the server session_token to openPaddleCheckout as the second argument", async () => {
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    const upgradeBtn = await screen.findByText(/subscribeWithPaddle/i);
     fireEvent.click(upgradeBtn);
 
     await waitFor(() => {
@@ -253,7 +253,7 @@ describe("SubscriptionAtelier — Paddle checkout flow", () => {
 
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    const upgradeBtn = await screen.findByText(/subscribeWithPaddle/i);
     fireEvent.click(upgradeBtn);
 
     await waitFor(() => {
@@ -266,7 +266,7 @@ describe("SubscriptionAtelier — Paddle checkout flow", () => {
 
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    const upgradeBtn = await screen.findByText(/subscribeWithPaddle/i);
     fireEvent.click(upgradeBtn);
 
     await waitFor(() => {
@@ -297,7 +297,7 @@ describe("Runtime billing config — mode resolution and fail-closed behavior", 
   it("Paddle-active config → Paddle CTA, no WhatsApp link anywhere", async () => {
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    await screen.findByText(/upgradeTo/i);
+    await screen.findByText(/subscribeWithPaddle/i);
 
     expect(document.querySelectorAll('a[href*="wa.me"]').length).toBe(0);
     expect(screen.queryByText(/continueOnWhatsApp/i)).toBeNull();
@@ -324,7 +324,7 @@ describe("Runtime billing config — mode resolution and fail-closed behavior", 
     expect(screen.getAllByText(/paymentTemporarilyUnavailable/i).length).toBeGreaterThan(0);
     expect(document.querySelectorAll('a[href*="wa.me"]').length).toBe(0);
     expect(screen.queryByText(/continueOnWhatsApp/i)).toBeNull();
-    expect(screen.queryByText(/upgradeTo/i)).toBeNull();
+    expect(screen.queryByText(/subscribeWithPaddle/i)).toBeNull();
   });
 
   it("unreachable billing config → fail-closed, NEVER WhatsApp", async () => {
@@ -340,7 +340,7 @@ describe("Runtime billing config — mode resolution and fail-closed behavior", 
   it("uses the server-resolved price_id from the checkout session", async () => {
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    const upgradeBtn = await screen.findByText(/subscribeWithPaddle/i);
     fireEvent.click(upgradeBtn);
 
     await waitFor(() => expect(mockOpenPaddleCheckout).toHaveBeenCalled());
@@ -363,7 +363,7 @@ describe("Backend confirmation — success is never declared locally", () => {
     mockOpenPaddleCheckout.mockResolvedValue("completed");
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    const upgradeBtn = await screen.findByText(/subscribeWithPaddle/i);
     const callsBeforeCheckout = mockGetMySubscription.mock.calls.length;
     fireEvent.click(upgradeBtn);
 
@@ -376,7 +376,7 @@ describe("Backend confirmation — success is never declared locally", () => {
     mockOpenPaddleCheckout.mockResolvedValue("closed");
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    const upgradeBtn = await screen.findByText(/upgradeTo/i);
+    const upgradeBtn = await screen.findByText(/subscribeWithPaddle/i);
     const callsBeforeCheckout = mockGetMySubscription.mock.calls.length;
     fireEvent.click(upgradeBtn);
 
@@ -396,7 +396,7 @@ describe("Pricing copy — USD, not AED", () => {
 
   it("renders the USD footer key and no AED copy", async () => {
     render(React.createElement(SubscriptionAtelier, { user }));
-    await screen.findByText(/upgradeTo/i);
+    await screen.findByText(/subscribeWithPaddle/i);
 
     expect(screen.getByText(/pricesInUSD/i)).toBeDefined();
     expect(screen.queryByText(/pricesInAED/i)).toBeNull();
@@ -405,7 +405,7 @@ describe("Pricing copy — USD, not AED", () => {
 
   it("formats the monthly price with two decimals (USD 21.50)", async () => {
     render(React.createElement(SubscriptionAtelier, { user }));
-    await screen.findByText(/upgradeTo/i);
+    await screen.findByText(/subscribeWithPaddle/i);
 
     expect(screen.getByText(/USD 21\.50/)).toBeDefined();
   });

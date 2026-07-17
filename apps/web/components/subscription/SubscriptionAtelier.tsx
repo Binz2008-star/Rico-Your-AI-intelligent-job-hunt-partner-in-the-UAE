@@ -299,7 +299,7 @@ function PlanCard({
                                     {t("connecting")}
                                 </span>
                             ) : (
-                                `${t("upgradeTo")} ${localName}`
+                                t("subscribeWithPaddle")
                             )}
                         </button>
                     )
