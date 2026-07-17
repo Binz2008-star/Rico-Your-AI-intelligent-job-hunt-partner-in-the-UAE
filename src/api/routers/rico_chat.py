@@ -1735,6 +1735,30 @@ async def rico_upload_cv(
             request_ref,
         )
 
+        # Readability gate: require meaningful readable text before preview_ready
+        # Must not rely on file byte size alone (no_text guard is separate)
+        extracted_chars = parsed.get("extracted_chars", 0)
+        extraction_quality = parsed.get("extraction_quality", "unknown")
+        _MIN_READABLE_CHARS = 50  # Minimum meaningful characters for a readable CV
+        if extracted_chars < _MIN_READABLE_CHARS or extraction_quality == "poor":
+            _metrics.record_request((time.time() - start_time) * 1000)
+            logger.info(
+                "cv_upload_unreadable user=%s filename=%s chars=%d quality=%s request_ref=%s",
+                resolved_user_id, safe_name, extracted_chars, extraction_quality, request_ref,
+            )
+            return {
+                "ok": False,
+                "status": "unreadable",
+                "document_type": cv_doc_type,
+                "file_format": classification.file_format,
+                "filename": safe_name,
+                "message": (
+                    "I couldn't extract enough readable text from this file. "
+                    "It may be a scan, image-only PDF, or corrupt file. "
+                    "Please upload a text-based PDF or Word document."
+                ),
+            }
+
         # Company profile: route through classification instead of CV pipeline.
         if cv_doc_type == "company_profile":
             _metrics.record_request((time.time() - start_time) * 1000)
@@ -1996,6 +2020,26 @@ async def confirm_cv_profile(
                 )
 
         confirmed_cv_text: str | None = (artifact or {}).get("cv_text") or None
+
+        # Confirmation defense-in-depth: reject artifacts with unreadable cv_text
+        # This is a safety net in case the upload gate is bypassed or a bug
+        # allows garbage through. Must not rely on client-supplied data.
+        if confirmed_cv_text is not None:
+            _MIN_CONFIRM_CHARS = 50
+            if len(confirmed_cv_text.strip()) < _MIN_CONFIRM_CHARS:
+                logger.warning(
+                    "cv_confirm_unreadable_artifact user=%s upload_id=%s filename=%s chars=%d request_ref=%s",
+                    resolved_user_id, payload.upload_id, payload.filename,
+                    len(confirmed_cv_text), request_ref,
+                )
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "ok": False,
+                        "status": "cv_confirmation_required",
+                        "message": "The uploaded file didn't contain enough readable text. Please upload a text-based PDF or Word document.",
+                    },
+                )
 
         # ── Write order & partial-state policy (#975 review) ──────────────────
         # For authenticated users the durable My Files document write happens

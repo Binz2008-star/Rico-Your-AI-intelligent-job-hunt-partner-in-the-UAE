@@ -204,11 +204,15 @@ class CVParser:
 
     def parse_bytes(self, data: bytes, filename: str = "cv.txt") -> ParsedCV:
         suffix = Path(filename).suffix.lower()
-        if suffix == ".pdf":
+
+        # Format integrity: check magic bytes before trusting extension
+        # A file renamed to .pdf must not force PDF treatment when bytes are not PDF
+        if suffix == ".pdf" and data[:4] == b"%PDF":
             text = self._parse_pdf(data)
         elif suffix in {".docx", ".doc"}:
             text = self._parse_docx(data)
         else:
+            # For non-PDF or files with mismatched extension, treat as text
             text = data.decode("utf-8", errors="ignore")
         result = self.parse_text(text)
         result.document_type = self.detect_document_type(text)
@@ -336,8 +340,8 @@ class CVParser:
             doc = fitz.open(stream=data, filetype="pdf")
             return "\n".join(page.get_text() for page in doc)
         except Exception as exc:
-            logger.warning("cv_parser: PyMuPDF failed, falling back to raw UTF-8 decode: %s", exc)
-            return data.decode("utf-8", errors="ignore")
+            logger.warning("cv_parser: PyMuPDF failed to parse PDF: %s", exc)
+            raise RuntimeError(f"PDF parsing failed: {exc}") from exc
 
     def _parse_docx(self, data: bytes) -> str:
         # Reject decompression bombs before python-docx inflates the zip. Reading
