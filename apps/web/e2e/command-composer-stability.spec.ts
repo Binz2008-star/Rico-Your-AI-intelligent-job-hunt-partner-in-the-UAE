@@ -72,11 +72,37 @@ async function contrastRatio(page: Page, selector: string) {
     const element = document.querySelector(targetSelector);
     if (!element) throw new Error(`Missing element: ${targetSelector}`);
 
-    const parseRgb = (value: string) => {
-      const channels = value.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number);
-      if (!channels || channels.length !== 3) throw new Error(`Unsupported color: ${value}`);
-      return channels;
+    // [r, g, b, a] — alpha defaults to 1 when absent ("rgb(…)").
+    const parseColor = (value: string) => {
+      const channels = value.match(/\d+(?:\.\d+)?/g)?.map(Number);
+      if (!channels || channels.length < 3) throw new Error(`Unsupported color: ${value}`);
+      return [channels[0], channels[1], channels[2], channels.length >= 4 ? channels[3] : 1];
     };
+
+    // The element's real backdrop: walk up through ancestors, collecting painted
+    // background layers until an opaque one, then composite top-down. The old
+    // implementation read document.body's background, which only matched while
+    // /command painted its own full-bleed dark canvas over the dark body — the
+    // light workspace shell paints its background on an inner div, not on body.
+    const effectiveBackground = () => {
+      const layers: number[][] = [];
+      let node: Element | null = element;
+      while (node) {
+        const layer = parseColor(getComputedStyle(node).backgroundColor);
+        if (layer[3] > 0) {
+          layers.push(layer);
+          if (layer[3] >= 1) break;
+        }
+        node = node.parentElement;
+      }
+      let out = [255, 255, 255];
+      for (let i = layers.length - 1; i >= 0; i--) {
+        const [r, g, b, a] = layers[i];
+        out = [a * r + (1 - a) * out[0], a * g + (1 - a) * out[1], a * b + (1 - a) * out[2]];
+      }
+      return out;
+    };
+
     const luminance = (rgb: number[]) => {
       const [r, g, b] = rgb.map((channel) => {
         const value = channel / 255;
@@ -85,8 +111,17 @@ async function contrastRatio(page: Page, selector: string) {
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
 
-    const foreground = luminance(parseRgb(getComputedStyle(element).color));
-    const background = luminance(parseRgb(getComputedStyle(document.body).backgroundColor));
+    const backdrop = effectiveBackground();
+    const [fr, fg, fb, fa] = parseColor(getComputedStyle(element).color);
+    // Composite a translucent text color over its backdrop before measuring.
+    const text = [
+      fa * fr + (1 - fa) * backdrop[0],
+      fa * fg + (1 - fa) * backdrop[1],
+      fa * fb + (1 - fa) * backdrop[2],
+    ];
+
+    const foreground = luminance(text);
+    const background = luminance(backdrop);
     return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
   }, selector);
 }
