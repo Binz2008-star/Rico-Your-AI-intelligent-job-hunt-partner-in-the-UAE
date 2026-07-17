@@ -270,9 +270,17 @@ def upsert_profile(
 
     logger.info("profile_repo.upsert_profile: user_id=%s filtered_updates=%s", user_id, list(filtered_updates.keys()))
 
-    # ── JSON mirror (always) — keeps existing code working ────────────────────
+    # ── JSON mirror ────────────────────────────────────────────────────────────
+    # Default (require_db=False) callers keep the long-standing mirror-first
+    # behavior. Mandatory (require_db=True) writes must NOT pre-mutate the
+    # mirror: a failed DB transaction would otherwise leave phantom fallback
+    # state that a later DB-read outage could expose as if the mutation had
+    # succeeded (#764). For those callers the mirror is updated only AFTER the
+    # DB transaction commits.
     mem = _memory()
-    profile = mem.upsert_profile_from_dict(user_id=user_id, updates=filtered_updates)
+    profile: RicoProfile | None = None
+    if not require_db:
+        profile = mem.upsert_profile_from_dict(user_id=user_id, updates=filtered_updates)
 
     # ── DB primary with transaction ───────────────────────────────────────────
     db = _db()
@@ -375,6 +383,11 @@ def upsert_profile(
         if require_db:
             raise
         # Don't re-raise - we have JSON fallback
+
+    if require_db:
+        # DB commit confirmed — now (and only now) reflect the change in the
+        # process-local mirror so fallback reads match committed state (#764).
+        profile = mem.upsert_profile_from_dict(user_id=user_id, updates=filtered_updates)
 
     return profile
 
