@@ -108,13 +108,16 @@ def test_unavailable_listing_rejected():
         == RejectionReason.LISTING_UNAVAILABLE
 
 
-# ── 7. Dead apply URL cannot produce an Apply action ────────────────────────
-def test_dead_apply_url_rejected():
-    assert validate_listing(_rec(apply_url=""), single_terms=SUS_TERMS[0], phrase_terms=SUS_TERMS[1]) \
-        == RejectionReason.APPLY_URL_INVALID
-    assert validate_listing(_rec(apply_url="not-a-url", link="", canonical_url=""),
+# ── 7. Dead (malformed) apply URL cannot produce an Apply action ────────────
+def test_malformed_apply_url_rejected_missing_allowed_unverified():
+    # A present-but-malformed URL is a hard rejection (no Apply action possible).
+    assert validate_listing(_rec(apply_url="not-a-url"),
                             single_terms=SUS_TERMS[0], phrase_terms=SUS_TERMS[1]) \
         == RejectionReason.APPLY_URL_INVALID
+    # A MISSING url is allowed (marked unverified downstream; still no Apply
+    # action) per the "usable OR marked unverified" contract — not over-rejected.
+    assert validate_listing(_rec(apply_url=""),
+                            single_terms=SUS_TERMS[0], phrase_terms=SUS_TERMS[1]) is None
 
 
 # ── 8. Provider payload / source-page title mismatch is rejected ────────────

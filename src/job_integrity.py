@@ -171,13 +171,18 @@ def _role_supported(text: str, single_terms: set[str], phrase_terms: set[str]) -
     return False
 
 
-def _valid_apply_url(rec: dict) -> bool:
+def _apply_url_present_but_invalid(rec: dict) -> bool:
+    """True only when a URL field is present but is not a usable http(s) URL.
+
+    A *missing* URL is NOT invalid — per the trust contract a listing may be
+    "usable OR explicitly marked unverified", so an un-enriched listing with no
+    URL yet is allowed (it is marked unverified downstream and offers no Apply
+    action). Only a present-but-malformed URL is a hard rejection.
+    """
     url = _record_field(
         rec, "apply_url", "apply_link", "link", "url", "canonical_url", "source_url"
     ).strip()
-    if not url:
-        return False
-    return url.lower().startswith(("http://", "https://"))
+    return bool(url) and not url.lower().startswith(("http://", "https://"))
 
 
 def _is_unavailable(rec: dict) -> bool:
@@ -266,8 +271,9 @@ def validate_listing(
     if _is_unavailable(rec):
         return RejectionReason.LISTING_UNAVAILABLE
 
-    # 5. Usable apply/canonical URL.
-    if not _valid_apply_url(rec):
+    # 5. Usable apply/canonical URL — reject only a present-but-malformed URL;
+    #    a missing URL is allowed (marked unverified downstream, no Apply action).
+    if _apply_url_present_but_invalid(rec):
         return RejectionReason.APPLY_URL_INVALID
 
     # 6. Freshness (only when a parseable date is present and clearly old).
