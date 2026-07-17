@@ -78,6 +78,80 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260717-008 — PR #1145: unify /command visuals with the shared WorkspaceShell
+
+Status: done — **merged to main** (squash commit `ecd29a66`); Vercel production
+deploy verification pending (see Continuity Block)
+Owner: Claude (release owner; owner directive 2026-07-17 — "اعمل ما تراه مناسب"
+after a completed read-only audit of #1145)
+Branch: `fix/command-atelier-visual-consistency` (merged)
+Issue/PR: #1145 (merged as squash commit `ecd29a66ac43301219ff04a3c5c7fe6b4711a33c`)
+
+#### Objective
+
+Visual/system unification only: make authenticated `/command` a clear part of
+the Rico Workspace (shared `WorkspaceShell variant="app"`, single
+`WORKSPACE_THEME` token source, light-first default with dark via the shared
+toggle) with **zero** chat-behavior change — no endpoint, payload, streaming,
+persistence, auth, or quota code touched. Implements DEC-20260717-001.
+
+#### What changed
+
+- `apps/web/components/command/CommandObsidianShell.tsx` — composes
+  `WorkspaceShell variant="app"`; keeps only route-scoped console bar
+  (status/panel toggles/account-logout), the 260px Sessions rail, and the
+  rgba-aware CSS-var reply-surface layer derived from the ACTIVE shared palette
+- `apps/web/components/command/commandAtelierTheme.ts` — **deleted** (copied
+  token source; no duplicated palette remains)
+- `apps/web/app/command/page.tsx` — chrome doc comment only, no logic change
+- 3 command vitest specs repinned to the new contract (light default, shared
+  palette, shared sidebar nav); composer hint raised ink40→ink70 for WCAG 4.5:1
+- `AI_WORKSPACE/DECISIONS.md` — DEC-20260717-001 recorded
+
+#### Verification
+
+- CI on head `75cd1432` (post-rebase onto main `282660dd`): all 9 checks green
+  (Setup, pytest, postgres-integration, frontend, playwright,
+  workflow-security-guards, Create/Delete Neon Branch, Vercel) — no failures
+- Local: `npx vitest run` 625/625; `npm run build` clean (`/command` 79.5 kB)
+- Zero review threads / zero pending reviews; `mergeable_state: clean`
+- Merged via squash with expected head SHA `75cd1432` → main now `ecd29a66`
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-008
+- GitHub PR: #1145 (merged)
+- Branch: `fix/command-atelier-visual-consistency` | Base: main @ `282660dd`
+- Last safe commit SHA (main before merge): `282660dd`
+- Current head SHA (main after merge): `ecd29a66`
+- Uncommitted changes present: no
+- Status: done (merge complete); production deploy verification pending
+- Files changed: see "What changed" above (frontend-only)
+- Files intentionally not touched: `MobileCommandHeader` / `MobileBottomNav`
+  (shared with public/legacy surfaces — documented follow-up); all backend;
+  public/guest chrome
+- What is complete: rebase, DEC entry, CI green, Ready flip, squash-merge,
+  local-main sync to `ecd29a66`
+- What is incomplete: confirm Vercel deploys the exact merge SHA `ecd29a66` to
+  production (`ricohunt.com`) — not just "deployment started"
+- Known blockers: Vercel MCP is unauthenticated in this session and container
+  egress to `ricohunt.com` is blocked (proxy CONNECT 403), so production HTML
+  cannot be fetched from here; verification relies on the Vercel commit status
+  GitHub posts on `ecd29a66`, or owner-side Vercel dashboard confirmation
+- Validation already run: full CI on `75cd1432` green; local vitest+build clean
+- Validation still required: Vercel production deployment status on `ecd29a66`
+  == "Deployment has completed" (Production, not Preview)
+- Deployment/CI/Neon/Vercel state to check next: Vercel production build of
+  `ecd29a66`
+- Next exact action: read the Vercel commit status on `ecd29a66`; if not yet
+  posted, re-check shortly
+- Stop condition: Vercel production status success on `ecd29a66` → done;
+  Vercel build FAILURE → diagnose (frontend-only revert = single-commit
+  rollback) and report to owner
+- Rollback plan: revert squash commit `ecd29a66` — restores
+  `commandAtelierTheme.ts` and prior shell wholesale; no state/storage/API/env
+  change involved
+
 ### TASK-20260717-007 — PR #1143: Paddle-only subscription checkout; remove manual/WhatsApp payment path
 
 Status: verified — **#1143 PRODUCTION PASS** (merged main @ e903496, deployed)
