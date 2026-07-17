@@ -11475,6 +11475,26 @@ class RicoChatAPI:
         if not is_track and not is_save and not is_score:
             return None
 
+        # BUG-24: only the SCORE regex over-matches search phrasing — "Find UAE
+        # jobs that MATCH my CV" reads as "score this job against my CV", so this
+        # intercept used to answer "I don't have an uploaded job document yet."
+        # for a plain job search. Save/track phrasing is precise (a real search
+        # never matches them), so a false intercept can only come from a lone
+        # score match. In that case, defer to the SAME public predicate the
+        # production search router keys on — chat_service forces the real search
+        # path on is_explicit_job_listing_request(message) — so a genuine job
+        # search falls through to the job-search path here rather than the
+        # job-document scoring flow. Genuine "score this against my CV" is not an
+        # explicit job-listing request, so it still scores. Reuses the canonical
+        # public guard (already used in process_message); no parallel model.
+        from src.rico.intent.gates import is_explicit_job_listing_request
+
+        if (
+            is_score and not is_save and not is_track
+            and is_explicit_job_listing_request(message or "")
+        ):
+            return None
+
         _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
         doc = self._get_last_uploaded_document(user_id)
 
