@@ -15,7 +15,13 @@ on:
           - "false"
           - "true"
 
-# Prevent overlapping scheduled/manual runs
+# Default-deny at the workflow level; jobs that need more escalate explicitly
+# (deploy-dashboard needs contents: write to push the dashboard branch).
+permissions:
+  contents: read
+
+# ONE canonical lock (#1086): the legacy manual-fallback workflow shares this
+# exact group, so scheduled and manual pipeline runs queue and never overlap.
 concurrency:
   group: daily-job-bot
   cancel-in-progress: false
@@ -45,10 +51,14 @@ jobs:
           pip install -r requirements.txt
 
       - name: Write Gmail OAuth files
+        env:
+          GMAIL_CREDENTIALS_JSON: ${{ secrets.GMAIL_CREDENTIALS_JSON }}
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
         run: |
           mkdir -p data
-          printf '%s' '${{ secrets.GMAIL_CREDENTIALS_JSON }}' > data/gmail_credentials.json
-          printf '%s' '${{ secrets.GMAIL_TOKEN_JSON }}'       > data/gmail_token.json
+          printf '%s' "$GMAIL_CREDENTIALS_JSON" > data/gmail_credentials.json
+          printf '%s' "$GMAIL_TOKEN_JSON"       > data/gmail_token.json
+          chmod 600 data/gmail_credentials.json data/gmail_token.json
 
       - name: Run intelligence pipeline
         env:
@@ -85,9 +95,15 @@ jobs:
           path: dashboard.html
           retention-days: 1
 
-  # ── Job 2: Dashboard deploy — separate job with write permission ───────────
+  # ── Job 2: Dashboard publish — dedicated non-runtime branch (#1086) ────────
+  # Generated content NEVER commits to main: a dashboard-only change must not
+  # trigger the Render/production deploy workflows or contaminate deployment
+  # history. The dashboard is force-pushed as a single deterministic commit to
+  # the dedicated `dashboard` branch (point GitHub Pages at that branch,
+  # /docs folder — one-time repo setting). Runs ONLY after a successful
+  # pipeline, and a failed push fails the job loudly — no `|| echo` swallow.
   deploy-dashboard:
-    name: Deploy Dashboard
+    name: Publish Dashboard
     needs: intelligence
     if: success()
     runs-on: ubuntu-latest
@@ -104,23 +120,21 @@ jobs:
         with:
           name: dashboard-html
 
-      - name: Deploy to GitHub Pages
+      - name: Publish to the dashboard branch (never main)
         run: |
           if [ ! -f dashboard.html ]; then
-            echo "dashboard.html not found — skipping deploy"
-            exit 0
+            echo "::error::dashboard.html not found — pipeline succeeded but produced no dashboard"
+            exit 1
           fi
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
-          # Pull latest main BEFORE regenerating/committing: docs/index.html is
-          # fully regenerated every run, so committing first and rebasing after
-          # guarantees a conflict against any other run's dashboard commit.
-          git pull --rebase origin main
+          git checkout --orphan dashboard
+          git rm -rf --quiet . || true
           mkdir -p docs
           cp dashboard.html docs/index.html
           git add docs/index.html
-          git diff --staged --quiet || git commit -m "Update dashboard [skip ci]"
-          git push origin main || echo "Dashboard push failed — likely concurrent main update"
+          git commit -m "Publish dashboard $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push --force origin dashboard
 
   # ── Job 3: Apply — self-hosted runner ─────────────────────────────────────
   apply:

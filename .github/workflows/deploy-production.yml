@@ -3,6 +3,17 @@ name: Deploy to Production
 on:
   push:
     branches: [main]
+    # Runtime path filter (#1086): production verification runs only for
+    # commits that can change production behavior — never for docs/workspace/
+    # generated-dashboard-only changes.
+    paths:
+      - "src/**"
+      - "apps/web/**"
+      - "migrations/**"
+      - "requirements.txt"
+      - "render.yaml"
+      - "Dockerfile.backend"
+      - ".github/workflows/deploy-production.yml"
   workflow_dispatch:
 
 jobs:

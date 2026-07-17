@@ -282,6 +282,95 @@ lookup to the database boundary over ONE canonical logical record set — no
 - Rollback plan: revert the squash commit — read paths return to the capped
   snapshot; no schema/data change in either direction
 
+### TASK-20260717-005 — #1086: one scheduled pipeline; generated dashboard off main; deploy path filters
+
+Status: review
+Owner: Claude (WRITER; Coder pass, owner-directed "full ownership" of the
+2026-07-17 reconciliation-audit remediation sequence)
+Branch: `fix/1086-single-scheduled-pipeline`
+Issue/PR: #1086
+
+#### Objective
+
+Retire the duplicate scheduled pipeline, put every pipeline run behind one
+queued lock, stop generated dashboard commits to main, and path-filter the
+deploy workflows so docs/generated-only changes can never redeploy the
+backend.
+
+#### Context
+
+- Relevant files: `.github/workflows/daily.yml`, `daily-job-bot.yml`,
+  `deploy-render.yml`, `deploy-production.yml`
+- Existing behavior: both daily workflows ran the same crons (06:00/15:00
+  UTC), same `src.run_daily` + `src.follow_up`, no shared lock; both pushed
+  regenerated `docs/index.html` to main (legacy even under `if: always()`
+  with `|| echo` swallowing push failures); every dashboard commit
+  re-triggered both deploy workflows.
+
+#### Constraints
+
+- No workflow dispatched or run as part of the fix.
+- Apply/auto-action flags stay off.
+- Keep a manual fallback for the legacy pipeline (dispatch-only).
+
+#### Acceptance criteria
+
+- [x] Exactly one scheduled invocation owns run_daily + follow_up
+- [x] Legacy workflow manual-only, sharing the SAME queued concurrency group
+- [x] No workflow pushes to main; dashboard force-published to the dedicated
+      `dashboard` branch only after pipeline success, failures loud
+- [x] Deploy workflows auto-trigger only on runtime paths
+- [x] OAuth temp files written from env vars, chmod 600, cleaned in always()
+- [x] Static invariant suite enforces all of the above in CI
+
+#### Required verification
+
+- [x] Unit tests: `tests/test_1086_single_scheduled_pipeline.py` — 8 passed
+      (CI-wired); `test_1084_workflow_guards.py` — 17 passed;
+      `scripts/check_workflow_security.py` — OK, 16 files
+- [x] YAML parse of all changed workflows
+- [ ] Owner action after merge: point GitHub Pages at the `dashboard`
+      branch `/docs` folder (one-time repo setting); until then the stale
+      main copy of docs/index.html remains served
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-005
+- GitHub issue/PR: #1086; draft PR from `fix/1086-single-scheduled-pipeline`
+- Branch: `fix/1086-single-scheduled-pipeline`
+- Base branch: main
+- Last safe commit SHA: 5069447 (origin/main at branch cut)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: the four workflows above, `workflow-guards.yml`,
+  `scripts/check_workflow_security.py`, repo root (render.yaml,
+  Dockerfile.backend)
+- Files changed: `daily-job-bot.yml` — schedule removed (dispatch-only),
+  shared lock, env-var+chmod OAuth handling with always() cleanup,
+  dashboard-push and user-chat failure ping removed; `daily.yml` —
+  workflow-level read permissions, env-var+chmod OAuth write, dashboard
+  publish rewritten to force-push the dedicated `dashboard` branch (loud
+  failure, success-only); `deploy-render.yml` + `deploy-production.yml` —
+  runtime path filters; `tests/test_1086_single_scheduled_pipeline.py` —
+  8 static invariants (CI-wired via qa-tests.yml)
+- Files intentionally not touched: apply jobs' logic (flags stay off),
+  error-notifications.yml (already owns admin failure alerts)
+- What is complete: containment items 1–6 of the issue
+- What is incomplete: full SHA-pinning of action refs (#127 scope)
+- Known blockers: none
+- Validation already run: invariants 8/8; guards 17/17; checker OK; YAML OK
+- Validation still required: CI on the PR head; first scheduled run
+  post-merge should be observed
+- Deployment/CI/Neon/Vercel state to check next: after merge, confirm a
+  dashboard-only publish does NOT trigger deploy-render
+- Next exact action: owner review; after merge, flip GitHub Pages source to
+  the `dashboard` branch
+- Stop condition: if the Pages flip is undesired, revert to discuss an
+  actions/deploy-pages artifact flow instead
+- Rollback plan: revert the squash commit — schedules and publication return
+  to the previous (duplicated) behavior
+
 ### TASK-20260715-002 — Atelier slice 4b: /command message bubbles + empty state
 
 Status: review

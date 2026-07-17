@@ -56,6 +56,7 @@ jobs:
             tests/test_1084_workflow_guards.py \
             tests/test_1076_log_privacy.py \
             tests/test_1077_no_paid_probe.py \
+            tests/test_1086_single_scheduled_pipeline.py \
             tests/test_journey_state.py \
             tests/test_journey_route.py \
             tests/test_tc8_interview_prep_grounding.py \
