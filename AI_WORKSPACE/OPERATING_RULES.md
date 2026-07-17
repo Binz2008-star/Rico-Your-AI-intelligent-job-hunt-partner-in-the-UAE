@@ -207,6 +207,15 @@ Use this matrix after relevant merges/deploys.
 - Do not derive protected user identity from request body fields.
 - Do not log secrets or expose tokens in docs, tests, comments, or PR bodies.
 - If credentials appear in history, report whether redaction and rotation are both needed.
+- **Log privacy (#1076):** operational logs never carry profile values, contact
+  identifiers (email/phone/Telegram), chat or document text, saved-search text,
+  or any reset/verification/checkout token. Use `src/log_privacy.py`
+  (`user_ref`/`token_ref`/`safe_fields`/`safe_exc`) — ad-hoc slicing is not
+  redaction. `logger.exception` is forbidden on paths where driver/SMTP
+  exception strings can embed bound values. Production refuses to boot with a
+  token-logging flag (e.g. `RESET_TOKEN_LOG`). Sentry events pass through the
+  shared `sentry_before_send` scrubber. The static guard in
+  `tests/test_1076_log_privacy.py` enforces the denylist repo-wide.
 - Do not call live third-party APIs from unit tests.
 
 ## No Dead UI Rule

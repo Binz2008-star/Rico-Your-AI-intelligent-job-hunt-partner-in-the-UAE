@@ -109,16 +109,28 @@ def init_sentry() -> None:
         import sentry_sdk
         from sentry_sdk.integrations.fastapi import FastApiIntegration
 
+        from src.log_privacy import sentry_before_send
+
         sentry_sdk.init(
             dsn=dsn,
             environment=os.getenv("SENTRY_ENVIRONMENT", os.getenv("RICO_ENV", "production")),
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
             integrations=[FastApiIntegration()],
+            # #1076: scrub credentials/contact values/document text from every
+            # exported event — logs must not widen through the error exporter.
+            before_send=sentry_before_send,
         )
         logger.info("sentry_initialized environment=%s", os.getenv("SENTRY_ENVIRONMENT", os.getenv("RICO_ENV", "production")))
     except Exception:
         logger.exception("sentry_init_failed")
 
+
+# #1076: production refuses to boot with any token-logging/debug-PII flag on
+# (e.g. RESET_TOKEN_LOG) — a debug override that writes recovery credentials
+# into live logs is not an acceptable production path.
+from src.log_privacy import enforce_production_log_safety
+
+enforce_production_log_safety()
 
 init_sentry()
 

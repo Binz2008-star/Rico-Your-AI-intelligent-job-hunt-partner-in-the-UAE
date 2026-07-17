@@ -46,6 +46,10 @@ def send_password_reset_email(user_email: str, token: str) -> bool:
         else:
             logger.info("password_reset_email_sent")
         return ok
-    except Exception:
-        logger.exception("password_reset_email_exception")
+    except Exception as exc:
+        # #1076: SMTP exceptions (e.g. SMTPRecipientsRefused) embed the
+        # recipient address — never re-emit the exception string.
+        from src.log_privacy import safe_exc
+
+        logger.error("password_reset_email_exception err=%s", safe_exc(exc))
         return False

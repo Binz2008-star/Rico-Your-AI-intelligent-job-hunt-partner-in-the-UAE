@@ -10,6 +10,8 @@ that accepts a `PipelineContext(user_id=...)`.
 from __future__ import annotations
 
 import logging
+
+from src.log_privacy import user_ref
 from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -49,16 +51,16 @@ class UserScheduler:
 
         for user in users:
             email = user.email
-            logger.info("scheduler_user_start email=%s", email)
+            logger.info("scheduler_user_start user=%s", user_ref(email))
             try:
                 rc = self.runner(email)
                 results[email] = rc
                 if rc == 0:
-                    logger.info("scheduler_user_done email=%s rc=0", email)
+                    logger.info("scheduler_user_done user=%s rc=0", user_ref(email))
                 else:
-                    logger.warning("scheduler_user_error email=%s rc=%s", email, rc)
+                    logger.warning("scheduler_user_error user=%s rc=%s", user_ref(email), rc)
             except Exception:
-                logger.exception("scheduler_user_exception email=%s", email)
+                logger.exception("scheduler_user_exception user=%s", user_ref(email))
 
         logger.info("scheduler_complete ran=%d total=%d", len(results), len(users))
         return results

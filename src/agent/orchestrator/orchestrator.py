@@ -134,7 +134,8 @@ def _execute_action(action: AgentAction, user_email: str, actor_is_admin: bool =
 
 def _execute_intent(message: str, user_email: str = "anonymous", actor_is_admin: bool = False) -> ToolExecutionResult:
     intent, tool_name = detect(message)
-    logger.info("intent_detected intent=%r tool=%r message=%r", intent, tool_name, message[:80])
+    # #1076: message text is user content — log length only.
+    logger.info("intent_detected intent=%r tool=%r message_len=%d", intent, tool_name, len(message or ""))
 
     if tool_name is None:
         return ToolExecutionResult(success=True, tool_name="help", data={"intent": "help"})

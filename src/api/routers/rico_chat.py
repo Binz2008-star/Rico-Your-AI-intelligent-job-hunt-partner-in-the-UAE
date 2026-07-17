@@ -42,6 +42,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.api.admin_guard import require_admin_user
 from src.api.deps import get_current_user, get_current_user_id
+from src.log_privacy import safe_fields, user_ref
 from src.api.public_identity import (
     is_safe_public_session_id,
     is_valid_public_user_id,
@@ -1447,7 +1448,8 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         from src.role_normalization import NORMALIZATION_VERSION
         updates["normalization_version"] = NORMALIZATION_VERSION
 
-    logger.info("update_profile endpoint: user_id=%s updates=%s", user_id, updates)
+    # #1076: field names only — updates carry contact/career values.
+    logger.info("update_profile endpoint: user=%s %s", user_ref(user_id), safe_fields(updates))
 
     profile_for_warnings = None
     if updates:
@@ -1477,7 +1479,7 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
                 status_code=500,
                 detail="Profile update could not be confirmed. Please try again.",
             )
-        logger.info("profile_update user=%s fields=%s", user_id, list(updates.keys()))
+        logger.info("profile_update user=%s %s", user_ref(user_id), safe_fields(updates))
     else:
         logger.warning("profile_update no fields user=%s", user_id)
         profile_for_warnings = get_profile(user_id)

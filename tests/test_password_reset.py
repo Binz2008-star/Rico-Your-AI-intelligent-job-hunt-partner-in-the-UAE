@@ -132,18 +132,25 @@ class TestForgotPassword:
             client.post(self.URL, json={"email": "alice@rico.ai"})
         assert raw_token not in caplog.text
 
-    def test_dev_logs_reset_url(self, caplog):
-        """In non-production, the reset URL should appear in logs."""
+    def test_reset_url_never_logged_even_in_dev(self, caplog):
+        """#1076: the reset URL/token is never logged in ANY environment —
+        the old dev convenience path is gone by design."""
         import logging
         raw_token = _fake_token()
         with (
             patch.dict(os.environ, {"RICO_ENV": "development"}, clear=False),
             patch("src.repositories.users_repo.get_user_by_email", return_value=_DB_USER),
             patch("src.repositories.password_reset_repo.create_reset_token", return_value=raw_token),
+            patch(
+                "src.services.password_reset_email.send_password_reset_email",
+                return_value=True,
+            ),
             caplog.at_level(logging.INFO),
         ):
             client.post(self.URL, json={"email": "alice@rico.ai"})
-        assert raw_token in caplog.text
+        assert raw_token not in caplog.text
+        assert "alice@rico.ai" not in caplog.text
+        assert "password_reset_url_generated" in caplog.text
 
 
 # ── POST /reset-password ──────────────────────────────────────────────────────

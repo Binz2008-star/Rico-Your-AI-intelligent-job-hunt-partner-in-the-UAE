@@ -53,6 +53,7 @@ jobs:
             tests/test_1082_consent_fail_closed.py \
             tests/test_1070_guest_identity_binding.py \
             tests/test_1084_workflow_guards.py \
+            tests/test_1076_log_privacy.py \
             tests/test_journey_state.py \
             tests/test_journey_route.py \
             tests/test_tc8_interview_prep_grounding.py \

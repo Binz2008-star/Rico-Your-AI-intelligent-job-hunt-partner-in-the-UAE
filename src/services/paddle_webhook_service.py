@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import json
 import logging
+
+from src.log_privacy import safe_exc, token_ref, user_ref
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -254,8 +256,8 @@ def _extract_subscription_data(
             user_id = _user_id_from_checkout_session(db_module, session_token)
             if user_id:
                 logger.info(
-                    "paddle_identity_via_checkout_session sub_id=%s session_token=%s user_id=%s",
-                    sub_id, session_token, user_id,
+                    "paddle_identity_via_checkout_session sub_id=%s session=%s user=%s",
+                    sub_id, token_ref(session_token), user_ref(user_id),
                 )
                 _consume_checkout_session(db_module, session_token)
 
@@ -499,7 +501,7 @@ def _consume_checkout_session(db_module: Any, session_token: str) -> None:
         from src.repositories import paddle_repo
         paddle_repo.mark_checkout_session_used(db_module, session_token)
     except Exception as exc:
-        logger.warning("paddle_checkout_session_consume_failed token=%s: %s", session_token, exc)
+        logger.warning("paddle_checkout_session_consume_failed session=%s err=%s", token_ref(session_token), safe_exc(exc))
 
 
 def _ensure_paddle_customer(db_module: Any, user_id: str, paddle_customer_id: str, paddle_repo) -> None:
