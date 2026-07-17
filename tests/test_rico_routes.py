@@ -98,7 +98,15 @@ def auth_client():
 _CHAT_RESPONSE = {"type": "assistant", "message": "Hello from Rico"}
 _PUBLIC_UPLOAD_ID = "public:web-upload12345"
 _CV_PARSED = {
-    "text": "Sample CV text",
+    # Readable text >= the parse-quality gate's minimum (50 chars, printable).
+    # The fixture must satisfy the #1118 readability contract, since the upload
+    # route now gates on parsed["text"]/["extracted_chars"] before preview_ready.
+    "text": (
+        "John Doe — HSE Manager. Five years of UAE experience across health, "
+        "safety and environment. Skills: NEBOSH, ISO 14001, risk assessment, "
+        "safety audits, compliance. Email test@example.com."
+    ),
+    "extracted_chars": 186,
     "skills": ["hse"],
     "emails": ["test@example.com"],
     "phones": [],

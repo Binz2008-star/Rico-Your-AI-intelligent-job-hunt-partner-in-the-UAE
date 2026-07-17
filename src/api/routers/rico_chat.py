@@ -1469,7 +1469,13 @@ async def rico_upload_cv(
         # ── Format integrity: reject .pdf files without PDF magic bytes ─────────
         # A file renamed to .pdf must not be silently accepted if bytes are not PDF.
         # This prevents garbage injection from fake PDFs.
-        if safe_name.lower().endswith(".pdf") and classification.file_format != "pdf":
+        if (
+            safe_name.lower().endswith(".pdf")
+            and classification.file_format != "pdf"
+            # Executables are rejected with a hard 422 below — never softened to a
+            # 200 "invalid_signature" (a disguised .exe/.pdf must fail closed).
+            and classification.file_format != "executable"
+        ):
             _metrics.record_request((time.time() - start_time) * 1000)
             logger.warning(
                 "cv_upload_format_mismatch user=%s filename=%s declared_format=pdf detected_format=%s request_ref=%s",

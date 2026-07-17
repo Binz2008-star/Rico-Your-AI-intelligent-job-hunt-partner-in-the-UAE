@@ -37,6 +37,12 @@ def test_cv_upload_runs_parser_in_executor(monkeypatch):
         captured["filename"] = filename
         return {
             "document_type": "resume",
+            # Readable text is required by the #1118 parse-quality gate before a
+            # preview_ready result; the mock must supply it, not just a count.
+            "text": (
+                "Jane Roe — Software Engineer with Python, FastAPI and cloud "
+                "experience. Skills: python, testing, CI. Based in Dubai, UAE."
+            ),
             "extraction_quality": "high",
             "extracted_chars": 100,
             "skills": ["python"],
