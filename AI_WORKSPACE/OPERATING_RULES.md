@@ -140,6 +140,21 @@ is still available for on-demand redeploys.
 
 If `main` is ahead of Render, report: `backend not live yet` and identify the deployed SHA and expected SHA.
 
+### Render account workflows (#1084 containment)
+
+- `render-audit.yml` is strictly **read-only** and `render-cleanup2.yml` is the **only** workflow
+  allowed to mutate Render. Both read `RENDER_API_KEY` exclusively from the protected `production`
+  environment secret and fail closed when it is absent. Credentials must NEVER be accepted through
+  `workflow_dispatch` inputs.
+- Deletions require an **explicit service-id allowlist** typed twice (`target_service_ids` +
+  `confirm_service_ids`), validated by `scripts/render_cleanup_guard.py` against the live service
+  list before AND immediately before mutation. A renamed/missing production service refuses the
+  entire run. `dry_run` defaults to `true`. No authenticated response body is ever logged.
+- `workflow-guards.yml` (`scripts/check_workflow_security.py`) statically rejects secret-like
+  dispatch inputs, mutable branch action refs, and unprotected privileged jobs on every PR/push.
+- Owner-side requirement: the GitHub `production` environment must exist with **required reviewers**
+  and hold `RENDER_API_KEY`; environment protection lives in repo Settings, not in code.
+
 ## Frontend / Vercel Verification
 
 For frontend changes:

@@ -1,171 +1,184 @@
-name: Render Cleanup 2 -- Fix PR Previews
+name: Render Cleanup 2 -- explicit-allowlist mutation
 
+# #1084: the ONLY workflow allowed to mutate Render, rebuilt fail-closed:
+#   * credential comes ONLY from the environment-scoped RENDER_API_KEY secret
+#     (no dispatch input) and the job refuses to run without it
+#   * runs inside the protected `production` environment (required-reviewer
+#     approval boundary — configure reviewers in repo Settings → Environments)
+#   * deletion targets are an EXPLICIT service-id allowlist, confirmed twice
+#     (the confirmation input must repeat the exact id list), validated by
+#     scripts/render_cleanup_guard.py against the LIVE service list, and the
+#     validation re-runs immediately before mutation so a stale/changed set
+#     refuses the run
+#   * a renamed/missing production service makes the guard refuse everything —
+#     production can never fall through into a deletion set
+#   * dry_run defaults to 'true'; no authenticated response body is ever
+#     printed (status codes only)
 on:
   workflow_dispatch:
     inputs:
-      render_api_key:
-        description: 'Render API Key override (leave blank to use stored secret)'
-        required: false
       dry_run:
-        description: 'dry_run: true = list only, false = execute'
+        description: 'true = validate and preview only, false = execute'
         required: false
         default: 'true'
         type: choice
         options:
           - 'true'
           - 'false'
+      target_service_ids:
+        description: 'EXPLICIT comma-separated Render service ids to DELETE (srv-...). Leave empty for no deletions.'
+        required: false
+        default: ''
+      confirm_service_ids:
+        description: 'Repeat the SAME id list to confirm — the confirmation is bound to the exact target set.'
+        required: false
+        default: ''
+      disable_pr_previews:
+        description: 'yes = PATCH production to disable PR previews (requires dry_run=false)'
+        required: false
+        default: 'no'
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-mutation
+  cancel-in-progress: false
 
 jobs:
   cleanup:
-    name: Render Cleanup 2
+    name: Render Cleanup 2 (approved mutation)
     runs-on: ubuntu-latest
+    environment: production
     env:
-      RENDER_KEY: ${{ github.event.inputs.render_api_key || secrets.RENDER_API_KEY }}
+      RENDER_KEY: ${{ secrets.RENDER_API_KEY }}
       DRY_RUN: ${{ github.event.inputs.dry_run }}
+      TARGET_SERVICE_IDS: ${{ github.event.inputs.target_service_ids }}
+      CONFIRM_SERVICE_IDS: ${{ github.event.inputs.confirm_service_ids }}
+      DISABLE_PR_PREVIEWS: ${{ github.event.inputs.disable_pr_previews }}
 
     steps:
-      - name: 1. List all services
-        run: |
-          echo "=== ALL RENDER SERVICES ==="
-          curl -s -H "Authorization: Bearer $RENDER_KEY" \
-            "https://api.render.com/v1/services?limit=50" \
-            > /tmp/services.json
-          python3 - /tmp/services.json << 'PYEOF'
-          import sys, json
-          with open(sys.argv[1]) as f:
-              data = json.load(f)
-          print("Total services:", len(data))
-          for item in data:
-              s = item.get("service", item)
-              name = s.get("name", "")
-              keep = name == "rico-job-automation-api"
-              tag = "KEEP" if keep else "DELETE"
-              print(" ", tag, s.get("id"), "|", name)
-          PYEOF
+      - uses: actions/checkout@v4
 
-      - name: 2. Get production service ID
+      - name: 0. Fail closed without the environment secret
+        run: |
+          if [ -z "$RENDER_KEY" ]; then
+            echo "::error::RENDER_API_KEY is not configured on the production environment — refusing to run (fail closed, no network calls made)"
+            exit 1
+          fi
+          echo "Credential present (environment-scoped secret). DRY_RUN=$DRY_RUN"
+
+      - name: 1. Resolve production service (by canonical name, fail closed)
         run: |
           curl -s -H "Authorization: Bearer $RENDER_KEY" \
             "https://api.render.com/v1/services?limit=50" \
             > /tmp/services.json
           python3 - /tmp/services.json /tmp/svc_id.txt << 'PYEOF'
           import sys, json
-          with open(sys.argv[1]) as f:
-              data = json.load(f)
-          svc_id = ""
-          for item in data:
-              s = item.get("service", item)
-              if s.get("name") == "rico-job-automation-api":
-                  svc_id = s.get("id", "")
+          try:
+              with open(sys.argv[1]) as f:
+                  data = json.load(f)
+          except Exception:
+              print("Unparseable authenticated response (body suppressed).")
+              sys.exit(1)
+          ids = [
+              (item.get("service", item)).get("id", "")
+              for item in data
+              if (item.get("service", item)).get("name") == "rico-job-automation-api"
+          ]
+          if len(ids) != 1 or not ids[0]:
+              print("REFUSED: production service 'rico-job-automation-api' not uniquely found — no mutation is possible in this state.")
+              sys.exit(1)
           with open(sys.argv[2], "w") as f:
-              f.write(svc_id)
-          print("Production service ID:", svc_id)
+              f.write(ids[0])
+          print("Production service ID:", ids[0], "(protected — never a deletion target)")
           PYEOF
 
-      - name: 3. Disable PR preview creation (string no)
-        if: env.DRY_RUN == 'false'
+      - name: 2. Validate explicit deletion allowlist (guard, auditable preview)
+        if: env.TARGET_SERVICE_IDS != ''
+        run: |
+          python3 scripts/render_cleanup_guard.py /tmp/services.json
+
+      - name: 3. Dry-run summary
+        if: env.DRY_RUN == 'true'
+        run: |
+          echo "=== DRY RUN — nothing will be mutated ==="
+          if [ -n "$TARGET_SERVICE_IDS" ]; then
+            echo "Validated deletion targets are listed in step 2."
+          else
+            echo "No deletion targets supplied."
+          fi
+          echo "disable_pr_previews=$DISABLE_PR_PREVIEWS (ignored in dry run)"
+          echo "Set dry_run=false AND repeat the id list in confirm_service_ids to execute."
+
+      - name: 4. Disable PR preview creation (opt-in, approved)
+        if: env.DRY_RUN == 'false' && env.DISABLE_PR_PREVIEWS == 'yes'
         run: |
           SVC_ID=$(cat /tmp/svc_id.txt)
-          echo "Disabling PR previews on $SVC_ID"
-          HTTP=$(curl -s -o /tmp/patch_resp.json -w "%{http_code}" \
+          echo "Disabling PR previews on production service"
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             -X PATCH \
             -H "Authorization: Bearer $RENDER_KEY" \
             -H "Content-Type: application/json" \
             -d '{"serviceDetails":{"pullRequestPreviewsEnabled":"no"}}' \
             "https://api.render.com/v1/services/$SVC_ID")
-          echo "PATCH HTTP $HTTP"
-          python3 - /tmp/patch_resp.json << 'PYEOF'
-          import sys, json
-          with open(sys.argv[1]) as f:
-              raw = f.read()
-          try:
-              data = json.loads(raw)
-              s = data.get("service", data)
-              sd = s.get("serviceDetails", {})
-              print("PR previews after PATCH:", sd.get("pullRequestPreviewsEnabled", "N/A"))
-          except Exception as e:
-              print("Response:", raw[:300])
-          PYEOF
+          echo "PATCH -> HTTP $HTTP (response body suppressed)"
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::PATCH failed with HTTP $HTTP"
+            exit 1
+          fi
 
-      - name: 4. Delete all non-production services
-        if: env.DRY_RUN == 'false'
+      - name: 5. Delete ONLY the validated allowlist (re-validated live)
+        if: env.DRY_RUN == 'false' && env.TARGET_SERVICE_IDS != ''
         run: |
-          echo "=== DELETING NON-PRODUCTION SERVICES ==="
+          # Re-fetch and RE-VALIDATE immediately before mutating: if the live
+          # service set changed since the preview (renames, deletions, new
+          # ids), the guard refuses and nothing is deleted.
           curl -s -H "Authorization: Bearer $RENDER_KEY" \
             "https://api.render.com/v1/services?limit=50" \
-            > /tmp/services.json
+            > /tmp/services_now.json
+          python3 scripts/render_cleanup_guard.py /tmp/services_now.json
 
-          python3 - /tmp/services.json << 'PYEOF'
-          import sys, json
-          with open(sys.argv[1]) as f:
-              data = json.load(f)
-          targets = []
-          for item in data:
-              s = item.get("service", item)
-              name = s.get("name", "")
-              if name != "rico-job-automation-api":
-                  targets.append((s.get("id", ""), name))
-          for svc_id, name in targets:
-              print(f"{svc_id} | {name}")
-          PYEOF
+          python3 - /tmp/services_now.json << 'PYEOF'
+          import json, os, sys, urllib.request
+          sys.path.insert(0, "scripts")
+          from render_cleanup_guard import parse_service_list, validate
 
-          python3 - /tmp/services.json << 'PYEOF'
-          import sys, json, subprocess
-          import os
           with open(sys.argv[1]) as f:
-              data = json.load(f)
-          key = os.environ.get("RENDER_KEY", "")
-          for item in data:
-              s = item.get("service", item)
-              name = s.get("name", "")
-              svc_id = s.get("id", "")
-              if name == "rico-job-automation-api":
-                  continue
-              result = subprocess.run(
-                  ["curl", "-s", "-o", "/tmp/del_resp.json", "-w", "%{http_code}",
-                   "-X", "DELETE",
-                   "-H", f"Authorization: Bearer {key}",
-                   f"https://api.render.com/v1/services/{svc_id}"],
-                  capture_output=True, text=True
+              services = parse_service_list(json.load(f))
+          targets, _ = validate(
+              services,
+              os.environ.get("TARGET_SERVICE_IDS", ""),
+              os.environ.get("CONFIRM_SERVICE_IDS", ""),
+          )
+          key = os.environ["RENDER_KEY"]
+          names = dict(services)
+          failures = 0
+          for svc_id in targets:
+              req = urllib.request.Request(
+                  f"https://api.render.com/v1/services/{svc_id}",
+                  method="DELETE",
+                  headers={"Authorization": f"Bearer {key}"},
               )
-              http_code = result.stdout.strip()
-              with open("/tmp/del_resp.json") as rf:
-                  resp = rf.read()
-              print(f"DELETE {svc_id} ({name}) -> HTTP {http_code} | {resp[:80]}")
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      code = resp.status
+              except urllib.error.HTTPError as e:
+                  code = e.code
+              # #1084: status code only — never the response body.
+              print(f"DELETE {svc_id} ({names.get(svc_id, '?')}) -> HTTP {code}")
+              if code not in (200, 202, 204):
+                  failures += 1
+          if failures:
+              print(f"{failures} deletion(s) did not return success.")
+              sys.exit(1)
           PYEOF
 
-      - name: 5. DRY RUN -- show targets
-        if: env.DRY_RUN == 'true'
-        run: |
-          echo "=== DRY RUN: would delete ==="
-          curl -s -H "Authorization: Bearer $RENDER_KEY" \
-            "https://api.render.com/v1/services?limit=50" \
-            > /tmp/services.json
-          python3 - /tmp/services.json << 'PYEOF'
-          import sys, json
-          with open(sys.argv[1]) as f:
-              data = json.load(f)
-          keep = []
-          delete = []
-          for item in data:
-              s = item.get("service", item)
-              name = s.get("name", "")
-              svc_id = s.get("id", "")
-              if name == "rico-job-automation-api":
-                  keep.append(f"{svc_id} | {name}")
-              else:
-                  delete.append(f"{svc_id} | {name}")
-          print("KEEP:")
-          for x in keep:
-              print(" ", x)
-          print("DELETE:")
-          for x in delete:
-              print(" ", x)
-          print("")
-          print("Set dry_run=false to execute.")
-          PYEOF
-
-      - name: 6. Verify final state
+      - name: 6. Verify final state (read-only)
         run: |
           echo "=== FINAL SERVICE LIST ==="
           curl -s -H "Authorization: Bearer $RENDER_KEY" \
@@ -173,31 +186,14 @@ jobs:
             > /tmp/services_final.json
           python3 - /tmp/services_final.json << 'PYEOF'
           import sys, json
-          with open(sys.argv[1]) as f:
-              data = json.load(f)
+          try:
+              with open(sys.argv[1]) as f:
+                  data = json.load(f)
+          except Exception:
+              print("Unparseable authenticated response (body suppressed).")
+              sys.exit(0)
           print("Total services remaining:", len(data))
           for item in data:
               s = item.get("service", item)
               print(" ", s.get("id"), "|", s.get("name"))
           PYEOF
-
-          SVC_ID=$(cat /tmp/svc_id.txt 2>/dev/null || echo "")
-          if [ -n "$SVC_ID" ]; then
-            echo ""
-            echo "=== PRODUCTION SERVICE PR PREVIEW STATUS ==="
-            HTTP=$(curl -s -o /tmp/svc_check.json -w "%{http_code}" \
-              -H "Authorization: Bearer $RENDER_KEY" \
-              "https://api.render.com/v1/services/$SVC_ID")
-            python3 - /tmp/svc_check.json << 'PYEOF'
-            import sys, json
-            with open(sys.argv[1]) as f:
-                raw = f.read()
-            try:
-                data = json.loads(raw)
-                s = data.get("service", data)
-                sd = s.get("serviceDetails", {})
-                print("PR previews enabled:", sd.get("pullRequestPreviewsEnabled", "N/A"))
-            except Exception:
-                print("Response:", raw[:200])
-            PYEOF
-          fi
