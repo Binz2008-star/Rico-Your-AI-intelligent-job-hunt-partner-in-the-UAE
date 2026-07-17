@@ -1588,61 +1588,20 @@ class TestRicoDeleteSavedSearchRoute:
         # JWT identity is used, not URL injection
 
 
-class TestRicoOpenAISmokeRoute:
-    """GET /api/v1/rico/openai-smoke - AI provider health check."""
+class TestRicoOpenAISmokeRouteRemoved:
+    """#1077: the user-callable paid-provider probe is REMOVED.
 
-    def test_unauthenticated_returns_401(self, client):
-        r = client.get("/api/v1/rico/openai-smoke")
-        assert r.status_code == 401
+    Any authenticated self-signup account could trigger real OpenAI/DeepSeek
+    calls (with fallback retries) through a GET outside plan accounting. The
+    route is gone; liveness lives on the free public /health/ai-provider.
+    """
 
-    def test_authenticated_returns_200(self, auth_client):
-        # Mock the internal call to avoid actual API key dependency
-        with patch("src.api.routers.rico_chat.call_openai_minimal", return_value={
-            "success": True,
-            "text": "OK",
-            "provider_available": True,
-            "model": "gpt-4",
-        }), patch("src.api.routers.rico_chat.get_ai_provider", return_value="openai"):
-            r = auth_client.get("/api/v1/rico/openai-smoke")
-        assert r.status_code == 200
+    def test_route_absent_for_unauthenticated(self, client):
+        client.cookies.clear()
+        assert client.get("/api/v1/rico/openai-smoke").status_code == 404
 
-    def test_response_contains_provider_and_success_flag(self, auth_client):
-        with patch("src.api.routers.rico_chat.call_openai_minimal", return_value={
-            "success": True,
-            "text": "OK",
-            "provider_available": True,
-            "model": "gpt-3.5-turbo",
-        }), patch("src.api.routers.rico_chat.get_ai_provider", return_value="openai"):
-            r = auth_client.get("/api/v1/rico/openai-smoke")
-        body = r.json()
-        assert "success" in body
-        assert "provider" in body
-        assert body["success"] is True
-        assert body["provider"] == "openai"
+    def test_route_absent_for_authenticated(self, auth_client):
+        assert auth_client.get("/api/v1/rico/openai-smoke").status_code == 404
 
-    def test_deepseek_provider_works(self, auth_client):
-        with patch("src.api.routers.rico_chat.call_openai_minimal", return_value={
-            "success": True,
-            "text": "OK",
-            "provider_available": True,
-            "deepseek_model": "deepseek-chat",
-        }), patch("src.api.routers.rico_chat.get_ai_provider", return_value="deepseek"):
-            r = auth_client.get("/api/v1/rico/openai-smoke")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["provider"] == "deepseek"
-        assert body["success"] is True
-
-    def test_fallback_provider_disabled_returns_200_but_not_success(self, auth_client):
-        # When active provider is neither openai nor deepseek, smoke returns structured error.
-        with patch("src.api.routers.rico_chat.call_openai_minimal", return_value={
-            "success": False,
-            "text": "Premium AI provider disabled",
-            "provider_available": False,
-        }), patch("src.api.routers.rico_chat.get_ai_provider", return_value="anthropic"):
-            r = auth_client.get("/api/v1/rico/openai-smoke")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["success"] is False
-        assert body["provider"] == "anthropic"
-        assert "Premium AI provider disabled" in body["response"]
+    def test_post_cannot_resurrect_the_probe(self, auth_client):
+        assert auth_client.post("/api/v1/rico/openai-smoke").status_code in (404, 405)

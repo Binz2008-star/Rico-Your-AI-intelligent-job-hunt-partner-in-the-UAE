@@ -317,65 +317,13 @@ def _authenticate(client):
     client.cookies.set("access_token", token)
 
 
-def test_smoke_endpoint_returns_success_shape_when_helper_succeeds(client):
-    _authenticate(client)
-    fake_result = {
-        "success": True,
-        "response_source": "openai",
-        "model": "gpt-4o-mini",
-        "text": "OK",
-        "openai_available": True,
-        "profile_context_present": False,
-    }
-    with patch("src.api.routers.rico_chat.get_ai_provider", return_value="openai"), \
-         patch("src.api.routers.rico_chat.call_openai_minimal", return_value=fake_result):
-        r = client.get("/api/v1/rico/openai-smoke")
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["success"] is True
-    assert body["model"] == "gpt-4o-mini"
-    assert body["response"] == "OK"
-    assert body["error"] is None
-    assert body["openai_available"] is True
-
-
-def test_smoke_endpoint_returns_failure_shape_when_helper_fails(client):
-    _authenticate(client)
-    fake_result = {
-        "success": False,
-        "type": "openai_error_fallback",
-        "response_source": "fallback",
-        "openai_available": True,
-        "openai_model": "gpt-4o-mini",
-        "fallback_model": "gpt-4.1-mini",
-        "profile_context_present": False,
-        "error": "InternalServerError",
-        "error_detail": {
-            "error_type": "InternalServerError",
-            "message": "500 server error",
-            "status_code": 500,
-            "request_id": "req_abc",
-        },
-        "text": "I understood. I can still help while the AI reasoning layer is being configured.",
-    }
-    with patch("src.api.routers.rico_chat.get_ai_provider", return_value="openai"), \
-         patch("src.api.routers.rico_chat.call_openai_minimal", return_value=fake_result):
-        r = client.get("/api/v1/rico/openai-smoke")
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["success"] is False
-    assert body["error"] == "InternalServerError"
-    assert body["error_detail"]["status_code"] == 500
-    assert body["error_detail"]["request_id"] == "req_abc"
-    assert body["fallback_model"] == "gpt-4.1-mini"
-    assert body["model"] == "gpt-4o-mini"
-
-
-def test_smoke_endpoint_requires_auth(client):
-    # Drop any cookie a prior test may have set.
+def test_smoke_endpoint_removed_entirely(client):
+    """#1077: the paid-provider probe route no longer exists — no auth state
+    can reach a provider call through it."""
     client.cookies.clear()
-    r = client.get("/api/v1/rico/openai-smoke")
-    assert r.status_code == 401, f"expected 401, got {r.status_code}: {r.text}"
+    assert client.get("/api/v1/rico/openai-smoke").status_code == 404
+    _authenticate(client)
+    assert client.get("/api/v1/rico/openai-smoke").status_code == 404
 
 
 # ── 3. Chat surface contract ─────────────────────────────────────────────────
