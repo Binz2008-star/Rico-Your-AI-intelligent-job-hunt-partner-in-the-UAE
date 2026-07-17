@@ -18,8 +18,11 @@ import pytest
 def _guest_capability_owner_browser(monkeypatch):
     """This suite exercises upload mechanics AS the owning guest browser. The
     #1070 ownership boundary is covered by tests/test_1070_guest_identity_binding.py;
-    here every request is treated as the session's first/owning browser."""
-    monkeypatch.setattr("src.api.public_identity.guest_state_exists", lambda _uid: False)
+    the identity resolution is pinned to the claimed sid."""
+    monkeypatch.setattr(
+        "src.api.routers.rico_chat._resolve_guest_sid",
+        lambda request, response, correlation_sid: correlation_sid,
+    )
 
 
 

@@ -1,23 +1,22 @@
 /**
- * publicSession — the ONE place a guest session id is minted (#1070).
+ * publicSession — the guest CORRELATION id (#1070, locked design).
  *
- * The public session id (`rico_sid`) names the guest's temporary profile,
- * uploaded-document OCR text, and chat history, so it must be unguessable and
- * CSPRNG-generated on every path. The server additionally binds the session to
- * this browser with a signed HttpOnly proof cookie (`rico_guest_proof`): the
- * id string alone is NOT a bearer credential. If the server rejects a session
- * as unverified (403 `guest_session_unverified` — e.g. the id leaked to, or
- * was minted by, another browser), callers rotate to a fresh id with
- * `rotatePublicSessionId()` and continue as a new guest.
+ * Authorization for guest sessions lives exclusively in the server-minted,
+ * signed, HttpOnly `rico_guest_proof` capability cookie. The value stored in
+ * localStorage (`rico_sid`) is correlation-only: it labels requests for
+ * logging only. The server-authoritative sid is NEVER disclosed to
+ * JavaScript — it exists only inside the HttpOnly cookie — so this value
+ * carries ZERO authorization meaning and never has to match it.
  *
- * There is deliberately NO Math.random/Date.now fallback: every production
- * runtime (browsers, jsdom, Node 20) provides Web Crypto.
+ * Minting is CSPRNG-only (no Date.now/Math.random path): even a correlation
+ * id must not be guessable enough to invite probing. There is deliberately no
+ * automatic rotate-and-retry: capability failures (403
+ * guest_capability_invalid, 503 guest_capability_unavailable) surface as
+ * errors and stay observable — the server clears an invalid cookie itself and
+ * the next request transparently starts a fresh identity.
  */
 
 const STORAGE_KEY = "rico_sid";
-
-/** Server error code for an unproved claim over an existing guest session. */
-export const GUEST_SESSION_UNVERIFIED = "guest_session_unverified";
 
 function mintSessionId(): string {
     if (typeof crypto === "undefined" || (!crypto.randomUUID && !crypto.getRandomValues)) {
@@ -32,7 +31,7 @@ function mintSessionId(): string {
     return `web-${rnd}`;
 }
 
-/** Return the stored guest session id, minting one (CSPRNG) if absent. */
+/** Return the stored correlation id, minting one (CSPRNG) if absent. */
 export function ensurePublicSessionId(): string {
     let sid = window.localStorage.getItem(STORAGE_KEY);
     if (!sid) {
@@ -42,22 +41,7 @@ export function ensurePublicSessionId(): string {
     return sid;
 }
 
-/** Discard the current guest session id and mint a fresh one. */
-export function rotatePublicSessionId(): string {
-    const sid = mintSessionId();
-    window.localStorage.setItem(STORAGE_KEY, sid);
-    return sid;
-}
-
-/** Canonical guest identity for upload/confirm flows. */
+/** Canonical guest identity label for upload/confirm flows (correlation-only). */
 export function getPublicUserId(): string {
     return `public:${ensurePublicSessionId()}`;
-}
-
-/** True when an error body carries the guest-session-unverified code. */
-export function isGuestSessionUnverified(errorData: unknown): boolean {
-    if (!errorData || typeof errorData !== "object") return false;
-    const detail = (errorData as { detail?: unknown }).detail;
-    if (!detail || typeof detail !== "object") return false;
-    return (detail as { code?: unknown }).code === GUEST_SESSION_UNVERIFIED;
 }

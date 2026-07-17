@@ -18,12 +18,8 @@ import { PageTransition } from "@/components/ui/PageTransition";
 import { ProcessingOverlay } from "@/components/ui/ProcessingOverlay";
 import { AtelierAuthShell } from "@/components/auth/AtelierAuthShell";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { ApiError, uploadCV } from "@/lib/api";
-import {
-    getPublicUserId,
-    isGuestSessionUnverified,
-    rotatePublicSessionId,
-} from "@/lib/publicSession";
+import { uploadCV } from "@/lib/api";
+import { getPublicUserId } from "@/lib/publicSession";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -45,18 +41,10 @@ export function GuestUploadAtelier() {
         try {
             // Backend-authoritative: only advance to the processing/success
             // stage after uploadCV resolves. A rejected upload throws and is
-            // surfaced below — never a false success.
-            try {
-                await uploadCV(file, getPublicUserId());
-            } catch (err) {
-                // The stored session id could not be verified for this browser
-                // (#1070) — rotate to a fresh guest identity and retry once.
-                if (err instanceof ApiError && isGuestSessionUnverified(err.data)) {
-                    await uploadCV(file, `public:${rotatePublicSessionId()}`);
-                } else {
-                    throw err;
-                }
-            }
+            // surfaced below — never a false success. The passed public id is
+            // correlation-only (#1070); ownership binds to the server-minted
+            // HttpOnly capability cookie and is never disclosed to JS.
+            await uploadCV(file, getPublicUserId());
             setIsUploading(false);
             setIsProcessing(true);
         } catch (err) {

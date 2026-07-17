@@ -45,6 +45,7 @@ from src.api.deps import get_current_user, get_current_user_id
 from src.api.public_identity import (
     is_safe_public_session_id,
     is_valid_public_user_id,
+    make_public_user_id,
     normalize_public_email,
 )
 from src.api.rate_limit import LIMIT_ADMIN, LIMIT_CHAT, LIMIT_PROFILE, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
@@ -339,14 +340,14 @@ def _resolve_upload_user_id(
     form_user_id: str | None,
     response: Response | None = None,
 ) -> str:
-    """Resolve user ID for CV upload, allowing authenticated or PROVEN public sessions.
+    """Resolve user ID for CV upload: JWT identity, or the SERVER-AUTHORITATIVE
+    guest identity from the signed capability cookie (#1070).
 
     A JWT identity always wins (caller-supplied public IDs are ignored). For
-    guest callers the public ID must pass the browser-bound capability check
-    (#1070): a formatted-but-unproved `public:*` value over a session that
-    already has state is rejected with 403 — possession of the string alone
-    cannot read, write, or confirm another guest's context. A brand-new
-    session endorses this browser via the signed proof cookie on *response*.
+    guest callers the supplied `public:*` value is required and format-checked
+    but is CORRELATION-ONLY — the identity that owns the upload/confirm is the
+    sid inside the capability cookie (minted here when absent). A
+    client-selected sid can never become ownership identity.
     """
     try:
         return get_current_user_id(request)
@@ -369,21 +370,9 @@ def _resolve_upload_user_id(
             detail="Authentication or valid public session required"
         )
 
-    from src.api.public_identity import (
-        GUEST_NEW,
-        GUEST_REJECTED,
-        check_guest_capability,
-        endorse_guest_session,
-    )
-
-    session_id = user_id.split(":", 1)[1]
-    capability = check_guest_capability(request, session_id)
-    if capability == GUEST_REJECTED:
-        raise HTTPException(status_code=403, detail=_GUEST_UNVERIFIED_DETAIL)
-    if capability == GUEST_NEW and response is not None:
-        endorse_guest_session(response, session_id)
-
-    return user_id
+    correlation_sid = user_id.split(":", 1)[1]
+    sid = _resolve_guest_sid(request, response if response is not None else Response(), correlation_sid)
+    return make_public_user_id(sid)
 
 
 def _validate_jotform_secret(request: Request) -> None:
@@ -866,7 +855,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
     # email is held to the SAME monthly AI cap as the authenticated path. The
     # email is unverified (no JWT) so it grants NO account privilege — only the cap.
     anti_dodge_terminal: dict[str, Any] | None = None
-    endorse_sid: str | None = None
+    guest_headers: Response | None = None
     if payload.email:
         from src.repositories.users_repo import get_user_by_email
 
@@ -888,24 +877,25 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
             def _err_bad():
                 yield f'data: {_json.dumps({"type":"error","message":"Invalid session."})}\n\n'
             return StreamingResponse(_err_bad(), media_type="text/event-stream", headers=SSE_HEADERS)
-        session_id = session_id[:64]
-        # Browser-bound guest capability (#1070): mirror /chat/public — an
-        # unproved claim over an existing session must not stream its context.
-        from src.api.public_identity import (
-            GUEST_NEW,
-            GUEST_REJECTED,
-            check_guest_capability,
-            endorse_guest_session,
-        )
+        # Server-authoritative guest identity (#1070) — mirror /chat/public.
+        # The capability cookie decides the sid; the payload value is
+        # correlation-only. HTTPException from the resolver becomes a JSON
+        # error response carrying the resolver's cookie operations.
+        from fastapi.responses import JSONResponse
 
-        capability = check_guest_capability(request, session_id)
-        if capability == GUEST_REJECTED:
-            from fastapi.responses import JSONResponse
-
-            return JSONResponse(status_code=403, content={"detail": _GUEST_UNVERIFIED_DETAIL})
-        if capability == GUEST_NEW:
-            endorse_sid = session_id
-        ctx = RicoSessionContext.for_public(session_id)
+        guest_headers = Response()
+        guest_headers.raw_headers.clear()
+        try:
+            sid = _resolve_guest_sid(request, guest_headers, session_id[:64])
+        except HTTPException as exc:
+            err = JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=exc.headers,
+            )
+            _transfer_guest_headers(guest_headers, err)
+            return err
+        ctx = RicoSessionContext.for_public(sid)
 
     user_id = ctx.user_id
 
@@ -973,39 +963,83 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
-    if endorse_sid:
-        from src.api.public_identity import endorse_guest_session as _endorse
-
-        _endorse(streaming_response, endorse_sid)
+    if guest_headers is not None:
+        _transfer_guest_headers(guest_headers, streaming_response)
     return streaming_response
 
 
-_GUEST_UNVERIFIED_DETAIL = {
-    "code": "guest_session_unverified",
-    "message": "This guest session could not be verified by this browser. Start a new session.",
+_GUEST_CAPABILITY_INVALID_DETAIL = {
+    "code": "guest_capability_invalid",
+    "message": "This guest session token is not valid. Please try again.",
+}
+_GUEST_CAPABILITY_UNAVAILABLE_DETAIL = {
+    "code": "guest_capability_unavailable",
+    "message": "Guest sessions are temporarily unavailable. Please try again later.",
 }
 
 
-def _require_guest_capability(request: Request, response: Response, session_id: str) -> None:
-    """Enforce browser-bound ownership of a public session (#1070).
+def _resolve_guest_sid(request: Request, response: Response, correlation_sid: str | None) -> str:
+    """Resolve the SERVER-AUTHORITATIVE guest sid for an unauthenticated request (#1070).
 
-    Verified → proceed. New (no state yet) → endorse this browser with the
-    signed proof cookie and proceed. Unproved claim over an existing session →
-    403; possession of the session-id string alone never grants access to the
-    guest's profile / OCR / chat context.
+    Identity comes only from the signed capability cookie; a fresh identity is
+    minted (and endorsed on *response*) when no cookie is present. The
+    client-supplied *correlation_sid* carries ZERO authorization meaning — it
+    is logged when it differs (one-time legacy migration / multi-tab
+    observability) and never adopted as identity.
+
+    Failure modes are distinct and fail closed (#1070 correction 5):
+    invalid/expired/tampered token → 403 guest_capability_invalid (bad cookie
+    cleared, self-healing next request); missing production secret → 503
+    guest_capability_unavailable.
     """
     from src.api.public_identity import (
-        GUEST_NEW,
-        GUEST_REJECTED,
-        check_guest_capability,
-        endorse_guest_session,
+        GuestCapabilityUnavailable,
+        InvalidGuestCapability,
+        clear_guest_capability,
+        resolve_guest_identity,
     )
 
-    capability = check_guest_capability(request, session_id)
-    if capability == GUEST_REJECTED:
-        raise HTTPException(status_code=403, detail=_GUEST_UNVERIFIED_DETAIL)
-    if capability == GUEST_NEW:
-        endorse_guest_session(response, session_id)
+    try:
+        sid = resolve_guest_identity(request, response)
+    except InvalidGuestCapability as exc:
+        # Log the FIXED reason code only — never the token/SID/nonce/signature.
+        logger.warning(
+            "guest_capability_invalid path=%s reason_code=%s",
+            request.url.path,
+            exc.reason_code,
+        )
+        # FastAPI discards injected-response headers on HTTPException, so the
+        # cookie clear must travel on the exception itself — the invalid
+        # cookie is removed and the next request self-heals with a fresh mint.
+        cleaner = Response()
+        clear_guest_capability(cleaner)
+        raise HTTPException(
+            status_code=403,
+            detail=_GUEST_CAPABILITY_INVALID_DETAIL,
+            headers={"set-cookie": cleaner.headers.get("set-cookie", "")},
+        )
+    except GuestCapabilityUnavailable:
+        logger.error("guest_capability_unavailable path=%s", request.url.path)
+        raise HTTPException(status_code=503, detail=_GUEST_CAPABILITY_UNAVAILABLE_DETAIL)
+
+    if correlation_sid and correlation_sid != sid:
+        logger.info(
+            "guest_correlation_mismatch path=%s (client id is correlation-only)",
+            request.url.path,
+        )
+    # The authoritative sid is NEVER disclosed to JavaScript: identity lives
+    # exclusively in the HttpOnly capability cookie. No response header/body
+    # field carries it — a future frontend cannot mistake it for an id.
+    return sid
+
+
+def _transfer_guest_headers(src: Response, dst) -> None:
+    """Copy capability Set-Cookie headers from a placeholder response onto the
+    real one — appending Set-Cookie is legal HTTP, but the resolver mints at
+    most one capability per request so the result carries exactly one."""
+    for key, value in src.raw_headers:
+        if key.decode("latin-1").lower() == "set-cookie":
+            dst.raw_headers.append((key, value))
 
 
 @router.post("/chat/public", response_model=RicoChatResponse)
@@ -1064,11 +1098,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest, response:
             ).hexdigest()[:40]
             ctx = RicoSessionContext.for_public(email_key)
         else:
-            session_id = payload.session_id[:64]
-            # Browser-bound guest capability (#1070): a session-id string alone
-            # must not read another guest's profile/OCR/chat context.
-            _require_guest_capability(request, response, session_id)
-            ctx = RicoSessionContext.for_public(session_id)
+            # Server-authoritative guest identity (#1070): the payload
+            # session_id is correlation-only; context binds to the sid inside
+            # the signed capability cookie (minted here when absent).
+            sid = _resolve_guest_sid(request, response, payload.session_id[:64])
+            ctx = RicoSessionContext.for_public(sid)
 
         logger.info(
             "chat_public_request user=%s message_len=%d request_ref=%s",

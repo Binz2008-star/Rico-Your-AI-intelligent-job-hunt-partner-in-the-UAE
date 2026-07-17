@@ -306,7 +306,7 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
             merged = merge_public_identity_into_auth(
                 public_user_id=req.public_user_id_to_merge,
                 auth_user_id=user_info["email"],
-                guest_proof=request.cookies.get(GUEST_PROOF_COOKIE),
+                guest_capability_token=request.cookies.get(GUEST_PROOF_COOKIE),
             )
             if merged:
                 clear_guest_capability(response)
@@ -512,7 +512,7 @@ def register(
             merged = merge_public_identity_into_auth(
                 public_user_id=req.public_user_id_to_merge,
                 auth_user_id=user.email,
-                guest_proof=request.cookies.get(GUEST_PROOF_COOKIE),
+                guest_capability_token=request.cookies.get(GUEST_PROOF_COOKIE),
             )
             if merged:
                 clear_guest_capability(response)

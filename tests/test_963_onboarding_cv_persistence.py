@@ -44,9 +44,12 @@ def _guest_capability_owner_browser(monkeypatch):
     """This suite exercises upload/confirm/chat mechanics AS the owning guest
     browser. The #1070 ownership boundary (unproved claims over existing
     sessions are 403) is covered by tests/test_1070_guest_identity_binding.py;
-    here every request is treated as the session's first/owning browser so the
-    mechanics under test stay deterministic across test order and DB state."""
-    monkeypatch.setattr("src.api.public_identity.guest_state_exists", lambda _uid: False)
+    the server-authoritative identity resolution is pinned to the claimed sid
+    so the mechanics under test stay deterministic."""
+    monkeypatch.setattr(
+        "src.api.routers.rico_chat._resolve_guest_sid",
+        lambda request, response, correlation_sid: correlation_sid,
+    )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("ADMIN_EMAIL", "rico-test@example.com")

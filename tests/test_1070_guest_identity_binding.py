@@ -1,16 +1,20 @@
-"""Guest identity binding (#1070).
+"""Guest identity binding (#1070) — locked design.
 
-A `public:*` session id is a client-minted string — possession of the string
-alone must not read, write, confirm, or merge a guest's temporary context.
-Ownership is a browser-bound, signed, HttpOnly capability cookie
-(`rico_guest_proof`), endorsed on the session's FIRST use and required for
-every later claim. The public→auth merge additionally consumes a one-time,
-account-bound claim.
+The BACKEND mints the authoritative guest SID and binds it to the browser via
+a versioned, signed, HttpOnly capability cookie (`rico_guest_proof`). The
+client's localStorage id is correlation-only and carries zero authorization
+meaning. Validation enforces every signed field (version, purpose, sid,
+issued_at, expiry, nonce) from the payload itself. GUEST_CAPABILITY_SECRET is
+a dedicated key (never derived from JWT_SECRET) and its absence in production
+fails closed. Failure modes are distinct and observable — no blanket
+rotate-and-retry.
 
 All DB access is mocked — no real database, no live provider calls.
 """
 from __future__ import annotations
 
+import json
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,13 +22,16 @@ from fastapi.testclient import TestClient
 
 from src.api.app import app
 from src.api.public_identity import (
-    GUEST_NEW,
+    GUEST_CAPABILITY_PURPOSE,
+    GUEST_CAPABILITY_VERSION,
     GUEST_PROOF_COOKIE,
-    GUEST_REJECTED,
-    GUEST_VERIFIED,
-    check_guest_capability,
-    make_guest_proof,
-    verify_guest_proof,
+    GuestCapabilityUnavailable,
+    InvalidGuestCapability,
+    _b64url_encode,
+    _sign,
+    make_guest_capability_for_sid,
+    mint_guest_capability,
+    parse_guest_capability,
 )
 
 
@@ -36,164 +43,348 @@ def _reset_rate_limiter():
     yield
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Proof primitives
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestProofPrimitives:
-    def test_roundtrip(self):
-        sid = "web-abc12345"
-        assert verify_guest_proof(sid, make_guest_proof(sid)) is True
-
-    def test_tampered_proof_fails(self):
-        sid = "web-abc12345"
-        proof = make_guest_proof(sid)
-        bad = ("0" if proof[0] != "0" else "1") + proof[1:]
-        assert verify_guest_proof(sid, bad) is False
-
-    def test_proof_is_session_bound(self):
-        assert verify_guest_proof("web-abc12345", make_guest_proof("web-other999")) is False
-
-    def test_missing_or_unsafe_inputs_fail_closed(self):
-        assert verify_guest_proof(None, None) is False
-        assert verify_guest_proof("web-abc12345", None) is False
-        assert verify_guest_proof("bad/sid", "anything") is False
-        with pytest.raises(ValueError):
-            make_guest_proof("nope")  # under 8 chars
-
-
-class _FakeRequest:
-    def __init__(self, cookies=None):
-        self.cookies = cookies or {}
-
-
-class TestCapabilityCheck:
-    def test_valid_proof_is_verified(self):
-        sid = "web-abc12345"
-        req = _FakeRequest({GUEST_PROOF_COOKIE: make_guest_proof(sid)})
-        assert check_guest_capability(req, sid) == GUEST_VERIFIED
-
-    def test_no_state_endorses_new_browser(self):
-        with patch("src.api.public_identity.guest_state_exists", return_value=False):
-            assert check_guest_capability(_FakeRequest(), "web-abc12345") == GUEST_NEW
-
-    def test_existing_state_without_proof_is_rejected(self):
-        with patch("src.api.public_identity.guest_state_exists", return_value=True):
-            assert check_guest_capability(_FakeRequest(), "web-abc12345") == GUEST_REJECTED
-
-    def test_state_check_fails_closed_on_db_error(self):
-        """A DB error during the existence check must reject, never endorse."""
-        from src.api import public_identity as pi
-
-        with patch.object(pi, "RicoDB", create=True):
-            with patch("src.rico_memory.RicoMemoryStore") as mock_store, patch(
-                "src.rico_db.RicoDB"
-            ) as mock_db:
-                mock_store.return_value.load_profile.return_value = None
-                mock_db.side_effect = RuntimeError("db exploded")
-                assert pi.guest_state_exists("public:web-abc12345") is True
+def _forge_token(**overrides) -> str:
+    """Build a signed token with arbitrary payload fields (test-only)."""
+    now = int(time.time())
+    payload = {
+        "v": GUEST_CAPABILITY_VERSION,
+        "purpose": GUEST_CAPABILITY_PURPOSE,
+        "sid": "g-forged-sid-123",
+        "iat": now,
+        "exp": now + 3600,
+        "nonce": "test-nonce",
+    }
+    payload.update(overrides)
+    payload = {k: v for k, v in payload.items() if v is not None}
+    payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode())
+    return f"{payload_b64}.{_sign(payload_b64)}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Public chat endpoints — string alone must not retrieve context
+# Token primitives — every field enforced from the SIGNED payload
 # ─────────────────────────────────────────────────────────────────────────────
 
-_SID = "web-11112222"
+class TestCapabilityToken:
+    def test_mint_parse_roundtrip(self):
+        sid, token = mint_guest_capability()
+        assert parse_guest_capability(token) == sid
+        assert sid.startswith("g-") and 8 <= len(sid) <= 64
+
+    def test_expiry_enforced_from_signed_payload(self):
+        """A VALIDLY SIGNED but expired token is rejected — expiry lives in the
+        payload, not only in the cookie's Max-Age."""
+        now = int(time.time())
+        token = _forge_token(iat=now - 7200, exp=now - 3600)
+        with pytest.raises(InvalidGuestCapability, match="expired"):
+            parse_guest_capability(token)
+
+    def test_wrong_purpose_rejected(self):
+        with pytest.raises(InvalidGuestCapability, match="purpose"):
+            parse_guest_capability(_forge_token(purpose="password-reset"))
+
+    def test_wrong_version_rejected(self):
+        with pytest.raises(InvalidGuestCapability, match="version"):
+            parse_guest_capability(_forge_token(v=99))
+
+    def test_missing_nonce_rejected(self):
+        with pytest.raises(InvalidGuestCapability, match="nonce"):
+            parse_guest_capability(_forge_token(nonce=None))
+
+    def test_nonce_differs_between_capabilities(self):
+        t1 = make_guest_capability_for_sid("g-same-sid-123")
+        t2 = make_guest_capability_for_sid("g-same-sid-123")
+        p1 = json.loads(__import__("base64").urlsafe_b64decode(t1.split(".")[0] + "=="))
+        p2 = json.loads(__import__("base64").urlsafe_b64decode(t2.split(".")[0] + "=="))
+        assert p1["nonce"] != p2["nonce"]
+        assert t1 != t2
+
+    def test_tampered_signature_rejected(self):
+        _, token = mint_guest_capability()
+        payload, _, sig = token.partition(".")
+        bad = payload + "." + ("0" if sig[0] != "0" else "1") + sig[1:]
+        with pytest.raises(InvalidGuestCapability, match="signature"):
+            parse_guest_capability(bad)
+
+    def test_tampered_payload_rejected(self):
+        """Editing the payload (e.g. swapping the sid) breaks the signature."""
+        _, token = mint_guest_capability()
+        payload_b64, _, sig = token.partition(".")
+        other = _forge_token(sid="g-attacker-sid-1").partition(".")[0]
+        with pytest.raises(InvalidGuestCapability):
+            parse_guest_capability(f"{other}.{sig}")
+
+    def test_malformed_tokens_rejected(self):
+        for bad in (None, "", "no-dot", "a.b", "!!!.???"):
+            with pytest.raises(InvalidGuestCapability):
+                parse_guest_capability(bad)
 
 
-class TestPublicChatCapability:
-    def test_unproved_claim_over_existing_session_is_403(self):
+class TestKeySeparation:
+    def test_missing_production_secret_fails_closed(self, monkeypatch):
+        """No GUEST_CAPABILITY_SECRET in production → nothing minted or
+        validated; NO fallback to JWT_SECRET."""
+        monkeypatch.delenv("GUEST_CAPABILITY_SECRET", raising=False)
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv("JWT_SECRET", "x" * 64)  # present — must NOT be used
+        with pytest.raises(GuestCapabilityUnavailable):
+            mint_guest_capability()
+        with pytest.raises(GuestCapabilityUnavailable):
+            parse_guest_capability("aaaaaaaa.bbbbbbbb")
+
+    def test_dedicated_secret_changes_signatures(self, monkeypatch):
+        """Tokens signed under one GUEST_CAPABILITY_SECRET fail under another —
+        and JWT_SECRET plays no part."""
+        monkeypatch.setenv("GUEST_CAPABILITY_SECRET", "secret-A" * 8)
+        _, token = mint_guest_capability()
+        assert parse_guest_capability(token)
+        monkeypatch.setenv("GUEST_CAPABILITY_SECRET", "secret-B" * 8)
+        with pytest.raises(InvalidGuestCapability):
+            parse_guest_capability(token)
+        # JWT_SECRET rotation must NOT invalidate guest capabilities.
+        monkeypatch.setenv("GUEST_CAPABILITY_SECRET", "secret-A" * 8)
+        monkeypatch.setenv("JWT_SECRET", "rotated" * 10)
+        assert parse_guest_capability(token)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Server authority on the public surfaces
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _mock_chat(mock_chat):
+    mock_chat.send_message.return_value = {"message": "hi", "type": "conversational"}
+    mock_chat.run_chat_preflight.return_value = MagicMock(terminal=None)
+
+
+class TestPublicChatServerAuthority:
+    def test_client_selected_sid_never_becomes_identity(self):
+        """A cookie-less request claiming an arbitrary sid gets a SERVER-minted
+        identity — the claimed value is correlation-only."""
         client = TestClient(app)
-        with patch("src.api.public_identity.guest_state_exists", return_value=True):
+        captured = {}
+
+        def spy_for_public(sid):
+            captured["sid"] = sid
+            ctx = MagicMock()
+            ctx.user_id = f"public:{sid}"
+            return ctx
+
+        with patch("src.api.routers.rico_chat.chat_service") as mock_chat, patch(
+            "src.api.routers.rico_chat.RicoSessionContext"
+        ) as mock_ctx_cls:
+            _mock_chat(mock_chat)
+            mock_ctx_cls.for_public.side_effect = spy_for_public
             r = client.post(
                 "/api/v1/rico/chat/public",
-                json={"message": "what do you know about me?", "session_id": _SID},
-            )
-        assert r.status_code == 403
-        assert r.json()["detail"]["code"] == "guest_session_unverified"
-
-    def test_fresh_session_is_endorsed_with_cookie(self):
-        client = TestClient(app)
-        with patch("src.api.public_identity.guest_state_exists", return_value=False), patch(
-            "src.api.routers.rico_chat.chat_service"
-        ) as mock_chat:
-            mock_chat.send_message.return_value = {"message": "hi", "type": "conversational"}
-            mock_chat.run_chat_preflight.return_value = MagicMock(terminal=None)
-            r = client.post(
-                "/api/v1/rico/chat/public",
-                json={"message": "hello", "session_id": _SID},
+                json={"message": "hello", "session_id": "web-attacker00001"},
             )
         assert r.status_code == 200
-        assert client.cookies.get(GUEST_PROOF_COOKIE) == make_guest_proof(_SID)
+        assert captured["sid"] != "web-attacker00001"
+        assert captured["sid"].startswith("g-")
+        # The authoritative sid is NEVER disclosed to JavaScript — no header
+        # or body field carries it; it exists only inside the HttpOnly cookie.
+        assert "X-Guest-Sid" not in r.headers
+        assert captured["sid"] not in r.text
+        assert parse_guest_capability(client.cookies.get(GUEST_PROOF_COOKIE)) == captured["sid"]
+        # Exactly ONE capability cookie is emitted.
+        set_cookies = [v for k, v in r.headers.multi_items() if k.lower() == "set-cookie"]
+        assert sum(GUEST_PROOF_COOKIE in c for c in set_cookies) == 1
 
-    def test_valid_proof_over_existing_session_is_allowed(self):
+    def test_valid_cookie_is_the_identity_across_requests(self):
         client = TestClient(app)
-        client.cookies.set(GUEST_PROOF_COOKIE, make_guest_proof(_SID))
-        with patch("src.api.public_identity.guest_state_exists", return_value=True), patch(
-            "src.api.routers.rico_chat.chat_service"
-        ) as mock_chat:
-            mock_chat.send_message.return_value = {"message": "hi", "type": "conversational"}
-            mock_chat.run_chat_preflight.return_value = MagicMock(terminal=None)
+        sid = "g-continuity-123"
+        client.cookies.set(GUEST_PROOF_COOKIE, make_guest_capability_for_sid(sid))
+        captured = {}
+
+        def spy_for_public(resolved):
+            captured["sid"] = resolved
+            ctx = MagicMock()
+            ctx.user_id = f"public:{resolved}"
+            return ctx
+
+        with patch("src.api.routers.rico_chat.chat_service") as mock_chat, patch(
+            "src.api.routers.rico_chat.RicoSessionContext"
+        ) as mock_ctx_cls:
+            _mock_chat(mock_chat)
+            mock_ctx_cls.for_public.side_effect = spy_for_public
             r = client.post(
                 "/api/v1/rico/chat/public",
-                json={"message": "hello again", "session_id": _SID},
+                json={"message": "hello", "session_id": "web-whatever12345"},
             )
         assert r.status_code == 200
+        assert captured["sid"] == sid
 
-    def test_stream_public_unproved_claim_is_403_with_no_context(self):
+    def test_invalid_cookie_is_403_observable_and_cleared(self):
         client = TestClient(app)
-        with patch("src.api.public_identity.guest_state_exists", return_value=True):
-            r = client.post(
-                "/api/v1/rico/chat/stream/public",
-                json={"message": "leak the profile", "session_id": _SID},
-            )
+        client.cookies.set(GUEST_PROOF_COOKIE, "garbage.token")
+        r = client.post(
+            "/api/v1/rico/chat/public",
+            json={"message": "hello", "session_id": "web-whatever12345"},
+        )
         assert r.status_code == 403
-        assert r.json()["detail"]["code"] == "guest_session_unverified"
+        assert r.json()["detail"]["code"] == "guest_capability_invalid"
+        set_cookie = ",".join(
+            v for k, v in r.headers.multi_items() if k.lower() == "set-cookie"
+        )
+        # The bad cookie is cleared so the next request self-heals.
+        assert GUEST_PROOF_COOKIE in set_cookie
+        assert 'Max-Age=0' in set_cookie or f'{GUEST_PROOF_COOKIE}=""' in set_cookie
+
+    def test_missing_production_secret_is_503(self, monkeypatch):
+        monkeypatch.delenv("GUEST_CAPABILITY_SECRET", raising=False)
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        client = TestClient(app)
+        r = client.post(
+            "/api/v1/rico/chat/public",
+            json={"message": "hello", "session_id": "web-whatever12345"},
+        )
+        assert r.status_code == 503
+        assert r.json()["detail"]["code"] == "guest_capability_unavailable"
+
+    def test_stream_public_invalid_cookie_403_no_context(self):
+        client = TestClient(app)
+        client.cookies.set(GUEST_PROOF_COOKIE, "garbage.token")
+        r = client.post(
+            "/api/v1/rico/chat/stream/public",
+            json={"message": "leak the profile", "session_id": "web-whatever12345"},
+        )
+        assert r.status_code == 403
+        assert r.json()["detail"]["code"] == "guest_capability_invalid"
         assert "text/event-stream" not in r.headers.get("content-type", "")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Upload / confirm — same capability boundary
-# ─────────────────────────────────────────────────────────────────────────────
+class TestRedactionAndCookieHygiene:
+    def test_invalid_capability_logs_fixed_reason_code_only(self):
+        """Neither reason_code nor str(exc) ever carries token/SID/nonce/sig."""
+        cases = {
+            "garbage": "malformed",
+            "aaaaaaaa.bbbbbbbb": "signature",
+        }
+        _, good = mint_guest_capability()
+        payload, _, sig = good.partition(".")
+        cases[payload + "." + ("0" if sig[0] != "0" else "1") + sig[1:]] = "signature"
+        now = int(time.time())
+        cases[_forge_token(iat=now - 7200, exp=now - 3600)] = "expired"
+        cases[_forge_token(purpose="password-reset")] = "purpose"
+        cases[_forge_token(v=99)] = "version"
+        cases[_forge_token(nonce=None)] = "nonce"
 
-class TestUploadCapability:
-    def test_unproved_guest_upload_is_403(self):
-        import io
+        fixed_codes = {
+            "malformed", "signature", "payload_undecodable", "payload_malformed",
+            "version", "purpose", "nonce", "sid", "timestamps", "expired",
+        }
+        for token, expected in cases.items():
+            with pytest.raises(InvalidGuestCapability) as exc_info:
+                parse_guest_capability(token)
+            exc = exc_info.value
+            assert exc.reason_code == expected
+            assert exc.reason_code in fixed_codes
+            # The stringified exception IS the fixed code — no material leaks.
+            assert str(exc) == exc.reason_code
+            assert token not in str(exc)
+            assert "nonce=" not in str(exc) and sig not in str(exc)
 
+    def test_stream_mint_emits_exactly_one_capability_cookie(self):
         client = TestClient(app)
-        with patch("src.api.public_identity.guest_state_exists", return_value=True):
-            r = client.post(
-                f"/api/v1/rico/upload-cv?user_id=public:{_SID}",
-                files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+        with patch("src.api.routers.rico_chat.chat_service") as mock_chat, patch(
+            "src.api.routers.rico_chat.RicoSessionContext"
+        ) as mock_ctx_cls:
+            mock_chat.run_chat_preflight.return_value = MagicMock(
+                terminal={"message": "hi", "type": "conversational"}
             )
-        assert r.status_code == 403
-        assert r.json()["detail"]["code"] == "guest_session_unverified"
+            ctx = MagicMock()
+            ctx.user_id = "public:g-stream-x"
+            mock_ctx_cls.for_public.return_value = ctx
+            r = client.post(
+                "/api/v1/rico/chat/stream/public",
+                json={"message": "hello", "session_id": "web-corr12345"},
+            )
+        assert r.status_code == 200
+        set_cookies = [v for k, v in r.headers.multi_items() if k.lower() == "set-cookie"]
+        assert sum(GUEST_PROOF_COOKIE in c for c in set_cookies) == 1
+        assert "X-Guest-Sid" not in r.headers
 
-    def test_unproved_guest_confirm_is_403(self):
+    def test_stream_invalid_cookie_emits_exactly_one_clearing_cookie(self):
         client = TestClient(app)
-        with patch("src.api.public_identity.guest_state_exists", return_value=True):
-            r = client.post(
-                f"/api/v1/rico/confirm-cv-profile?user_id=public:{_SID}",
-                json={"preview": {"skills": ["hse"]}, "filename": "cv.pdf"},
-            )
+        client.cookies.set(GUEST_PROOF_COOKIE, "garbage.token")
+        r = client.post(
+            "/api/v1/rico/chat/stream/public",
+            json={"message": "hello", "session_id": "web-corr12345"},
+        )
         assert r.status_code == 403
+        set_cookies = [v for k, v in r.headers.multi_items() if k.lower() == "set-cookie"]
+        capability_cookies = [c for c in set_cookies if GUEST_PROOF_COOKIE in c]
+        assert len(capability_cookies) == 1
+        assert 'Max-Age=0' in capability_cookies[0] or f'{GUEST_PROOF_COOKIE}=""' in capability_cookies[0]
 
-    def test_proved_guest_passes_resolver(self):
+    def test_stream_identity_is_server_minted_not_claimed(self):
+        """Disclosed-sid probe on the stream surface: the claimed sid never
+        becomes the context identity."""
+        client = TestClient(app)
+        captured = {}
+
+        def spy_for_public(sid):
+            captured["sid"] = sid
+            ctx = MagicMock()
+            ctx.user_id = f"public:{sid}"
+            return ctx
+
+        with patch("src.api.routers.rico_chat.chat_service") as mock_chat, patch(
+            "src.api.routers.rico_chat.RicoSessionContext"
+        ) as mock_ctx_cls:
+            mock_chat.run_chat_preflight.return_value = MagicMock(
+                terminal={"message": "hi", "type": "conversational"}
+            )
+            mock_ctx_cls.for_public.side_effect = spy_for_public
+            r = client.post(
+                "/api/v1/rico/chat/stream/public",
+                json={"message": "hello", "session_id": "web-victim000001"},
+            )
+        assert r.status_code == 200
+        assert captured["sid"] != "web-victim000001"
+        assert captured["sid"].startswith("g-")
+
+
+class TestUploadServerAuthority:
+    def test_upload_identity_is_token_sid_not_supplied_sid(self):
         from src.api.routers.rico_chat import _resolve_upload_user_id
+        from fastapi import HTTPException, Response
+
+        sid = "g-upload-owner-1"
+        req = MagicMock()
+        req.state.access_token_present = False
+        req.cookies = {GUEST_PROOF_COOKIE: make_guest_capability_for_sid(sid)}
+        req.url.path = "/api/v1/rico/upload-cv"
+        with patch(
+            "src.api.deps.get_current_user_id",
+            side_effect=HTTPException(status_code=401),
+        ):
+            resolved = _resolve_upload_user_id(
+                req, "public:web-attacker00001", None, Response()
+            )
+        assert resolved == f"public:{sid}"
+
+    def test_cookieless_upload_gets_fresh_server_identity(self):
+        from src.api.routers.rico_chat import _resolve_upload_user_id
+        from fastapi import HTTPException, Response
 
         req = MagicMock()
         req.state.access_token_present = False
-        req.cookies = {GUEST_PROOF_COOKIE: make_guest_proof(_SID)}
+        req.cookies = {}
+        req.url.path = "/api/v1/rico/upload-cv"
+        resp = Response()
         with patch(
             "src.api.deps.get_current_user_id",
-            side_effect=__import__("fastapi").HTTPException(status_code=401),
+            side_effect=HTTPException(status_code=401),
         ):
-            resolved = _resolve_upload_user_id(req, f"public:{_SID}", None)
-        assert resolved == f"public:{_SID}"
+            resolved = _resolve_upload_user_id(req, "public:web-mine12345", None, resp)
+        assert resolved.startswith("public:g-")
+        assert resolved != "public:web-mine12345"
+        # The authoritative sid is never disclosed via headers.
+        assert "X-Guest-Sid" not in resp.headers
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Auth merge wiring — proof passed, capability rotated on success
+# Auth merge wiring — token passed, capability rotated on success
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestAuthMergeWiring:
@@ -210,28 +401,28 @@ class TestAuthMergeWiring:
                 json={
                     "email": "user@test.com",
                     "password": "x" * 12,
-                    "public_user_id_to_merge": f"public:{_SID}",
+                    "public_user_id_to_merge": "public:g-merge-src-1",
                 },
             )
         return r, mock_merge
 
-    def test_login_passes_browser_proof_to_merge(self):
+    def test_login_passes_capability_token_to_merge(self):
         client = TestClient(app)
-        proof = make_guest_proof(_SID)
-        client.cookies.set(GUEST_PROOF_COOKIE, proof)
+        token = make_guest_capability_for_sid("g-merge-src-1")
+        client.cookies.set(GUEST_PROOF_COOKIE, token)
         r, mock_merge = self._login(client, merge_result=True)
         assert r.status_code == 200
-        assert mock_merge.call_args.kwargs["guest_proof"] == proof
+        assert mock_merge.call_args.kwargs["guest_capability_token"] == token
 
-    def test_login_without_cookie_passes_no_proof(self):
+    def test_login_without_cookie_passes_none(self):
         client = TestClient(app)
         r, mock_merge = self._login(client, merge_result=False)
         assert r.status_code == 200  # login itself still succeeds
-        assert mock_merge.call_args.kwargs["guest_proof"] is None
+        assert mock_merge.call_args.kwargs["guest_capability_token"] is None
 
     def test_successful_merge_rotates_guest_capability(self):
         client = TestClient(app)
-        client.cookies.set(GUEST_PROOF_COOKIE, make_guest_proof(_SID))
+        client.cookies.set(GUEST_PROOF_COOKIE, make_guest_capability_for_sid("g-merge-src-1"))
         r, _ = self._login(client, merge_result=True)
         set_cookie_headers = ",".join(
             v for k, v in r.headers.multi_items() if k.lower() == "set-cookie"
@@ -241,10 +432,9 @@ class TestAuthMergeWiring:
 
     def test_failed_merge_keeps_guest_capability(self):
         client = TestClient(app)
-        client.cookies.set(GUEST_PROOF_COOKIE, make_guest_proof(_SID))
+        client.cookies.set(GUEST_PROOF_COOKIE, make_guest_capability_for_sid("g-merge-src-1"))
         r, _ = self._login(client, merge_result=False)
         set_cookie_headers = ",".join(
             v for k, v in r.headers.multi_items() if k.lower() == "set-cookie"
         )
-        # Only the auth JWT cookie is set; the guest capability is untouched.
         assert GUEST_PROOF_COOKIE not in set_cookie_headers

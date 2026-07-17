@@ -19,7 +19,6 @@ import {
   SavedSearchesResponseSchema,
   UploadCVResponseSchema,
 } from "@/lib/schemas";
-import { isGuestSessionUnverified, rotatePublicSessionId } from "@/lib/publicSession";
 import { getSignupAttribution } from "@/lib/signupAttribution";
 import type {
   Application,
@@ -1554,32 +1553,22 @@ export async function sendChatPublic(
   operationId?: string,
   language?: "en" | "ar",
 ): Promise<ChatApiResponse> {
-  const send = async (sid: string) => {
-    const body: Record<string, unknown> = {
-      message,
-      session_id: sid,
-      operation_id: operationId,
-    };
-    if (language) body.language = language;
-    return requestJson<unknown>("/api/v1/rico/chat/public", {
-      method: "POST",
-      signal,
-      body: JSON.stringify(body),
-    });
+  // session_id is correlation-only (#1070): guest identity/authorization is
+  // the server's HttpOnly capability cookie; the authoritative sid syncs back
+  // via the X-Guest-Sid header in requestJson. Capability failures (403/503)
+  // surface as errors — deliberately NO automatic rotate-and-retry.
+  const body: Record<string, unknown> = {
+    message,
+    session_id: sessionId,
+    operation_id: operationId,
   };
+  if (language) body.language = language;
 
-  let data: unknown;
-  try {
-    data = await send(sessionId);
-  } catch (err) {
-    // The stored session id could not be verified for this browser (#1070) —
-    // rotate to a fresh guest identity and retry once as a new session.
-    if (err instanceof ApiError && isGuestSessionUnverified(err.data)) {
-      data = await send(rotatePublicSessionId());
-    } else {
-      throw err;
-    }
-  }
+  const data = await requestJson<unknown>("/api/v1/rico/chat/public", {
+    method: "POST",
+    signal,
+    body: JSON.stringify(body),
+  });
   return validateShape(RicoChatResponseSchema, data, "public Rico chat");
 }
 
@@ -1637,27 +1626,16 @@ export async function* sendChatStreamPublic(
   signal?: AbortSignal,
   language?: "en" | "ar",
 ): AsyncGenerator<ChatStreamEvent> {
-  const open = (sid: string) => {
-    const body: Record<string, unknown> = { message, session_id: sid };
-    if (language) body.language = language;
-    return fetch(`${PROXY}/api/v1/rico/chat/stream/public`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      signal,
-      body: JSON.stringify(body),
-    });
-  };
-
-  let res = await open(sessionId);
-  if (res.status === 403) {
-    // The stored session id could not be verified for this browser (#1070) —
-    // rotate to a fresh guest identity and retry once as a new session.
-    const errBody = (await res.json().catch(() => ({}))) as unknown;
-    if (isGuestSessionUnverified(errBody)) {
-      res = await open(rotatePublicSessionId());
-    }
-  }
+  // session_id is correlation-only (#1070); identity is the capability cookie.
+  const body: Record<string, unknown> = { message, session_id: sessionId };
+  if (language) body.language = language;
+  const res = await fetch(`${PROXY}/api/v1/rico/chat/stream/public`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    signal,
+    body: JSON.stringify(body),
+  });
   if (!res.ok || !res.body) {
     yield { type: "error", error: `${res.status}` };
     return;

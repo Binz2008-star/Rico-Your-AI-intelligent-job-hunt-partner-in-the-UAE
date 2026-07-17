@@ -1,25 +1,24 @@
 /**
- * Guest session minting (#1070): one CSPRNG-only helper for every surface.
+ * Guest correlation id (#1070, locked design): one CSPRNG-only helper for
+ * every surface, correlation-only semantics, and NO automatic rotation.
  *
  * The direct /upload path previously minted `rico_sid` with
  * Date.now()+Math.random(), permanently carrying a low-entropy id into
- * /command. Both paths now share lib/publicSession, and rotation (after a 403
- * guest_session_unverified) propagates through the command page's ref wrapper.
+ * /command. Both paths now share lib/publicSession. Authorization lives in
+ * the server's HttpOnly capability cookie; the localStorage value only labels
+ * requests only; the server-authoritative sid is never disclosed to JS.
+ * Cookie loss or capability errors must NOT silently rotate the id —
+ * failures stay observable; the only mutation path is the first mint.
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-    ensurePublicSessionId,
-    getPublicUserId,
-    isGuestSessionUnverified,
-    rotatePublicSessionId,
-} from "@/lib/publicSession";
+import { ensurePublicSessionId, getPublicUserId } from "@/lib/publicSession";
 import { ensureSessionId } from "@/app/command/sessionId";
 
 beforeEach(() => {
     window.localStorage.clear();
 });
 
-describe("publicSession CSPRNG minting", () => {
+describe("publicSession correlation id", () => {
     it("mints a web- prefixed CSPRNG id within the server charset bounds", () => {
         const sid = ensurePublicSessionId();
         expect(sid).toMatch(/^web-[A-Za-z0-9-]+$/);
@@ -38,20 +37,18 @@ describe("publicSession CSPRNG minting", () => {
         expect(getPublicUserId()).toBe(`public:${sid}`);
     });
 
-    it("rotation mints a fresh id and the command ref picks it up", () => {
+    it("never rotates or adopts a server identity — correlation only", () => {
+        // The server-authoritative sid is NEVER disclosed to JavaScript, and
+        // cookie loss / capability failures must not silently mint a fresh
+        // correlation id. The ONLY mutation path is the first mint.
+        const sid = ensurePublicSessionId();
+        expect(ensurePublicSessionId()).toBe(sid);
         const ref = { current: null as string | null };
-        const before = ensureSessionId(ref);
-        const rotated = rotatePublicSessionId();
-        expect(rotated).not.toBe(before);
-        // The ref wrapper re-reads storage, so the retired id is never reused.
-        expect(ensureSessionId(ref)).toBe(rotated);
-    });
-
-    it("detects the server's guest_session_unverified error body", () => {
-        expect(
-            isGuestSessionUnverified({ detail: { code: "guest_session_unverified" } }),
-        ).toBe(true);
-        expect(isGuestSessionUnverified({ detail: "nope" })).toBe(false);
-        expect(isGuestSessionUnverified(undefined)).toBe(false);
+        expect(ensureSessionId(ref)).toBe(sid);
+        // The module deliberately exposes no rotation/sync API.
+        import("@/lib/publicSession").then((mod) => {
+            expect("rotatePublicSessionId" in mod).toBe(false);
+            expect("syncPublicSessionId" in mod).toBe(false);
+        });
     });
 });
