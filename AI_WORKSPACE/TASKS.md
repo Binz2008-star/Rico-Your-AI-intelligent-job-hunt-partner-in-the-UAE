@@ -80,8 +80,8 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ### TASK-20260717-008 — PR #1145: unify /command visuals with the shared WorkspaceShell
 
-Status: done — **merged to main** (squash commit `ecd29a66`); Vercel production
-deploy verification pending (see Continuity Block)
+Status: verified — **#1145 PRODUCTION PASS** (merged main @ `ecd29a66`, deployed;
+owner-confirmed on ricohunt.com 2026-07-17)
 Owner: Claude (release owner; owner directive 2026-07-17 — "اعمل ما تراه مناسب"
 after a completed read-only audit of #1145)
 Branch: `fix/command-atelier-visual-consistency` (merged)
@@ -116,6 +116,9 @@ persistence, auth, or quota code touched. Implements DEC-20260717-001.
 - Local: `npx vitest run` 625/625; `npm run build` clean (`/command` 79.5 kB)
 - Zero review threads / zero pending reviews; `mergeable_state: clean`
 - Merged via squash with expected head SHA `75cd1432` → main now `ecd29a66`
+- **Production: PASS** — owner confirmed `ricohunt.com/command` serves `ecd29a66`
+  (light-first shared WorkspaceShell chrome, not the old forced-dark Obsidian
+  console) on 2026-07-17
 
 #### Continuity Block
 
@@ -125,29 +128,23 @@ persistence, auth, or quota code touched. Implements DEC-20260717-001.
 - Last safe commit SHA (main before merge): `282660dd`
 - Current head SHA (main after merge): `ecd29a66`
 - Uncommitted changes present: no
-- Status: done (merge complete); production deploy verification pending
+- Status: verified — PRODUCTION PASS (merge complete + owner-confirmed deploy)
 - Files changed: see "What changed" above (frontend-only)
 - Files intentionally not touched: `MobileCommandHeader` / `MobileBottomNav`
   (shared with public/legacy surfaces — documented follow-up); all backend;
   public/guest chrome
 - What is complete: rebase, DEC entry, CI green, Ready flip, squash-merge,
-  local-main sync to `ecd29a66`
-- What is incomplete: confirm Vercel deploys the exact merge SHA `ecd29a66` to
-  production (`ricohunt.com`) — not just "deployment started"
-- Known blockers: Vercel MCP is unauthenticated in this session and container
-  egress to `ricohunt.com` is blocked (proxy CONNECT 403), so production HTML
-  cannot be fetched from here; verification relies on the Vercel commit status
-  GitHub posts on `ecd29a66`, or owner-side Vercel dashboard confirmation
-- Validation already run: full CI on `75cd1432` green; local vitest+build clean
-- Validation still required: Vercel production deployment status on `ecd29a66`
-  == "Deployment has completed" (Production, not Preview)
-- Deployment/CI/Neon/Vercel state to check next: Vercel production build of
-  `ecd29a66`
-- Next exact action: read the Vercel commit status on `ecd29a66`; if not yet
-  posted, re-check shortly
-- Stop condition: Vercel production status success on `ecd29a66` → done;
-  Vercel build FAILURE → diagnose (frontend-only revert = single-commit
-  rollback) and report to owner
+  local-main sync to `ecd29a66`, owner-confirmed production deploy
+- What is incomplete: none
+- Known blockers: none (sandbox could not read production directly — private-repo
+  403, unauthenticated Vercel MCP, egress to ricohunt.com proxy-blocked — so the
+  production check was owner-run and confirmed PASS)
+- Validation already run: full CI on `75cd1432` green; local vitest+build clean;
+  owner-confirmed production PASS on ricohunt.com/command
+- Validation still required: none
+- Deployment/CI/Neon/Vercel state to check next: none
+- Next exact action: none — task closed
+- Stop condition: reached — production PASS confirmed
 - Rollback plan: revert squash commit `ecd29a66` — restores
   `commandAtelierTheme.ts` and prior shell wholesale; no state/storage/API/env
   change involved
