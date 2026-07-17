@@ -280,7 +280,13 @@ def resolve_guest_identity(request, response) -> str:
 
 
 def _set_capability_cookie(response, token: str) -> None:
-    from src.api.auth import _cookie_domain, _cookie_samesite, _cookie_secure
+    # HOST-ONLY (#1070 hardening): deliberately NO Domain attribute — narrower
+    # than the JWT auth cookie's `.ricohunt.com` scope. A host-only capability
+    # (a) is not exposed to any *.ricohunt.com subdomain, and (b) round-trips on
+    # whatever host actually served it (the same-origin proxy for real users, or
+    # the backend host for direct API clients), so continuity never depends on a
+    # single hard-coded cookie domain.
+    from src.api.auth import _cookie_samesite, _cookie_secure
 
     response.set_cookie(
         key=GUEST_PROOF_COOKIE,
@@ -289,20 +295,22 @@ def _set_capability_cookie(response, token: str) -> None:
         httponly=True,
         secure=_cookie_secure(),
         samesite=_cookie_samesite(),
-        domain=_cookie_domain(),
         path="/",
     )
 
 
 def clear_guest_capability(response) -> None:
-    """Clear the guest capability cookie (invalid token, or consumed by merge)."""
-    from src.api.auth import _cookie_domain, _cookie_samesite, _cookie_secure
+    """Clear the guest capability cookie (invalid token, or consumed by merge).
+
+    Must mirror _set_capability_cookie's attributes (host-only, no Domain) so the
+    browser actually removes the cookie it set.
+    """
+    from src.api.auth import _cookie_samesite, _cookie_secure
 
     response.delete_cookie(
         key=GUEST_PROOF_COOKIE,
         httponly=True,
         secure=_cookie_secure(),
         samesite=_cookie_samesite(),
-        domain=_cookie_domain(),
         path="/",
     )

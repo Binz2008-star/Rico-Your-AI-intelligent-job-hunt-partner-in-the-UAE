@@ -8,6 +8,7 @@ test_user_isolation.py).
 """
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from datetime import datetime, timezone
@@ -243,6 +244,67 @@ class TestMergePublicIdentityIntoAuth:
         result = merge_public_identity_into_auth("public:web-guest", "auth@example.com", guest_capability_token=_TOKEN)
         assert result is True
         conn.commit.assert_called_once()
+
+    @patch("src.services.identity_merge_service.RicoDB")
+    def test_merge_success_log_redacts_guest_sid(self, MockDB, caplog):
+        """#1070 hardening: the merge_success log emits a hashed tag, never the
+        raw guest SID."""
+        secret_sid = "websecretsid987654"
+        token = make_guest_capability_for_sid(secret_sid)
+        db = MagicMock()
+        db.available = True
+        conn = _mock_conn(MagicMock())
+        db.connect.return_value = conn
+        MockDB.return_value = db
+        cur = conn.cursor.return_value.__enter__.return_value
+        cur.fetchone.side_effect = [
+            {"pg_try_advisory_xact_lock": True},
+            {"id": "uuid-guest"},
+            {"id": "uuid-auth"},
+            {"profile": {"skills": ["hse"]}},
+            {"profile": {"years_experience": 5}},
+            {"claimed_by_user_id": "uuid-auth"},
+            {"exists": True},
+            {"exists": True},
+        ]
+        with caplog.at_level(logging.INFO, logger="src.services.identity_merge_service"):
+            result = merge_public_identity_into_auth(
+                f"public:{secret_sid}", "auth@example.com", guest_capability_token=token
+            )
+        assert result is True
+        blob = "\n".join(r.getMessage() for r in caplog.records)
+        assert "merge_success" in blob          # the success path DID log
+        assert secret_sid not in blob           # ...but never the raw guest SID
+        assert "guest:" in blob                  # a redacted tag is emitted instead
+
+    @patch("src.services.identity_merge_service.RicoDB")
+    def test_already_claimed_log_redacts_guest_sid(self, MockDB, caplog):
+        """#1070 hardening: the already-claimed rejection log never carries the
+        raw guest SID."""
+        secret_sid = "websecretsid987654"
+        token = make_guest_capability_for_sid(secret_sid)
+        db = MagicMock()
+        db.available = True
+        conn = _mock_conn(MagicMock())
+        db.connect.return_value = conn
+        MockDB.return_value = db
+        cur = conn.cursor.return_value.__enter__.return_value
+        cur.fetchone.side_effect = [
+            {"pg_try_advisory_xact_lock": True},
+            {"id": "uuid-guest"},
+            {"id": "uuid-second-account"},
+            {"profile": {"profile_status": "merged", "merged_into_user_id": "uuid-first-owner"}},
+            {"profile": {}},
+        ]
+        with caplog.at_level(logging.INFO, logger="src.services.identity_merge_service"):
+            result = merge_public_identity_into_auth(
+                f"public:{secret_sid}", "second@example.com", guest_capability_token=token
+            )
+        assert result is False
+        blob = "\n".join(r.getMessage() for r in caplog.records)
+        assert "already_claimed" in blob
+        assert secret_sid not in blob
+        assert "guest:" in blob
 
     @patch("src.services.identity_merge_service.RicoDB")
     def test_rejects_unproved_claim(self, MockDB):
