@@ -4,7 +4,7 @@
  * UploadAtelier — the authenticated "My files" / CV manager in the approved
  * WorkspaceShell (Shell C) Atelier direction. Rendered inside WorkspaceShell,
  * so it reads the shell's local light/dark palette via useWorkspaceTheme()
- * (parity with ProfileAtelier / SettingsAtelier).
+ * (parity with ProfileEditorial / SettingsAtelier).
  *
  * All data + behaviour is preserved from the previous FileManagerView:
  *  - listUserFiles + fetchProfile (role-mismatch compute)
