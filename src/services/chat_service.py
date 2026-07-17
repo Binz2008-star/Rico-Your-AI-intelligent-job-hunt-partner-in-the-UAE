@@ -667,8 +667,12 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
       2. Short-circuit for test/empty payloads that carry no user data —
          returns 'accepted' without touching the DB.
       3. Delegate to the Rico handler for real submissions.
-      4. Catch DB errors and return a graceful 'accepted' response so the
-         webhook always returns 200 (Jotform retries on non-200).
+      4. Do NOT mask a required persistence/idempotency failure: the handler
+         runs claim + user/profile/settings/processed in one transaction that
+         rolls back on failure, so the exception propagates — the webhook route
+         returns HTTP 500 and Jotform retries, then re-claims the same
+         submission atomically (#1089). Rejected/ignored/no-user payloads still
+         return their own responses.
     """
     normalized = _normalize_jotform_payload(payload)
 
@@ -684,14 +688,12 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     from src.rico_jotform_webhook import handle_jotform_submission as _handle
-    try:
-        return _handle(normalized)
-    except Exception as exc:
-        logger.error("jotform_submission_failed: %s", exc, exc_info=True)
-        return {
-            "status": "accepted",
-            "message": "Submission received; DB write pending when service recovers",
-        }
+    # Do NOT mask a required-persistence failure as 200 "accepted": the handler
+    # runs claim + user/profile/settings/processed in ONE transaction that rolls
+    # back on failure, so the exception must propagate → the webhook route
+    # decorator returns 500 → the provider retries → the retry re-claims the same
+    # submission and re-processes atomically (#1089).
+    return _handle(normalized)
 
 
 def _resolve_db_user_id(user_id: str):

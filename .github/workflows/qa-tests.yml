@@ -111,6 +111,7 @@ jobs:
           PYTHONPATH=$GITHUB_WORKSPACE pytest \
             tests/integration/test_user_documents_postgres.py \
             tests/integration/test_cv_upload_artifacts_postgres.py \
+            tests/integration/test_jotform_atomicity_postgres.py \
             -v --tb=short
 
   playwright:
