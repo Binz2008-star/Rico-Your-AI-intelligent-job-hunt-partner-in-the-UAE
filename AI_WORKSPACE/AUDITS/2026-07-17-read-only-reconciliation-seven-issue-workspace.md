@@ -3,6 +3,29 @@
 **Date:** 2026-07-17
 **Author:** Rico AI agent session (branch `claude/read-only-reconciliation-7r2hkl`)
 **Status:** Read-only reconciliation. No code changed, no revert performed, no issue closed.
+
+---
+
+## ⚠️ ADDENDUM (2026-07-17, later the same day) — this document is a point-in-time snapshot, NOT current state
+
+Written against `main` @ `1b6ee1c`. The same day, AFTER this audit was written, `main` moved
+substantially — do not treat the sections below as the present situation:
+
+- **#1076 is no longer "docs-only/not started": PR #1140 merged** (`907b404`), remediating it
+  repo-wide with `src/log_privacy.py` (server-keyed fingerprints, Sentry scrubbing, production
+  boot enforcement, repo-wide static guard). The parallel PR #1137 from this session was
+  **closed without merge as superseded**; the residual chat-stream/exception-log delta was
+  extracted into a small follow-up PR built on the merged helper (PR #1148).
+- **#1077 remediated: PR #1142 merged** (`6e95fd9`) — the user-callable paid-provider smoke
+  probe was removed.
+- **#1084 remediated: PR #1134 merged**; **#1070 hardening: PR #1135 merged**.
+- Remediation PRs for #1080/#1092/#1072/#1086 were opened from this session
+  (#1139/#1144/#1138/#1146) and follow the owner's per-PR review queue.
+
+The Decision Records this audit called for (DEC-20260717-001/-002) remain valid — #1096 and
+#1102 are still open. Everything else below reflects the pre-merge morning state only.
+
+---
 **Input:** An owner-supplied reconciliation report describing 21 uncommitted modified files on a
 local `main` checkout, mapped to issues #1080, #1072, #1076, #1096, #1086, #1102, #1092.
 **Ground truth used:** GitHub `main` @ `1b6ee1c` (fresh clone), GitHub issue/PR state on 2026-07-17.
