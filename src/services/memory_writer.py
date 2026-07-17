@@ -319,8 +319,17 @@ class MemoryWriter:
         source_uri: Optional[str] = None,
         retention_class: str = "episode",
         version: int = 1,
+        expected_deletion_generation: Optional[int] = None,
     ) -> MemoryWriteResult:
-        """Append one episode for the resolved canonical account."""
+        """Append one episode for the resolved canonical account.
+
+        ``expected_deletion_generation`` (#1088): callers replaying or
+        backfilling data captured earlier pass the deletion generation they
+        read alongside that data; the write is refused
+        (``refused_deletion_boundary``) if the account was purged since, so
+        erased data can never be resurrected. Fresh, just-happened writes may
+        leave it None — they are admitted under the current generation.
+        """
         self._validate_provenance(
             source=source, actor=actor, confidence=confidence,
             occurred_at=occurred_at,
@@ -368,6 +377,7 @@ class MemoryWriter:
                 source_uri=source_uri,
                 retention_class=retention_class,
                 version=version,
+                expected_deletion_generation=expected_deletion_generation,
             )
         except Exception:
             logger.warning("memory_engine_event_write_failed type=%s", event_type,
@@ -396,6 +406,7 @@ class MemoryWriter:
         retention_class: str = "core_fact",
         effective_from: Optional[datetime] = None,
         effective_to: Optional[datetime] = None,
+        expected_deletion_generation: Optional[int] = None,
     ) -> MemoryWriteResult:
         """Write one fact with history semantics (ADR §7).
 
@@ -485,6 +496,7 @@ class MemoryWriter:
                 retention_class=retention_class,
                 effective_from=effective_from,
                 effective_to=effective_to,
+                expected_deletion_generation=expected_deletion_generation,
             )
         except Exception:
             logger.warning("memory_engine_fact_write_failed key=%s", fact_key,
@@ -495,6 +507,35 @@ class MemoryWriter:
         self._record_success(status)
         logger.debug("memory_engine_fact status=%s key=%s", status, fact_key)
         return MemoryWriteResult(status=status, account_id=account_id)
+
+    # ── Deletion (#1088 gate) ─────────────────────────────────────────────────
+
+    def purge_account(self, *, external_user_id: str) -> Optional[Dict[str, Any]]:
+        """Erase ALL engine memory for the canonical account behind
+        *external_user_id* and advance its deletion boundary.
+
+        Deliberately NOT gated by the feature flag or circuit breaker: a user's
+        deletion request must be honored even while writes are disabled.
+        Returns the deletion receipt (counts by storage class, new generation)
+        or None when the account cannot be resolved — the caller must surface
+        failure rather than claim erasure (raises on DB failure).
+        """
+        account_id = self._resolve_account_id(external_user_id)
+        if not account_id:
+            self._count("purge_no_account")
+            return None
+        from src.repositories import career_memory_repo
+
+        receipt = career_memory_repo.purge_account_memory(account_id=account_id)
+        self._count("purged")
+        logger.info(
+            "memory_engine_purged account=%s generation=%s events=%s facts=%s",
+            account_id,
+            receipt.get("deletion_generation"),
+            receipt.get("events_deleted"),
+            receipt.get("facts_deleted"),
+        )
+        return receipt
 
     # ── M1 shadow integration (agent_runtime step 11b) ───────────────────────
 

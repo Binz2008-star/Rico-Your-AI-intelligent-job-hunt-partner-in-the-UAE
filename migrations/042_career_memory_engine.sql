@@ -97,8 +97,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_cm_facts_current_set_member
 CREATE INDEX IF NOT EXISTS idx_cm_facts_account_key
     ON career_memory_facts (account_id, fact_key, effective_from DESC);
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Deletion state (#1088 gate): per-account deletion generation / tombstone.
+-- purge_account bumps the generation and deletes the account's rows in ONE
+-- transaction; every write records the generation it was admitted under and is
+-- refused when its captured generation is older than the current one — a
+-- pre-clear late write or backfill can never resurrect erased data.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS career_memory_deletion_state (
+    account_id          UUID        PRIMARY KEY,
+    deletion_generation BIGINT      NOT NULL DEFAULT 0,
+    last_purged_at      TIMESTAMPTZ,
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE career_memory_events
+    ADD COLUMN IF NOT EXISTS deletion_generation BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE career_memory_facts
+    ADD COLUMN IF NOT EXISTS deletion_generation BIGINT NOT NULL DEFAULT 0;
+
 -- Rollback (manual, only if explicitly approved — see docs/career-memory-engine.md):
 -- The engine is shadow-write only behind RICO_MEMORY_ENGINE_ENABLED (default
 -- false); the zero-risk rollback is to leave the flag off. Dropping data:
+-- DROP TABLE IF EXISTS career_memory_deletion_state;
 -- DROP TABLE IF EXISTS career_memory_facts;
 -- DROP TABLE IF EXISTS career_memory_events;

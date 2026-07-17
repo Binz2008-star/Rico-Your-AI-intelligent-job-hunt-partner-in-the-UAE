@@ -26,6 +26,131 @@ class CareerMemoryRepoError(RuntimeError):
     """Raised when a memory write cannot reach or complete in the database."""
 
 
+def _admit_write(cur, account_id: str, expected_generation: Optional[int]) -> Optional[int]:
+    """Deletion-boundary admission check (#1088) — run inside the write txn.
+
+    Ensures the account's deletion-state row exists, then takes a FOR SHARE
+    lock on it so a concurrent purge (which takes FOR UPDATE) serializes with
+    this write: either the write commits before the purge's DELETE (and is
+    erased by it), or the purge commits first and this check sees the bumped
+    generation.
+
+    Returns the current generation to stamp on the row, or None when
+    ``expected_generation`` (captured when the caller read its source data) is
+    older than the current one — the write must be refused, never admitted.
+    """
+    cur.execute(
+        """
+        INSERT INTO career_memory_deletion_state (account_id)
+        VALUES (%s) ON CONFLICT (account_id) DO NOTHING
+        """,
+        (account_id,),
+    )
+    cur.execute(
+        """
+        SELECT deletion_generation FROM career_memory_deletion_state
+        WHERE account_id = %s FOR SHARE
+        """,
+        (account_id,),
+    )
+    row = cur.fetchone()
+    current = int(row[0]) if row else 0
+    if expected_generation is not None and int(expected_generation) != current:
+        return None
+    return current
+
+
+def get_deletion_generation(*, account_id: str) -> int:
+    """Return the account's current deletion generation (0 when never purged)."""
+    conn = get_db_connection()
+    if not conn:
+        raise CareerMemoryRepoError("no database connection")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT deletion_generation FROM career_memory_deletion_state
+                WHERE account_id = %s
+                """,
+                (account_id,),
+            )
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
+    finally:
+        conn.close()
+
+
+def purge_account_memory(*, account_id: str) -> Dict[str, Any]:
+    """Erase ALL memory rows for ONE account and advance its deletion boundary.
+
+    One transaction: lock the deletion-state row (FOR UPDATE), bump the
+    generation, then delete the account's events and facts. Any in-flight
+    write that captured the previous generation is either deleted here (it
+    committed first) or refused by ``_admit_write`` (it commits after) — no
+    resurrection path exists. Rows of every other account are untouched.
+
+    Returns a deletion receipt (no content): account_id, new generation,
+    per-storage-class deleted counts, purged_at.
+    """
+    conn = get_db_connection()
+    if not conn:
+        raise CareerMemoryRepoError("no database connection")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO career_memory_deletion_state (account_id)
+                VALUES (%s) ON CONFLICT (account_id) DO NOTHING
+                """,
+                (account_id,),
+            )
+            cur.execute(
+                """
+                SELECT deletion_generation FROM career_memory_deletion_state
+                WHERE account_id = %s FOR UPDATE
+                """,
+                (account_id,),
+            )
+            cur.execute(
+                """
+                UPDATE career_memory_deletion_state
+                SET deletion_generation = deletion_generation + 1,
+                    last_purged_at = NOW(),
+                    updated_at = NOW()
+                WHERE account_id = %s
+                RETURNING deletion_generation, last_purged_at
+                """,
+                (account_id,),
+            )
+            gen_row = cur.fetchone()
+            cur.execute(
+                "DELETE FROM career_memory_events WHERE account_id = %s",
+                (account_id,),
+            )
+            events_deleted = cur.rowcount or 0
+            cur.execute(
+                "DELETE FROM career_memory_facts WHERE account_id = %s",
+                (account_id,),
+            )
+            facts_deleted = cur.rowcount or 0
+        conn.commit()
+        return {
+            "account_id": account_id,
+            "deletion_generation": int(gen_row[0]),
+            "events_deleted": events_deleted,
+            "facts_deleted": facts_deleted,
+            "purged_at": gen_row[1].isoformat() if gen_row[1] else None,
+        }
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise CareerMemoryRepoError(str(exc)) from exc
+    finally:
+        conn.close()
+
+
 def insert_event(
     *,
     account_id: str,
@@ -40,20 +165,28 @@ def insert_event(
     source_uri: Optional[str] = None,
     retention_class: str = "episode",
     version: int = 1,
+    expected_deletion_generation: Optional[int] = None,
 ) -> str:
-    """Append one episode. Returns 'written' or 'duplicate' (idempotency hit)."""
+    """Append one episode. Returns 'written', 'duplicate' (idempotency hit),
+    or 'refused_deletion_boundary' when the caller's captured deletion
+    generation is older than the account's current one (#1088)."""
     conn = get_db_connection()
     if not conn:
         raise CareerMemoryRepoError("no database connection")
     try:
         with conn.cursor() as cur:
+            generation = _admit_write(cur, account_id, expected_deletion_generation)
+            if generation is None:
+                conn.rollback()
+                return "refused_deletion_boundary"
             cur.execute(
                 """
                 INSERT INTO career_memory_events (
                     account_id, event_type, version, retention_class,
                     idempotency_key, occurred_at, actor, source,
-                    source_record_id, source_uri, confidence, payload
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    source_record_id, source_uri, confidence, payload,
+                    deletion_generation
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT ON CONSTRAINT uq_career_memory_events_idem DO NOTHING
                 RETURNING id
                 """,
@@ -61,6 +194,7 @@ def insert_event(
                     account_id, event_type, version, retention_class,
                     idempotency_key, occurred_at, actor, source,
                     source_record_id, source_uri, confidence, json.dumps(payload),
+                    generation,
                 ),
             )
             inserted = cur.fetchone() is not None
@@ -93,8 +227,10 @@ def insert_fact(
     version: int = 1,
     effective_from: Optional[datetime] = None,
     effective_to: Optional[datetime] = None,
+    expected_deletion_generation: Optional[int] = None,
 ) -> str:
-    """Write one fact with history semantics. Returns 'written' or 'duplicate'.
+    """Write one fact with history semantics. Returns 'written', 'duplicate',
+    or 'refused_deletion_boundary' (#1088 deletion-boundary admission).
 
     replaceable / verified_only: the current row (effective_to IS NULL) for
     (account_id, fact_key), if any, is closed in the same transaction — its
@@ -113,6 +249,10 @@ def insert_fact(
         raise CareerMemoryRepoError("no database connection")
     try:
         with conn.cursor() as cur:
+            generation = _admit_write(cur, account_id, expected_deletion_generation)
+            if generation is None:
+                conn.rollback()
+                return "refused_deletion_boundary"
             # Idempotency pre-check keeps the supersede logic from closing the
             # current row twice when the same logical write is retried.
             cur.execute(
@@ -158,9 +298,10 @@ def insert_fact(
                 INSERT INTO career_memory_facts (
                     account_id, fact_key, fact_class, version, retention_class,
                     value, source, source_record_id, source_uri, confidence,
-                    actor, occurred_at, effective_from, effective_to, idempotency_key
+                    actor, occurred_at, effective_from, effective_to, idempotency_key,
+                    deletion_generation
                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                          COALESCE(%s, NOW()), %s, %s)
+                          COALESCE(%s, NOW()), %s, %s, %s)
                 ON CONFLICT ON CONSTRAINT uq_career_memory_facts_idem DO NOTHING
                 RETURNING id
                 """,
@@ -168,6 +309,7 @@ def insert_fact(
                     account_id, fact_key, fact_class, version, retention_class,
                     json.dumps(value), source, source_record_id, source_uri, confidence,
                     actor, occurred_at, effective_from, effective_to, idempotency_key,
+                    generation,
                 ),
             )
             new_row = cur.fetchone()

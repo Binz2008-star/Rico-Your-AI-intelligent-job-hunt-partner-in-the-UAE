@@ -73,6 +73,9 @@ CHECKS: list[tuple[str, str, object]] = [
     ("042", "constraint", "uq_career_memory_events_idem"),
     ("042", "constraint", "uq_career_memory_facts_idem"),
     ("042", "index", "uq_cm_facts_current_single"),
+    ("042", "table", "career_memory_deletion_state"),
+    ("042", "column", ("career_memory_events", "deletion_generation")),
+    ("042", "column", ("career_memory_facts", "deletion_generation")),
     # Gmail read-only connector M0 (migration 043)
     ("043", "table", "gmail_connections"),
     ("043", "table", "gmail_sync_runs"),

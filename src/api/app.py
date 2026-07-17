@@ -220,20 +220,6 @@ def _apply_uploaded_document_context() -> None:
     _apply_sql_migration("032_uploaded_document_context", sql)
 
 
-def _apply_career_memory_engine() -> None:
-    """ADR-001 M1: additive career_memory_events/facts schema (shadow-only)."""
-    sql_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "migrations", "042_career_memory_engine.sql"
-    )
-    sql_path = os.path.normpath(sql_path)
-    if not os.path.exists(sql_path):
-        logger.warning("career_memory_engine_migration not found at %s", sql_path)
-        return
-    with open(sql_path) as f:
-        sql = f.read()
-    _apply_sql_migration("042_career_memory_engine", sql)
-
-
 def _apply_cv_upload_artifacts() -> None:
     sql_path = os.path.join(
         os.path.dirname(__file__), "..", "..", "migrations", "038_cv_upload_artifacts.sql"
@@ -268,7 +254,11 @@ async def lifespan(app: FastAPI):
     _apply_audit_helper_tables()
     _apply_uploaded_document_context()
     _apply_cv_upload_artifacts()
-    _apply_career_memory_engine()
+    # Migration 042 (career memory engine) is deliberately NOT auto-applied at
+    # startup (#1025 merge gate item 5 / #1088): flag OFF must mean zero
+    # production schema change. Apply manually before enabling
+    # RICO_MEMORY_ENGINE_ENABLED, same operating procedure as Gmail's 043:
+    #   psql $DATABASE_URL -f migrations/042_career_memory_engine.sql
     yield
 
 
