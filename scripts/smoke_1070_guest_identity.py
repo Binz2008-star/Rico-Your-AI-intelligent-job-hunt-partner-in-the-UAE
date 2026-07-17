@@ -283,8 +283,12 @@ def main() -> int:
 
     # ---- d: guest CV confirmation ------------------------------------------
     if upload_ok:
+        # The real frontend contract (lib/api.ts confirmCVProfile) sends the
+        # correlation user_id as a QUERY parameter for public sessions — the
+        # server derives the actual identity from the capability cookie.
         r5 = guest.post(
             f"{API}/rico/confirm-cv-profile",
+            params={"user_id": f"public:{CORRELATION_SID}"},
             json={
                 "preview": up.get("preview") or {},
                 "filename": up.get("filename") or "smoke_cv.pdf",
@@ -294,10 +298,18 @@ def main() -> int:
             timeout=TIMEOUT,
         )
         capture("confirm_cv_guest", r5)
-        record("d. guest CV confirmation works", r5.status_code == 200,
-               f"HTTP {r5.status_code}")
+        confirm_body = {}
+        try:
+            confirm_body = r5.json()
+        except Exception:
+            pass
+        record(
+            "d. guest CV confirmation works (same guest identity)",
+            r5.status_code == 200 and confirm_body.get("status") == "profile_updated",
+            f"HTTP {r5.status_code}, status={confirm_body.get('status')!r}",
+        )
     else:
-        record("d. guest CV confirmation works", False,
+        record("d. guest CV confirmation works (same guest identity)", False,
                "skipped: upload not preview_ready")
 
     pre_merge_guest_cookie = guest.cookies.get(GUEST_COOKIE)
@@ -338,24 +350,46 @@ def main() -> int:
         "SELECT claimed_by_user_id::text FROM guest_identity_claims WHERE public_user_id = %s",
         (f"public:{g_sid}",),
     )
-    chat_moved = db_one(
-        "SELECT COUNT(*) FROM rico_chat_history WHERE user_id::text = %s",
+    # The guest's mergeable data in this flow is the confirmed CV profile
+    # (production guests do not persist chat rows). After the merge, A's
+    # profile must carry the CV evidence.
+    a_profile = db_one(
+        "SELECT profile::text FROM rico_profiles WHERE user_id::text = %s",
         (a_uuid or "-",),
-    ) or (0,)
-    guest_left = (
-        db_one("SELECT COUNT(*) FROM rico_chat_history WHERE user_id::text = %s",
-               (guest_uuid,))
-        if guest_uuid else (0,)
-    ) or (0,)
+    )
+    a_has_cv = bool(a_profile and ("smoke_cv.pdf" in a_profile[0] or "Samira Smoke" in a_profile[0]))
     record(
         "e. guest data merges into authenticated account",
         reg_ok and verified == 1 and r7.status_code == 200 and jwt_set and cap_rotated
         and claim is not None and a_uuid is not None and claim[0] == a_uuid
-        and chat_moved[0] >= 1 and guest_left[0] == 0,
+        and a_has_cv,
         f"register={r6.status_code}, verified_rows={verified}, login={r7.status_code}, "
         f"jwt_cookie={jwt_set}, capability_rotated={cap_rotated}, "
         f"claim_owner_is_A={bool(claim and a_uuid and claim[0] == a_uuid)}, "
-        f"chat_rows_on_A={chat_moved[0]}, chat_rows_left_on_guest={guest_left[0]}",
+        f"A_profile_has_guest_cv={a_has_cv}",
+    )
+
+    # ---- e2: replay by the SAME account is idempotent ----------------------
+    replay = requests.Session()
+    if pre_merge_guest_cookie:
+        replay.cookies.set(GUEST_COOKIE, pre_merge_guest_cookie)
+    r7b = replay.post(
+        f"{API}/auth/login",
+        json={"email": EMAIL_A, "password": PASSWORD,
+              "public_user_id_to_merge": f"public:{CORRELATION_SID}"},
+        timeout=TIMEOUT,
+    )
+    capture("login_a_replay", r7b)
+    claim_replay = db_one(
+        "SELECT COUNT(*), MIN(claimed_by_user_id::text) FROM guest_identity_claims "
+        "WHERE public_user_id = %s",
+        (f"public:{g_sid}",),
+    ) or (0, None)
+    record(
+        "e2. same-account replay is idempotent",
+        r7b.status_code == 200 and claim_replay[0] == 1 and claim_replay[1] == a_uuid,
+        f"replay_login={r7b.status_code}, claim_rows={claim_replay[0]} (want 1), "
+        f"owner_still_A={claim_replay[1] == a_uuid}",
     )
 
     # ---- f: second account cannot claim the same guest identity -------------
@@ -390,11 +424,14 @@ def main() -> int:
         (EMAIL_B, EMAIL_B),
     )
     b_uuid = row[0] if row else None
-    b_rows = (
-        db_one("SELECT COUNT(*) FROM rico_chat_history WHERE user_id::text = %s",
+    b_profile = (
+        db_one("SELECT profile::text FROM rico_profiles WHERE user_id::text = %s",
                (b_uuid,))
-        if b_uuid else (0,)
-    ) or (0,)
+        if b_uuid else None
+    )
+    b_got_guest_data = bool(
+        b_profile and ("smoke_cv.pdf" in b_profile[0] or "Samira Smoke" in b_profile[0])
+    )
     claim_count = db_one(
         "SELECT COUNT(*) FROM guest_identity_claims "
         "WHERE claimed_by_user_id::text IN (%s, %s)",
@@ -404,10 +441,10 @@ def main() -> int:
         "f. second account cannot claim the same guest",
         r9.status_code == 200 and verified_b == 1
         and claim_after is not None and claim_after[0] == a_uuid
-        and b_rows[0] == 0 and claim_count[0] == 1,
+        and not b_got_guest_data and claim_count[0] == 1,
         f"login_b={r9.status_code} (login itself allowed), claim_owner_still_A="
         f"{bool(claim_after and claim_after[0] == a_uuid)}, "
-        f"b_chat_rows={b_rows[0]} (want 0 — no partial migration), "
+        f"B_received_guest_data={b_got_guest_data} (want False — no partial migration), "
         f"claim_rows_for_A_and_B={claim_count[0]} (want 1)",
     )
 
@@ -491,12 +528,16 @@ def cleanup() -> None:
                 (CLEANUP_EXTERNAL_IDS, [EMAIL_A, EMAIL_B]),
             )
             uuids = [r[0] for r in cur.fetchall()] or ["-"]
+            # Cover BOTH keying schemes: internal uuids AND the exact external
+            # string ids of this run (some guest-scoped rows key by the
+            # public:<sid> string before any rico_users row exists).
+            all_keys = uuids + CLEANUP_EXTERNAL_IDS
             for table in ("rico_chat_history", "cv_upload_artifacts", "rico_profiles",
                           "uploaded_document_context", "user_documents",
                           "search_context", "user_job_context", "rico_onboarding_states"):
                 try:
                     cur.execute(
-                        f"DELETE FROM {table} WHERE user_id::text = ANY(%s)", (uuids,)
+                        f"DELETE FROM {table} WHERE user_id::text = ANY(%s)", (all_keys,)
                     )
                     print(f"  {table}: {cur.rowcount} rows")
                 except Exception as exc:  # column shape differs — report, move on
