@@ -12,7 +12,6 @@ Routes:
   GET    /api/v1/rico/chat/history              conversation history   (JWT required)
   DELETE /api/v1/rico/chat/history              clear chat history     (JWT required)
   POST /api/v1/rico/feedback                    feedback on matches    (JWT required)
-  GET  /api/v1/rico/openai-smoke                AI runtime probe       (JWT required)
   POST /api/v1/rico/upload-cv                   CV file upload + parsing
   GET  /api/v1/rico/metrics                     Prometheus metrics
   POST /api/v1/rico/webhooks/telegram           Telegram bot webhook (called by Telegram)
@@ -63,7 +62,6 @@ from src.rico_openai_agent import RicoOpenAIAgent
 from src.services.matching_guardrails import build_matching_guardrail_warnings
 from src.services.cv_quality_warnings import build_cv_quality_warnings
 from src.services.settings_service import get_settings
-from src.rico_openai_runtime import call_openai_minimal
 from src.schemas.actions import ActionRequest, ActionResponse, ExecutePermissionActionRequest
 from src.schemas.chat import RicoChatResponse, RicoSessionContext
 from src.services import chat_service
@@ -1229,63 +1227,12 @@ def rico_feedback(request: Request, body: FeedbackRequest) -> None:
 # AI Probe Endpoint
 # ============================================================================
 
-@router.get("/openai-smoke")
-@limiter.limit(LIMIT_CHAT)
-def rico_openai_smoke(request: Request) -> dict[str, Any]:
-    """Minimal premium-provider runtime probe."""
-    start_time = time.time()
-    get_current_user(request)
-
-    provider = get_ai_provider()
-    agent = RicoOpenAIAgent()
-
-    if provider not in ("openai", "deepseek"):
-        _metrics.record_request((time.time() - start_time) * 1000)
-        return {
-            "success": False,
-            "provider": provider,
-            "provider_available": agent.provider_available,
-            "openai_available": False,
-            "deepseek_available": agent.deepseek_available,
-            "hf_available": agent.hf_available,
-            "response": (
-                f"Premium AI provider disabled (active provider: {provider}). "
-                "Set RICO_AI_PROVIDER=openai or RICO_AI_PROVIDER=deepseek to enable advanced reasoning."
-            ),
-            "error": "OpenAIProviderDisabled",
-            "error_detail": None,
-            "model": None,
-            "fallback_model": None,
-        }
-
-    if provider == "openai":
-        result = call_openai_minimal("Say OK", smoke=True)
-    else:
-        result = call_openai_minimal("Say OK", smoke=True, provider=provider)
-
-    _metrics.record_request((time.time() - start_time) * 1000)
-    return {
-        "success": result.get("success", False),
-        "provider": provider,
-        "provider_available": result.get("provider_available"),
-        "model": (
-            result.get("model")
-            or result.get("deepseek_model")
-            or result.get("openai_model")
-        ),
-        "fallback_model": result.get("fallback_model"),
-        "response": result.get("text"),
-        "error": result.get("error"),
-        "error_detail": result.get("error_detail"),
-        "openai_available": result.get(
-            "openai_available",
-            bool(os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API")),
-        ),
-        "deepseek_available": result.get(
-            "deepseek_available",
-            bool(os.getenv("DEEPSEEK_API_KEY")),
-        ),
-    }
+# #1077: the user-callable paid-provider probe (GET /openai-smoke) was
+# REMOVED. Every authenticated self-signup account could trigger real
+# OpenAI/DeepSeek calls (with fallback-chain retries) outside any plan
+# accounting, via a GET the browser could prefetch. Liveness stays on the
+# free public /health/ai-provider below; active provider probes run only
+# from owner-approved server-side release workflows.
 
 
 # ============================================================================

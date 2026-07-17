@@ -124,88 +124,9 @@ class TestFreeProviderMode:
         assert isinstance(result, dict)
         assert "message" in result
 
-    def test_openai_smoke_provider_none(self):
-        """Test that smoke endpoint returns disabled status when provider=none."""
+    def test_openai_smoke_route_removed(self):
+        """#1077: rico_openai_smoke no longer exists in the router module —
+        the user-callable paid probe was removed, not just gated."""
         import src.api.routers.rico_chat as _chat_mod
-        mock_request = Mock(spec=Request)
-
-        with patch.object(_chat_mod, 'get_ai_provider', return_value="none"), \
-             patch.object(_chat_mod, 'get_current_user', return_value={"email": "test@example.com"}):
-            result = _chat_mod.rico_openai_smoke(mock_request)
-
-        assert result["success"] is False
-        assert result["provider"] == "none"
-        assert result["openai_available"] is False
-        assert result["model"] is None
-        assert result["fallback_model"] is None
-        assert "disabled" in result["response"].lower()
-
-    def test_openai_smoke_provider_openai(self):
-        """Test that smoke endpoint calls OpenAI when provider=openai."""
-        import src.api.routers.rico_chat as _chat_mod
-        mock_request = Mock(spec=Request)
-
-        with patch.object(_chat_mod, 'get_ai_provider', return_value="openai"), \
-             patch.object(_chat_mod, 'get_current_user', return_value={"email": "test@example.com"}), \
-             patch.object(_chat_mod, 'call_openai_minimal', return_value={
-                 "success": True,
-                 "model": "gpt-4o-mini",
-                 "fallback_model": "gpt-4.1-mini",
-                 "text": "OK",
-                 "error": None,
-                 "error_detail": None,
-                 "openai_available": True
-             }) as mock_call_openai:
-            result = _chat_mod.rico_openai_smoke(mock_request)
-
-        mock_call_openai.assert_called_once_with("Say OK", smoke=True)
-        assert result["success"] is True
-        assert result["model"] == "gpt-4o-mini"
-        assert result["response"] == "OK"
-
-    def test_openai_smoke_provider_huggingface(self):
-        """Test that smoke endpoint returns HF status when provider=huggingface."""
-        import src.api.routers.rico_chat as _chat_mod
-        mock_request = Mock(spec=Request)
-
-        with patch.dict(os.environ, {"HF_TOKEN": "hf_test_token"}), \
-             patch.object(_chat_mod, 'get_ai_provider', return_value="huggingface"), \
-             patch.object(_chat_mod, 'get_current_user', return_value={"email": "test@example.com"}):
-            result = _chat_mod.rico_openai_smoke(mock_request)
-
-        assert result["success"] is False
-        assert result["provider"] == "huggingface"
-        assert result["openai_available"] is False
-        assert result["hf_available"] is True
-        assert result["error"] == "OpenAIProviderDisabled"
-
-    def test_openai_smoke_provider_deepseek(self):
-        """Test that smoke endpoint calls the shared runtime when provider=deepseek."""
-        import src.api.routers.rico_chat as _chat_mod
-        mock_request = Mock(spec=Request)
-
-        with patch.object(_chat_mod, 'get_ai_provider', return_value="deepseek"), \
-             patch.object(_chat_mod, 'get_current_user', return_value={"email": "test@example.com"}), \
-             patch.object(_chat_mod, 'call_openai_minimal', return_value={
-                 "success": True,
-                 "provider": "deepseek",
-                 "provider_available": True,
-                 "model": "deepseek-v4-flash",
-                 "fallback_model": "deepseek-v4-pro",
-                 "text": "OK",
-                 "error": None,
-                 "error_detail": None,
-                 "openai_available": False,
-                 "deepseek_available": True,
-             }) as mock_call_openai:
-            result = _chat_mod.rico_openai_smoke(mock_request)
-
-        mock_call_openai.assert_called_once_with("Say OK", smoke=True, provider="deepseek")
-        assert result["success"] is True
-        assert result["provider"] == "deepseek"
-        assert result["model"] == "deepseek-v4-flash"
-        assert result["deepseek_available"] is True
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        assert not hasattr(_chat_mod, "rico_openai_smoke")
+        assert not hasattr(_chat_mod, "call_openai_minimal")
