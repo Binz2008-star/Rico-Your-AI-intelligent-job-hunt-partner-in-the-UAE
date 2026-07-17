@@ -6806,7 +6806,26 @@ class RicoChatAPI:
         # file uploads" is wrong — the platform has a dedicated upload page.
         # This guard runs before any AI call so the user always gets a clear,
         # deterministic direction instead of a questionnaire or false refusal.
-        if self._looks_like_cv_intent_no_file(message):
+        #
+        # BUG-25: _looks_like_cv_intent_no_file matches the Arabic phrase
+        # "سيرتي الذاتية" ("my CV"), which also appears in a legitimate Arabic
+        # job search ("ابحث عن وظائف تناسب سيرتي الذاتية") — the English
+        # announce-phrase list needs a "have"/"upload" verb, so English searches
+        # never trip this, but the Arabic one did and was answered with the
+        # CV-status message instead of running the search. The earlier CV-upload
+        # gate (see _looks_like_cv_upload above) already exempts job requests;
+        # this one lacked that guard. Defer to the SAME canonical public
+        # predicate the search router keys on (is_explicit_job_listing_request):
+        # an explicit job-listing request — EN or AR — bypasses the CV-status /
+        # upload guidance and continues to the job-search path. Genuine CV
+        # questions ("هل لدي سيرة ذاتية محفوظة؟") and upload/replace requests are
+        # not explicit job-listing requests, so they still get CV guidance.
+        from src.rico.intent.gates import is_explicit_job_listing_request
+
+        if (
+            self._looks_like_cv_intent_no_file(message)
+            and not is_explicit_job_listing_request(message)
+        ):
             # Check user_documents first — if a CV already exists, confirm it
             # rather than asking for an upload.
             _db_check = self._cv_upload_guidance_with_db_check(user_id, message, profile=profile)
