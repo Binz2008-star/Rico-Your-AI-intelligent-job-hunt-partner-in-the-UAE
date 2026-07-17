@@ -105,7 +105,7 @@ describe("handleConfirmProfile", () => {
       );
       expect(String(confirmCall?.[0])).not.toMatch(/^http/);
     });
-  });
+  }, 15000);
 });
 
 describe("Edit before saving", () => {
@@ -158,7 +158,12 @@ describe("Edit before saving", () => {
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
 
     const editButton = await screen.findByText("Edit before saving", {}, { timeout: 5000 });
-    const callsBefore = fetchMock.mock.calls.length;
+    // Count everything except /api/v1/me: newly-mounted components re-check
+    // auth via useAuth (one fetchMe per mount), so the raw call count is
+    // timing-dependent. Edit must stay purely local for every OTHER endpoint.
+    const nonAuthCalls = () =>
+      fetchMock.mock.calls.filter(([url]) => !String(url).includes("/api/v1/me")).length;
+    const callsBefore = nonAuthCalls();
 
     await userEvent.click(editButton);
 
@@ -166,12 +171,15 @@ describe("Edit before saving", () => {
       expect(screen.getByText("Edit profile")).toBeInTheDocument();
     });
 
-    expect(fetchMock.mock.calls.length).toBe(callsBefore);
+    expect(nonAuthCalls()).toBe(callsBefore);
     expect(screen.queryByText("Edit before saving")).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).includes("/api/v1/rico/chat/public"))
     ).toBe(false);
-  });
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes("confirm-cv-profile"))
+    ).toBe(false);
+  }, 15000);
 
   it("calls confirm-cv-profile with edited draft when Save profile is clicked", async () => {
     fetchMock.mockImplementation(async (input) => {
@@ -238,5 +246,5 @@ describe("Edit before saving", () => {
       const body = JSON.parse(String((confirmCall?.[1] as RequestInit | undefined)?.body ?? "{}"));
       expect(body.preview.name).toBe("Roben Edwan");
     });
-  });
+  }, 15000);
 });

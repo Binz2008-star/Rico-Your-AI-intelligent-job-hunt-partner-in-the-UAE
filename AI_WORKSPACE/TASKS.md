@@ -2308,3 +2308,30 @@ Issue/PR: follow-up to #1085
   "/" → film plays (scene active = script live, URL masked to chooser) →
   fast-forward → landing renders once with marker stripped → reload → next film
 - Next exact action: owner merge word; production deploy via Vercel on merge
+
+---
+
+### TASK-20260717-001 — Stabilize flaky chat-confirm-profile vitest file (CI tax)
+
+Status: in review (owner granted execution autonomy in-session 2026-07-17 to finish outstanding work; test-only change)
+Owner: Claude
+Branch: `claude/rico-film-rotation-fix-g7tua4` (restarted from main after #1116 merged)
+Issue/PR: follow-up; flaked 3x on 2026-07-16 (#1085 and #1116 CI, plus one local run) always in `chat-confirm-profile.test.tsx`
+
+#### Objective
+
+Remove the two flake modes without weakening the guard:
+1. 5s default test timeout too tight for the full CommandPage render + CV
+   upload flow on loaded CI runners → per-test 15s timeout on the three
+   heavy tests.
+2. Raw `fetchMock.mock.calls.length` equality races with `useAuth`'s
+   per-mount `/api/v1/me` re-check (the Edit click mounts the editor panel)
+   → count only non-`/api/v1/me` calls, and additionally assert that
+   neither `/chat/public` nor `confirm-cv-profile` is ever called by Edit.
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-001
+- Files touched: `apps/web/__tests__/chat-confirm-profile.test.tsx` only
+- Validation: file passed 10/10 consecutive local runs post-fix
+- Next exact action: PR, CI green, merge under the in-session autonomy grant
