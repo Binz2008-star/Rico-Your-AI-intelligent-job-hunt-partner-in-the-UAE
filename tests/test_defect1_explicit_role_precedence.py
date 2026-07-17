@@ -95,6 +95,12 @@ def test_explicit_off_profile_role_not_rewritten_to_profile():
     ir = classify_intent("Find accountant jobs in Dubai", has_cv_profile=True)
     assert (ir.extracted_role or "").lower() == "accountant"
     assert (ir.entities or {}).get("location") == "Dubai"
+    # The fenced off-profile opt-in gate (DO-NOT-CHANGE) still fires AND holds the
+    # ACTUAL requested target — Accountant + Dubai — as the pending confirmation,
+    # never the saved profile role.
+    assert res.get("type") == "clarification"
+    pending = (h._rctx.get("u@test") or {}).get("_pending_role_confirmation")
+    assert pending == {"role": "Accountant", "location": "Dubai"}
 
 
 # ---------------------------------------------------------------------------
@@ -237,3 +243,95 @@ def test_uae_wide_refinement_without_role_still_expands_prior_search():
     # empty city filter (real cities like "Dubai" pass through verbatim).
     assert new_locs == [""]
     assert "UAE" in (res.get("message") or "")
+
+
+def test_search_all_across_uae_refinement_reuses_prior_role_exact_wording():
+    """Owner's exact wording: T1 'Find HSE Manager jobs in Dubai.' then
+    T2 'Search all across the UAE.' — T2 must reuse HSE Manager, broaden to
+    UAE, invent no new role, and the UAE-wide intercept must still fire."""
+    h = _Harness()
+    _seed(h)
+    h.say("u@test", "Find HSE Manager jobs in Dubai.")
+    before = len(h.searched_roles)
+    res = h.say("u@test", "Search all across the UAE.")
+    new_roles = h.searched_roles[before:]
+    assert new_roles == ["HSE Manager"]              # prior role reused
+    assert h.searched_locations[before:] == [""]     # broadened to UAE default
+    assert "UAE" in (res.get("message") or "")
+    # No new explicit role invented from the refinement phrase.
+    assert RicoChatAPI._message_names_explicit_role("Search all across the UAE.", True) is False
+
+
+def test_executable_search_state_contains_all_requested_roles():
+    """The multi-role contract must keep EVERY requested family in executable
+    search state — not merely name them in prose. All three are persisted in
+    ``multi_role_candidates`` and each, when selected, is searched directly
+    (bypassing taxonomy / profile fallback). JSearch takes one role per query,
+    so the primary runs now and the rest run on selection — this is the existing
+    product contract, exercised here end-to-end, not a parallel engine."""
+    h = _Harness()
+    _seed(h)
+    res = h.say(
+        "u@test",
+        "Show me any HSE, sustainability, or operations manager jobs anywhere in the UAE.",
+    )
+    candidates = [c.lower() for c in ((h._rctx.get("u@test") or {}).get("multi_role_candidates") or [])]
+    assert candidates == ["hse", "sustainability", "operations manager"]
+    # Each remaining family executes directly when its offered option is selected
+    # (the option label "Search <role>" is what the UI sends on tap).
+    for label, expected in [
+        ("Search operations manager", "operations manager"),
+        ("Search sustainability", "sustainability"),
+    ]:
+        h2 = _Harness()
+        _seed(h2)
+        h2.say(
+            "u@test",
+            "Show me any HSE, sustainability, or operations manager jobs anywhere in the UAE.",
+        )
+        before = len(h2.searched_roles)
+        follow = h2.say("u@test", label)
+        selected = h2.searched_roles[before:]
+        assert selected and selected[0].lower() == expected
+        assert PROFILE_ROLE not in selected           # never the profile role
+        assert follow.get("type") == "job_matches"
+
+
+def test_prior_role_cannot_overwrite_new_multi_role_request():
+    """A previous single-role search must not bleed into a later multi-role
+    request — even one carrying a 'anywhere in the UAE' scope phrase."""
+    h = _Harness()
+    _seed(h)
+    h.say("u@test", "Find Environmental Manager jobs")
+    assert h.searched_roles == ["Environmental Manager"]
+    before = len(h.searched_roles)
+    res = h.say(
+        "u@test",
+        "Show me any HSE, sustainability, or operations manager jobs anywhere in the UAE.",
+    )
+    new = [r.lower() for r in h.searched_roles[before:]]
+    recognised = [r.lower() for r in (res.get("recognized_roles") or [])]
+    assert recognised == ["hse", "sustainability", "operations manager"]
+    assert "environmental manager" not in new         # prior role not reused
+    assert new and new[0] in recognised
+
+
+def test_classify_intent_is_deterministic_for_the_guard():
+    """The precedence guard calls ``classify_intent`` once and routing calls it
+    again at dispatch. ``classify_intent`` is a pure regex/exact-phrase function,
+    so the two calls are provably identical — the extra call cannot diverge from
+    the value routing acts on. (Moving the single classification up would instead
+    force it onto ~88 early-return handlers that never classify today, so the
+    localized guard is the smallest safe change.)"""
+    for message in [
+        "Show me any HSE, sustainability, or operations manager jobs anywhere in the UAE.",
+        "Find HSE Manager jobs in Dubai",
+        "search all over the UAE",
+        "Find jobs matching my profile",
+    ]:
+        first = classify_intent(message, has_cv_profile=True)
+        second = classify_intent(message, has_cv_profile=True)
+        assert first.intent == second.intent
+        assert getattr(first, "entities", None) == getattr(second, "entities", None)
+        assert first.extracted_role == second.extracted_role
+        assert first.confidence == second.confidence
