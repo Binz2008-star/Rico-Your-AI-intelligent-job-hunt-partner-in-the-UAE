@@ -19,18 +19,10 @@ import { ProcessingOverlay } from "@/components/ui/ProcessingOverlay";
 import { AtelierAuthShell } from "@/components/auth/AtelierAuthShell";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { uploadCV } from "@/lib/api";
+import { getPublicUserId } from "@/lib/publicSession";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-
-function getGuestUploadUserId(): string {
-    let sessionId = window.localStorage.getItem("rico_sid");
-    if (!sessionId) {
-        sessionId = `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-        window.localStorage.setItem("rico_sid", sessionId);
-    }
-    return `public:${sessionId}`;
-}
 
 export function GuestUploadAtelier() {
     const { language } = useLanguage();
@@ -49,8 +41,10 @@ export function GuestUploadAtelier() {
         try {
             // Backend-authoritative: only advance to the processing/success
             // stage after uploadCV resolves. A rejected upload throws and is
-            // surfaced below — never a false success.
-            await uploadCV(file, getGuestUploadUserId());
+            // surfaced below — never a false success. The passed public id is
+            // correlation-only (#1070); ownership binds to the server-minted
+            // HttpOnly capability cookie and is never disclosed to JS.
+            await uploadCV(file, getPublicUserId());
             setIsUploading(false);
             setIsProcessing(true);
         } catch (err) {

@@ -13,6 +13,21 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _guest_capability_owner_browser(monkeypatch):
+    """This suite exercises upload mechanics AS the owning guest browser. The
+    #1070 ownership boundary is covered by tests/test_1070_guest_identity_binding.py;
+    the identity resolution is pinned to the claimed sid."""
+    monkeypatch.setattr(
+        "src.api.routers.rico_chat._resolve_guest_sid",
+        lambda request, response, correlation_sid: correlation_sid,
+    )
+
+
+
 
 # ── Fix 1: CV parse runs in an executor (does not block the event loop) ────────
 

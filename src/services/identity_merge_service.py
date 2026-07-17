@@ -65,9 +65,16 @@ MERGEABLE_PROFILE_KEYS = {
 CONFIRMED_USER_SCOPED_TABLES = ["rico_saved_searches"]
 
 
-def _merge_lock_key(public_user_id: str, auth_user_id: str) -> int:
-    """Deterministic 63-bit positive integer for PostgreSQL advisory xact lock."""
-    h = hashlib.sha256(f"{public_user_id}:{auth_user_id}".encode()).hexdigest()
+def _merge_lock_key(public_user_id: str) -> int:
+    """Deterministic 63-bit positive integer for PostgreSQL advisory xact lock.
+
+    Keyed on the GUEST identity alone (#1070): two different accounts claiming
+    the same guest must contend for the SAME lock, so exactly one claim can
+    proceed at a time and the loser observes the committed claim marker. The
+    previous pair-key let concurrent claims of one guest by two accounts run
+    under different locks and both copy the guest data.
+    """
+    h = hashlib.sha256(f"guest-claim:{public_user_id}".encode()).hexdigest()
     return int(h[:16], 16) % (2**63 - 1)
 
 
@@ -272,27 +279,61 @@ def _migrate_user_scoped_rows(
 
 
 def merge_public_identity_into_auth(
-    public_user_id: str,
+    public_user_id: str | None,
     auth_user_id: str,
+    guest_capability_token: str | None = None,
 ) -> bool:
     """
     Merge a public (guest) identity into an authenticated identity.
 
-    Steps:
-    1. Validate inputs (public_user_id must be a canonical public session ID).
-    2. Resolve both to internal DB UUIDs.
-    3. Read guest profile JSONB.
-    4. Read auth profile JSONB.
-    5. Merge guest data into auth (auth wins scalars, lists deduped).
-    6. Write merged profile back to auth.
-    7. Mark guest profile as merged.
-    8. Migrate confirmed user-scoped rows.
+    Ownership contract (#1070, locked design): the MERGE SOURCE is the
+    server-minted sid inside the browser's signed capability token — never the
+    request body. ``public_user_id`` is the client's correlation-only value:
+    it signals merge INTENT and is never accepted by the source-selection path
+    — a mismatch with the token identity is logged (observable) and has no
+    effect on which guest is merged. A missing/invalid token rejects the claim
+    outright.
 
-    Returns True on success, False on failure.
+    The claim is one-time, account-bound, and DURABLE: a guest-scoped advisory
+    lock serializes concurrent claims, and a row in ``guest_identity_claims``
+    (PRIMARY KEY on the guest identity — DB-enforced single owner, migration
+    044) is inserted inside the SAME transaction and connection as every data
+    move. The profile marker remains as observability. A repeated claim by the
+    same owner is an idempotent success; a claim by any other account is
+    rejected; any failure rolls the claim and the data moves back together.
+
+    Returns True on success, False on failure (failures remain retryable).
     """
-    if not public_user_id or not auth_user_id:
-        logger.warning("merge_rejected reason=missing_user_id")
+    if not auth_user_id:
+        logger.warning("merge_rejected reason=missing_auth_user")
         return False
+
+    # 1. Ownership: the capability token IS the merge source.
+    from src.api.public_identity import InvalidGuestCapability, parse_guest_capability
+
+    try:
+        token_sid = parse_guest_capability(guest_capability_token)
+    except InvalidGuestCapability as exc:
+        # Fixed reason code only — never token/SID/nonce/signature material.
+        logger.warning(
+            "merge_rejected reason=unproved_claim reason_code=%s",
+            getattr(exc, "reason_code", "invalid"),
+        )
+        return False
+    except Exception:  # GuestCapabilityUnavailable etc. — fail closed
+        logger.error("merge_rejected reason=capability_unavailable")
+        return False
+
+    authoritative_public_id = f"public:{token_sid}"
+
+    # 2. The client-supplied value is correlation-only: it can never select,
+    #    rotate, or overwrite the server identity. A mismatch is expected
+    #    (the browser cannot read the HttpOnly token) and is logged for
+    #    observability; the merge source is the token identity regardless.
+    if public_user_id and public_user_id != authoritative_public_id:
+        logger.info("merge_correlation_mismatch (client value ignored)")
+
+    public_user_id = authoritative_public_id
     if not is_valid_public_user_id(public_user_id):
         logger.warning("merge_rejected reason=not_public_source public_user_id=%s", public_user_id)
         return False
@@ -308,9 +349,11 @@ def merge_public_identity_into_auth(
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            # Serialize concurrent merges for the same pair via advisory xact lock.
-            # Transaction-scoped: released automatically on commit or rollback.
-            lock_key = _merge_lock_key(public_user_id, auth_user_id)
+            # Serialize concurrent claims of the SAME GUEST via a guest-scoped
+            # advisory xact lock (released automatically on commit/rollback).
+            # Two accounts claiming one guest contend here; the loser either
+            # fails the try-lock (retryable) or sees the committed claim marker.
+            lock_key = _merge_lock_key(public_user_id)
             cur.execute("SELECT pg_try_advisory_xact_lock(%s)", (lock_key,))
             got_lock = cur.fetchone()["pg_try_advisory_xact_lock"]
             if not got_lock:
@@ -338,6 +381,73 @@ def merge_public_identity_into_auth(
             # Read profiles
             guest_profile = _read_profile_jsonb(cur, guest_db_id)
             auth_profile = _read_profile_jsonb(cur, auth_db_id)
+
+            # One-time claim (CAS, enforced under the guest-scoped lock in the
+            # same transaction as every data move): a guest already claimed by
+            # ANOTHER account is never merged again; a replay by the SAME
+            # owner is an idempotent no-op success.
+            prior_owner = guest_profile.get("merged_into_user_id")
+            if guest_profile.get("profile_status") == "merged":
+                if str(prior_owner) == str(auth_db_id):
+                    logger.info(
+                        "merge_idempotent_replay public_user_id=%s auth_user_id=%s",
+                        public_user_id, auth_user_id,
+                    )
+                    return True
+                logger.warning(
+                    "merge_rejected reason=already_claimed public_user_id=%s",
+                    public_user_id,
+                )
+                return False
+
+            # 3. DURABLE one-time claim (#1070 correction 4): guests can hold
+            #    chat/upload/artifact data WITHOUT a rico_profiles row, so the
+            #    profile marker above is observability, not the authority. The
+            #    PRIMARY KEY on guest_identity_claims enforces a single owner
+            #    unconditionally, inside this SAME transaction and connection
+            #    as every data move below — a failed merge rolls the claim
+            #    back with the data.
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO guest_identity_claims (public_user_id, claimed_by_user_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT (public_user_id) DO NOTHING
+                    RETURNING claimed_by_user_id::text
+                    """,
+                    (public_user_id, auth_db_id),
+                )
+                claim_row = cur.fetchone()
+            except Exception as exc:
+                if getattr(exc, "pgcode", None) == "42P01":
+                    logger.error(
+                        "merge_rejected reason=claims_table_missing — apply "
+                        "migrations/044_guest_identity_claims.sql before enabling merges"
+                    )
+                    conn.rollback()
+                    return False
+                raise
+            if claim_row is None:
+                cur.execute(
+                    """
+                    SELECT claimed_by_user_id::text AS claimed_by_user_id
+                    FROM guest_identity_claims WHERE public_user_id = %s
+                    """,
+                    (public_user_id,),
+                )
+                owner_row = cur.fetchone()
+                owner = owner_row["claimed_by_user_id"] if owner_row else None
+                if owner == str(auth_db_id):
+                    logger.info(
+                        "merge_idempotent_replay public_user_id=%s auth_user_id=%s",
+                        public_user_id, auth_user_id,
+                    )
+                    return True
+                logger.warning(
+                    "merge_rejected reason=already_claimed public_user_id=%s",
+                    public_user_id,
+                )
+                return False
 
             # Merge
             merged = merge_profile_data(auth_profile, guest_profile)

@@ -17,6 +17,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from src.api.public_identity import make_guest_capability_for_sid
 from src.services.identity_merge_service import (
     merge_public_identity_into_auth,
     _get_db_user_id,
@@ -27,6 +28,10 @@ from src.services.identity_merge_service import (
 )
 
 _UTC = timezone.utc
+
+# Server-authoritative guest capability (#1070): every legitimate claim in
+# these tests presents the signed token whose sid IS the merge source.
+_TOKEN = make_guest_capability_for_sid("web-guest")
 
 
 def _mock_cursor(rows=None):
@@ -141,20 +146,57 @@ class TestMigrateUserScopedRows:
 
 class TestMergePublicIdentityIntoAuth:
     @patch("src.services.identity_merge_service.RicoDB")
-    def test_rejects_non_public_source(self, MockDB):
-        result = merge_public_identity_into_auth("alice@example.com", "bob@example.com")
-        assert result is False
-        MockDB.assert_not_called()
+    def test_client_value_never_selects_source(self, MockDB):
+        """The body value is correlation-only: whatever the client sends
+        (another guest, malformed junk, an email), the merge source is the
+        TOKEN identity — never rotated, overwritten, or selected by the
+        client (#1070 locked design)."""
+        for client_value in (
+            "public:web-other-guest1",   # a different guest
+            "alice@example.com",          # not a guest id at all
+            "public:has/slash",           # malformed
+        ):
+            db = MagicMock()
+            db.available = True
+            conn = _mock_conn(MagicMock())
+            db.connect.return_value = conn
+            MockDB.return_value = db
 
-    @patch("src.services.identity_merge_service.RicoDB")
-    def test_rejects_malformed_public_source(self, MockDB):
-        result = merge_public_identity_into_auth("public:has/slash", "bob@example.com")
-        assert result is False
-        MockDB.assert_not_called()
+            cur = conn.cursor.return_value.__enter__.return_value
+            lookups = []
+
+            real_execute = MagicMock()
+
+            def _spy_execute(sql, params=None, _lookups=lookups):
+                if params and "rico_users" in sql and "SELECT" in sql:
+                    _lookups.append(params[0])
+
+            cur.execute.side_effect = _spy_execute
+            cur.fetchone.side_effect = [
+                {"pg_try_advisory_xact_lock": True},
+                {"id": "uuid-guest"},
+                {"id": "uuid-auth"},
+                {"profile": {}},
+                {"profile": {}},
+                {"claimed_by_user_id": "uuid-auth"},
+                {"exists": True},
+                {"exists": True},
+            ]
+
+            result = merge_public_identity_into_auth(
+                client_value, "auth@example.com", guest_capability_token=_TOKEN
+            )
+            assert result is True
+            # The guest looked up is the TOKEN's guest — not the client value.
+            assert lookups[0] == "public:web-guest"
+            assert client_value not in lookups
 
     @patch("src.services.identity_merge_service.RicoDB")
     def test_rejects_same_user_id(self, MockDB):
-        result = merge_public_identity_into_auth("public:same", "public:same")
+        result = merge_public_identity_into_auth(
+            "public:same-session", "public:same-session",
+            guest_capability_token=make_guest_capability_for_sid("same-session"),
+        )
         assert result is False
         MockDB.assert_not_called()
 
@@ -167,9 +209,12 @@ class TestMergePublicIdentityIntoAuth:
         MockDB.return_value = db
 
         cur = conn.cursor.return_value.__enter__.return_value
-        cur.fetchone.return_value = None  # guest not found
+        cur.fetchone.side_effect = [
+            {"pg_try_advisory_xact_lock": True},  # guest-scoped advisory lock
+            None,                                  # guest not found
+        ]
 
-        result = merge_public_identity_into_auth("public:web-guest", "auth@example.com")
+        result = merge_public_identity_into_auth("public:web-guest", "auth@example.com", guest_capability_token=_TOKEN)
         assert result is False
 
     @patch("src.services.identity_merge_service.RicoDB")
@@ -181,20 +226,65 @@ class TestMergePublicIdentityIntoAuth:
         MockDB.return_value = db
 
         cur = conn.cursor.return_value.__enter__.return_value
-        # Sequence: advisory lock, guest id, auth id, guest profile, auth profile, table checks
+        # Sequence: advisory lock, guest id, auth id, guest profile,
+        # auth profile, durable claim INSERT (returns our row = we own it),
+        # table checks
         cur.fetchone.side_effect = [
             {"pg_try_advisory_xact_lock": True},   # advisory xact lock
             {"id": "uuid-guest"},          # guest lookup
             {"id": "uuid-auth"},           # auth lookup
             {"profile": {"skills": ["hse"]}},  # guest profile
             {"profile": {"years_experience": 5}},  # auth profile
+            {"claimed_by_user_id": "uuid-auth"},  # claim INSERT ... RETURNING
             {"exists": True},              # table check 1
             {"exists": True},              # column check 1
         ]
 
-        result = merge_public_identity_into_auth("public:web-guest", "auth@example.com")
+        result = merge_public_identity_into_auth("public:web-guest", "auth@example.com", guest_capability_token=_TOKEN)
         assert result is True
         conn.commit.assert_called_once()
+
+    @patch("src.services.identity_merge_service.RicoDB")
+    def test_rejects_unproved_claim(self, MockDB):
+        """A formatted public ID with no capability token is rejected (#1070)."""
+        result = merge_public_identity_into_auth("public:web-guest", "auth@example.com")
+        assert result is False
+        MockDB.assert_not_called()
+
+    @patch("src.services.identity_merge_service.RicoDB")
+    def test_rejects_tampered_token(self, MockDB):
+        token = make_guest_capability_for_sid("web-guest")
+        payload, _, sig = token.partition(".")
+        bad = payload + "." + ("0" if sig[0] != "0" else "1") + sig[1:]
+        result = merge_public_identity_into_auth(
+            "public:web-guest", "auth@example.com", guest_capability_token=bad
+        )
+        assert result is False
+        MockDB.assert_not_called()
+
+    @patch("src.services.identity_merge_service.RicoDB")
+    def test_rejects_claim_by_second_account(self, MockDB):
+        """A guest already claimed by another account is never merged again."""
+        db = MagicMock()
+        db.available = True
+        conn = _mock_conn(MagicMock())
+        db.connect.return_value = conn
+        MockDB.return_value = db
+
+        cur = conn.cursor.return_value.__enter__.return_value
+        cur.fetchone.side_effect = [
+            {"pg_try_advisory_xact_lock": True},
+            {"id": "uuid-guest"},
+            {"id": "uuid-second-account"},
+            {"profile": {"profile_status": "merged", "merged_into_user_id": "uuid-first-owner"}},
+            {"profile": {}},
+        ]
+
+        result = merge_public_identity_into_auth(
+            "public:web-guest", "second@example.com", guest_capability_token=_TOKEN
+        )
+        assert result is False
+        conn.commit.assert_not_called()
 
     @patch("src.services.identity_merge_service.RicoDB")
     def test_rollback_on_error(self, MockDB):
@@ -207,7 +297,7 @@ class TestMergePublicIdentityIntoAuth:
         cur = conn.cursor.return_value.__enter__.return_value
         cur.execute.side_effect = RuntimeError("DB exploded")
 
-        result = merge_public_identity_into_auth("public:web-guest", "auth@example.com")
+        result = merge_public_identity_into_auth("public:web-guest", "auth@example.com", guest_capability_token=_TOKEN)
         assert result is False
         conn.rollback.assert_called_once()
 
@@ -231,6 +321,70 @@ class TestMergePublicIdentityIntoAuth:
             {"exists": True},
         ]
 
-        result = merge_public_identity_into_auth("public:web-guest", "auth@example.com")
+        result = merge_public_identity_into_auth("public:web-guest", "auth@example.com", guest_capability_token=_TOKEN)
         assert result is True
-        conn.commit.assert_called_once()
+        # Replay by the SAME owner is a no-op success: no data is
+        # re-copied and nothing needs to commit (#1070 one-time claim).
+        conn.commit.assert_not_called()
+
+    @patch("src.services.identity_merge_service.RicoDB")
+    def test_claim_row_owned_by_other_account_rejected(self, MockDB):
+        """No profile marker, but the DURABLE claim row names another owner —
+        the DB uniqueness authority wins even without a profile row (#1070)."""
+        db = MagicMock()
+        db.available = True
+        conn = _mock_conn(MagicMock())
+        db.connect.return_value = conn
+        MockDB.return_value = db
+
+        cur = conn.cursor.return_value.__enter__.return_value
+        cur.fetchone.side_effect = [
+            {"pg_try_advisory_xact_lock": True},
+            {"id": "uuid-guest"},
+            {"id": "uuid-second"},
+            {"profile": {}},                       # guest has NO profile marker
+            {"profile": {}},
+            None,                                   # claim INSERT: conflict, no row
+            {"claimed_by_user_id": "uuid-first"},  # existing owner lookup
+        ]
+
+        result = merge_public_identity_into_auth(
+            "public:web-guest", "second@example.com", guest_capability_token=_TOKEN
+        )
+        assert result is False
+        conn.commit.assert_not_called()
+
+    @patch("src.services.identity_merge_service.RicoDB")
+    def test_claims_table_missing_fails_closed(self, MockDB):
+        """Migration 044 not applied → merge fails closed, nothing copied."""
+        db = MagicMock()
+        db.available = True
+        conn = _mock_conn(MagicMock())
+        db.connect.return_value = conn
+        MockDB.return_value = db
+
+        class _UndefinedTable(Exception):
+            pgcode = "42P01"
+
+        cur = conn.cursor.return_value.__enter__.return_value
+        responses = [
+            {"pg_try_advisory_xact_lock": True},
+            {"id": "uuid-guest"},
+            {"id": "uuid-auth"},
+            {"profile": {}},
+            {"profile": {}},
+        ]
+        cur.fetchone.side_effect = responses
+
+        def _execute(sql, *args, **kwargs):
+            if "guest_identity_claims" in sql:
+                raise _UndefinedTable()
+
+        cur.execute.side_effect = _execute
+
+        result = merge_public_identity_into_auth(
+            "public:web-guest", "auth@example.com", guest_capability_token=_TOKEN
+        )
+        assert result is False
+        conn.rollback.assert_called()
+        conn.commit.assert_not_called()

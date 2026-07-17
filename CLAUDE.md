@@ -337,6 +337,16 @@ RICO_ENABLE_USER_TELEGRAM_ALERTS=false
 # (POST /api/v1/pipeline/reminders, X-Cron-Secret header). Issue #355.
 RICO_CRON_SECRET=
 
+# Guest-session capability signing key (#1070). DEDICATED secret — never
+# derived from or shared with JWT_SECRET. Signs the versioned guest capability
+# token (rico_guest_proof cookie) that carries the server-minted guest SID.
+# REQUIRED in production: missing value fails closed (guest surfaces return
+# 503; nothing is minted or validated). Rotation: replacing the value
+# invalidates every outstanding guest capability — active guests transparently
+# restart as fresh anonymous sessions on their next request. Generate with:
+# python3 -c "import secrets; print(secrets.token_hex(32))"
+GUEST_CAPABILITY_SECRET=
+
 RICO_REDIS_URL=
 REDIS_URL=
 

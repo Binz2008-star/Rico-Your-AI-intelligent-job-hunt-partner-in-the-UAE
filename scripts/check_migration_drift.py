@@ -77,6 +77,8 @@ CHECKS: list[tuple[str, str, object]] = [
     ("043", "constraint", "uq_gmail_review_items_user_message"),
     # Per-user recurring-sync consent (fleet-sweep opt-in) — amended into 043.
     ("043", "column", ("gmail_connections", "recurring_sync_consent_at")),
+    # Guest merge single-owner claim (#1070)
+    ("044", "table", "guest_identity_claims"),
 ]
 
 

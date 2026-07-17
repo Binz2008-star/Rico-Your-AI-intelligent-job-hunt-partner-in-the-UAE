@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from functools import wraps
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -45,6 +45,7 @@ from src.api.deps import get_current_user, get_current_user_id
 from src.api.public_identity import (
     is_safe_public_session_id,
     is_valid_public_user_id,
+    make_public_user_id,
     normalize_public_email,
 )
 from src.api.rate_limit import LIMIT_ADMIN, LIMIT_CHAT, LIMIT_PROFILE, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
@@ -337,8 +338,17 @@ def _resolve_upload_user_id(
     request: Request,
     query_user_id: str | None,
     form_user_id: str | None,
+    response: Response | None = None,
 ) -> str:
-    """Resolve user ID for CV upload, allowing authenticated or validated public sessions."""
+    """Resolve user ID for CV upload: JWT identity, or the SERVER-AUTHORITATIVE
+    guest identity from the signed capability cookie (#1070).
+
+    A JWT identity always wins (caller-supplied public IDs are ignored). For
+    guest callers the supplied `public:*` value is required and format-checked
+    but is CORRELATION-ONLY — the identity that owns the upload/confirm is the
+    sid inside the capability cookie (minted here when absent). A
+    client-selected sid can never become ownership identity.
+    """
     try:
         return get_current_user_id(request)
     except HTTPException as auth_exc:
@@ -360,7 +370,9 @@ def _resolve_upload_user_id(
             detail="Authentication or valid public session required"
         )
 
-    return user_id
+    correlation_sid = user_id.split(":", 1)[1]
+    sid = _resolve_guest_sid(request, response if response is not None else Response(), correlation_sid)
+    return make_public_user_id(sid)
 
 
 def _validate_jotform_secret(request: Request) -> None:
@@ -843,6 +855,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
     # email is held to the SAME monthly AI cap as the authenticated path. The
     # email is unverified (no JWT) so it grants NO account privilege — only the cap.
     anti_dodge_terminal: dict[str, Any] | None = None
+    guest_headers: Response | None = None
     if payload.email:
         from src.repositories.users_repo import get_user_by_email
 
@@ -864,7 +877,25 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
             def _err_bad():
                 yield f'data: {_json.dumps({"type":"error","message":"Invalid session."})}\n\n'
             return StreamingResponse(_err_bad(), media_type="text/event-stream", headers=SSE_HEADERS)
-        ctx = RicoSessionContext.for_public(session_id[:64])
+        # Server-authoritative guest identity (#1070) — mirror /chat/public.
+        # The capability cookie decides the sid; the payload value is
+        # correlation-only. HTTPException from the resolver becomes a JSON
+        # error response carrying the resolver's cookie operations.
+        from fastapi.responses import JSONResponse
+
+        guest_headers = Response()
+        guest_headers.raw_headers.clear()
+        try:
+            sid = _resolve_guest_sid(request, guest_headers, session_id[:64])
+        except HTTPException as exc:
+            err = JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=exc.headers,
+            )
+            _transfer_guest_headers(guest_headers, err)
+            return err
+        ctx = RicoSessionContext.for_public(sid)
 
     user_id = ctx.user_id
 
@@ -927,16 +958,93 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
             logger.exception("chat_stream_public_error user=%s", user_id)
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
 
-    return StreamingResponse(
+    streaming_response = StreamingResponse(
         _event_stream(),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
+    if guest_headers is not None:
+        _transfer_guest_headers(guest_headers, streaming_response)
+    return streaming_response
+
+
+_GUEST_CAPABILITY_INVALID_DETAIL = {
+    "code": "guest_capability_invalid",
+    "message": "This guest session token is not valid. Please try again.",
+}
+_GUEST_CAPABILITY_UNAVAILABLE_DETAIL = {
+    "code": "guest_capability_unavailable",
+    "message": "Guest sessions are temporarily unavailable. Please try again later.",
+}
+
+
+def _resolve_guest_sid(request: Request, response: Response, correlation_sid: str | None) -> str:
+    """Resolve the SERVER-AUTHORITATIVE guest sid for an unauthenticated request (#1070).
+
+    Identity comes only from the signed capability cookie; a fresh identity is
+    minted (and endorsed on *response*) when no cookie is present. The
+    client-supplied *correlation_sid* carries ZERO authorization meaning — it
+    is logged when it differs (one-time legacy migration / multi-tab
+    observability) and never adopted as identity.
+
+    Failure modes are distinct and fail closed (#1070 correction 5):
+    invalid/expired/tampered token → 403 guest_capability_invalid (bad cookie
+    cleared, self-healing next request); missing production secret → 503
+    guest_capability_unavailable.
+    """
+    from src.api.public_identity import (
+        GuestCapabilityUnavailable,
+        InvalidGuestCapability,
+        clear_guest_capability,
+        resolve_guest_identity,
+    )
+
+    try:
+        sid = resolve_guest_identity(request, response)
+    except InvalidGuestCapability as exc:
+        # Log the FIXED reason code only — never the token/SID/nonce/signature.
+        logger.warning(
+            "guest_capability_invalid path=%s reason_code=%s",
+            request.url.path,
+            exc.reason_code,
+        )
+        # FastAPI discards injected-response headers on HTTPException, so the
+        # cookie clear must travel on the exception itself — the invalid
+        # cookie is removed and the next request self-heals with a fresh mint.
+        cleaner = Response()
+        clear_guest_capability(cleaner)
+        raise HTTPException(
+            status_code=403,
+            detail=_GUEST_CAPABILITY_INVALID_DETAIL,
+            headers={"set-cookie": cleaner.headers.get("set-cookie", "")},
+        )
+    except GuestCapabilityUnavailable:
+        logger.error("guest_capability_unavailable path=%s", request.url.path)
+        raise HTTPException(status_code=503, detail=_GUEST_CAPABILITY_UNAVAILABLE_DETAIL)
+
+    if correlation_sid and correlation_sid != sid:
+        logger.info(
+            "guest_correlation_mismatch path=%s (client id is correlation-only)",
+            request.url.path,
+        )
+    # The authoritative sid is NEVER disclosed to JavaScript: identity lives
+    # exclusively in the HttpOnly capability cookie. No response header/body
+    # field carries it — a future frontend cannot mistake it for an id.
+    return sid
+
+
+def _transfer_guest_headers(src: Response, dst) -> None:
+    """Copy capability Set-Cookie headers from a placeholder response onto the
+    real one — appending Set-Cookie is legal HTTP, but the resolver mints at
+    most one capability per request so the result carries exactly one."""
+    for key, value in src.raw_headers:
+        if key.decode("latin-1").lower() == "set-cookie":
+            dst.raw_headers.append((key, value))
 
 
 @router.post("/chat/public", response_model=RicoChatResponse)
 @limiter.limit("10/minute")
-def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoChatResponse:
+def rico_chat_public(request: Request, payload: RicoPublicChatRequest, response: Response) -> RicoChatResponse:
     """Unauthenticated chat for landing page visitors.
 
     Supports two user identification modes:
@@ -990,7 +1098,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
             ).hexdigest()[:40]
             ctx = RicoSessionContext.for_public(email_key)
         else:
-            ctx = RicoSessionContext.for_public(payload.session_id[:64])
+            # Server-authoritative guest identity (#1070): the payload
+            # session_id is correlation-only; context binds to the sid inside
+            # the signed capability cookie (minted here when absent).
+            sid = _resolve_guest_sid(request, response, payload.session_id[:64])
+            ctx = RicoSessionContext.for_public(sid)
 
         logger.info(
             "chat_public_request user=%s message_len=%d request_ref=%s",
@@ -1019,6 +1131,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
 
         _metrics.record_request((time.time() - start_time) * 1000)
         return RicoChatResponse(**stripped_result, trace_id=request_ref)
+    except HTTPException:
+        # Deliberate policy responses (e.g. 403 guest_session_unverified) must
+        # keep their status code — not be masked as a 200 error-chat message.
+        _metrics.record_request((time.time() - start_time) * 1000)
+        raise
     except Exception as exc:
         logger.exception(
             "chat_public_error user=%s message_len=%d error_type=%s error=%s request_ref=%s",
@@ -1411,6 +1528,7 @@ def rico_metrics(request: Request) -> MetricsResponse:
 @limiter.limit(LIMIT_UPLOAD)
 async def rico_upload_cv(
     request: Request,
+    response: Response,
     file: UploadFile = File(...),
     user_id: str | None = None,
     form_user_id: str | None = Form(None, alias="user_id"),
@@ -1418,7 +1536,7 @@ async def rico_upload_cv(
     """Upload and parse CV file (PDF only)."""
     start_time = time.time()
     request_ref = generate_error_ref()
-    resolved_user_id = _resolve_upload_user_id(request, user_id, form_user_id)
+    resolved_user_id = _resolve_upload_user_id(request, user_id, form_user_id, response)
 
     # Enforce per-plan CV quota for authenticated users.
     # Guest/public sessions (public:*) are exempt — they have no plan record.
@@ -1978,6 +2096,7 @@ def _resolve_trusted_cv_artifact(
 async def confirm_cv_profile(
     request: Request,
     payload: ConfirmCVProfileRequest,
+    response: Response,
     user_id: str | None = Query(None),
 ) -> dict[str, Any]:
     """Confirm and save CV profile preview to permanent profile.
@@ -1988,7 +2107,7 @@ async def confirm_cv_profile(
     """
     start_time = time.time()
     request_ref = generate_error_ref()
-    resolved_user_id = _resolve_upload_user_id(request, user_id, None)
+    resolved_user_id = _resolve_upload_user_id(request, user_id, None, response)
 
     try:
         logger.info(

@@ -1553,6 +1553,10 @@ export async function sendChatPublic(
   operationId?: string,
   language?: "en" | "ar",
 ): Promise<ChatApiResponse> {
+  // session_id is correlation-only (#1070): guest identity/authorization is
+  // the server's HttpOnly capability cookie; the authoritative sid syncs back
+  // via the X-Guest-Sid header in requestJson. Capability failures (403/503)
+  // surface as errors — deliberately NO automatic rotate-and-retry.
   const body: Record<string, unknown> = {
     message,
     session_id: sessionId,
@@ -1622,6 +1626,7 @@ export async function* sendChatStreamPublic(
   signal?: AbortSignal,
   language?: "en" | "ar",
 ): AsyncGenerator<ChatStreamEvent> {
+  // session_id is correlation-only (#1070); identity is the capability cookie.
   const body: Record<string, unknown> = { message, session_id: sessionId };
   if (language) body.language = language;
   const res = await fetch(`${PROXY}/api/v1/rico/chat/stream/public`, {
