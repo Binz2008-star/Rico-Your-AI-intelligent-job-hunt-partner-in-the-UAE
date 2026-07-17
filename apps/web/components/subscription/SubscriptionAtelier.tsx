@@ -454,7 +454,11 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                 return;
             }
             const priceId = getPaddlePriceId();
-            if (!priceId) { toast(subscriptionPaymentConfiguringMessage, "error"); return; }
+            if (!priceId) {
+                // Don't show technical error to users — payment is temporarily unavailable
+                toast(subscriptionPaymentConfiguringMessage, "error");
+                return;
+            }
             setCheckingOut(plan);
             try {
                 const session = await createPaddleCheckoutSession(plan, "monthly");

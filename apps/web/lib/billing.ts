@@ -12,11 +12,18 @@
  */
 
 export function isManualBillingMode(): boolean {
+    // Fall back to manual billing if Paddle client token or price ID is not configured
+    const hasPaddleToken = !!process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim();
+    const hasPaddlePriceId = !!process.env.NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID?.trim();
+    const billingMode = process.env.NEXT_PUBLIC_BILLING_MODE?.trim();
+    // If explicitly set to manual, or if Paddle credentials are missing, use manual
+    if (billingMode === "manual") return true;
+    if (!hasPaddleToken || !hasPaddlePriceId) return true;
     return false;
 }
 
 export function isPaddleBillingMode(): boolean {
-    return true;
+    return !isManualBillingMode();
 }
 
 /**
