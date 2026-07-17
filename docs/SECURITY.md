@@ -64,11 +64,29 @@ Do not log:
 - raw uploaded CV contents
 - private email bodies unless explicitly needed for debugging in a secure environment
 
+Do not log career-profile or contact values (#1076). The sensitive-field
+denylist is documented in `src/services/log_redaction.py` and covers:
+
+- direct identifiers: name, email, phone, Telegram username/chat id
+- career context: target roles, preferred cities, salary expectation,
+  current role, skills, visa/notice status, saved-search queries
+- content: CV text, extracted document text, chat messages, prompts,
+  AI-provider payloads
+- session bearers: public-session / guest IDs
+
+Never use an email, phone number, Telegram id, or public-session bearer id as
+the log correlation key. Use `log_redaction.user_fingerprint()` (stable,
+non-reversible) or an internal opaque DB row id. On sensitive paths log
+exception TYPES only (`log_redaction.safe_error()`) — driver/provider
+exception messages can re-emit bound values.
+
 Allowed logs:
 
 - whether a required variable is set
 - non-sensitive service readiness
 - counts, statuses, and error categories
+- field-NAME lists (never values), value counts/lengths, durations
+- `user_fingerprint()` output and internal opaque DB row ids
 - masked identifiers only when needed
 
 ## GitHub Actions and cloud deployment

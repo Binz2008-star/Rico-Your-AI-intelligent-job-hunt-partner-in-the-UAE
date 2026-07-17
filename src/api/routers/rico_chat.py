@@ -61,6 +61,7 @@ from src.rico_hf_client import generate_text, is_available as hf_ok
 from src.rico_openai_agent import RicoOpenAIAgent
 from src.services.matching_guardrails import build_matching_guardrail_warnings
 from src.services.cv_quality_warnings import build_cv_quality_warnings
+from src.services.log_redaction import safe_field_names, user_fingerprint
 from src.services.settings_service import get_settings
 from src.rico_openai_runtime import call_openai_minimal
 from src.schemas.actions import ActionRequest, ActionResponse, ExecutePermissionActionRequest
@@ -805,7 +806,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                     try:
                         api._append_chat(user_id, "assistant", assembled)
                     except Exception:
-                        logger.debug("chat_stream: assistant persist failed user=%s", user_id, exc_info=True)
+                        logger.debug("chat_stream: assistant persist failed user=%s", user_fingerprint(user_id), exc_info=True)
 
             done_response = {"message": assembled, "type": "conversational", "response_source": "stream"}
             if (
@@ -819,7 +820,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                     done_response["messages_limit"] = pre.gate.limit
             yield f'data: {_json.dumps({"type":"done","response":done_response})}\n\n'
         except Exception:
-            logger.exception("chat_stream_error user=%s", user_id)
+            logger.exception("chat_stream_error user=%s", user_fingerprint(user_id))
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
 
     return StreamingResponse(
@@ -951,11 +952,11 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
                     try:
                         api._append_chat(user_id, "assistant", assembled)
                     except Exception:
-                        logger.debug("chat_stream_public: assistant persist failed user=%s", user_id, exc_info=True)
+                        logger.debug("chat_stream_public: assistant persist failed user=%s", user_fingerprint(user_id), exc_info=True)
 
             yield f'data: {_json.dumps({"type":"done","response":{"message":assembled,"type":"conversational","response_source":"stream"}})}\n\n'
         except Exception:
-            logger.exception("chat_stream_public_error user=%s", user_id)
+            logger.exception("chat_stream_public_error user=%s", user_fingerprint(user_id))
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
 
     streaming_response = StreamingResponse(
@@ -1447,7 +1448,10 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         from src.role_normalization import NORMALIZATION_VERSION
         updates["normalization_version"] = NORMALIZATION_VERSION
 
-    logger.info("update_profile endpoint: user_id=%s updates=%s", user_id, updates)
+    logger.info(
+        "update_profile endpoint: user=%s fields=%s",
+        user_fingerprint(user_id), safe_field_names(updates),
+    )
 
     profile_for_warnings = None
     if updates:
@@ -1458,8 +1462,11 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         # here leaves no phantom state and the client gets a retryable error.
         try:
             profile_for_warnings = upsert_profile(user_id, updates, require_db=True)
-        except Exception:
-            logger.exception("profile_update persistence failed user=%s", user_id)
+        except Exception as e:
+            logger.error(
+                "profile_update persistence failed user=%s err=%s",
+                user_fingerprint(user_id), safe_error(e),
+            )
             raise HTTPException(
                 status_code=503,
                 detail="Profile update could not be saved. Please try again.",
@@ -1477,9 +1484,12 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
                 status_code=500,
                 detail="Profile update could not be confirmed. Please try again.",
             )
-        logger.info("profile_update user=%s fields=%s", user_id, list(updates.keys()))
+        logger.info(
+            "profile_update user=%s fields=%s",
+            user_fingerprint(user_id), safe_field_names(updates),
+        )
     else:
-        logger.warning("profile_update no fields user=%s", user_id)
+        logger.warning("profile_update no fields user=%s", user_fingerprint(user_id))
         profile_for_warnings = get_profile(user_id)
 
     matching_fields_updated = bool({"target_roles", "preferred_cities"} & updates.keys())

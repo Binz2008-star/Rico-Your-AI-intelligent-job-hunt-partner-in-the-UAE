@@ -78,6 +78,91 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260717-001 — #1076: remove career-profile and contact values from production logs
+
+Status: review
+Owner: Claude (WRITER; Coder pass, owner-directed "full ownership" of the
+2026-07-17 reconciliation-audit remediation sequence)
+Branch: `fix/1076-pii-log-redaction`
+Issue/PR: #1076
+
+#### Objective
+
+Stop operational logs from emitting raw career-profile values, contact
+identifiers, and session bearer IDs on profile read/write, saved-search, and
+chat-stream paths; add a shared redaction helper and a static regression guard.
+
+#### Context
+
+- Relevant files: `src/repositories/profile_repo.py`,
+  `src/api/routers/rico_chat.py`, `src/services/log_redaction.py` (new),
+  `docs/SECURITY.md`
+- Existing behavior: full `bundle_profile` JSON, `updates` dict,
+  `user_payload` (name/email/phone/telegram), raw target roles/cities/salary,
+  saved-search query text, and raw user ids (emails, Telegram ids,
+  public-session bearer ids) were logged at INFO on routine flows; failure
+  paths used `logger.exception`, which re-emits driver messages that can echo
+  bound values.
+
+#### Constraints
+
+- Do not touch: auth behavior, persistence behavior, response shapes — logs only.
+- No migrations.
+- Keep scope limited to the issue's named paths + the shared helper/guard.
+
+#### Acceptance criteria
+
+- [x] No raw profile dictionaries or field values in logs on the remediated paths
+- [x] caplog sentinel tests prove email/phone/salary/city/Telegram/CV-text/public-SID
+      never appear on success or failure paths
+- [x] Correlation uses a stable non-reversible fingerprint, not raw ids
+- [x] Static regression guard (AST) fails on reintroduction
+
+#### Required verification
+
+- [x] Unit tests: `tests/test_1076_log_redaction.py` — 17 passed
+- [x] Regression: profile/route/JWT-isolation/CV-persistence suites — 255 passed,
+      1 pre-existing failure reproduced on clean `main` (`test_profile_inline_edit`)
+- [ ] Frontend build: n/a
+- [ ] Production/deploy smoke: log inspection after deploy (fingerprints, no values)
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-001
+- GitHub issue/PR: #1076; draft PR from `fix/1076-pii-log-redaction`
+- Branch: `fix/1076-pii-log-redaction`
+- Base branch: main
+- Last safe commit SHA: 5069447 (origin/main at branch cut)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: `src/repositories/profile_repo.py` (all log call sites),
+  `src/api/routers/rico_chat.py` (update_profile + chat-stream logs),
+  `docs/SECURITY.md`, `tests/test_user_profiles.py` (mock patterns)
+- Files changed: `src/services/log_redaction.py` — new shared helper;
+  `src/repositories/profile_repo.py` — all log sites redacted, exception
+  types only; `src/api/routers/rico_chat.py` — update_profile + stream logs
+  redacted; `docs/SECURITY.md` — denylist + correlation-key rules;
+  `tests/test_1076_log_redaction.py` — sentinel + guard suite
+- Files intentionally not touched: other routers'/services' log sites — the
+  static guard covers the two issue-named modules; expanding coverage is
+  follow-up, not this PR
+- What is complete: helper, remediation of issue-named paths, SECURITY.md
+  rules, 17-test suite, regression run
+- What is incomplete: guard coverage beyond the two named modules
+- Known blockers: none
+- Validation already run: `python -m pytest tests/test_1076_log_redaction.py
+  tests/test_user_profiles.py tests/test_rico_routes.py
+  tests/test_jwt_user_isolation.py ... -q` → 255 passed / 1 pre-existing
+  failure (reproduced on clean main @5069447 with diff stashed)
+- Validation still required: CI on the PR head
+- Deployment/CI/Neon/Vercel state to check next: QA Tests run on the PR
+- Next exact action: owner review of the draft PR
+- Stop condition: any reviewer finding that redaction removed operationally
+  required diagnostics → discuss before weakening redaction
+- Rollback plan: revert the single squash commit; logs return to prior
+  format, no data/schema change
+
 ### TASK-20260715-002 — Atelier slice 4b: /command message bubbles + empty state
 
 Status: review
