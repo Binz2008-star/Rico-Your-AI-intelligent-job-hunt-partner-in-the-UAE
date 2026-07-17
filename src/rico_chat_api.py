@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass, replace as _dc_replace
 import json
 import logging
+
+from src.log_privacy import safe_exc, user_ref
 import os
 import re
 import uuid
@@ -3139,7 +3141,7 @@ class RicoChatAPI:
             try:
                 all_matches.extend(self._search_jsearch_direct(query))
             except Exception as exc:
-                logger.debug("career_execution_search_failed query=%r error=%s", query, exc)
+                logger.debug("career_execution_search_failed query_len=%d err=%s", len(query or ""), safe_exc(exc))
 
         top_matches = self._sort_by_company_quality(
             self._rerank_by_learned_preferences(all_matches, user_id)
@@ -6570,8 +6572,8 @@ class RicoChatAPI:
                 # 1-A: also surface as clickable chat_continue buttons in agentic_ui
                 result = self._inject_option_buttons(result, _options)
             return result
-        except Exception:
-            logger.exception("rico_routing_error user=%s msg=%r", user_id, message)
+        except Exception as exc:
+            logger.error("rico_routing_error user=%s msg_len=%d err=%s", user_ref(user_id), len(message or ""), safe_exc(exc))
             fallback = {
                 "type": "clarification",
                 "message": (
@@ -6751,7 +6753,7 @@ class RicoChatAPI:
         if not self._is_arabic_text(message) and not _MARK_APPLIED_CARD_ACTION_RE.search(message):
             from src.agent.intelligence.intent_classifier import _is_english_manual_applied_status
             if _is_english_manual_applied_status(message):
-                logger.info("rico_manual_applied user=%s msg=%r", user_id, message)
+                logger.info("rico_manual_applied user=%s msg_len=%d", user_ref(user_id), len(message or ""))
                 return self._finalize(
                     self._handle_application_status_update(user_id, message, profile),
                     self.SOURCE_KEYWORD,
@@ -7037,8 +7039,8 @@ class RicoChatAPI:
             )
 
         logger.info(
-            "rico_followup_check user=%s has_cv=%s msg=%r followup=%s",
-            user_id, has_cv, message, self._looks_like_next_step_followup(message),
+            "rico_followup_check user=%s has_cv=%s msg_len=%d followup=%s",
+            user_ref(user_id), has_cv, len(message or ""), self._looks_like_next_step_followup(message),
         )
 
         # Fast path: short follow-up after role confirmation → instant options
@@ -7046,7 +7048,7 @@ class RicoChatAPI:
             self._looks_like_next_step_followup(message)
             or self._is_arabic_what_now(message)
         ):
-            logger.info("rico_followup_hit user=%s msg=%r", user_id, message)
+            logger.info("rico_followup_hit user=%s msg_len=%d", user_ref(user_id), len(message or ""))
             return self._finalize(
                 self._handle_next_step_options(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -14318,8 +14320,8 @@ class RicoChatAPI:
         matches = fetch.items or []
 
         logger.info(
-            "company_search: company=%r query=%r results=%d rate_limited=%s",
-            company, search_query, len(matches), fetch.rate_limited,
+            "company_search: company_len=%d query_len=%d results=%d rate_limited=%s",
+            len(company or ""), len(search_query or ""), len(matches), fetch.rate_limited,
         )
 
         if not matches:

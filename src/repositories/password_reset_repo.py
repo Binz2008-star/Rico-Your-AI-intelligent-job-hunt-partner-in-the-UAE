@@ -12,6 +12,8 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from src.log_privacy import user_ref
+
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 _TOKEN_TTL_MINUTES = 30
@@ -45,7 +47,7 @@ def create_reset_token(email: str) -> str:
             )
         conn.commit()
     except Exception:
-        logger.exception("password_reset_repo_create_failed email=%s", email)
+        logger.error("password_reset_repo_create_failed user=%s", user_ref(email))
         try:
             conn.rollback()
         except Exception:

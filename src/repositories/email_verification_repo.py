@@ -13,6 +13,8 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from src.log_privacy import user_ref
+
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 _TOKEN_TTL_HOURS = 24
@@ -46,7 +48,7 @@ def create_verification_token(email: str) -> str:
             )
         conn.commit()
     except Exception:
-        logger.exception("email_verification_repo_create_failed email=%s", email)
+        logger.error("email_verification_repo_create_failed user=%s", user_ref(email))
         try:
             conn.rollback()
         except Exception:

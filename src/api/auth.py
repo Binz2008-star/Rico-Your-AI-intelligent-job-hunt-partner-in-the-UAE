@@ -26,6 +26,7 @@ import bcrypt as _bcrypt
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from jose import JWTError, jwt
 
+from src.log_privacy import user_ref
 from src.api.rate_limit import LIMIT_LOGIN, LIMIT_PASSWORD_RESET, LIMIT_REGISTER, LIMIT_VERIFY_EMAIL, limiter
 from src.schemas.auth import (
     ForgotPasswordRequest,
@@ -316,7 +317,7 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
         except Exception:
             logger.exception("public_profile_merge_failed public_user_id=%s", req.public_user_id_to_merge)
 
-    logger.info("login_success email=%r role=%s", user_info["email"], user_info["role"])
+    logger.info("login_success user=%s role=%s", user_ref(user_info["email"]), user_info["role"])
     return LoginResponse(message="Logged in", email=user_info["email"])
 
 
@@ -377,26 +378,20 @@ def _dispatch_password_reset_email(email: str) -> None:
 
     user = get_user_by_email(email)
     if user is None:
-        logger.info("password_reset_request email=%r user_not_found", email)
+        logger.info("password_reset_request user=%s user_not_found", user_ref(email))
         return
 
     try:
         token = create_reset_token(email)
     except Exception:
-        logger.exception("password_reset_token_creation_failed email=%r", email)
+        logger.error("password_reset_token_creation_failed user=%s", user_ref(email))
         return
 
-    reset_url    = f"{_reset_base_url()}/reset-password?token={token}"
-    _prod        = _is_production()
-    _token_log   = os.getenv("RESET_TOKEN_LOG", "").lower() in ("1", "true", "yes")
-
-    if not _prod or _token_log:
-        logger.info("password_reset_url email=%r url=%s", email, reset_url)
-    else:
-        logger.info(
-            "password_reset_requested email=%r (token suppressed in production)",
-            email,
-        )
+    reset_url = f"{_reset_base_url()}/reset-password?token={token}"
+    # #1076/#1095: the reset URL carries an account-takeover token — it is
+    # NEVER logged in any environment. RESET_TOKEN_LOG is a rejected flag:
+    # production startup fails if it is set (log_privacy.enforce_production_log_safety).
+    logger.info("password_reset_url_generated user=%s (url suppressed)", user_ref(email))
 
     # Best-effort delivery; failures logged but never exposed to the user.
     from src.services.password_reset_email import send_password_reset_email
@@ -415,7 +410,7 @@ def forgot_password(
     Initiate password reset. Always returns generic success to prevent email enumeration.
     Token creation + email delivery are deferred to a background task so the response time
     does not depend on whether the email is registered.
-    Dev/local: logs reset URL to stdout. Production: token suppressed unless RESET_TOKEN_LOG=true.
+    The reset URL/token is never logged in any environment (#1076/#1095).
     """
     email = req.email.strip().lower()
     # Always schedule the background task — DB lookup and SMTP run inside it so
@@ -443,13 +438,13 @@ def reset_password(request: Request, req: ResetPasswordRequest) -> ResetPassword
     new_hash = _hash_password(req.new_password)
     ok = update_password(email, new_hash)
     if not ok:
-        logger.error("password_reset_update_failed email=%r", email)
+        logger.error("password_reset_update_failed user=%s", user_ref(email))
         raise HTTPException(
             status_code=503,
             detail="Password update failed — please try again",
         )
 
-    logger.info("password_reset_success email=%r", email)
+    logger.info("password_reset_success user=%s", user_ref(email))
     return ResetPasswordResponse(
         message="Password updated. You can now sign in with your new password."
     )
@@ -565,12 +560,12 @@ def register(
                         )
                     conn2.commit()
                 except Exception:
-                    logger.exception("register_rico_users_upsert_failed email=%s", email)
+                    logger.error("register_rico_users_upsert_failed user=%s", user_ref(email))
                     conn2.rollback()
                 finally:
                     conn2.close()
         except Exception:
-            logger.exception("register_name_persist_failed email=%s", email)
+            logger.error("register_name_persist_failed user=%s", user_ref(email))
 
     try:
         from src.services.signup_notifications import send_admin_signup_notification
@@ -597,11 +592,11 @@ def register(
                         if row and row[0]:
                             profile_data = row[0]
                 except Exception:
-                    logger.exception("register_profile_query_failed email=%s", email)
+                    logger.error("register_profile_query_failed user=%s", user_ref(email))
                 finally:
                     conn.close()
         except Exception:
-            logger.exception("register_profile_db_unavailable email=%s", email)
+            logger.error("register_profile_db_unavailable user=%s", user_ref(email))
 
         background_tasks.add_task(
             send_admin_signup_notification,
@@ -617,7 +612,7 @@ def register(
             getattr(user, "id", "unknown"),
         )
 
-    logger.info("register_success email=%r", user.email)
+    logger.info("register_success user=%s", user_ref(user.email))
     return RegisterResponse(
         email=user.email,
         role=user.role,
@@ -648,13 +643,13 @@ def verify_email(request: Request, token: str) -> VerifyEmailResponse:
 
     ok = mark_email_verified(email)
     if not ok:
-        logger.error("email_verification_mark_failed email=%r", email)
+        logger.error("email_verification_mark_failed user=%s", user_ref(email))
         raise HTTPException(
             status_code=503,
             detail="Verification failed — please try again.",
         )
 
-    logger.info("email_verified email=%r", email)
+    logger.info("email_verified user=%s", user_ref(email))
     return VerifyEmailResponse(message="Email verified. Welcome to RicoHunt!", email=email)
 
 
@@ -684,6 +679,6 @@ def resend_verification(
         verification_token = create_verification_token(email)
         background_tasks.add_task(send_verification_email, email, verification_token)
     except Exception:
-        logger.exception("resend_verification_failed email=%r", email)
+        logger.error("resend_verification_failed user=%s", user_ref(email))
 
     return _generic

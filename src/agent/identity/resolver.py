@@ -14,6 +14,8 @@ All identity sources merge into one canonical user record.
 from __future__ import annotations
 
 import logging
+
+from src.log_privacy import safe_fields, user_ref
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -211,7 +213,7 @@ class IdentityResolver:
                 cur.fetchone()
             return False
         except Exception:
-            logger.exception("identity_merge_failed canonical=%s email=%s", canonical_user_id, email)
+            logger.error("identity_merge_failed canonical=%s user=%s", canonical_user_id, user_ref(email))
             return False
         finally:
             conn.close()
@@ -247,7 +249,7 @@ class IdentityResolver:
 
             if updates:
                 upsert_profile(user_id=canonical_user_id, updates=updates)
-                logger.info("identity_linked canonical=%s updates=%s", canonical_user_id, list(updates.keys()))
+                logger.info("identity_linked canonical=%s %s", canonical_user_id, safe_fields(updates))
                 return True
 
             return False

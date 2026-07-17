@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from src.log_privacy import user_ref
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,7 +61,7 @@ def get_user_by_email(email: str) -> Optional[User]:
                 email_verified=row[7],
             )
     except Exception:
-        logger.exception("users_repo_get_failed email=%s", email)
+        logger.error("users_repo_get_failed user=%s", user_ref(email))
         return None
     finally:
         conn.close()
@@ -97,7 +99,7 @@ def create_user(email: str, password_hash: str, role: str = "user") -> Optional[
                 email_verified=row[7],
             )
     except Exception:
-        logger.exception("users_repo_create_failed email=%s", email)
+        logger.error("users_repo_create_failed user=%s", user_ref(email))
         try:
             conn.rollback()
         except Exception:
@@ -196,7 +198,7 @@ def update_password(email: str, new_hash: str) -> bool:
         conn.commit()
         return updated > 0
     except Exception:
-        logger.exception("users_repo_update_password_failed email=%s", email)
+        logger.error("users_repo_update_password_failed user=%s", user_ref(email))
         try:
             conn.rollback()
         except Exception:
@@ -245,7 +247,7 @@ def mark_email_verified(email: str) -> bool:
         conn.commit()
         return updated > 0
     except Exception:
-        logger.exception("users_repo_mark_verified_failed email=%s", email)
+        logger.error("users_repo_mark_verified_failed user=%s", user_ref(email))
         try:
             conn.rollback()
         except Exception:

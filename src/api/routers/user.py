@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+
+from src.log_privacy import user_ref
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
@@ -18,7 +20,7 @@ def _fetch_display_name(email: str) -> str | None:
         bundle = db.get_user_bundle(email)
         return bundle.get("name") if bundle else None
     except Exception:
-        logger.debug("me_name_lookup_failed email=%s", email)
+        logger.debug("me_name_lookup_failed user=%s", user_ref(email))
         return None
 
 

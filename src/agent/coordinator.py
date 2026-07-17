@@ -14,6 +14,8 @@ The AI model reasons over the current profile context.
 from __future__ import annotations
 
 import logging
+
+from src.log_privacy import user_ref
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -273,7 +275,7 @@ class StatefulAgentCoordinator:
 
             return success
         except Exception:
-            logger.exception("identity_merge_failed guest=%s email=%s", guest_session_id, email)
+            logger.error("identity_merge_failed guest=%s user=%s", user_ref(guest_session_id), user_ref(email))
             return False
 
 

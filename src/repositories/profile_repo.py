@@ -28,6 +28,8 @@ from src.rico_memory import RicoMemoryStore
 from src.services.profile_context_resolver import resolve_profile_context
 from src.services.identity_flow_mapper import IdentitySignal
 
+from src.log_privacy import safe_exc, safe_fields, user_ref
+
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 
@@ -182,10 +184,18 @@ def get_profile(user_id: str) -> RicoProfile | None:
         try:
             bundle = db.get_user_bundle(user_id)
             if bundle:
-                logger.info("profile_repo.get_profile: user_id=%s bundle_name=%s bundle_profile=%s", user_id, bundle.get("name"), bundle.get("profile"))
+                # #1076: never log profile values or the raw user identifier —
+                # safe metadata (field count) + non-reversible ref only.
+                logger.info(
+                    "profile_repo.get_profile: user=%s %s",
+                    user_ref(user_id), safe_fields(bundle.get("profile") or {}),
+                )
                 profile = _bundle_to_profile(bundle)
         except Exception as e:
-            logger.exception("profile_repo: get_profile DB failed user_id=%s", user_id)
+            logger.error(
+                "profile_repo: get_profile DB failed user=%s err=%s",
+                user_ref(user_id), safe_exc(e),
+            )
 
     if not profile:
         profile = _memory().load_profile(user_id)
@@ -211,10 +221,10 @@ def get_profile(user_id: str) -> RicoProfile | None:
             )
             if normalized != profile.target_roles or stored_version < NORMALIZATION_VERSION:
                 logger.info(
-                    "profile_normalization user=%s old_roles=%s new_roles=%s version=%s->%d",
-                    user_id,
-                    profile.target_roles,
-                    normalized,
+                    "profile_normalization user=%s roles_count=%d->%d version=%s->%d",
+                    user_ref(user_id),
+                    len(profile.target_roles or []),
+                    len(normalized or []),
                     stored_version,
                     NORMALIZATION_VERSION,
                 )
@@ -253,14 +263,9 @@ def upsert_profile(
     logger = logging.getLogger(__name__)
 
     # Log profile update for debugging
-    logger.info(
-        "profile_update user=%s fields=%s target_roles=%s city=%s salary=%d",
-        user_id,
-        list(updates.keys()),
-        updates.get("target_roles"),
-        updates.get("preferred_cities"),
-        updates.get("salary_expectation_aed") or 0,
-    )
+    # #1076: field names only — roles/cities/salary are profile VALUES and
+    # must never reach operational logs.
+    logger.info("profile_update user=%s %s", user_ref(user_id), safe_fields(updates))
 
     # Filter updates to valid fields (profile fields OR settings fields)
     filtered_updates = {
@@ -268,7 +273,10 @@ def upsert_profile(
         if (k in _PROFILE_FIELDS or k in _SETTINGS_FIELDS) and v is not None
     }
 
-    logger.info("profile_repo.upsert_profile: user_id=%s filtered_updates=%s", user_id, list(filtered_updates.keys()))
+    logger.info(
+        "profile_repo.upsert_profile: user=%s %s",
+        user_ref(user_id), safe_fields(filtered_updates),
+    )
 
     # ── JSON mirror ────────────────────────────────────────────────────────────
     # Default (require_db=False) callers keep the long-standing mirror-first
@@ -336,7 +344,12 @@ def upsert_profile(
                 if "telegram_notifications_enabled" in filtered_updates:
                     user_payload["telegram_notifications_enabled"] = filtered_updates["telegram_notifications_enabled"]
                 user_payload = {k: v for k, v in user_payload.items() if v is not None}
-                logger.info("profile_repo.upsert_profile: user_id=%s user_payload=%s", user_id, user_payload)
+                # #1076: user_payload can carry name/email/phone/telegram —
+                # log field names only.
+                logger.info(
+                    "profile_repo.upsert_profile: user=%s user_row %s",
+                    user_ref(user_id), safe_fields(user_payload),
+                )
                 user_row = db.upsert_user(user_payload, conn=conn)
                 db_user_id = str(user_row["id"])
             logger.info("profile_repo.upsert_profile: db_user_id=%s", db_user_id)
@@ -373,10 +386,10 @@ def upsert_profile(
             if settings_data:
                 db.upsert_settings(db_user_id, settings_data, conn=conn)
 
-        logger.debug("profile_repo: upsert_profile DB success user_id=%s", user_id)
+        logger.debug("profile_repo: upsert_profile DB success user=%s", user_ref(user_id))
 
     except Exception as e:
-        logger.exception("profile_repo: upsert_profile DB failed user_id=%s", user_id)
+        logger.error("profile_repo: upsert_profile DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         # require_db callers must NOT get a false success masked by the JSON
         # mirror — re-raise so they can return a non-2xx. Default callers keep
         # the long-standing JSON-fallback behavior (swallow, return mirror).
@@ -421,11 +434,11 @@ def delete_profile(user_id: str) -> bool:
         # Also delete from memory store
         _memory().delete_profile(user_id)
 
-        logger.info("profile_repo: deleted profile user_id=%s", user_id)
+        logger.info("profile_repo: deleted profile user=%s", user_ref(user_id))
         return True
 
     except Exception as e:
-        logger.exception("profile_repo: delete_profile failed user_id=%s", user_id)
+        logger.error("profile_repo: delete_profile failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return False
 
 
@@ -442,7 +455,7 @@ def get_preferences(user_id: str) -> dict[str, Any]:
             if bundle and bundle.get("settings"):
                 return dict(bundle["settings"])
         except Exception as e:
-            logger.exception("profile_repo: get_preferences DB failed user_id=%s", user_id)
+            logger.error("profile_repo: get_preferences DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
 
     profile = _memory().load_profile(user_id)
     if profile:
@@ -478,11 +491,11 @@ def save_preferences(user_id: str, prefs: dict[str, Any]) -> bool:
             db_user_id = str(user_row["id"])
             db.upsert_settings(db_user_id, valid_prefs, conn=conn)
 
-        logger.debug("profile_repo: saved preferences user_id=%s", user_id)
+        logger.debug("profile_repo: saved preferences user=%s", user_ref(user_id))
         return True
 
     except Exception as e:
-        logger.exception("profile_repo: save_preferences DB failed user_id=%s", user_id)
+        logger.error("profile_repo: save_preferences DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return False
 
 
@@ -499,7 +512,7 @@ def save_search(
     """Persist a saved search for a user with idempotent upsert."""
     db = _db()
     if not db:
-        logger.debug("profile_repo: save_search skipped — DB unavailable user_id=%s", user_id)
+        logger.debug("profile_repo: save_search skipped — DB unavailable user=%s", user_ref(user_id))
         return None
 
     try:
@@ -554,11 +567,15 @@ def save_search(
                     if row:
                         return str(row["id"])
 
-        logger.info("profile_repo: saved_search persisted user_id=%s query=%r", user_id, query)
+        # #1076: the query text is user content — length only.
+        logger.info(
+            "profile_repo: saved_search persisted user=%s query_len=%d",
+            user_ref(user_id), len(query or ""),
+        )
         return None
 
     except Exception as e:
-        logger.exception("profile_repo: save_search DB failed user_id=%s", user_id)
+        logger.error("profile_repo: save_search DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return None
 
 
@@ -602,7 +619,7 @@ def list_saved_searches(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
         return searches
 
     except Exception as e:
-        logger.exception("profile_repo: list_saved_searches DB failed user_id=%s", user_id)
+        logger.error("profile_repo: list_saved_searches DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return []
 
 
@@ -630,12 +647,12 @@ def delete_search(user_id: str, search_id: str) -> bool:
                 deleted = cur.rowcount > 0
 
         if deleted:
-            logger.info("profile_repo: deleted search user_id=%s search_id=%s", user_id, search_id)
+            logger.info("profile_repo: deleted search user=%s search_id=%s", user_ref(user_id), search_id)
 
         return deleted
 
     except Exception as e:
-        logger.exception("profile_repo: delete_search DB failed user_id=%s", user_id)
+        logger.error("profile_repo: delete_search DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return False
 
 
@@ -675,7 +692,7 @@ def get_search_by_id(user_id: str, search_id: str) -> dict[str, Any] | None:
         return None
 
     except Exception as e:
-        logger.exception("profile_repo: get_search_by_id failed user_id=%s", user_id)
+        logger.error("profile_repo: get_search_by_id failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return None
 
 
@@ -799,8 +816,8 @@ def find_profiles_by_email(email: str) -> list[Any]:
                         )
                         rows = cur.fetchall()
                         candidates.extend(_bundle_rows_to_profiles(rows))
-        except Exception:
-            logger.exception("profile_repo: find_profiles_by_email failed email=%s", email_norm)
+        except Exception as e:
+            logger.error("profile_repo: find_profiles_by_email failed ref=%s err=%s", user_ref(email_norm), safe_exc(e))
 
     # Memory fallback — linear scan over JSON profiles
     if not candidates:
@@ -842,8 +859,8 @@ def find_profiles_by_phone(phone: str) -> list[Any]:
                         )
                         rows = cur.fetchall()
                         candidates.extend(_bundle_rows_to_profiles(rows))
-        except Exception:
-            logger.exception("profile_repo: find_profiles_by_phone failed phone=%s", digits)
+        except Exception as e:
+            logger.error("profile_repo: find_profiles_by_phone failed ref=%s err=%s", user_ref(digits), safe_exc(e))
 
     # Memory fallback
     if not candidates:
@@ -885,10 +902,10 @@ def find_profiles_by_telegram_username(username: str) -> list[Any]:
                         )
                         rows = cur.fetchall()
                         candidates.extend(_bundle_rows_to_profiles(rows))
-        except Exception:
-            logger.exception(
-                "profile_repo: find_profiles_by_telegram_username failed username=%s",
-                username_norm,
+        except Exception as e:
+            logger.error(
+                "profile_repo: find_profiles_by_telegram_username failed ref=%s err=%s",
+                user_ref(username_norm), safe_exc(e),
             )
 
     # Memory fallback

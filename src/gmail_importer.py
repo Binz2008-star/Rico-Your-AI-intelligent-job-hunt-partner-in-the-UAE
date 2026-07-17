@@ -694,17 +694,15 @@ def _print_report(report: ImportReport) -> None:
     if report.matches:
         print(f"\nMatches:")
         for m in report.matches:
-            app_str = (
-                f"{m.matched_application.get('company')} / {m.matched_application.get('title')}"
-                if m.matched_application else "NO MATCH"
-            )
+            # #1076: company/title/subject are career data — counts only.
+            app_str = "MATCHED" if m.matched_application else "NO MATCH"
             print(
                 f"  [{m.action.upper():6}] {m.email.status:<22} "
                 f"cls={m.email.classification_confidence:.2f}  "
                 f"match={m.match_confidence:.2f}  "
                 f"â†’ {app_str}"
             )
-            print(f"           Subject: {m.email.subject[:70]}")
+            print(f"           Subject: [{len(m.email.subject or '')} chars suppressed]")
 
     if report.queued_for_review > 0:
         print(f"\nReview queue: {REVIEW_FILE}")
