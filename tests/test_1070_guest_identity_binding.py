@@ -438,3 +438,111 @@ class TestAuthMergeWiring:
             v for k, v in r.headers.multi_items() if k.lower() == "set-cookie"
         )
         assert GUEST_PROOF_COOKIE not in set_cookie_headers
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Upload/confirm response bodies never disclose the server identity (#1070
+# hotfix). The one historical leak: upload-cv echoed resolved_user_id, which
+# after #1132 became the SERVER-minted guest sid — production smoke run
+# 29582449298 caught it (8a). Guests now get no identity echo at all;
+# authenticated uploads keep the field for backward compatibility.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _tiny_cv_pdf() -> bytes:
+    """Minimal one-page PDF with enough extractable text to pass the parse
+    quality gate (>= 50 readable chars)."""
+    lines = [
+        "Samira Smoke",
+        "Senior Operations Coordinator - Dubai, UAE",
+        "PROFESSIONAL SUMMARY",
+        "Operations coordinator with 6 years of experience in logistics,",
+        "vendor management and process improvement across UAE facilities.",
+        "EXPERIENCE",
+        "Operations Coordinator, Example Logistics LLC 2019-2025:",
+        "coordinated 40+ weekly shipments and owned monthly KPI reporting.",
+        "SKILLS",
+        "Excel, SAP, scheduling, inventory management, English, Arabic",
+    ]
+    parts = []
+    y = 760
+    for line in lines:
+        parts.append(f"BT /F1 11 Tf 50 {y} Td ({line}) Tj ET")
+        y -= 18
+    stream = ("\n".join(parts)).encode()
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for i, obj in enumerate(objs, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref_at = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n".encode()
+    out += b"0000000000 65535 f \n"
+    for off in offsets[1:]:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += (
+        f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF"
+    ).encode()
+    return bytes(out)
+
+
+class TestUploadConfirmResponseSecrecy:
+    """The server-authoritative sid must not appear in ANY guest-reachable
+    upload/confirm response body, header, or echoed field."""
+
+    def test_guest_upload_response_hides_server_identity(self):
+        client = TestClient(app)
+        sid = "g-upload-secret-001"
+        client.cookies.set(GUEST_PROOF_COOKIE, make_guest_capability_for_sid(sid))
+        r = client.post(
+            "/api/v1/rico/upload-cv",
+            files={"file": ("cv.pdf", _tiny_cv_pdf(), "application/pdf")},
+            data={"user_id": "public:web-correlation01"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body.get("status") == "preview_ready"
+        assert sid not in r.text
+        assert body.get("user_id") is None
+
+    def test_authenticated_upload_response_keeps_user_id(self):
+        client = TestClient(app)
+        with patch(
+            "src.api.routers.rico_chat.get_current_user_id",
+            return_value="auth-user@example.com",
+        ), patch("src.services.subscription_gating.enforce_document_quota"):
+            r = client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("cv.pdf", _tiny_cv_pdf(), "application/pdf")},
+            )
+        assert r.status_code == 200
+        assert r.json().get("user_id") == "auth-user@example.com"
+
+    def test_guest_confirm_response_hides_server_identity(self):
+        client = TestClient(app)
+        sid = "g-confirm-secret-001"
+        client.cookies.set(GUEST_PROOF_COOKIE, make_guest_capability_for_sid(sid))
+        with patch(
+            "src.services.subscription_gating.enforce_profile_optimization_allowed"
+        ), patch(
+            "src.services.subscription_gating.record_profile_optimization_usage"
+        ), patch("src.repositories.profile_repo.upsert_profile"):
+            r = client.post(
+                "/api/v1/rico/confirm-cv-profile",
+                params={"user_id": "public:web-correlation01"},
+                json={
+                    "preview": {"name": "Samira Smoke", "skills": ["excel"]},
+                    "filename": "cv.pdf",
+                },
+            )
+        assert r.status_code == 200
+        assert r.json().get("status") == "profile_updated"
+        assert sid not in r.text

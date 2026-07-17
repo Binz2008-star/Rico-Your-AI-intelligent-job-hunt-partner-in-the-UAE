@@ -1506,10 +1506,6 @@ export default function CommandPage() {
                 chatAudience === "authenticated"
                     ? await uploadCV(file)
                     : await uploadCV(file, `public:${getSessionId(sessionIdRef)}`);
-            // Store returned user_id for guest→auth merge later (client-only)
-            if (typeof window !== "undefined" && result.user_id && result.user_id.startsWith("public:")) {
-                localStorage.setItem("rico_public_uid", result.user_id);
-            }
 
             // Document Intelligence: non-CV classification with suggested actions
             if (result.status === "classified" && result.document_type) {

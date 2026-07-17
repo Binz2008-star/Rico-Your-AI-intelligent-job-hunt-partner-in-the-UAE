@@ -2039,7 +2039,11 @@ async def rico_upload_cv(
             "filename": safe_name,
             "preview": preview,
             "parsed": parsed,
-            "user_id": resolved_user_id,
+            # #1070: for guest sessions resolved_user_id is the SERVER-minted
+            # identity, which must never reach page JavaScript — authorization
+            # lives only in the HttpOnly capability cookie. Guests get no
+            # identity echo; authenticated uploads keep the field unchanged.
+            "user_id": None if is_valid_public_user_id(resolved_user_id) else resolved_user_id,
             "upload_id": upload_id,
             "warnings": cv_warnings,
         }

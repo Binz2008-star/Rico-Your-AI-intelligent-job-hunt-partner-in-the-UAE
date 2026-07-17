@@ -295,7 +295,9 @@ class TestRicoCVUploadRouteExists:
         assert r.status_code == 200
         body = r.json()
         assert "parsed" in body
-        assert body["user_id"] == _PUBLIC_UPLOAD_ID
+        # #1070: guest sessions get NO identity echo — the resolved id is the
+        # server-minted sid and must never appear in the response body.
+        assert body["user_id"] is None
         assert body["status"] == "preview_ready"
 
     def test_upload_cv_missing_file_returns_422(self, client):
@@ -394,7 +396,9 @@ class TestRicoCVUploadSecurity:
         assert r.status_code == 200
         body = r.json()
         assert body["status"] == "preview_ready"
-        assert body["user_id"] == public_session_id
+        # #1070: no identity echo for guests — authorization lives only in the
+        # HttpOnly capability cookie, and the server sid never reaches JS.
+        assert body["user_id"] is None
         assert body["preview"]["skills_detected"] == ["hse"]
 
     def test_guest_invalid_user_id_is_rejected(self, client):
