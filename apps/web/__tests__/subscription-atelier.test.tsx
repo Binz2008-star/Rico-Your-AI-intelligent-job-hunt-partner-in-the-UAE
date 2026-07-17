@@ -10,11 +10,11 @@
  *  2. Upgrade button calls createPaddleCheckoutSession first (server session),
  *     then passes the returned session_token to openPaddleCheckout.
  *  3. Paddle checkout.error events surface as a Rico toast error message.
- *  4. Runtime GET /api/v1/billing/config decides the mode: Paddle-active shows
- *     the Paddle CTA (no WhatsApp link anywhere); explicit manual mode shows
- *     the WhatsApp CTA; Paddle-active without a client token, or an
- *     unreachable config, fails closed ("payment temporarily unavailable" —
- *     never WhatsApp).
+ *  4. Runtime GET /api/v1/billing/config decides whether Paddle checkout is
+ *     offered: Paddle-active shows the Paddle CTA (no WhatsApp link anywhere);
+ *     every other state — legacy manual config, Paddle-active without a client
+ *     token, unreachable config — fails closed ("payment temporarily
+ *     unavailable"; Paddle is the only billing path, never WhatsApp).
  *  5. checkout.completed re-confirms with GET /api/v1/subscription/me before
  *     any success is shown; a dismissed overlay does not.
  *  6. Footer says prices are in USD (no "Prices in AED" copy).
@@ -86,14 +86,9 @@ vi.mock("@/lib/billing", async (importOriginal) => {
     ...actual,
     hasPaddleClientConfig: () => mockHasPaddleClientConfig,
     // resolveBillingUiMode reads the module-local hasPaddleClientConfig, so
-    // reimplement it here against the controllable flag (same logic).
-    resolveBillingUiMode: (config: { billing_mode?: string; paddle_active?: boolean } | null) => {
-      if (!config) return "unavailable";
-      if (config.paddle_active) return mockHasPaddleClientConfig ? "paddle" : "unavailable";
-      return config.billing_mode === "manual" ? "manual" : "unavailable";
-    },
-    buildWhatsAppUpgradeUrl: () => "https://wa.me/test",
-    buildWhatsAppManageUrl: () => "https://wa.me/manage",
+    // reimplement it here against the controllable flag (same Paddle-only logic).
+    resolveBillingUiMode: (config: { billing_mode?: string; paddle_active?: boolean } | null) =>
+      config?.paddle_active && mockHasPaddleClientConfig ? "paddle" : "unavailable",
   };
 });
 
@@ -308,13 +303,14 @@ describe("Runtime billing config — mode resolution and fail-closed behavior", 
     expect(screen.queryByText(/continueOnWhatsApp/i)).toBeNull();
   });
 
-  it("explicit manual config → WhatsApp CTA, no Paddle checkout call", async () => {
+  it("legacy manual config → fail-closed, NEVER a WhatsApp payment flow", async () => {
     mockGetBillingConfig.mockResolvedValue({ billing_mode: "manual", paddle_active: false, sandbox: true });
     render(React.createElement(SubscriptionAtelier, { user }));
 
-    const whatsappCta = await screen.findByText(/continueOnWhatsApp/i);
-    fireEvent.click(whatsappCta);
+    await screen.findByTestId("payment-unavailable");
 
+    expect(document.querySelectorAll('a[href*="wa.me"]').length).toBe(0);
+    expect(screen.queryByText(/continueOnWhatsApp/i)).toBeNull();
     expect(mockCreatePaddleCheckoutSession).not.toHaveBeenCalled();
     expect(mockOpenPaddleCheckout).not.toHaveBeenCalled();
   });

@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebarStatus } from "@/hooks/useSidebarStatus";
-import { buildWhatsAppManageUrl } from "@/lib/billing";
+import { buildWhatsAppSupportUrl } from "@/lib/billing";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -271,7 +271,7 @@ export function AppSidebar({ className, user, onLogout, loading }: AppSidebarPro
                 {enabled && (
                     <div className="px-3 pb-1">
                         <a
-                            href={buildWhatsAppManageUrl()}
+                            href={buildWhatsAppSupportUrl()}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"

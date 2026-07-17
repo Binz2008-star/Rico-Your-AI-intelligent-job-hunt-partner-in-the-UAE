@@ -1949,7 +1949,7 @@ export async function submitAction(
 
 export async function recordSubscriptionIntent(
   plan: string,
-  billingMode: "manual" | "paddle" = "manual",
+  billingMode: "paddle" = "paddle",
   sourcePage: string = "/subscription",
 ): Promise<void> {
   try {

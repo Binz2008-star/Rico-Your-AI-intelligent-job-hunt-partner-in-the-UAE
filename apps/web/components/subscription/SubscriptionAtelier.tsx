@@ -12,11 +12,10 @@
  *
  * Checkout mode is resolved at RUNTIME from the backend's public
  * GET /api/v1/billing/config (docs/product/subscription-flow.md): Paddle when
- * the backend says Paddle is active, WhatsApp-assisted manual flow only when
- * the backend explicitly reports manual mode, and a fail-closed
- * "payment temporarily unavailable" state otherwise (config unreachable, or
- * Paddle active but the client bundle is missing its Paddle.js token). A
- * missing credential must never silently reroute users to WhatsApp.
+ * the backend says Paddle is active and the client can run Paddle.js, and a
+ * fail-closed "payment temporarily unavailable" state otherwise (config
+ * unreachable, Paddle inactive, or missing Paddle.js token). Paddle is the
+ * ONLY billing path — there is no manual/WhatsApp payment fallback.
  *
  * Paddle error callback: openPaddleCheckout returns a Promise that rejects on
  * checkout.error, so the user sees a Rico toast rather than the Paddle error
@@ -42,7 +41,7 @@ import {
     type SubscriptionPlan,
 } from "@/lib/api";
 import type { StoredUser } from "@/lib/auth";
-import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, resolveBillingUiMode, type BillingUiMode } from "@/lib/billing";
+import { resolveBillingUiMode, type BillingUiMode } from "@/lib/billing";
 import { getPaddlePriceId, openPaddleCheckout } from "@/lib/paddle";
 import type { TranslationKey } from "@/lib/translations";
 import { useTranslation } from "@/lib/translations";
@@ -190,11 +189,10 @@ function PlanCard({
     t: (key: TranslationKey) => string;
     c: ReturnType<typeof useWorkspaceTheme>;
 }) {
-    const manualBilling = uiMode === "manual";
-    const isCurrent = currentPlan === plan.plan && (isActive || manualBilling);
+    const isCurrent = currentPlan === plan.plan && isActive;
     const isHigherPlan =
         isLoggedIn &&
-        (isActive || manualBilling) &&
+        isActive &&
         (PLAN_TIER[currentPlan ?? ""] ?? -1) > (PLAN_TIER[plan.plan] ?? 0);
 
     const localName = PLAN_NAME_KEY[plan.name] ? t(PLAN_NAME_KEY[plan.name]) : plan.name;
@@ -278,9 +276,9 @@ function PlanCard({
                     </div>
                 ) : isLoggedIn ? (
                     uiMode === "unavailable" ? (
-                        /* Fail-closed: no checkout mode is actually configured.
-                           Never fall back to WhatsApp here — manual mode must be
-                           an explicit backend decision, not a missing credential. */
+                        /* Fail-closed: Paddle checkout is not available (config
+                           unreachable, Paddle inactive, or missing client token).
+                           Paddle is the only billing path — no fallback exists. */
                         <button
                             disabled
                             data-testid="payment-unavailable"
@@ -288,16 +286,6 @@ function PlanCard({
                         >
                             {t("paymentTemporarilyUnavailable")}
                         </button>
-                    ) : manualBilling ? (
-                        <a
-                            href={buildWhatsAppUpgradeUrl(plan.plan, userEmail, plan.price_monthly, plan.currency)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => onIntent(plan.plan as "pro")}
-                            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", width: "100%", padding: "0.625rem 1rem", borderRadius: 8, border: "none", background: plan.is_popular ? c.red : "transparent", borderColor: plan.is_popular ? undefined : c.hair, borderWidth: plan.is_popular ? 0 : 1, borderStyle: "solid", color: plan.is_popular ? "#fff" : c.ink, fontSize: "0.82rem", fontWeight: 700, textDecoration: "none", boxSizing: "border-box" }}
-                        >
-                            {t("continueOnWhatsApp")}
-                        </a>
                     ) : (
                         <button
                             type="button"
@@ -325,11 +313,6 @@ function PlanCard({
                 )}
             </div>
 
-            {manualBilling && isLoggedIn && !isCurrent && !isHigherPlan && !subLoading && !configLoading && !maintenanceMode && (
-                <p style={{ marginTop: "0.75rem", fontSize: "0.7rem", lineHeight: 1.4, color: c.ink40, textAlign: "center" }}>
-                    {t("whatsappPaymentConfirm")}<br />{t("whatsappPaymentUseEmail")}
-                </p>
-            )}
             {uiMode === "unavailable" && isLoggedIn && !isCurrent && !isHigherPlan && !subLoading && !configLoading && !maintenanceMode && (
                 <p style={{ marginTop: "0.75rem", fontSize: "0.7rem", lineHeight: 1.4, color: c.ink40, textAlign: "center" }}>
                     {t("paymentTemporarilyUnavailableDesc")}
@@ -497,16 +480,6 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
         async (plan: "pro") => {
             if (maintenanceMode) { toast(backendMaintenanceSubMessage, "error"); return; }
             if (configLoading) return;
-            if (uiMode === "manual") {
-                // Explicit backend decision only — never a credentials fallback.
-                const planData = plans.find((p) => p.plan === plan);
-                window.open(
-                    buildWhatsAppUpgradeUrl(plan, userEmail, planData?.price_monthly ?? null, planData?.currency ?? "USD"),
-                    "_blank",
-                    "noopener,noreferrer",
-                );
-                return;
-            }
             if (uiMode !== "paddle") {
                 // Fail closed: no configured checkout path.
                 toast(paymentTemporarilyUnavailableMessage, "error");
@@ -543,19 +516,15 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                 setCheckingOut(null);
             }
         },
-        [backendMaintenanceSubMessage, configLoading, language, maintenanceMode, paymentTemporarilyUnavailableMessage, plans, subscriptionCheckoutFailedMessage, subscriptionPaymentConfiguringMessage, subscriptionProcessingPaymentMessage, toast, uiMode, userEmail],
+        [backendMaintenanceSubMessage, configLoading, language, maintenanceMode, paymentTemporarilyUnavailableMessage, subscriptionCheckoutFailedMessage, subscriptionPaymentConfiguringMessage, subscriptionProcessingPaymentMessage, toast, uiMode, userEmail],
     );
 
     const handleIntent = useCallback((plan: "pro") => {
-        void recordSubscriptionIntent(plan, uiMode === "manual" ? "manual" : "paddle", "/subscription");
-    }, [uiMode]);
+        void recordSubscriptionIntent(plan, "paddle", "/subscription");
+    }, []);
 
     const handleManage = useCallback(async () => {
         if (maintenanceMode) { toast(backendMaintenanceSubMessage, "error"); return; }
-        if (uiMode === "manual") {
-            window.open(buildWhatsAppManageUrl(), "_blank", "noopener,noreferrer");
-            return;
-        }
         if (uiMode !== "paddle") {
             toast(paymentTemporarilyUnavailableMessage, "error");
             return;
@@ -714,10 +683,10 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                 <div style={{ marginTop: "1.5rem" }}>
                     <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600, color: c.ink }}>{t("faqTitle")}</h3>
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                        <FaqItem q={t("faqHowUpgrade")} a={uiMode === "manual" ? t("faqHowUpgradeManual") : t("faqHowUpgradePaddle")} c={c} />
-                        <FaqItem q={t("faqPaymentMethods")} a={uiMode === "manual" ? t("faqPaymentMethodsManual") : t("faqPaymentMethodsPaddle")} c={c} />
-                        <FaqItem q={t("faqActivationTime")} a={uiMode === "manual" ? t("faqActivationTimeManual") : t("faqActivationTimePaddle")} c={c} />
-                        <FaqItem q={t("faqChangeCancel")} a={uiMode === "manual" ? t("faqChangeCancelManual") : t("faqChangeCancelPaddle")} c={c} />
+                        <FaqItem q={t("faqHowUpgrade")} a={t("faqHowUpgradePaddle")} c={c} />
+                        <FaqItem q={t("faqPaymentMethods")} a={t("faqPaymentMethodsPaddle")} c={c} />
+                        <FaqItem q={t("faqActivationTime")} a={t("faqActivationTimePaddle")} c={c} />
+                        <FaqItem q={t("faqChangeCancel")} a={t("faqChangeCancelPaddle")} c={c} />
                     </div>
                 </div>
 

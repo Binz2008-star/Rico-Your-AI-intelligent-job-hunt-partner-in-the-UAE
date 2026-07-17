@@ -55,7 +55,6 @@ import {
     type ProfileResponse,
 } from "@/lib/api";
 import type { StoredUser } from "@/lib/auth";
-import { isPaddleBillingMode } from "@/lib/billing";
 import { useTranslation } from "@/lib/translations";
 import type { SettingsResponse, TelegramStatusResponse } from "@/types";
 
@@ -471,20 +470,18 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                 <Link href="/refund-policy" className="text-[12px]" style={{ color: palette.ink40 }}>{t("refundPolicy")}</Link>
                             </div>
 
-                            {isPaddleBillingMode() && (
-                                <PaddleBillingSection
-                                    userId={user.email}
-                                    userEmail={user.email}
-                                    colors={{
-                                        ink: palette.ink,
-                                        ink70: palette.ink70,
-                                        ink40: palette.ink40,
-                                        surface: palette.panel,
-                                        red: palette.red,
-                                        borderDefault: palette.hair,
-                                    }}
-                                />
-                            )}
+                            <PaddleBillingSection
+                                userId={user.email}
+                                userEmail={user.email}
+                                colors={{
+                                    ink: palette.ink,
+                                    ink70: palette.ink70,
+                                    ink40: palette.ink40,
+                                    surface: palette.panel,
+                                    red: palette.red,
+                                    borderDefault: palette.hair,
+                                }}
+                            />
                         </div>
                     </Panel>
                 )}

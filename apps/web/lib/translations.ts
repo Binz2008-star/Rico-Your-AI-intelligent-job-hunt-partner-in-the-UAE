@@ -242,9 +242,6 @@ export const translations = {
     connecting: "Connecting…",
     upgradeTo: "Upgrade to",
     loginToUpgrade: "Log in to upgrade",
-    whatsappPaymentConfirm:
-      "We'll confirm payment and activate your account manually.",
-    whatsappPaymentUseEmail: "Use your Rico account email in the message.",
     checkoutCancelled: "Checkout cancelled",
     checkoutCancelledDesc:
       "No payment was made. You can try again whenever you're ready.",
@@ -272,31 +269,15 @@ export const translations = {
     couldNotLoadPlansRefresh: "Could not load plans. Please refresh the page.",
     faqTitle: "Frequently Asked Questions",
     faqHowUpgrade: "How does upgrading work?",
-    faqHowUpgradeManual:
-      "Click the WhatsApp button on your chosen plan. Send us your Rico account email and preferred plan. We'll confirm your payment and activate your account within a few hours.",
-    faqHowUpgradeStripe:
-      "Click Upgrade to be taken to secure checkout. After payment your plan activates immediately.",
     faqHowUpgradePaddle:
       "Click Upgrade to open secure checkout. After payment your plan activates immediately.",
     faqPaymentMethods: "What payment methods are accepted?",
-    faqPaymentMethodsManual:
-      "We accept bank transfer, Ziina, and Mamo. After payment, send the receipt and your Rico account email via WhatsApp for activation.",
-    faqPaymentMethodsStripe:
-      "We accept all major credit and debit cards. Your payment is securely processed and card details are never stored on our servers.",
     faqPaymentMethodsPaddle:
       "We accept all major credit and debit cards. Your payment is securely processed by Paddle and card details are never stored on our servers.",
     faqActivationTime: "How quickly is my account activated?",
-    faqActivationTimeManual:
-      "After we receive your payment confirmation via WhatsApp, your Rico account is activated within a few hours. You will need to logout and log back in if premium access does not appear immediately.",
-    faqActivationTimeStripe:
-      "Activation is immediate after successful payment.",
     faqActivationTimePaddle:
       "Activation is immediate after successful payment.",
     faqChangeCancel: "Can I change or cancel my plan?",
-    faqChangeCancelManual:
-      "Contact Rico support via WhatsApp to adjust or cancel your subscription. Your access continues until the end of your current period.",
-    faqChangeCancelStripe:
-      "You can upgrade, downgrade, or cancel at any time through the subscription management portal. When cancelling, access continues until the end of the billing period.",
     faqChangeCancelPaddle:
       "You can cancel at any time through the subscription management portal. If a payment fails, you keep full access for a 7-day grace period while we retry the charge — after that, your plan moves to Free.",
     pricesInUSD: "Prices in USD. Billed monthly. Cancel anytime.",
@@ -458,7 +439,6 @@ export const translations = {
     premium: "Premium",
     upgrade: "Upgrade",
     manage: "Manage",
-    continueOnWhatsApp: "Continue on WhatsApp",
 
     // Upload
     uploadCV: "Upload CV",
@@ -1498,8 +1478,6 @@ export const translations = {
     connecting: "جاري الاتصال…",
     upgradeTo: "ترقية إلى",
     loginToUpgrade: "سجّل الدخول للترقية",
-    whatsappPaymentConfirm: "سنؤكد الدفع ونفعل حسابك يدويًا.",
-    whatsappPaymentUseEmail: "استخدم بريدك الإلكتروني في ريكو في الرسالة.",
     checkoutCancelled: "تم إلغاء الدفع",
     checkoutCancelledDesc:
       "لم يتم الدفع. يمكنك المحاولة مرة أخرى عندما تكون جاهزًا.",
@@ -1527,29 +1505,14 @@ export const translations = {
     couldNotLoadPlansRefresh: "لم نتمكن من تحميل الخطط. يرجى تحديث الصفحة.",
     faqTitle: "الأسئلة المتكررة",
     faqHowUpgrade: "كيف تعمل الترقية؟",
-    faqHowUpgradeManual:
-      "انقر على زر واتساب في الخطة المختارة. أرسل لنا بريدك الإلكتروني في ريكو والخطة المفضلة. سنؤكد دفعك ونفعل حسابك خلال بضع ساعات.",
-    faqHowUpgradeStripe:
-      "انقر ترقية للانتقال إلى الدفع الآمن. بعد الدفع، يتم تفعيل خطتك فورًا.",
     faqHowUpgradePaddle:
       "انقر ترقية لفتح الدفع الآمن. بعد الدفع، يتم تفعيل خطتك فورًا.",
     faqPaymentMethods: "ما هي طرق الدفع المقبولة؟",
-    faqPaymentMethodsManual:
-      "نقبل التحويل البنكي وزيينة ومامو. بعد الدفع، أرسل الإيصال وبريدك الإلكتروني في ريكو عبر واتساب للتفعيل.",
-    faqPaymentMethodsStripe:
-      "نقبل جميع بطاقات الائتمان والخصم الرئيسية. يتم معالجة الدفع بشكل آمن ولا يتم تخزين تفاصيل البطاقة على خوادمنا.",
     faqPaymentMethodsPaddle:
       "نقبل جميع بطاقات الائتمان والخصم الرئيسية. يتم معالجة الدفع بشكل آمن عبر Paddle ولا يتم تخزين تفاصيل البطاقة على خوادمنا.",
     faqActivationTime: "كم سرعة تفعيل حسابي؟",
-    faqActivationTimeManual:
-      "بعد استلام تأكيد الدفع عبر واتساب، يتم تفعيل حساب ريكو خلال بضع ساعات. قد تحتاج إلى تسجيل الخروج وتسجيل الدخول مرة أخرى إذا لم يظهر الوصول المميز فورًا.",
-    faqActivationTimeStripe: "التفعيل فوري بعد الدفع الناجح.",
     faqActivationTimePaddle: "التفعيل فوري بعد الدفع الناجح.",
     faqChangeCancel: "هل يمكنني تغيير أو إلغاء خطتي؟",
-    faqChangeCancelManual:
-      "اتصل بدعم ريكو عبر واتساب لضبط أو إلغاء اشتراكك. يستمر الوصول حتى نهاية فترتك الحالية.",
-    faqChangeCancelStripe:
-      "يمكنك الترقية أو التخفيض أو الإلغاء في أي وقت من خلال بوابة إدارة الاشتراك. عند الإلغاء، يستمر الوصول حتى نهاية فترة الفوترة.",
     faqChangeCancelPaddle:
       "يمكنك الإلغاء في أي وقت من خلال بوابة إدارة الاشتراك. إذا فشلت عملية الدفع، يستمر وصولك الكامل لمدة ٧ أيام كفترة سماح ريثما نعيد محاولة الدفع — بعدها تنتقل خطتك إلى المجانية.",
     pricesInUSD: "الأسعار بالدولار الأمريكي. فوترة شهرية. إلغاء في أي وقت.",
@@ -1710,7 +1673,6 @@ export const translations = {
     premium: "مميز",
     upgrade: "ترقية",
     manage: "إدارة",
-    continueOnWhatsApp: "المتابعة على واتساب",
 
     // Upload
     uploadCV: "رفع السيرة الذاتية",

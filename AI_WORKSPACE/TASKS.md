@@ -78,6 +78,57 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260717-007 — PR #1143: Paddle-only subscription checkout; remove manual/WhatsApp payment path
+
+Status: review
+Owner: Claude (WRITER; owner directive 2026-07-17 — "Proceed with #1143 only",
+Paddle is the approved and only billing path)
+Branch: `fix/subscription-paddle-runtime-ui`
+Issue/PR: #1143
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-007
+- Branch: `fix/subscription-paddle-runtime-ui` | Base: main @ c46a5fa (rebased
+  from f2c801e; clean, PR files disjoint from the merged #1148/#1139/#1144/#1146 chain)
+- Files changed: `apps/web/lib/billing.ts` (BillingUiMode narrowed to
+  paddle|unavailable; legacy backend "manual" config now fails closed; removed
+  isManualBillingMode/isPaddleBillingMode/buildWhatsAppUpgradeUrl/
+  buildWhatsAppManageUrl; added buildWhatsAppSupportUrl — support contact only);
+  `apps/web/components/subscription/SubscriptionAtelier.tsx` (all manual/WhatsApp
+  CTA branches removed; FAQ always Paddle variants; intent always "paddle");
+  `apps/web/lib/translations.ts` (EN+AR: removed continueOnWhatsApp,
+  whatsappPaymentConfirm/UseEmail, all faq*Manual and dead faq*Stripe variants);
+  `apps/web/components/settings/SettingsAtelier.tsx` (PaddleBillingSection no
+  longer gated on build-time mode); `apps/web/components/layout/AppSidebar.tsx`
+  (support link uses generic support prefill, no subscription-manage copy);
+  `apps/web/lib/api.ts` (recordSubscriptionIntent billing_mode narrowed to
+  "paddle"); `apps/web/components/billing/PaddleBillingSection.tsx` +
+  `apps/web/.env.local.example` (stale NEXT_PUBLIC_BILLING_MODE docs removed);
+  tests: billing-mode-resolution + subscription-atelier updated (legacy manual
+  config → fail-closed; no wa.me anywhere; removed-exports guard)
+- Files intentionally not touched: legal/contact/FAQ public pages (their
+  WhatsApp mentions are company support contact info, not payment copy);
+  backend billing (`src/api/routers/paddle_billing.py`, `src/billing_mode.py`)
+  — untouched, backend remains the authority; `#1145` frozen per owner; no
+  /command visual redesign
+- What is complete: rebase to c46a5fa; Paddle-only removal; vitest 625/625;
+  next build clean
+- What is incomplete: push + fresh CI on head; owner merge decision
+- Known blockers: production go-live needs Render BILLING_MODE=paddle +
+  PADDLE_* secrets and Vercel NEXT_PUBLIC_PADDLE_CLIENT_TOKEN; until set, the
+  page shows fail-closed "payment temporarily unavailable" (intended — never
+  WhatsApp)
+- Validation already run: `npx vitest run` 625/625 (66 files); `npm run build`
+  clean
+- Validation still required: full qa-tests CI on pushed head
+- Next exact action: push branch, verify CI green, report to owner (no merge
+  without owner approval)
+- Stop condition: any CI failure beyond the known chat-confirm-profile flake →
+  diagnose and report, no broad fixes
+- Rollback plan: revert the squash commit — frontend-only, no API/DB/config
+  migration; no env var change needed to roll back
+
 ### TASK-20260717-006 — #1076 delta: purge raw user/session ids from chat-stream and CV/profile exception logs
 
 Status: review
