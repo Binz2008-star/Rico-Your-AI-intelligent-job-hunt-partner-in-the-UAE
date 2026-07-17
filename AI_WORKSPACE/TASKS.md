@@ -2275,7 +2275,9 @@ Task            TASK-20260716-003 (this entry)
 
 ### TASK-20260716-004 — After the films comes the landing page (+ film-boot robustness fix)
 
-Status: review (draft PR — owner directive delivered in-session 2026-07-16; merge pending owner word)
+Status: merge authorized — owner (Binz2008-star) explicitly said "merge"
+in-session (2026-07-16) after CI went green and the Vercel preview was up;
+containment exception recorded, same basis as TASK-20260716-003 / #1085.
 Owner: Claude
 Branch: `claude/rico-film-rotation-fix-g7tua4` (restarted from main after #1085 merged)
 Issue/PR: follow-up to #1085
