@@ -269,19 +269,20 @@ export function CommandEmptyState({
     }
 
     /* Atelier surface. */
-    const chip = (qa: CommandQuickAction, compact: boolean) => (
+    const chip = (qa: CommandQuickAction, compact: boolean, index = 0) => (
         <button
             type="button"
             key={qa.key}
             onClick={qa.onClick}
             disabled={disabled}
             data-testid="atelier-quick-chip"
-            className={`atl-chip group flex cursor-pointer items-center gap-3 rounded-xl text-start transition-all disabled:opacity-50 ${compact ? "min-h-[44px] px-3 py-2.5 text-[12px]" : "min-h-[52px] px-4 py-3 text-[13px]"}`}
+            className={`atl-chip group flex cursor-pointer items-center gap-3 rounded-xl text-start transition-all disabled:opacity-50 animate-fade-up motion-reduce:animate-none ${compact ? "min-h-[44px] px-3 py-2.5 text-[12px]" : "min-h-[52px] px-4 py-3 text-[13px]"}`}
             style={{
                 background: c.panel,
                 border: `1px solid ${c.hair}`,
                 color: c.ink55,
                 fontFamily: ATELIER_FONT.body,
+                animationDelay: `${index * 60}ms`,
             }}
         >
             <span className="atl-chip-icon shrink-0 transition-colors" style={{ color: c.ink40 }} aria-hidden="true">
@@ -294,8 +295,10 @@ export function CommandEmptyState({
     /* Scoped hover styles (inline styles can't express :hover). */
     const hoverCss = (
         <style dangerouslySetInnerHTML={{ __html: `
-            .atl-chip:hover:not(:disabled) { border-color: ${c.red} !important; color: ${c.ink} !important; }
+            .atl-chip { transition: border-color .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease; }
+            .atl-chip:hover:not(:disabled) { border-color: ${c.red} !important; color: ${c.ink} !important; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
             .atl-chip:hover:not(:disabled) .atl-chip-icon { color: ${c.red} !important; }
+            @media (prefers-reduced-motion: reduce) { .atl-chip:hover:not(:disabled) { transform: none; } }
         ` }} />
     );
 
@@ -323,7 +326,7 @@ export function CommandEmptyState({
                     </div>
                 </div>
                 <div className="grid w-full max-w-xl grid-cols-1 gap-2 min-[480px]:grid-cols-2">
-                    {actions.map((qa) => chip(qa, false))}
+                    {actions.map((qa, i) => chip(qa, false, i))}
                 </div>
                 {hoverCss}
             </div>
@@ -332,7 +335,7 @@ export function CommandEmptyState({
 
     return (
         <div data-testid="atelier-empty-chips" className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2">
-            {actions.map((qa) => chip(qa, true))}
+            {actions.map((qa, i) => chip(qa, true, i))}
             {hoverCss}
         </div>
     );

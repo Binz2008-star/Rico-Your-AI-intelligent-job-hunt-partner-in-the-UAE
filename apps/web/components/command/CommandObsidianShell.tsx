@@ -235,7 +235,7 @@ function CommandConsole({
                         {accountOpen && (
                             <div
                                 role="menu"
-                                className="absolute end-0 top-[calc(100%+4px)] z-50 w-44 rounded-lg py-1"
+                                className="absolute end-0 top-[calc(100%+4px)] z-50 w-44 rounded-lg py-1 animate-fade-in-scale motion-reduce:animate-none origin-top"
                                 style={{ background: c.panel, border: `1px solid ${c.hair}`, boxShadow: dark ? "0 8px 24px rgba(0,0,0,0.35)" : "0 8px 24px rgba(31,27,21,0.12)" }}
                                 data-testid="command-obsidian-account-menu"
                             >
@@ -311,8 +311,47 @@ function CommandConsole({
                 [data-testid="command-obsidian-shell"] a:focus-visible,
                 [data-testid="command-obsidian-shell"] button:focus-visible { outline: 2px solid ${c.red}; outline-offset: 2px; border-radius: 4px; }
                 [data-testid="command-obsidian-shell"] ::selection { background: ${c.red}; color: ${c.bg}; }
-                [data-testid="command-obsidian-shell"] .serif { font-family: var(--font-fraunces-landing), Georgia, serif; }
-                [data-testid="command-obsidian-shell"] .serif-italic { font-family: var(--font-fraunces-landing), Georgia, serif; font-style: italic; }
+                [data-testid="command-obsidian-shell"] .serif { font-family: var(--font-fraunces-landing), var(--font-naskh-arabic, "Noto Naskh Arabic"), Georgia, serif; }
+                [data-testid="command-obsidian-shell"] .serif-italic { font-family: var(--font-fraunces-landing), var(--font-naskh-arabic, "Noto Naskh Arabic"), Georgia, serif; font-style: italic; }
+                /* ── Reply-experience motion layer (2026-07-17) ─────────────────
+                   Reasoning shimmer: a sun-red sweep through the thinking label.
+                   Gradient text needs transparent fill, so reduced-motion gets a
+                   solid-color fallback instead of a frozen transparent state. */
+                [data-testid="command-obsidian-shell"] .atl-reason-shimmer {
+                    background-image: linear-gradient(90deg, ${c.ink55} 0%, ${c.ink} 35%, ${c.red} 50%, ${c.ink} 65%, ${c.ink55} 100%);
+                    background-size: 200% 100%;
+                    -webkit-background-clip: text;
+                    background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    color: transparent;
+                    animation: shimmer 2.4s linear infinite;
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    [data-testid="command-obsidian-shell"] .atl-reason-shimmer {
+                        animation: none;
+                        background-image: none;
+                        -webkit-text-fill-color: currentColor;
+                        color: inherit;
+                    }
+                }
+                /* Job cards: gentle hover lift + deepened shadow (inline base
+                   shadow is overridden here, so !important is required). */
+                [data-testid="command-obsidian-shell"] .atl-match-card {
+                    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+                }
+                [data-testid="command-obsidian-shell"] .atl-match-card:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 12px 28px rgba(0,0,0,0.12) !important;
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    [data-testid="command-obsidian-shell"] .atl-match-card:hover { transform: none; }
+                }
+                /* Staggered entrance for sibling cards in one reply. */
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(2) { animation-delay: 70ms; }
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(3) { animation-delay: 140ms; }
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(4) { animation-delay: 210ms; }
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(5) { animation-delay: 280ms; }
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(n+6) { animation-delay: 340ms; }
                 [lang="ar"][data-testid="command-obsidian-shell"] * { letter-spacing: 0 !important; }
             ` }} />
         </div>

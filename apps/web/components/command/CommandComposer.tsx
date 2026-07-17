@@ -213,11 +213,12 @@ export function CommandComposer({
 
                 {/* Paper input container */}
                 <div
-                    className="flex items-end gap-2 rounded-2xl px-3 py-2.5 sm:px-4"
+                    className="atl-composer-surface flex items-end gap-2 rounded-2xl px-3 py-2.5 sm:px-4"
                     style={{
                         background: c.panel,
                         border: `1px solid ${c.hair}`,
                         boxShadow: `0 2px 12px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12)`,
+                        transition: "border-color .2s ease, box-shadow .25s ease",
                     }}
                 >
                     {/* Attachment button (paperclip) */}
@@ -378,8 +379,21 @@ export function CommandComposer({
                     [data-testid="atelier-composer"] .atl-composer-attach:hover { color: ${c.red} !important; }
                     [data-testid="atelier-composer"] .atl-composer-textarea::placeholder { color: ${c.ink40}; }
                     [data-testid="atelier-composer"] .atl-composer-textarea:focus { outline: none; }
-                    [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):hover { opacity: 0.85 !important; }
+                    [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):hover { opacity: 0.85 !important; transform: translateY(-1px); }
+                    [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):active { transform: scale(0.94); }
+                    [data-testid="atelier-composer"] .atl-composer-send { transition: opacity .15s ease, transform .15s ease, background-color .15s ease; }
                     [data-testid="atelier-composer"] .atl-composer-cancel:hover { opacity: 0.85 !important; }
+                    [data-testid="atelier-composer"] .atl-composer-cancel:active { transform: scale(0.94); }
+                    /* Focus glow — the writing surface answers with the route accent. */
+                    [data-testid="atelier-composer"] .atl-composer-surface:focus-within {
+                        border-color: ${c.red}66 !important;
+                        box-shadow: 0 0 0 3px ${c.red}1f, 0 2px 12px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12) !important;
+                    }
+                    @media (prefers-reduced-motion: reduce) {
+                        [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):hover,
+                        [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):active,
+                        [data-testid="atelier-composer"] .atl-composer-cancel:active { transform: none; }
+                    }
                 ` }} />
             </div>
         );

@@ -35,14 +35,14 @@ export function RicoReply({ text, streaming = false, canRegenerate = false, onRe
   const copy = useCallback(() => { void navigator.clipboard?.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); }, [text]);
   if (!text) return null; // empty pending → nothing (RicoThinking handles the shimmer)
   return (
-    <div className="relative ps-3" aria-live="polite" aria-busy={streaming || undefined}>
-      <span aria-hidden className="absolute inset-y-1 start-0 w-px bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
+    <div className="relative ps-3 animate-fade-up motion-reduce:animate-none" aria-live="polite" aria-busy={streaming || undefined}>
+      <span aria-hidden className="absolute inset-y-1 start-0 w-px animate-rail-draw motion-reduce:animate-none bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
       <p dir="auto" className="serif whitespace-pre-wrap text-[16.5px] leading-[1.65] text-ink">
         {text}
         {streaming && <span data-testid="transcript-streaming-caret" aria-hidden className="animate-caret motion-reduce:animate-none ms-0.5 inline-block h-[1em] w-[0.55ch] translate-y-[0.15em] bg-ink align-baseline" />}
       </p>
       {!streaming && (
-        <div className="mt-2 flex gap-1">
+        <div className="mt-2 flex gap-1 animate-fade-up motion-reduce:animate-none">
           <button type="button" onClick={copy} className="inline-flex h-7 items-center gap-1 rounded-sm border border-transparent px-2 text-[11px] uppercase tracking-[0.14em] text-ink-mute transition-colors hover:border-rule hover:text-ink focus-visible:border-rule focus-visible:text-ink focus-visible:outline-none">
             {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{copied ? (isAr ? "نُسخ" : "Copied") : (isAr ? "نسخ" : "Copy")}
           </button>
@@ -59,18 +59,31 @@ export function RicoReply({ text, streaming = false, canRegenerate = false, onRe
 
 export function RicoUserBubble({ text }: { text: string }) {
   return (
-    <div className="flex justify-end">
+    <div className="flex justify-end animate-fade-up motion-reduce:animate-none">
       <div dir="auto" className="max-w-[78%] rounded-sm border border-ink bg-ink px-3 py-2 text-[14.5px] text-paper">{text}</div>
     </div>
   );
 }
 
+/**
+ * RicoThinking — the reasoning state, upgraded to the modern-AI signature:
+ * a sun-red→ink gradient sweeps through the serif-italic label
+ * (`.atl-reason-shimmer`, defined in CommandObsidianShell's scoped CSS with a
+ * prefers-reduced-motion solid-color fallback) followed by three cascading
+ * dots. Same role/aria contract as before.
+ */
 export function RicoThinking({ isAr = false }: { isAr?: boolean }) {
   return (
-    <div className="relative ps-3" role="status" aria-live="polite">
-      <span aria-hidden className="absolute inset-y-1 start-0 w-px bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
-      <p className="serif-italic text-[16.5px] leading-[1.65] text-ink-mute">{isAr ? "أُفكّر…" : "Thinking…"}
-        <span aria-hidden className="ms-1 inline-block h-1 w-1 -translate-y-px rounded-full bg-ink-mute animate-pulse motion-reduce:animate-none align-middle" /></p>
+    <div className="relative ps-3 animate-fade-up motion-reduce:animate-none" role="status" aria-live="polite">
+      <span aria-hidden className="absolute inset-y-1 start-0 w-px animate-rail-draw motion-reduce:animate-none bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
+      <p className="serif-italic text-[16.5px] leading-[1.65] text-ink-mute">
+        <span className="atl-reason-shimmer">{isAr ? "أُفكّر…" : "Thinking…"}</span>
+        <span aria-hidden className="ms-1.5 inline-flex items-baseline gap-[3px] align-middle">
+          <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" />
+          <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" style={{ animationDelay: "0.15s" }} />
+          <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" style={{ animationDelay: "0.3s" }} />
+        </span>
+      </p>
     </div>
   );
 }
