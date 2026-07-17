@@ -181,8 +181,10 @@ describe("profile editorial — real-data rendering", () => {
     it("renders hero identity, sections, documents, and billing from the real APIs only", async () => {
         await renderLoaded();
 
-        // hero: verified identity + strength from completeness_score
-        expect(screen.getByText("Verified identity")).toBeInTheDocument();
+        // hero: honest verified-EMAIL badge (backend verifies email ownership,
+        // not identity) + strength from completeness_score
+        expect(screen.getByText("Verified email")).toBeInTheDocument();
+        expect(screen.queryByText(/Verified identity/)).toBeNull();
         expect(screen.getByRole("progressbar", { name: "Profile strength" })).toHaveAttribute("aria-valuenow", "82");
         expect(screen.getByText("Analyst · Synthetic Co")).toBeInTheDocument();
 
@@ -214,7 +216,7 @@ describe("profile editorial — real-data rendering", () => {
         expect(screen.queryByTestId("profile-ed-savebar")).toBeNull();
     });
 
-    it("shows the Free plan card (with Manage link) when the subscription is inactive", async () => {
+    it("shows the Free plan card only after the API confirms an inactive subscription", async () => {
         getMySubscriptionMock.mockResolvedValue(FREE_SUBSCRIPTION);
         await renderLoaded();
         await waitFor(() => expect(screen.getByText("Free")).toBeInTheDocument());
@@ -222,10 +224,20 @@ describe("profile editorial — real-data rendering", () => {
         expect(screen.getByRole("link", { name: "Manage plan" })).toHaveAttribute("href", "/subscription");
     });
 
-    it("still renders the billing section with the Manage link when the subscription request fails", async () => {
-        getMySubscriptionMock.mockRejectedValue(new Error("network"));
+    it("never shows 'Free' while the subscription request is still loading", async () => {
+        getMySubscriptionMock.mockReturnValue(new Promise(() => {}));
         await renderLoaded();
         expect(screen.getByRole("heading", { name: "Billing" })).toBeInTheDocument();
+        expect(screen.getByText("Loading...")).toBeInTheDocument();
+        expect(screen.queryByText("Free")).toBeNull();
+        expect(screen.queryByText("Rico Monthly")).toBeNull();
+    });
+
+    it("shows an explicit unavailable state (never 'Free') when the subscription request fails", async () => {
+        getMySubscriptionMock.mockRejectedValue(new Error("network"));
+        await renderLoaded();
+        expect(await screen.findByText("Billing status unavailable — try again later.")).toBeInTheDocument();
+        expect(screen.queryByText("Free")).toBeNull();
         expect(screen.getByRole("link", { name: "Manage plan" })).toHaveAttribute("href", "/subscription");
     });
 });
@@ -266,6 +278,22 @@ describe("profile editorial — dirty draft save flow", () => {
         expect(updateProfileMock).not.toHaveBeenCalled();
     });
 
+    it("clearing a numeric field shows a validation message, keeps the edit visible, and never silently reverts", async () => {
+        const user = userEvent.setup();
+        await renderLoaded();
+
+        const years = screen.getByLabelText("Experience");
+        await user.clear(years);
+        const savebar = await screen.findByTestId("profile-ed-savebar");
+        await user.click(within(savebar).getByRole("button", { name: "Save changes" }));
+
+        expect(await screen.findByText(/Clearing this field isn't supported yet/)).toBeInTheDocument();
+        expect(updateProfileMock).not.toHaveBeenCalled();
+        // the user's edit stays visible — no silent revert to the saved value
+        expect(screen.getByLabelText("Experience")).toHaveValue("");
+        expect(screen.getByTestId("profile-ed-savebar")).toBeInTheDocument();
+    });
+
     it("rejects a non-numeric years value inline and never calls the API", async () => {
         const user = userEvent.setup();
         await renderLoaded();
@@ -301,6 +329,33 @@ describe("profile editorial — dirty draft save flow", () => {
         expect(await screen.findByText(/Maximum 4 target roles/)).toBeInTheDocument();
         expect(await screen.findByText(/Only UAE cities are supported/)).toBeInTheDocument();
         expect(updateProfileMock).not.toHaveBeenCalled();
+    });
+});
+
+describe("profile editorial — honest Telegram status", () => {
+    it("describes a SAVED username as 'added' — never as a connection claim", async () => {
+        await renderLoaded();
+        expect(screen.getByText(/Telegram username added/)).toBeInTheDocument();
+        expect(screen.queryByText(/alerts connected/i)).toBeNull();
+    });
+
+    it("flags an edited, unsaved username as not yet saved", async () => {
+        const user = userEvent.setup();
+        await renderLoaded();
+
+        const tg = screen.getByLabelText("Telegram");
+        await user.clear(tg);
+        await user.type(tg, "new_handle");
+
+        expect(screen.getByText(/Username not yet saved/)).toBeInTheDocument();
+        expect(screen.queryByText(/Telegram username added/)).toBeNull();
+    });
+
+    it("shows the opt-in hint when no username is saved", async () => {
+        fetchProfileMock.mockResolvedValue({ ...BASE_PROFILE, telegram_username: null });
+        await renderLoaded();
+        expect(screen.getByText(/Add your Telegram username/)).toBeInTheDocument();
+        expect(screen.queryByText(/Telegram username added/)).toBeNull();
     });
 });
 

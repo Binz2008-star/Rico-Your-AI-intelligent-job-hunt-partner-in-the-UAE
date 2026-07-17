@@ -180,7 +180,12 @@ export function buildPayload(
     for (const k of NUMBER_FIELDS) {
         if (!changed.has(k)) continue;
         const raw = draft[k].trim();
-        if (raw === "") continue; // clearing a numeric field is not supported by the API
+        if (raw === "") {
+            // The PATCH API cannot null a numeric field; surface that instead of
+            // silently dropping (and reverting) the user's edit.
+            errors[k] = "profileEdNumericClear";
+            continue;
+        }
         const parsed = Number(raw);
         if (!Number.isFinite(parsed) || parsed < 0) {
             errors[k] = k === "years_experience" ? "profileInvalidYears" : "profileInvalidSalary";
@@ -513,10 +518,7 @@ export function ProfileEditorial({
             setErrors(nextErrors);
             return;
         }
-        if (Object.keys(payload).length === 0) {
-            onDiscard();
-            return;
-        }
+        if (Object.keys(payload).length === 0) return;
         setSaving(true);
         try {
             await updateProfile(payload);
@@ -531,7 +533,7 @@ export function ProfileEditorial({
         } finally {
             setSaving(false);
         }
-    }, [profile, draft, notify, refresh, t, onDiscard]);
+    }, [profile, draft, notify, refresh, t]);
 
     /* documents */
     const [files, setFiles] = useState<UserDocument[]>([]);
@@ -618,16 +620,20 @@ export function ProfileEditorial({
         [confirmDeleteId, loadFiles, notify, t],
     );
 
-    /* billing */
+    /* billing — explicit lifecycle so "Free" is only ever shown when the API
+       confirmed an inactive subscription (never while loading / on failure) */
     const [sub, setSub] = useState<SubscriptionMeResponse | null>(null);
+    const [subState, setSubState] = useState<"loading" | "loaded" | "error">("loading");
     useEffect(() => {
         let cancelled = false;
         getMySubscription()
             .then((s) => {
-                if (!cancelled) setSub(s);
+                if (cancelled) return;
+                setSub(s);
+                setSubState("loaded");
             })
             .catch(() => {
-                // billing card falls back to the Manage-plan link only
+                if (!cancelled) setSubState("error");
             });
         return () => {
             cancelled = true;
@@ -675,7 +681,7 @@ export function ProfileEditorial({
         if (Number.isNaN(d.getTime())) return null;
         return new Intl.DateTimeFormat(isAr ? "ar-AE" : "en-AE", { dateStyle: "long" }).format(d);
     }, [sub, isAr]);
-    const planActive = sub?.is_active && sub.plan;
+    const planActive = subState === "loaded" && sub?.is_active ? sub.plan : null;
     const docDate = useCallback(
         (iso: string | null | undefined) => {
             if (!iso) return null;
@@ -687,7 +693,14 @@ export function ProfileEditorial({
     );
 
     const askRicoHref = `/command?prompt=${encodeURIComponent(t("profileEdAskRicoPrompt"))}`;
-    const telegramConnected = !!draft.telegram_username.trim();
+    // Honest Telegram status: only the SAVED username counts as "added"; a
+    // draft that differs from the saved value is flagged as not yet saved.
+    // No "connected" claim — the backend stores a username, it does not verify
+    // a bot connection here.
+    const savedTelegram = (profile.telegram_username ?? "").trim().replace(/^@/, "");
+    const draftTelegram = draft.telegram_username.trim().replace(/^@/, "");
+    const telegramStatus: "unsaved" | "added" | "none" =
+        draftTelegram !== savedTelegram ? "unsaved" : savedTelegram ? "added" : "none";
 
     const ghostButton = {
         border: `1px solid ${palette.hair}`,
@@ -1084,10 +1097,10 @@ export function ProfileEditorial({
                                     </div>
                                     <div className="min-w-0">
                                         <div className="text-sm font-semibold" style={{ color: palette.ink }}>{t("telegram")}</div>
-                                        <div className="mt-0.5 text-[11px]" style={{ fontFamily: MONO, color: telegramConnected ? tone.success : palette.ink55 }}>
-                                            {telegramConnected
-                                                ? `● ${t("profileEdTelegramOn")} · @${draft.telegram_username.trim().replace(/^@/, "")}`
-                                                : `○ ${t("profileEdTelegramOff")}`}
+                                        <div className="mt-0.5 text-[11px]" style={{ fontFamily: MONO, color: telegramStatus === "added" ? tone.success : palette.ink55 }}>
+                                            {telegramStatus === "added" && <>● {t("profileEdTelegramAdded")} · <bdi dir="ltr">@{savedTelegram}</bdi></>}
+                                            {telegramStatus === "unsaved" && <>○ {t("profileEdTelegramUnsaved")}</>}
+                                            {telegramStatus === "none" && <>○ {t("profileEdTelegramOff")}</>}
                                         </div>
                                     </div>
                                 </div>
@@ -1146,12 +1159,18 @@ export function ProfileEditorial({
                                 >
                                     {t("profileEdCurrentPlan")}
                                 </div>
-                                <div
-                                    className="mt-1 text-[26px] font-medium leading-tight tracking-[-0.01em]"
-                                    style={{ fontFamily: SERIF, color: planActive ? "#fff" : palette.ink }}
-                                >
-                                    {planActive ? sub!.plan!.name : t("profileEdFreePlan")}
-                                </div>
+                                {subState === "loaded" ? (
+                                    <div
+                                        className="mt-1 text-[26px] font-medium leading-tight tracking-[-0.01em]"
+                                        style={{ fontFamily: SERIF, color: planActive ? "#fff" : palette.ink }}
+                                    >
+                                        {planActive ? planActive.name : t("profileEdFreePlan")}
+                                    </div>
+                                ) : (
+                                    <div className="mt-1.5 text-[13.5px]" style={{ color: palette.ink55 }} role={subState === "loading" ? "status" : undefined}>
+                                        {subState === "loading" ? t("loading") : t("profileEdBillingUnavailable")}
+                                    </div>
+                                )}
                                 {planActive && renewDate && (
                                     <div className="mt-1 text-[12.5px]" style={{ color: "rgba(255,255,255,0.9)" }}>
                                         {t("profileEdRenewsOn")} {renewDate}
@@ -1161,7 +1180,7 @@ export function ProfileEditorial({
                             <div className="text-end">
                                 {planActive && (
                                     <div className="text-[22px] font-medium" style={{ fontFamily: SERIF, color: "#fff" }}>
-                                        {nfCurrency(sub!.plan!.currency, sub!.plan!.price_monthly)}
+                                        {nfCurrency(planActive.currency, planActive.price_monthly)}
                                         <span className="text-[13px] opacity-80">{t("profileEdPerMonth")}</span>
                                     </div>
                                 )}
