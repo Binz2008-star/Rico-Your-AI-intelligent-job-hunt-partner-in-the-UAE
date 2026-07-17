@@ -164,9 +164,11 @@ def count_monthly_ai_messages(user_id: str, since: datetime) -> int:
 
 def count_saved_jobs(user_id: str) -> int:
     try:
-        from src.repositories.applications_repo import get_all
+        from src.repositories.applications_repo import count_by_status
 
-        apps = get_all(user_id=user_id)
+        # Canonical DB-side count (#1092): the full logical record set, not a
+        # capped in-memory snapshot — quota decisions see every saved job.
+        return count_by_status(user_id, "saved")
     except Exception:
         from src.applications import get_applied_jobs
 
@@ -178,7 +180,9 @@ def count_saved_jobs(user_id: str) -> int:
             app for app in get_applied_jobs()
             if app.get("user_id") == user_id
         ]
-    return sum(1 for app in apps if isinstance(app, dict) and app.get("status") == "saved")
+        return sum(
+            1 for app in apps if isinstance(app, dict) and app.get("status") == "saved"
+        )
 
 
 def count_profile_optimizations(user_id: str, since: datetime) -> int:

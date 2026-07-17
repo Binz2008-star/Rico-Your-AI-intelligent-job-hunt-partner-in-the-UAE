@@ -188,6 +188,100 @@ surfaces.
 - Rollback plan: revert the squash commit — routes return to unbounded
   read; no schema/data change
 
+### TASK-20260717-004 — #1092: replace fake 200-row application pagination with canonical DB paging
+
+Status: review
+Owner: Claude (WRITER; Coder pass, owner-directed "full ownership" of the
+2026-07-17 reconciliation-audit remediation sequence)
+Branch: `fix/1092-canonical-db-pagination`
+Issue/PR: #1092
+
+#### Objective
+
+Move application filtering, pagination, counting, stats, and single-record
+lookup to the database boundary over ONE canonical logical record set — no
+200-row cap, no in-Python dedup, no page-scan PATCH lookups.
+
+#### Context
+
+- Relevant files: `src/rico_db.py` (canonical CTE + new methods),
+  `src/repositories/applications_repo.py`, `src/api/routers/applications.py`,
+  `src/services/subscription_gating.py` (count_saved_jobs)
+- Existing behavior: get_all() always fetched the newest 200 rows, deduped in
+  Python, then the router sliced pages from that snapshot; find_by_job_id
+  scanned the same 200 rows; stats derived from the capped list; gating
+  counted saved jobs from it.
+
+#### Constraints
+
+- get_all() keeps its list contract — chat/agent callers unchanged.
+- Physical write paths (upsert/update/job_key schemes) untouched.
+- No migration required: (user_id, job_key) uniqueness (011/035) already
+  exists; dedup of legacy multi-key rows is a read-boundary rule.
+- Data-correctness work only — no provider run, no deploy in verification.
+
+#### Acceptance criteria
+
+- [x] 451 logical records + duplicates: every record reachable exactly once
+      across pages with correct total/pages (real Postgres)
+- [x] A status existing only beyond row 200 filters and counts correctly
+- [x] PATCH addresses the oldest owned row directly; other users' rows never
+      visible
+- [x] Stats and quota counts run uncapped over the SAME canonical set as
+      the pages
+- [x] Insert-between-page-reads behavior documented and proven (repeat
+      possible, never a silent skip)
+- [x] BUG-3 dedup semantics preserved, now proven against real SQL
+
+#### Required verification
+
+- [x] Unit tests: delegation-contract suite (rewritten
+      `test_bug3_duplicate_kanban_entries.py`, CI-wired) + rewired
+      isolation suites — all passing
+- [x] Integration tests: `tests/integration/
+      test_1092_applications_pagination_postgres.py` — 14 passed against a
+      real local Postgres 16; wired into the postgres-integration CI job
+- [x] Full local unit suite diffed vs clean-main baseline — zero new failures
+- [ ] Production/deploy smoke: /applications page/total for a real account
+
+#### Continuity Block
+
+- Task ID: TASK-20260717-004
+- GitHub issue/PR: #1092; draft PR from `fix/1092-canonical-db-pagination`
+- Branch: `fix/1092-canonical-db-pagination`
+- Base branch: main
+- Last safe commit SHA: 5069447 (origin/main at branch cut)
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: `applications_repo.py`, `rico_db.py`
+  (get_recommendations/stats/upsert/schema), `routers/applications.py`,
+  `subscription_gating.py`, the five mock-based test suites
+- Files changed: `rico_db.py` — _CANONICAL_APPS_CTE +
+  get_applications_page/count_applications/get_application_stats/
+  find_recommendation + row-shaping refactor; `applications_repo.py` —
+  get_all uncapped canonical, new get_page/count_by_status, DB-side
+  get_stats, direct find_by_job_id, dead Python dedup removed
+  (_VALID_STATUSES kept — Gmail route imports it);
+  `routers/applications.py` — list route delegates to get_page;
+  `subscription_gating.py` — count_saved_jobs uses canonical count;
+  integration + rewritten unit suites; qa-tests.yml wiring
+- Files intentionally not touched: write paths' job_key derivation
+  (write-time canonical identity is a follow-up design), cursor-based
+  pagination (documented stable offset chosen per the issue's alternative)
+- What is complete: DB-boundary paging/counts/stats/lookup + full proofs
+- What is incomplete: unifying job_key derivation at write time (would let
+  the CTE collapse be retired eventually)
+- Known blockers: none
+- Validation already run: 14/14 real-Postgres; full unit suite = baseline
+- Validation still required: CI on the PR head
+- Deployment/CI/Neon/Vercel state to check next: QA Tests on the PR
+- Next exact action: owner review of the draft PR
+- Stop condition: any caller found relying on the old 200-row snapshot
+  semantics → surface before merging
+- Rollback plan: revert the squash commit — read paths return to the capped
+  snapshot; no schema/data change in either direction
+
 ### TASK-20260715-002 — Atelier slice 4b: /command message bubbles + empty state
 
 Status: review

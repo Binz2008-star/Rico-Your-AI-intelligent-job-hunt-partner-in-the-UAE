@@ -375,6 +375,18 @@ def test_saved_applied_record_is_returned_by_applications_api(monkeypatch) -> No
             self.db_user_ids.append(user_id)
             return list(self.records)
 
+        # #1092 canonical DB-boundary contract
+        def get_applications_page(self, user_id, status=None, limit=None, offset=0):
+            self.db_user_ids.append(user_id)
+            rows = [r for r in self.records if not status or r.get("status") == status]
+            return rows[offset:(offset + limit) if limit is not None else None]
+
+        def count_applications(self, user_id, status=None):
+            return len([r for r in self.records if not status or r.get("status") == status])
+
+        def find_recommendation(self, user_id, job_key):
+            return next((r for r in self.records if r.get("job_id") == job_key), None)
+
     fake_db = FakeDB()
     monkeypatch.setattr(applications_repo, "_db", lambda: fake_db)
 

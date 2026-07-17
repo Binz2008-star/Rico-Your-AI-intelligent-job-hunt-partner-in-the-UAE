@@ -49,6 +49,7 @@ jobs:
             tests/test_tc2_target_role_propagation.py \
             tests/test_tc2_tc8_wiring.py \
             tests/test_job_result_integrity.py \
+            tests/test_bug3_duplicate_kanban_entries.py \
             tests/test_764_durable_mutation_truth.py \
             tests/test_1082_consent_fail_closed.py \
             tests/test_1070_guest_identity_binding.py \
@@ -122,6 +123,7 @@ jobs:
             tests/integration/test_cv_upload_artifacts_postgres.py \
             tests/integration/test_jotform_atomicity_postgres.py \
             tests/integration/test_guest_merge_claim_postgres.py \
+            tests/integration/test_1092_applications_pagination_postgres.py \
             -v --tb=short
 
   playwright:

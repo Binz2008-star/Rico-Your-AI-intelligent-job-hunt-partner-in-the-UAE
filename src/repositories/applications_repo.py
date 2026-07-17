@@ -163,108 +163,88 @@ def _warn_legacy_fallback(operation: str) -> None:
     logger.warning("LEGACY_FALLBACK_NO_USER_ID operation=%s", operation)
 
 
-# ── Public API ───────────────────────────────────────────────────────────────
-
-
-def get_all(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Load tracked applications for a specific user or fall back to legacy JSON."""
-    if user_id:
-        db = _db()
-        if not db:
-            raise HTTPException(status_code=503, detail="Database unavailable")
-        db_user_id = _provision_db_user_id(db, user_id)
-        return _dedupe_by_job_identity(db.get_recommendations(db_user_id, limit=200))
-
-    # Legacy fallback
-    _warn_legacy_fallback("get_all")
-    return _get_applied()
-
-
-def _dedupe_by_job_identity(apps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Collapse rows that represent the same real-world job into one.
-
-    job_key is derived independently by several write paths (daily pipeline,
-    chat "save this job", lifecycle tracking), each with its own scheme, so
-    the same job can land under more than one job_key and render as duplicate
-    cards on /flow (BUG-3). Rows come back ordered by updated_at DESC, so the
-    first row seen per identity wins.
-
-    A row matches a previously seen row when either:
-      - normalized (title, company, location) match (BUG-3's original key), or
-      - normalized (title, company, apply_url/link) match — closes the gap
-        where the same posting is re-saved with a differently formatted
-        location string (e.g. "Dubai" vs "Dubai, UAE") but an identical apply
-        link, which previously bypassed dedup and rendered as a duplicate
-        card (e.g. a duplicated "Mastercard" entry).
-    location-only matches still require an identical location so two
-    genuinely distinct postings at different sites are never merged.
-    """
-    seen_loc: set = set()
-    seen_url: set = set()
-    deduped: List[Dict[str, Any]] = []
-    for app in apps:
-        if not isinstance(app, dict):
-            deduped.append(app)
-            continue
-        title = (app.get("title") or "").strip().lower()
-        company = (app.get("company") or "").strip().lower()
-        if not title and not company:
-            deduped.append(app)
-            continue
-        location = (app.get("location") or "").strip().lower()
-        loc_identity = (title, company, location)
-
-        url = (app.get("apply_url") or app.get("link") or "").strip().lower()
-        url_identity = (title, company, url) if url else None
-
-        if loc_identity in seen_loc or (url_identity and url_identity in seen_url):
-            continue
-        seen_loc.add(loc_identity)
-        if url_identity:
-            seen_url.add(url_identity)
-        deduped.append(app)
-    return deduped
-
-
+# Statuses the SaaS application API accepts (also consumed by the Gmail
+# review-approve route via applications_repo._VALID_STATUSES).
 _VALID_STATUSES = (
     "saved", "opened", "opened_external", "prepared", "applied", "interview",
     "rejected", "offer", "decision_made", "follow_up_due",
 )
 
 
-def _stats_from_apps(apps: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Derive total/by_status counts from an already-deduped application list.
+# ── Public API ───────────────────────────────────────────────────────────────
 
-    Computing stats from the same list get_all() returns (rather than a
-    separate, independently-aggregated DB query) guarantees the two endpoints
-    can never disagree on totals — this was the root cause of chat/sidebar/
-    /flow showing different counts for the same user.
+
+def get_all(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Complete canonical application list for a user (no 200-row cap).
+
+    Dedup of physically duplicated rows happens at the DB boundary (#1092 —
+    see RicoDB._CANONICAL_APPS_CTE), so this list, the paged API, stats, and
+    quota counts all derive from the same canonical record set.
     """
-    by_status: Dict[str, int] = {s: 0 for s in _VALID_STATUSES}
-    for app in apps:
-        if not isinstance(app, dict):
-            continue
-        status = app.get("status")
-        if status in by_status:
-            by_status[status] += 1
-        elif status:
-            by_status[status] = by_status.get(status, 0) + 1
+    if user_id:
+        db = _db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        db_user_id = _provision_db_user_id(db, user_id)
+        return db.get_applications_page(db_user_id)
+
+    # Legacy fallback
+    _warn_legacy_fallback("get_all")
+    return _get_applied()
+
+
+def get_page(
+    user_id: str,
+    page: int = 1,
+    limit: int = 50,
+    status: Optional[str] = None,
+) -> Dict[str, Any]:
+    """One page of the canonical application set plus true totals.
+
+    Filtering, counting, and slicing all run in the database over the same
+    canonical set — total/pages reflect EVERY logical record, not a capped
+    in-memory snapshot. Ordering is updated_at DESC, id DESC (documented
+    stable offset): a row inserted between page reads may repeat an item on
+    a later page; items are never silently skipped.
+    """
+    db = _db()
+    if not db:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    db_user_id = _provision_db_user_id(db, user_id)
+    total = db.count_applications(db_user_id, status=status)
+    items = db.get_applications_page(
+        db_user_id, status=status, limit=limit, offset=(page - 1) * limit
+    )
     return {
-        "total": len(apps),
-        "by_status": by_status,
-        "applied": by_status.get("applied", 0),
-        "saved": by_status.get("saved", 0),
-        "interview": by_status.get("interview", 0),
-        "rejected": by_status.get("rejected", 0),
-        "offer": by_status.get("offer", 0),
-        "follow_up_due": by_status.get("follow_up_due", 0),
+        "applications": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": max(1, -(-total // limit)),
     }
 
 
+def count_by_status(user_id: str, status: str) -> int:
+    """Canonical count of a user's applications in one status (uncapped)."""
+    db = _db()
+    if not db:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    db_user_id = _provision_db_user_id(db, user_id)
+    return db.count_applications(db_user_id, status=status)
+
+
 def get_stats(user_id: Optional[str] = None) -> Dict[str, Any]:
-    """Aggregate statistics for a specific user or fall back to legacy JSON."""
+    """Aggregate statistics for a specific user or fall back to legacy JSON.
+
+    Computed in the database over the SAME canonical set get_all()/get_page()
+    serve, with no row cap — the endpoints can never disagree on totals.
+    """
     if user_id:
-        return _stats_from_apps(get_all(user_id=user_id))
+        db = _db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        db_user_id = _provision_db_user_id(db, user_id)
+        return db.get_application_stats(db_user_id)
 
     # Legacy fallback
     _warn_legacy_fallback("get_stats")
@@ -272,17 +252,17 @@ def get_stats(user_id: Optional[str] = None) -> Dict[str, Any]:
 
 
 def find_by_job_id(job_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Find a single application record by job_id for a user or in legacy JSON."""
+    """Find a single application record by job_id for a user or in legacy JSON.
+
+    Direct single-row DB lookup — an owned record stays addressable for PATCH
+    no matter how many newer rows exist (#1092 removed the 200-row scan).
+    """
     if user_id:
         db = _db()
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")
         db_user_id = _provision_db_user_id(db, user_id)
-        apps = db.get_recommendations(db_user_id, limit=200)
-        return next(
-            (a for a in apps if isinstance(a, dict) and a.get("job_id") == job_id),
-            None,
-        )
+        return db.find_recommendation(db_user_id, job_id)
 
     # Legacy fallback
     _warn_legacy_fallback("find_by_job_id")
