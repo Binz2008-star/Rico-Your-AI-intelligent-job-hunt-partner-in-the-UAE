@@ -74,20 +74,30 @@ _UAE_COUNTRY_VALUES: frozenset[str] = frozenset({
 # HSE / environment / management / operations listings. ──────────────────────
 _PROTECTED_DOMAINS: dict[str, frozenset[str]] = {
     "healthcare": frozenset({
-        # English
+        # English — clinical role nouns AND common protected-domain job titles, so
+        # a Doctor/Dentist/Surgeon/Pharmacist search resolves its OWN domain and
+        # its legitimate clinical body is not mis-flagged as a conflict.
         "nurse", "nursing", "mental health", "practitioner", "clinical",
         "patient", "patients", "ward", "therapy", "therapist", "recovery service",
         "care worker", "support worker", "physician", "midwife", "paramedic",
         "psycholog", "counsell", "caregiver", "healthcare assistant", "dementia",
-        "rehabilitation", "clinician",
+        "rehabilitation", "clinician", "doctor", "dentist", "dental", "surgeon",
+        "surgical", "pharmacist", "pharmacy", "radiographer", "physiotherapist",
+        "physiotherapy", "optometrist", "dietitian", "sonographer", "phlebotomist",
         # Arabic (high-confidence, deterministic — no English required to flag AR)
         "ممرض", "ممرضة", "تمريض", "مريض", "مرضى", "الصحة النفسية", "صحة نفسية",
         "عيادة", "سريري", "معالج", "علاج", "رعاية صحية", "طبيب", "قابلة",
-        "مستشفى", "تأهيل", "نفسي",
+        "مستشفى", "تأهيل", "نفسي", "دكتور", "جراح", "صيدلي", "أسنان",
     }),
     "education": frozenset({
+        # English — teaching role nouns AND common titles (Teacher/Lecturer/Tutor)
+        # so an education-role search resolves its OWN domain.
         "classroom", "pupils", "curriculum", "kindergarten", "nursery nurse",
         "teaching assistant", "lesson plan", "safeguarding of children",
+        "teacher", "teaching", "lecturer", "professor", "tutor", "headteacher",
+        "educator",
+        # Arabic
+        "معلم", "مدرس", "أستاذ", "محاضر", "منهج", "طلاب", "تدريس",
     }),
     "legal": frozenset({
         "solicitor", "barrister", "paralegal", "litigation", "conveyancing",

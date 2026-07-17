@@ -387,3 +387,28 @@ def test_applyurl_malformed_rejected():
 def test_applyurl_unavailable_rejected():
     kept, rejected = filter_listings([_rec(availability="expired")], requested_terms=SUS_TERMS)
     assert kept == [] and rejected.get(RejectionReason.LISTING_UNAVAILABLE.value) == 1
+
+
+# ── Review follow-up (#1123): common protected-domain ROLE searches (Doctor,
+#    Teacher, Pharmacist, Dentist, Surgeon) must resolve their own domain so a
+#    legitimate clinical/teaching listing is NOT flagged as a title/body conflict.
+def test_pd6_protected_role_searches_accept_their_own_listings():
+    cases = [
+        ("Doctor",     {"doctor"},     "Provide clinical patient care on the ward; treat patients daily."),
+        ("Pharmacist", {"pharmacist"}, "Dispense medication; pharmacy patient counselling; clinical checks."),
+        ("Dentist",    {"dentist"},    "Dental patient care; clinical dental treatment in the clinic."),
+        ("Surgeon",    {"surgeon"},    "Surgical patient care; clinical operating theatre; ward rounds."),
+        ("Teacher",    {"teacher"},    "Classroom teaching; deliver lesson plan to pupils; curriculum delivery."),
+    ]
+    for title, terms, body in cases:
+        rec = _rec(title=title, location="Dubai, UAE", description=body)
+        assert validate_listing(rec, single_terms=terms, phrase_terms=set()) is None, title
+
+
+def test_pd7_doctor_title_with_teaching_body_still_rejected():
+    # A protected-domain title whose body belongs to a DIFFERENT protected domain
+    # remains a conflict (cross-domain corruption).
+    rec = _rec(title="Doctor", location="Dubai, UAE",
+               description="Classroom teaching; deliver lesson plan to pupils; curriculum, teacher duties.")
+    assert validate_listing(rec, single_terms={"doctor"}, phrase_terms=set()) \
+        == RejectionReason.TITLE_DESCRIPTION_CONFLICT
