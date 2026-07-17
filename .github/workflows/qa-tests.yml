@@ -58,6 +58,7 @@ jobs:
             tests/test_764_durable_mutation_truth.py \
             tests/test_1082_consent_fail_closed.py \
             tests/test_1070_guest_identity_binding.py \
+            tests/test_1072_jwt_auth_version.py \
             tests/test_1084_workflow_guards.py \
             tests/test_1076_log_privacy.py \
             tests/test_1077_no_paid_probe.py \
