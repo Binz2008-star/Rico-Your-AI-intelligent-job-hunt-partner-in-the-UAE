@@ -80,11 +80,32 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ### TASK-20260717-007 — PR #1143: Paddle-only subscription checkout; remove manual/WhatsApp payment path
 
-Status: review
+Status: verified — **#1143 PRODUCTION PASS** (merged main @ e903496, deployed)
 Owner: Claude (WRITER; owner directive 2026-07-17 — "Proceed with #1143 only",
 Paddle is the approved and only billing path)
-Branch: `fix/subscription-paddle-runtime-ui`
-Issue/PR: #1143
+Branch: `fix/subscription-paddle-runtime-ui` (merged)
+Issue/PR: #1143 (merged as squash commit e903496)
+
+#### Production smoke — PASS (owner-run on ricohunt.com, Paddle sandbox mode, 2026-07-17)
+
+Seven-check gate, all confirmed with owner-supplied production evidence:
+
+1. Paddle CTA "Subscribe with Paddle" / "اشترك عبر Paddle" visible (EN + AR) — PASS
+2. No WhatsApp / manual-activation payment path or copy anywhere — PASS
+3. Sandbox checkout completes (Paddle overlay "transaction completed") — PASS
+4. Signed webhook processed (`POST /api/v1/billing/paddle/webhook`) — PASS
+5. Neon subscription active (period end 2026-08-17) — PASS
+6. `GET /api/v1/subscription/me` → `is_active: true`, plan `pro`, USD 21.50,
+   Paddle customer + subscription IDs present — PASS
+7. UI reflects Active/Current + "Manage Subscription" (Paddle customer portal) — PASS
+
+Backend billing config confirmed live: `GET /api/v1/billing/config` →
+`{"billing_mode":"paddle","paddle_active":true,"sandbox":true}`.
+
+Real-money go-live (`PADDLE_SANDBOX=false` + live Paddle credentials on
+Render/Vercel) is an OPTIONAL, owner-only dashboard step — NOT a prerequisite
+for anything downstream. This smoke validated the flow end-to-end with Paddle
+in sandbox mode.
 
 #### Continuity Block
 
