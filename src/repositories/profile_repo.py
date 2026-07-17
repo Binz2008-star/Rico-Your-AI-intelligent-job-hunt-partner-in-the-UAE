@@ -931,8 +931,10 @@ def find_identity_candidates(signal: IdentitySignal) -> list[Any]:
 def get_users_with_telegram_alerts() -> list[dict[str, Any]]:
     """Return all users who have opted in to Telegram job alerts.
 
-    A user is considered opted-in when they have a numeric telegram_chat_id
-    stored — that ID is captured the first time they message the Rico bot.
+    Consent is fail-closed (#1082): a user is selected only when they have a
+    non-empty telegram_chat_id AND an explicit durable
+    ``telegram_notifications_enabled IS TRUE`` row. NULL/missing consent is not
+    permission — a /stop or opt-out row is excluded on the very next sweep.
     Returns a list of plain dicts with keys: external_user_id, name,
     telegram_chat_id, telegram_username.  Returns [] on DB unavailability.
     """
@@ -952,6 +954,7 @@ def get_users_with_telegram_alerts() -> list[dict[str, Any]]:
                       FROM rico_users
                      WHERE telegram_chat_id IS NOT NULL
                        AND telegram_chat_id <> ''
+                       AND telegram_notifications_enabled IS TRUE
                      ORDER BY updated_at DESC
                     """
                 )
@@ -967,6 +970,39 @@ def get_users_with_telegram_alerts() -> list[dict[str, Any]]:
 # ============================================================================
 # Email alert roster
 # ============================================================================
+
+def disable_telegram_alerts_for_chat(chat_id: str) -> int:
+    """Durably disable Telegram alerts for EVERY rico_users row bound to *chat_id*.
+
+    /stop consent handling (#1082): a Telegram chat may be bound to a native
+    Telegram row (external_user_id == chat_id) and/or a web-linked account row.
+    Disabling by ``telegram_chat_id`` covers all of them so the next roster
+    (``get_users_with_telegram_alerts``) excludes the chat entirely.
+
+    DB-mandatory: raises RuntimeError when the DB is unavailable or the write
+    fails, so callers can refuse to claim "notifications paused" without a
+    committed row. Returns the number of rows disabled.
+    """
+    if not chat_id:
+        raise RuntimeError("disable_telegram_alerts_for_chat: empty chat_id")
+    db = _db()
+    if not db:
+        raise RuntimeError(f"telegram consent DB unavailable chat_id={chat_id}")
+    with _db_transaction() as conn:
+        if not conn:
+            raise RuntimeError(f"telegram consent DB connection unavailable chat_id={chat_id}")
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE rico_users
+                   SET telegram_notifications_enabled = FALSE,
+                       updated_at = now()
+                 WHERE telegram_chat_id = %s
+                """,
+                (str(chat_id),),
+            )
+            return cur.rowcount or 0
+
 
 def get_users_with_email_alerts() -> list[dict[str, Any]]:
     """Return all users who have opted in to email job alerts.

@@ -327,6 +327,12 @@ RICO_INTERACTIVE_APPLY=false
 RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true
 RICO_TELEGRAM_PUBLIC_ALERTS=true
 
+# Global kill switch for scheduled PER-USER Telegram job alerts (#1082).
+# Default OFF (fail-closed) while consent enforcement is remediated; distinct
+# from RICO_TELEGRAM_PUBLIC_ALERTS (admin/public bot). Set true to re-enable
+# the daily per-user roster sender.
+RICO_ENABLE_USER_TELEGRAM_ALERTS=false
+
 # Shared secret for the cron-only follow-up reminders sweep
 # (POST /api/v1/pipeline/reminders, X-Cron-Secret header). Issue #355.
 RICO_CRON_SECRET=
