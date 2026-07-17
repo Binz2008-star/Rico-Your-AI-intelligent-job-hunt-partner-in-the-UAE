@@ -10,161 +10,58 @@ const config: Config = {
     theme: {
         extend: {
             colors: {
-                // ── Atelier editorial token layer (route-scoped to /command) ──
-                // Backed by CSS custom properties the CommandObsidianShell sets
-                // from its JS WorkspacePalette (channels: "r g b"), so light /
-                // "Atelier at Night" both resolve automatically and Tailwind's
-                // `/<alpha>` modifier works (e.g. from-ink/50, via-ink/20).
-                // Only consumed by the /command reply surface (RicoReply /
-                // RicoUserBubble / RicoThinking); no other route defines these vars.
+                // Atelier V3 "Obsidian" token system
+                // All colors resolve through CSS custom properties for light/dark theming
+                background: "rgb(var(--background) / <alpha-value>)",
+                foreground: "rgb(var(--foreground) / <alpha-value>)",
+
+                // Canvas and surfaces
+                paper: "rgb(var(--paper) / <alpha-value>)",
+                "paper-2": "rgb(var(--paper-2) / <alpha-value>)",
+                card: "rgb(var(--card) / <alpha-value>)",
+                popover: "rgb(var(--popover) / <alpha-value>)",
+
+                // Text hierarchy
                 ink: "rgb(var(--ink) / <alpha-value>)",
                 "ink-soft": "rgb(var(--ink-soft) / <alpha-value>)",
                 "ink-mute": "rgb(var(--ink-mute) / <alpha-value>)",
-                paper: "rgb(var(--paper) / <alpha-value>)",
-                "paper-2": "rgb(var(--paper-2) / <alpha-value>)",
                 rule: "rgb(var(--rule) / <alpha-value>)",
+
+                // Accent — acid-lime signal
                 sun: "rgb(var(--sun) / <alpha-value>)",
+                "sun-soft": "rgb(var(--sun-soft) / <alpha-value>)",
 
-                // Rico AI Design System v4 — Premium UAE Career
-                // Primary:   Gold/Amber  — brand, CTAs
-                // Secondary: Indigo      — actions, interactive (professional)
-                // Tertiary:  Sky Blue    — data, links
-                // Success:   Emerald     — confirmed, applied, live
+                // Semantic mappings
+                primary: "rgb(var(--primary) / <alpha-value>)",
+                "primary-foreground": "rgb(var(--primary-foreground) / <alpha-value>)",
+                secondary: "rgb(var(--secondary) / <alpha-value>)",
+                "secondary-foreground": "rgb(var(--secondary-foreground) / <alpha-value>)",
+                muted: "rgb(var(--muted) / <alpha-value>)",
+                "muted-foreground": "rgb(var(--muted-foreground) / <alpha-value>)",
+                accent: "rgb(var(--accent) / <alpha-value>)",
+                "accent-foreground": "rgb(var(--accent-foreground) / <alpha-value>)",
+                destructive: "rgb(var(--destructive) / <alpha-value>)",
+                "destructive-foreground": "rgb(var(--destructive-foreground) / <alpha-value>)",
+                border: "rgb(var(--border) / <alpha-value>)",
+                input: "rgb(var(--input) / <alpha-value>)",
+                ring: "rgb(var(--ring) / <alpha-value>)",
 
-                // Rico Site v3 token system — all semantic colors resolve through
-                // CSS variables (channels) so they switch with the .light theme and
-                // still support Tailwind alpha modifiers via `/ <alpha-value>`.
+                // Sidebar tokens
+                sidebar: "rgb(var(--sidebar) / <alpha-value>)",
+                "sidebar-foreground": "rgb(var(--sidebar-foreground) / <alpha-value>)",
+                "sidebar-primary": "rgb(var(--sidebar-primary) / <alpha-value>)",
+                "sidebar-primary-foreground": "rgb(var(--sidebar-primary-foreground) / <alpha-value>)",
+                "sidebar-accent": "rgb(var(--sidebar-accent) / <alpha-value>)",
+                "sidebar-accent-foreground": "rgb(var(--sidebar-accent-foreground) / <alpha-value>)",
+                "sidebar-border": "rgb(var(--sidebar-border) / <alpha-value>)",
+                "sidebar-ring": "rgb(var(--sidebar-ring) / <alpha-value>)",
 
-                // Global Canvas
-                background: "rgb(var(--bg) / <alpha-value>)",
-                // Nocturne aliases — `void` is the canvas, `overlay` the translucent
-                // white/dark channel used for hairline borders + glass fills.
-                void: "rgb(var(--bg) / <alpha-value>)",
-                overlay: "rgb(var(--overlay) / <alpha-value>)",
-                surface: {
-                    DEFAULT: "rgb(var(--surface) / <alpha-value>)",
-                    elevated: "rgb(var(--surface-elevated) / <alpha-value>)",
-                    subtle: "rgb(var(--overlay) / 0.02)",
-                    glass: "rgb(var(--overlay) / 0.04)",
-                },
-
-                // Primary System - Gold/Amber
-                gold: {
-                    DEFAULT: "rgb(var(--gold) / <alpha-value>)",
-                    hover: "rgb(var(--gold-hover) / <alpha-value>)",
-                    glow: "rgb(var(--gold) / 0.25)",
-                    soft: "rgb(var(--gold) / 0.10)",
-                    muted: "rgb(var(--gold) / 0.15)",
-                    dim: "rgb(var(--gold) / 0.05)",
-                    border: "rgb(var(--gold) / 0.35)",
-                },
-
-                // Secondary System - Magenta
-                magenta: {
-                    DEFAULT: "rgb(var(--magenta) / <alpha-value>)",
-                    glow: "rgb(var(--magenta) / 0.3)",
-                    soft: "rgb(var(--magenta) / 0.1)",
-                    dim: "rgb(var(--magenta) / 0.05)",
-                    hover: "rgb(var(--magenta-hover) / <alpha-value>)",
-                },
-
-                // Tertiary System - Cyan
-                cyan: {
-                    DEFAULT: "rgb(var(--cyan) / <alpha-value>)",
-                    glow: "rgb(var(--cyan) / 0.3)",
-                    soft: "rgb(var(--cyan) / 0.1)",
-                    dim: "rgb(var(--cyan) / 0.05)",
-                    hover: "rgb(var(--cyan-hover) / <alpha-value>)",
-                },
-
-                // Nocturne — Ember (Rico's voice). Aliases the --gold token for semantic reads.
-                ember: {
-                    DEFAULT: "rgb(var(--gold) / <alpha-value>)",
-                    bright: "rgb(var(--gold-hover) / <alpha-value>)",
-                    glow: "rgb(var(--gold) / 0.25)",
-                    soft: "rgb(var(--gold) / 0.10)",
-                    border: "rgb(var(--gold) / 0.35)",
-                },
-
-                // Nocturne — Aura (intelligence / data only). Teal on dark, AA-darkened on light.
-                aura: {
-                    DEFAULT: "rgb(var(--aura) / <alpha-value>)",
-                    dim: "rgb(var(--aura-dim) / <alpha-value>)",
-                    glow: "rgb(var(--aura) / 0.25)",
-                    soft: "rgb(var(--aura) / 0.10)",
-                    border: "rgb(var(--aura) / 0.40)",
-                },
-
-                // Success System — Emerald
-                success: {
-                    DEFAULT: "rgb(var(--success) / <alpha-value>)",
-                    hover: "rgb(var(--success-hover) / <alpha-value>)",
-                    soft: "rgb(var(--success) / 0.10)",
-                    border: "rgb(var(--success) / 0.30)",
-                    glow: "rgb(var(--success) / 0.20)",
-                },
-
-                // Gradient System
-                gradient: {
-                    gold: "linear-gradient(135deg, #f0a94a 0%, #fbbf24 100%)",
-                    magenta: "linear-gradient(135deg, #818cf8 0%, #6366f1 100%)",
-                    cyan: "linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)",
-                    duo: "linear-gradient(135deg, #f0a94a 0%, #818cf8 100%)",
-                    subtle: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%)",
-                },
-
-                // Text System
-                text: {
-                    primary: "rgb(var(--text-primary) / <alpha-value>)",
-                    secondary: "rgb(var(--text-secondary) / <alpha-value>)",
-                    tertiary: "rgb(var(--text-tertiary) / <alpha-value>)",
-                    muted: "rgb(var(--text-muted) / <alpha-value>)",
-                    disabled: "rgb(var(--text-disabled) / <alpha-value>)",
-                },
-
-                // Border System (overlay channel + fixed alphas)
-                border: {
-                    subtle: "rgb(var(--overlay) / 0.06)",
-                    soft: "rgb(var(--overlay) / 0.1)",
-                    medium: "rgb(var(--overlay) / 0.16)",
-                    strong: "rgb(var(--overlay) / 0.24)",
-                    gradient: "linear-gradient(135deg, rgba(255,45,142,0.5) 0%, rgba(0,229,255,0.5) 100%)",
-                },
-
-                // Legacy compatibility layer — now token-backed so it themes too.
-                "surface-container": "rgb(var(--surface) / <alpha-value>)",
-                "surface-variant": "rgb(var(--surface-elevated) / <alpha-value>)",
-                primary: "rgb(var(--text-primary) / <alpha-value>)",
-                secondary: "rgb(var(--cyan) / <alpha-value>)",
-                error: "#ff5e5b",
-                outline: "rgb(var(--overlay) / 0.1)",
-                rico: {
-                    bg: "rgb(var(--bg) / <alpha-value>)",
-                    surface: "rgb(var(--surface) / <alpha-value>)",
-                    "surface-2": "rgb(var(--surface-elevated) / <alpha-value>)",
-                    border: "rgb(var(--overlay) / 0.06)",
-                    // Primary accent → gold
-                    accent: "rgb(var(--gold) / <alpha-value>)",
-                    "accent-hover": "rgb(var(--gold-hover) / <alpha-value>)",
-                    "accent-muted": "rgb(var(--gold) / 0.10)",
-                    "accent-border": "rgb(var(--gold) / 0.35)",
-                    "accent-glow": "rgb(var(--gold) / 0.20)",
-                    // Secondary accent → indigo (was magenta)
-                    magenta: "rgb(var(--magenta) / <alpha-value>)",
-                    "magenta-muted": "rgb(var(--magenta) / 0.10)",
-                    text: "rgb(var(--text-primary) / <alpha-value>)",
-                    "text-muted": "rgb(var(--text-secondary) / <alpha-value>)",
-                    "text-dim": "rgb(var(--text-tertiary) / <alpha-value>)",
-                    purple: "rgb(var(--magenta) / <alpha-value>)",
-                    teal: "rgb(var(--cyan) / <alpha-value>)",
-                    red: "#f87171",
-                    // Gold aliases
-                    amber: "rgb(var(--gold) / <alpha-value>)",
-                    gold: "rgb(var(--gold) / <alpha-value>)",
-                    // Success alias
-                    success: "rgb(var(--success) / <alpha-value>)",
-                    "success-muted": "rgb(var(--success) / 0.10)",
-                },
+                // Chart colors
+                "chart-1": "rgb(var(--chart-1) / <alpha-value>)",
+                "chart-2": "rgb(var(--chart-2) / <alpha-value>)",
+                "chart-3": "rgb(var(--chart-3) / <alpha-value>)",
+                "chart-4": "rgb(var(--chart-4) / <alpha-value>)",
+                "chart-5": "rgb(var(--chart-5) / <alpha-value>)",
             },
             // Nocturne hairline alpha stops — Tailwind's `/N` color-alpha modifier only
             // resolves values present in the opacity scale, and the reference uses
@@ -195,12 +92,15 @@ const config: Config = {
                 "container-padding-desktop": "120px",
             },
             fontFamily: {
-                // Nocturne: Space Grotesk (display/headline) + Inter (body/sans) + IBM Plex Mono
-                display: ["var(--font-display)", "var(--font-body)", "sans-serif"],
-                headline: ["var(--font-display)", "var(--font-body)", "sans-serif"],
-                sans: ["var(--font-body)", "system-ui", "sans-serif"],
-                body: ["var(--font-body)", "system-ui", "sans-serif"],
+                // Atelier V3: Space Grotesk (display) + Inter (body) + JetBrains Mono (meta) + Fraunces (editorial)
+                display: ["var(--font-display)", "sans-serif"],
+                sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+                body: ["var(--font-sans)", "system-ui", "sans-serif"],
                 mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+                editorial: ["var(--font-editorial)", "serif"],
+                // Arabic fonts
+                "display-ar": ["var(--font-display-ar)", "serif"],
+                "sans-ar": ["var(--font-sans-ar)", "system-ui", "sans-serif"],
             },
             fontSize: {
                 "display-lg": ["80px", { lineHeight: "1.1", letterSpacing: "-0.04em", fontWeight: "700" }],

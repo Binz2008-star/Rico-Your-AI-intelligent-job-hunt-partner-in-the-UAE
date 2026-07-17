@@ -2,21 +2,14 @@ import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans, Inter, Space_Grotesk } from "next/font/google";
+import { Amiri, Fraunces, IBM_Plex_Sans_Arabic, Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 
 const themeInitScript = `(function(){try{var t=localStorage.getItem("rico-theme");var m=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";var r=(t==="light"||t==="dark")?t:(t==="system"?m:"dark");var e=document.documentElement;e.classList.remove("dark","light");e.classList.add(r);e.setAttribute("data-theme",r);}catch(_){}})();`;
 const langInitScript = `(function(){try{var l=localStorage.getItem("rico-language");if(l==="ar"){var e=document.documentElement;e.lang="ar";e.dir="rtl";}}catch(_){}})();`;
 
-// V2 landing: IBM Plex Sans (200–700 weights for the black/cyan/magenta design)
-const ibmPlexSans = IBM_Plex_Sans({
-    subsets: ["latin"],
-    weight: ["200", "300", "400", "500", "600", "700"],
-    variable: "--font-ibm-plex-sans",
-    display: "swap",
-});
-
+// Atelier V3 fonts
 const spaceGrotesk = Space_Grotesk({
     subsets: ["latin"],
     weight: ["400", "500", "600", "700"],
@@ -27,14 +20,36 @@ const spaceGrotesk = Space_Grotesk({
 const inter = Inter({
     subsets: ["latin"],
     weight: ["400", "500", "600"],
-    variable: "--font-body",
+    variable: "--font-sans",
     display: "swap",
 });
 
-const ibmPlexMono = IBM_Plex_Mono({
+const jetbrainsMono = JetBrains_Mono({
     subsets: ["latin"],
     weight: ["400", "500", "600"],
     variable: "--font-mono",
+    display: "swap",
+});
+
+const fraunces = Fraunces({
+    subsets: ["latin"],
+    weight: ["400"],
+    variable: "--font-editorial",
+    display: "swap",
+    style: ["italic"],
+});
+
+const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
+    subsets: ["arabic"],
+    weight: ["400", "500", "600", "700"],
+    variable: "--font-sans-ar",
+    display: "swap",
+});
+
+const amiri = Amiri({
+    subsets: ["arabic"],
+    weight: ["400", "700"],
+    variable: "--font-display-ar",
     display: "swap",
 });
 
@@ -297,9 +312,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <script dangerouslySetInnerHTML={{ __html: langInitScript }} />
             </head>
             <body
-                className={`${
-                    ibmPlexSans.variable
-                } ${spaceGrotesk.variable} ${inter.variable} ${ibmPlexMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}
+                className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} ${fraunces.variable} ${ibmPlexSansArabic.variable} ${amiri.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}
             >
                 <Script
                     id="json-ld-root"

@@ -2,148 +2,343 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Rico AI Design System v4 — Premium UAE Career
- * Primary:   Gold/Amber   (#f0a94a) — brand, CTAs, premium
- * Secondary: Indigo       (#818cf8) — actions, interactive (replaces hot magenta)
- * Tertiary:  Sky Blue     (#60a5fa) — data, links (replaces neon cyan)
- * Success:   Emerald      (#10b981) — confirmed, applied, live
+/*
+ * Rico Hunt — "Obsidian" (Atelier V3 remix)
+ *
+ * Dark-first operator console. Deep obsidian paper, luminous cream ink,
+ * one acid-lime signal. Space Grotesk display + Inter body + JetBrains
+ * Mono meta. Fraunces reserved for editorial italic accents.
+ *
+ * Same utility class names as v3 (serif, mono-eyebrow, ink/paper/sun)
+ * so every existing surface picks up the new system without rewrites.
  */
 
-/* ───────────────────────────────────────────────────────────────────────────
- * Token layer
- *
- * Semantic colors expressed as space-separated RGB channels so Tailwind's
- * alpha modifiers (`bg-surface/60`) resolve through the
- * `rgb(var(--token) / <alpha-value>)` pattern in tailwind.config.ts.
- *
- * `:root` = dark theme (production default).
- * `.light` remaps to a clean white AA-contrast palette.
- * ─────────────────────────────────────────────────────────────────────────── */
+/* ---------- Light mode (default) — "Obsidian at dawn" ---------- */
 :root {
-    color-scheme: dark;
-
-    /* Canvas + surfaces — deep navy/indigo (professional, not void-black) */
-    --bg: 11 13 28;
-    --surface: 16 20 42;
-    --surface-elevated: 23 28 58;
-    /* Overlay channel for translucent fills/borders */
-    --overlay: 255 255 255;
-
-    /* Primary: Gold — UAE premium brand, unchanged */
-    --gold: 240 169 74;
-    --gold-hover: 255 196 110;
-
-    /* Intelligence accent: Teal/Aura — unchanged (data/AI outputs only) */
-    --aura: 111 233 208;
-    --aura-dim: 63 185 166;
-
-    /* Secondary: Indigo (professional, replaces hot magenta) */
-    --magenta: 129 140 248;
-    --magenta-hover: 149 160 255;
-
-    /* Tertiary: Sky Blue (professional, replaces neon cyan) */
-    --cyan: 96 165 250;
-    --cyan-hover: 125 185 255;
-
-    /* Success: Emerald — job applied, email verified, live status */
-    --success: 16 185 129;
-    --success-hover: 5 150 105;
-
-    /* Text — strong contrast on navy canvas */
-    --text-primary: 242 244 250;
-    --text-secondary: 158 168 192;
-    --text-tertiary: 108 118 142;
-    --text-muted: 72 80 100;
-    --text-disabled: 44 50 68;
-
-    /* Ambient canvas: gold TL + indigo BR (subtle, premium atmosphere) */
-    --canvas-glow-1: 240 169 74;
-    --canvas-glow-2: 99 102 241;
-
-    /* Glass panel: navy-tinted surfaces */
-    --glass-top: 23 28 58;
-    --glass-bottom: 13 16 38;
-
-    /* Drop-shadow color */
-    --shadow-color: 5 6 18;
-
-    /* Focus ring — gold, high contrast */
-    --focus-ring: rgb(var(--gold));
-    --focus-ring-shadow: rgb(var(--gold) / 0.20);
-    --focus-ring-offset: 3px;
-    --focus-ring-width: 2px;
-
-    /* ── Rico Command alias layer ─────────────────────────────────────────────
-     * The Command page and Rico UI primitives use --rico-* tokens.
-     * These alias the channel tokens above so they flip with .light automatically.
-     * ─────────────────────────────────────────────────────────────────────── */
-    --rico-bg: rgb(var(--bg));
-    --rico-fg-1: rgb(var(--text-primary));
-    --rico-fg-2: rgb(var(--text-secondary));
-    --rico-fg-3: rgb(var(--text-tertiary));
-    --rico-fg-4: rgb(var(--text-muted));
-    --rico-border-subtle: rgb(var(--overlay) / 0.06);
-    --rico-border-soft: rgb(var(--overlay) / 0.10);
-    --rico-border-medium: rgb(var(--overlay) / 0.16);
-    /* Primary accent → gold */
-    --rico-primary: rgb(var(--gold));
-    --rico-primary-container: rgb(var(--gold) / 0.15);
-    --rico-on-primary: #0a0a0f;
-    /* Secondary accent → indigo (was magenta) */
-    --rico-secondary: rgb(var(--magenta));
-    --rico-secondary-dim: rgb(var(--magenta) / 0.6);
-    --rico-magenta-glow: rgb(var(--magenta) / 0.20);
-    --rico-cyan-glow: rgb(var(--cyan) / 0.20);
-    --rico-gold-glow: rgb(var(--gold) / 0.25);
-    --rico-focus-ring: rgb(var(--gold));
-    --rico-error: #f87171;
-    --rico-error-bg: rgb(248 113 113 / 0.10);
-    /* Success */
-    --rico-success: rgb(var(--success));
-    --rico-success-bg: rgb(var(--success) / 0.10);
-
-    /* Radius scale */
-    --r-lg: 0.625rem;
-    --r-xl: 0.875rem;
-    --r-full: 9999px;
-}
-
-.light {
     color-scheme: light;
 
-    /* Clean white — professional, spacious */
-    --bg: 248 249 252;
-    --surface: 255 255 255;
-    --surface-elevated: 241 243 249;
-    --overlay: 15 17 32;
+    --radius: 0.375rem;
 
-    /* Darkened accents for AA on light surfaces */
-    --gold: 168 95 0;
-    --gold-hover: 140 75 0;
-    --aura: 15 118 110;
-    --aura-dim: 13 95 85;
-    --magenta: 99 102 241;
-    --magenta-hover: 79 82 221;
-    --cyan: 37 99 235;
-    --cyan-hover: 29 78 216;
-    --success: 5 150 105;
-    --success-hover: 4 120 87;
+    --paper: #f4f5f0;
+    --paper-2: #e8ebe0;
+    --ink: #0f1210;
+    --ink-soft: #2f342e;
+    --ink-mute: #626a5e;
+    --rule: #d2d6c8;
 
-    --text-primary: 15 17 32;
-    --text-secondary: 68 76 98;
-    --text-tertiary: 108 118 142;
-    --text-muted: 148 158 178;
-    --text-disabled: 188 196 212;
+    --sun: #3e6b0f;
+    --sun-soft: #6ea41f;
 
-    --canvas-glow-1: 240 169 74;
-    --canvas-glow-2: 99 102 241;
+    --background: var(--paper);
+    --foreground: var(--ink);
 
-    /* Light glass = pure white translucent */
-    --glass-top: 255 255 255;
-    --glass-bottom: 241 243 249;
+    --card: #fbfcf6;
+    --card-foreground: var(--ink);
+    --popover: #fbfcf6;
+    --popover-foreground: var(--ink);
 
-    /* Soft neutral shadow on light surfaces */
-    --shadow-color: 88 94 120;
+    --primary: var(--ink);
+    --primary-foreground: var(--paper);
+
+    --secondary: var(--paper-2);
+    --secondary-foreground: var(--ink);
+
+    --muted: var(--paper-2);
+    --muted-foreground: var(--ink-mute);
+
+    --accent: var(--sun);
+    --accent-foreground: #ffffff;
+
+    --destructive: #b23a1a;
+    --destructive-foreground: #fff7ef;
+
+    --border: var(--rule);
+    --input: var(--rule);
+    --ring: var(--sun);
+
+    --chart-1: var(--sun);
+    --chart-2: #1f6f8b;
+    --chart-3: var(--sun-soft);
+    --chart-4: var(--ink-mute);
+    --chart-5: #b23a1a;
+
+    --sidebar: var(--paper);
+    --sidebar-foreground: var(--ink);
+    --sidebar-primary: var(--ink);
+    --sidebar-primary-foreground: var(--paper);
+    --sidebar-accent: var(--paper-2);
+    --sidebar-accent-foreground: var(--ink);
+    --sidebar-border: var(--rule);
+    --sidebar-ring: var(--sun);
+
+    --shadow-plate:
+        0 1px 0 rgba(15, 18, 16, 0.04),
+        0 24px 60px -40px rgba(15, 18, 16, 0.35);
+
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------- Dark mode — "Obsidian night" ---------- */
+.dark {
+    color-scheme: dark;
+
+    --paper: #0a0b0d;
+    --paper-2: #12141a;
+    --ink: #f2f4f0;
+    --ink-soft: #c7ccc0;
+    --ink-mute: #7a8078;
+    --rule: #1f2229;
+
+    --sun: #c8ff3f;
+    --sun-soft: #9de81a;
+
+    --background: var(--paper);
+    --foreground: var(--ink);
+
+    --card: #10131a;
+    --card-foreground: var(--ink);
+    --popover: #10131a;
+    --popover-foreground: var(--ink);
+
+    --primary: var(--sun);
+    --primary-foreground: #0a0b0d;
+
+    --secondary: var(--paper-2);
+    --secondary-foreground: var(--ink);
+
+    --muted: var(--paper-2);
+    --muted-foreground: var(--ink-mute);
+
+    --accent: var(--sun);
+    --accent-foreground: #0a0b0d;
+
+    --destructive: #ff5a4a;
+    --destructive-foreground: #0a0b0d;
+
+    --border: var(--rule);
+    --input: var(--rule);
+    --ring: var(--sun);
+
+    --chart-1: var(--sun);
+    --chart-2: #6ee7ff;
+    --chart-3: var(--sun-soft);
+    --chart-4: var(--ink-mute);
+    --chart-5: #ff8ac2;
+
+    --sidebar: var(--paper);
+    --sidebar-foreground: var(--ink);
+    --sidebar-primary: var(--sun);
+    --sidebar-primary-foreground: #0a0b0d;
+    --sidebar-accent: var(--paper-2);
+    --sidebar-accent-foreground: var(--ink);
+    --sidebar-border: var(--rule);
+    --sidebar-ring: var(--sun);
+
+    --shadow-plate:
+        0 1px 0 rgba(200, 255, 63, 0.04),
+        0 24px 60px -32px rgba(0, 0, 0, 0.7);
+}
+
+@layer base {
+    * {
+        border-color: var(--color-border);
+    }
+
+    html {
+        background-color: var(--paper);
+    }
+
+    body {
+        background-color: var(--color-background);
+        color: var(--color-foreground);
+        font-family: var(--font-sans);
+        font-feature-settings: "ss01", "cv11";
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-family: var(--font-display);
+        font-weight: 500;
+        letter-spacing: -0.025em;
+        color: var(--ink);
+    }
+
+    ::selection {
+        background: var(--sun);
+        color: #0a0b0d;
+    }
+
+    /* Subtle grid grain — colder in dark, warmer in light */
+    body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.05;
+        background-image:
+            linear-gradient(to right, var(--ink-mute) 1px, transparent 1px),
+            linear-gradient(to bottom, var(--ink-mute) 1px, transparent 1px);
+        background-size: 64px 64px;
+        mask-image: radial-gradient(ellipse at 50% 30%, black 30%, transparent 75%);
+    }
+
+    /* Acid-lime aura at the top of the viewport */
+    body::after {
+        content: "";
+        position: fixed;
+        top: -20vh;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 90vw;
+        height: 60vh;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.08;
+        background: radial-gradient(ellipse at center, var(--sun) 0%, transparent 60%);
+        filter: blur(60px);
+    }
+
+    .dark body::after {
+        opacity: 0.2;
+    }
+
+    /* -------- Arabic typography -------- */
+    :lang(ar) {
+        font-family: var(--font-sans-ar);
+        letter-spacing: 0 !important;
+    }
+
+    :lang(ar) h1,
+    :lang(ar) h2,
+    :lang(ar) h3,
+    :lang(ar) h4,
+    :lang(ar) h5,
+    :lang(ar) h6 {
+        font-family: var(--font-display-ar);
+        letter-spacing: 0;
+        line-height: 1.25;
+    }
+
+    [dir="rtl"] .serif-italic,
+    :lang(ar) .serif-italic {
+        font-family: var(--font-display-ar);
+        font-style: normal;
+    }
+
+    [dir="rtl"] .mono-eyebrow,
+    :lang(ar) .mono-eyebrow {
+        font-family: var(--font-sans-ar);
+        letter-spacing: 0.04em;
+        text-transform: none;
+        font-size: 12px;
+    }
+
+    [dir="rtl"] .font-mono,
+    :lang(ar) .font-mono {
+        letter-spacing: 0.04em;
+    }
+}
+
+/* Legacy utility name "serif" — now maps to Space Grotesk display.
+ * Fraunces-italic accents live on `.serif-italic` where used. */
+@utility serif {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.025em;
+}
+
+@utility serif-italic {
+    font-family: var(--font-editorial);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.015em;
+}
+
+@utility mono-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+}
+
+@utility rule-top {
+    border-top: 1px solid var(--rule);
+}
+
+@utility rule-bottom {
+    border-bottom: 1px solid var(--rule);
+}
+
+@utility ink-underline {
+    background-image: linear-gradient(var(--sun), var(--sun));
+    background-repeat: no-repeat;
+    background-size: 100% 0.14em;
+    background-position: 0 92%;
+    padding-inline: 0.05em;
+}
+
+@keyframes atelier-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes atelier-caret {
+
+    0%,
+    45% {
+        opacity: 1;
+    }
+
+    50%,
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes atelier-drift {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-6px);
+    }
+}
+
+@keyframes atelier-spark {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@utility animate-fade-up {
+    animation: atelier-fade-up 0.75s var(--ease-out-expo) both;
+}
+
+@utility animate-caret {
+    animation: atelier-caret 1s steps(1, end) infinite;
+}
+
+@utility animate-drift {
+    animation: atelier-drift 7s var(--ease-out-expo) infinite;
 }
 
 /* ── Command dark lock ──────────────────────────────────────────────────────
@@ -153,274 +348,53 @@
 .command-dark-lock {
     color-scheme: dark;
 
-    --bg: 11 13 28;
-    --surface: 16 20 42;
-    --surface-elevated: 23 28 58;
-    --overlay: 255 255 255;
+    --paper: #0a0b0d;
+    --paper-2: #12141a;
+    --ink: #f2f4f0;
+    --ink-soft: #c7ccc0;
+    --ink-mute: #7a8078;
+    --rule: #1f2229;
 
-    --gold: 240 169 74;
-    --gold-hover: 255 196 110;
-    --aura: 111 233 208;
-    --aura-dim: 63 185 166;
-    --magenta: 129 140 248;
-    --magenta-hover: 149 160 255;
-    --cyan: 96 165 250;
-    --cyan-hover: 125 185 255;
-    --success: 16 185 129;
-    --success-hover: 5 150 105;
+    --sun: #c8ff3f;
+    --sun-soft: #9de81a;
 
-    --text-primary: 242 244 250;
-    --text-secondary: 158 168 192;
-    --text-tertiary: 108 118 142;
-    --text-muted: 72 80 100;
-    --text-disabled: 44 50 68;
+    --background: var(--paper);
+    --foreground: var(--ink);
 
-    --glass-top: 23 28 58;
-    --glass-bottom: 13 16 38;
+    --card: #10131a;
+    --card-foreground: var(--ink);
+    --popover: #10131a;
+    --popover-foreground: var(--ink);
 
-    --shadow-color: 5 6 18;
+    --primary: var(--sun);
+    --primary-foreground: #0a0b0d;
 
-    --focus-ring: rgb(var(--gold));
-    --focus-ring-shadow: rgb(var(--gold) / 0.20);
-    --rico-primary: rgb(var(--gold));
-    --rico-primary-container: rgb(var(--gold) / 0.15);
-    --rico-focus-ring: rgb(var(--gold));
-    --rico-success: rgb(var(--success));
-    --rico-success-bg: rgb(var(--success) / 0.10);
-}
+    --secondary: var(--paper-2);
+    --secondary-foreground: var(--ink);
 
-html,
-body {
-    /* Ambient canvas — subtle premium atmosphere */
-    background:
-        radial-gradient(circle at top left, rgb(var(--canvas-glow-1) / 0.06) 0%, transparent 36%),
-        radial-gradient(circle at bottom right, rgb(var(--canvas-glow-2) / 0.05) 0%, transparent 30%),
-        rgb(var(--bg));
-    color: rgb(var(--text-primary));
-    font-family: var(--font-body), system-ui, sans-serif;
-    overflow-x: hidden;
-}
+    --muted: var(--paper-2);
+    --muted-foreground: var(--ink-mute);
 
-/* Glass panel — clean, professional elevation */
-.glass-panel {
-    backdrop-filter: blur(32px);
-    background:
-        linear-gradient(180deg, rgb(var(--glass-top) / 0.80) 0%, rgb(var(--glass-bottom) / 0.72) 100%);
-    border: 1px solid rgb(var(--overlay) / 0.09);
-    box-shadow:
-        0 16px 48px rgb(var(--shadow-color) / 0.24),
-        inset 0 1px 0 rgb(var(--overlay) / 0.06);
-}
+    --accent: var(--sun);
+    --accent-foreground: #0a0b0d;
 
-.glass-island {
-    backdrop-filter: blur(36px);
-    background:
-        linear-gradient(180deg, rgb(var(--glass-top) / 0.86) 0%, rgb(var(--glass-bottom) / 0.78) 100%);
-    border-top: 0.5px solid rgb(var(--overlay) / 0.10);
-    border-left: 0.5px solid rgb(var(--overlay) / 0.06);
-    box-shadow:
-        0 14px 40px rgb(var(--shadow-color) / 0.20),
-        inset 0 1px 0 rgb(var(--overlay) / 0.05);
-}
+    --destructive: #ff5a4a;
+    --destructive-foreground: #0a0b0d;
 
-/* Aura glow effects — toned down, professional */
-.aura-glow-gold {
-    background: radial-gradient(circle, rgba(240, 169, 74, 0.10) 0%, rgba(0, 0, 0, 0) 70%);
-}
+    --border: var(--rule);
+    --input: var(--rule);
+    --ring: var(--sun);
 
-.aura-glow-cyan {
-    background: radial-gradient(circle, rgba(96, 165, 250, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
-}
+    --sidebar: var(--paper);
+    --sidebar-foreground: var(--ink);
+    --sidebar-primary: var(--sun);
+    --sidebar-primary-foreground: #0a0b0d;
+    --sidebar-accent: var(--paper-2);
+    --sidebar-accent-foreground: var(--ink);
+    --sidebar-border: var(--rule);
+    --sidebar-ring: var(--sun);
 
-.aura-glow-magenta {
-    background: radial-gradient(circle, rgba(129, 140, 248, 0.07) 0%, rgba(0, 0, 0, 0) 70%);
-}
-
-.glow-aura {
-    filter: blur(140px);
-    background: radial-gradient(circle, rgba(240, 169, 74, 0.12) 0%, rgba(240, 169, 74, 0) 70%);
-}
-
-.glow-gold-point {
-    filter: blur(40px);
-    background: rgba(240, 169, 74, 0.10);
-}
-
-.glow-cyan-point {
-    filter: blur(40px);
-    background: rgba(96, 165, 250, 0.08);
-}
-
-/* Skeleton shimmer */
-@keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
-}
-
-.skeleton-shimmer {
-    background: linear-gradient(90deg,
-        rgb(var(--overlay) / 0.04) 0%,
-        rgb(var(--overlay) / 0.09) 50%,
-        rgb(var(--overlay) / 0.04) 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.8s ease-in-out infinite;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-    background: rgb(var(--overlay) / 0.10);
-    border-radius: 99px;
-}
-::-webkit-scrollbar-thumb:hover { background: rgb(var(--overlay) / 0.18); }
-
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* Focus system */
-:where(a, button, input, textarea, select, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
-}
-
-/* Ambient grain overlay — very subtle (0.028) */
-body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    pointer-events: none;
-    z-index: 9999;
-    opacity: 0.028;
-}
-
-/* Cinematic entrance keyframes */
-@keyframes fadeSlideIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes glowPulse {
-    0%, 100% {
-        box-shadow: 0 0 16px rgba(240, 169, 74, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    }
-    50% {
-        box-shadow: 0 0 28px rgba(240, 169, 74, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.07);
-    }
-}
-
-/* Glass panel interactive states */
-.glass-panel:focus-within {
-    border-color: rgb(var(--gold) / 0.20);
-    box-shadow:
-        0 16px 48px rgb(var(--shadow-color) / 0.24),
-        inset 0 1px 0 rgb(var(--overlay) / 0.06),
-        0 0 32px rgb(var(--gold) / 0.05);
-}
-
-.glass-panel:hover {
-    border-color: rgb(var(--overlay) / 0.13);
-}
-
-/* ── Rico thinking indicator ─────────────────────────────────────────────── */
-.rico-thinking-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 8px 0 10px;
-}
-
-.rico-orb {
-    width: 28px;
-    height: 28px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    color: #0a0a0f;
-    font-weight: 700;
-    font-size: 13px;
-    background:
-        radial-gradient(circle at center, rgba(240, 169, 74, 0.9), rgba(240, 169, 74, 0.7)),
-        #f0a94a;
-    border: 1px solid rgba(240, 169, 74, 0.8);
-    box-shadow:
-        0 0 12px rgba(240, 169, 74, 0.28),
-        inset 0 1px 0 rgba(255, 255, 255, 0.20);
-    animation: ricoOrbPulse 2s ease-in-out infinite;
-    flex-shrink: 0;
-}
-
-.rico-orb span {
-    display: inline-block;
-    letter-spacing: -0.02em;
-}
-
-.rico-thinking-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: rgba(255, 255, 255, 0.60);
-    font-size: 13px;
-    letter-spacing: -0.01em;
-}
-
-.rico-dots {
-    display: inline-flex;
-    gap: 3px;
-    align-items: center;
-}
-
-.rico-dots i {
-    display: block;
-    width: 4px;
-    height: 4px;
-    border-radius: 999px;
-    background: rgb(var(--gold));
-    opacity: 0.4;
-    font-style: normal;
-    animation: ricoDot 1.4s ease-in-out infinite;
-}
-
-.rico-dots i:nth-child(2) { animation-delay: 0.18s; }
-.rico-dots i:nth-child(3) { animation-delay: 0.36s; }
-
-@keyframes ricoRSpin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-}
-
-@keyframes ricoOrbPulse {
-    0%, 100% { transform: scale(1); box-shadow: 0 0 8px rgba(240, 169, 74, 0.22); }
-    50%       { transform: scale(1.05); box-shadow: 0 0 16px rgba(240, 169, 74, 0.40); }
-}
-
-@keyframes ricoDot {
-    0%, 100% { opacity: 0.30; transform: translateY(0); }
-    50%       { opacity: 1; transform: translateY(-2px); }
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        scroll-behavior: auto !important;
-        transition-duration: 0.01ms !important;
-    }
-
-    .animate-breathe,
-    .animate-pulse-ring,
-    .animate-float,
-    .animate-pulse-gold,
-    .animate-pulse-magenta,
-    .skeleton-shimmer {
-        animation: none !important;
-    }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .motion-safe\:animate-breathe {
-        animation: breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
-    }
+    --shadow-plate:
+        0 1px 0 rgba(200, 255, 63, 0.04),
+        0 24px 60px -32px rgba(0, 0, 0, 0.7);
 }
