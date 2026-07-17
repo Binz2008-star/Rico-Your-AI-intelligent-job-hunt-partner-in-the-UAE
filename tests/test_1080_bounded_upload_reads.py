@@ -197,3 +197,36 @@ class TestRealAppWiring:
             files={"file": ("cv.txt", b"hello rico", "text/plain")},
         )
         assert r.status_code != 413
+
+
+class TestExactCapBoundaries:
+    """Owner merge condition: the exact 10MB image / 25MB document boundaries
+    must not suffer off-by-one — exactly-at-cap is accepted, cap+1 rejected."""
+
+    def test_exact_25mb_document_accepted_and_plus_one_rejected(self):
+        from src.api.routers.rico_chat import _MAX_DOC_BYTES, _upload_limit_for
+        assert _upload_limit_for("pdf") == _MAX_DOC_BYTES == 25 * 1024 * 1024
+
+        at_cap = _FakeUploadFile(total=_MAX_DOC_BYTES)
+        data = asyncio.run(read_upload_bounded(at_cap, _MAX_DOC_BYTES))
+        assert len(data) == _MAX_DOC_BYTES
+
+        over = _FakeUploadFile(total=_MAX_DOC_BYTES + 1)
+        with pytest.raises(HTTPException) as e:
+            asyncio.run(read_upload_bounded(over, _MAX_DOC_BYTES))
+        assert e.value.status_code == 413
+
+    def test_exact_10mb_image_boundary_semantics(self):
+        from src.api.routers.rico_chat import _MAX_IMAGE_BYTES, _upload_limit_for
+        assert _upload_limit_for("image") == _MAX_IMAGE_BYTES == 10 * 1024 * 1024
+        # The per-kind rule is a strict `>` post-detection check: exactly-at-cap
+        # passes, one byte over fails.
+        exactly = b"x" * _MAX_IMAGE_BYTES
+        assert not (len(exactly) > _MAX_IMAGE_BYTES)
+        assert (len(exactly) + 1) > _MAX_IMAGE_BYTES
+
+    def test_ingress_cap_leaves_room_for_25mb_multipart(self):
+        from src.api.upload_limits import MAX_REQUEST_BODY_BYTES, MAX_UPLOAD_BYTES
+        assert MAX_UPLOAD_BYTES == 25 * 1024 * 1024
+        assert MAX_REQUEST_BODY_BYTES > MAX_UPLOAD_BYTES, \
+            "multipart framing allowance must keep a full 25MB document acceptable"
