@@ -40,6 +40,7 @@ import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useWorkspaceTheme, type WorkspacePalette } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useToast } from "@/hooks/useToast";
 import {
     ApiError,
@@ -60,7 +61,7 @@ import type { SettingsResponse, TelegramStatusResponse } from "@/types";
 
 const SERIF = ATELIER_FONT.serif;
 
-type TabKey = "account" | "preferences" | "notifications" | "danger";
+type TabKey = "account" | "preferences" | "notifications" | "appearance" | "danger";
 
 function splitKeywords(value: string): string[] {
     return value
@@ -156,6 +157,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
     const router = useRouter();
     const palette = useWorkspaceTheme();
     const { toasts, toast } = useToast();
+    const { theme, setTheme } = useTheme();
 
     const [tab, setTab] = useState<TabKey>("account");
 
@@ -308,6 +310,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
         { key: "account", label: t("account") },
         { key: "preferences", label: t("settingsTabPreferences") },
         { key: "notifications", label: t("notifications") },
+        { key: "appearance", label: t("appearance") },
         { key: "danger", label: t("settingsTabDanger") },
     ];
 
@@ -675,6 +678,30 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    </Panel>
+                )}
+
+                {/* ── Appearance ── */}
+                {tab === "appearance" && (
+                    <Panel palette={palette} id="sx-panel-appearance" labelledBy="sx-tab-appearance">
+                        <TabIntro palette={palette}>{t("settingsAppearanceIntro")}</TabIntro>
+                        <div className="flex flex-col gap-6">
+                            <div>
+                                <FieldLabel palette={palette} htmlFor="sx-theme">{t("theme")}</FieldLabel>
+                                <select
+                                    id="sx-theme"
+                                    value={theme}
+                                    onChange={(e) => setTheme(e.target.value as "dark" | "light" | "system")}
+                                    className="sx-input w-full rounded-[6px] px-3.5 py-2.5 text-sm"
+                                    style={inputStyle}
+                                >
+                                    <option value="dark">{t("themeDark")}</option>
+                                    <option value="light">{t("themeLight")}</option>
+                                    <option value="system">{t("themeSystem")}</option>
+                                </select>
+                                <Hint palette={palette}>{t("themeHint")}</Hint>
+                            </div>
                         </div>
                     </Panel>
                 )}
