@@ -412,3 +412,25 @@ def test_pd7_doctor_title_with_teaching_body_still_rejected():
                description="Classroom teaching; deliver lesson plan to pupils; curriculum, teacher duties.")
     assert validate_listing(rec, single_terms={"doctor"}, phrase_terms=set()) \
         == RejectionReason.TITLE_DESCRIPTION_CONFLICT
+
+
+# ── Owner-requested explicit per-role reproduction (#1123 second review): each
+#    protected-domain role search must (a) resolve requested_domain, (b) accept a
+#    valid listing, (c) NOT emit TITLE_DESCRIPTION_CONFLICT. Deterministic.
+def test_pd8_protected_role_searches_resolve_domain_and_accept():
+    from src.job_integrity import _dominant_protected_domain
+    cases = [
+        ("Doctor",     "healthcare", {"doctor"},     "Provide clinical patient care on the ward; treat patients daily."),
+        ("Teacher",    "education",  {"teacher"},    "Classroom teaching; deliver lesson plan to pupils; curriculum delivery."),
+        ("Pharmacist", "healthcare", {"pharmacist"}, "Dispense medication; pharmacy patient counselling; clinical checks."),
+        ("Dentist",    "healthcare", {"dentist"},    "Dental patient care; clinical dental treatment in the clinic."),
+        ("Surgeon",    "healthcare", {"surgeon"},    "Surgical patient care; clinical operating theatre; ward rounds."),
+    ]
+    for role, expected_domain, terms, body in cases:
+        # (a) requested_domain resolves correctly
+        assert _dominant_protected_domain(role, min_hits=1) == expected_domain, f"{role} domain"
+        rec = _rec(title=role, location="Dubai, UAE", description=body)
+        reason = validate_listing(rec, single_terms=terms, phrase_terms=set())
+        # (b) valid listing accepted, (c) NOT a title/description conflict
+        assert reason is None, f"{role} should be accepted, got {reason}"
+        assert reason != RejectionReason.TITLE_DESCRIPTION_CONFLICT, f"{role} conflict leak"
