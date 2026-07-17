@@ -74,11 +74,16 @@ _UAE_COUNTRY_VALUES: frozenset[str] = frozenset({
 # HSE / environment / management / operations listings. ──────────────────────
 _PROTECTED_DOMAINS: dict[str, frozenset[str]] = {
     "healthcare": frozenset({
+        # English
         "nurse", "nursing", "mental health", "practitioner", "clinical",
         "patient", "patients", "ward", "therapy", "therapist", "recovery service",
         "care worker", "support worker", "physician", "midwife", "paramedic",
         "psycholog", "counsell", "caregiver", "healthcare assistant", "dementia",
         "rehabilitation", "clinician",
+        # Arabic (high-confidence, deterministic — no English required to flag AR)
+        "ممرض", "ممرضة", "تمريض", "مريض", "مرضى", "الصحة النفسية", "صحة نفسية",
+        "عيادة", "سريري", "معالج", "علاج", "رعاية صحية", "طبيب", "قابلة",
+        "مستشفى", "تأهيل", "نفسي",
     }),
     "education": frozenset({
         "classroom", "pupils", "curriculum", "kindergarten", "nursery nurse",
@@ -185,6 +190,25 @@ def _apply_url_present_but_invalid(rec: dict) -> bool:
     return bool(url) and not url.lower().startswith(("http://", "https://"))
 
 
+def _has_valid_apply_url(rec: dict) -> bool:
+    """True when the record carries a usable http(s) apply/canonical URL."""
+    url = _record_field(
+        rec, "apply_url", "apply_link", "link", "url", "canonical_url", "source_url"
+    ).strip()
+    return bool(url) and url.lower().startswith(("http://", "https://"))
+
+
+def _insufficient_evidence(title: str, description: str) -> bool:
+    """True when the listing carries no trustworthy role signal.
+
+    A title with fewer than three letters (Latin OR Arabic) and an empty body is
+    not a listing we can stand behind — it is marked INSUFFICIENT, never silently
+    trusted. Applies equally to Arabic and English.
+    """
+    letters = re.sub(r"[^A-Za-z؀-ۿ]", "", title or "")
+    return len(letters) < 3 and not (description or "").strip()
+
+
 def _is_unavailable(rec: dict) -> bool:
     for f in ("availability", "status", "verification_status", "listing_state"):
         v = _norm(rec.get(f))
@@ -235,24 +259,48 @@ def validate_listing(
     if uae_only and not is_uae_market(rec):
         return RejectionReason.OUTSIDE_REQUESTED_MARKET
 
-    # 2. Role integrity. English-only vocabulary; skip for Arabic titles/bodies to
-    #    avoid an English-only bias that would wrongly drop a valid Arabic listing.
-    role_checkable = bool((single_terms or phrase_terms)) and not _is_arabic(title)
-    if role_checkable:
-        title_ok = _role_supported(title, single_terms, phrase_terms)
-        desc_ok = _role_supported(description, single_terms, phrase_terms) if description and not _is_arabic(description) else False
-        desc_domain = _dominant_protected_domain(description) if not _is_arabic(description) else None
-        title_domain = _dominant_protected_domain(title)
-        # 2a. Requested role supported by neither title nor body → mismatch.
-        if not title_ok and not desc_ok:
-            if desc_domain and desc_domain != title_domain:
-                return RejectionReason.DESCRIPTION_ROLE_MISMATCH
-            return RejectionReason.TITLE_ROLE_MISMATCH
-        # 2b. Title/body describe conflicting occupational domains — body belongs
-        #     to a protected domain the requested role/title do not (e.g. a
-        #     "Sustainability Manager" title with a nursing body).
-        if desc_domain and desc_domain != title_domain:
-            return RejectionReason.TITLE_DESCRIPTION_CONFLICT
+    # 2. Role integrity. The REQUESTED role's own occupational domain participates
+    #    in the comparison, so a valid protected-domain request (e.g. Nurse) whose
+    #    short title carries fewer than two domain markers is NOT mis-flagged as a
+    #    title/body conflict. Protected-domain detection is bilingual (EN + AR
+    #    vocabulary), so an Arabic listing is validated with Arabic signals — never
+    #    skipped, and never requiring English words.
+    requested_domain = _dominant_protected_domain(requested_role, min_hits=1)
+    title_domain = _dominant_protected_domain(title, min_hits=1)
+    desc_domain = _dominant_protected_domain(description)
+    title_is_ar = _is_arabic(title)
+    title_ok = _role_supported(title, single_terms, phrase_terms) if not title_is_ar else False
+    desc_ok = (
+        _role_supported(description, single_terms, phrase_terms)
+        if (description and not _is_arabic(description)) else False
+    )
+
+    # 2a. Body describes a PROTECTED domain that is neither the requested role's
+    #     domain nor claimed by the title → severe title/description conflict.
+    #     (Project-Manager title + Mental-Health body; Sustainability + nursing;
+    #     bilingual — Arabic nursing body vs a non-healthcare request.)
+    if desc_domain and desc_domain != requested_domain and desc_domain != title_domain:
+        return RejectionReason.TITLE_DESCRIPTION_CONFLICT
+
+    # 2b. Role support (English titles, where role vocabulary is comparable). The
+    #     requested role must be confirmed by the title (term match OR the title's
+    #     protected domain equalling the request), else by a strongly-supporting
+    #     body; a generic/mismatched title carrying only a body claim for a
+    #     protected-domain request is not sufficiently aligned.
+    if not title_is_ar and (single_terms or phrase_terms):
+        title_confirms = title_ok or (requested_domain is not None and title_domain == requested_domain)
+        if not title_confirms:
+            if not desc_ok:
+                if desc_domain and desc_domain != requested_domain:
+                    return RejectionReason.DESCRIPTION_ROLE_MISMATCH
+                return RejectionReason.TITLE_ROLE_MISMATCH
+            if requested_domain is not None and title_domain != requested_domain:
+                return RejectionReason.TITLE_ROLE_MISMATCH
+
+    # 2c. Insufficient evidence — a listing (Arabic or English) whose title carries
+    #     no meaningful role signal and has an empty body cannot be trusted.
+    if _insufficient_evidence(title, description):
+        return RejectionReason.INSUFFICIENT_LISTING_EVIDENCE
 
     # 3. Source-page agreement (when enrichment fetched the real page title).
     src_title = _record_field(rec, "source_page_title")
@@ -310,6 +358,11 @@ def filter_listings(
             uae_only=uae_only,
         )
         if reason is None:
+            # Accepted. Tag whether it carries a usable apply URL so downstream
+            # rendering can offer an Apply action only for verified listings; a
+            # missing-URL record is kept as unverified informational evidence and
+            # must never present an Apply control or claim direct application.
+            rec["apply_verified"] = _has_valid_apply_url(rec)
             kept.append(rec)
         else:
             rejected[reason.value] = rejected.get(reason.value, 0) + 1

@@ -3571,6 +3571,11 @@ class RicoChatAPI:
             "usable_link": usable_link,
             "link_unavailable": link_unavailable,
             "link_unavailable_reason": link_unavailable_reason,
+            # Explicit apply-URL trust flag (#1121 contract): True only when a
+            # usable canonical link exists. A card with apply_verified=False is
+            # unverified informational — it must render the fallback CTA, never an
+            # Apply action nor a "direct application available" claim.
+            "apply_verified": bool(usable_link) and not link_unavailable,
             "verification_status": verification_status,
             "company_quality": company_quality,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
