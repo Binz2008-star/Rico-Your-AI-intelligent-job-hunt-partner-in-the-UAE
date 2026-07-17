@@ -2,7 +2,8 @@
 /**
  * PaddleBillingSection
  *
- * Renders the billing section when NEXT_PUBLIC_BILLING_MODE=paddle.
+ * Renders the Settings billing section. Paddle is the only billing path,
+ * so this section is always shown for logged-in users.
  * Shows current plan, status, renewal/expiry date, and action buttons.
  *
  * SECURITY: PADDLE_API_KEY is never imported here. Checkout is opened via

@@ -1949,7 +1949,7 @@ export async function submitAction(
 
 export async function recordSubscriptionIntent(
   plan: string,
-  billingMode: "manual" | "paddle" = "manual",
+  billingMode: "paddle" = "paddle",
   sourcePage: string = "/subscription",
 ): Promise<void> {
   try {
@@ -2016,6 +2016,25 @@ export async function executePermissionAction(
 }
 
 // ── Paddle Billing ────────────────────────────────────────────────────────────
+
+/**
+ * Public, unauthenticated billing configuration — GET /api/v1/billing/config.
+ * The backend is the source of truth for whether Paddle checkout or the
+ * manual (WhatsApp-assisted) flow is active; the subscription UI must decide
+ * its checkout mode from this response, not from build-time env vars.
+ */
+export interface BillingConfig {
+  billing_mode: string;
+  paddle_active: boolean;
+  sandbox: boolean;
+}
+
+export async function getBillingConfig(signal?: AbortSignal): Promise<BillingConfig> {
+  return requestJson<BillingConfig>("/api/v1/billing/config", {
+    method: "GET",
+    signal,
+  });
+}
 
 export interface PaddleBillingStatus {
   user_id: string;

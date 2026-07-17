@@ -8,8 +8,8 @@
  * This suite pins the corrected contract:
  *   1. Setup receives the event dispatcher; Checkout.open() gets NO eventCallback.
  *   2. checkout.error  → the checkout Promise rejects with Paddle's error detail.
- *   3. checkout.completed → resolves.
- *   4. checkout.closed    → resolves quietly (user dismissal is not an error).
+ *   3. checkout.completed → resolves "completed".
+ *   4. checkout.closed    → resolves "closed" quietly (dismissal is not an error).
  *   5. A synchronous Checkout.open throw rejects (no hang).
  */
 
@@ -76,7 +76,7 @@ describe("openPaddleCheckout — Paddle.js v2 event contract", () => {
         expect(checkoutOpts?.customData).toEqual({ checkout_session_id: "sess_token_123" });
 
         firePaddleEvent({ name: "checkout.closed" });
-        await expect(pending).resolves.toBeUndefined();
+        await expect(pending).resolves.toBe("closed");
     });
 
     it("rejects with Paddle's own detail on checkout.error", async () => {
@@ -87,12 +87,12 @@ describe("openPaddleCheckout — Paddle.js v2 event contract", () => {
         await expect(pending).rejects.toThrow("price not active");
     });
 
-    it("resolves on checkout.completed", async () => {
+    it("resolves with \"completed\" on checkout.completed", async () => {
         const pending = openPaddleCheckout("pri_test", "sess_token_123", "u@rico.ai", "en");
         await vi.waitFor(() => expect(checkoutOpen).toHaveBeenCalledTimes(1));
 
         firePaddleEvent({ name: "checkout.completed" });
-        await expect(pending).resolves.toBeUndefined();
+        await expect(pending).resolves.toBe("completed");
     });
 
     it("does not log sensitive data (token prefix, session prefix, email, raw events)", async () => {
@@ -102,7 +102,7 @@ describe("openPaddleCheckout — Paddle.js v2 event contract", () => {
         await vi.waitFor(() => expect(checkoutOpen).toHaveBeenCalledTimes(1));
 
         firePaddleEvent({ name: "checkout.completed" });
-        await expect(pending).resolves.toBeUndefined();
+        await expect(pending).resolves.toBe("completed");
 
         expect(debugSpy).not.toHaveBeenCalled();
     });

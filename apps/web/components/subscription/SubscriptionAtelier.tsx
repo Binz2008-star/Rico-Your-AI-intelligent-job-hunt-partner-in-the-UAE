@@ -3,17 +3,25 @@
 /**
  * SubscriptionAtelier — the billing/plan page rendered inside WorkspaceShell.
  *
- * Mirrors all logic from the legacy AppShell SubscriptionPage:
- *  - single Rico Monthly plan
+ *  - single Rico Monthly plan (USD 21.50/month, internal tier "pro")
  *  - server-created Paddle checkout session (session_token → customData.checkout_session_id)
  *  - customer portal redirect
  *  - EN/AR + RTL
  *  - maintenance mode banner
  *  - cancel-redirect banner
  *
- * Paddle error callback: openPaddleCheckout now returns a Promise that rejects
- * on checkout.error, so the user sees a Rico toast ("Something went wrong: <detail>")
- * rather than the Paddle error overlay.
+ * Checkout mode is resolved at RUNTIME from the backend's public
+ * GET /api/v1/billing/config (docs/product/subscription-flow.md): Paddle when
+ * the backend says Paddle is active and the client can run Paddle.js, and a
+ * fail-closed "payment temporarily unavailable" state otherwise (config
+ * unreachable, Paddle inactive, or missing Paddle.js token). Paddle is the
+ * ONLY billing path — there is no manual/WhatsApp payment fallback.
+ *
+ * Paddle error callback: openPaddleCheckout returns a Promise that rejects on
+ * checkout.error, so the user sees a Rico toast rather than the Paddle error
+ * overlay. On "completed" the subscription is re-fetched from
+ * GET /api/v1/subscription/me — the backend is the only authority on whether
+ * the plan is active; the UI never declares success on its own.
  */
 
 import { ToastContainer } from "@/components/ui/Toast";
@@ -24,14 +32,16 @@ import {
     ApiError,
     createPaddleCheckoutSession,
     createPaddleCustomerPortalSession,
+    getBillingConfig,
     getMySubscription,
     getSubscriptionPlans,
     recordSubscriptionIntent,
+    type BillingConfig,
     type SubscriptionMeResponse,
     type SubscriptionPlan,
 } from "@/lib/api";
 import type { StoredUser } from "@/lib/auth";
-import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
+import { resolveBillingUiMode, type BillingUiMode } from "@/lib/billing";
 import { getPaddlePriceId, openPaddleCheckout } from "@/lib/paddle";
 import type { TranslationKey } from "@/lib/translations";
 import { useTranslation } from "@/lib/translations";
@@ -39,7 +49,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
-const MANUAL_BILLING = isManualBillingMode();
 
 const FALLBACK_PLANS: SubscriptionPlan[] = [
     {
@@ -157,7 +166,8 @@ function PlanCard({
     onManage,
     onIntent,
     maintenanceMode,
-    manualBilling,
+    uiMode,
+    configLoading,
     userEmail,
     t,
     c,
@@ -173,15 +183,16 @@ function PlanCard({
     onManage: () => void;
     onIntent: (plan: "pro") => void;
     maintenanceMode: boolean;
-    manualBilling: boolean;
+    uiMode: BillingUiMode;
+    configLoading: boolean;
     userEmail: string | null;
     t: (key: TranslationKey) => string;
     c: ReturnType<typeof useWorkspaceTheme>;
 }) {
-    const isCurrent = currentPlan === plan.plan && (isActive || manualBilling);
+    const isCurrent = currentPlan === plan.plan && isActive;
     const isHigherPlan =
         isLoggedIn &&
-        (isActive || manualBilling) &&
+        isActive &&
         (PLAN_TIER[currentPlan ?? ""] ?? -1) > (PLAN_TIER[plan.plan] ?? 0);
 
     const localName = PLAN_NAME_KEY[plan.name] ? t(PLAN_NAME_KEY[plan.name]) : plan.name;
@@ -226,7 +237,7 @@ function PlanCard({
             {/* Price */}
             <div style={{ marginTop: "1.25rem", display: "flex", alignItems: "baseline", gap: "0.25rem" }}>
                 <span style={{ fontSize: "2.1rem", fontWeight: 800, color: c.ink, lineHeight: 1 }}>
-                    {plan.currency} {plan.price_monthly}
+                    {plan.currency} {plan.price_monthly.toFixed(2)}
                 </span>
                 <span style={{ fontSize: "0.78rem", color: c.ink40, fontWeight: 500 }}>/mo</span>
             </div>
@@ -249,7 +260,7 @@ function PlanCard({
                     <button disabled style={{ width: "100%", padding: "0.625rem 1rem", borderRadius: 8, border: `1px solid ${c.hair}`, background: "transparent", color: c.ink40, fontSize: "0.82rem", fontWeight: 600, cursor: "not-allowed", opacity: 0.6 }}>
                         {t("temporarilyUnavailable")}
                     </button>
-                ) : subLoading && isLoggedIn ? (
+                ) : (subLoading || configLoading) && isLoggedIn ? (
                     <div style={{ height: 40, borderRadius: 8, border: `1px solid ${c.hair}`, background: c.inset, opacity: 0.6 }} />
                 ) : isCurrent ? (
                     <button
@@ -264,16 +275,17 @@ function PlanCard({
                         ✓ {t("includedInYourPlan")}
                     </div>
                 ) : isLoggedIn ? (
-                    manualBilling ? (
-                        <a
-                            href={buildWhatsAppUpgradeUrl(plan.plan, userEmail, plan.price_monthly)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => onIntent(plan.plan as "pro")}
-                            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", width: "100%", padding: "0.625rem 1rem", borderRadius: 8, border: "none", background: plan.is_popular ? c.red : "transparent", borderColor: plan.is_popular ? undefined : c.hair, borderWidth: plan.is_popular ? 0 : 1, borderStyle: "solid", color: plan.is_popular ? "#fff" : c.ink, fontSize: "0.82rem", fontWeight: 700, textDecoration: "none", boxSizing: "border-box" }}
+                    uiMode === "unavailable" ? (
+                        /* Fail-closed: Paddle checkout is not available (config
+                           unreachable, Paddle inactive, or missing client token).
+                           Paddle is the only billing path — no fallback exists. */
+                        <button
+                            disabled
+                            data-testid="payment-unavailable"
+                            style={{ width: "100%", padding: "0.625rem 1rem", borderRadius: 8, border: `1px solid ${c.hair}`, background: "transparent", color: c.ink40, fontSize: "0.82rem", fontWeight: 600, cursor: "not-allowed", opacity: 0.6 }}
                         >
-                            {t("continueOnWhatsApp")}
-                        </a>
+                            {t("paymentTemporarilyUnavailable")}
+                        </button>
                     ) : (
                         <button
                             type="button"
@@ -287,7 +299,7 @@ function PlanCard({
                                     {t("connecting")}
                                 </span>
                             ) : (
-                                `${t("upgradeTo")} ${localName}`
+                                t("subscribeWithPaddle")
                             )}
                         </button>
                     )
@@ -301,9 +313,9 @@ function PlanCard({
                 )}
             </div>
 
-            {manualBilling && isLoggedIn && !isCurrent && !isHigherPlan && !subLoading && !maintenanceMode && (
+            {uiMode === "unavailable" && isLoggedIn && !isCurrent && !isHigherPlan && !subLoading && !configLoading && !maintenanceMode && (
                 <p style={{ marginTop: "0.75rem", fontSize: "0.7rem", lineHeight: 1.4, color: c.ink40, textAlign: "center" }}>
-                    {t("whatsappPaymentConfirm")}<br />{t("whatsappPaymentUseEmail")}
+                    {t("paymentTemporarilyUnavailableDesc")}
                 </p>
             )}
         </div>
@@ -394,9 +406,28 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
     const [subscriptionError, setSubscriptionError] = useState(false);
     const [checkingOut, setCheckingOut] = useState<"pro" | null>(null);
 
+    // Runtime billing mode — undefined while GET /api/v1/billing/config is in
+    // flight, null when it failed (resolves to the fail-closed "unavailable").
+    const [billingCfg, setBillingCfg] = useState<BillingConfig | null | undefined>(
+        maintenanceMode ? null : undefined,
+    );
+    const configLoading = billingCfg === undefined;
+    const uiMode: BillingUiMode = resolveBillingUiMode(billingCfg ?? null);
+
+    useEffect(() => {
+        if (maintenanceMode) return;
+        let cancelled = false;
+        getBillingConfig()
+            .then((cfg) => { if (!cancelled) setBillingCfg(cfg); })
+            .catch(() => { if (!cancelled) setBillingCfg(null); });
+        return () => { cancelled = true; };
+    }, [maintenanceMode]);
+
     const backendMaintenanceSubMessage = t("backendMaintenanceSub");
     const subscriptionCheckoutFailedMessage = t("subscriptionCheckoutFailed");
     const subscriptionPaymentConfiguringMessage = t("subscriptionPaymentConfiguring");
+    const paymentTemporarilyUnavailableMessage = t("paymentTemporarilyUnavailable");
+    const subscriptionProcessingPaymentMessage = t("subscriptionProcessingPayment");
     const subscriptionPortalFailedMessage = t("subscriptionPortalFailed");
 
     const loadPlans = useCallback(() => {
@@ -448,21 +479,31 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
     const handleUpgrade = useCallback(
         async (plan: "pro") => {
             if (maintenanceMode) { toast(backendMaintenanceSubMessage, "error"); return; }
-            if (MANUAL_BILLING) {
-                const price = plans.find((p) => p.plan === plan)?.price_monthly ?? null;
-                window.open(buildWhatsAppUpgradeUrl(plan, userEmail, price), "_blank", "noopener,noreferrer");
-                return;
-            }
-            const priceId = getPaddlePriceId();
-            if (!priceId) {
-                // Don't show technical error to users — payment is temporarily unavailable
-                toast(subscriptionPaymentConfiguringMessage, "error");
+            if (configLoading) return;
+            if (uiMode !== "paddle") {
+                // Fail closed: no configured checkout path.
+                toast(paymentTemporarilyUnavailableMessage, "error");
                 return;
             }
             setCheckingOut(plan);
             try {
                 const session = await createPaddleCheckoutSession(plan, "monthly");
-                await openPaddleCheckout(priceId, session.session_token, userEmail, language as "en" | "ar");
+                // Server-resolved price ID is authoritative; the build-time env
+                // var is only a fallback for older backend responses.
+                const priceId = session.price_id ?? getPaddlePriceId();
+                if (!priceId) {
+                    // Don't show technical error to users — payment is temporarily unavailable
+                    toast(subscriptionPaymentConfiguringMessage, "error");
+                    return;
+                }
+                const outcome = await openPaddleCheckout(priceId, session.session_token, userEmail, language as "en" | "ar");
+                if (outcome === "completed") {
+                    // Never declare success locally — the backend decides via
+                    // GET /api/v1/subscription/me (webhook-driven activation).
+                    const data = await getMySubscription();
+                    setSub(data);
+                    if (!data.is_active) toast(subscriptionProcessingPaymentMessage, "info");
+                }
             } catch (err) {
                 const msg =
                     err instanceof ApiError
@@ -475,17 +516,17 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                 setCheckingOut(null);
             }
         },
-        [backendMaintenanceSubMessage, language, maintenanceMode, plans, subscriptionCheckoutFailedMessage, subscriptionPaymentConfiguringMessage, toast, userEmail],
+        [backendMaintenanceSubMessage, configLoading, language, maintenanceMode, paymentTemporarilyUnavailableMessage, subscriptionCheckoutFailedMessage, subscriptionPaymentConfiguringMessage, subscriptionProcessingPaymentMessage, toast, uiMode, userEmail],
     );
 
     const handleIntent = useCallback((plan: "pro") => {
-        void recordSubscriptionIntent(plan, MANUAL_BILLING ? "manual" : "paddle", "/subscription");
+        void recordSubscriptionIntent(plan, "paddle", "/subscription");
     }, []);
 
     const handleManage = useCallback(async () => {
         if (maintenanceMode) { toast(backendMaintenanceSubMessage, "error"); return; }
-        if (MANUAL_BILLING) {
-            window.open(buildWhatsAppManageUrl(), "_blank", "noopener,noreferrer");
+        if (uiMode !== "paddle") {
+            toast(paymentTemporarilyUnavailableMessage, "error");
             return;
         }
         try {
@@ -500,7 +541,7 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                         : subscriptionPortalFailedMessage;
             toast(msg, "error");
         }
-    }, [backendMaintenanceSubMessage, maintenanceMode, subscriptionPortalFailedMessage, toast]);
+    }, [backendMaintenanceSubMessage, maintenanceMode, paymentTemporarilyUnavailableMessage, subscriptionPortalFailedMessage, toast, uiMode]);
 
     const currentPlan = sub?.subscription?.plan ?? null;
     const isActive = Boolean(sub?.is_active);
@@ -508,7 +549,9 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
     const dir = language === "ar" ? "rtl" : "ltr";
 
     return (
-        <div dir={dir} style={{ width: "100%", maxWidth: 800 }}>
+        /* Centered within the shell's main column so wide desktops don't pin
+           the page to the inline-start edge. */
+        <div dir={dir} style={{ width: "100%", maxWidth: 860, marginInline: "auto" }}>
             <style>{`@keyframes atelier-spin { to { transform: rotate(360deg); } }`}</style>
 
             {/* Page heading */}
@@ -558,7 +601,7 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                 )}
 
                 {/* Checkout cancel banner (Paddle mode only) */}
-                {!MANUAL_BILLING && <CancelBanner />}
+                {uiMode === "paddle" && <CancelBanner />}
 
                 {/* Past-due warning */}
                 {!maintenanceMode && sub && sub.subscription.subscription_status === "past_due" && (
@@ -621,7 +664,8 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                                 onManage={handleManage}
                                 onIntent={handleIntent}
                                 maintenanceMode={maintenanceMode}
-                                manualBilling={MANUAL_BILLING}
+                                uiMode={uiMode}
+                                configLoading={configLoading}
                                 userEmail={userEmail}
                                 t={t}
                                 c={c}
@@ -639,15 +683,15 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                 <div style={{ marginTop: "1.5rem" }}>
                     <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600, color: c.ink }}>{t("faqTitle")}</h3>
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                        <FaqItem q={t("faqHowUpgrade")} a={MANUAL_BILLING ? t("faqHowUpgradeManual") : t("faqHowUpgradePaddle")} c={c} />
-                        <FaqItem q={t("faqPaymentMethods")} a={MANUAL_BILLING ? t("faqPaymentMethodsManual") : t("faqPaymentMethodsPaddle")} c={c} />
-                        <FaqItem q={t("faqActivationTime")} a={MANUAL_BILLING ? t("faqActivationTimeManual") : t("faqActivationTimePaddle")} c={c} />
-                        <FaqItem q={t("faqChangeCancel")} a={MANUAL_BILLING ? t("faqChangeCancelManual") : t("faqChangeCancelPaddle")} c={c} />
+                        <FaqItem q={t("faqHowUpgrade")} a={t("faqHowUpgradePaddle")} c={c} />
+                        <FaqItem q={t("faqPaymentMethods")} a={t("faqPaymentMethodsPaddle")} c={c} />
+                        <FaqItem q={t("faqActivationTime")} a={t("faqActivationTimePaddle")} c={c} />
+                        <FaqItem q={t("faqChangeCancel")} a={t("faqChangeCancelPaddle")} c={c} />
                     </div>
                 </div>
 
-                {/* Footer note */}
-                <p style={{ textAlign: "center", fontSize: "0.7rem", color: c.ink40 }}>{t("pricesInAED")}</p>
+                {/* Footer note — the single plan bills in USD (Paddle does not bill AED) */}
+                <p style={{ textAlign: "center", fontSize: "0.7rem", color: c.ink40 }}>{t("pricesInUSD")}</p>
 
             </div>
 
