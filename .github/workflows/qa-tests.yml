@@ -51,6 +51,7 @@ jobs:
             tests/test_job_result_integrity.py \
             tests/test_764_durable_mutation_truth.py \
             tests/test_1082_consent_fail_closed.py \
+            tests/test_1070_guest_identity_binding.py \
             tests/test_journey_state.py \
             tests/test_journey_route.py \
             tests/test_tc8_interview_prep_grounding.py \
@@ -116,6 +117,7 @@ jobs:
             tests/integration/test_user_documents_postgres.py \
             tests/integration/test_cv_upload_artifacts_postgres.py \
             tests/integration/test_jotform_atomicity_postgres.py \
+            tests/integration/test_guest_merge_claim_postgres.py \
             -v --tb=short
 
   playwright:

@@ -14,6 +14,15 @@ from unittest.mock import patch
 
 import pytest
 
+@pytest.fixture(autouse=True)
+def _guest_capability_owner_browser(monkeypatch):
+    """This suite exercises upload mechanics AS the owning guest browser. The
+    #1070 ownership boundary is covered by tests/test_1070_guest_identity_binding.py;
+    here every request is treated as the session's first/owning browser."""
+    monkeypatch.setattr("src.api.public_identity.guest_state_exists", lambda _uid: False)
+
+
+
 os.environ.setdefault("JWT_SECRET", "ricosecret" + "x" * 21)
 
 _PUBLIC_UID = "public:web-imgvision123"

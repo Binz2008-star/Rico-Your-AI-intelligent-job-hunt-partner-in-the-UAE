@@ -65,9 +65,16 @@ MERGEABLE_PROFILE_KEYS = {
 CONFIRMED_USER_SCOPED_TABLES = ["rico_saved_searches"]
 
 
-def _merge_lock_key(public_user_id: str, auth_user_id: str) -> int:
-    """Deterministic 63-bit positive integer for PostgreSQL advisory xact lock."""
-    h = hashlib.sha256(f"{public_user_id}:{auth_user_id}".encode()).hexdigest()
+def _merge_lock_key(public_user_id: str) -> int:
+    """Deterministic 63-bit positive integer for PostgreSQL advisory xact lock.
+
+    Keyed on the GUEST identity alone (#1070): two different accounts claiming
+    the same guest must contend for the SAME lock, so exactly one claim can
+    proceed at a time and the loser observes the committed claim marker. The
+    previous pair-key let concurrent claims of one guest by two accounts run
+    under different locks and both copy the guest data.
+    """
+    h = hashlib.sha256(f"guest-claim:{public_user_id}".encode()).hexdigest()
     return int(h[:16], 16) % (2**63 - 1)
 
 
@@ -274,21 +281,30 @@ def _migrate_user_scoped_rows(
 def merge_public_identity_into_auth(
     public_user_id: str,
     auth_user_id: str,
+    guest_proof: str | None = None,
 ) -> bool:
     """
     Merge a public (guest) identity into an authenticated identity.
 
-    Steps:
-    1. Validate inputs (public_user_id must be a canonical public session ID).
-    2. Resolve both to internal DB UUIDs.
-    3. Read guest profile JSONB.
-    4. Read auth profile JSONB.
-    5. Merge guest data into auth (auth wins scalars, lists deduped).
-    6. Write merged profile back to auth.
-    7. Mark guest profile as merged.
-    8. Migrate confirmed user-scoped rows.
+    Ownership contract (#1070): the caller must present the guest capability
+    proof (the signed ``rico_guest_proof`` cookie value) for this exact
+    session — a formatted-but-unproved public ID is rejected. The claim is
+    one-time and account-bound: a guest-scoped advisory lock serializes
+    concurrent claims, and a compare-and-set on the guest profile's claim
+    marker inside the SAME transaction as the data moves guarantees exactly
+    one committed owner. A repeated claim by the same owner is an idempotent
+    success; a claim by any other account is rejected.
 
-    Returns True on success, False on failure.
+    Steps:
+    1. Validate inputs + verify the guest capability proof.
+    2. Take the guest-scoped advisory xact lock.
+    3. Resolve both identities; read the guest claim marker (CAS check).
+    4. Merge guest data into auth (auth wins scalars, lists deduped).
+    5. Write merged profile, consume the claim marker, migrate user-scoped
+       rows — all in one transaction.
+
+    Returns True on success, False on failure (failures roll back the whole
+    claim and remain retryable).
     """
     if not public_user_id or not auth_user_id:
         logger.warning("merge_rejected reason=missing_user_id")
@@ -300,6 +316,16 @@ def merge_public_identity_into_auth(
         logger.warning("merge_rejected reason=same_user_id")
         return False
 
+    # Ownership proof (#1070): possession of the public ID string alone does
+    # not entitle a login/signup to claim the guest's data. The browser-bound
+    # capability must verify for this exact session ID.
+    from src.api.public_identity import verify_guest_proof
+
+    session_id = public_user_id.split(":", 1)[1]
+    if not verify_guest_proof(session_id, guest_proof):
+        logger.warning("merge_rejected reason=unproved_claim public_user_id=%s", public_user_id)
+        return False
+
     db = RicoDB()
     if not db.available:
         logger.warning("merge_rejected reason=db_unavailable")
@@ -308,9 +334,11 @@ def merge_public_identity_into_auth(
     conn = db.connect()
     try:
         with conn.cursor() as cur:
-            # Serialize concurrent merges for the same pair via advisory xact lock.
-            # Transaction-scoped: released automatically on commit or rollback.
-            lock_key = _merge_lock_key(public_user_id, auth_user_id)
+            # Serialize concurrent claims of the SAME GUEST via a guest-scoped
+            # advisory xact lock (released automatically on commit/rollback).
+            # Two accounts claiming one guest contend here; the loser either
+            # fails the try-lock (retryable) or sees the committed claim marker.
+            lock_key = _merge_lock_key(public_user_id)
             cur.execute("SELECT pg_try_advisory_xact_lock(%s)", (lock_key,))
             got_lock = cur.fetchone()["pg_try_advisory_xact_lock"]
             if not got_lock:
@@ -338,6 +366,24 @@ def merge_public_identity_into_auth(
             # Read profiles
             guest_profile = _read_profile_jsonb(cur, guest_db_id)
             auth_profile = _read_profile_jsonb(cur, auth_db_id)
+
+            # One-time claim (CAS, enforced under the guest-scoped lock in the
+            # same transaction as every data move): a guest already claimed by
+            # ANOTHER account is never merged again; a replay by the SAME
+            # owner is an idempotent no-op success.
+            prior_owner = guest_profile.get("merged_into_user_id")
+            if guest_profile.get("profile_status") == "merged":
+                if str(prior_owner) == str(auth_db_id):
+                    logger.info(
+                        "merge_idempotent_replay public_user_id=%s auth_user_id=%s",
+                        public_user_id, auth_user_id,
+                    )
+                    return True
+                logger.warning(
+                    "merge_rejected reason=already_claimed public_user_id=%s",
+                    public_user_id,
+                )
+                return False
 
             # Merge
             merged = merge_profile_data(auth_profile, guest_profile)

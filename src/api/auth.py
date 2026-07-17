@@ -295,15 +295,21 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
         value=token,
         **_cookie_set_kwargs(max_age=_ttl_hours() * 3600),
     )
-    # Merge guest profile into authenticated account if requested
+    # Merge guest profile into authenticated account if requested. The claim
+    # must carry the browser-bound guest capability proof (#1070) — a formatted
+    # ID alone is rejected by the merge service — and a consumed claim rotates
+    # the capability so it cannot be replayed into another account.
     if req.public_user_id_to_merge:
         try:
+            from src.api.public_identity import GUEST_PROOF_COOKIE, clear_guest_capability
             from src.services.identity_merge_service import merge_public_identity_into_auth
             merged = merge_public_identity_into_auth(
                 public_user_id=req.public_user_id_to_merge,
                 auth_user_id=user_info["email"],
+                guest_proof=request.cookies.get(GUEST_PROOF_COOKIE),
             )
             if merged:
+                clear_guest_capability(response)
                 logger.info("public_profile_merged public_user_id=%s", req.public_user_id_to_merge)
             else:
                 logger.warning("public_profile_merge_skipped public_user_id=%s", req.public_user_id_to_merge)
@@ -496,15 +502,20 @@ def register(
             getattr(user, "id", "unknown"),
         )
 
-    # Merge guest profile into authenticated account if requested
+    # Merge guest profile into authenticated account if requested. Same
+    # ownership contract as login (#1070): browser-bound proof required, and a
+    # consumed claim rotates the guest capability.
     if req.public_user_id_to_merge:
         try:
+            from src.api.public_identity import GUEST_PROOF_COOKIE, clear_guest_capability
             from src.services.identity_merge_service import merge_public_identity_into_auth
             merged = merge_public_identity_into_auth(
                 public_user_id=req.public_user_id_to_merge,
                 auth_user_id=user.email,
+                guest_proof=request.cookies.get(GUEST_PROOF_COOKIE),
             )
             if merged:
+                clear_guest_capability(response)
                 logger.info("public_profile_merged public_user_id=%s", req.public_user_id_to_merge)
             else:
                 logger.warning("public_profile_merge_skipped public_user_id=%s", req.public_user_id_to_merge)

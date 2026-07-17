@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from functools import wraps
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -337,8 +337,17 @@ def _resolve_upload_user_id(
     request: Request,
     query_user_id: str | None,
     form_user_id: str | None,
+    response: Response | None = None,
 ) -> str:
-    """Resolve user ID for CV upload, allowing authenticated or validated public sessions."""
+    """Resolve user ID for CV upload, allowing authenticated or PROVEN public sessions.
+
+    A JWT identity always wins (caller-supplied public IDs are ignored). For
+    guest callers the public ID must pass the browser-bound capability check
+    (#1070): a formatted-but-unproved `public:*` value over a session that
+    already has state is rejected with 403 — possession of the string alone
+    cannot read, write, or confirm another guest's context. A brand-new
+    session endorses this browser via the signed proof cookie on *response*.
+    """
     try:
         return get_current_user_id(request)
     except HTTPException as auth_exc:
@@ -359,6 +368,20 @@ def _resolve_upload_user_id(
             status_code=401,
             detail="Authentication or valid public session required"
         )
+
+    from src.api.public_identity import (
+        GUEST_NEW,
+        GUEST_REJECTED,
+        check_guest_capability,
+        endorse_guest_session,
+    )
+
+    session_id = user_id.split(":", 1)[1]
+    capability = check_guest_capability(request, session_id)
+    if capability == GUEST_REJECTED:
+        raise HTTPException(status_code=403, detail=_GUEST_UNVERIFIED_DETAIL)
+    if capability == GUEST_NEW and response is not None:
+        endorse_guest_session(response, session_id)
 
     return user_id
 
@@ -843,6 +866,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
     # email is held to the SAME monthly AI cap as the authenticated path. The
     # email is unverified (no JWT) so it grants NO account privilege — only the cap.
     anti_dodge_terminal: dict[str, Any] | None = None
+    endorse_sid: str | None = None
     if payload.email:
         from src.repositories.users_repo import get_user_by_email
 
@@ -864,7 +888,24 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
             def _err_bad():
                 yield f'data: {_json.dumps({"type":"error","message":"Invalid session."})}\n\n'
             return StreamingResponse(_err_bad(), media_type="text/event-stream", headers=SSE_HEADERS)
-        ctx = RicoSessionContext.for_public(session_id[:64])
+        session_id = session_id[:64]
+        # Browser-bound guest capability (#1070): mirror /chat/public — an
+        # unproved claim over an existing session must not stream its context.
+        from src.api.public_identity import (
+            GUEST_NEW,
+            GUEST_REJECTED,
+            check_guest_capability,
+            endorse_guest_session,
+        )
+
+        capability = check_guest_capability(request, session_id)
+        if capability == GUEST_REJECTED:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(status_code=403, content={"detail": _GUEST_UNVERIFIED_DETAIL})
+        if capability == GUEST_NEW:
+            endorse_sid = session_id
+        ctx = RicoSessionContext.for_public(session_id)
 
     user_id = ctx.user_id
 
@@ -927,16 +968,49 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
             logger.exception("chat_stream_public_error user=%s", user_id)
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
 
-    return StreamingResponse(
+    streaming_response = StreamingResponse(
         _event_stream(),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
+    if endorse_sid:
+        from src.api.public_identity import endorse_guest_session as _endorse
+
+        _endorse(streaming_response, endorse_sid)
+    return streaming_response
+
+
+_GUEST_UNVERIFIED_DETAIL = {
+    "code": "guest_session_unverified",
+    "message": "This guest session could not be verified by this browser. Start a new session.",
+}
+
+
+def _require_guest_capability(request: Request, response: Response, session_id: str) -> None:
+    """Enforce browser-bound ownership of a public session (#1070).
+
+    Verified → proceed. New (no state yet) → endorse this browser with the
+    signed proof cookie and proceed. Unproved claim over an existing session →
+    403; possession of the session-id string alone never grants access to the
+    guest's profile / OCR / chat context.
+    """
+    from src.api.public_identity import (
+        GUEST_NEW,
+        GUEST_REJECTED,
+        check_guest_capability,
+        endorse_guest_session,
+    )
+
+    capability = check_guest_capability(request, session_id)
+    if capability == GUEST_REJECTED:
+        raise HTTPException(status_code=403, detail=_GUEST_UNVERIFIED_DETAIL)
+    if capability == GUEST_NEW:
+        endorse_guest_session(response, session_id)
 
 
 @router.post("/chat/public", response_model=RicoChatResponse)
 @limiter.limit("10/minute")
-def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoChatResponse:
+def rico_chat_public(request: Request, payload: RicoPublicChatRequest, response: Response) -> RicoChatResponse:
     """Unauthenticated chat for landing page visitors.
 
     Supports two user identification modes:
@@ -990,7 +1064,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
             ).hexdigest()[:40]
             ctx = RicoSessionContext.for_public(email_key)
         else:
-            ctx = RicoSessionContext.for_public(payload.session_id[:64])
+            session_id = payload.session_id[:64]
+            # Browser-bound guest capability (#1070): a session-id string alone
+            # must not read another guest's profile/OCR/chat context.
+            _require_guest_capability(request, response, session_id)
+            ctx = RicoSessionContext.for_public(session_id)
 
         logger.info(
             "chat_public_request user=%s message_len=%d request_ref=%s",
@@ -1019,6 +1097,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
 
         _metrics.record_request((time.time() - start_time) * 1000)
         return RicoChatResponse(**stripped_result, trace_id=request_ref)
+    except HTTPException:
+        # Deliberate policy responses (e.g. 403 guest_session_unverified) must
+        # keep their status code — not be masked as a 200 error-chat message.
+        _metrics.record_request((time.time() - start_time) * 1000)
+        raise
     except Exception as exc:
         logger.exception(
             "chat_public_error user=%s message_len=%d error_type=%s error=%s request_ref=%s",
@@ -1411,6 +1494,7 @@ def rico_metrics(request: Request) -> MetricsResponse:
 @limiter.limit(LIMIT_UPLOAD)
 async def rico_upload_cv(
     request: Request,
+    response: Response,
     file: UploadFile = File(...),
     user_id: str | None = None,
     form_user_id: str | None = Form(None, alias="user_id"),
@@ -1418,7 +1502,7 @@ async def rico_upload_cv(
     """Upload and parse CV file (PDF only)."""
     start_time = time.time()
     request_ref = generate_error_ref()
-    resolved_user_id = _resolve_upload_user_id(request, user_id, form_user_id)
+    resolved_user_id = _resolve_upload_user_id(request, user_id, form_user_id, response)
 
     # Enforce per-plan CV quota for authenticated users.
     # Guest/public sessions (public:*) are exempt — they have no plan record.
@@ -1978,6 +2062,7 @@ def _resolve_trusted_cv_artifact(
 async def confirm_cv_profile(
     request: Request,
     payload: ConfirmCVProfileRequest,
+    response: Response,
     user_id: str | None = Query(None),
 ) -> dict[str, Any]:
     """Confirm and save CV profile preview to permanent profile.
@@ -1988,7 +2073,7 @@ async def confirm_cv_profile(
     """
     start_time = time.time()
     request_ref = generate_error_ref()
-    resolved_user_id = _resolve_upload_user_id(request, user_id, None)
+    resolved_user_id = _resolve_upload_user_id(request, user_id, None, response)
 
     try:
         logger.info(

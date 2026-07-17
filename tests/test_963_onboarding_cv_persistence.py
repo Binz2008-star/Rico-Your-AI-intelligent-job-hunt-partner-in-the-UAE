@@ -38,6 +38,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _guest_capability_owner_browser(monkeypatch):
+    """This suite exercises upload/confirm/chat mechanics AS the owning guest
+    browser. The #1070 ownership boundary (unproved claims over existing
+    sessions are 403) is covered by tests/test_1070_guest_identity_binding.py;
+    here every request is treated as the session's first/owning browser so the
+    mechanics under test stay deterministic across test order and DB state."""
+    monkeypatch.setattr("src.api.public_identity.guest_state_exists", lambda _uid: False)
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("ADMIN_EMAIL", "rico-test@example.com")
 os.environ.setdefault("ADMIN_PASSWORD", "ricopass123")

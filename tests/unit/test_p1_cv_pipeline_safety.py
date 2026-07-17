@@ -13,6 +13,18 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _guest_capability_owner_browser(monkeypatch):
+    """This suite exercises upload mechanics AS the owning guest browser. The
+    #1070 ownership boundary is covered by tests/test_1070_guest_identity_binding.py;
+    here every request is treated as the session's first/owning browser."""
+    monkeypatch.setattr("src.api.public_identity.guest_state_exists", lambda _uid: False)
+
+
+
 
 # ── Fix 1: CV parse runs in an executor (does not block the event loop) ────────
 
