@@ -1,6 +1,50 @@
 # Current State
 
-> **Reconciliation header — 2026-07-18 (night; latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-18 (production-defect remediation; latest;
+> supersedes all headers below — including the "track COMPLETE" claim in the
+> night header, which the owner's production smoke disproved).**
+> `main` HEAD **`96464b8e`**.
+>
+> **Owner production smoke exposed two confirmed defects** in the just-shipped
+> Profile Hardening track; both are now fixed, merged, and deployed:
+>
+> - **P0 — every live `/profile` save failed** ("Profile update could not be
+>   saved. Please try again."). Root cause: #1166's endpoint change passed
+>   `clear_fields=` to the router's stable patch-point wrapper
+>   (`rico_chat.upsert_profile`), whose signature didn't accept it — a
+>   TypeError on EVERY save, swallowed into the generic 503. CI missed it
+>   because endpoint tests mock that exact wrapper symbol. **Fixed in #1169
+>   (`1e8615ce`, "Deploy to Production" success)**: wrapper forwards
+>   `clear_fields`; 503/500 surfaces now carry a correlation ref tied to the
+>   log line; new `TestRicoProfileSaveThroughRealWrapper` runs the REAL wrapper
+>   (verified failing pre-fix) so this class of mismatch can't ship silently.
+> - **P0 — legacy dark shell layered over the new workspace**: the old
+>   MobileCommandHeader top bar + MobileBottomNav dock still rendered for the
+>   authenticated audience on `/command` mobile (the #1145 "app variant renders
+>   no mobile chrome" compromise). **Fixed in #1170 (`e2ba730b`, deploy
+>   success)**: WorkspaceShell app variant gains opt-in `mobileChrome`
+>   (the same shared mobile bar/drawer as document routes, + `mobileExtras`);
+>   authenticated `/command` uses it — legacy header now public/checking-only,
+>   dock mount deleted, composer's 56px dock compensation removed. Proven by
+>   `e2e/single-shell.spec.ts` (one `.wsx-root`, zero legacy chrome on
+>   `/command` `/profile` `/settings` `/applications`, AR RTL, public
+>   unchanged).
+> - **Mobile usability follow-up — #1171 (`96464b8e`)**: desktop CTRL+K/CTRL+J
+>   hints hidden below `md` (desktop keeps them); `/profile` unsaved bar
+>   compacted (Save/Discard on-screen at 320px); warning text `break-words`;
+>   `e2e/mobile-usability.spec.ts` pins hint visibility, in-viewport composer,
+>   and zero horizontal overflow at 320/360/390 EN + AR RTL.
+>
+> Ledger: `TASKS.md` TASK-20260718-020…022. **Final acceptance still requires
+> owner live evidence:** (1) profile save succeeds, (2) numeric clear succeeds,
+> (3) old dark top bar gone, (4) old dark bottom nav gone, (5) one shell only,
+> (6) composer/nav no overlap, (7) shortcuts hidden on mobile, (8) EN + AR RTL.
+> Docs-only sync; no runtime change in this header.
+
+> **Reconciliation header — 2026-07-18 (night; superseded by the header above —
+> its "Profile Hardening track COMPLETE" statement stands corrected: the track's
+> #1166 shipped the save-breaking wrapper mismatch, and the single-shell defect
+> predating it was still live).**
 > `main` HEAD **`ae656787`**. Records the completed **Profile Workspace Hardening
 > track** (owner-authorized autonomous execution, five PRs merged sequentially,
 > one objective each):
