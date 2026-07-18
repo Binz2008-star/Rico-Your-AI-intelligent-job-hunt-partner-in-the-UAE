@@ -216,6 +216,7 @@ const sectionHeading = (name: string) => screen.queryByRole("heading", { name })
 
 beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear(); // no dirty-draft mirror may leak across tests
     seedUrl(""); // clean /profile by default
     fetchProfileMock.mockResolvedValue(BASE_PROFILE);
     listUserFilesMock.mockResolvedValue(FILES);
