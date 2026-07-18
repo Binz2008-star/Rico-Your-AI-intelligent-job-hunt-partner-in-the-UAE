@@ -522,7 +522,7 @@ describe("profile editorial — dirty draft save flow", () => {
         expect(updateProfileMock).not.toHaveBeenCalled();
     });
 
-    it("clearing a numeric field shows a validation message, keeps the edit, and never silently reverts", async () => {
+    it("clearing a numeric field saves an explicit null (omitted fields stay unchanged)", async () => {
         const user = userEvent.setup();
         await renderLoaded();
         await gotoSection(user, "career");
@@ -530,12 +530,31 @@ describe("profile editorial — dirty draft save flow", () => {
         const years = screen.getByLabelText("Experience");
         await user.clear(years);
         const savebar = await screen.findByTestId("profile-ed-savebar");
+        // the refreshed authoritative profile reflects the cleared value
+        fetchProfileMock.mockResolvedValue({ ...BASE_PROFILE, years_experience: null });
         await user.click(within(savebar).getByRole("button", { name: "Save changes" }));
 
-        expect(await screen.findByText(/Clearing this field isn't supported yet/)).toBeInTheDocument();
-        expect(updateProfileMock).not.toHaveBeenCalled();
+        // exactly one PATCH carrying ONLY the explicit null — nothing else
+        await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith({ years_experience: null }));
+        expect(updateProfileMock).toHaveBeenCalledTimes(1);
+        // refreshed profile matches the cleared draft → the bar clears
+        await waitFor(() => expect(screen.queryByTestId("profile-ed-savebar")).toBeNull());
         expect(screen.getByLabelText("Experience")).toHaveValue("");
-        expect(screen.getByTestId("profile-ed-savebar")).toBeInTheDocument();
+    });
+
+    it("zero is a valid numeric value, saved as 0 — not treated as a clear", async () => {
+        const user = userEvent.setup();
+        await renderLoaded();
+        await gotoSection(user, "career");
+
+        const years = screen.getByLabelText("Experience");
+        await user.clear(years);
+        await user.type(years, "0");
+        const savebar = await screen.findByTestId("profile-ed-savebar");
+        fetchProfileMock.mockResolvedValue({ ...BASE_PROFILE, years_experience: 0 });
+        await user.click(within(savebar).getByRole("button", { name: "Save changes" }));
+
+        await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith({ years_experience: 0 }));
     });
 
     it("rejects a non-numeric years value inline and never calls the API", async () => {

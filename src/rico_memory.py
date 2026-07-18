@@ -17,6 +17,7 @@ import re
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Collection
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -115,7 +116,12 @@ class RicoMemoryStore:
         settings = RicoAgentSettings(**settings_data)
         return RicoProfile(**filtered_data, settings=settings)
 
-    def upsert_profile_from_dict(self, user_id: str, updates: Dict[str, Any]) -> RicoProfile:
+    def upsert_profile_from_dict(
+        self,
+        user_id: str,
+        updates: Dict[str, Any],
+        clear_fields: "Collection[str]" = (),
+    ) -> RicoProfile:
         profile = self.load_profile(user_id)
         if profile is None:
             profile = RicoProfile(user_id=user_id)
@@ -124,6 +130,13 @@ class RicoMemoryStore:
         for key, value in updates.items():
             if hasattr(profile, key) and value is not None:
                 setattr(profile, key, value)
+
+        # Explicit clear channel (mirrors profile_repo.upsert_profile): only
+        # these named fields are set to None; plain None values in `updates`
+        # keep meaning "unchanged" for every existing caller.
+        for key in clear_fields:
+            if hasattr(profile, key):
+                setattr(profile, key, None)
 
         if settings_updates:
             for key, value in settings_updates.items():

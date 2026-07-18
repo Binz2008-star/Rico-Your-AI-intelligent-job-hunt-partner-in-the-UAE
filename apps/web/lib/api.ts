@@ -1454,9 +1454,9 @@ export interface ProfileUpdatePayload {
   telegram_username?: string;
   target_roles?: string[];
   preferred_cities?: string[];
-  salary_expectation_aed?: number;
-  minimum_salary_aed?: number;
-  years_experience?: number;
+  salary_expectation_aed?: number | null;
+  minimum_salary_aed?: number | null;
+  years_experience?: number | null;
   current_role?: string;
   current_company?: string;
   linkedin_url?: string;

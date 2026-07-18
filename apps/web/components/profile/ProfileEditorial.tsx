@@ -181,9 +181,9 @@ export function buildPayload(
         if (!changed.has(k)) continue;
         const raw = draft[k].trim();
         if (raw === "") {
-            // The PATCH API cannot null a numeric field; surface that instead of
-            // silently dropping (and reverting) the user's edit.
-            errors[k] = "profileEdNumericClear";
+            // Explicit clear: the PATCH API distinguishes an explicit null
+            // ("clear this value") from an omitted field ("unchanged").
+            payload[k] = null;
             continue;
         }
         const parsed = Number(raw);

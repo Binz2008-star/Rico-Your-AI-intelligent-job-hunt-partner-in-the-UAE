@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict, fields, is_dataclass
 from datetime import datetime, timezone
+from collections.abc import Collection
 from typing import Any
 from contextlib import contextmanager
 
@@ -69,6 +70,15 @@ _USER_TABLE_FIELDS = {
 
 # Fields that go into profile JSONB
 _PROFILE_JSONB_FIELDS = _PROFILE_FIELDS - _USER_TABLE_FIELDS - {"settings"}
+
+# Nullable numeric profile fields a user may EXPLICITLY clear (persisted as
+# JSON null in the profile JSONB). Everything else keeps the long-standing
+# "None means unchanged" upsert semantics.
+_CLEARABLE_PROFILE_FIELDS = {
+    "salary_expectation_aed",
+    "minimum_salary_aed",
+    "years_experience",
+}
 
 # Settings fields that are boolean flags
 _BOOLEAN_SETTINGS = {
@@ -242,6 +252,7 @@ def upsert_profile(
     *,
     cv_text: str | None = None,
     require_db: bool = False,
+    clear_fields: Collection[str] = (),
 ) -> RicoProfile:
     """Write profile to DB (primary) and JSON (fallback mirror) with transaction safety.
 
@@ -258,6 +269,14 @@ def upsert_profile(
     translate the raised error into a non-2xx response so the user retries
     rather than believing their data was saved. With the default ``False`` the
     long-standing JSON-fallback behavior is unchanged.
+
+    ``clear_fields`` is the EXPLICIT clear channel: field names whose stored
+    value must be set to null. ``updates`` keeps its long-standing "None means
+    unchanged" semantics for every existing caller; only fields listed here —
+    restricted to ``_CLEARABLE_PROFILE_FIELDS`` — are written as JSON null in
+    the profile JSONB (the ``||`` merge overwrites the key) and cleared on the
+    mirror. Unknown names are ignored, never raised (defense in depth; the API
+    layer already allowlists).
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -272,6 +291,8 @@ def upsert_profile(
         k: v for k, v in updates.items()
         if (k in _PROFILE_FIELDS or k in _SETTINGS_FIELDS) and v is not None
     }
+
+    clears = {k for k in clear_fields if k in _CLEARABLE_PROFILE_FIELDS}
 
     logger.info(
         "profile_repo.upsert_profile: user=%s %s",
@@ -288,7 +309,9 @@ def upsert_profile(
     mem = _memory()
     profile: RicoProfile | None = None
     if not require_db:
-        profile = mem.upsert_profile_from_dict(user_id=user_id, updates=filtered_updates)
+        profile = mem.upsert_profile_from_dict(
+            user_id=user_id, updates=filtered_updates, clear_fields=clears,
+        )
 
     # ── DB primary with transaction ───────────────────────────────────────────
     db = _db()
@@ -359,6 +382,10 @@ def upsert_profile(
                 k: v for k, v in filtered_updates.items()
                 if k in _PROFILE_JSONB_FIELDS
             }
+            # Explicit clears: the JSONB `||` merge overwrites the key with
+            # JSON null — this is the only path that writes None into profile.
+            for k in clears:
+                profile_data[k] = None
             if profile_data or cv_text:
                 logger.info(
                     "profile_repo.upsert_profile: db_user_id=%s profile_data=%s cv_text_chars=%d",
@@ -400,7 +427,9 @@ def upsert_profile(
     if require_db:
         # DB commit confirmed — now (and only now) reflect the change in the
         # process-local mirror so fallback reads match committed state (#764).
-        profile = mem.upsert_profile_from_dict(user_id=user_id, updates=filtered_updates)
+        profile = mem.upsert_profile_from_dict(
+            user_id=user_id, updates=filtered_updates, clear_fields=clears,
+        )
 
     return profile
 

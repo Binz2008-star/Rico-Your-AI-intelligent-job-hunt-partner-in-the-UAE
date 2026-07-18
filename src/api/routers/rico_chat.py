@@ -1396,6 +1396,17 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     if body.industries is not None:
         updates["industries"] = [i.strip() for i in body.industries if i.strip()]
 
+    # Explicit clears for nullable NUMERIC fields. Pydantic gives an omitted
+    # field and an explicit JSON null the same default (None), so
+    # `model_fields_set` is the only way to tell "leave unchanged" (omitted)
+    # apart from "clear this value" (explicit null). Only these three fields
+    # support clearing; every other field keeps omitted==null==unchanged.
+    clear_fields = [
+        f
+        for f in ("salary_expectation_aed", "minimum_salary_aed", "years_experience")
+        if f in body.model_fields_set and getattr(body, f) is None
+    ]
+
     # When the user explicitly sets target_roles or skills, bump normalization_version
     # to the current version so get_profile does not re-normalize and silently mutate
     # adjacent fields (e.g. a skills save triggering normalization that changes
@@ -1408,14 +1419,19 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     logger.info("update_profile endpoint: user=%s %s", user_ref(user_id), safe_fields(updates))
 
     profile_for_warnings = None
-    if updates:
+    if updates or clear_fields:
+        # Expected post-write state for the durable-truth verifier: set values
+        # plus explicit nulls for cleared fields.
+        expected_state = {**updates, **{k: None for k in clear_fields}}
         # Durable-truth contract (#764): a user-directed profile write must
         # persist to the canonical DB or fail the request. require_db=True
         # raises instead of silently falling back to the process-local mirror,
         # and the mirror is only updated after the DB commit — so a failure
         # here leaves no phantom state and the client gets a retryable error.
         try:
-            profile_for_warnings = upsert_profile(user_id, updates, require_db=True)
+            profile_for_warnings = upsert_profile(
+                user_id, updates, require_db=True, clear_fields=clear_fields,
+            )
         except Exception as e:
             # #1076 delta: no raw id, no traceback — psycopg2 error strings can
             # re-emit the bound profile values this endpoint just tried to save.
@@ -1429,7 +1445,7 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
             )
         confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
             MutationResult(success=True),
-            verifier=lambda: _profile_updates_visible(user_id, updates),
+            verifier=lambda: _profile_updates_visible(user_id, expected_state),
             success_en="confirmed",
             success_ar="confirmed",
             failure_en="failed",
@@ -1440,7 +1456,7 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
                 status_code=500,
                 detail="Profile update could not be confirmed. Please try again.",
             )
-        logger.info("profile_update user=%s %s", user_ref(user_id), safe_fields(updates))
+        logger.info("profile_update user=%s %s", user_ref(user_id), safe_fields(expected_state))
     else:
         logger.warning("profile_update no fields user=%s", user_ref(user_id))
         profile_for_warnings = get_profile(user_id)
@@ -1456,7 +1472,7 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     )
     response = {
         "status": "ok",
-        "updated_fields": list(updates.keys()),
+        "updated_fields": list(updates.keys()) + clear_fields,
     }
     if warnings:
         response["warnings"] = warnings
