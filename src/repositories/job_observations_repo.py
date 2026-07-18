@@ -156,9 +156,10 @@ def record_observations(
         with conn.cursor() as cur:
             cur.executemany(_INSERT_SQL, rows)
         conn.commit()
+        # Query text is never logged (it can embed profile-derived terms —
+        # see tests/test_1076_log_privacy.py); it is stored, not logged.
         logger.debug(
-            "job_observations: recorded %d rows provider=%s query=%r",
-            len(rows), provider, query_context,
+            "job_observations: recorded %d rows provider=%s", len(rows), provider,
         )
         return len(rows)
     except Exception as exc:
