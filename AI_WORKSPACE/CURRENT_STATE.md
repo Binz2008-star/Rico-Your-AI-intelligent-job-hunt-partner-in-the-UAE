@@ -1,6 +1,58 @@
 # Current State
 
-> **Reconciliation header — 2026-07-18 (evening; latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-18 (night; latest; supersedes all headers below).**
+> `main` HEAD **`ae656787`**. Records the completed **Profile Workspace Hardening
+> track** (owner-authorized autonomous execution, five PRs merged sequentially,
+> one objective each):
+>
+> - `21293c9d` **#1163** — docs-only workspace reconciliation (Phase 0).
+> - `63e976d0` **#1164 — Profile Phase 4A**: backend-authoritative warning
+>   **severity contract** in `src/services/matching_guardrails.py` —
+>   `WarningSeverity` enum (`blocking`/`important`/`recommendation`), explicit
+>   `WARNING_SEVERITY_BY_CODE` + `WARNING_FIELD_BY_CODE` for all 6 emitted codes,
+>   fail-safe `severity_for_code()` (unknown → logged + deterministic
+>   `important`; unreachable in a green build via the exhaustive contract test
+>   `tests/unit/test_matching_guardrail_severity_contract.py`). Response shape
+>   unchanged; bilingual message contract preserved. Deploy: **success**.
+> - `ab707594` **#1165 — Profile Phase 4B**: `/profile`'s passive warning banner
+>   replaced by the **actionable warnings workflow** — live count summary (EN/AR,
+>   singular/plural), blocking-first severity badges, per-warning direct action on
+>   stable field identifiers (`target_roles`/`preferred_cities` → `?section=goals`
+>   with param preservation + exact-field focus + reduced-motion-safe highlight +
+>   SR announcement; settings-owned fields → `/settings`), authoritative
+>   save-refresh removes resolved warnings / hides the empty panel, **blocking
+>   warnings non-dismissable**, session-scoped "Review later" with restore (never
+>   claims resolution). Frontend-only. Deploy: **success**.
+> - `0da1c3e2` **#1166 — numeric-field clearing**: the reported PATCH defect was
+>   real (three layers: Pydantic omitted≡null, repo None-strip, mirror None-skip).
+>   Contract now: omitted=unchanged, explicit null=clear, 0=valid, invalid=422 —
+>   for `salary_expectation_aed`/`minimum_salary_aed`/`years_experience` via an
+>   additive `clear_fields` channel (JSONB `||` writes the null — **no migration,
+>   no schema change**); every existing caller's None-means-unchanged semantics
+>   preserved; #764 verifier checks merged expected state. Deploy: **success**.
+> - `ae656787` **#1167 — route-exit dirty-state protection**: closes the #1161
+>   residual P1. Browser Back that exits `/profile` is made **non-destructive**
+>   (per-tab, account-keyed sessionStorage draft mirror + restore-on-return with
+>   the unsaved bar) instead of an unsafe history trap that would break section
+>   back/forward; cleared on save/discard; foreign-account drafts wiped; all
+>   #1161 guards unchanged; no shell/router change.
+>
+> **Profile Phases 3, 4A, 4B and the route-exit P1 are COMPLETE.** Detail:
+> `TASKS.md` TASK-20260718-016…019.
+>
+> **Still pending (owner):** live authenticated `/profile` + Arabic RTL visual
+> smoke on `ricohunt.com` for the whole track (production host network-blocked
+> from the executing session; every behavior above is pinned by 727 frontend +
+> 3,977 backend tests, focused Playwright with screenshots, and green CI/deploys).
+>
+> **Deferred (outside this track):** `chat-confirm-profile.test.tsx` is CI-flaky
+> (failed on 2 unrelated PRs, passed on re-run + locally — test-stability
+> follow-up); `/settings` still renders the passive `GuardrailWarnings` list (an
+> actionable settings workflow was not in scope); "Review later" persistence
+> beyond the session is a product decision. Docs-only sync; no runtime change in
+> this header.
+
+> **Reconciliation header — 2026-07-18 (evening; superseded by the header above).**
 > `main` HEAD **`76e52984`**. Records four PRs merged after #1157 that the prior
 > header (`4ce678b`) did not cover, and marks **Profile Phase 3 complete**.
 >
