@@ -268,6 +268,86 @@ class TestRicoProfileUpdateRouteExists:
         assert captured["updates"] == {"name": "Roben Nihad"}
 
 
+class TestRicoProfileNumericClear:
+    """Explicit-null clearing of nullable numeric profile fields.
+
+    Contract: omitted means unchanged; explicit JSON null means clear; zero is
+    a valid value; invalid values stay rejected; the response's updated_fields
+    reflects clears; no unrelated field is touched.
+    """
+
+    @staticmethod
+    def _spy(captured):
+        def spy_upsert(user_id, updates, **kwargs):
+            captured["user_id"] = user_id
+            captured["updates"] = updates
+            captured["clear_fields"] = kwargs.get("clear_fields")
+            return {"ok": True}
+        return spy_upsert
+
+    def _patch(self, auth_client, payload, captured):
+        with patch("src.api.routers.rico_chat.upsert_profile", side_effect=self._spy(captured)), \
+             patch("src.api.routers.rico_chat._profile_updates_visible", return_value=True):
+            return auth_client.patch("/api/v1/rico/profile", json=payload)
+
+    def test_explicit_null_clears_each_numeric_field(self, auth_client):
+        for field in ("salary_expectation_aed", "minimum_salary_aed", "years_experience"):
+            captured = {}
+            r = self._patch(auth_client, {field: None}, captured)
+            assert r.status_code == 200, f"{field}: {r.status_code}: {r.text}"
+            assert field in r.json()["updated_fields"], field
+            assert captured["clear_fields"] == [field], field
+            assert field not in captured["updates"], field
+
+    def test_omitted_numeric_fields_stay_unchanged(self, auth_client):
+        captured = {}
+        r = self._patch(auth_client, {"current_role": "Analyst"}, captured)
+        assert r.status_code == 200
+        assert captured["clear_fields"] == []
+        assert r.json()["updated_fields"] == ["current_role"]
+
+    def test_zero_is_a_valid_value_not_a_clear(self, auth_client):
+        captured = {}
+        r = self._patch(auth_client, {"years_experience": 0}, captured)
+        assert r.status_code == 200
+        assert captured["updates"]["years_experience"] == 0
+        assert captured["clear_fields"] == []
+
+    def test_invalid_numeric_values_remain_rejected(self, auth_client):
+        for payload in (
+            {"years_experience": -1},
+            {"years_experience": "ten"},
+            {"salary_expectation_aed": -5},
+            {"minimum_salary_aed": 99_999_999_999},
+        ):
+            captured = {}
+            r = self._patch(auth_client, payload, captured)
+            assert r.status_code == 422, f"{payload}: {r.status_code}"
+            assert captured == {}, f"{payload}: nothing may persist"
+
+    def test_clear_combines_with_set_in_one_patch(self, auth_client):
+        captured = {}
+        r = self._patch(
+            auth_client,
+            {"current_role": "HSE Lead", "salary_expectation_aed": None},
+            captured,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert set(body["updated_fields"]) == {"current_role", "salary_expectation_aed"}
+        assert captured["updates"] == {"current_role": "HSE Lead"}
+        assert captured["clear_fields"] == ["salary_expectation_aed"]
+
+    def test_explicit_null_on_non_clearable_field_means_unchanged(self, auth_client):
+        # Strings/lists keep omitted==null==unchanged: null current_role with
+        # no other change is a no-op request (no persistence call).
+        captured = {}
+        r = self._patch(auth_client, {"current_role": None}, captured)
+        assert r.status_code == 200
+        assert r.json()["updated_fields"] == []
+        assert captured == {}, "no upsert may run for a null non-clearable field"
+
+
 class TestRicoCVUploadRouteExists:
     def test_upload_cv_route_returns_200(self, client):
         with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
