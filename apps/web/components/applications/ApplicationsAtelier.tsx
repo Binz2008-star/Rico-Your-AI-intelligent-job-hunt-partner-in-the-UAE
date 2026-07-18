@@ -45,12 +45,12 @@ const SERIF = ATELIER_FONT.serif;
 const T: Record<"en" | "ar", { eyebrow: string; title: string; intro: string }> = {
     en: {
         eyebrow: "Applications",
-        title: "Your pipeline.",
+        title: "Your applications.",
         intro: "Every application Rico is tracking for you, across all stages.",
     },
     ar: {
         eyebrow: "الطلبات",
-        title: "مسار طلباتك.",
+        title: "طلباتك.",
         intro: "كل طلبٍ يتابعه ريكو من أجلك، عبر جميع المراحل.",
     },
 };

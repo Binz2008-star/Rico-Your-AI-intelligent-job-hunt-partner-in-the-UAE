@@ -189,7 +189,7 @@ describe("profile editorial — real-data rendering", () => {
         expect(screen.getByText("Analyst · Synthetic Co")).toBeInTheDocument();
 
         // numbered editorial sections
-        for (const title of ["About you", "Career", "Skills", "CV & documents", "Career preferences", "Integrations", "Account & security", "Billing"]) {
+        for (const title of ["About you", "Career", "Skills", "CV & documents", "Career goals", "Integrations", "Account & security", "Billing"]) {
             expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
         }
 

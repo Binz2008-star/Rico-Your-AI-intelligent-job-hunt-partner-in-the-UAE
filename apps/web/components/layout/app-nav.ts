@@ -24,7 +24,7 @@ export const mainNavSections: NavSection[] = [
         title: "Search",
         items: [
             { label: "Ask Rico",  href: "/command", icon: "auto_awesome" },
-            { label: "Pipeline",  href: "/applications", icon: "insights" },
+            { label: "Applications",  href: "/applications", icon: "insights" },
         ],
     },
     {
