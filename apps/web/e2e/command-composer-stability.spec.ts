@@ -142,6 +142,10 @@ test.describe("/command composer stability", () => {
 
       await page.goto("/command");
 
+      // The shortcut hint is desktop-only (mobile usability, 2026-07-18):
+      // geometry anchors on the composer container, which exists on all widths.
+      const isDesktop = scenario.viewport.width >= 768;
+      const composerAnchor = page.getByTestId("atelier-composer");
       const composerHint = page.getByTestId("composer-hint");
       const messagePane = page.locator('[role="log"]');
       const textarea = page.getByTestId("composer-textarea");
@@ -149,13 +153,13 @@ test.describe("/command composer stability", () => {
       await expect(textarea).toBeEnabled();
       await textarea.fill("Find HSE jobs in Dubai");
 
-      const composerBefore = await yPosition(composerHint);
+      const composerBefore = await yPosition(composerAnchor);
       const paneBefore = await yPosition(messagePane);
 
       await textarea.press("Enter");
       await page.waitForTimeout(250);
 
-      const composerDuring = await yPosition(composerHint);
+      const composerDuring = await yPosition(composerAnchor);
       const paneDuring = await yPosition(messagePane);
 
       expect(Math.abs(composerDuring - composerBefore)).toBeLessThanOrEqual(2);
@@ -163,13 +167,18 @@ test.describe("/command composer stability", () => {
 
       await expect(page.getByText("Done")).toBeVisible();
 
-      const composerAfter = await yPosition(composerHint);
+      const composerAfter = await yPosition(composerAnchor);
       const paneAfter = await yPosition(messagePane);
 
       expect(Math.abs(composerAfter - composerBefore)).toBeLessThanOrEqual(2);
       expect(Math.abs(paneAfter - paneBefore)).toBeLessThanOrEqual(2);
-      await expect(composerHint).toHaveText(scenario.hint);
-      expect(await contrastRatio(page, '[data-testid="composer-hint"]')).toBeGreaterThanOrEqual(4.5);
+      if (isDesktop) {
+        await expect(composerHint).toHaveText(scenario.hint);
+        expect(await contrastRatio(page, '[data-testid="composer-hint"]')).toBeGreaterThanOrEqual(4.5);
+      } else {
+        // touch widths: desktop keyboard shortcuts must not be advertised
+        await expect(composerHint).toBeHidden();
+      }
       await expect(page.getByText(/openai|deepseek|provider/i)).toHaveCount(0);
     });
   }

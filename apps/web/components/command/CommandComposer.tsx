@@ -359,9 +359,11 @@ export function CommandComposer({
                 </div>
 
                 {/* Hint line — ink70, not ink40: on the light workspace paper the
-                    hint must clear WCAG 4.5:1 (e2e command-composer-stability). */}
+                    hint must clear WCAG 4.5:1 (e2e command-composer-stability).
+                    Desktop-only: CTRL+K/CTRL+J are keyboard affordances that
+                    mean nothing on a phone (2026-07-18 mobile usability). */}
                 <div
-                    className="mt-2 text-center"
+                    className="mt-2 hidden text-center md:block"
                     style={{
                         fontFamily: ATELIER_FONT.mono,
                         fontSize: 10,
@@ -536,8 +538,8 @@ export function CommandComposer({
                 )}
             </div>
 
-            {/* Hint line */}
-            <div className="mt-1.5 text-center text-[11px] text-text-tertiary" aria-hidden="true" data-testid="composer-hint">
+            {/* Hint line — desktop-only: keyboard shortcuts are meaningless on touch */}
+            <div className="mt-1.5 hidden text-center text-[11px] text-text-tertiary md:block" aria-hidden="true" data-testid="composer-hint">
                 {t("cmdHint")}
             </div>
         </div>
