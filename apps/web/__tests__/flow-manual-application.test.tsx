@@ -273,8 +273,8 @@ describe("Flow Arabic / RTL localization", () => {
 
         renderFlow();
 
-        // Atelier headline = مسار طلباتك. (reference wording), Track application = تتبع طلب
-        expect(await screen.findByText("مسار طلباتك.")).toBeInTheDocument();
+        // Atelier headline = طلباتك. (plain-language wording), Track application = تتبع طلب
+        expect(await screen.findByText("طلباتك.")).toBeInTheDocument();
         expect(
             await screen.findByRole("button", { name: /تتبع طلب/ }),
         ).toBeInTheDocument();
@@ -285,7 +285,7 @@ describe("Flow Arabic / RTL localization", () => {
 
         renderFlow();
 
-        await screen.findByText("مسار طلباتك.");
+        await screen.findByText("طلباتك.");
         await waitFor(() => {
             expect(document.documentElement.dir).toBe("rtl");
         });

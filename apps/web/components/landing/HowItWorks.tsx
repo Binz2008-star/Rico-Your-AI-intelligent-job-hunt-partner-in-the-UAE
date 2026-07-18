@@ -23,7 +23,7 @@ export default function HowItWorks() {
       n: "03",
       title: "Track every move",
       body:
-        "Saved, opened, applied, follow-up, interview — one pipeline. You approve every outbound action before it happens.",
+        "Saved, opened, applied, follow-up, interview — all in one place. You approve every outbound action before it happens.",
     },
   ];
 

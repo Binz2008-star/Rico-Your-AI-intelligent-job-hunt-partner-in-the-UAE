@@ -106,7 +106,7 @@ describe("job-card fallback — action availability", () => {
         expect(keys).toEqual(["company_site", "linkedin", "google", "copy", "save"]);
     });
 
-    it("always offers Save to pipeline even with no title or company", () => {
+    it("always offers Save to applications even with no title or company", () => {
         const actions = getJobFallbackActions({});
         expect(actions.length).toBeGreaterThan(0);
         expect(actions.some((a) => a.key === "save")).toBe(true);

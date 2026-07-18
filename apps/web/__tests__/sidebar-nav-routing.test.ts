@@ -66,7 +66,7 @@ describe("sidebar nav routing — specific pages", () => {
     const profile = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/profile")!;
     const settings = mainNavSections.flatMap((s) => s.items).find((i) => i.href === "/settings")!;
 
-    it("/applications (Pipeline) opens /applications from /settings — canonical target, no /flow double-hop", () => {
+    it("/applications (Applications) opens /applications from /settings — canonical target, no /flow double-hop", () => {
         expect(resolveNavHref(pipeline.href, pipeline.chatPrompt, "/settings")).toBe("/applications");
     });
 
