@@ -8,7 +8,9 @@
 --     PII — ever. Enforced in the application layer by a strict per-event
 --     property allowlist that only admits booleans, bounded numbers, and
 --     short enum-like tokens (^[a-z0-9_.:-]{1,64}$); free-form strings are
---     structurally impossible.
+--     significantly reduced. Note: the token validator still accepts
+--     identifier-shaped strings and digit-only values, so caller discipline
+--     remains required.
 --   * The actor is stored ONLY as a keyed, non-reversible HMAC-SHA256
 --     (`actor_hash`) under the dedicated RICO_ANALYTICS_HMAC_KEY — its own
 --     secret (never JWT_SECRET, never RICO_ARCHIVE_HMAC_KEY, never stored
@@ -31,14 +33,27 @@
 CREATE TABLE IF NOT EXISTS analytics_events (
     id              BIGSERIAL PRIMARY KEY,
     occurred_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    schema_version  SMALLINT NOT NULL DEFAULT 1,
-    event_name      VARCHAR(64) NOT NULL,
+    schema_version  SMALLINT NOT NULL DEFAULT 1 CHECK (schema_version > 0),
+    event_name      VARCHAR(64) NOT NULL CHECK (
+        event_name IN (
+            'session_start',
+            'signup_completed',
+            'search_performed',
+            'job_list_viewed',
+            'job_action',
+            'profile_completed',
+            'cv_upload_completed',
+            'reason_chip_feedback'
+        )
+    ),
     actor_hash      CHAR(64) NOT NULL DEFAULT '',
-    audience        VARCHAR(16) NOT NULL DEFAULT 'user',
+    audience        VARCHAR(16) NOT NULL DEFAULT 'user' CHECK (audience IN ('user', 'guest')),
     surface         VARCHAR(32) NOT NULL DEFAULT '',
     language        VARCHAR(8) NOT NULL DEFAULT '',
     dedupe_key      CHAR(64) NOT NULL,
-    properties      JSONB NOT NULL DEFAULT '{}'::jsonb
+    properties      JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (
+        properties IS NOT NULL AND jsonb_typeof(properties) = 'object'
+    )
 );
 
 -- Idempotency: duplicate deliveries collapse on the dedupe key.

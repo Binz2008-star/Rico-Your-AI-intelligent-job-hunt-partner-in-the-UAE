@@ -8,10 +8,12 @@ instrumented yet — wiring emitters into routes is a separate change.
 
 Privacy contract (mirrors the job_observations pattern, owner-approved):
   * NO raw message text, email, CV text, search query text, or other PII —
-    structurally enforced: the per-event allowlist admits only booleans,
-    bounded numbers, and short enum-like tokens (``_TOKEN_RE``); free-form
-    strings cannot pass validation, so PII cannot be recorded even by a
-    careless caller.
+    significantly reduced by structural enforcement: the per-event allowlist
+    admits only booleans, bounded numbers, and short enum-like tokens
+    (``_TOKEN_RE``). Free-form strings (emails with '@', phones with '+',
+    names with spaces) cannot pass. Note: the token validator still accepts
+    identifier-shaped strings and digit-only values, so caller discipline
+    remains required.
   * The actor is stored only as keyed non-reversible HMAC-SHA256 under the
     dedicated ``RICO_ANALYTICS_HMAC_KEY`` (its own secret — never
     JWT_SECRET, never the archive key, never stored in the DB). Absent key
@@ -78,6 +80,7 @@ def _v_hex64(value: Any) -> bool:
 # Strict allowlist: event name → {property: validator}. Unknown events are
 # DROPPED (warn once per name); unknown/invalid properties are STRIPPED.
 # Growing this map is a reviewed change — never accept caller-defined events.
+# Current count: 8 events.
 EVENT_ALLOWLIST: Dict[str, Dict[str, Any]] = {
     "session_start": {"surface": _v_token},
     "signup_completed": {"attribution_source": _v_token},
@@ -127,6 +130,11 @@ def _actor_hash(user_id: Optional[str]) -> Optional[str]:
     Returns '' for anonymous rows (no user_id). NEVER falls back to an
     unkeyed hash — identities are guessable, so an unkeyed hash would be
     dictionary-attackable.
+
+    Guest dedupe limitation: all anonymous actors share actor_hash='', so
+    identical guest events in the same minute can collapse across different
+    users. This is accepted as a best-effort limitation for anonymous
+    sessions; authenticated users have per-user hashes and full dedupe.
     """
     key = os.getenv(_HMAC_KEY_ENV, "").strip()
     if not key:
@@ -253,9 +261,15 @@ def purge_expired(retention_days: int = RETENTION_DAYS) -> int:
     Returns the number of rows removed (0 on any skip/failure). The
     scheduled invocation is wired in a later change — this is the policy's
     single implementation point.
+
+    Bounds: retention_days must be between 1 and 3650 (10 years).
+    Values outside this range are clamped to the nearest bound.
     """
     if not is_db_available():
         return 0
+
+    # Clamp to safe positive range
+    retention_days = max(1, min(int(retention_days), 3650))
     conn = None
     try:
         conn = get_db_connection()

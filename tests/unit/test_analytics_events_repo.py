@@ -228,3 +228,59 @@ def test_purge_never_raises():
     with patch.object(repo, "is_db_available", return_value=True), \
          patch.object(repo, "get_db_connection", return_value=conn):
         assert repo.purge_expired() == 0
+
+
+def test_purge_bounds_clamps_zero_to_one():
+    conn, cursor = _mock_conn()
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn):
+        removed = repo.purge_expired(0)
+    assert removed == 0
+    (sql, params) = cursor.execute.call_args[0]
+    assert params == (1,)  # clamped to 1
+
+
+def test_purge_bounds_clamps_negative_to_one():
+    conn, cursor = _mock_conn()
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn):
+        removed = repo.purge_expired(-100)
+    assert removed == 0
+    (sql, params) = cursor.execute.call_args[0]
+    assert params == (1,)  # clamped to 1
+
+
+def test_purge_bounds_clamps_extreme_to_max():
+    conn, cursor = _mock_conn()
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn):
+        removed = repo.purge_expired(10000)
+    assert removed == 0
+    (sql, params) = cursor.execute.call_args[0]
+    assert params == (3650,)  # clamped to 10 years
+
+
+def test_purge_bounds_accepts_normal_values():
+    conn, cursor = _mock_conn()
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn):
+        repo.purge_expired(180)
+        (sql, params) = cursor.execute.call_args[0]
+        assert params == (180,)  # normal value passes through
+
+
+def test_guest_dedupe_collision_is_accepted():
+    """Guest events share actor_hash='', so identical events in same minute collapse.
+
+    This is a documented best-effort limitation for anonymous sessions.
+    Authenticated users have per-user hashes and full dedupe.
+    """
+    # Two different guest users, same event, same minute → same dedupe key
+    key1 = repo._dedupe_key("", "session_start", {"surface": "command"}, None, _WHEN)
+    key2 = repo._dedupe_key("", "session_start", {"surface": "command"}, None, _WHEN)
+    assert key1 == key2  # collision expected and accepted
+
+    # Authenticated users have distinct hashes
+    key3 = repo._dedupe_key("user1@example.com", "session_start", {"surface": "command"}, None, _WHEN)
+    key4 = repo._dedupe_key("user2@example.com", "session_start", {"surface": "command"}, None, _WHEN)
+    assert key3 != key4  # no collision for authenticated users
