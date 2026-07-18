@@ -1,17 +1,22 @@
 # Current State
 
-> **Header — 2026-07-18 (evening): Product Truth Sprint begins — data-integrity
-> foundation in review.** Owner accepted the strategy review (Data Integrity
-> before Analytics) and directed autonomous execution of the highest
-> long-term-impact item. In review on `claude/release-captain-queue-76nrwz`:
-> (1) **posting-history archive** — append-only `job_observations`
-> (migration 046 file; applying to Neon = owner action; code fail-safes to
-> no-op until applied) recording every fresh provider sighting with a
-> versioned cross-provider fingerprint, zero user data; (2) **learning-signal
-> hygiene** — the daily pipeline's echo writer (its own matches recorded as
-> user "save" signals, `source="daily_pipeline"`) removed, and that source
-> quarantined on every learning read path, so personalization now learns from
-> real user actions only. Ledger: TASK-20260718-023. Next sprint tracks
+> **Header — 2026-07-18 (night): Product Truth Sprint — data-integrity
+> foundation MERGED & LIVE (supersedes the evening "in review" header
+> below).** `main` HEAD **`4879c04d`** (PR #1173, squash, expected-head
+> protection, CI green, 0 threads). Shipped: (1) **posting-history archive**
+> — append-only `job_observations`; privacy contract (owner-reviewed, twice
+> amended): no direct user identifiers or raw query text; query context
+> stored only as keyed non-reversible **HMAC-SHA256** under dedicated
+> `RICO_ARCHIVE_HMAC_KEY` (fail-closed when absent, never an unkeyed-hash
+> fallback). Migration 046 validated on the Neon preview branch, then
+> applied to `production` (`robenjob`/`br-restless-cherry-amq6wj7o`) with
+> explicit owner approval BEFORE merge — drift check green from first run,
+> production table verified 17-columns/2-indexes/0-rows. Owner set the HMAC
+> key on Render (secret never transited the session) — archive fully armed;
+> first real search writes the first observations. (2) **learning-signal
+> hygiene** — daily-pipeline echo writer removed; `daily_pipeline` source
+> quarantined at every learning read path; personalization learns from real
+> user actions only. Ledger: TASK-20260718-023 (done). Next sprint tracks
 > (deferred, owner-sequenced): behavioral analytics events, taste-loop
 > surfacing on /jobs, UAE user cohort.
 
