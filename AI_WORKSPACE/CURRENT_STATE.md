@@ -1,5 +1,20 @@
 # Current State
 
+> **Header — 2026-07-18 (evening): Product Truth Sprint begins — data-integrity
+> foundation in review.** Owner accepted the strategy review (Data Integrity
+> before Analytics) and directed autonomous execution of the highest
+> long-term-impact item. In review on `claude/release-captain-queue-76nrwz`:
+> (1) **posting-history archive** — append-only `job_observations`
+> (migration 046 file; applying to Neon = owner action; code fail-safes to
+> no-op until applied) recording every fresh provider sighting with a
+> versioned cross-provider fingerprint, zero user data; (2) **learning-signal
+> hygiene** — the daily pipeline's echo writer (its own matches recorded as
+> user "save" signals, `source="daily_pipeline"`) removed, and that source
+> quarantined on every learning read path, so personalization now learns from
+> real user actions only. Ledger: TASK-20260718-023. Next sprint tracks
+> (deferred, owner-sequenced): behavioral analytics events, taste-loop
+> surfacing on /jobs, UAE user cohort.
+
 > **Reconciliation header — 2026-07-18 (production-defect remediation; latest;
 > supersedes all headers below — including the "track COMPLETE" claim in the
 > night header, which the owner's production smoke disproved).**

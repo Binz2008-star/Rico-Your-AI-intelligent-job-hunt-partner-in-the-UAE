@@ -131,6 +131,9 @@ def normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "salary_string":   str(item.get("job_salary_string") or ""),
         "employment_type": str(item.get("job_employment_type") or ""),
         "job_id":          str(item.get("job_id") or ""),
+        # Provider's CLAIMED posting date — untrusted; kept for the
+        # job_observations archive (observed_at is the authoritative clock).
+        "posted_at":       str(item.get("job_posted_at_datetime_utc") or ""),
     }
 
 
@@ -260,6 +263,13 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
                     seen_ids.add(jid)
                 items.append(it)
             _cache_put(query, items)
+            # Posting-history archive: fresh fetches only — a cache hit is the
+            # same response re-served, not a new sighting. Never raises.
+            try:
+                from src.repositories.job_observations_repo import record_observations
+                record_observations(items, provider="jsearch", query_context=query, country=country)
+            except Exception:
+                logger.debug("job_observations hook skipped", exc_info=True)
             logger.info("jsearch_fetch ok query=%r results=%d retries=%d", query, len(items), retries)
             return FetchResult(items=items, retries=retries)
         except urllib.error.HTTPError as exc:

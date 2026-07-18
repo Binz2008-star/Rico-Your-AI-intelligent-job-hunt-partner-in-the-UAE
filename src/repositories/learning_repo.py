@@ -96,6 +96,14 @@ ROLE_PATTERNS = [
     re.compile(r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(Engineer|Developer|Scientist|Analyst)"),
 ]
 
+# Signal sources that do NOT reflect real user behavior and are therefore
+# excluded from every read path. Historical "daily_pipeline" rows were written
+# by the daily bot recording Rico's OWN top matches as user "save" actions —
+# an echo loop that trained personalization on system output. The writer was
+# removed (src/run_daily.py); this filter keeps the historical rows inert and
+# must not be bypassed if a pipeline-side writer is ever reintroduced.
+_EXCLUDED_SIGNAL_SOURCES = ("daily_pipeline",)
+
 # UAE salary ranges (monthly AED)
 SALARY_TIERS = {
     "entry": (5000, 15000),
@@ -217,6 +225,11 @@ class LearningRepository:
         # Keep history bounded (max 1000 signals per user for memory)
         if len(profile.signal_history) > 1000:
             profile.signal_history = profile.signal_history[-1000:]
+
+        # Excluded sources are persisted for the record but never shape the
+        # aggregated preferences (mirrors the _apply_decay_to_profile filter).
+        if source in _EXCLUDED_SIGNAL_SOURCES:
+            return True
 
         # Update appropriate field with EMA
         if signal_type == "role_preference":
@@ -377,6 +390,8 @@ class LearningRepository:
             "company_sentiment": "company_sentiment",
         }
         for signal in profile.signal_history:
+            if signal.source in _EXCLUDED_SIGNAL_SOURCES:
+                continue  # non-user-behavior source (see _EXCLUDED_SIGNAL_SOURCES)
             if signal.signal_type == "preference_veto":
                 continue
             veto_key = (_VETO_KEY_MAP.get(signal.signal_type, ""), signal.signal_value.lower())
@@ -762,9 +777,10 @@ class LearningRepository:
                     SELECT signal_type, signal_value, signal_weight, source, timestamp, metadata
                     FROM learning_signals
                     WHERE canonical_user_id = %s
+                      AND NOT (source = ANY(%s))
                     ORDER BY timestamp DESC
                     LIMIT 1000
-                """, (canonical_user_id,))
+                """, (canonical_user_id, list(_EXCLUDED_SIGNAL_SOURCES)))
 
                 for row in cur.fetchall():
                     signal = LearningSignal(

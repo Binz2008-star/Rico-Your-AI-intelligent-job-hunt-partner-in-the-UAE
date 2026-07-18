@@ -80,7 +80,6 @@ from src.applications import get_applied_jobs, get_applied_jobs_count
 from src.decision_engine import JobDecisionEngine, generate_decision_insights
 from src.feedback_loop import FeedbackLoopOrchestrator, CycleResult
 from src.dashboard import build_dashboard
-from src.repositories.learning_repo import get_learning_repository
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -627,36 +626,9 @@ def _auto_apply_naukrigulf(matches: List[Tuple[Dict[str, Any], int]]) -> None:
         apply_errors.labels(platform="naukrigulf").inc()
 
 
-def _update_learning_repo(matches: List[Tuple[Dict[str, Any], int]]) -> None:
-    """Update learning repository with user preferences from job actions."""
-    try:
-        repo = get_learning_repository()
-        profile = get_candidate_profile()
-
-        if not profile:
-            logger.debug("learning_repo_skipped no_profile")
-            return
-
-        user_id = profile.get("email", "unknown")
-
-        for job, score in matches[:20]:  # Limit to top 20
-            # Record as positive signal for role, company, location
-            repo.infer_signals_from_job_action(user_id, "save", job)
-
-            # High score = stronger signal
-            if score >= 75:
-                repo.record_signal(
-                    user_id,
-                    "role_preference",
-                    job.get("title", ""),
-                    signal_weight=min(0.8, score / 100),
-                    source="daily_pipeline",
-                    metadata={"score": score, "auto_saved": True}
-                )
-
-        logger.info(f"learning_repo_updated signals_sent={len(matches[:20])}", extra={"signals_sent": len(matches[:20])})
-    except Exception as e:
-        logger.exception(f"learning_repo_error: {e}")
+# Learning signals are user-action-only. The pipeline must never record its own
+# matches as user signals (that trained personalization on Rico's own output —
+# an echo loop). See learning_repo._EXCLUDED_SIGNAL_SOURCES.
 
 
 def _run_feedback_loop(
@@ -812,7 +784,6 @@ def run_pipeline() -> int:
         _notify_users_via_telegram(matches)
         _apply_assistant(matches)
         _auto_apply_naukrigulf(matches)
-        _update_learning_repo(matches)
         _sync_gmail()
 
         try:

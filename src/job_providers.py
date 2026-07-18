@@ -167,6 +167,26 @@ def _provider_configured(name: str) -> bool:
     return False
 
 
+def _record_observations_safe(
+    items: List[Dict[str, Any]],
+    *,
+    provider: str,
+    query_context: str,
+    country: str = "ae",
+) -> None:
+    """Posting-history archive hook for fresh provider fetches. Never raises.
+
+    Called only on fresh network responses — the caches above these clients
+    mean a cache hit is the same response re-served, not a new sighting.
+    (JSearch records inside jsearch_client.search() for the same reason.)
+    """
+    try:
+        from src.repositories.job_observations_repo import record_observations
+        record_observations(items, provider=provider, query_context=query_context, country=country)
+    except Exception:
+        logger.debug("job_observations hook skipped provider=%s", provider, exc_info=True)
+
+
 # ── Jooble client ─────────────────────────────────────────────────────────────
 
 def _normalize_jooble(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -234,6 +254,7 @@ def _jooble_search(role: str, location: str, *, page: int = 1) -> FetchResult:
     if not isinstance(raw_jobs, list):
         raw_jobs = []
     items = [_normalize_jooble(j) for j in raw_jobs if isinstance(j, dict)]
+    _record_observations_safe(items, provider="jooble", query_context=f"{role} {location}".strip())
     logger.info("jooble_fetch ok role=%r results=%d", role, len(items))
     return FetchResult(items=items, provider="jooble")
 
@@ -339,6 +360,10 @@ def _adzuna_search(role: str, location: str, *, page: int = 1) -> FetchResult:
     if not isinstance(raw, list):
         raw = []
     items = [_normalize_adzuna(j) for j in raw if isinstance(j, dict)]
+    _record_observations_safe(
+        items, provider="adzuna",
+        query_context=f"{role} {location}".strip(), country=country,
+    )
     logger.info("adzuna_fetch ok role=%r results=%d", role, len(items))
     return FetchResult(items=items, provider="adzuna")
 
