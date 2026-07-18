@@ -78,6 +78,179 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260718-001 — Stage 1: Neon data-architecture audit + source-of-truth decision record (docs-only)
+
+Status: review (draft PR open; owner approval is the stop condition)
+Owner: Claude (WRITER on `claude/database-audit-results-qcurpe`)
+Branch: `claude/database-audit-results-qcurpe` (base: `main` @ `4ce678b6`)
+Issue/PR: Stage 1 audit PR (docs-only)
+Program mapping: Vision **Career OS reliability** → Epic **Neon data
+architecture remediation** → Milestone **Stage 1: audit + canonical
+decisions** → Phase 0 (evidence)
+
+#### Objective
+Produce the verified, read-only Neon production architecture audit and the
+proposed source-of-truth decision matrix; no production or runtime change.
+
+#### Scope / files
+- `AI_WORKSPACE/AUDITS/2026-07-18-neon-data-architecture-audit.md` (new)
+- `AI_WORKSPACE/DECISIONS.md` (DEC-20260718-001, proposed)
+- `AI_WORKSPACE/TASKS.md` (this ledger)
+
+#### Risks
+Docs-only; only risk is stale numbers — every figure is dated 2026-07-18 and
+sourced (repo `file:line` or aggregate live query).
+
+#### Acceptance criteria
+- [x] Every material claim carries repo or aggregate-DB evidence
+- [x] No PII/secrets in the diff (aggregate counts only)
+- [x] No runtime files changed; no SQL beyond SELECT/catalog reads
+- [ ] Owner approves DEC-20260718-001 rows (moves to Accepted)
+
+#### Rollback plan
+Revert the single docs commit; nothing else is affected.
+
+Dependencies: none. Production impact: none. Neon changes: none.
+Documentation impact: adds the canonical audit + proposed decision + phased
+task ledger (Phases 1–7 below).
+
+### TASK-20260718-002 — Phase 1: protect and document the production Neon branch
+
+Status: proposed (blocked on DEC-20260718-001 approval)
+Owner: owner-gated (Neon console) with agent-prepared checklist
+Program mapping: … Milestone **Stage 2: containment** → Phase 1
+
+- **Objective:** enable branch protection on `production`
+  (`br-restless-cherry-amq6wj7o`) and document the branch/backup model.
+- **Scope:** Neon console setting + AI_WORKSPACE doc update; no schema/code.
+- **Risks:** preview-branch automation (Vercel/GitHub create children of
+  production — 216 live examples) must be confirmed unaffected first.
+- **Acceptance:** branch shows `protected: true`; a test preview branch still
+  creates successfully; model documented.
+- **Rollback:** toggle protection off (one console action).
+- **Dependencies:** DEC approval. **Production impact:** none to data.
+  **Docs impact:** branch model section in AI_WORKSPACE.
+
+### TASK-20260718-003 — Phase 2: database access boundary and least privilege
+
+Status: proposed
+Owner: agent-prepared on a non-production Neon branch; owner-gated cutover
+Program mapping: … Phase 2
+
+- **Objective:** replace the BYPASSRLS owner role in the runtime path with a
+  least-privilege role; revoke blanket `authenticated` CRUD (44 tables);
+  design RLS policies with cross-user denial tests.
+- **Scope:** new role + grants + policies on a test branch; Render env change
+  at cutover. No business logic.
+- **Risks:** under-granted role breaks runtime paths — full API smoke on the
+  test branch first; RLS must NOT be flipped on production before policies
+  exist (17 tables already have policy-less RLS enabled that only the owner
+  bypass masks).
+- **Acceptance:** all backend tests + smoke green under the new role on the
+  test branch; cross-user read/write proven denied; Data API status verified
+  and recorded.
+- **Rollback:** point Render back to the previous connection string.
+- **Dependencies:** TASK-002; owner verification of Data API + Render role
+  (audit §14). **Production impact:** one env-var change window.
+  **Docs impact:** access model documented in AI_WORKSPACE.
+
+### TASK-20260718-004 — Phase 3: canonical identity reconciliation
+
+Status: proposed
+Program mapping: … Phase 3
+
+- **Objective:** make `rico_users.id` (UUID) the enforced identity spine:
+  mapping report, resolve 3 duplicate-email groups, link/classify the
+  121 onboarding + 12 job-context + 2 document-context unlinkable rows,
+  implement the real identity merge (`resolver._attempt_identity_merge` is a
+  no-op today), then add constraints incrementally.
+- **Scope:** read-only mapping report first; then reviewed idempotent
+  reconciliation script; then `NOT VALID → VALIDATE` constraints.
+- **Risks:** wrong merge joins two real people — merge only on exact
+  verified-email match with a dry-run report reviewed by owner.
+- **Acceptance:** unlinkable counts → 0 or documented-guest; duplicate email
+  groups → 0; merge implemented with tests; no orphan rows introduced.
+- **Rollback:** backup branch before the write window; script logs every row
+  it touches.
+- **Dependencies:** TASK-003. **Production impact:** one data change window.
+  **Docs impact:** identity map updated in audit + ARCHITECTURE.
+
+### TASK-20260718-005 — Phase 4: application lifecycle reconciliation
+
+Status: proposed
+Program mapping: … Phase 4
+
+- **Objective:** reconcile the 5 context-`applied` (+2/+1 legacy) records
+  into `rico_job_recommendations`; freeze new writes to `applications`; add a
+  shared job-key link for `user_job_context`; add status CHECK constraints.
+- **Scope:** one reconciliation script + repo-layer guard + constraints.
+- **Risks:** the ujc→rjr match is heuristic (no shared key) — each of the 5
+  rows is resolved explicitly in the dry-run report, never bulk-matched.
+- **Acceptance:** canonical table reflects every real application; smoke
+  search → open → prepared → applied → follow-up passes; `applications`
+  write-frozen.
+- **Rollback:** backup branch; constraints added `NOT VALID` first.
+- **Dependencies:** TASK-004 (user resolution must be canonical first).
+  **Production impact:** one data change window. **Docs impact:** lifecycle
+  map updated.
+
+### TASK-20260718-006 — Phase 5: migration drift resolution
+
+Status: proposed
+Program mapping: … Phase 5
+
+- **Objective:** apply 043 in the Gmail change window (before any
+  `RICO_ENABLE_GMAIL_SYNC=true`); finish 034's two remaining
+  `DROP INDEX CONCURRENTLY`; extend `scripts/check_migration_drift.py` with
+  absence checks so DROP-only migrations can no longer stay silently
+  unapplied; confirm the drift job is scheduled and alerting.
+- **Acceptance:** drift script reports zero drift including DROP-only
+  signatures; CI job verified scheduled.
+- **Rollback:** 043 is additive (documented DROP rollback); re-create dropped
+  indexes from saved definitions if needed.
+- **Dependencies:** owner change window. **Production impact:** additive DDL
+  + 2 concurrent index drops. **Docs impact:** drift-detector README section.
+
+### TASK-20260718-007 — Phase 6: index and retention cleanup
+
+Status: proposed
+Program mapping: … Phase 6
+
+- **Objective:** EXPLAIN-verify then drop the 21 duplicate index pairs
+  (batched, CONCURRENTLY); add a scheduled sweep for expired
+  `password_reset_tokens` (16), `email_verification_tokens` (130),
+  `cv_upload_artifacts` (2), `paddle_checkout_sessions` (13); document
+  retention windows.
+- **Risks:** never drop on duplicate-listing or `idx_scan=0` alone — every
+  drop needs an EXPLAIN check on a test branch (the 034 partial-DROP history
+  proves manual index work drifts; the sweep prevents recurrence).
+- **Acceptance:** duplicate-pair query returns 0 rows; sweep runs on
+  schedule with metrics; retention documented.
+- **Rollback:** recreate indexes from saved definitions; sweep is
+  feature-flagged.
+- **Dependencies:** TASK-006. **Production impact:** concurrent drops only.
+  **Docs impact:** retention policy in AI_WORKSPACE.
+
+### TASK-20260718-008 — Phase 7: legacy table isolation or retirement
+
+Status: proposed
+Program mapping: … Phase 7
+
+- **Objective:** owner decision + execution on `leads` (zero code paths;
+  likely belongs to the sibling `eco-technology-leads` project — export or
+  move out of the Rico DB); formal read-only freeze then retirement plan for
+  Stripe-era `user_subscriptions`/`subscription_events` (aligns with #1066)
+  and the legacy `applications` pipeline trio; delete-or-wire decision for
+  dormant `search_context`.
+- **Risks:** deleting data whose ownership is unconfirmed — export before
+  any removal; Stripe tables stay until the #1066 retirement is owner-signed.
+- **Acceptance:** no orphaned/foreign product tables remain in `neondb`;
+  every remaining table maps to a class in audit §12.
+- **Rollback:** exports retained; moves are copies-then-verify-then-drop.
+- **Dependencies:** TASK-002…007; owner ownership confirmation.
+  **Production impact:** one isolation window. **Docs impact:** final
+  inventory update.
+
 ### TASK-20260717-008 — PR #1145: unify /command visuals with the shared WorkspaceShell
 
 Status: verified — **#1145 PRODUCTION PASS** (merged main @ `ecd29a66`, deployed;
