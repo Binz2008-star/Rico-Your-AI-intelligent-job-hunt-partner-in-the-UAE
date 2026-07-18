@@ -13,6 +13,13 @@ Two sources of agentic UI artifacts (merged, runtime wins on conflicts):
                             attachment analysis, actions)
   2. response_dict.type   — response-type–based action cards that make the
                             chat the primary interface (PR-C)
+
+Action payload contract (P1 fix, 2026-07-19): every ``chat_continue`` action
+MUST carry ``payload["message"]`` — the exact chat text the click sends. The
+frontend (ChatActionCard) refuses to send anything else; in particular a
+button LABEL is presentation only and must never become chat input (the old
+``prompt`` key silently fell back to the label, which the intent router then
+parsed as a job role). UI-level flows (e.g. refine) use ``open_drawer``.
 """
 from __future__ import annotations
 
@@ -46,13 +53,17 @@ def _job_matches_actions(response_dict: dict[str, Any]) -> list[dict[str, Any]]:
             "label": "Save search",
             "kind": "chat_continue",
             "impact": "medium",
-            "payload": {"prompt": f"save this search for {search_role}"},
+            "payload": {"message": f"save this search for {search_role}"},
         })
+    # Refine is a STRUCTURED UI action, never natural language: the frontend
+    # opens a refinement panel and the LLM only ever sees the final composed
+    # search query the user submits. A chat_continue here would put UI wording
+    # into the intent router (P1: the label itself was being parsed as a role).
     actions.append({
         "id": "refine-search",
         "label": "Refine search",
-        "kind": "chat_continue",
-        "payload": {"prompt": "refine this job search"},
+        "kind": "open_drawer",
+        "payload": {"drawer": "refine_search", "search_query": search_role},
     })
     return actions
 
@@ -66,13 +77,13 @@ def _delete_saved_jobs_confirm_actions() -> list[dict[str, Any]]:
             "kind": "chat_continue",
             "impact": "high",
             "requires_confirmation": True,
-            "payload": {"prompt": "yes delete all my saved jobs"},
+            "payload": {"message": "yes delete all my saved jobs"},
         },
         {
             "id": "cancel-delete-jobs",
             "label": "No, keep them",
             "kind": "chat_continue",
-            "payload": {"prompt": "no cancel"},
+            "payload": {"message": "no cancel"},
         },
     ]
 
@@ -108,7 +119,7 @@ def _new_search_actions() -> list[dict[str, Any]]:
             "id": "new-search",
             "label": "Find new jobs",
             "kind": "chat_continue",
-            "payload": {"prompt": "find me jobs"},
+            "payload": {"message": "find me jobs"},
         },
     ]
 

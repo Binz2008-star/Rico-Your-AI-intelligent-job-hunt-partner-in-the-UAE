@@ -6,6 +6,7 @@ import { classifyMessage } from "@/components/command/CommandEventAdapter";
 import { AtelierMarkdownScope, CommandEmptyState } from "@/components/command/CommandMessages";
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
+import { RefineSearchPanel } from "@/components/command/RefineSearchPanel";
 import { AtelierCardScope } from "@/components/command/CommandStates";
 import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
@@ -845,6 +846,9 @@ export default function CommandPage() {
     const [initialContentReady, setInitialContentReady] = useState(false);
     // id of the message whose "Copy" button most recently confirmed a copy
     const [copiedId, setCopiedId] = useState<number | null>(null);
+    // Structured refine flow (P1): non-null opens the RefineSearchPanel with
+    // the role prefilled from the message's search context.
+    const [refineDraft, setRefineDraft] = useState<{ role: string } | null>(null);
 
     // True when the latest Rico message has an unresolved permission request — blocks new input.
     // 4e right rail — session-derived only (same contract as the atelier-console
@@ -1775,9 +1779,17 @@ export default function CommandPage() {
         ]);
     }
 
-    /** Handle open_drawer action — injects the drawer content as a new Rico message. */
+    /** Handle open_drawer action — structured UI flows that must never route
+     * through the chat/LLM (P1: the refine label used to be sent as a message
+     * and parsed as a job role). Unknown drawers keep the legacy behavior of
+     * injecting payload content as a Rico message. */
     function handleOpenDrawer(m: Message, action: RicoChatAction): void {
         const payload = action.payload as Record<string, unknown>;
+        if (payload.drawer === "refine_search") {
+            const role = String(payload.search_query ?? m.search_query ?? "");
+            setRefineDraft({ role: role === "these roles" ? "" : role });
+            return;
+        }
         const content = String(payload.content ?? payload.message ?? action.label);
         setMessages((prev) => [
             ...prev,
@@ -2420,6 +2432,17 @@ export default function CommandPage() {
 
                         <div aria-hidden="true" />
                     </div>
+
+                    {/* Structured refine flow — only the composed query ever
+                    reaches the chat; UI wording never does. */}
+                    {refineDraft !== null && (
+                        <RefineSearchPanel
+                            initialRole={refineDraft.role}
+                            onSubmit={(query) => sendMessage(query)}
+                            onClose={() => setRefineDraft(null)}
+                            disabled={thinking}
+                        />
+                    )}
 
                     {/* Input bar — PR 4a of the Atelier migration program.
                     Authenticated: Atelier surface. Public/checking: original surface. */}
