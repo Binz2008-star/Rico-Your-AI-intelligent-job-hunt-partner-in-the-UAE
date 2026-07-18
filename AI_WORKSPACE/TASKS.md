@@ -78,6 +78,77 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260718-019 — PR #1167: route-exit dirty-state protection (Profile track Phase 4)
+
+Status: verified — **MERGED + deployed (frontend-only)**
+Owner: Claude (owner-authorized autonomous track execution 2026-07-18)
+Branch: `feat/profile-route-exit-dirty-protection` (merged, auto-deleted)
+Issue/PR: #1167 (squash `ae6567871beffdab4ebff3b68bee8d5d75863908`)
+
+#### Delivered
+- Closes the #1161 residual P1: browser Back exiting `/profile` is made
+  non-destructive — per-tab, account-keyed sessionStorage draft mirror,
+  restored with the unsaved bar on return; removed on save/discard;
+  foreign-account drafts ignored AND wiped; corrupt storage → clean start.
+  No history trap (would break section back/forward), no shell/router change.
+  All #1161 guards unchanged. 8 new tests (`profile-draft-persistence.test.tsx`);
+  full vitest 711/68 green.
+
+### TASK-20260718-018 — PR #1166: explicit-null clearing for numeric profile fields
+
+Status: verified — **MERGED + deployed ("Deploy to Production" success)**
+Owner: Claude (owner-authorized autonomous track execution 2026-07-18)
+Branch: `fix/profile-nullable-numeric-clear` (merged, auto-deleted)
+Issue/PR: #1166 (squash `0da1c3e23647f6b5bc5529cab8e57214b860e21c`)
+
+#### Delivered
+- Defect confirmed real at three layers (Pydantic omitted≡null; repo
+  None-strip; mirror None-skip). Contract: omitted=unchanged, explicit
+  null=clear, 0=valid, invalid=422 — for `salary_expectation_aed`,
+  `minimum_salary_aed`, `years_experience` only. Additive `clear_fields`
+  channel (endpoint `model_fields_set` → repo allowlist → JSONB `||` null
+  write → mirror clear post-commit); **no migration, no schema change**;
+  every existing caller's None-means-unchanged semantics preserved; #764
+  verifier checks merged expected state. 13 new backend tests + frontend
+  clear-saves-null/zero-valid tests; backend 3,964 + frontend 703 green.
+
+### TASK-20260718-017 — PR #1165: actionable profile warnings (Profile Phase 4B)
+
+Status: verified — **MERGED + deployed ("Deploy to Production" success)**
+Owner: Claude (owner-authorized autonomous track execution 2026-07-18)
+Branch: `feat/profile-actionable-warnings` (merged, auto-deleted)
+Issue/PR: #1165 (squash `ab7075940a309293e6f0738fc7a6553b30ce1577`)
+
+#### Delivered
+- Passive `/profile` warning banner → actionable workflow on the Phase 4A
+  contract: live count summary (EN/AR singular/plural), blocking-first
+  severity badges, direct actions on stable field identifiers
+  (`target_roles`/`preferred_cities` → `?section=goals` + param preservation +
+  exact-field focus + reduced-motion-safe highlight + SR announcement;
+  settings-owned fields → `/settings`), authoritative save-refresh removal +
+  hide-when-empty, blocking non-dismissable, session-scoped Review-later with
+  restore (never claims resolution). Frontend-only; 16 new vitest cases +
+  focused Playwright (EN + AR RTL, screenshots as uncommitted artifacts).
+
+### TASK-20260718-016 — PR #1164: backend-authoritative warning severity contract (Profile Phase 4A)
+
+Status: verified — **MERGED + deployed ("Deploy to Production" success)**
+Owner: Claude (owner-authorized autonomous track execution 2026-07-18)
+Branch: `fix/profile-warning-severity-contract` (merged, auto-deleted)
+Issue/PR: #1164 (squash `63e976d0a06144c28f447ace210ccc453dd5d72f`)
+
+#### Delivered
+- `WarningSeverity` enum (`blocking`/`important`/`recommendation`);
+  explicit `WARNING_SEVERITY_BY_CODE` + `WARNING_FIELD_BY_CODE` for all 6
+  emitted matching-guardrail codes (blocking:
+  `excluded_keyword_blocks_target_role`, `invalid_uae_city`; important:
+  `excluded_keyword_overlaps_included_keyword`,
+  `excluded_keyword_blocks_core_role_word`, `minimum_fit_score_high`;
+  recommendation: `too_many_target_roles`); fail-safe `severity_for_code()`
+  (unknown → logged + deterministic `important`, unreachable in a green build
+  via the exhaustive contract test). Response shape + bilingual contract
+  preserved; `cv_quality_warnings` untouched; no DB change.
+
 ### TASK-20260718-015 — PR #1161: profile true URL-backed section navigation (Profile Phase 3)
 
 Status: verified — **MERGED + deployed (frontend-only)**
