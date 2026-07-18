@@ -3971,7 +3971,7 @@ pipeline's echo learning-signals (system output recorded as user behavior).
 
 ### TASK-20260719-001 — P1: "Refine search" as a structured action (never chat input)
 
-Status: review
+Status: done
 Owner: Claude (Fable session; owner CPO decision: fix before analytics/taste-loop)
 Branch: claude/refine-search-structured-action
 Issue/PR: (draft PR from this branch)
@@ -4012,3 +4012,55 @@ sees the final composed search query.
       suites; full vitest 724 green; `npm run build` clean).
 - [x] Analytics-purity side effect: no more synthetic "Refine search"
       user messages polluting chat history or future analytics.
+
+---
+
+### TASK-20260719-002 — analytics_events foundation (migration 047)
+
+Status: review
+Owner: Claude (Fable session; owner directive post-#1175: single-objective PR)
+Branch: claude/analytics-events-foundation
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+Product Truth Sprint track 1 ("eyes"): first-party behavioral event store —
+migration + storage foundation ONLY. No emitters wired, no Taste Loop, no
+structured-action changes.
+
+#### Scope delivered
+- `migrations/047_analytics_events.sql` — append-mostly store; unique
+  `dedupe_key` (idempotency); `schema_version` on every row; indexes for
+  funnels + retention sweeps. NOT applied anywhere — production application
+  requires a separate owner approval gate (preview-first, as 046).
+- `src/repositories/analytics_events_repo.py` — `record_event()` (never
+  raises; 42P01 latch; ON CONFLICT DO NOTHING) + `purge_expired()`
+  (RETENTION_DAYS=180; scheduled invocation is a LATER change).
+- Strict `EVENT_ALLOWLIST` (9 events): unknown events rejected, unknown
+  properties stripped; values limited to bools, bounded ints, and enum-like
+  tokens `^[a-z0-9_.:-]{1,64}$` — free text/emails/query strings are
+  STRUCTURALLY impossible. `search_performed` deliberately has no
+  query-text property.
+- Actor = keyed HMAC-SHA256 under dedicated `RICO_ANALYTICS_HMAC_KEY`
+  (documented in .env.example; never JWT_SECRET / never the archive key so
+  datasets stay unlinkable); absent key ⇒ all writes skipped fail-closed
+  with one structured warning; no unkeyed fallback.
+- Drift signatures for 047 (table + dedupe index).
+
+#### Rollback
+Revert the commit; drop the table if created — nothing references it.
+
+#### Acceptance criteria
+- [x] Privacy pins: unknown event rejected without DB touch; PII-shaped
+      values cannot pass the validator; raw user id never in a row;
+      fail-closed no-key path warns once without identifiers.
+- [x] Idempotency pins: client_event_id-stable keys; canonical
+      order-independent minute-bucket keys; conflict ⇒ False, no error.
+- [x] Resilience pins: DB-down no-op; 42P01 latch; transient errors don't
+      latch.
+- [x] Retention pin: purge SQL + 180-day constant.
+      (tests/unit/test_analytics_events_repo.py — 16 tests.)
+
+##### Housekeeping
+TASK-20260719-001 (Refine search structured action): merged as `d5f96f1e`
+on `main` (PR #1175, expected-head protection, CI green incl. the new
+real-browser smoke) → Status: done.

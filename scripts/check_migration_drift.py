@@ -86,6 +86,11 @@ CHECKS: list[tuple[str, str, object]] = [
     ("046", "index", "idx_job_observations_fingerprint_observed"),
     # Detects a stale pre-review table shape (raw query_context / query_hash).
     ("046", "column", ("job_observations", "query_context_hmac")),
+    # First-party analytics event store. Like 046: after merge the drift
+    # alert IS the reminder until the owner applies 047; the event store
+    # code no-ops (fail-closed) until the table exists.
+    ("047", "table", "analytics_events"),
+    ("047", "index", "uq_analytics_events_dedupe"),
 ]
 
 
