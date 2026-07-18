@@ -640,12 +640,12 @@ function ProfileActionableWarnings({
                                         >
                                             {t(SEVERITY_LABEL_KEY[item.severity])}
                                         </span>
-                                        <p className="m-0 min-w-0 flex-1 text-[13px] font-medium leading-[1.5]" style={{ color: palette.ink }}>
+                                        <p className="m-0 min-w-0 flex-1 break-words text-[13px] font-medium leading-[1.5]" style={{ color: palette.ink }}>
                                             {item.message}
                                         </p>
                                     </div>
                                     {item.suggestion && (
-                                        <p className="mb-0 mt-1.5 text-[12.5px] leading-[1.5]" style={{ color: palette.ink70 }}>
+                                        <p className="mb-0 mt-1.5 break-words text-[12.5px] leading-[1.5]" style={{ color: palette.ink70 }}>
                                             {item.suggestion}
                                         </p>
                                     )}
@@ -1139,10 +1139,10 @@ export function ProfileEditorial({
             {dirty && (
                 <div
                     data-testid="profile-ed-savebar"
-                    className="sticky top-2 z-30 mb-4 flex items-center justify-between gap-4 rounded-[12px] px-4 py-2.5 animate-fade-up motion-reduce:animate-none sm:px-5"
+                    className="sticky top-2 z-30 mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[12px] px-3 py-2 animate-fade-up motion-reduce:animate-none sm:px-5 sm:py-2.5"
                     style={{ background: palette.red, color: "#fff", boxShadow: tone.shadow }}
                 >
-                    <span className="text-[13px] font-medium">{t("profileEdUnsaved")}</span>
+                    <span className="min-w-0 text-[12.5px] font-medium sm:text-[13px]">{t("profileEdUnsaved")}</span>
                     <div className="flex shrink-0 items-center gap-2">
                         <button
                             type="button"
