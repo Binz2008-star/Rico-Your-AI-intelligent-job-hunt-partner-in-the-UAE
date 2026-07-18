@@ -3859,3 +3859,92 @@ record: market/country normalization.
 - Search-context durability: `recent_search_role` non-durable under
   `RICO_MEMORY_BACKEND=postgres`; multi-role option click triggers page reload;
   refinement falls back to profile after reload. Tracked separately.
+
+---
+
+### TASK-20260718-023 — Data-integrity foundation: posting-history archive + learning-signal hygiene
+
+Status: review
+Owner: Claude (Fable session, owner-directed "choose highest long-term impact and execute")
+Branch: claude/release-captain-queue-76nrwz
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+Start the two time-sensitive data-integrity foundations of the Product Truth
+Sprint: (1) an append-only `job_observations` posting archive (longitudinal
+market data cannot be backfilled), and (2) stop + quarantine the daily
+pipeline's echo learning-signals (system output recorded as user behavior).
+
+#### Context
+- Strategy: owner-approved Product Truth Sprint; owner note "Data Integrity
+  before Analytics".
+- Evidence: `run_daily._update_learning_repo` recorded pipeline matches as
+  user "save" signals (`source="daily_pipeline"`, `auto_saved: True`);
+  `jobs` table is a rolling 14-day window (jobs_repo filters
+  `date_found >= now() - interval '14 days'`) so posting history was being
+  discarded by design.
+- Files: `migrations/046_job_observations.sql`,
+  `src/repositories/job_observations_repo.py`, hooks in
+  `src/jsearch_client.py` (+ `posted_at` passthrough) and
+  `src/job_providers.py` (jooble/adzuna), `src/run_daily.py` (writer removed),
+  `src/repositories/learning_repo.py` (`_EXCLUDED_SIGNAL_SOURCES` filter at
+  DB load, decay aggregation, and write-time EMA).
+
+#### Constraints
+- Migration 046 is a FILE ONLY in this PR — applying it to Neon is an owner
+  action; the archive code fail-safes to a disabled no-op (pgcode 42P01
+  latches off per process) until the table exists.
+- `job_observations` carries ZERO user data (market-side only; no PDPL scope).
+- Append-only: no update/delete code paths.
+- No analytics, no taste-loop UI, no ranking changes in this PR.
+
+#### Acceptance criteria
+- [x] Fresh provider fetches (jsearch/jooble/adzuna) record observations;
+      cache hits never do.
+- [x] Fingerprint v1 is provider-format stable (EN + AR) and versioned.
+- [x] Description text never stored (hash + length only); apply URL reduced
+      to domain.
+- [x] Pipeline echo writer gone; `daily_pipeline` source inert on every read
+      path; real user-action signals unaffected (pinned by
+      `tests/unit/test_learning_signal_hygiene.py`).
+- [x] `tests/unit/test_job_observations_repo.py` +
+      `tests/unit/test_learning_signal_hygiene.py` green; adjacent suites
+      (jsearch, providers, run_daily-touching) green.
+
+##### Addendum (owner review round, 2026-07-18)
+
+- **Privacy contract amended (owner catch)**: the migration stored raw
+  `query_context` while claiming "zero user data" — query text can embed
+  profile-derived terms. Resolved: column is now `query_hash CHAR(64)`
+  (sha256 one-way); raw query text is never stored nor logged. Hash equality
+  fully preserves the longitudinal instrument (same query → same hash).
+- **Dual-scope merge accepted (documented per owner's option 2)**: PR #1173
+  intentionally carries BOTH (a) the archive and (b) learning-signal hygiene.
+  Rationale: one shared objective (data integrity), hygiene is read-path
+  filtering + writer removal with no migration dependency, the archive
+  fail-safes to a no-op until 046 exists — coupled risk ≈ union of two small
+  independent risks; a split would cost a second branch/PR cycle with no
+  added safety.
+- **Owner-directed rollout gate**: 046 is applied to the Neon PREVIEW branch
+  first (`preview/pr-1173-claude/release-captain-queue-76nrwz`, project
+  `robenjob`) with table/index/write verification there; production
+  application requires a separate explicit owner approval; only then
+  Draft → Ready → merge.
+
+##### Addendum 2 (owner privacy review, 2026-07-18 — supersedes the sha256 note above)
+
+- Owner rejected plain sha256: the query space is small/guessable, so an
+  unkeyed hash is dictionary-attackable — pseudonymous, NOT "zero user data".
+- Approved contract implemented: `query_context_hmac CHAR(64)` =
+  HMAC-SHA256(`RICO_ARCHIVE_HMAC_KEY`, normalized query). Key is dedicated
+  (never JWT_SECRET), never stored in DB. Absent key ⇒ archive writes skipped
+  entirely (fail-closed, one structured warning without query text, search
+  unaffected); NO fallback to an unkeyed hash. Documentation claim corrected
+  everywhere to: "No direct user identifiers or raw query text; query context
+  stored only as a keyed, non-reversible HMAC for longitudinal grouping."
+- Drift signature extended with the `query_context_hmac` column so a stale
+  pre-review table shape is detected as drift.
+- Dual-scope single-PR merge recorded as an EXPLICIT owner-granted exception
+  to the one-task-one-PR rule (rationale in Addendum 1).
+- Operational note: `RICO_ARCHIVE_HMAC_KEY` must be set on Render for the
+  archive to record in production; until then it is safely OFF (fail-closed).

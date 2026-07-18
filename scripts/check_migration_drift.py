@@ -79,6 +79,13 @@ CHECKS: list[tuple[str, str, object]] = [
     ("043", "column", ("gmail_connections", "recurring_sync_consent_at")),
     # Guest merge single-owner claim (#1070)
     ("044", "table", "guest_identity_claims"),
+    # Posting-history archive (Product Truth Sprint data-integrity foundation).
+    # Expected to report drift after merge until the owner applies 046 — that
+    # alert IS the reminder; the archive code no-ops until the table exists.
+    ("046", "table", "job_observations"),
+    ("046", "index", "idx_job_observations_fingerprint_observed"),
+    # Detects a stale pre-review table shape (raw query_context / query_hash).
+    ("046", "column", ("job_observations", "query_context_hmac")),
 ]
 
 

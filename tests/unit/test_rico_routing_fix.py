@@ -225,7 +225,7 @@ def test_jsearch_direct_coerces_nullable_strings(monkeypatch):
         jobs = RicoChatAPI._search_jsearch_direct("HSE Manager")
 
     # normalize_item now emits apply_link, alt_link, job_id, employer_url,
-    # apply_is_direct in addition to the original 9 fields.
+    # apply_is_direct, posted_at in addition to the original 9 fields.
     assert jobs == [
         {
             "title": "",
@@ -241,6 +241,7 @@ def test_jsearch_direct_coerces_nullable_strings(monkeypatch):
             "source": "jsearch",
             "salary_string": "",
             "employment_type": "",
+            "posted_at": "",
         }
     ]
     for field in ("title", "company", "location", "link", "description", "salary_string", "employment_type"):
