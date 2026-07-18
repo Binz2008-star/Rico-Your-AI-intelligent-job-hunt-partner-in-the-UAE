@@ -636,24 +636,27 @@ describe("profile editorial — documents", () => {
     });
 });
 
-describe("profile editorial — guardrail warnings", () => {
-    it("wraps the warnings alert in the palette-scoped container so its text is legible on the editorial paper", async () => {
+describe("profile editorial — guardrail warnings (actionable panel)", () => {
+    // Full actionable-warning coverage lives in profile-actionable-warnings.test.tsx.
+    // This block pins the page-level contract only: render inside the scoped
+    // container when warnings exist, and no container when there are none.
+    it("renders the actionable panel inside the palette-scoped container", async () => {
         fetchProfileMock.mockResolvedValue({
             ...BASE_PROFILE,
             warnings: [
-                { code: "min_score", field: "matching", message: "Minimum fit score is 60%.", suggestion: "Scores above 80% are strong matches." },
+                { code: "minimum_fit_score_high", field: "min_score", severity: "important", message: "Minimum fit score is 80%.", suggestion: "Use 60% or lower." },
             ],
         });
         await renderLoaded();
 
-        const alert = await screen.findByRole("alert");
-        expect(alert).toHaveTextContent("Minimum fit score is 60%.");
-        expect(alert.closest(".profile-ed-warnings")).not.toBeNull();
+        const panel = await screen.findByRole("region", { name: /affecting your job matches/ });
+        expect(panel).toHaveTextContent("Minimum fit score is 80%.");
+        expect(panel.closest(".profile-ed-warnings")).not.toBeNull();
     });
 
     it("renders no warnings container when there are none", async () => {
         await renderLoaded();
-        expect(screen.queryByRole("alert")).toBeNull();
+        expect(screen.queryByRole("region", { name: /affecting your job matches/ })).toBeNull();
         expect(document.querySelector(".profile-ed-warnings")).toBeNull();
     });
 });
