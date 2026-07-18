@@ -4,8 +4,12 @@ Pins the write-path contract:
 
 - versioned fingerprint is normalization-stable across providers
   (case/punctuation/whitespace/city-format variants land on one identity);
+- the producing query reaches the table ONLY as a keyed HMAC-SHA256
+  (RICO_ARCHIVE_HMAC_KEY): stable for the same query, different across
+  queries and keys, never raw text — and an absent key skips archive writes
+  entirely (fail-closed, no unkeyed-hash fallback);
 - ``record_observations`` never raises, no-ops without a DB, and stores
-  NO description text (hash + length only) and NO user data;
+  NO description text (hash + length only) and no direct user identifiers;
 - an absent table (migration 046 not applied, pgcode 42P01) disables the
   archive for the process instead of hammering the hot path.
 """
@@ -18,10 +22,13 @@ import pytest
 
 from src.repositories import job_observations_repo as repo
 
+_TEST_KEY = "test-archive-hmac-key-not-a-real-secret"
+
 
 @pytest.fixture(autouse=True)
-def _reset_state():
+def _reset_state(monkeypatch):
     repo._reset_state_for_tests()
+    monkeypatch.setenv(repo._HMAC_KEY_ENV, _TEST_KEY)
     yield
     repo._reset_state_for_tests()
 
@@ -106,9 +113,9 @@ def test_records_rows_without_description_text_or_user_data():
     assert conn.commit.called
 
 
-def test_query_text_is_stored_as_hash_only():
-    """Privacy contract: query text can embed profile-derived terms — only its
-    sha256 may reach the table (and the raw text is never logged either)."""
+def test_query_text_is_stored_as_keyed_hmac_only():
+    """Privacy contract: only the keyed HMAC may reach the table — never raw
+    query text, never an unkeyed hash (the query space is guessable)."""
     import hashlib
 
     conn, cursor = _mock_conn()
@@ -118,11 +125,44 @@ def test_query_text_is_stored_as_hash_only():
         repo.record_observations([_ITEM], provider="jsearch", query_context=query)
     sql, rows = cursor.executemany.call_args[0]
     (row,) = rows
-    assert "query_hash" in sql and "query_context" not in sql
+    assert "query_context_hmac" in sql
     assert not any(isinstance(v, str) and query.lower() in v.lower() for v in row)
-    assert hashlib.sha256(query.encode("utf-8")).hexdigest() in row
-    # empty query stays empty, not a hash of ""
-    assert repo._query_hash("") == ""
+    # an unkeyed sha256 of the query must NOT appear (dictionary-attackable)
+    assert hashlib.sha256(query.encode("utf-8")).hexdigest() not in row
+    assert repo._query_context_hmac(query) in row
+
+
+def test_hmac_is_stable_per_query_and_differs_across_queries_and_keys(monkeypatch):
+    q1, q2 = "HSE Manager Dubai UAE", "Environmental Manager UAE"
+    a = repo._query_context_hmac("  HSE   Manager, Dubai UAE ")
+    b = repo._query_context_hmac(q1)
+    assert a == b  # normalized before signing → stable grouping token
+    assert repo._query_context_hmac(q2) != b  # different query, different token
+    monkeypatch.setenv(repo._HMAC_KEY_ENV, "another-key")
+    assert repo._query_context_hmac(q1) != b  # keyed: token useless without key
+    # empty query stays empty (no token minted for nothing)
+    assert repo._query_context_hmac("") == ""
+
+
+def test_missing_hmac_key_skips_archive_failclosed(monkeypatch, caplog):
+    """No key → search continues, archive write skipped, one structured
+    warning WITHOUT query text — and no unkeyed-hash fallback."""
+    import logging
+
+    monkeypatch.delenv(repo._HMAC_KEY_ENV, raising=False)
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection") as get_conn, \
+         caplog.at_level(logging.WARNING, logger="src.repositories.job_observations_repo"):
+        assert repo.record_observations(
+            [_ITEM], provider="jsearch", query_context="HSE Manager Dubai UAE",
+        ) == 0
+        assert repo.record_observations(
+            [_ITEM], provider="jsearch", query_context="HSE Manager Dubai UAE",
+        ) == 0
+    assert not get_conn.called  # never raises, never touches the DB
+    warnings = [r for r in caplog.records if "RICO_ARCHIVE_HMAC_KEY" in r.getMessage()]
+    assert len(warnings) == 1  # structured, once per process
+    assert not any("HSE Manager" in r.getMessage() for r in caplog.records)
 
 
 def test_missing_table_disables_archive_for_process():

@@ -8,13 +8,17 @@
 --
 -- Contract:
 --   * APPEND-ONLY: rows are never updated or deleted by application code.
---   * ZERO user data: no user_id, no session, no request identity — this table
---     describes the job market, not users, so it carries no PDPL/consent scope.
---     The producing search query is stored ONLY as a one-way sha256 hash
---     (`query_hash`): query text can embed profile-derived terms (target
---     roles, preferred cities), so raw query text is never stored NOR logged;
---     the hash alone is sufficient to compare sightings of the same query
---     over time (the delisting/repost instrument).
+--   * No direct user identifiers or raw query text. No user_id, no session,
+--     no request identity. Query context is stored ONLY as a keyed,
+--     non-reversible HMAC-SHA256 (`query_context_hmac`) for longitudinal
+--     grouping: query text can embed profile-derived terms (target roles,
+--     preferred cities) and the query space is small enough for dictionary
+--     attacks against an unkeyed hash, so a plain hash is NOT sufficient.
+--     The key is RICO_ARCHIVE_HMAC_KEY — dedicated to the archive (never
+--     JWT_SECRET or any shared secret) and never stored in the database.
+--     When the key is absent the application skips archive writes entirely
+--     (fail-closed; search is unaffected) — it never falls back to an
+--     unkeyed hash.
 --   * `fingerprint` is the versioned canonical job identity
 --     (sha256 over normalized company|title|city, see
 --     src/repositories/job_observations_repo.py). `fingerprint_version` allows
@@ -28,7 +32,7 @@ CREATE TABLE IF NOT EXISTS job_observations (
     id                  BIGSERIAL PRIMARY KEY,
     observed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     provider            VARCHAR(32) NOT NULL,
-    query_hash          CHAR(64) NOT NULL DEFAULT '',
+    query_context_hmac  CHAR(64) NOT NULL DEFAULT '',
     provider_job_id     VARCHAR(512) NOT NULL DEFAULT '',
     fingerprint         CHAR(64) NOT NULL,
     fingerprint_version SMALLINT NOT NULL DEFAULT 1,

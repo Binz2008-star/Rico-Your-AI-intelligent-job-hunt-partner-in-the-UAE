@@ -84,6 +84,8 @@ CHECKS: list[tuple[str, str, object]] = [
     # alert IS the reminder; the archive code no-ops until the table exists.
     ("046", "table", "job_observations"),
     ("046", "index", "idx_job_observations_fingerprint_observed"),
+    # Detects a stale pre-review table shape (raw query_context / query_hash).
+    ("046", "column", ("job_observations", "query_context_hmac")),
 ]
 
 

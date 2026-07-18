@@ -3930,3 +3930,21 @@ pipeline's echo learning-signals (system output recorded as user behavior).
   `robenjob`) with table/index/write verification there; production
   application requires a separate explicit owner approval; only then
   Draft → Ready → merge.
+
+##### Addendum 2 (owner privacy review, 2026-07-18 — supersedes the sha256 note above)
+
+- Owner rejected plain sha256: the query space is small/guessable, so an
+  unkeyed hash is dictionary-attackable — pseudonymous, NOT "zero user data".
+- Approved contract implemented: `query_context_hmac CHAR(64)` =
+  HMAC-SHA256(`RICO_ARCHIVE_HMAC_KEY`, normalized query). Key is dedicated
+  (never JWT_SECRET), never stored in DB. Absent key ⇒ archive writes skipped
+  entirely (fail-closed, one structured warning without query text, search
+  unaffected); NO fallback to an unkeyed hash. Documentation claim corrected
+  everywhere to: "No direct user identifiers or raw query text; query context
+  stored only as a keyed, non-reversible HMAC for longitudinal grouping."
+- Drift signature extended with the `query_context_hmac` column so a stale
+  pre-review table shape is detected as drift.
+- Dual-scope single-PR merge recorded as an EXPLICIT owner-granted exception
+  to the one-task-one-PR rule (rationale in Addendum 1).
+- Operational note: `RICO_ARCHIVE_HMAC_KEY` must be set on Render for the
+  archive to record in production; until then it is safely OFF (fail-closed).
