@@ -34,7 +34,7 @@ Status: proposed (owner approval required; acceptance = owner approval of the
 Stage 1 audit PR plus explicit sign-off on each row below)
 Date: 2026-07-18
 Owner: Roben (evidence prepared by Claude, Stage 1 DB audit)
-Related task: TASK-20260718-001; audit:
+Related task: TASK-20260718-007; audit:
 `AI_WORKSPACE/AUDITS/2026-07-18-neon-data-architecture-audit.md`
 
 #### Context
@@ -60,7 +60,7 @@ one source of truth per domain is decided.
 
 #### Consequences
 
-- Positive: every remediation phase (TASK-20260718-002…008) inherits one
+- Positive: every remediation phase (TASK-20260718-008…014) inherits one
   unambiguous target per domain; ends email-vs-UUID drift in new code.
 - Negative/trade-off: a mapping layer must be built and maintained for the
   text-keyed tables; Phase 2 role migration carries a production change
@@ -72,7 +72,7 @@ one source of truth per domain is decided.
       conditional in audit §8 is live)
 - [ ] Owner confirms Render `DATABASE_URL` role and `leads` data ownership
 - [ ] On approval, move this entry to Accepted and start Phase 1
-      (TASK-20260718-002)
+      (TASK-20260718-008)
 
 ## Accepted decisions
 

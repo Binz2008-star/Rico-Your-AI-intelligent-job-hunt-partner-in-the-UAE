@@ -78,7 +78,7 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
-### TASK-20260718-001 — Stage 1: Neon data-architecture audit + source-of-truth decision record (docs-only)
+### TASK-20260718-007 — Stage 1: Neon data-architecture audit + source-of-truth decision record (docs-only)
 
 Status: review (draft PR open; owner approval is the stop condition)
 Owner: Claude (WRITER on `claude/database-audit-results-qcurpe`)
@@ -90,7 +90,7 @@ Traceability: Vision: Rico Career OS — trustworthy user data
 → Phase: Phase 0 (evidence)
 → Proposed PR objective: publish the verified audit + proposed decision
   matrix + phased task ledger, docs-only
-→ Task: TASK-20260718-001
+→ Task: TASK-20260718-007
 
 #### Objective
 Produce the verified, read-only Neon production architecture audit and the
@@ -118,7 +118,7 @@ Dependencies: none. Production impact: none. Neon changes: none.
 Documentation impact: adds the canonical audit + proposed decision + phased
 task ledger (Phases 1–7 below).
 
-### TASK-20260718-002 — Phase 1 (umbrella): protect and document the production Neon branch
+### TASK-20260718-008 — Phase 1 (umbrella): protect and document the production Neon branch
 
 Status: proposed (blocked on DEC-20260718-001 approval)
 Owner: owner-gated (Neon console) with agent-prepared checklist
@@ -127,7 +127,7 @@ Traceability: Vision: Rico Career OS — trustworthy user data
 → Milestone: M1 — production containment
 → Phase: Phase 1 (single-slice milestone)
 → Proposed PR objective: see slice 1A (the only slice)
-→ Task: TASK-20260718-002 (subtask 002-1A)
+→ Task: TASK-20260718-008 (subtask 008-1A)
 
 A Phase is an umbrella milestone, not a PR. Each slice = one PR / one change
 window with exactly one objective. Slices are never combined.
@@ -145,7 +145,7 @@ window with exactly one objective. Slices are never combined.
 - **Depends on:** DEC-20260718-001 approval. **Production impact:** none to
   data. **Docs impact:** branch model section in AI_WORKSPACE.
 
-### TASK-20260718-003 — Phase 2 (umbrella): database access boundary and least privilege
+### TASK-20260718-009 — Phase 2 (umbrella): database access boundary and least privilege
 
 Status: proposed
 Owner: agent-prepared on a non-production Neon branch; owner-gated cutover
@@ -154,7 +154,7 @@ Traceability: Vision: Rico Career OS — trustworthy user data
 → Milestone: M2 — least-privilege access boundary
 → Phase: Phase 2 (umbrella; slices 2A–2E, one PR each)
 → Proposed PR objectives: per slice below
-→ Task: TASK-20260718-003 (subtasks 003-2A … 003-2E)
+→ Task: TASK-20260718-009 (subtasks 009-2A … 009-2E)
 
 Never combined: runtime-role creation, Render cutover, grant revocation, and
 RLS rollout are four separate change windows.
@@ -166,7 +166,7 @@ Umbrella docs impact: access model documented in AI_WORKSPACE.
   previews), including the role each uses.
 - **Scope:** read-only verification + one docs update. **Risk:** none
   (read-only). **Acceptance:** audit §14 items 1–2 closed with evidence.
-- **Rollback:** n/a. **Depends on:** TASK-002. **Production impact:** none.
+- **Rollback:** n/a. **Depends on:** TASK-008. **Production impact:** none.
 
 #### Slice 2B — create and test a limited runtime role (non-production)
 - **Objective (one):** create the least-privilege FastAPI role and prove the
@@ -208,7 +208,7 @@ Umbrella docs impact: access model documented in AI_WORKSPACE.
   policies. **Depends on:** 2C (limited role in place; RLS is meaningless
   under BYPASSRLS). **Production impact:** one change window per group.
 
-### TASK-20260718-004 — Phase 3 (umbrella): canonical identity reconciliation
+### TASK-20260718-010 — Phase 3 (umbrella): canonical identity reconciliation
 
 Status: proposed
 Traceability: Vision: Rico Career OS — trustworthy user data
@@ -216,7 +216,7 @@ Traceability: Vision: Rico Career OS — trustworthy user data
 → Milestone: M3 — one identity spine (`rico_users.id` UUID)
 → Phase: Phase 3 (umbrella; slices 3A–3E, one PR each)
 → Proposed PR objectives: per slice below
-→ Task: TASK-20260718-004 (subtasks 004-3A … 004-3E)
+→ Task: TASK-20260718-010 (subtasks 010-3A … 010-3E)
 
 Never combined: identity reporting, data reconciliation, merge
 implementation, and constraints are separate PRs.
@@ -272,7 +272,7 @@ Umbrella docs impact: identity map updated in audit + ARCHITECTURE.
   drop the constraints (non-destructive). **Depends on:** 3C, 3D.
 - **Production impact:** one change window.
 
-### TASK-20260718-005 — Phase 4 (umbrella): application lifecycle reconciliation
+### TASK-20260718-011 — Phase 4 (umbrella): application lifecycle reconciliation
 
 Status: proposed
 Traceability: Vision: Rico Career OS — trustworthy user data
@@ -280,7 +280,7 @@ Traceability: Vision: Rico Career OS — trustworthy user data
 → Milestone: M4 — one application ledger (`rico_job_recommendations`)
 → Phase: Phase 4 (umbrella; slices 4A–4E, one PR each)
 → Proposed PR objectives: per slice below
-→ Task: TASK-20260718-005 (subtasks 005-4A … 005-4E)
+→ Task: TASK-20260718-011 (subtasks 011-4A … 011-4E)
 
 Never combined: dry-run, reconciliation writes, write-freeze, linkage, and
 constraints are separate PRs. Umbrella docs impact: lifecycle map updated.
@@ -292,7 +292,7 @@ constraints are separate PRs. Umbrella docs impact: lifecycle map updated.
   resolved explicitly, never bulk-matched).
 - **Scope:** read-only report. **Risk:** none. **Acceptance:**
   owner-approved disposition per row. **Rollback:** n/a.
-- **Depends on:** TASK-004 (canonical user resolution). **Production
+- **Depends on:** TASK-010 (canonical user resolution). **Production
   impact:** none.
 
 #### Slice 4B — reconcile approved records
@@ -335,7 +335,7 @@ constraints are separate PRs. Umbrella docs impact: lifecycle map updated.
   constraints. **Depends on:** 4B–4D. **Production impact:** one change
   window.
 
-### TASK-20260718-006 — Phase 5 (umbrella): migration drift resolution
+### TASK-20260718-012 — Phase 5 (umbrella): migration drift resolution
 
 Status: proposed
 Traceability: Vision: Rico Career OS — trustworthy user data
@@ -343,7 +343,7 @@ Traceability: Vision: Rico Career OS — trustworthy user data
 → Milestone: M5 — zero silent drift
 → Phase: Phase 5 (umbrella; slices 5A–5D, one PR each)
 → Proposed PR objectives: per slice below
-→ Task: TASK-20260718-006 (subtasks 006-5A … 006-5D)
+→ Task: TASK-20260718-012 (subtasks 012-5A … 012-5D)
 
 Never combined: the Gmail 043 window, the 034 index cleanup, and the
 drift-detector code change are separate PRs.
@@ -390,7 +390,7 @@ Umbrella docs impact: drift-detector README section.
   evidence recorded. **Rollback:** revert workflow change. **Depends on:**
   5C. **Production impact:** none.
 
-### TASK-20260718-007 — Phase 6 (umbrella): index and retention cleanup
+### TASK-20260718-013 — Phase 6 (umbrella): index and retention cleanup
 
 Status: proposed
 Traceability: Vision: Rico Career OS — trustworthy user data
@@ -398,7 +398,7 @@ Traceability: Vision: Rico Career OS — trustworthy user data
 → Milestone: M6 — lean indexes + documented retention
 → Phase: Phase 6 (umbrella; slices 6A–6D, one PR each)
 → Proposed PR objectives: per slice below
-→ Task: TASK-20260718-007 (subtasks 007-6A … 007-6D)
+→ Task: TASK-20260718-013 (subtasks 013-6A … 013-6D)
 
 Never combined: index cleanup and retention automation are separate PRs.
 Umbrella docs impact: retention policy in AI_WORKSPACE.
@@ -412,7 +412,7 @@ Umbrella docs impact: retention policy in AI_WORKSPACE.
 - **Scope:** read-only analysis on a Neon test branch + docs. **Risk:**
   none. **Acceptance:** every index classified with an evidence line;
   drop-list is the explicit Class A + proven Class B shadows only.
-- **Rollback:** n/a. **Depends on:** TASK-006 (5B done first so the 034
+- **Rollback:** n/a. **Depends on:** TASK-012 (5B done first so the 034
   leftovers exit the list). **Production impact:** none.
 
 #### Slice 6B — small concurrent index-drop batches
@@ -450,7 +450,7 @@ Umbrella docs impact: retention policy in AI_WORKSPACE.
 - **Rollback:** flag OFF. **Depends on:** 6C. **Production impact:**
   scheduled deletes of expired records only.
 
-### TASK-20260718-008 — Phase 7 (umbrella): legacy table isolation or retirement
+### TASK-20260718-014 — Phase 7 (umbrella): legacy table isolation or retirement
 
 Status: proposed
 Traceability: Vision: Rico Career OS — trustworthy user data
@@ -459,7 +459,7 @@ Traceability: Vision: Rico Career OS — trustworthy user data
 → Phase: Phase 7 (umbrella; slices 7A–7D — four INDEPENDENT decisions,
   never one PR)
 → Proposed PR objectives: per slice below
-→ Task: TASK-20260718-008 (subtasks 008-7A … 008-7D)
+→ Task: TASK-20260718-014 (subtasks 014-7A … 014-7D)
 
 Never combined: `leads`, Stripe retirement, legacy `applications`
 retirement, and `search_context` are independent decisions and PRs.
@@ -493,7 +493,7 @@ Umbrella docs impact: final inventory update in the audit.
 - **Scope:** plan + archival strategy; drops are separate signed windows.
 - **Risk:** legacy pipeline still reading — usage inventory first.
 - **Acceptance:** plan owner-signed; archives defined. **Rollback:** n/a
-  (docs until execution). **Depends on:** TASK-005 (4B/4C done).
+  (docs until execution). **Depends on:** TASK-011 (4B/4C done).
 - **Production impact:** none until execution.
 
 #### Slice 7D — `search_context` decision
@@ -505,6 +505,186 @@ Umbrella docs impact: final inventory update in the audit.
   assigned an owner feature. **Rollback:** table is recreatable from
   migration history. **Depends on:** DEC approval. **Production impact:**
   none until execution.
+<!-- Reconciliation 2026-07-18: the six PRs below merged to main after
+TASK-008 (#1145) and were not yet in this ledger. Recorded here as the
+canonical per-PR record. Merge order on main (oldest→newest): #1153 →
+#1152 → #1156 → #1155 → #1151 → #1157. Presented newest-first. -->
+
+### TASK-20260718-006 — PR #1157: plain-language terminology in user-facing copy (EN+AR)
+
+Status: verified — **MERGED + deployed; owner production visual smoke pending**
+Owner: Claude (release owner; owner directive 2026-07-18 — approved to finalize+merge)
+Branch: `fix/ui-copy-plain-language` (merged, deleted)
+Issue/PR: #1157 (merged as squash commit `4ce678b6400889ebfb838e00079c7dfa86fcaf7c`)
+
+#### Objective
+Remove technical product jargon from **user-facing copy only** — no internal
+identifiers, translation KEY names, props, test IDs, routes, DB fields, API
+contracts, or analytics identifiers renamed.
+
+#### Delivered
+- EN+AR value changes across nav / headings / buttons / states / helper text:
+  Pipeline→Applications; Job Pipeline / Application Flow→Application tracking;
+  Career preferences→Career goals (تفضيلات المسار→أهدافك المهنية); In pipeline→In
+  applications; Save to pipeline→Save to applications; Pipeline score→Match score;
+  Open Flow / Flow→Open applications / Applications; /applications headline "Your
+  pipeline."→"Your applications." (مسار طلباتك.→طلباتك.); AR pipeline terms
+  (مسار الطلبات / خط الوظائف / المسار)→طلبات التوظيف / متابعة طلبات التوظيف.
+- Files: `apps/web/lib/translations.ts`, `components/applications/ApplicationsAtelier.tsx`,
+  `components/landing/HowItWorks.tsx`, `components/layout/app-nav.ts`, and 4 test files.
+- Deliberately preserved: translation key names, `CommandRail` `pipeline` prop,
+  `command-rail-pipeline` testid, `pipeline_active` state key, career-path wording
+  (`Career` / `المسار المهني`). The "no jargon remaining" finding is scoped to the
+  `apps/web` product-copy surfaces scanned only (server/email/notification/stored
+  copy NOT scanned).
+
+#### Deferred / not in scope
+- `Sessions → Conversations` (belongs to the Command Workspace program, not this task).
+
+#### Verification
+- Rebased onto post-#1151 main; head `e1e8337` → squash `4ce678b`.
+- Full frontend vitest 657 pass; `npm run build` clean (41/41); lint clean on changed files.
+- CI all green; 0 review threads; `mergeable_state: clean`.
+- Production: "Deploy to Production" run #997 for `4ce678b` = success (health + `ricohunt.com`
+  reachability + `/proxy/health`). **Owner live terminology visual smoke pending.**
+
+### TASK-20260718-005 — PR #1151: structured Rico reply presentation (safe markdown) + motion polish
+
+Status: verified — **MERGED + deployed; owner production visual smoke pending**
+Owner: Claude (release owner; owner directive 2026-07-18 — approved to finalize first)
+Branch: `feat/command-reply-motion-arabic-type` (merged, deleted)
+Issue/PR: #1151 (merged as squash commit `965dd6404e6be2d0f2c3b3a06e1b1031ad3c2774`)
+
+#### Objective
+Render the **same** answer string the `/command` transcript already receives as
+safe, structured markdown, plus the reply-motion layer. No change to response
+content, prompts, backend routing, APIs, providers, or DB — frontend
+reply-presentation only.
+
+#### Delivered
+- `react-markdown` + `remark-gfm` + `skipHtml` renderer (`RicoReplyMarkdown.tsx`, new):
+  headings, lists, emphasis, blockquotes, inline + fenced code, sanitized links
+  (allowlist http/https/mailto/relative; `javascript:`/`data:`/`vbscript:`/`file:`/
+  entity-encoded → inert span; `rel="noopener noreferrer"`), no class/style/HTML
+  injection, markdown renders during streaming, reduced-motion caret.
+- Files: 13 (+593/−34) incl. `RicoReply.tsx`, motion layer (`fonts.ts`, `tokens.ts`,
+  `CommandComposer/Messages/ObsidianShell.tsx`, `JobMatchCardAtelier.tsx`,
+  `WorkspaceShell.tsx`, `tailwind.config.ts`, `vitest.setup.ts`), and two new test
+  files (`rico-reply-markdown.test.tsx`, `rico-reply-markdown-security.test.tsx`).
+
+#### Verification
+- Base `6b62a11` → approved head `a4e7b44` → squash `965dd64`.
+- Focused renderer+security+transcript 50 pass; full frontend vitest 657 pass;
+  `npm run build` clean; lint clean on changed files; Playwright matrix (EN light/dark,
+  AR RTL light/dark, mobile 390px, streaming, reduced-motion) captured.
+- CI all green; 0 review threads; `mergeable_state: clean`.
+- Production: "Deploy to Production" run #996 for `965dd64` = success. **Owner live
+  `/command` structured-reply visual smoke pending.**
+
+### TASK-20260718-004 — PR #1155: explicit Arabic job search reaches the search router (not CV-status)
+
+Status: verified — **MERGED + deployed (Render backend); owner AR production smoke pending**
+Owner: Claude (release owner; owner directive 2026-07-18 — approved to finalize+merge first)
+Branch: `fix/arabic-jobsearch-vs-cv-status` (merged, deleted)
+Issue/PR: #1155 (merged as squash commit `6b62a114771d4da5ed775632703f78da7f92dde6`)
+
+#### Objective
+Post-#1153 Arabic-only defect: the second CV-guidance gate in
+`_handle_active_user_inner` intercepted explicit Arabic job searches
+("ابحث عن وظائف تناسب سيرتي الذاتية") as CV-status guidance.
+
+#### Delivered
+- Guard added: the gate now also requires `not is_explicit_job_listing_request(message)`
+  — the same canonical public predicate the search router keys on (reused from #1153;
+  no duplicated intent logic). Files: `src/rico_chat_api.py` (+21/−1), new
+  `tests/test_arabic_jobsearch_vs_cv_status.py` (unit + `_process_message_inner`
+  production-path).
+
+#### Deferred / not in scope
+- Generic `_JOB_DOC_SCORE_RE` tightening (P1) — explicitly deferred by owner.
+
+#### Verification
+- Re-anchored; head `7a8f85d` → squash `6b62a11`.
+- 8 targeted tests + regression sweep pass (57 on merged commit); CI all green;
+  0 review threads; `mergeable_state: clean`.
+- Production: Render backend deploy run #389 = success (gated on `/version` commit ==
+  `6b62a11` + `/health` 200); the `main` "Deploy to Production" run for `6b62a11` also
+  green. **Owner live Arabic `/command` routing smoke pending.**
+
+### TASK-20260718-003 — PR #1156: legible guardrail-warnings banner on the editorial /profile
+
+Status: verified — **MERGED + deployed (contrast-only)**
+Owner: Claude (release owner; owner directive 2026-07-18 — contrast-only scope)
+Branch: `fix/profile-warnings-contrast` (merged, deleted)
+Issue/PR: #1156 (merged as squash commit `25f19445343533c725916b96ab273fda598775c9`)
+
+#### Objective
+Fix the unreadable guardrail-warnings banner on the live editorial `/profile`
+(contrast/legibility only).
+
+#### Delivered
+- `warning`/`warningTint` tone + scoped CSS so `role="alert"` warnings are legible
+  in light and dark. `ProfileEditorial.tsx` + translations only.
+
+#### Deferred / not in scope (still QUEUED — see TASK-20260718-... Phase 4)
+- Actionable warning workflow: compact summary, severity model, section/field
+  navigation, field focus/highlight, refresh-after-save, resolved-warning removal,
+  live count, hide-when-empty, unsaved-edit integration. **NOT delivered here.**
+
+#### Verification
+- Squash `25f1944`; CI green; frontend build clean; production "Deploy to Production"
+  run #994 = success.
+
+### TASK-20260718-002 — PR #1152: rebuild /profile on the owner editorial design (real-data wiring)
+
+Status: verified — **MERGED + deployed (rebuild + visual section rail only)**
+Owner: Claude (release owner; owner directive 2026-07 — profile editorial rebuild)
+Branch: `feat/profile-editorial-rebuild` (merged, deleted)
+Issue/PR: #1152 (merged as squash commit `cee1d6304...`)
+
+#### Objective
+Replace `/profile` with the uploaded editorial design, wired to the real system,
+deleting the old profile code.
+
+#### Delivered
+- `ProfileEditorial.tsx` editorial rebuild: hero plate, profile-strength meter,
+  **visual** sticky numbered section rail, 8 section cards, dirty-draft single-PATCH
+  save bar; thin auth+data shell page; honest billing/Telegram states; "Verified email";
+  numeric-clear validation. Real-data wired (`lib/api.ts`); auth-guard contract preserved.
+
+#### Deferred / not in scope (still QUEUED — see Phase 3 true section navigation)
+- **True section navigation is NOT delivered.** The rail is visual only. Missing:
+  render-only-selected-section, `/profile?section=…` URL state, deep links,
+  back/forward, refresh persistence, invalid→about fallback, mobile selector,
+  unsaved-edit protection, section focus management.
+
+#### Verification
+- Squash `cee1d63`; CI green; frontend build clean; production "Deploy to Production" = success.
+
+### TASK-20260718-001 — PR #1153: route "find jobs that match my CV" to job search, not job-doc scoring
+
+Status: verified — **MERGED + deployed (English routing fix)**
+Owner: Claude (release owner; owner directive 2026-07 — smallest P0 after read-only audit)
+Branch: `fix/find-jobs-cv-routing` (merged, deleted)
+Issue/PR: #1153 (merged as squash commit `14b2b2e63...`)
+
+#### Objective
+Fix the demonstrated English `/command` failure ("Find UAE jobs that match my CV"
+→ "I don't have an uploaded job document yet") — smallest P0 fix.
+
+#### Delivered
+- Guard in `_handle_job_doc_action` so a score-intent that is an explicit job-listing
+  request (`is_explicit_job_listing_request`) is not intercepted as job-doc scoring;
+  production-path regression test; reused canonical public predicate (no broad except).
+
+#### Deferred / not in scope
+- **This was the English routing defect only — NOT a full authenticated
+  route/API/database/storage/entitlement audit.** That full cross-route audit
+  remains NOT STARTED. `_JOB_DOC_SCORE_RE` tightening (P1) deferred. (The Arabic
+  equivalent was fixed separately in #1155.)
+
+#### Verification
+- Squash `14b2b2e`; CI green; production "Deploy to Production" (backend path) = success.
 
 ### TASK-20260717-008 — PR #1145: unify /command visuals with the shared WorkspaceShell
 

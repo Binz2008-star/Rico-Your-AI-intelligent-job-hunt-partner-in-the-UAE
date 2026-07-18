@@ -54,7 +54,7 @@ application can hold more than one identity and more than one source of truth.
 | #1025 (draft, frozen) | Migration 042 career-memory tables — branch-only; **not in production** (verified live: `career_memory_events` absent) |
 | #1129 (draft, stacked on #1025) | Erasure wiring; no new schema |
 | #1136 (draft) | Docs-only reconciliation audit |
-| #1159 (open) | Gmail UI + recurring-sync consent readiness — frontend-only; feature remains disabled; no migration, no OAuth activation. Any future activation still requires 043 first (§7, §9) |
+| #1159 (merged to `main` 2026-07-18, `197d946`) | Gmail UI + recurring-sync consent readiness — frontend-only; feature remains disabled (flag OFF); no migration, no OAuth activation. Any future activation still requires 043 first (§7, §9) |
 
 ### Method
 
@@ -419,7 +419,7 @@ documented retention policy.
 lettered slice: each slice below is exactly one PR / one change window with
 one objective, owner-approved, verified on a non-production Neon branch
 before production. Dangerous or logically separate operations are never
-combined in one slice. Traceable tasks: TASK-20260718-002 … -008 in
+combined in one slice. Traceable tasks: TASK-20260718-008 … -014 in
 `AI_WORKSPACE/TASKS.md` (one subtask per slice).
 
 **Phase 1 — Protect and document production** (single-slice milestone)
