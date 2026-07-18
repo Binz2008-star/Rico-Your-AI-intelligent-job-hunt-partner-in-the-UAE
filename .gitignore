@@ -131,6 +131,7 @@ skills-lock.json
 apps/web/.env.local
 apps/web/playwright-report/
 apps/web/test-results/
+apps/web/e2e/screenshots/
 
 # npm install artifacts (e.g. =11.0.0)
 =*
