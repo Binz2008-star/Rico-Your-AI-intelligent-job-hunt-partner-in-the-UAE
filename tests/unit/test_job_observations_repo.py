@@ -106,6 +106,25 @@ def test_records_rows_without_description_text_or_user_data():
     assert conn.commit.called
 
 
+def test_query_text_is_stored_as_hash_only():
+    """Privacy contract: query text can embed profile-derived terms — only its
+    sha256 may reach the table (and the raw text is never logged either)."""
+    import hashlib
+
+    conn, cursor = _mock_conn()
+    query = "HSE Manager Abu Dhabi UAE"
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn):
+        repo.record_observations([_ITEM], provider="jsearch", query_context=query)
+    sql, rows = cursor.executemany.call_args[0]
+    (row,) = rows
+    assert "query_hash" in sql and "query_context" not in sql
+    assert not any(isinstance(v, str) and query.lower() in v.lower() for v in row)
+    assert hashlib.sha256(query.encode("utf-8")).hexdigest() in row
+    # empty query stays empty, not a hash of ""
+    assert repo._query_hash("") == ""
+
+
 def test_missing_table_disables_archive_for_process():
     conn, cursor = _mock_conn()
     exc = Exception("relation \"job_observations\" does not exist")

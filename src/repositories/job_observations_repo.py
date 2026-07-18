@@ -5,7 +5,10 @@ Append-only posting-history archive (migration 046).
 Every FRESH provider fetch (never a cache hit) records one row per returned
 job so longitudinal posting data — first seen, re-posts, delistings — accrues
 from day one. The table describes the job market, not users: no user_id, no
-session identity, no request context beyond the query string.
+session identity, and the producing query is stored ONLY as a one-way sha256
+hash — query text can embed profile-derived terms (target roles, preferred
+cities), so it is never stored nor logged. The hash alone supports the
+longitudinal instrument (same query → same hash → comparable sightings).
 
 Write path contract:
   * ``record_observations`` NEVER raises and adds no meaningful latency —
@@ -41,13 +44,20 @@ _table_missing = False
 
 _INSERT_SQL = """
     INSERT INTO job_observations (
-        provider, query_context, provider_job_id,
+        provider, query_hash, provider_job_id,
         fingerprint, fingerprint_version,
         title, company, location, country,
         claimed_posted_at, salary_string, employment_type,
         description_hash, description_len, apply_domain
     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
+
+
+def _query_hash(query_context: str) -> str:
+    """One-way hash of the producing query — raw text is never persisted."""
+    if not query_context:
+        return ""
+    return hashlib.sha256(query_context.encode("utf-8")).hexdigest()
 
 
 def _normalize_part(value: str) -> str:
@@ -108,7 +118,7 @@ def _row_for(
     description = str(item.get("description") or "")
     return (
         provider[:32],
-        (query_context or "")[:256],
+        _query_hash(query_context),
         str(item.get("job_id") or "")[:512],
         compute_fingerprint(title, company, location),
         FINGERPRINT_VERSION,

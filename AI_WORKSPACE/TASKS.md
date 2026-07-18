@@ -3910,3 +3910,23 @@ pipeline's echo learning-signals (system output recorded as user behavior).
 - [x] `tests/unit/test_job_observations_repo.py` +
       `tests/unit/test_learning_signal_hygiene.py` green; adjacent suites
       (jsearch, providers, run_daily-touching) green.
+
+##### Addendum (owner review round, 2026-07-18)
+
+- **Privacy contract amended (owner catch)**: the migration stored raw
+  `query_context` while claiming "zero user data" — query text can embed
+  profile-derived terms. Resolved: column is now `query_hash CHAR(64)`
+  (sha256 one-way); raw query text is never stored nor logged. Hash equality
+  fully preserves the longitudinal instrument (same query → same hash).
+- **Dual-scope merge accepted (documented per owner's option 2)**: PR #1173
+  intentionally carries BOTH (a) the archive and (b) learning-signal hygiene.
+  Rationale: one shared objective (data integrity), hygiene is read-path
+  filtering + writer removal with no migration dependency, the archive
+  fail-safes to a no-op until 046 exists — coupled risk ≈ union of two small
+  independent risks; a split would cost a second branch/PR cycle with no
+  added safety.
+- **Owner-directed rollout gate**: 046 is applied to the Neon PREVIEW branch
+  first (`preview/pr-1173-claude/release-captain-queue-76nrwz`, project
+  `robenjob`) with table/index/write verification there; production
+  application requires a separate explicit owner approval; only then
+  Draft → Ready → merge.
