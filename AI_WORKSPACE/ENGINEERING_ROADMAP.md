@@ -29,11 +29,25 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 ---
 
-## Where Rico is right now (2026-07-16 evening)
+## Where Rico is right now (2026-07-18)
 
 > This snapshot is authoritative alongside `PROJECT_STATUS.md` (the control panel);
-> if they ever disagree, `PROJECT_STATUS.md` + live `main` win. The older
-> 2026-07-11 / #963 / #1008-draft / `241b85d` snapshot is **historical** (superseded).
+> if they ever disagree, `PROJECT_STATUS.md` + live `main` win. Snapshots dated
+> 2026-07-16 and earlier are **historical** (superseded).
+>
+> **`main` `4ce678b`.** Job-Seeker-Workspace batch merged + deployed since #1145
+> (Phase 5 surfaces): #1153 English CV-vs-search routing (`14b2b2e`), #1152 `/profile`
+> editorial rebuild + **visual** section rail (`cee1d63`), #1156 profile-warning
+> **contrast** (`25f1944`), #1155 **Arabic** search routing (`6b62a11`, Render #389
+> verified), #1151 structured `/command` replies + motion (`965dd64`), #1157
+> plain-language terminology EN+AR (`4ce678b`). Per-PR detail: `TASKS.md`
+> TASK-20260718-001…006. **Owner production visual smoke pending** for #1155/#1151/#1157.
+> **Still open — do NOT read as complete:** profile *true* section navigation (only a
+> visual rail shipped), profile *actionable* warning workflow (only contrast shipped),
+> the *full* cross-route authenticated audit (only the English routing defect fixed),
+> Command Workspace, Applications/Documents/Cover-letter workspaces, Dashboard #14,
+> `Sessions → Conversations`. Claude Design's UX prototype is design-only, not
+> repository/runtime-verified.
 
 | Question | Answer |
 | --- | --- |
@@ -185,6 +199,12 @@ before feature/redesign/worker/notification/infra work.
 
 | Date | Commit | What went live |
 | --- | --- | --- |
+| 2026-07-18 | `4ce678b` | #1157 — plain-language terminology in user-facing copy (EN+AR). Deploy-to-Production #997 green; **owner visual smoke pending** |
+| 2026-07-18 | `965dd64` | #1151 — structured safe-markdown `/command` replies + motion. Deploy-to-Production #996 green; **owner visual smoke pending** |
+| 2026-07-18 | `6b62a11` | #1155 — explicit Arabic job search reaches the search router. Render backend deploy #389 verified serving `6b62a11`; **owner AR smoke pending** |
+| 2026-07-18 | `25f1944` | #1156 — profile guardrail-warnings contrast/legibility (editorial `/profile`) |
+| 2026-07-18 | `cee1d63` | #1152 — `/profile` editorial rebuild + real-data wiring (visual section rail only) |
+| 2026-07-18 | `14b2b2e` | #1153 — English "find jobs that match my CV" routed to job search (not job-doc scoring) |
 | 2026-07-08 | `7d167dd` | #887 — batch-row-isolation hardening (apply-link batch resilience) |
 
 _Merged to `main` (`80e246b`), deploy verification pending: #885 (follow-ups
