@@ -25,7 +25,7 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useToast } from "@/hooks/useToast";
 import { ApiError, fetchProfile, type ProfileResponse } from "@/lib/api";
 import { useTranslation } from "@/lib/translations";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 
 export default function ProfilePage() {
     const { language } = useLanguage();
@@ -119,7 +119,11 @@ export default function ProfilePage() {
                 )}
 
                 {!loading && !error && profile?.profile_exists && (
-                    <ProfileEditorial profile={profile} refresh={loadProfile} notify={toast} />
+                    // ProfileEditorial reads ?section= via useSearchParams — Next 14
+                    // requires that consumer to sit under a Suspense boundary.
+                    <Suspense fallback={<LoadingState variant="card" message={t("profileLoading")} />}>
+                        <ProfileEditorial profile={profile} refresh={loadProfile} notify={toast} />
+                    </Suspense>
                 )}
             </div>
             <ToastContainer toasts={toasts} />

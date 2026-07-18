@@ -49,6 +49,7 @@ import {
 import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { Check, Mail, MapPin, Phone, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const SERIF = ATELIER_FONT.serif;
@@ -294,7 +295,8 @@ function SectionCard({
                     <div className="mb-1"><Eyebrow tone={tone}>{num} · {eyebrow}</Eyebrow></div>
                     <h2
                         id={`profile-${id}-title`}
-                        className="m-0 text-[22px] font-medium leading-tight tracking-[-0.01em]"
+                        tabIndex={-1}
+                        className="m-0 text-[22px] font-medium leading-tight tracking-[-0.01em] outline-none"
                         style={{ fontFamily: SERIF, color: tone.palette.ink }}
                     >
                         {title}
@@ -461,16 +463,36 @@ function ChipEditor({
 
 /* ── sections config ────────────────────────────────────────────────────────── */
 
+// Canonical, stable section slugs. These are the source of truth for the
+// `?section=` URL parameter, the desktop rail, the mobile selector, and the
+// render-only-selected switch below. Slugs are user-visible in the URL, so they
+// are kept short and stable (do not rename without a redirect).
 const RAIL_SECTIONS: { id: string; num: string; labelKey: TranslationKey }[] = [
     { id: "about", num: "01", labelKey: "profileEdAboutTitle" },
     { id: "career", num: "02", labelKey: "profileCareer" },
     { id: "skills", num: "03", labelKey: "profileSkills" },
     { id: "documents", num: "04", labelKey: "profileEdDocsTitle" },
-    { id: "preferences", num: "05", labelKey: "profileEdPrefsTitle" },
+    { id: "goals", num: "05", labelKey: "profileEdPrefsTitle" },
     { id: "integrations", num: "06", labelKey: "profileEdIntegrationsTitle" },
     { id: "security", num: "07", labelKey: "profileEdSecurityTitle" },
     { id: "billing", num: "08", labelKey: "profileEdBillingTitle" },
 ];
+
+const SECTION_IDS = RAIL_SECTIONS.map((s) => s.id);
+const DEFAULT_SECTION = "about";
+
+/**
+ * Resolve the section to render from the raw `?section=` value.
+ *  - a valid explicit slug always wins (even alongside a Gmail callback);
+ *  - otherwise a Gmail OAuth callback (`?gmail=…`) opens Integrations so the
+ *    returning user lands on the card that owns that callback;
+ *  - anything else (missing / invalid) falls back to `about`.
+ */
+function resolveSection(raw: string | null, hasGmailCallback: boolean): string {
+    if (raw && SECTION_IDS.includes(raw)) return raw;
+    if (hasGmailCallback) return "integrations";
+    return DEFAULT_SECTION;
+}
 
 /* ── main component ─────────────────────────────────────────────────────────── */
 
@@ -492,7 +514,54 @@ export function ProfileEditorial({
     const [draft, setDraft] = useState<ProfileDraft>(() => toDraft(profile));
     const [errors, setErrors] = useState<Partial<Record<DraftKey, TranslationKey>>>({});
     const [saving, setSaving] = useState(false);
-    const [activeSection, setActiveSection] = useState("about");
+
+    /* ── true section navigation (URL-backed) ────────────────────────────────
+       The rendered section is derived from `?section=` — not React state — so
+       deep links, browser back/forward, and refresh all resolve to the same
+       section with no local mirror to fall out of sync. */
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const rawSection = searchParams.get("section");
+    const hasGmailCallback = searchParams.has("gmail");
+    const activeSection = resolveSection(rawSection, hasGmailCallback);
+
+    // Build a section URL that preserves every unrelated query parameter
+    // (Gmail/billing callbacks included) — only `section` changes.
+    const sectionHref = useCallback(
+        (id: string) => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("section", id);
+            return `${pathname}?${params.toString()}`;
+        },
+        [pathname, searchParams],
+    );
+
+    // Canonicalize the URL when the section param is invalid, or when a Gmail
+    // callback forced Integrations without an explicit section — with `replace`
+    // (no history entry), preserving all other params. A clean `/profile`
+    // (missing section, no callback) is left untouched so the URL stays tidy.
+    useEffect(() => {
+        const needsWrite =
+            (rawSection !== null && rawSection !== activeSection) ||
+            (rawSection === null && hasGmailCallback && activeSection !== DEFAULT_SECTION);
+        if (!needsWrite) return;
+        router.replace(sectionHref(activeSection), { scroll: false });
+    }, [rawSection, activeSection, hasGmailCallback, router, sectionHref]);
+
+    // After an INTENTIONAL section change, move focus to the section heading so
+    // keyboard and screen-reader users land in the new content. Skipped on the
+    // initial mount (never steal focus on page load) and when the section value
+    // did not actually change (e.g. a canonicalizing replace that keeps it).
+    const focusPrimed = useRef(false);
+    useEffect(() => {
+        if (!focusPrimed.current) {
+            focusPrimed.current = true;
+            return;
+        }
+        const heading = document.getElementById(`profile-${activeSection}-title`);
+        heading?.focus();
+    }, [activeSection]);
 
     // Reset the draft whenever a fresh profile arrives (post-save/upload
     // refresh). Render-time adjustment (React's "state from previous renders"
@@ -644,30 +713,52 @@ export function ProfileEditorial({
         };
     }, []);
 
-    /* section rail tracking */
+    // Dirty-state protection: warn only when the user would actually DISCARD
+    // unsaved edits by leaving or refreshing the profile route. Section switches
+    // are SPA navigations (pushState) and never trigger `beforeunload`, and the
+    // draft lives in component state that survives switching — so changing
+    // sections shows no warning and loses nothing. Only a real unload
+    // (refresh / tab close / full navigation) with a dirty draft prompts.
     useEffect(() => {
-        if (typeof IntersectionObserver === "undefined") return;
-        const observer = new IntersectionObserver(
-            (entries) => {
-                const visible = entries
-                    .filter((e) => e.isIntersecting)
-                    .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-                const first = visible[0]?.target.id;
-                if (first) setActiveSection(first.replace("profile-", ""));
-            },
-            { rootMargin: "-15% 0px -70% 0px" },
-        );
-        for (const s of RAIL_SECTIONS) {
-            const el = document.getElementById(`profile-${s.id}`);
-            if (el) observer.observe(el);
-        }
-        return () => observer.disconnect();
-    }, []);
+        if (!dirty) return;
+        const onBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = "";
+        };
+        window.addEventListener("beforeunload", onBeforeUnload);
+        return () => window.removeEventListener("beforeunload", onBeforeUnload);
+    }, [dirty]);
 
-    const jumpTo = useCallback((id: string) => {
-        setActiveSection(id);
-        document.getElementById(`profile-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, []);
+    // Client-side navigation guard: `beforeunload` only covers refresh/close/hard
+    // nav. App Router <Link> clicks (e.g. a sidebar route) need a capture-phase
+    // interceptor — there is no official App-Router blocker. Profile-scoped: the
+    // listener exists only while /profile has unsaved edits and is removed on
+    // clean/unmount, so it never affects the rest of the app. A same-route click
+    // (a section change: same pathname, different ?section=) is always allowed —
+    // the draft is preserved — so switching sections never prompts.
+    useEffect(() => {
+        if (!dirty) return;
+        const onDocClickCapture = (e: MouseEvent) => {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            const anchor = (e.target as HTMLElement | null)?.closest?.("a");
+            const href = anchor?.getAttribute("href");
+            if (!anchor || !href || anchor.target === "_blank") return;
+            let dest: URL;
+            try {
+                dest = new URL(href, window.location.href);
+            } catch {
+                return;
+            }
+            if (dest.origin !== window.location.origin) return; // external → beforeunload owns it
+            if (dest.pathname === pathname) return; // same route (section change) → always allowed
+            if (!window.confirm(t("profileUnsavedLeaveConfirm"))) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+        document.addEventListener("click", onDocClickCapture, true);
+        return () => document.removeEventListener("click", onDocClickCapture, true);
+    }, [dirty, pathname, t]);
 
     /* derived hero facts */
     const pct = clampPct(profile.completeness_score);
@@ -852,20 +943,18 @@ export function ProfileEditorial({
             </section>
 
             <div className="grid grid-cols-1 items-start gap-7 lg:grid-cols-[220px_1fr]">
-                {/* sticky numbered rail (desktop) */}
-                <aside className="sticky top-20 hidden flex-col gap-0.5 lg:flex" aria-label={t("profileEdSections")}>
+                {/* sticky numbered rail (desktop) — true navigation: each item is a
+                    real link to ?section=<slug> (push → browser back/forward work). */}
+                <nav className="sticky top-20 hidden flex-col gap-0.5 lg:flex" aria-label={t("profileEdSections")}>
                     <div className="px-3 pb-2"><Eyebrow tone={tone}>{t("profileEdSections")}</Eyebrow></div>
                     {RAIL_SECTIONS.map((s) => {
                         const active = activeSection === s.id;
                         return (
-                            <a
+                            <Link
                                 key={s.id}
-                                href={`#profile-${s.id}`}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    jumpTo(s.id);
-                                }}
-                                aria-current={active ? "true" : undefined}
+                                href={sectionHref(s.id)}
+                                scroll={false}
+                                aria-current={active ? "page" : undefined}
                                 className="profile-ed-rail-link flex items-center justify-between rounded-[9px] px-3 py-2 text-[13px]"
                                 style={{
                                     textDecoration: "none",
@@ -877,14 +966,34 @@ export function ProfileEditorial({
                             >
                                 {t(s.labelKey)}
                                 <span style={{ fontFamily: MONO, fontSize: "9.5px", color: active ? palette.red : palette.ink40 }}>{s.num}</span>
-                            </a>
+                            </Link>
                         );
                     })}
-                </aside>
+                </nav>
 
                 {/* WorkspaceShell owns the single <main> landmark; this is a plain column. */}
                 <div className="flex min-w-0 flex-col gap-6">
+                    {/* mobile section selector (below lg) — same URL-backed navigation as the rail */}
+                    <div className="lg:hidden">
+                        <label htmlFor="profile-section-select" className="sr-only">{t("profileEdSections")}</label>
+                        <select
+                            id="profile-section-select"
+                            value={activeSection}
+                            onChange={(e) => router.push(sectionHref(e.target.value))}
+                            className="profile-ed-input w-full rounded-[10px] px-3 py-2.5 text-[14px]"
+                            style={{ border: `1px solid ${palette.hair}`, background: palette.panel, color: palette.ink }}
+                        >
+                            {RAIL_SECTIONS.map((s) => (
+                                <option key={s.id} value={s.id}>{s.num} · {t(s.labelKey)}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Render only the selected section (true navigation). All field
+                        edits live in the parent `draft` state, so switching sections
+                        preserves unsaved values and never refetches. */}
                     {/* 01 · About */}
+                    {activeSection === "about" && (
                     <SectionCard id="about" num="01" index={0} tone={tone} eyebrow={t("profileEdAboutEyebrow")} title={t("profileEdAboutTitle")} help={t("profileEdAboutHelp")}>
                         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                             <div>
@@ -907,7 +1016,10 @@ export function ProfileEditorial({
                         </div>
                     </SectionCard>
 
+                    )}
+
                     {/* 02 · Career */}
+                    {activeSection === "career" && (
                     <SectionCard id="career" num="02" index={1} tone={tone} eyebrow={t("profileEdCareerEyebrow")} title={t("profileCareer")} help={t("profileEdCareerHelp")}>
                         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                             <div>
@@ -926,7 +1038,10 @@ export function ProfileEditorial({
                         </div>
                     </SectionCard>
 
+                    )}
+
                     {/* 03 · Skills */}
+                    {activeSection === "skills" && (
                     <SectionCard id="skills" num="03" index={2} tone={tone} eyebrow={t("profileEdSkillsEyebrow")} title={t("profileSkills")} help={t("profileEdSkillsHelp")}>
                         <ChipEditor
                             idBase="profile-ed-skill"
@@ -938,7 +1053,10 @@ export function ProfileEditorial({
                         />
                     </SectionCard>
 
+                    )}
+
                     {/* 04 · CV & documents */}
+                    {activeSection === "documents" && (
                     <SectionCard
                         id="documents"
                         num="04"
@@ -1050,8 +1168,11 @@ export function ProfileEditorial({
                         )}
                     </SectionCard>
 
-                    {/* 05 · Career preferences */}
-                    <SectionCard id="preferences" num="05" index={4} tone={tone} eyebrow={t("profileEdPrefsEyebrow")} title={t("profileEdPrefsTitle")} help={t("profileEdPrefsHelp")}>
+                    )}
+
+                    {/* 05 · Career goals */}
+                    {activeSection === "goals" && (
+                    <SectionCard id="goals" num="05" index={4} tone={tone} eyebrow={t("profileEdPrefsEyebrow")} title={t("profileEdPrefsTitle")} help={t("profileEdPrefsHelp")}>
                         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                             <div className="sm:col-span-2">
                                 <FieldLabel tone={tone}>{t("profileTargetRoles")}</FieldLabel>
@@ -1098,7 +1219,10 @@ export function ProfileEditorial({
                         </div>
                     </SectionCard>
 
+                    )}
+
                     {/* 06 · Integrations */}
+                    {activeSection === "integrations" && (
                     <SectionCard id="integrations" num="06" index={5} tone={tone} eyebrow={t("profileEdIntegrationsEyebrow")} title={t("profileEdIntegrationsTitle")} help={t("profileEdIntegrationsHelp")}>
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <div className="rounded-[12px] p-4" style={{ border: `1px solid ${palette.hair}`, background: palette.inset }}>
@@ -1128,7 +1252,10 @@ export function ProfileEditorial({
                         </div>
                     </SectionCard>
 
+                    )}
+
                     {/* 07 · Account & security */}
+                    {activeSection === "security" && (
                     <SectionCard id="security" num="07" index={6} tone={tone} eyebrow={t("profileEdSecurityEyebrow")} title={t("profileEdSecurityTitle")}>
                         <div className="flex flex-col">
                             <div className="flex items-center justify-between gap-4 py-3.5" style={{ borderBottom: `1px solid ${palette.track}` }}>
@@ -1162,7 +1289,10 @@ export function ProfileEditorial({
                         </div>
                     </SectionCard>
 
+                    )}
+
                     {/* 08 · Billing — real subscription state; plan facts come from the API */}
+                    {activeSection === "billing" && (
                     <SectionCard id="billing" num="08" index={7} tone={tone} eyebrow={t("profileEdBillingEyebrow")} title={t("profileEdBillingTitle")}>
                         <div
                             className="grid grid-cols-1 gap-4 rounded-[14px] p-5 sm:grid-cols-[1fr_auto]"
@@ -1218,6 +1348,7 @@ export function ProfileEditorial({
                             </div>
                         </div>
                     </SectionCard>
+                    )}
                 </div>
             </div>
         </div>
