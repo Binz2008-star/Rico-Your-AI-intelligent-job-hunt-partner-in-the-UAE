@@ -78,6 +78,67 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260718-022 — PR #1171: mobile usability pass on /command + /profile
+
+Status: verified — **MERGED + deployed**
+Owner: Claude (production-defect remediation, owner directive 2026-07-18)
+Branch: `fix/mobile-usability-command-profile` (merged, auto-deleted)
+Issue/PR: #1171 (squash `96464b8e101b5a034470b07f359aaebc079a7d6d`)
+
+#### Delivered
+- CTRL+K/CTRL+J hint lines hidden below `md` on both chat audiences (desktop
+  keeps them + WCAG contrast check); composer proven in-viewport at
+  320/360/390 with no fixed-nav overlap; `/profile` unsaved bar compacted
+  (Save/Discard on-screen at 320px); warning text `break-words` (zero
+  horizontal overflow EN + AR RTL). New `e2e/mobile-usability.spec.ts`
+  (10 checks); stability spec re-anchored; `apps/web/e2e/screenshots/`
+  gitignored (evidence artifacts never committed). 22/22 focused e2e.
+
+### TASK-20260718-021 — PR #1170: single approved shell on authenticated workspace routes (P0)
+
+Status: verified — **MERGED + deployed ("Deploy to Production" success)**
+Owner: Claude (production-defect remediation, owner directive 2026-07-18)
+Branch: `fix/single-shell-authenticated-command` (merged, auto-deleted)
+Issue/PR: #1170 (squash `e2ba730b497ba07687c53dba5e044194b89e60fa`)
+
+#### Root cause (owner production screenshots)
+- Legacy dark MobileCommandHeader + MobileBottomNav still mounted for the
+  authenticated audience on `/command` mobile — the #1145 compromise
+  (`WorkspaceShell variant="app"` rendered no mobile chrome, so the page kept
+  the legacy pair) layered old chrome over the Atelier workspace.
+
+#### Delivered
+- WorkspaceShell app variant: opt-in `mobileChrome` (shared mobile bar +
+  drawer, single navigation owner) + `mobileExtras` slot; authenticated
+  `/command` uses it — New chat / Clear chat / Log out live in the drawer;
+  MobileCommandHeader is public/checking-only; MobileBottomNav mount deleted;
+  composer 56px dock compensation removed (safe-area kept). `/profile`
+  `/settings` `/applications` verified already single-shell and pinned.
+  Proof: `e2e/single-shell.spec.ts` + updated stability spec (12 checks,
+  real Chromium; AR RTL; public surface unchanged); screenshots delivered
+  as artifacts.
+
+### TASK-20260718-020 — PR #1169: restore live profile saves (P0 production outage)
+
+Status: verified — **MERGED + deployed ("Deploy to Production" success)**
+Owner: Claude (production-defect remediation, owner directive 2026-07-18)
+Branch: `fix/profile-save-wrapper-clear-fields` (merged, auto-deleted)
+Issue/PR: #1169 (squash `1e8615ce1137e725485e2a41d1439bf133abd039`)
+
+#### Root cause (owner production screenshot: "Profile update could not be saved")
+- #1166 called the router's stable patch-point wrapper with `clear_fields=`;
+  the wrapper's signature didn't accept it → TypeError on EVERY save,
+  swallowed by the endpoint's broad except into the generic 503. CI green
+  because endpoint tests mock the wrapper symbol itself (over-mocking).
+
+#### Delivered
+- Wrapper accepts + forwards `clear_fields` (superset-signature invariant
+  pinned in a comment); 503/500 failure surfaces carry a correlation ref
+  (`(ref XXXX)`) matching the backend log line — the frontend toast already
+  renders server detail. Regression: `TestRicoProfileSaveThroughRealWrapper`
+  exercises the REAL wrapper, patching one layer down — verified failing
+  (503) against the pre-fix code; 4/4 with the fix. Backend suite 3,968 green.
+
 ### TASK-20260718-019 — PR #1167: route-exit dirty-state protection (Profile track Phase 4)
 
 Status: verified — **MERGED + deployed (frontend-only)**
