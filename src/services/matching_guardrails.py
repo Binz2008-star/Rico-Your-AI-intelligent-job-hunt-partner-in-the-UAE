@@ -1,12 +1,84 @@
 """Warnings for profile/settings values that can make job matching too narrow."""
 from __future__ import annotations
 
+import logging
 import re
+from enum import Enum
 from typing import Any, Mapping
+
+logger = logging.getLogger(__name__)
 
 Warning = dict[str, str]
 
 CORE_ROLE_TERMS = ("manager", "environmental", "compliance", "esg", "hse")
+
+
+class WarningSeverity(str, Enum):
+    """Backend-authoritative severity tiers for matching-guardrail warnings.
+
+    This enum is the product contract — the frontend renders whatever tier the
+    backend assigns and must not re-derive severity from business logic.
+
+    - BLOCKING: the input actively suppresses or misdirects the user's own
+      matches (their results are wrong until fixed).
+    - IMPORTANT: the input meaningfully degrades match quality or hides
+      useful results.
+    - RECOMMENDATION: advisory tuning; matching still works as configured.
+    """
+
+    BLOCKING = "blocking"
+    IMPORTANT = "important"
+    RECOMMENDATION = "recommendation"
+
+
+# Explicit product contract: EVERY emitted warning code maps to exactly one
+# severity tier. Adding a new warning without registering it here is a contract
+# violation caught by tests/unit/test_matching_guardrail_severity_contract.py.
+WARNING_SEVERITY_BY_CODE: dict[str, WarningSeverity] = {
+    # The user's own exclusion cancels their target role — matches are
+    # actively suppressed until this is fixed.
+    "excluded_keyword_blocks_target_role": WarningSeverity.BLOCKING,
+    # An unrecognized city makes Rico search the wrong market entirely.
+    "invalid_uae_city": WarningSeverity.BLOCKING,
+    # These meaningfully degrade or hide useful matches.
+    "excluded_keyword_overlaps_included_keyword": WarningSeverity.IMPORTANT,
+    "excluded_keyword_blocks_core_role_word": WarningSeverity.IMPORTANT,
+    "minimum_fit_score_high": WarningSeverity.IMPORTANT,
+    # Advisory focus tuning — matching still works as configured.
+    "too_many_target_roles": WarningSeverity.RECOMMENDATION,
+}
+
+# Canonical code → editable-field mapping (part of the same contract; the
+# `field` value emitted with each warning must match this map).
+WARNING_FIELD_BY_CODE: dict[str, str] = {
+    "excluded_keyword_blocks_target_role": "exclude_keywords",
+    "invalid_uae_city": "preferred_cities",
+    "excluded_keyword_overlaps_included_keyword": "exclude_keywords",
+    "excluded_keyword_blocks_core_role_word": "exclude_keywords",
+    "minimum_fit_score_high": "min_score",
+    "too_many_target_roles": "target_roles",
+}
+
+ALL_WARNING_CODES: tuple[str, ...] = tuple(WARNING_SEVERITY_BY_CODE)
+
+
+def severity_for_code(code: str) -> WarningSeverity:
+    """Resolve a warning code's contract severity.
+
+    Fail-safe: an unknown/unmapped code never crashes a request — it logs the
+    contract violation loudly and resolves to the deterministic conservative
+    tier IMPORTANT. The exhaustive contract test guarantees no emitted code can
+    reach this fallback in a shipped build.
+    """
+    severity = WARNING_SEVERITY_BY_CODE.get(code)
+    if severity is None:
+        logger.error(
+            "matching_guardrails severity contract violation: code %r has no "
+            "registered severity; defaulting to 'important'",
+            code,
+        )
+        return WarningSeverity.IMPORTANT
+    return severity
 
 UAE_CITY_ALIASES = {
     "abu dhabi": "Abu Dhabi",
@@ -273,7 +345,7 @@ def _warning(
     return {
         "code": code,
         "field": field,
-        "severity": "warning",
+        "severity": severity_for_code(code).value,
         "message": message,
         "suggestion": suggestion,
         "message_ar": message_ar,
