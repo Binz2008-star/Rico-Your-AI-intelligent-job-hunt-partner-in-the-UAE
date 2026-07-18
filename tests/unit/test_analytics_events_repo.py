@@ -231,7 +231,7 @@ def test_purge_never_raises():
 
 
 def test_purge_bounds_clamps_zero_to_one():
-    conn, cursor = _mock_conn()
+    conn, cursor = _mock_conn(rowcount=0)  # No rows deleted in this test
     with patch.object(repo, "is_db_available", return_value=True), \
          patch.object(repo, "get_db_connection", return_value=conn):
         removed = repo.purge_expired(0)
@@ -241,7 +241,7 @@ def test_purge_bounds_clamps_zero_to_one():
 
 
 def test_purge_bounds_clamps_negative_to_one():
-    conn, cursor = _mock_conn()
+    conn, cursor = _mock_conn(rowcount=0)  # No rows deleted in this test
     with patch.object(repo, "is_db_available", return_value=True), \
          patch.object(repo, "get_db_connection", return_value=conn):
         removed = repo.purge_expired(-100)
@@ -251,7 +251,7 @@ def test_purge_bounds_clamps_negative_to_one():
 
 
 def test_purge_bounds_clamps_extreme_to_max():
-    conn, cursor = _mock_conn()
+    conn, cursor = _mock_conn(rowcount=0)  # No rows deleted in this test
     with patch.object(repo, "is_db_available", return_value=True), \
          patch.object(repo, "get_db_connection", return_value=conn):
         removed = repo.purge_expired(10000)
