@@ -240,7 +240,7 @@ function ScorePip({ score, scorePct, accent, contrastInk, fitLabel }: {
         <span
             data-testid="job-score"
             data-score-tier={tier}
-            className="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5"
+            className="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 animate-pop-in motion-reduce:animate-none"
             style={{
                 fontFamily: ATELIER_FONT.mono,
                 fontSize: 10,
@@ -333,7 +333,7 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
 
     return (
         <article
-            className="mt-2 rounded-xl px-3.5 py-3"
+            className="atl-match-card mt-2 rounded-xl px-3.5 py-3 animate-fade-up motion-reduce:animate-none"
             aria-label={ariaMatch}
             data-testid="opportunity-card"
             style={{
@@ -356,7 +356,7 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                         {strong && (
                             <span
                                 data-testid="job-rico-picks"
-                                className="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5"
+                                className="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 animate-fade-in-scale motion-reduce:animate-none"
                                 style={{ fontFamily: ATELIER_FONT.mono, fontSize: 9, fontWeight: 600, letterSpacing: language === "ar" ? "0" : "0.14em", textTransform: language === "ar" ? "none" : "uppercase", color: accent, border: `1px solid ${accent}80`, background: `${accent}14` }}
                             >
                                 ✦ {t("cmdMatchPicks")}
@@ -415,7 +415,7 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                         data-testid={linkTestId}
                         aria-label={ariaFor(linkLabel)}
                         onClick={() => setLinkOpened(true)}
-                        className="rounded-md px-3 py-1.5 text-[11px] font-semibold transition-opacity hover:opacity-90"
+                        className="rounded-md px-3 py-1.5 text-[11px] font-semibold transition-[opacity,transform] duration-150 hover:opacity-90 hover:-translate-y-px active:translate-y-0 active:scale-[0.98]"
                         style={{ background: c.ink, color: c.bg }}
                     >
                         {linkLabel}
@@ -432,7 +432,7 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                         rel="noopener noreferrer"
                         data-testid="job-link-source"
                         aria-label={ariaFor(t("cmdViewSource"))}
-                        className="rounded-md px-3 py-1.5 text-[11px] transition-opacity hover:opacity-80"
+                        className="rounded-md px-3 py-1.5 text-[11px] transition-[opacity,transform] duration-150 hover:opacity-80 active:scale-[0.98]"
                         style={{ border: `1px solid ${c.hair}`, color: c.ink70 }}
                     >
                         {t("cmdViewSource")}
@@ -442,7 +442,7 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                     type="button"
                     data-testid="job-action-save"
                     onClick={() => onAction(`Save ${match.title} at ${match.company} to my pipeline`)}
-                    className="rounded-md px-3 py-1.5 text-[11px] transition-opacity hover:opacity-80"
+                    className="rounded-md px-3 py-1.5 text-[11px] transition-[opacity,transform] duration-150 hover:opacity-80 active:scale-[0.98]"
                     style={{ border: `1px solid ${c.hair}`, color: c.ink70 }}
                 >
                     {t("cmdMatchSave")}
@@ -451,7 +451,7 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                     type="button"
                     data-testid="job-action-skip"
                     onClick={() => onAction(`Skip ${match.title} at ${match.company}`)}
-                    className="rounded-md px-3 py-1.5 text-[11px] transition-opacity hover:opacity-80"
+                    className="rounded-md px-3 py-1.5 text-[11px] transition-[opacity,transform] duration-150 hover:opacity-80 active:scale-[0.98]"
                     style={{ color: c.ink55, background: "transparent", border: "1px solid transparent" }}
                 >
                     {t("cmdMatchSkip")}

@@ -223,6 +223,12 @@ const config: Config = {
                 thinking: "thinking 3s ease-in-out infinite",
                 shimmer: "shimmer 1.8s ease-in-out infinite",
                 "fade-up": "fadeUp 0.4s ease-out forwards",
+                // Command reply-experience motion layer (2026-07-17):
+                // entrance/reveal micro-interactions for the chat surface.
+                "fade-in-scale": "fadeInScale 0.18s ease-out both",
+                "pop-in": "popIn 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+                "dot-cascade": "dotCascade 1.15s ease-in-out infinite",
+                "rail-draw": "railDraw 0.45s ease-out both",
                 // Nocturne Aura animations
                 breathe: "breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
                 "pulse-ring": "pulse-ring 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
@@ -258,6 +264,23 @@ const config: Config = {
                 fadeUp: {
                     "0%": { opacity: "0", transform: "translateY(6px)" },
                     "100%": { opacity: "1", transform: "translateY(0)" },
+                },
+                // Command reply-experience motion layer (2026-07-17)
+                fadeInScale: {
+                    "0%": { opacity: "0", transform: "scale(0.96)" },
+                    "100%": { opacity: "1", transform: "scale(1)" },
+                },
+                popIn: {
+                    "0%": { opacity: "0", transform: "scale(0.85)" },
+                    "100%": { opacity: "1", transform: "scale(1)" },
+                },
+                dotCascade: {
+                    "0%, 60%, 100%": { transform: "translateY(0)", opacity: "0.35" },
+                    "30%": { transform: "translateY(-3px)", opacity: "1" },
+                },
+                railDraw: {
+                    "0%": { transform: "scaleY(0)", transformOrigin: "top" },
+                    "100%": { transform: "scaleY(1)", transformOrigin: "top" },
                 },
                 // Nocturne Aura keyframes
                 breathe: {

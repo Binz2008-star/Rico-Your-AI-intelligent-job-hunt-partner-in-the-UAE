@@ -21,6 +21,8 @@ vi.mock("next/font/google", () => {
     IBM_Plex_Sans: font,
     IBM_Plex_Sans_Arabic: font,
     Inter: font,
+    Noto_Naskh_Arabic: font,
+    Noto_Sans_Arabic: font,
     Space_Grotesk: font,
   };
 });

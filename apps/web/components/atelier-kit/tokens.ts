@@ -38,8 +38,11 @@ export const ATELIER = {
 export const ATELIER_FRAUNCES_VAR = "--font-fraunces-landing";
 
 export const ATELIER_FONT = {
-    serif: `var(${ATELIER_FRAUNCES_VAR}), Georgia, serif`,
+    /* Arabic glyphs fall through Fraunces (Latin-only) to Noto Naskh Arabic —
+       the designed Arabic serif companion (2026-07-17). The var() fallback name
+       keeps the stack valid on routes that don't attach the font variable. */
+    serif: `var(${ATELIER_FRAUNCES_VAR}), var(--font-naskh-arabic, "Noto Naskh Arabic"), Georgia, serif`,
     mono: "var(--font-mono), ui-monospace, monospace",
-    /* Arabic mono/eyebrow fallback: system Arabic via the body stack (no new dep). */
-    body: "var(--font-body), ui-sans-serif, system-ui, sans-serif",
+    /* Arabic body companion: Noto Sans Arabic after Inter (Latin unchanged). */
+    body: `var(--font-body), var(--font-sans-arabic, "Noto Sans Arabic"), ui-sans-serif, system-ui, sans-serif`,
 } as const;

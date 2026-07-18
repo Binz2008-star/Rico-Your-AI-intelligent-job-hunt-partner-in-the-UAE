@@ -25,7 +25,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
-import { atelierFraunces } from "@/components/atelier-kit/fonts";
+import { atelierFraunces, atelierNaskhArabic, atelierSansArabic } from "@/components/atelier-kit/fonts";
 import { Mono } from "@/components/atelier-kit/primitives";
 import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
 
@@ -133,7 +133,7 @@ export function WorkspaceShell({
 
     return (
         <div
-            className={`wsx-root ${isAr ? "wsx-ar" : ""} ${isApp ? "h-[100dvh] overflow-hidden" : "min-h-screen"} ${atelierFraunces.variable}`}
+            className={`wsx-root ${isAr ? "wsx-ar" : ""} ${isApp ? "h-[100dvh] overflow-hidden" : "min-h-screen"} ${atelierFraunces.variable} ${atelierNaskhArabic.variable} ${atelierSansArabic.variable}`}
             dir={isAr ? "rtl" : "ltr"}
             lang={language}
             style={{ background: c.bg, color: c.ink, fontFamily: ATELIER_FONT.body }}
