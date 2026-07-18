@@ -78,6 +78,59 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260718-015 — PR #1161: profile true URL-backed section navigation (Profile Phase 3)
+
+Status: verified — **MERGED + deployed (frontend-only)**
+Owner: Claude (Release Captain pass; owner-approved merge 2026-07-18)
+Branch: `feat/profile-true-section-navigation` (merged, auto-deleted)
+Issue/PR: #1161 (squash `76e52984d0c052dfa9528844bcbb587c032ab021`)
+
+#### Objective
+Replace the /profile visual-only section rail (shipped by #1152) with true
+URL-backed section navigation. Completes **Profile Phase 3**.
+
+#### Delivered
+- `?section=` drives a render-only-selected switch (one section at a time; the old
+  IntersectionObserver scroll-spy is removed). Deep links, in-`/profile`
+  back/forward, and refresh resolve from the URL; missing→about (URL left clean),
+  invalid→about (canonicalized with `replace`), explicit valid section wins; every
+  unrelated query param (incl. the #1159 Gmail callback → Integrations) is preserved.
+  Unsaved draft survives section switches; `beforeunload` guards refresh/close and a
+  profile-scoped capture-phase interceptor guards internal cross-route nav while
+  dirty; mobile `<select>`; heading focus on intentional change; RTL mirrored.
+- Files: `apps/web/components/profile/ProfileEditorial.tsx`,
+  `apps/web/app/profile/page.tsx`, `apps/web/lib/translations.ts` (+2 EN/AR keys),
+  `apps/web/__tests__/profile-editorial.test.tsx`. 4 files, +467/−80. Frontend only —
+  no backend/schema/API/migration/Gmail/warning/billing change.
+
+#### Deferred / not in scope (still QUEUED)
+- **Browser Back that EXITS `/profile`** is not intercepted (refresh/close + internal
+  `<Link>` nav ARE; in-profile section back/forward preserves the draft). Owner-accepted
+  as a **separate P1**: *Profile cross-route dirty-state protection* at the shared
+  WorkspaceShell/navigation layer. Not branched, not implemented.
+- **Profile Phase 4A** (backend warning severity contract) and **Phase 4B** (actionable
+  warning frontend) — NOT started.
+
+#### Verification
+- Rebased onto `main` `f10498cd` (head `b688cdc8`); focused `profile-editorial.test.tsx`
+  **32/32**; `next build` clean; full CI green (frontend/pytest/playwright/
+  postgres-integration/workflow-security-guards); 0 review threads; `mergeable_state`
+  clean. Squash `76e52984`; **"Deploy to Production" run for `76e52984` = success**.
+- **Owner live authenticated `/profile` + Arabic RTL visual smoke on `ricohunt.com`
+  still PENDING** (production host network-blocked from the executing session).
+
+#### Continuity Block
+- Task ID: TASK-20260718-015
+- GitHub issue/PR: #1161
+- Branch: `feat/profile-true-section-navigation` (merged, auto-deleted)
+- Base branch: main
+- Last safe commit SHA: `f10498cd` (pre-merge main)
+- Current head SHA: `76e52984` (squash on main)
+- Uncommitted changes present: no
+- Status: verified
+- Files inspected: the 4 files above
+- Files changed: none pending — merged
+
 ### TASK-20260718-007 — Stage 1: Neon data-architecture audit + source-of-truth decision record (docs-only)
 
 Status: review (draft PR open; owner approval is the stop condition)
@@ -663,8 +716,10 @@ deleting the old profile code.
   save bar; thin auth+data shell page; honest billing/Telegram states; "Verified email";
   numeric-clear validation. Real-data wired (`lib/api.ts`); auth-guard contract preserved.
 
-#### Deferred / not in scope (still QUEUED — see Phase 3 true section navigation)
-- **True section navigation is NOT delivered.** The rail is visual only. Missing:
+#### Deferred / not in scope (DELIVERED 2026-07-18 by #1161 — see TASK-20260718-015)
+- **True section navigation is NOT delivered *by this PR (#1152)*.** The rail here is
+  visual only; true navigation shipped later in **#1161** (`76e52984`, Profile Phase 3).
+  Was missing at #1152 time (all now delivered by #1161):
   render-only-selected-section, `/profile?section=…` URL state, deep links,
   back/forward, refresh persistence, invalid→about fallback, mobile selector,
   unsaved-edit protection, section focus management.
