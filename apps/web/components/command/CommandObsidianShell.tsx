@@ -103,7 +103,11 @@ function PanelIcon({ side }: { side: "start" | "end" }) {
     );
 }
 
-export function CommandObsidianShell(props: {
+export function CommandObsidianShell({
+    mobileChrome = false,
+    mobileActions,
+    ...props
+}: {
     children: React.ReactNode;
     /** Content of the start rail — the canonical Sessions position. */
     leftRail?: React.ReactNode;
@@ -117,9 +121,14 @@ export function CommandObsidianShell(props: {
     onToggleRight?: () => void;
     /** Called when the user clicks Log out in the desktop account menu. */
     onLogout?: () => void;
+    /** Render the shared WorkspaceShell mobile bar/drawer (single-shell mobile
+     *  chrome for the authenticated audience — no legacy header/dock). */
+    mobileChrome?: boolean;
+    /** Command-specific actions appended to the shell's mobile drawer. */
+    mobileActions?: React.ReactNode;
 }) {
     return (
-        <WorkspaceShell variant="app">
+        <WorkspaceShell variant="app" mobileChrome={mobileChrome} mobileExtras={mobileActions}>
             <CommandConsole {...props} />
         </WorkspaceShell>
     );

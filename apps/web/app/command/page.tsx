@@ -10,7 +10,6 @@ import { AtelierCardScope } from "@/components/command/CommandStates";
 import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
-import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
 import { MissionContextBar } from "@/components/mission/MissionContextBar";
 import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
@@ -1816,6 +1815,37 @@ export default function CommandPage() {
             onToggleLeft={() => setLeftRailOpen((v) => !v)}
             onToggleRight={() => setRightRailOpen((v) => !v)}
             onLogout={handleLogout}
+            mobileActions={
+                /* Command actions in the shared mobile drawer — replaces the
+                   legacy MobileCommandHeader overflow menu for authenticated
+                   mobile (single-shell chrome). Inherits the drawer palette. */
+                <div className="flex flex-col gap-2" data-testid="command-mobile-actions">
+                    <button
+                        type="button"
+                        onClick={handleNewChat}
+                        className="rounded-[7px] px-3 py-2.5 text-start text-[14px]"
+                        style={{ border: "1px solid rgba(127,127,127,0.35)", background: "transparent", color: "inherit", cursor: "pointer" }}
+                    >
+                        {t("newChat")}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void handleClearHistory()}
+                        className="rounded-[7px] px-3 py-2.5 text-start text-[14px]"
+                        style={{ border: "1px solid rgba(127,127,127,0.35)", background: "transparent", color: "inherit", cursor: "pointer" }}
+                    >
+                        {t("clearChat")}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="rounded-[7px] px-3 py-2.5 text-start text-[14px]"
+                        style={{ border: "1px solid rgba(127,127,127,0.35)", background: "transparent", color: "inherit", cursor: "pointer" }}
+                    >
+                        {t("logout")}
+                    </button>
+                </div>
+            }
             leftRail={
                 <CommandConversationRail
                     audience={chatAudience}
@@ -1833,9 +1863,12 @@ export default function CommandPage() {
         >
             {/* Main column — fills remaining width */}
             <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
-                {/* Top nav: always on mobile/tablet; on lg+ the authenticated audience gets the
-                WorkspaceShell rail instead (public keeps this header on all widths). */}
-                <div className={chatAudience === "authenticated" ? "lg:hidden" : ""}>
+                {/* Top nav — public/checking audiences only (all widths). The
+                authenticated audience gets single-shell chrome instead: the
+                WorkspaceShell rail on lg+ and the shared WorkspaceShell mobile
+                bar/drawer below lg (2026-07-18 single-shell defect — the legacy
+                dark header/dock must never render over workspace surfaces). */}
+                {chatAudience !== "authenticated" && (
                     <MobileCommandHeader
                         chatAudience={chatAudience}
                         onLogout={handleLogout}
@@ -1844,7 +1877,7 @@ export default function CommandPage() {
                         loginHref={COMMAND_LOGIN_HREF}
                         signupHref={COMMAND_SIGNUP_HREF}
                     />
-                </div>
+                )}
 
                 {/* Mission Context Bar — authenticated only; shows goal, progress, next
                 action. 4e: repainted via AtelierCardScope (supporting workspace panel). */}
@@ -2423,8 +2456,6 @@ export default function CommandPage() {
                 open={rightRailOpen}
             />
 
-            {/* Mobile bottom dock — authenticated only (public gets sign-in links in MobileCommandHeader) */}
-            {chatAudience === "authenticated" && <MobileBottomNav />}
         </CommandChrome>
     );
 }
@@ -2453,6 +2484,7 @@ function CommandChrome({
     onToggleRight,
     onLogout,
     leftRail,
+    mobileActions,
     children,
 }: {
     audience: "checking" | "public" | "authenticated";
@@ -2465,6 +2497,8 @@ function CommandChrome({
     onToggleRight: () => void;
     onLogout?: () => void;
     leftRail: React.ReactNode;
+    /** Command actions for the shared mobile drawer (authenticated only). */
+    mobileActions?: React.ReactNode;
     children: React.ReactNode;
 }) {
     if (audience === "public") {
@@ -2484,6 +2518,8 @@ function CommandChrome({
             onToggleRight={onToggleRight}
             onLogout={onLogout}
             leftRail={leftRail}
+            mobileChrome={audience === "authenticated"}
+            mobileActions={mobileActions}
         >
             <div className="relative flex h-full min-h-0 flex-1 overflow-hidden">
                 {children}

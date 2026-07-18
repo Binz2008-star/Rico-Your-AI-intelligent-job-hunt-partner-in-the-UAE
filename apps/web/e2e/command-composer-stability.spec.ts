@@ -197,35 +197,26 @@ test.describe("/command composer stability", () => {
     expect(Math.abs((await yPosition(messagePane)) - paneBefore)).toBeLessThanOrEqual(2);
   });
 
-  test("keeps mobile header geometry stable while authentication resolves", async ({ page }) => {
+  test("authenticated mobile resolves to the single WorkspaceShell chrome (no legacy header/dock)", async ({ page }) => {
+    // Single-shell contract (2026-07-18): the legacy dark MobileCommandHeader
+    // and MobileBottomNav must never render for the authenticated audience —
+    // the shared WorkspaceShell mobile bar owns mobile navigation. The header
+    // may exist transiently while auth resolves; the END state is what's pinned.
     await page.setViewportSize({ width: 390, height: 844 });
     await mockAuthenticatedCommand(page, { authDelayMs: 600 });
     await page.goto("/command");
 
-    const header = page.getByTestId("command-mobile-header");
-    const brand = page.getByTestId("command-mobile-brand");
-    const authSlot = page.getByTestId("command-mobile-auth-slot");
     const textarea = page.getByTestId("composer-textarea");
-
-    const headerBefore = await header.boundingBox();
-    const brandBefore = await brand.boundingBox();
-    const slotBefore = await authSlot.boundingBox();
-    expect(headerBefore).not.toBeNull();
-    expect(brandBefore).not.toBeNull();
-    expect(slotBefore).not.toBeNull();
-
     await expect(textarea).toBeEnabled();
 
-    const headerAfter = await header.boundingBox();
-    const brandAfter = await brand.boundingBox();
-    const slotAfter = await authSlot.boundingBox();
-    expect(headerAfter).not.toBeNull();
-    expect(brandAfter).not.toBeNull();
-    expect(slotAfter).not.toBeNull();
-
-    expect(Math.abs(headerAfter!.height - headerBefore!.height)).toBeLessThanOrEqual(1);
-    expect(Math.abs(brandAfter!.x - brandBefore!.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(slotAfter!.x - slotBefore!.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(slotAfter!.width - slotBefore!.width)).toBeLessThanOrEqual(1);
+    // exactly one mobile chrome owner: the shared workspace bar
+    await expect(page.getByTestId("wsx-mobile-bar")).toHaveCount(1);
+    await expect(page.getByTestId("command-mobile-header")).toHaveCount(0);
+    // legacy fixed bottom dock is gone
+    await expect(page.locator("nav.fixed.bottom-0")).toHaveCount(0);
+    // composer is not pushed up by dock compensation and does not overlap nav
+    const composerBox = await page.getByTestId("atelier-composer").boundingBox();
+    expect(composerBox).not.toBeNull();
+    expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(844 + 1);
   });
 });
