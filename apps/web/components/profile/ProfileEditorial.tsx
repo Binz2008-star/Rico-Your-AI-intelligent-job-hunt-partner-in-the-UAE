@@ -142,6 +142,55 @@ const TEXT_FIELDS = [
 const NUMBER_FIELDS = ["years_experience", "salary_expectation_aed", "minimum_salary_aed"] as const;
 const LIST_FIELDS = ["target_roles", "preferred_cities", "skills"] as const;
 
+/* ── route-exit dirty-state protection (Phase 4) ────────────────────────────
+   The click interceptor + beforeunload (from #1161) cover link navigation and
+   refresh/close, but browser Back/forward that EXITS /profile cannot be
+   blocked safely in the Next 14 App Router without a history trap that would
+   break in-profile section back/forward. Instead of an unsafe trap, the dirty
+   draft is mirrored to per-tab sessionStorage: ANY route exit — Back included —
+   can no longer destroy unsaved edits, because returning to /profile restores
+   the draft (and the unsaved-changes bar). The mirror is cleared the moment
+   the draft is clean (save/discard) and is never restored across accounts. */
+
+const DRAFT_STORAGE_KEY = "rico-profile-draft";
+
+function sanitizeStoredDraft(value: unknown): Partial<ProfileDraft> | null {
+    if (!value || typeof value !== "object") return null;
+    const raw = value as Record<string, unknown>;
+    const out: Partial<ProfileDraft> = {};
+    for (const k of [...TEXT_FIELDS, ...NUMBER_FIELDS]) {
+        if (typeof raw[k] === "string") out[k] = raw[k] as string;
+    }
+    for (const k of LIST_FIELDS) {
+        const v = raw[k];
+        if (Array.isArray(v) && v.every((x) => typeof x === "string")) out[k] = v as string[];
+    }
+    return Object.keys(out).length > 0 ? out : null;
+}
+
+/** Restore a same-account stored draft that still differs from the loaded
+ *  profile; anything else (missing, foreign account, corrupt, or already
+ *  clean) yields null and a clean start. */
+export function restoreStoredDraft(profile: ProfileResponse): ProfileDraft | null {
+    try {
+        if (typeof window === "undefined") return null;
+        const raw = window.sessionStorage.getItem(DRAFT_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { email?: unknown; draft?: unknown };
+        if (parsed.email !== profile.email) {
+            // A draft from another account must never surface here.
+            window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+            return null;
+        }
+        const partial = sanitizeStoredDraft(parsed.draft);
+        if (!partial) return null;
+        const restored = { ...toDraft(profile), ...partial };
+        return changedKeys(profile, restored).length > 0 ? restored : null;
+    } catch {
+        return null; // storage unavailable/corrupt — protection degrades gracefully
+    }
+}
+
 type DraftKey = keyof ProfileDraft;
 
 function listsEqual(a: string[], b: string[]): boolean {
@@ -706,7 +755,9 @@ export function ProfileEditorial({
     const { language } = useLanguage();
     const t = useTranslation(language);
 
-    const [draft, setDraft] = useState<ProfileDraft>(() => toDraft(profile));
+    // Seed from a same-account stored draft when one survived a route exit
+    // (browser Back included) — otherwise start clean from the loaded profile.
+    const [draft, setDraft] = useState<ProfileDraft>(() => restoreStoredDraft(profile) ?? toDraft(profile));
     const [errors, setErrors] = useState<Partial<Record<DraftKey, TranslationKey>>>({});
     const [saving, setSaving] = useState(false);
 
@@ -803,6 +854,25 @@ export function ProfileEditorial({
     }
 
     const dirty = useMemo(() => changedKeys(profile, draft).length > 0, [profile, draft]);
+
+    // Mirror the dirty draft to per-tab sessionStorage (route-exit protection);
+    // remove it the moment the draft is clean again (save success or discard),
+    // so no stale draft outlives its resolution. Single effect — no duplicate
+    // listeners, nothing global.
+    useEffect(() => {
+        try {
+            if (dirty) {
+                window.sessionStorage.setItem(
+                    DRAFT_STORAGE_KEY,
+                    JSON.stringify({ email: profile.email, draft }),
+                );
+            } else {
+                window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+            }
+        } catch {
+            // storage unavailable — beforeunload + click-interceptor still guard
+        }
+    }, [dirty, draft, profile.email]);
 
     const set = useCallback(<K extends DraftKey>(key: K, value: ProfileDraft[K]) => {
         setDraft((d) => ({ ...d, [key]: value }));

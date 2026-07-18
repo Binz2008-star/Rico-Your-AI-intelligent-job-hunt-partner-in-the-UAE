@@ -158,6 +158,7 @@ const BASE_PROFILE = {
 beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    window.sessionStorage.clear(); // no dirty-draft mirror may leak across tests
     navState.params = new URLSearchParams();
     fetchProfileMock.mockResolvedValue(BASE_PROFILE);
     listUserFilesMock.mockResolvedValue({ files: [], total: 0 });
