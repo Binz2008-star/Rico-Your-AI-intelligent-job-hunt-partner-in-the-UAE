@@ -54,6 +54,7 @@ application can hold more than one identity and more than one source of truth.
 | #1025 (draft, frozen) | Migration 042 career-memory tables — branch-only; **not in production** (verified live: `career_memory_events` absent) |
 | #1129 (draft, stacked on #1025) | Erasure wiring; no new schema |
 | #1136 (draft) | Docs-only reconciliation audit |
+| #1159 (open) | Gmail UI + recurring-sync consent readiness — frontend-only; feature remains disabled; no migration, no OAuth activation. Any future activation still requires 043 first (§7, §9) |
 
 ### Method
 
@@ -301,17 +302,46 @@ No urgent bottleneck; total sizes are tiny (largest heaps: `jobs` 3.9 MB,
   small so current impact is negligible, but the pattern suggests per-request
   identity/profile/settings resolution scanning; revisit after Phase 3, not
   before.
-- **21 exact-duplicate index pairs** (identical key columns + predicate)
-  verified via `pg_index`, including `rico_job_recommendations
-  (user_id, job_key)` (unique + non-unique duplicate — the 034 leftover),
-  `rico_profiles.user_id`, `application_drafts (user_id, status)` ×2, both
-  `applications.job_link` indexes, and unique-constraint shadows on
-  `paddle_*`, `user_subscriptions`, `subscription_events`,
-  `password_reset_tokens`, `email_verification_tokens`,
-  `email_unsubscribe_tokens`, `jobs.link`, `rico_agent_settings.user_id`,
-  `rico_webhook_events`, `search_context`, `telegram_alert_log`,
-  `auto_apply_attempts`, `paddle_webhook_events`. Write amplification
-  examples: `rico_job_recommendations` 72 KB heap / 256 KB indexes;
+- **Redundant-index inventory — 21 signature-identical pairs** (identical key
+  columns + predicate) found via `pg_index`, then classified live by
+  uniqueness and constraint ownership (`pg_index.indisunique`,
+  `pg_constraint.conindid`):
+  - **Class A — truly identical non-unique twins (2 pairs):**
+    `application_drafts` (`idx_application_drafts_user_status` /
+    `idx_application_drafts_user_id`, both non-unique on
+    `(user_id, status)`) and `telegram_alert_log` (`idx_tal_user_sent` /
+    `idx_telegram_alert_log_user_sent`). Safest drop candidates — still
+    EXPLAIN-verified first, and drift-signature membership checked before
+    choosing which twin survives.
+  - **Class B — non-unique shadow covered by a constraint-owned unique index
+    (19 pairs):** e.g. `idx_rico_job_recommendations_user_job_key` (the 034
+    leftover) shadowing `rico_job_recommendations_user_id_job_key_key`;
+    `idx_rico_profiles_user_id` shadowing `rico_profiles_user_id_key`;
+    `idx_applications_job_link` shadowing `applications_job_link_unique`;
+    plus shadows on `paddle_customers` ×2, `paddle_subscriptions` ×2,
+    `paddle_webhook_events`, `paddle_checkout_sessions`,
+    `user_subscriptions`, `subscription_events`, `password_reset_tokens`,
+    `email_verification_tokens`, `email_unsubscribe_tokens`, `jobs`,
+    `rico_agent_settings`, `rico_webhook_events`, `search_context`,
+    `auto_apply_attempts`. Only the non-unique shadow is ever a drop
+    candidate.
+  - **Class C — overlapping/partial indexes (not signature-identical):**
+    require per-index EXPLAIN + code-path evidence before any judgement.
+    Known example: the full unique
+    `rico_job_recommendations_user_id_job_key_key` overlaps the partial
+    unique `idx_rico_recommendations_user_job_unique`
+    (`WHERE job_key IS NOT NULL`), which powers the `ON CONFLICT` upsert —
+    **DO NOT DROP** (migration 034 header L9–14). Full Class C inventory is
+    remediation slice 6A.
+  - **Class D — constraint-owned indexes (19, the `*_key` members of Class
+    B):** back live UNIQUE constraints and **must never be dropped
+    directly**; changing them means an `ALTER TABLE … DROP CONSTRAINT`
+    decision, which is out of scope for index cleanup.
+
+  The cleanup goal is NOT zero overlapping signatures — it is the removal of
+  independently proven redundant indexes only, without touching constraint
+  support or useful planner paths. Write-amplification examples:
+  `rico_job_recommendations` 72 KB heap / 256 KB indexes;
   `user_subscriptions` 8 KB / 112 KB.
 - Dead tuples are modest (max 479 on `jobs`); autovacuum has run on the hot
   tables.
@@ -358,7 +388,7 @@ documented retention policy.
 | **P1** | Migration drift: 043 absent (blocks Gmail), 034 partial, DROP-only migrations invisible to detector | §9 |
 | **P1** | Orphaned `leads` table with third-party PII inside the production DB, RLS disabled | §12 |
 | **P2** | 100% expired token/checkout records with no cleanup | §11 |
-| **P2** | 21 duplicate index pairs; nullable owner columns; unconstrained status columns | §10, §11 |
+| **P2** | Redundant indexes (2 identical twins + 19 constraint-shadow pairs; Class C overlaps uninventoried); nullable owner columns; unconstrained status columns | §10, §11 |
 | **P3** | Seq-scan hotspots on identity/profile/settings; three billing generations awaiting formal retirement docs | §6, §11 |
 
 ## 14. Assumptions and unresolved evidence
@@ -385,40 +415,79 @@ documented retention policy.
 
 ## 15. Recommended phased remediation (document only — nothing executed)
 
-Each phase = one PR / one change window, owner-approved, smallest safe step,
-verified on a non-production Neon branch before production.
+**A Phase is an umbrella milestone, not a PR.** The unit of execution is the
+lettered slice: each slice below is exactly one PR / one change window with
+one objective, owner-approved, verified on a non-production Neon branch
+before production. Dangerous or logically separate operations are never
+combined in one slice. Traceable tasks: TASK-20260718-002 … -008 in
+`AI_WORKSPACE/TASKS.md` (one subtask per slice).
 
-1. **Phase 1 — Protect and document production.** Enable protection on
-   `br-restless-cherry-amq6wj7o` after confirming preview-branch automation
-   (Vercel/GitHub create children of production — 216 live examples) is
-   unaffected; document the branch/backup model in AI_WORKSPACE.
-2. **Phase 2 — Access boundary.** Verify Data API status (console). Create a
-   least-privilege runtime role for FastAPI; move Render to it; revoke the
-   blanket `authenticated` CRUD grants; design RLS policies on a test branch
-   with cross-user denial tests. No business-logic change.
-3. **Phase 3 — Canonical identity.** Adopt `rico_users.id` (UUID) as the
-   canonical spine (DEC-20260718-001, proposed). Produce a read-only mapping
-   report; resolve the 3 duplicate-email groups; link the 121/12/2 unlinkable
-   rows or classify them as guest-expired; implement the real identity merge
-   the resolver only advertises; then add constraints incrementally.
-4. **Phase 4 — Application lifecycle.** One-time reconciliation of the 5
-   context-`applied` (and 2+1 legacy) records into
-   `rico_job_recommendations`; freeze writes to `applications`; introduce a
-   shared job-key linkage for `user_job_context`; add status CHECKs
-   (`NOT VALID → VALIDATE`).
-5. **Phase 5 — Migration drift.** Decide/apply 043 in a Gmail change window;
-   finish 034's two remaining `DROP INDEX CONCURRENTLY`; extend
-   `check_migration_drift.py` with absence checks for DROP-only migrations.
-6. **Phase 6 — Index and retention cleanup.** EXPLAIN-verify then drop the
-   duplicate indexes (CONCURRENTLY, batched); add a scheduled cleanup for
-   expired tokens/artifacts/checkout sessions; document retention.
-7. **Phase 7 — Legacy isolation.** Owner decision on `leads` (export/move out
-   of the Rico DB); formal read-only freeze then retirement plan for
-   Stripe-era tables and the legacy `applications` pipeline trio;
-   delete-or-wire decision for dormant `search_context`.
+**Phase 1 — Protect and document production** (single-slice milestone)
+- **1A** Enable protection on `br-restless-cherry-amq6wj7o` after confirming
+  preview-branch automation (Vercel/GitHub create children of production —
+  216 live examples) is unaffected; document the branch/backup model.
 
-Task breakdown: TASK-20260718-002 … TASK-20260718-008 in
-`AI_WORKSPACE/TASKS.md`.
+**Phase 2 — Database access boundary and least privilege**
+- **2A** Verify Data API status and inventory every runtime access path
+  (read-only; closes unresolved-evidence items 1–2 in §14).
+- **2B** Create and smoke-test a limited runtime role on a non-production
+  Neon branch (full backend test suite under the new role).
+- **2C** Cut Render to the limited role (one env change window; instant
+  rollback = previous connection string).
+- **2D** Revoke unnecessary `authenticated` grants (44-table CRUD), verified
+  against 2A's access-path inventory.
+- **2E** Introduce tested RLS policies incrementally (per table group, each
+  with cross-user denial tests; never a bulk flip).
+
+**Phase 3 — Canonical identity reconciliation**
+- **3A** Identity mapping report (read-only; every identifier family mapped).
+- **3B** Duplicate-email resolution plan for the 3 groups (dry-run first).
+- **3C** Orphan/guest classification and reconciliation of the 121/12/2
+  unlinkable rows.
+- **3D** Implement the real guest/auth identity merge (today
+  `_attempt_identity_merge` always returns False — resolver.py:194–219).
+- **3E** Add identity constraints (`NOT VALID → VALIDATE → SET NOT NULL`).
+
+**Phase 4 — Application lifecycle reconciliation**
+- **4A** Lifecycle reconciliation dry-run report (each of the 5 context-
+  `applied` + 2+1 legacy rows resolved explicitly; no bulk matching).
+- **4B** Reconcile the approved records into `rico_job_recommendations`.
+- **4C** Freeze legacy `applications` writes (repo-layer guard).
+- **4D** Introduce shared job identity/linkage between `user_job_context`
+  and `rico_job_recommendations`.
+- **4E** Status CHECK constraints + full lifecycle smoke
+  (search → open → prepared → applied → follow-up → interview).
+
+**Phase 5 — Migration drift resolution**
+- **5A** Gmail 043 change window (additive DDL; before any
+  `RICO_ENABLE_GMAIL_SYNC=true`).
+- **5B** Finish migration 034: the two remaining
+  `DROP INDEX CONCURRENTLY` statements.
+- **5C** Add DROP/absence drift detection to `check_migration_drift.py` so
+  DROP-only migrations can no longer stay silently unapplied.
+- **5D** Verify scheduled drift alerting actually runs and reaches the
+  admin channel.
+
+**Phase 6 — Index and retention cleanup**
+- **6A** Index classification: complete the Class A–D inventory of §11,
+  including the Class C overlap/partial cases, with per-index EXPLAIN
+  evidence and drift-signature membership.
+- **6B** Small concurrent index-drop batches — only indexes independently
+  proven redundant in 6A; never Class D constraint-owned indexes.
+- **6C** Retention policy documented (tokens, artifacts, checkout sessions,
+  webhook/audit logs).
+- **6D** Cleanup worker/schedule implementing 6C (feature-flagged, with
+  metrics).
+
+**Phase 7 — Legacy isolation or retirement** (four independent decisions —
+never one PR)
+- **7A** `leads`: owner ownership confirmation, then export/isolation out of
+  the Rico production DB.
+- **7B** Stripe-era retirement (`user_subscriptions`,
+  `subscription_events`) — aligns with #1066; read-only freeze first.
+- **7C** Legacy `applications` pipeline trio retirement plan (after 4B/4C).
+- **7D** `search_context`: delete-or-wire decision (dormant per repo
+  docstring).
 
 ## 16. Rollback and production-safety principles
 
