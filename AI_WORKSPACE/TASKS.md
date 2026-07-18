@@ -1124,6 +1124,38 @@ backend.
 - Validation already run: invariants 8/8; guards 17/17; checker OK; YAML OK
 - Validation still required: CI on the PR head; first scheduled run
   post-merge should be observed
+
+#### Residual fix (2026-07-18): dashboard orphan suppresses Vercel deployments
+
+Follow-up to the #1086 dashboard-publish mechanism, on branch
+`claude/vercel-dashboard-deployment-hygiene-yy7pzi` (separate Draft PR).
+
+- Symptom: the dedicated `dashboard` orphan branch still triggered the `web`
+  Vercel project (Root Directory `apps/web`), which auto-builds every pushed
+  branch. Because the orphan carries no `apps/web` app tree, every publish
+  produced ERROR deployments (two per publish: GitHub + Neon integrations) —
+  deployment-history noise, no product impact. One user/profile/locale? No:
+  the branch is global generated output, so the fix is global.
+- Fix: the `deploy-dashboard` publish step now also writes `apps/web/vercel.json`
+  into the orphan branch with `git.deploymentEnabled.dashboard=false` (Vercel's
+  officially supported per-branch switch). Vercel evaluates it at ingestion,
+  before Root-Directory validation, so no deployment is created for the
+  `dashboard` ref.
+- Proven by a reversible test push (dashboard `f22d2e8`): Vercel created ZERO
+  deployments for that SHA (baseline `bccf308` had produced two ERROR
+  deployments); `docs/index.html` blob byte-identical; main Production READY
+  and PR Previews READY throughout.
+- Scope: `.github/workflows/daily.yml` `deploy-dashboard` step only. The
+  generated `apps/web/vercel.json` exists ONLY on the `dashboard` orphan, never
+  on main's source tree. No change to main's `apps/web/vercel.json`, Vercel
+  project settings, Root Directory, or application code.
+- Preserved: main → production, normal PR branches → previews, GitHub Pages
+  from the `dashboard` `/docs` folder.
+- Rollback: revert the squash-merge commit; the next scheduled publish emits an
+  orphan without `apps/web/vercel.json`, restoring prior behavior.
+- Verify on the next natural scheduled run (do NOT dispatch for this): new
+  dashboard commit contains both files; no Vercel deployment for that SHA;
+  Pages opens; main Production READY; a normal PR Preview READY.
 - Deployment/CI/Neon/Vercel state to check next: after merge, confirm a
   dashboard-only publish does NOT trigger deploy-render
 - Next exact action: owner review; after merge, flip GitHub Pages source to
