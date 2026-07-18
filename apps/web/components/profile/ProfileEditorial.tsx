@@ -31,7 +31,6 @@
 
 import { GmailConnectionCard } from "@/components/settings/GmailConnectionCard";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
-import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
 import { WORKSPACE_THEME, useWorkspaceTheme, type WorkspacePalette } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
@@ -461,6 +460,202 @@ function ChipEditor({
     );
 }
 
+/* ── actionable matching warnings (Profile Phase 4B) ────────────────────────── */
+
+type GuardrailWarningEntry = NonNullable<ProfileResponse["warnings"]>[number];
+
+type WarningSeverityTier = "blocking" | "important" | "recommendation";
+
+const SEVERITY_ORDER: Record<WarningSeverityTier, number> = {
+    blocking: 0,
+    important: 1,
+    recommendation: 2,
+};
+
+const SEVERITY_LABEL_KEY: Record<WarningSeverityTier, TranslationKey> = {
+    blocking: "profileWarnSevBlocking",
+    important: "profileWarnSevImportant",
+    recommendation: "profileWarnSevRecommendation",
+};
+
+/** Profile-owned editable fields → owning section + stable field anchor.
+ *  Keyed by the backend contract's `field` value (stable identifiers — never
+ *  DOM text). Anchors are ids on the field containers in the goals section. */
+const WARNING_FIELD_TARGETS: Record<string, { section: string; anchor: string; labelKey: TranslationKey }> = {
+    target_roles: { section: "goals", anchor: "profile-field-target_roles", labelKey: "profileTargetRoles" },
+    preferred_cities: { section: "goals", anchor: "profile-field-preferred_cities", labelKey: "profileCities" },
+};
+
+/** Matching fields owned by the Settings page — their fix action opens /settings. */
+const SETTINGS_OWNED_FIELDS = new Set(["min_score", "exclude_keywords", "include_keywords", "max_daily_applies"]);
+
+/** Backend is authoritative for severity; anything unknown renders as the
+ *  conservative middle tier (mirrors the backend's own fail-safe). */
+function normalizeSeverity(value: unknown): WarningSeverityTier {
+    return value === "blocking" || value === "recommendation" ? value : "important";
+}
+
+/** Stable identity for defer/restore — never index-based, so a re-fetch that
+ *  reorders or removes other warnings cannot mis-target a deferral. */
+function warningIdentity(w: GuardrailWarningEntry): string {
+    return `${w.code ?? ""}|${w.field ?? ""}|${w.message ?? ""}`;
+}
+
+function ProfileActionableWarnings({
+    warnings,
+    tone,
+    onFieldAction,
+}: {
+    warnings: GuardrailWarningEntry[];
+    tone: Tone;
+    onFieldAction: (section: string, anchor: string, fieldLabel: string) => void;
+}) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+    const palette = tone.palette;
+    // Session-scoped "review later" — deferring is NOT resolving: state lives in
+    // memory only, so deferred warnings return on the next visit, and a save
+    // re-fetch drops entries that were actually fixed.
+    const [deferred, setDeferred] = useState<ReadonlySet<string>>(() => new Set<string>());
+
+    const items = useMemo(
+        () =>
+            warnings
+                .filter((w) => typeof w?.message === "string" && w.message.trim())
+                .map((w) => ({
+                    id: warningIdentity(w),
+                    code: w.code ?? "matching_warning",
+                    field: w.field ?? "",
+                    severity: normalizeSeverity(w.severity),
+                    message: language === "ar" && w.message_ar ? w.message_ar : w.message,
+                    suggestion: language === "ar" && w.suggestion_ar ? w.suggestion_ar : w.suggestion,
+                }))
+                .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]),
+        [warnings, language],
+    );
+
+    if (items.length === 0) return null;
+
+    const visible = items.filter((w) => !deferred.has(w.id));
+    const deferredCount = items.length - visible.length;
+    const summary =
+        visible.length === 1
+            ? t("profileWarnSummaryOne")
+            : t("profileWarnSummaryMany").replace("{count}", String(visible.length));
+
+    const severityStyle = (severity: WarningSeverityTier) => {
+        if (severity === "blocking") {
+            return { border: `1px solid ${tone.destructive}`, color: tone.destructive, background: "transparent" };
+        }
+        if (severity === "important") {
+            return { border: `1px solid ${tone.warning}`, color: tone.warning, background: "transparent" };
+        }
+        return { border: `1px solid ${palette.hair}`, color: palette.ink55, background: "transparent" };
+    };
+
+    return (
+        <section
+            aria-labelledby="profile-warnings-title"
+            className="rounded-[14px] p-4 sm:p-5"
+            style={{ border: `1px solid ${tone.warning}59`, background: tone.warningTint }}
+        >
+            {visible.length > 0 && (
+                <>
+                    <h2
+                        id="profile-warnings-title"
+                        aria-live="polite"
+                        className="m-0 text-[15px] font-semibold leading-snug"
+                        style={{ fontFamily: SERIF, color: palette.ink }}
+                    >
+                        {summary}
+                    </h2>
+                    <p className="mb-0 mt-1 text-[12.5px]" style={{ color: palette.ink70 }}>
+                        {t("profileWarnSummaryHint")}
+                    </p>
+                    <ul className="m-0 mt-3 flex list-none flex-col gap-3 p-0">
+                        {visible.map((item) => {
+                            const target = WARNING_FIELD_TARGETS[item.field];
+                            const opensSettings = !target && SETTINGS_OWNED_FIELDS.has(item.field);
+                            return (
+                                <li
+                                    key={item.id}
+                                    data-warning-code={item.code}
+                                    data-warning-severity={item.severity}
+                                    className="rounded-[10px] p-3"
+                                    style={{ border: `1px solid ${palette.hair}`, background: palette.panel }}
+                                >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span
+                                            className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                                            style={{ fontFamily: MONO, ...severityStyle(item.severity) }}
+                                        >
+                                            {t(SEVERITY_LABEL_KEY[item.severity])}
+                                        </span>
+                                        <p className="m-0 min-w-0 flex-1 text-[13px] font-medium leading-[1.5]" style={{ color: palette.ink }}>
+                                            {item.message}
+                                        </p>
+                                    </div>
+                                    {item.suggestion && (
+                                        <p className="mb-0 mt-1.5 text-[12.5px] leading-[1.5]" style={{ color: palette.ink70 }}>
+                                            {item.suggestion}
+                                        </p>
+                                    )}
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        {target && (
+                                            <button
+                                                type="button"
+                                                className="profile-ed-warn-action rounded-[8px] px-2.5 py-1 text-[12px] font-semibold"
+                                                style={{ border: `1px solid ${palette.hair}`, background: "transparent", color: palette.red, cursor: "pointer" }}
+                                                onClick={() => onFieldAction(target.section, target.anchor, t(target.labelKey))}
+                                            >
+                                                {t("profileWarnGoTo").replace("{target}", t(target.labelKey))}
+                                            </button>
+                                        )}
+                                        {opensSettings && (
+                                            <Link
+                                                href="/settings"
+                                                className="profile-ed-warn-action rounded-[8px] px-2.5 py-1 text-[12px] font-semibold"
+                                                style={{ border: `1px solid ${palette.hair}`, textDecoration: "none", color: palette.red }}
+                                            >
+                                                {t("profileWarnOpenSettings")}
+                                            </Link>
+                                        )}
+                                        {item.severity !== "blocking" && (
+                                            <button
+                                                type="button"
+                                                className="profile-ed-warn-action rounded-[8px] px-2.5 py-1 text-[12px]"
+                                                style={{ border: `1px solid ${palette.hair}`, background: "transparent", color: palette.ink55, cursor: "pointer" }}
+                                                onClick={() => setDeferred((prev) => new Set(prev).add(item.id))}
+                                            >
+                                                {t("profileWarnReviewLater")}
+                                            </button>
+                                        )}
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </>
+            )}
+            {deferredCount > 0 && (
+                <div className={`flex flex-wrap items-center gap-2 ${visible.length > 0 ? "mt-3" : ""}`}>
+                    <p className="m-0 text-[12px]" style={{ color: palette.ink55 }}>
+                        {t("profileWarnDeferredNote").replace("{count}", String(deferredCount))}
+                    </p>
+                    <button
+                        type="button"
+                        className="profile-ed-warn-action rounded-[8px] px-2 py-0.5 text-[12px]"
+                        style={{ border: `1px solid ${palette.hair}`, background: "transparent", color: palette.ink70, cursor: "pointer" }}
+                        onClick={() => setDeferred(new Set<string>())}
+                    >
+                        {t("profileWarnShowDeferred")}
+                    </button>
+                </div>
+            )}
+        </section>
+    );
+}
+
 /* ── sections config ────────────────────────────────────────────────────────── */
 
 // Canonical, stable section slugs. These are the source of truth for the
@@ -562,6 +757,40 @@ export function ProfileEditorial({
         const heading = document.getElementById(`profile-${activeSection}-title`);
         heading?.focus();
     }, [activeSection]);
+
+    /* ── actionable-warning field navigation (Phase 4B) ──────────────────────
+       Selecting a warning jumps to the owning section (same URL-backed push as
+       the rail — unrelated params preserved), then focuses and briefly
+       highlights the exact field container. Runs AFTER the heading-focus
+       effect above, so on a warning-driven jump the final focus target is the
+       field, not the section heading. Screen readers get the move announced
+       via the polite live region below. */
+    const pendingFieldAnchor = useRef<string | null>(null);
+    const [fieldFlash, setFieldFlash] = useState<string | null>(null);
+    const [fieldNavTick, setFieldNavTick] = useState(0);
+    const [fieldNavAnnouncement, setFieldNavAnnouncement] = useState("");
+
+    const goToWarningField = useCallback(
+        (section: string, anchor: string, fieldLabel: string) => {
+            pendingFieldAnchor.current = anchor;
+            if (activeSection !== section) router.push(sectionHref(section));
+            setFieldNavTick((n) => n + 1);
+            setFieldNavAnnouncement(t("profileWarnNavAnnounce").replace("{target}", fieldLabel));
+        },
+        [activeSection, router, sectionHref, t],
+    );
+
+    useEffect(() => {
+        const anchor = pendingFieldAnchor.current;
+        if (!anchor) return;
+        const el = document.getElementById(anchor);
+        if (!el) return; // target section not rendered yet — retried when activeSection updates
+        pendingFieldAnchor.current = null;
+        el.focus();
+        setFieldFlash(anchor);
+        const timeoutId = window.setTimeout(() => setFieldFlash(null), 2400);
+        return () => window.clearTimeout(timeoutId);
+    }, [activeSection, fieldNavTick]);
 
     // Reset the draft whenever a fresh profile arrives (post-save/upload
     // refresh). Render-time adjustment (React's "state from previous renders"
@@ -815,18 +1044,25 @@ export function ProfileEditorial({
                 .profile-editorial .profile-ed-action:focus-visible,
                 .profile-editorial .profile-ed-ghost:focus-visible { outline: 2px solid ${palette.red}; outline-offset: 2px; }
                 .profile-editorial .profile-ed-rail-link { transition: background .12s ease, color .12s ease; }
-                /* GuardrailWarnings ships dark-app amber tints (text-amber-100 /
-                   bg-amber-400/10) that are unreadable on the light editorial
-                   paper. Recolor its [role=alert] box for this palette — a
-                   warning-toned card with ink-legible text — in both themes. */
-                .profile-editorial .profile-ed-warnings [role="alert"] {
-                    border: 1px solid ${tone.warning}59;
-                    background: ${tone.warningTint};
-                    border-radius: 14px;
-                    padding: 14px 16px;
+                .profile-editorial .profile-ed-warn-action { transition: border-color .12s ease, color .12s ease; }
+                .profile-editorial .profile-ed-warn-action:hover { border-color: ${palette.red} !important; }
+                .profile-editorial .profile-ed-warn-action:focus-visible { outline: 2px solid ${palette.red}; outline-offset: 2px; }
+                /* Warning-driven field highlight: a brief accessible outline pulse
+                   on the exact field container after navigation. Under reduced
+                   motion the outline is static (no pulse) and still time-bounded. */
+                .profile-editorial .profile-ed-field-flash {
+                    outline: 2px solid ${tone.warning};
+                    outline-offset: 6px;
+                    border-radius: 12px;
+                    animation: profile-ed-field-flash 0.8s ease-in-out 2;
                 }
-                .profile-editorial .profile-ed-warnings [role="alert"] p { color: ${palette.ink}; }
-                .profile-editorial .profile-ed-warnings [role="alert"] li p + p { color: ${palette.ink70}; }
+                @keyframes profile-ed-field-flash {
+                    0%, 100% { outline-color: ${tone.warning}; }
+                    50% { outline-color: transparent; }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    .profile-editorial .profile-ed-field-flash { animation: none; }
+                }
             ` }} />
 
             {/* unsaved-changes bar (design: sticky sun banner with Save / Discard) */}
@@ -860,9 +1096,18 @@ export function ProfileEditorial({
                 </div>
             )}
 
+            {/* screen-reader announcement for warning-driven field navigation */}
+            <div aria-live="polite" role="status" className="sr-only">
+                {fieldNavAnnouncement}
+            </div>
+
             {profile.warnings && profile.warnings.length > 0 && (
                 <div className="profile-ed-warnings mb-6">
-                    <GuardrailWarnings warnings={profile.warnings} language={language} />
+                    <ProfileActionableWarnings
+                        warnings={profile.warnings}
+                        tone={tone}
+                        onFieldAction={goToWarningField}
+                    />
                 </div>
             )}
 
@@ -1174,7 +1419,12 @@ export function ProfileEditorial({
                     {activeSection === "goals" && (
                     <SectionCard id="goals" num="05" index={4} tone={tone} eyebrow={t("profileEdPrefsEyebrow")} title={t("profileEdPrefsTitle")} help={t("profileEdPrefsHelp")}>
                         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                            <div className="sm:col-span-2">
+                            <div
+                                className={`sm:col-span-2 outline-none ${fieldFlash === "profile-field-target_roles" ? "profile-ed-field-flash" : ""}`}
+                                id="profile-field-target_roles"
+                                data-profile-field="target_roles"
+                                tabIndex={-1}
+                            >
                                 <FieldLabel tone={tone}>{t("profileTargetRoles")}</FieldLabel>
                                 <ChipEditor
                                     idBase="profile-ed-target-role"
@@ -1186,7 +1436,12 @@ export function ProfileEditorial({
                                 />
                                 {errors.target_roles && <FieldError tone={tone}>{t(errors.target_roles)}</FieldError>}
                             </div>
-                            <div className="sm:col-span-2">
+                            <div
+                                className={`sm:col-span-2 outline-none ${fieldFlash === "profile-field-preferred_cities" ? "profile-ed-field-flash" : ""}`}
+                                id="profile-field-preferred_cities"
+                                data-profile-field="preferred_cities"
+                                tabIndex={-1}
+                            >
                                 <FieldLabel tone={tone}>{t("profileCities")}</FieldLabel>
                                 <ChipEditor
                                     idBase="profile-ed-city"
