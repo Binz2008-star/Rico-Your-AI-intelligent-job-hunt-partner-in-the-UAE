@@ -78,6 +78,444 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260718-007 — Stage 1: Neon data-architecture audit + source-of-truth decision record (docs-only)
+
+Status: review (draft PR open; owner approval is the stop condition)
+Owner: Claude (WRITER on `claude/database-audit-results-qcurpe`)
+Branch: `claude/database-audit-results-qcurpe`
+- Audit baseline (evidence gathered at): `main` @ `4ce678b6`
+- Current PR base after reconciliation with main: `main` @ `197d946`
+- PR head before this correction pass: `c3cdb95`
+Issue/PR: Stage 1 audit PR #1160 (docs-only)
+Traceability: Vision: Rico Career OS — trustworthy user data
+→ Epic: Neon data architecture remediation (DEC-20260718-001)
+→ Milestone: M0 — audit + canonical decisions
+→ Phase: Phase 0 (evidence)
+→ Proposed PR objective: publish the verified audit + proposed decision
+  matrix + phased task ledger, docs-only
+→ Task: TASK-20260718-007
+
+#### Objective
+Produce the verified, read-only Neon production architecture audit and the
+proposed source-of-truth decision matrix; no production or runtime change.
+
+#### Scope / files
+- `AI_WORKSPACE/AUDITS/2026-07-18-neon-data-architecture-audit.md` (new)
+- `AI_WORKSPACE/DECISIONS.md` (DEC-20260718-001, proposed)
+- `AI_WORKSPACE/TASKS.md` (this ledger)
+
+#### Risks
+Docs-only; only risk is stale numbers — every figure is dated 2026-07-18 and
+sourced (repo `file:line` or aggregate live query).
+
+#### Acceptance criteria
+- [x] Every material claim carries repo or aggregate-DB evidence
+- [x] No PII/secrets in the diff (aggregate counts only)
+- [x] No runtime files changed; no SQL beyond SELECT/catalog reads
+- [ ] Owner approves DEC-20260718-001 rows (moves to Accepted)
+
+#### Rollback plan
+- Before merge: close PR #1160 without merge; production and runtime remain
+  unchanged.
+- After squash merge: revert the resulting squash-merge commit.
+
+Dependencies: none. Production impact: none. Neon changes: none.
+Documentation impact: adds the canonical audit + proposed decision + phased
+task ledger (Phases 1–7 below).
+
+### TASK-20260718-008 — Phase 1 (umbrella): protect and document the production Neon branch
+
+Status: proposed (execution gated only on explicit owner approval of branch
+protection itself — NOT on acceptance of the full DEC-20260718-001 matrix)
+Owner: owner-gated (Neon console) with agent-prepared checklist
+Traceability: Vision: Rico Career OS — trustworthy user data
+→ Epic: Neon data architecture remediation (DEC-20260718-001)
+→ Milestone: M1 — production containment
+→ Phase: Phase 1 (single-slice milestone)
+→ Proposed PR objective: see slice 1A (the only slice)
+→ Task: TASK-20260718-008 (subtask 008-1A)
+
+A Phase is an umbrella milestone, not a PR. Each slice = one PR / one change
+window with exactly one objective. Slices are never combined.
+
+#### Slice 1A — enable production branch protection
+- **Objective (one):** turn on Neon branch protection for `production`
+  (`br-restless-cherry-amq6wj7o`) and document the branch/backup model.
+- **Scope:** one Neon console setting + one AI_WORKSPACE doc section; no
+  schema, no code, no data.
+- **Risk:** preview-branch automation (Vercel/GitHub create children of
+  production — 216 live examples) must be confirmed unaffected first.
+- **Acceptance:** branch shows `protected: true`; a test preview branch still
+  creates successfully; branch/backup model documented.
+- **Rollback:** toggle protection off (one console action, documented).
+- **Depends on (only):** (1) explicit owner approval; (2) verification that
+  protection does not break Vercel/GitHub preview-branch creation; (3) the
+  documented toggle-off rollback above. NOT gated on Neon Data API status,
+  the Render `DATABASE_URL` role, or acceptance of the full
+  DEC-20260718-001 matrix — those verifications live exclusively in slice
+  2A (TASK-20260718-009). **Production impact:** none to data.
+  **Docs impact:** branch model section in AI_WORKSPACE.
+
+### TASK-20260718-009 — Phase 2 (umbrella): database access boundary and least privilege
+
+Status: proposed
+Owner: agent-prepared on a non-production Neon branch; owner-gated cutover
+Traceability: Vision: Rico Career OS — trustworthy user data
+→ Epic: Neon data architecture remediation (DEC-20260718-001)
+→ Milestone: M2 — least-privilege access boundary
+→ Phase: Phase 2 (umbrella; slices 2A–2E, one PR each)
+→ Proposed PR objectives: per slice below
+→ Task: TASK-20260718-009 (subtasks 009-2A … 009-2E)
+
+Never combined: runtime-role creation, Render cutover, grant revocation, and
+RLS rollout are four separate change windows.
+Umbrella docs impact: access model documented in AI_WORKSPACE.
+
+#### Slice 2A — verify Data API and runtime access paths (read-only)
+- **Objective (one):** record Data API enabled/disabled state (console) and
+  inventory every path that connects to `neondb` (Render, workflows, MCP,
+  previews), including the role each uses.
+- **Scope:** read-only verification + one docs update. **Risk:** none
+  (read-only). **Acceptance:** audit §14 items 1–2 closed with evidence.
+- **Rollback:** n/a. **Depends on:** TASK-008. **Production impact:** none.
+
+#### Slice 2B — create and test a limited runtime role (non-production)
+- **Objective (one):** create the least-privilege FastAPI role and prove the
+  full backend test suite + API smoke green under it on a Neon test branch.
+- **Scope:** role + grants on a test branch only; zero production change.
+- **Risk:** under-granting breaks runtime paths — that is what the test
+  branch is for. **Acceptance:** suite + smoke green under the new role.
+- **Rollback:** delete the test branch. **Depends on:** 2A.
+- **Production impact:** none.
+
+#### Slice 2C — cut Render to the limited role
+- **Objective (one):** switch Render's `DATABASE_URL` to the proven limited
+  role in one change window.
+- **Scope:** one env-var change; no code. **Risk:** missed grant surfaces in
+  production — mitigated by 2B parity + post-cutover smoke.
+- **Acceptance:** `/health`, auth, chat, applications smoke green; live
+  sessions show the new role. **Rollback:** restore the previous connection
+  string (instant). **Depends on:** 2B. **Production impact:** one
+  change window.
+
+#### Slice 2D — revoke unnecessary `authenticated` grants
+- **Objective (one):** revoke the blanket 44-table CRUD from `authenticated`
+  (and review `anonymous`), keeping only what 2A's inventory proves needed.
+- **Scope:** REVOKE statements, staged on the test branch first. **Risk:**
+  breaking a legitimate Data-API consumer — none is known; 2A is the guard.
+- **Acceptance:** grants match the documented access model; runtime
+  unaffected. **Rollback:** re-GRANT from the recorded previous state.
+- **Depends on:** 2C. **Production impact:** one change window.
+
+#### Slice 2E — introduce tested RLS policies incrementally
+- **Objective (one):** add user-scoping RLS policies table-group by
+  table-group, each group with cross-user denial tests on the test branch
+  before production.
+- **Scope:** policies only; never a bulk flip; the 17 policy-less
+  RLS-enabled tables are regularized in the same passes. **Risk:** a wrong
+  policy blocks legitimate access — per-group rollout keeps blast radius
+  small. **Acceptance:** cross-user read/write proven denied per group;
+  product smoke green after each group. **Rollback:** drop the group's
+  policies. **Depends on:** 2C (limited role in place; RLS is meaningless
+  under BYPASSRLS). **Production impact:** one change window per group.
+
+### TASK-20260718-010 — Phase 3 (umbrella): canonical identity reconciliation
+
+Status: proposed
+Traceability: Vision: Rico Career OS — trustworthy user data
+→ Epic: Neon data architecture remediation (DEC-20260718-001)
+→ Milestone: M3 — one identity spine (`rico_users.id` UUID)
+→ Phase: Phase 3 (umbrella; slices 3A–3E, one PR each)
+→ Proposed PR objectives: per slice below
+→ Task: TASK-20260718-010 (subtasks 010-3A … 010-3E)
+
+Never combined: identity reporting, data reconciliation, merge
+implementation, and constraints are separate PRs.
+Umbrella docs impact: identity map updated in audit + ARCHITECTURE.
+
+#### Slice 3A — identity mapping report (read-only)
+- **Objective (one):** produce the full identifier-family mapping report
+  (users ↔ rico_users ↔ text-keyed tables ↔ guests), aggregate-only.
+- **Scope:** read-only queries + one AI_WORKSPACE report. **Risk:** none.
+- **Acceptance:** every table's identity key mapped; unlinkable rows
+  itemized by class. **Rollback:** n/a. **Depends on:** DEC approval.
+- **Production impact:** none.
+
+#### Slice 3B — duplicate-email resolution plan
+- **Objective (one):** dry-run resolution plan for the 3 duplicate-email
+  groups in `rico_users` (which row survives, where children re-point).
+- **Scope:** plan + dry-run report; no writes until owner approves.
+- **Risk:** wrong merge joins two real people — exact verified-email match
+  only. **Acceptance:** owner-approved per-group plan. **Rollback:** n/a
+  (docs). **Depends on:** 3A. **Production impact:** none (execution rides
+  the 3C window).
+
+#### Slice 3C — orphan/guest classification and reconciliation
+- **Objective (one):** classify and reconcile the 121 onboarding + 12
+  job-context + 2 document-context unlinkable rows (link, mark
+  guest-expired, or archive) with a reviewed idempotent script.
+- **Scope:** one scripted data window, backup branch first; script logs
+  every row touched. **Risk:** mislinking a guest row to the wrong account —
+  linking requires an exact-key match, else classify-not-link.
+- **Acceptance:** unlinkable counts → 0 or documented-guest; no orphan rows
+  introduced. **Rollback:** restore from the pre-window backup branch.
+- **Depends on:** 3B approved. **Production impact:** one data change
+  window.
+
+#### Slice 3D — implement the real guest/auth identity merge
+- **Objective (one):** replace the no-op `_attempt_identity_merge`
+  (`src/agent/identity/resolver.py:194–219`) with a real merge using the
+  044 `guest_identity_claims` single-owner invariant.
+- **Scope:** runtime code + tests; no data migration in this PR. **Risk:**
+  merge races — 044's PK + same-transaction claim is the guard, covered by
+  tests. **Acceptance:** guest→auth merge works end-to-end in tests; a
+  second claim on the same guest fails closed. **Rollback:** revert the
+  code PR. **Depends on:** 3C. **Production impact:** deploy only.
+
+#### Slice 3E — add identity constraints
+- **Objective (one):** enforce what 3A–3D made true:
+  `rico_profiles.user_id`, `rico_job_recommendations.user_id`,
+  `rico_chat_history.user_id` → `CHECK … NOT VALID → VALIDATE →
+  SET NOT NULL` (no table rewrite).
+- **Scope:** one additive constraint migration. **Risk:** validation fails
+  if stragglers exist — 3C acceptance is the precondition.
+- **Acceptance:** constraints VALID; drift signature added. **Rollback:**
+  drop the constraints (non-destructive). **Depends on:** 3C, 3D.
+- **Production impact:** one change window.
+
+### TASK-20260718-011 — Phase 4 (umbrella): application lifecycle reconciliation
+
+Status: proposed
+Traceability: Vision: Rico Career OS — trustworthy user data
+→ Epic: Neon data architecture remediation (DEC-20260718-001)
+→ Milestone: M4 — one application ledger (`rico_job_recommendations`)
+→ Phase: Phase 4 (umbrella; slices 4A–4E, one PR each)
+→ Proposed PR objectives: per slice below
+→ Task: TASK-20260718-011 (subtasks 011-4A … 011-4E)
+
+Never combined: dry-run, reconciliation writes, write-freeze, linkage, and
+constraints are separate PRs. Umbrella docs impact: lifecycle map updated.
+
+#### Slice 4A — lifecycle reconciliation dry-run
+- **Objective (one):** produce the row-by-row dry-run report for the 5
+  context-`applied` + 2 legacy-`applied` + 1 `interview_scheduled` records
+  (the ujc→rjr match is heuristic — no shared key — so every row is
+  resolved explicitly, never bulk-matched).
+- **Scope:** read-only report. **Risk:** none. **Acceptance:**
+  owner-approved disposition per row. **Rollback:** n/a.
+- **Depends on:** TASK-010 (canonical user resolution). **Production
+  impact:** none.
+
+#### Slice 4B — reconcile approved records
+- **Objective (one):** write the 4A-approved records into
+  `rico_job_recommendations` via a reviewed idempotent script.
+- **Scope:** one scripted data window, backup branch first. **Risk:**
+  double-insert — the `(user_id, job_key)` unique upsert path is the guard.
+- **Acceptance:** canonical table reflects every real application; quota/
+  stats counts match. **Rollback:** restore from the pre-window backup
+  branch. **Depends on:** 4A. **Production impact:** one data change window.
+
+#### Slice 4C — freeze legacy `applications` writes
+- **Objective (one):** add a repo-layer guard so no code path writes new
+  rows to legacy `applications`.
+- **Scope:** code + tests only. **Risk:** a legacy pipeline path still
+  expecting writes — inventory first, guard logs instead of raising.
+- **Acceptance:** guard covered by tests; zero new rows in production over
+  an observation window. **Rollback:** revert the code PR.
+- **Depends on:** 4B. **Production impact:** deploy only.
+
+#### Slice 4D — shared job identity/linkage
+- **Objective (one):** give `user_job_context` a durable link to canonical
+  job identity (job_key or FK) so context↔ledger matching is exact, ending
+  the heuristic gap 4A worked around.
+- **Scope:** one additive migration + backfill script + repo update.
+- **Risk:** wrong backfill link — backfill only on exact-URL matches, else
+  leave NULL. **Acceptance:** new context rows always carry the link;
+  backfill report reviewed. **Rollback:** additive column, harmless to
+  leave; revert code. **Depends on:** 4B. **Production impact:** one
+  change window.
+
+#### Slice 4E — status constraints and lifecycle smoke
+- **Objective (one):** add status CHECK constraints
+  (`rico_job_recommendations`, `user_job_context`; `NOT VALID → VALIDATE`)
+  and run the full lifecycle smoke
+  (search → open → prepared → applied → follow-up → interview).
+- **Scope:** one constraint migration + smoke run. **Risk:** unknown status
+  values — live scan showed none (audit §10). **Acceptance:** constraints
+  VALID; smoke green; drift signatures added. **Rollback:** drop
+  constraints. **Depends on:** 4B–4D. **Production impact:** one change
+  window.
+
+### TASK-20260718-012 — Phase 5 (umbrella): migration drift resolution
+
+Status: proposed
+Traceability: Vision: Rico Career OS — trustworthy user data
+→ Epic: Neon data architecture remediation (DEC-20260718-001)
+→ Milestone: M5 — zero silent drift
+→ Phase: Phase 5 (umbrella; slices 5A–5D, one PR each)
+→ Proposed PR objectives: per slice below
+→ Task: TASK-20260718-012 (subtasks 012-5A … 012-5D)
+
+Never combined: the Gmail 043 window, the 034 index cleanup, and the
+drift-detector code change are separate PRs.
+Umbrella docs impact: drift-detector README section.
+
+#### Slice 5A — Gmail migration 043 change window
+- **Objective (one):** apply 043 to production in an owner change window
+  (additive DDL), before any `RICO_ENABLE_GMAIL_SYNC=true`.
+- **Scope:** one migration apply + drift verification; no code, no flag
+  change. **Risk:** low (additive, idempotent); backup branch first per the
+  044 pattern. **Acceptance:** all seven 043 drift signatures PRESENT.
+- **Rollback:** documented DROP rollback in the migration footer.
+- **Depends on:** owner window; coordinates with #1159 (frontend-only,
+  feature stays disabled). **Production impact:** additive DDL.
+
+#### Slice 5B — finish migration 034
+- **Objective (one):** run the two remaining
+  `DROP INDEX CONCURRENTLY IF EXISTS` statements
+  (`idx_rico_job_recommendations_user_job_key`,
+  `idx_rico_profiles_user_id`) — both live-verified as non-unique shadows
+  of constraint-owned unique indexes (audit §11 Class B).
+- **Scope:** two concurrent drops, one window. **Risk:** minimal — covered
+  by the surviving unique indexes; EXPLAIN spot-check first anyway.
+- **Acceptance:** both absent; upsert path (`ON CONFLICT`) smoke green.
+- **Rollback:** recreate from saved definitions. **Depends on:** owner
+  window. **Production impact:** two concurrent index drops.
+
+#### Slice 5C — DROP/absence drift detection
+- **Objective (one):** extend `scripts/check_migration_drift.py` with
+  absence checks so DROP-only migrations (034 and future ones) can no
+  longer stay silently unapplied.
+- **Scope:** detector code + unit tests only. **Risk:** false alarms —
+  covered by tests. **Acceptance:** detector flags a simulated
+  unapplied-DROP; 034 signatures included. **Rollback:** revert the code
+  PR. **Depends on:** none (can land before 5B; it would then correctly
+  report 034 drift until 5B runs). **Production impact:** none.
+
+#### Slice 5D — verify scheduled drift alerting
+- **Objective (one):** confirm the drift check runs on a schedule against
+  production and its failure alert reaches the admin/dev channel
+  (`admin_ci` routing), fixing the wiring if absent.
+- **Scope:** CI workflow verification/config only. **Risk:** none.
+- **Acceptance:** a forced failure produces an admin alert; schedule
+  evidence recorded. **Rollback:** revert workflow change. **Depends on:**
+  5C. **Production impact:** none.
+
+### TASK-20260718-013 — Phase 6 (umbrella): index and retention cleanup
+
+Status: proposed
+Traceability: Vision: Rico Career OS — trustworthy user data
+→ Epic: Neon data architecture remediation (DEC-20260718-001)
+→ Milestone: M6 — lean indexes + documented retention
+→ Phase: Phase 6 (umbrella; slices 6A–6D, one PR each)
+→ Proposed PR objectives: per slice below
+→ Task: TASK-20260718-013 (subtasks 013-6A … 013-6D)
+
+Never combined: index cleanup and retention automation are separate PRs.
+Umbrella docs impact: retention policy in AI_WORKSPACE.
+
+#### Slice 6A — index classification
+- **Objective (one):** complete the Class A–D inventory of audit §11 —
+  including Class C overlap/partial cases not captured by the
+  signature-identical query — with per-index EXPLAIN evidence, code-path
+  notes (e.g. the `ON CONFLICT` partial unique), and drift-signature
+  membership.
+- **Scope:** read-only analysis on a Neon test branch + docs. **Risk:**
+  none. **Acceptance:** every index classified with an evidence line;
+  drop-list is the explicit Class A + proven Class B shadows only.
+- **Rollback:** n/a. **Depends on:** TASK-012 (5B done first so the 034
+  leftovers exit the list). **Production impact:** none.
+
+#### Slice 6B — small concurrent index-drop batches
+- **Objective (one):** drop only the indexes independently proven redundant
+  in 6A, in small `DROP INDEX CONCURRENTLY` batches (never Class D
+  constraint-owned indexes; never on `idx_scan=0` or signature-listing
+  evidence alone).
+- **Scope:** one batch per window, each preceded by an EXPLAIN re-check.
+- **Risk:** removing a useful planner path — per-index evidence + small
+  batches + saved definitions bound it. **Acceptance:** every 6A-approved
+  index removed; no query-plan regression in the post-batch smoke; all
+  constraint-owned indexes and the upsert partial unique untouched.
+  (The goal is NOT zero overlapping signatures — only proven-redundant
+  removals.)
+- **Rollback:** recreate from saved definitions. **Depends on:** 6A.
+- **Production impact:** concurrent drops only.
+
+#### Slice 6C — retention policy
+- **Objective (one):** document owner-approved retention windows for
+  expired `password_reset_tokens` (16/16 expired live),
+  `email_verification_tokens` (130/132), `cv_upload_artifacts` (2/2),
+  `paddle_checkout_sessions` (13/13), plus webhook/audit log aging.
+- **Scope:** docs only (AI_WORKSPACE). **Risk:** none. **Acceptance:**
+  policy covers every temporary-record table with a window and a legal/
+  audit rationale. **Rollback:** n/a. **Depends on:** DEC approval.
+- **Production impact:** none.
+
+#### Slice 6D — cleanup worker/schedule
+- **Objective (one):** implement the 6C policy as a feature-flagged,
+  batched, metric-emitting scheduled cleanup.
+- **Scope:** worker/cron code + tests; flag default OFF, enabled in its own
+  window. **Risk:** over-deletion — batch deletes with policy-derived
+  predicates + dry-run mode + metrics. **Acceptance:** expired backlog
+  drains; steady-state counts stay bounded; metrics visible.
+- **Rollback:** flag OFF. **Depends on:** 6C. **Production impact:**
+  scheduled deletes of expired records only.
+
+### TASK-20260718-014 — Phase 7 (umbrella): legacy table isolation or retirement
+
+Status: proposed
+Traceability: Vision: Rico Career OS — trustworthy user data
+→ Epic: Neon data architecture remediation (DEC-20260718-001)
+→ Milestone: M7 — every table maps to a class in audit §12
+→ Phase: Phase 7 (umbrella; slices 7A–7D — four INDEPENDENT decisions,
+  never one PR)
+→ Proposed PR objectives: per slice below
+→ Task: TASK-20260718-014 (subtasks 014-7A … 014-7D)
+
+Never combined: `leads`, Stripe retirement, legacy `applications`
+retirement, and `search_context` are independent decisions and PRs.
+Umbrella docs impact: final inventory update in the audit.
+
+#### Slice 7A — `leads` isolation
+- **Objective (one):** owner confirms data ownership (zero repo code paths;
+  sibling `eco-technology-leads` Neon project exists), then export/move the
+  table out of the Rico production DB.
+- **Scope:** export → verify → move/drop, one window. **Risk:** deleting
+  unconfirmed-ownership data — export precedes any removal; ownership
+  sign-off is a hard gate. **Acceptance:** `leads` no longer in `neondb`;
+  export retained. **Rollback:** re-import the export. **Depends on:**
+  owner confirmation. **Production impact:** one isolation window.
+
+#### Slice 7B — Stripe-era retirement
+- **Objective (one):** read-only freeze then retirement plan for
+  `user_subscriptions` / `subscription_events` (aligns with #1066; already
+  unused for entitlement per `src/subscription_plans.py:90–119`).
+- **Scope:** freeze guard + plan doc; the eventual drop is its own
+  owner-signed window. **Risk:** losing billing history — archive export
+  before any drop. **Acceptance:** no code writes to Stripe tables;
+  retirement plan owner-signed. **Rollback:** revert guard.
+- **Depends on:** #1066 owner decision. **Production impact:** none until
+  the signed drop window.
+
+#### Slice 7C — legacy `applications` pipeline retirement plan
+- **Objective (one):** retirement plan for the legacy pipeline trio
+  (`applications`, `auto_apply_attempts`, `weekly_reports`) after the
+  lifecycle ledger is reconciled.
+- **Scope:** plan + archival strategy; drops are separate signed windows.
+- **Risk:** legacy pipeline still reading — usage inventory first.
+- **Acceptance:** plan owner-signed; archives defined. **Rollback:** n/a
+  (docs until execution). **Depends on:** TASK-011 (4B/4C done).
+- **Production impact:** none until execution.
+
+#### Slice 7D — `search_context` decision
+- **Objective (one):** delete-or-wire decision for dormant `search_context`
+  (repo docstring declares it DORMANT; table live with 0 relevant rows).
+- **Scope:** decision + either a removal migration or an explicit wiring
+  plan — never silently left ambiguous. **Risk:** none (dormant, unused).
+- **Acceptance:** DECISIONS.md entry; table either scheduled for removal or
+  assigned an owner feature. **Rollback:** table is recreatable from
+  migration history. **Depends on:** DEC approval. **Production impact:**
+  none until execution.
 <!-- Reconciliation 2026-07-18: the six PRs below merged to main after
 TASK-008 (#1145) and were not yet in this ledger. Recorded here as the
 canonical per-PR record. Merge order on main (oldest→newest): #1153 →

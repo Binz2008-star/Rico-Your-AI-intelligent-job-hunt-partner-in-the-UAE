@@ -26,6 +26,67 @@ Related task: TASK-YYYYMMDD-001
 - [ ]
 ```
 
+## Proposed decisions
+
+### DEC-20260718-001 — Canonical Neon data-architecture source-of-truth matrix
+
+Status: proposed (owner approval required; acceptance = owner approval of the
+Stage 1 audit PR plus explicit sign-off on each row below)
+Date: 2026-07-18
+Owner: Roben (evidence prepared by Claude, Stage 1 DB audit)
+Related task: TASK-20260718-007; audit:
+`AI_WORKSPACE/AUDITS/2026-07-18-neon-data-architecture-audit.md`
+
+#### Context
+
+The 2026-07-18 read-only audit of Neon production (`robenjob` /
+`br-restless-cherry-amq6wj7o`) verified identity fragmentation across four
+identifier families, a three-way application-lifecycle contradiction,
+confirmed migration drift (043 absent, 034 partial), an owner-role/no-RLS
+access model, and an orphaned `leads` table. Remediation cannot start until
+one source of truth per domain is decided.
+
+#### Decision (proposed matrix)
+
+| Domain | Source of truth | Evidence |
+|---|---|---|
+| Authenticated identity spine | `rico_users.id` (UUID), mapped from `users`/JWT email; text-keyed tables link via a mapping layer, not a rewrite | audit §4 |
+| Application lifecycle | `rico_job_recommendations` (already canonical in code via `applications_repo` + `RicoDB._CANONICAL_APPS_CTE`) | audit §5 |
+| `user_job_context` role | discovery/conversation context ONLY — never an application ledger | audit §5 |
+| Legacy `applications` table | frozen legacy-pipeline artifact; no new writes; structurally single-tenant (no `user_id`, global `UNIQUE(job_link)`); retire in Phase 7 | audit §5, §12 |
+| Billing entitlement | `paddle_subscriptions` via `resolve_effective_user_plan` (`src/subscription_plans.py:90`); Stripe-era tables read-only legacy; `subscription_intents` = manual-mode lead capture, never entitlement | audit §6 |
+| Legacy tables policy | classify (active / transitional / legacy / dormant / orphaned), freeze, isolate — never delete without proven code-path absence AND owner data-ownership confirmation (`leads` has zero code paths but unconfirmed ownership) | audit §12 |
+| Production DB access model | least-privilege runtime role for FastAPI (replace BYPASSRLS owner); revoke blanket `authenticated` CRUD; RLS policies designed and cross-user-denial-tested on a non-production branch before any production flip | audit §8 |
+
+> **Study-2 gate:** the authenticated identity-spine row (first row above)
+> cannot move to ACCEPTED until **Study 2 — Identity, Authentication,
+> Authorization & Session Architecture Audit** verifies or revises that
+> decision. The remaining rows may be accepted independently on owner
+> approval.
+
+#### Consequences
+
+- Positive: every remediation phase (TASK-20260718-008…014) inherits one
+  unambiguous target per domain; ends email-vs-UUID drift in new code.
+- Negative/trade-off: a mapping layer must be built and maintained for the
+  text-keyed tables; Phase 2 role migration carries a production change
+  window.
+
+#### Follow-up
+
+- [ ] Phase 1 branch protection (TASK-20260718-008, slice 1A) proceeds on
+      explicit owner approval alone — it is NOT gated on this matrix, on
+      Neon Data API status, or on the Render runtime role
+- [ ] Neon Data API status and Render `DATABASE_URL` runtime-role
+      verification happen exclusively in Phase 2 slice 2A
+      (TASK-20260718-009); they decide whether the P0 conditional in
+      audit §8 is live
+- [ ] `leads` data ownership confirmation gates only slice 7A
+      (TASK-20260718-014)
+- [ ] Identity-spine row: stays PROPOSED until Study 2 (Identity/Auth/
+      Session architecture audit) verifies or revises it; on owner approval
+      the remaining rows may move to Accepted independently
+
 ## Accepted decisions
 
 ### DEC-20260717-001 — `/command` is unified with the shared WorkspaceShell; light-first default, dark by choice (implements DEC-20260716-001 for `/command`)
