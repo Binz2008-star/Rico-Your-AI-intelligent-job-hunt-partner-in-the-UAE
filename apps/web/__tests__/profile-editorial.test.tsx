@@ -6,16 +6,55 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders as render } from "./test-utils";
 
 /**
- * /profile editorial rebuild (owner design 2026-07-17).
+ * /profile editorial rebuild (owner design 2026-07-17) + TRUE section
+ * navigation (Phase 3, 2026-07-18).
  *
- * Pins the real-data wiring contract:
- *  - every rendered fact comes from ProfileResponse / user files /
- *    subscription APIs (no sample data, no retired plan copy)
- *  - edits accumulate into one dirty draft; Save issues a single PATCH with
- *    only the changed fields; Discard restores the loaded profile
- *  - validation: numeric salary/years, max 4 target roles, UAE-only cities
- *  - documents: set-primary and two-step delete hit the real endpoints
+ * Pins:
+ *  - real-data wiring: every rendered fact comes from ProfileResponse / user
+ *    files / subscription APIs (no sample data, no retired plan copy)
+ *  - dirty draft: edits accumulate; Save issues a single PATCH with only the
+ *    changed fields; Discard restores the loaded profile; numeric/role/city
+ *    validation
+ *  - TRUE section navigation: exactly one section renders, driven by ?section=;
+ *    valid/invalid/missing fallback + canonicalization; unrelated params (incl.
+ *    Gmail callback) preserved; unsaved edits survive section switches; dirty
+ *    leave/refresh is guarded; scroll no longer drives the active section.
  */
+
+// Stateful next/navigation mock: `?section=` lives in a tiny external store so
+// router.push/replace re-render the consumer through useSyncExternalStore,
+// mirroring real App-Router navigation (deep link, switch, back-to-URL).
+const { navState, pushMock, replaceMock, setUrl } = vi.hoisted(() => {
+    const state = { params: new URLSearchParams(), listeners: new Set<() => void>() };
+    const set = (url: string) => {
+        const qs = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
+        state.params = new URLSearchParams(qs);
+        state.listeners.forEach((l) => l());
+    };
+    return {
+        navState: state,
+        setUrl: set,
+        pushMock: vi.fn((url: string) => set(url)),
+        replaceMock: vi.fn((url: string) => set(url)),
+    };
+});
+
+vi.mock("next/navigation", async () => {
+    const React = await import("react");
+    return {
+        usePathname: () => "/profile",
+        useRouter: () => ({ push: pushMock, replace: replaceMock }),
+        useSearchParams: () =>
+            React.useSyncExternalStore(
+                (cb: () => void) => {
+                    navState.listeners.add(cb);
+                    return () => navState.listeners.delete(cb);
+                },
+                () => navState.params,
+                () => navState.params,
+            ),
+    };
+});
 
 const {
     fetchProfileMock,
@@ -162,8 +201,22 @@ const FREE_SUBSCRIPTION = {
     is_active: false,
 };
 
+/** Seed the initial URL before render (deep-link tests). */
+function seedUrl(query = "") {
+    navState.params = new URLSearchParams(query);
+}
+
+/** Navigate sections via the mobile selector (the mocked Link is a plain <a>,
+ *  so the selector is the interactive control that drives router.push). */
+async function gotoSection(user: ReturnType<typeof userEvent.setup>, id: string) {
+    await user.selectOptions(screen.getByRole("combobox", { name: "Sections" }), id);
+}
+
+const sectionHeading = (name: string) => screen.queryByRole("heading", { name });
+
 beforeEach(() => {
     vi.clearAllMocks();
+    seedUrl(""); // clean /profile by default
     fetchProfileMock.mockResolvedValue(BASE_PROFILE);
     listUserFilesMock.mockResolvedValue(FILES);
     getMySubscriptionMock.mockResolvedValue(ACTIVE_SUBSCRIPTION);
@@ -178,56 +231,61 @@ async function renderLoaded() {
 }
 
 describe("profile editorial — real-data rendering", () => {
-    it("renders hero identity, sections, documents, and billing from the real APIs only", async () => {
+    it("renders hero identity and the default About section from the real APIs only", async () => {
         await renderLoaded();
 
-        // hero: honest verified-EMAIL badge (backend verifies email ownership,
-        // not identity) + strength from completeness_score
+        // hero: honest verified-EMAIL badge + strength from completeness_score
         expect(screen.getByText("Verified email")).toBeInTheDocument();
         expect(screen.queryByText(/Verified identity/)).toBeNull();
         expect(screen.getByRole("progressbar", { name: "Profile strength" })).toHaveAttribute("aria-valuenow", "82");
         expect(screen.getByText("Analyst · Synthetic Co")).toBeInTheDocument();
 
-        // numbered editorial sections
-        for (const title of ["About you", "Career", "Skills", "CV & documents", "Career goals", "Integrations", "Account & security", "Billing"]) {
-            expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
-        }
-
-        // form fields bound to the loaded profile
+        // default section = About; its fields are bound to the loaded profile
+        expect(sectionHeading("About you")).toBeInTheDocument();
         expect(screen.getByLabelText("Name")).toHaveValue("Maryam Haddad");
         expect(screen.getByLabelText("Phone")).toHaveValue("+971500000000");
-        expect(screen.getByLabelText("Current role")).toHaveValue("Analyst");
-
-        // documents from /api/v1/user/files
-        await waitFor(() => expect(screen.getByText("Maryam_CV.pdf")).toBeInTheDocument());
-        expect(screen.getByText("Cover_letter.docx")).toBeInTheDocument();
-        expect(screen.getByText("Primary")).toBeInTheDocument();
-
-        // billing facts come from GET /api/v1/subscription/me
-        await waitFor(() => expect(screen.getByText("Rico Monthly")).toBeInTheDocument());
-        expect(screen.getByText(/21\.50/)).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: "Manage plan" })).toHaveAttribute("href", "/subscription");
-
-        // authoritative billing facts: retired plan copy must never render
-        expect(screen.queryByText(/Rico Pro/)).toBeNull();
-        expect(screen.queryByText(/AED 29|AED 49|\$29/)).toBeNull();
 
         // no unsaved-changes bar before any edit
         expect(screen.queryByTestId("profile-ed-savebar")).toBeNull();
     });
 
+    it("documents section shows files from /api/v1/user/files after navigating to it", async () => {
+        const user = userEvent.setup();
+        await renderLoaded();
+        await gotoSection(user, "documents");
+
+        await waitFor(() => expect(screen.getByText("Maryam_CV.pdf")).toBeInTheDocument());
+        expect(screen.getByText("Cover_letter.docx")).toBeInTheDocument();
+        expect(screen.getByText("Primary")).toBeInTheDocument();
+    });
+
+    it("billing section shows authoritative subscription facts (no retired plan copy)", async () => {
+        const user = userEvent.setup();
+        await renderLoaded();
+        await gotoSection(user, "billing");
+
+        await waitFor(() => expect(screen.getByText("Rico Monthly")).toBeInTheDocument());
+        expect(screen.getByText(/21\.50/)).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Manage plan" })).toHaveAttribute("href", "/subscription");
+        expect(screen.queryByText(/Rico Pro/)).toBeNull();
+        expect(screen.queryByText(/AED 29|AED 49|\$29/)).toBeNull();
+    });
+
     it("shows the Free plan card only after the API confirms an inactive subscription", async () => {
         getMySubscriptionMock.mockResolvedValue(FREE_SUBSCRIPTION);
+        const user = userEvent.setup();
         await renderLoaded();
+        await gotoSection(user, "billing");
         await waitFor(() => expect(screen.getByText("Free")).toBeInTheDocument());
         expect(screen.queryByText("Rico Monthly")).toBeNull();
-        expect(screen.getByRole("link", { name: "Manage plan" })).toHaveAttribute("href", "/subscription");
     });
 
     it("never shows 'Free' while the subscription request is still loading", async () => {
         getMySubscriptionMock.mockReturnValue(new Promise(() => {}));
+        const user = userEvent.setup();
         await renderLoaded();
-        expect(screen.getByRole("heading", { name: "Billing" })).toBeInTheDocument();
+        await gotoSection(user, "billing");
+        expect(sectionHeading("Billing")).toBeInTheDocument();
         expect(screen.getByText("Loading...")).toBeInTheDocument();
         expect(screen.queryByText("Free")).toBeNull();
         expect(screen.queryByText("Rico Monthly")).toBeNull();
@@ -235,10 +293,143 @@ describe("profile editorial — real-data rendering", () => {
 
     it("shows an explicit unavailable state (never 'Free') when the subscription request fails", async () => {
         getMySubscriptionMock.mockRejectedValue(new Error("network"));
+        const user = userEvent.setup();
         await renderLoaded();
+        await gotoSection(user, "billing");
         expect(await screen.findByText("Billing status unavailable — try again later.")).toBeInTheDocument();
         expect(screen.queryByText("Free")).toBeNull();
-        expect(screen.getByRole("link", { name: "Manage plan" })).toHaveAttribute("href", "/subscription");
+    });
+});
+
+describe("profile editorial — true section navigation", () => {
+    it("renders exactly one section at a time", async () => {
+        await renderLoaded();
+        expect(sectionHeading("About you")).toBeInTheDocument();
+        // no other section heading is in the DOM (rail labels are links, not headings)
+        for (const other of ["Career", "Skills", "CV & documents", "Career goals", "Integrations", "Account & security", "Billing"]) {
+            expect(sectionHeading(other)).toBeNull();
+        }
+    });
+
+    it("every valid section is reachable and renders alone", async () => {
+        const user = userEvent.setup();
+        await renderLoaded();
+        const cases: Array<[string, string]> = [
+            ["about", "About you"],
+            ["career", "Career"],
+            ["skills", "Skills"],
+            ["documents", "CV & documents"],
+            ["goals", "Career goals"],
+            ["integrations", "Integrations"],
+            ["security", "Account & security"],
+            ["billing", "Billing"],
+        ];
+        for (const [slug, heading] of cases) {
+            await gotoSection(user, slug);
+            await waitFor(() => expect(sectionHeading(heading)).toBeInTheDocument());
+        }
+    });
+
+    it("a direct deep link renders the requested section", async () => {
+        seedUrl("section=goals");
+        await renderLoaded();
+        expect(sectionHeading("Career goals")).toBeInTheDocument();
+        expect(sectionHeading("About you")).toBeNull();
+    });
+
+    it("a missing section falls back to About (URL left clean, no rewrite)", async () => {
+        seedUrl("");
+        await renderLoaded();
+        expect(sectionHeading("About you")).toBeInTheDocument();
+        expect(replaceMock).not.toHaveBeenCalled();
+    });
+
+    it("an invalid section falls back to About and canonicalizes the URL with replace", async () => {
+        seedUrl("section=bogus");
+        await renderLoaded();
+        await waitFor(() => expect(replaceMock).toHaveBeenCalled());
+        expect(replaceMock.mock.calls[0]![0]).toContain("section=about");
+        expect(sectionHeading("About you")).toBeInTheDocument();
+        expect(pushMock).not.toHaveBeenCalled(); // canonicalization never pushes history
+    });
+
+    it("preserves unrelated query params when switching section", async () => {
+        seedUrl("section=about&ref=email&foo=bar");
+        const user = userEvent.setup();
+        await renderLoaded();
+        await gotoSection(user, "skills");
+        const url = pushMock.mock.calls.at(-1)![0];
+        expect(url).toContain("section=skills");
+        expect(url).toContain("ref=email");
+        expect(url).toContain("foo=bar");
+    });
+
+    it("a Gmail callback opens Integrations, keeps ?gmail=, and leaves the Gmail card available", async () => {
+        seedUrl("gmail=connected");
+        await renderLoaded();
+        await waitFor(() => expect(sectionHeading("Integrations")).toBeInTheDocument());
+        // canonicalized to integrations while preserving the gmail callback param
+        await waitFor(() => expect(replaceMock).toHaveBeenCalled());
+        expect(replaceMock.mock.calls[0]![0]).toContain("section=integrations");
+        expect(replaceMock.mock.calls[0]![0]).toContain("gmail=connected");
+        expect(screen.getByTestId("gmail-card-stub")).toBeInTheDocument();
+    });
+
+    it("an explicit valid section wins even when a Gmail callback is present", async () => {
+        seedUrl("section=billing&gmail=connected");
+        await renderLoaded();
+        expect(sectionHeading("Billing")).toBeInTheDocument();
+        expect(sectionHeading("Integrations")).toBeNull();
+        expect(replaceMock).not.toHaveBeenCalled();
+    });
+
+    it("the active section is URL-driven — scrolling does not change it", async () => {
+        seedUrl("section=skills");
+        await renderLoaded();
+        expect(sectionHeading("Skills")).toBeInTheDocument();
+        window.dispatchEvent(new Event("scroll"));
+        // no IntersectionObserver/scroll-spy: the section is unchanged by scroll
+        expect(sectionHeading("Skills")).toBeInTheDocument();
+        expect(sectionHeading("Billing")).toBeNull();
+    });
+});
+
+describe("profile editorial — unsaved-edit contract", () => {
+    it("unsaved field values survive a section switch (and back)", async () => {
+        const user = userEvent.setup();
+        await renderLoaded();
+
+        const name = screen.getByLabelText("Name");
+        await user.clear(name);
+        await user.type(name, "Draft Name");
+
+        // leave About → Career → back to About; the draft must persist
+        await gotoSection(user, "career");
+        await waitFor(() => expect(sectionHeading("Career")).toBeInTheDocument());
+        await gotoSection(user, "about");
+        await waitFor(() => expect(sectionHeading("About you")).toBeInTheDocument());
+
+        expect(screen.getByLabelText("Name")).toHaveValue("Draft Name");
+        // the dirty save bar is still present — the edit was never discarded
+        expect(screen.getByTestId("profile-ed-savebar")).toBeInTheDocument();
+    });
+
+    it("guards a dirty refresh/leave via beforeunload, and does not guard a clean one", async () => {
+        const user = userEvent.setup();
+        await renderLoaded();
+
+        // clean: beforeunload is not prevented
+        const cleanEvt = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(cleanEvt);
+        expect(cleanEvt.defaultPrevented).toBe(false);
+
+        // make an edit → dirty
+        await user.type(screen.getByLabelText("Phone"), "9");
+        await screen.findByTestId("profile-ed-savebar");
+
+        const dirtyEvt = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(dirtyEvt);
+        expect(dirtyEvt.defaultPrevented).toBe(true);
     });
 });
 
@@ -255,11 +446,8 @@ describe("profile editorial — dirty draft save flow", () => {
         fetchProfileMock.mockResolvedValue({ ...BASE_PROFILE, phone: "+971511111111" });
         await user.click(within(savebar).getByRole("button", { name: "Save changes" }));
 
-        await waitFor(() =>
-            expect(updateProfileMock).toHaveBeenCalledWith({ phone: "+971511111111" }),
-        );
+        await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith({ phone: "+971511111111" }));
         expect(updateProfileMock).toHaveBeenCalledTimes(1);
-        // refreshed profile matches the draft → the bar clears
         await waitFor(() => expect(screen.queryByTestId("profile-ed-savebar")).toBeNull());
     });
 
@@ -278,9 +466,10 @@ describe("profile editorial — dirty draft save flow", () => {
         expect(updateProfileMock).not.toHaveBeenCalled();
     });
 
-    it("clearing a numeric field shows a validation message, keeps the edit visible, and never silently reverts", async () => {
+    it("clearing a numeric field shows a validation message, keeps the edit, and never silently reverts", async () => {
         const user = userEvent.setup();
         await renderLoaded();
+        await gotoSection(user, "career");
 
         const years = screen.getByLabelText("Experience");
         await user.clear(years);
@@ -289,7 +478,6 @@ describe("profile editorial — dirty draft save flow", () => {
 
         expect(await screen.findByText(/Clearing this field isn't supported yet/)).toBeInTheDocument();
         expect(updateProfileMock).not.toHaveBeenCalled();
-        // the user's edit stays visible — no silent revert to the saved value
         expect(screen.getByLabelText("Experience")).toHaveValue("");
         expect(screen.getByTestId("profile-ed-savebar")).toBeInTheDocument();
     });
@@ -297,6 +485,7 @@ describe("profile editorial — dirty draft save flow", () => {
     it("rejects a non-numeric years value inline and never calls the API", async () => {
         const user = userEvent.setup();
         await renderLoaded();
+        await gotoSection(user, "career");
 
         const years = screen.getByLabelText("Experience");
         await user.clear(years);
@@ -311,14 +500,13 @@ describe("profile editorial — dirty draft save flow", () => {
     it("enforces the 4-target-role cap and UAE-only cities", async () => {
         const user = userEvent.setup();
         await renderLoaded();
+        await gotoSection(user, "goals");
 
-        // add 4 more roles (5 total) via the chip editor
         for (const role of ["PM", "QA", "BA", "DevOps"]) {
             await user.click(screen.getByRole("button", { name: "+ Add role" }));
             await user.type(screen.getByRole("textbox", { name: "Add role" }), `${role}{Enter}`);
             await user.keyboard("{Escape}");
         }
-        // add a non-UAE city
         await user.click(screen.getByRole("button", { name: "+ Add city" }));
         await user.type(screen.getByRole("textbox", { name: "Add city" }), "Cairo{Enter}");
         await user.keyboard("{Escape}");
@@ -334,12 +522,14 @@ describe("profile editorial — dirty draft save flow", () => {
 
 describe("profile editorial — honest Telegram status", () => {
     it("describes a SAVED username as 'added' — never as a connection claim", async () => {
+        const user = userEvent.setup();
         await renderLoaded();
+        await gotoSection(user, "integrations");
         expect(screen.getByText(/Telegram username added/)).toBeInTheDocument();
         expect(screen.queryByText(/alerts connected/i)).toBeNull();
     });
 
-    it("flags an edited, unsaved username as not yet saved", async () => {
+    it("flags an edited, unsaved username (edited in About) as not yet saved (shown in Integrations)", async () => {
         const user = userEvent.setup();
         await renderLoaded();
 
@@ -347,13 +537,17 @@ describe("profile editorial — honest Telegram status", () => {
         await user.clear(tg);
         await user.type(tg, "new_handle");
 
+        // the unsaved draft persists across the section switch
+        await gotoSection(user, "integrations");
         expect(screen.getByText(/Username not yet saved/)).toBeInTheDocument();
         expect(screen.queryByText(/Telegram username added/)).toBeNull();
     });
 
     it("shows the opt-in hint when no username is saved", async () => {
         fetchProfileMock.mockResolvedValue({ ...BASE_PROFILE, telegram_username: null });
+        const user = userEvent.setup();
         await renderLoaded();
+        await gotoSection(user, "integrations");
         expect(screen.getByText(/Add your Telegram username/)).toBeInTheDocument();
         expect(screen.queryByText(/Telegram username added/)).toBeNull();
     });
@@ -363,6 +557,7 @@ describe("profile editorial — documents", () => {
     it("set-primary calls the real endpoint and reloads the list", async () => {
         const user = userEvent.setup();
         await renderLoaded();
+        await gotoSection(user, "documents");
         await screen.findByText("Cover_letter.docx");
 
         await user.click(screen.getByRole("button", { name: /Set primary/ }));
@@ -373,6 +568,7 @@ describe("profile editorial — documents", () => {
     it("delete requires an explicit second confirming click", async () => {
         const user = userEvent.setup();
         await renderLoaded();
+        await gotoSection(user, "documents");
         await screen.findByText("Cover_letter.docx");
 
         const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
@@ -396,8 +592,6 @@ describe("profile editorial — guardrail warnings", () => {
 
         const alert = await screen.findByRole("alert");
         expect(alert).toHaveTextContent("Minimum fit score is 60%.");
-        // The alert must sit inside .profile-ed-warnings, which the component's
-        // scoped CSS targets to override GuardrailWarnings' dark-app amber text.
         expect(alert.closest(".profile-ed-warnings")).not.toBeNull();
     });
 
