@@ -42,8 +42,9 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 > verified), #1151 structured `/command` replies + motion (`965dd64`), #1157
 > plain-language terminology EN+AR (`4ce678b`). Per-PR detail: `TASKS.md`
 > TASK-20260718-001…006. **Owner production visual smoke pending** for #1155/#1151/#1157.
-> **Still open — do NOT read as complete:** profile *true* section navigation (only a
-> visual rail shipped), profile *actionable* warning workflow (only contrast shipped),
+> **Profile *true* section navigation is now COMPLETE** — delivered by #1161
+> (`76e52984`, frontend-only, deployed; Profile Phase 3). **Still open — do NOT read as
+> complete:** profile *actionable* warning workflow (only contrast shipped; Profile Phase 4A/4B),
 > the *full* cross-route authenticated audit (only the English routing defect fixed),
 > Command Workspace, Applications/Documents/Cover-letter workspaces, Dashboard #14,
 > `Sessions → Conversations`. Claude Design's UX prototype is design-only, not

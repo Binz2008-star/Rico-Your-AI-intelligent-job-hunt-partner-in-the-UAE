@@ -1,6 +1,47 @@
 # Current State
 
-> **Reconciliation header — 2026-07-18 (latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-18 (evening; latest; supersedes all headers below).**
+> `main` HEAD **`76e52984`**. Records four PRs merged after #1157 that the prior
+> header (`4ce678b`) did not cover, and marks **Profile Phase 3 complete**.
+>
+> **Merged to `main` since #1157 (all "Deploy to Production" green):**
+> `197d946` **#1159** — Gmail user-facing recurring-sync **consent + connection-state
+> readiness UI only**; the connector stays **production-disabled**
+> (`RICO_ENABLE_GMAIL_SYNC=false`, flag OFF) — no Gmail sync runs. · `18fb5631`
+> **#1160** — **docs-only** Neon data-architecture audit + **proposed** remediation
+> plan (`DEC-20260718-001`, Status: **proposed** — owner approval required;
+> `AUDITS/2026-07-18-neon-data-architecture-audit.md`; umbrella TASK-20260718-007…014).
+> **No DDL/DML, migration, privilege, RLS, or production DB change was executed.**
+> · `f10498cd` **#1162** — deployment-policy **CI** change (disables Vercel
+> deployments for the generated `docs/index.html` dashboard branch only; production
+> `main` deploys unaffected). · `76e52984` **#1161** — **Profile true URL-backed
+> section navigation** (`?section=`, render-only-selected, deep-link/back-forward/
+> refresh, invalid→about, unrelated-param + Gmail-callback preservation, unsaved-edit
+> `beforeunload` + internal-nav guard, mobile selector, a11y/RTL). **Frontend-only**
+> (`apps/web`, 4 files, +467/−80); no backend/schema/migration/Gmail/warning/billing
+> change. Squash `76e52984`; CI green on head `b688cdc8`; **"Deploy to Production"
+> run for `76e52984` = success**. This completes **Profile Phase 3** — the visual-only
+> rail shipped in #1152 is now real navigation.
+>
+> **Profile Phase 4A** (backend-authoritative warning **severity contract**) and
+> **Phase 4B** (actionable warning frontend) are **NOT started.** (These are the
+> Profile-workspace phases — distinct from the ROADMAP's Neon/lifecycle "Phase 3/4"
+> umbrellas, TASK-20260718-010/011.)
+>
+> **Known residual (documented, NOT a blocker for #1161):** browser **Back that exits
+> `/profile`** can still discard unsaved edits without an in-app confirm; refresh/close
+> and internal sidebar `<Link>` nav ARE protected, and in-`/profile` section
+> back/forward preserves the draft. Safe cross-route history interception is a
+> **separate P1** at the shared WorkspaceShell/navigation layer
+> (*Profile cross-route dirty-state protection*).
+>
+> **Still pending (owner):** live **authenticated** `/profile` + **Arabic RTL** visual
+> smoke on `ricohunt.com` — the production host is network-blocked from the executing
+> session; behavior is covered by the merged `profile-editorial.test.tsx` (32/32) + CI
+> Playwright + clean `next build`. Docs-only sync; no `apps/web`/`src` runtime change
+> in this header.
+
+> **Reconciliation header — 2026-07-18 (midday; superseded by the header above).**
 > `main` HEAD **`4ce678b`**. Catches the operating log up to six PRs merged after
 > #1145 that were not yet recorded (see `TASKS.md` TASK-20260718-001…006 for the
 > canonical per-PR detail; `PROJECT_STATUS.md` for the control snapshot).
