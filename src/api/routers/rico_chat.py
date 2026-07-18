@@ -22,6 +22,7 @@ Routes:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Collection
 import hashlib
 import hmac
 import json
@@ -309,9 +310,21 @@ def get_profile(user_id: str):
     return profile_repo.get_profile(user_id)
 
 
-def upsert_profile(user_id: str, updates: dict[str, Any], cv_text: str | None = None, require_db: bool = False):
+def upsert_profile(
+    user_id: str,
+    updates: dict[str, Any],
+    cv_text: str | None = None,
+    require_db: bool = False,
+    clear_fields: Collection[str] = (),
+):
+    # This wrapper is the router's stable patch point — its signature MUST stay
+    # a superset of every call the router makes. The 2026-07-18 production save
+    # outage was exactly this: the endpoint passed clear_fields=, the wrapper
+    # didn't accept it, and the resulting TypeError surfaced as a 503 on EVERY
+    # profile save (endpoint tests mock this symbol, so CI could not see it).
     return profile_repo.upsert_profile(
-        user_id=user_id, updates=updates, cv_text=cv_text, require_db=require_db
+        user_id=user_id, updates=updates, cv_text=cv_text, require_db=require_db,
+        clear_fields=clear_fields,
     )
 
 
@@ -1435,13 +1448,16 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         except Exception as e:
             # #1076 delta: no raw id, no traceback — psycopg2 error strings can
             # re-emit the bound profile values this endpoint just tried to save.
+            # The ref ties the user-visible toast to this exact log line so a
+            # live failure is diagnosable without guessing (2026-07-18 smoke).
+            error_ref = generate_error_ref()
             logger.error(
-                "profile_update persistence failed user=%s err=%s",
-                user_ref(user_id), safe_exc(e),
+                "profile_update persistence failed user=%s ref=%s err=%s",
+                user_ref(user_id), error_ref, safe_exc(e),
             )
             raise HTTPException(
                 status_code=503,
-                detail="Profile update could not be saved. Please try again.",
+                detail=f"Profile update could not be saved. Please try again. (ref {error_ref})",
             )
         confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
             MutationResult(success=True),
@@ -1452,9 +1468,14 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
             failure_ar="failed",
         ) == "confirmed"
         if not confirmed:
+            error_ref = generate_error_ref()
+            logger.error(
+                "profile_update confirmation failed user=%s ref=%s",
+                user_ref(user_id), error_ref,
+            )
             raise HTTPException(
                 status_code=500,
-                detail="Profile update could not be confirmed. Please try again.",
+                detail=f"Profile update could not be confirmed. Please try again. (ref {error_ref})",
             )
         logger.info("profile_update user=%s %s", user_ref(user_id), safe_fields(expected_state))
     else:

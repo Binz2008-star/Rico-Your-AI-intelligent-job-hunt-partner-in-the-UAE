@@ -348,6 +348,67 @@ class TestRicoProfileNumericClear:
         assert captured == {}, "no upsert may run for a null non-clearable field"
 
 
+class TestRicoProfileSaveThroughRealWrapper:
+    """Regression for the 2026-07-18 production save outage.
+
+    The endpoint tests above patch ``rico_chat.upsert_profile`` — the router's
+    wrapper — so a signature mismatch between the endpoint call and the wrapper
+    was INVISIBLE to CI while every live save returned
+    "Profile update could not be saved" (the endpoint passed ``clear_fields=``,
+    the wrapper didn't accept it, and the TypeError was swallowed into a 503).
+
+    These tests run the REAL wrapper and patch one layer down
+    (``profile_repo.upsert_profile``), so any drift between the endpoint call
+    and the wrapper signature fails HERE first, not in production.
+    """
+
+    @staticmethod
+    def _repo_spy(captured):
+        def spy(*, user_id, updates, **kwargs):
+            captured["user_id"] = user_id
+            captured["updates"] = updates
+            captured.update(kwargs)
+            return {"ok": True}
+        return spy
+
+    def _patch_real(self, auth_client, payload, captured):
+        with patch("src.repositories.profile_repo.upsert_profile", side_effect=self._repo_spy(captured)), \
+             patch("src.api.routers.rico_chat._profile_updates_visible", return_value=True):
+            return auth_client.patch("/api/v1/rico/profile", json=payload)
+
+    def test_normal_text_save_succeeds_through_the_real_wrapper(self, auth_client):
+        captured = {}
+        r = self._patch_real(auth_client, {"current_role": "HSE Lead"}, captured)
+        assert r.status_code == 200, f"live-outage regression: {r.status_code}: {r.text}"
+        assert captured["updates"] == {"current_role": "HSE Lead"}
+        assert captured["require_db"] is True
+        assert list(captured.get("clear_fields") or []) == []
+
+    def test_numeric_save_succeeds_through_the_real_wrapper(self, auth_client):
+        captured = {}
+        r = self._patch_real(auth_client, {"salary_expectation_aed": 25000}, captured)
+        assert r.status_code == 200, f"{r.status_code}: {r.text}"
+        assert captured["updates"] == {"salary_expectation_aed": 25000}
+
+    def test_explicit_numeric_clear_succeeds_through_the_real_wrapper(self, auth_client):
+        captured = {}
+        r = self._patch_real(auth_client, {"years_experience": None}, captured)
+        assert r.status_code == 200, f"{r.status_code}: {r.text}"
+        assert list(captured["clear_fields"]) == ["years_experience"]
+        assert "years_experience" not in captured["updates"]
+
+    def test_persistence_failure_returns_503_with_correlation_ref(self, auth_client):
+        with patch(
+            "src.repositories.profile_repo.upsert_profile",
+            side_effect=RuntimeError("db down"),
+        ), patch("src.api.routers.rico_chat._profile_updates_visible", return_value=True):
+            r = auth_client.patch("/api/v1/rico/profile", json={"current_role": "X"})
+        assert r.status_code == 503
+        detail = r.json()["detail"]
+        assert "Profile update could not be saved" in detail
+        assert "(ref " in detail, "failure surface must carry a correlation ref"
+
+
 class TestRicoCVUploadRouteExists:
     def test_upload_cv_route_returns_200(self, client):
         with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
