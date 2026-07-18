@@ -45,9 +45,13 @@ describe("/command auth-state containment (issue #281)", () => {
 
     render(<CommandPage />);
 
-    // Once /me resolves, the authenticated controls appear. The logout affordance
-    // is an accessible control (sidebar avatar button + mobile drawer item) labelled
-    // "Log out", not visible "Sign out" text — assert on its accessible name.
+    // Once /me resolves, the authenticated single-shell chrome appears. The
+    // logout affordance lives behind the shared mobile drawer (WorkspaceShell
+    // burger -> command actions) since the legacy always-mounted header was
+    // removed (single-shell fix, 2026-07-18) — open the drawer, then assert.
+    const burger = await screen.findByRole("button", { name: "Menu" });
+    const { default: userEvent } = await import("@testing-library/user-event");
+    await userEvent.setup().click(burger);
     expect((await screen.findAllByRole("button", { name: /log out/i })).length).toBeGreaterThan(0);
     // …and the public links must NOT be rendered for a signed-in user.
     expect(screen.queryByText("Sign up free")).not.toBeInTheDocument();
@@ -83,6 +87,11 @@ describe("/command auth-state containment (issue #281)", () => {
 
     render(<CommandPage />);
 
+    // Authenticated audience => single-shell chrome: the shared mobile burger
+    // is the stable authenticated marker; logout sits in its drawer.
+    const burger2 = await screen.findByRole("button", { name: "Menu" });
+    const { default: userEvent2 } = await import("@testing-library/user-event");
+    await userEvent2.setup().click(burger2);
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: /log out/i }).length).toBeGreaterThan(0);
     });
