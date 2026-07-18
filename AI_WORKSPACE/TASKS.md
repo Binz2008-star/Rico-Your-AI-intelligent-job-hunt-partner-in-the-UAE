@@ -78,6 +78,187 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+<!-- Reconciliation 2026-07-18: the six PRs below merged to main after
+TASK-008 (#1145) and were not yet in this ledger. Recorded here as the
+canonical per-PR record. Merge order on main (oldest→newest): #1153 →
+#1152 → #1156 → #1155 → #1151 → #1157. Presented newest-first. -->
+
+### TASK-20260718-006 — PR #1157: plain-language terminology in user-facing copy (EN+AR)
+
+Status: verified — **MERGED + deployed; owner production visual smoke pending**
+Owner: Claude (release owner; owner directive 2026-07-18 — approved to finalize+merge)
+Branch: `fix/ui-copy-plain-language` (merged, deleted)
+Issue/PR: #1157 (merged as squash commit `4ce678b6400889ebfb838e00079c7dfa86fcaf7c`)
+
+#### Objective
+Remove technical product jargon from **user-facing copy only** — no internal
+identifiers, translation KEY names, props, test IDs, routes, DB fields, API
+contracts, or analytics identifiers renamed.
+
+#### Delivered
+- EN+AR value changes across nav / headings / buttons / states / helper text:
+  Pipeline→Applications; Job Pipeline / Application Flow→Application tracking;
+  Career preferences→Career goals (تفضيلات المسار→أهدافك المهنية); In pipeline→In
+  applications; Save to pipeline→Save to applications; Pipeline score→Match score;
+  Open Flow / Flow→Open applications / Applications; /applications headline "Your
+  pipeline."→"Your applications." (مسار طلباتك.→طلباتك.); AR pipeline terms
+  (مسار الطلبات / خط الوظائف / المسار)→طلبات التوظيف / متابعة طلبات التوظيف.
+- Files: `apps/web/lib/translations.ts`, `components/applications/ApplicationsAtelier.tsx`,
+  `components/landing/HowItWorks.tsx`, `components/layout/app-nav.ts`, and 4 test files.
+- Deliberately preserved: translation key names, `CommandRail` `pipeline` prop,
+  `command-rail-pipeline` testid, `pipeline_active` state key, career-path wording
+  (`Career` / `المسار المهني`). The "no jargon remaining" finding is scoped to the
+  `apps/web` product-copy surfaces scanned only (server/email/notification/stored
+  copy NOT scanned).
+
+#### Deferred / not in scope
+- `Sessions → Conversations` (belongs to the Command Workspace program, not this task).
+
+#### Verification
+- Rebased onto post-#1151 main; head `e1e8337` → squash `4ce678b`.
+- Full frontend vitest 657 pass; `npm run build` clean (41/41); lint clean on changed files.
+- CI all green; 0 review threads; `mergeable_state: clean`.
+- Production: "Deploy to Production" run #997 for `4ce678b` = success (health + `ricohunt.com`
+  reachability + `/proxy/health`). **Owner live terminology visual smoke pending.**
+
+### TASK-20260718-005 — PR #1151: structured Rico reply presentation (safe markdown) + motion polish
+
+Status: verified — **MERGED + deployed; owner production visual smoke pending**
+Owner: Claude (release owner; owner directive 2026-07-18 — approved to finalize first)
+Branch: `feat/command-reply-motion-arabic-type` (merged, deleted)
+Issue/PR: #1151 (merged as squash commit `965dd6404e6be2d0f2c3b3a06e1b1031ad3c2774`)
+
+#### Objective
+Render the **same** answer string the `/command` transcript already receives as
+safe, structured markdown, plus the reply-motion layer. No change to response
+content, prompts, backend routing, APIs, providers, or DB — frontend
+reply-presentation only.
+
+#### Delivered
+- `react-markdown` + `remark-gfm` + `skipHtml` renderer (`RicoReplyMarkdown.tsx`, new):
+  headings, lists, emphasis, blockquotes, inline + fenced code, sanitized links
+  (allowlist http/https/mailto/relative; `javascript:`/`data:`/`vbscript:`/`file:`/
+  entity-encoded → inert span; `rel="noopener noreferrer"`), no class/style/HTML
+  injection, markdown renders during streaming, reduced-motion caret.
+- Files: 13 (+593/−34) incl. `RicoReply.tsx`, motion layer (`fonts.ts`, `tokens.ts`,
+  `CommandComposer/Messages/ObsidianShell.tsx`, `JobMatchCardAtelier.tsx`,
+  `WorkspaceShell.tsx`, `tailwind.config.ts`, `vitest.setup.ts`), and two new test
+  files (`rico-reply-markdown.test.tsx`, `rico-reply-markdown-security.test.tsx`).
+
+#### Verification
+- Base `6b62a11` → approved head `a4e7b44` → squash `965dd64`.
+- Focused renderer+security+transcript 50 pass; full frontend vitest 657 pass;
+  `npm run build` clean; lint clean on changed files; Playwright matrix (EN light/dark,
+  AR RTL light/dark, mobile 390px, streaming, reduced-motion) captured.
+- CI all green; 0 review threads; `mergeable_state: clean`.
+- Production: "Deploy to Production" run #996 for `965dd64` = success. **Owner live
+  `/command` structured-reply visual smoke pending.**
+
+### TASK-20260718-004 — PR #1155: explicit Arabic job search reaches the search router (not CV-status)
+
+Status: verified — **MERGED + deployed (Render backend); owner AR production smoke pending**
+Owner: Claude (release owner; owner directive 2026-07-18 — approved to finalize+merge first)
+Branch: `fix/arabic-jobsearch-vs-cv-status` (merged, deleted)
+Issue/PR: #1155 (merged as squash commit `6b62a114771d4da5ed775632703f78da7f92dde6`)
+
+#### Objective
+Post-#1153 Arabic-only defect: the second CV-guidance gate in
+`_handle_active_user_inner` intercepted explicit Arabic job searches
+("ابحث عن وظائف تناسب سيرتي الذاتية") as CV-status guidance.
+
+#### Delivered
+- Guard added: the gate now also requires `not is_explicit_job_listing_request(message)`
+  — the same canonical public predicate the search router keys on (reused from #1153;
+  no duplicated intent logic). Files: `src/rico_chat_api.py` (+21/−1), new
+  `tests/test_arabic_jobsearch_vs_cv_status.py` (unit + `_process_message_inner`
+  production-path).
+
+#### Deferred / not in scope
+- Generic `_JOB_DOC_SCORE_RE` tightening (P1) — explicitly deferred by owner.
+
+#### Verification
+- Re-anchored; head `7a8f85d` → squash `6b62a11`.
+- 8 targeted tests + regression sweep pass (57 on merged commit); CI all green;
+  0 review threads; `mergeable_state: clean`.
+- Production: Render backend deploy run #389 = success (gated on `/version` commit ==
+  `6b62a11` + `/health` 200); the `main` "Deploy to Production" run for `6b62a11` also
+  green. **Owner live Arabic `/command` routing smoke pending.**
+
+### TASK-20260718-003 — PR #1156: legible guardrail-warnings banner on the editorial /profile
+
+Status: verified — **MERGED + deployed (contrast-only)**
+Owner: Claude (release owner; owner directive 2026-07-18 — contrast-only scope)
+Branch: `fix/profile-warnings-contrast` (merged, deleted)
+Issue/PR: #1156 (merged as squash commit `25f19445343533c725916b96ab273fda598775c9`)
+
+#### Objective
+Fix the unreadable guardrail-warnings banner on the live editorial `/profile`
+(contrast/legibility only).
+
+#### Delivered
+- `warning`/`warningTint` tone + scoped CSS so `role="alert"` warnings are legible
+  in light and dark. `ProfileEditorial.tsx` + translations only.
+
+#### Deferred / not in scope (still QUEUED — see TASK-20260718-... Phase 4)
+- Actionable warning workflow: compact summary, severity model, section/field
+  navigation, field focus/highlight, refresh-after-save, resolved-warning removal,
+  live count, hide-when-empty, unsaved-edit integration. **NOT delivered here.**
+
+#### Verification
+- Squash `25f1944`; CI green; frontend build clean; production "Deploy to Production"
+  run #994 = success.
+
+### TASK-20260718-002 — PR #1152: rebuild /profile on the owner editorial design (real-data wiring)
+
+Status: verified — **MERGED + deployed (rebuild + visual section rail only)**
+Owner: Claude (release owner; owner directive 2026-07 — profile editorial rebuild)
+Branch: `feat/profile-editorial-rebuild` (merged, deleted)
+Issue/PR: #1152 (merged as squash commit `cee1d6304...`)
+
+#### Objective
+Replace `/profile` with the uploaded editorial design, wired to the real system,
+deleting the old profile code.
+
+#### Delivered
+- `ProfileEditorial.tsx` editorial rebuild: hero plate, profile-strength meter,
+  **visual** sticky numbered section rail, 8 section cards, dirty-draft single-PATCH
+  save bar; thin auth+data shell page; honest billing/Telegram states; "Verified email";
+  numeric-clear validation. Real-data wired (`lib/api.ts`); auth-guard contract preserved.
+
+#### Deferred / not in scope (still QUEUED — see Phase 3 true section navigation)
+- **True section navigation is NOT delivered.** The rail is visual only. Missing:
+  render-only-selected-section, `/profile?section=…` URL state, deep links,
+  back/forward, refresh persistence, invalid→about fallback, mobile selector,
+  unsaved-edit protection, section focus management.
+
+#### Verification
+- Squash `cee1d63`; CI green; frontend build clean; production "Deploy to Production" = success.
+
+### TASK-20260718-001 — PR #1153: route "find jobs that match my CV" to job search, not job-doc scoring
+
+Status: verified — **MERGED + deployed (English routing fix)**
+Owner: Claude (release owner; owner directive 2026-07 — smallest P0 after read-only audit)
+Branch: `fix/find-jobs-cv-routing` (merged, deleted)
+Issue/PR: #1153 (merged as squash commit `14b2b2e63...`)
+
+#### Objective
+Fix the demonstrated English `/command` failure ("Find UAE jobs that match my CV"
+→ "I don't have an uploaded job document yet") — smallest P0 fix.
+
+#### Delivered
+- Guard in `_handle_job_doc_action` so a score-intent that is an explicit job-listing
+  request (`is_explicit_job_listing_request`) is not intercepted as job-doc scoring;
+  production-path regression test; reused canonical public predicate (no broad except).
+
+#### Deferred / not in scope
+- **This was the English routing defect only — NOT a full authenticated
+  route/API/database/storage/entitlement audit.** That full cross-route audit
+  remains NOT STARTED. `_JOB_DOC_SCORE_RE` tightening (P1) deferred. (The Arabic
+  equivalent was fixed separately in #1155.)
+
+#### Verification
+- Squash `14b2b2e`; CI green; production "Deploy to Production" (backend path) = success.
+
 ### TASK-20260717-008 — PR #1145: unify /command visuals with the shared WorkspaceShell
 
 Status: verified — **#1145 PRODUCTION PASS** (merged main @ `ecd29a66`, deployed;

@@ -9,8 +9,9 @@
 | Field | Current value |
 | --- | --- |
 | Repository | `Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE` |
-| Snapshot date | 2026-07-16 |
-| Live-main baseline audited | `4194736f` (2026-07-16 evening; agents must fetch and report the exact current SHA at session start) |
+| Snapshot date | 2026-07-18 |
+| Live-main baseline audited | `4ce678b` (2026-07-18; agents must fetch and report the exact current SHA at session start) |
+| Job-Seeker-Workspace merges since #1145 (2026-07-18) | `14b2b2e` #1153, `cee1d63` #1152, `25f1944` #1156, `6b62a11` #1155, `965dd64` #1151, `4ce678b` #1157 — all merged + "Deploy to Production" green; **owner production visual smoke pending** for #1155/#1151/#1157. Per-PR detail: `TASKS.md` TASK-20260718-001…006; narrative: `CURRENT_STATE.md` (2026-07-18 header). **Still open (do not mark complete):** profile true section navigation, actionable warning workflow, full cross-route audit, Command Workspace, Applications/Documents/Cover-letter, Dashboard #14, `Sessions → Conversations`. |
 | Control-plane PR #1010 | **MERGED** `b753885` (2026-07-13) — the reconciliation freeze it imposed is over |
 | Operating posture (owner 2026-07-16) | **CONTAINMENT FIRST.** (1) Rotate/quarantine the local `rico-job-automation-api.env` secrets (owner action; never deploy from it — stale + Stripe). (2) Unify source of truth (this reconciliation). (3) **Freeze new-integration activation** — allow only security + docs fixes until unified; Atelier design completion (#1062 job cards ready but held) and Gmail/Memory activation resume after. See `CURRENT_STATE.md` (evening header) for the full merge log. |
 | Design system | **Atelier V3 is the sole production-wide system** (`DEC-20260716-001`, merged #1059). `/command` re-skinned to Atelier (paper + "Atelier at Night", sun-red) — re-skin + editorial serif replies merged (#1060) + composer gradient (#1061); MATCH job cards **ready, held** (#1062). "Command Obsidian" acid-lime retired to reference. C5/C6 collapse to a verification pass. |

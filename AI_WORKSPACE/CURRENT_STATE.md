@@ -1,6 +1,33 @@
 # Current State
 
-> **Reconciliation header — 2026-07-16 (evening; latest; supersedes all headers below).**
+> **Reconciliation header — 2026-07-18 (latest; supersedes all headers below).**
+> `main` HEAD **`4ce678b`**. Catches the operating log up to six PRs merged after
+> #1145 that were not yet recorded (see `TASKS.md` TASK-20260718-001…006 for the
+> canonical per-PR detail; `PROJECT_STATUS.md` for the control snapshot).
+>
+> **Merged to `main` since #1145 (all deployed — "Deploy to Production" green):**
+> `14b2b2e` #1153 (English "find jobs that match my CV" → job search, not job-doc
+> scoring) · `cee1d63` #1152 (`/profile` editorial rebuild + real-data wiring +
+> **visual** section rail) · `25f1944` #1156 (profile guardrail-warnings **contrast**
+> legibility) · `6b62a11` #1155 (explicit **Arabic** job search reaches the search
+> router; Render backend deploy #389 verified serving `6b62a11`) · `965dd64` #1151
+> (structured safe-markdown `/command` replies + motion) · `4ce678b` #1157
+> (plain-language terminology EN+AR — no "pipeline" in scanned `apps/web` product copy).
+>
+> **Repository-verified by the executing session; owner production visual/browser
+> smoke still pending** for #1155 (AR routing), #1151 (`/command` structured reply),
+> and #1157 (terminology) on `ricohunt.com` (production host network-blocked from the
+> session; deploy workflows are green).
+>
+> **Explicitly NOT delivered by the above (still open, do not mark complete):**
+> profile **true section navigation** (#1152 shipped a *visual* rail only) · profile
+> **actionable warning workflow** (#1156 was *contrast only*) · **full cross-route
+> authenticated audit** (#1153 was the English routing defect only) · Command
+> Workspace · Applications/Documents/Cover-letter workspaces · Dashboard #14 ·
+> `Sessions → Conversations`. Claude Design's UX prototype is design-only and is not
+> repository/runtime-verified engineering.
+
+> **Reconciliation header — 2026-07-16 (evening; supersedes all headers below).**
 > `main` HEAD `4194736f`. This header catches the operating record up to a fast
 > design push (owner note: "the design advanced quickly but the operating log
 > didn't keep up").
