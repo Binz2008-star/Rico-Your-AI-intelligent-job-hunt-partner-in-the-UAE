@@ -431,6 +431,62 @@ describe("profile editorial — unsaved-edit contract", () => {
         window.dispatchEvent(dirtyEvt);
         expect(dirtyEvt.defaultPrevented).toBe(true);
     });
+
+    it("warns before client-side navigation AWAY from /profile when dirty; cancel blocks, confirm allows", async () => {
+        const user = userEvent.setup();
+        const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+        await renderLoaded();
+
+        await user.type(screen.getByLabelText("Phone"), "9");
+        await screen.findByTestId("profile-ed-savebar");
+        // switching to Billing is a same-route section change → no prompt
+        await gotoSection(user, "billing");
+        const manage = await screen.findByRole("link", { name: "Manage plan" }); // href="/subscription"
+        expect(confirmSpy).not.toHaveBeenCalled();
+
+        // click a leave-link → confirm shown; cancel → navigation blocked
+        const cancelClick = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+        manage.dispatchEvent(cancelClick);
+        expect(confirmSpy).toHaveBeenCalledWith("You have unsaved changes. Leave without saving?");
+        expect(cancelClick.defaultPrevented).toBe(true);
+        // edited value is intact — nothing was discarded
+        await gotoSection(user, "about");
+        expect(screen.getByLabelText("Phone")).toHaveValue("+9715000000009");
+
+        // confirm → navigation allowed (not prevented)
+        confirmSpy.mockReturnValue(true);
+        await gotoSection(user, "billing");
+        const manage2 = await screen.findByRole("link", { name: "Manage plan" });
+        const confirmClick = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+        manage2.dispatchEvent(confirmClick);
+        expect(confirmClick.defaultPrevented).toBe(false);
+        confirmSpy.mockRestore();
+    });
+
+    it("does not prompt when switching sections while dirty (draft is preserved)", async () => {
+        const user = userEvent.setup();
+        const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+        await renderLoaded();
+        await user.type(screen.getByLabelText("Phone"), "9");
+        await screen.findByTestId("profile-ed-savebar");
+        await gotoSection(user, "career");
+        await waitFor(() => expect(sectionHeading("Career")).toBeInTheDocument());
+        expect(confirmSpy).not.toHaveBeenCalled();
+        confirmSpy.mockRestore();
+    });
+
+    it("does not intercept navigation when there are no unsaved changes", async () => {
+        const user = userEvent.setup();
+        const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+        await renderLoaded();
+        await gotoSection(user, "billing");
+        const manage = await screen.findByRole("link", { name: "Manage plan" });
+        const evt = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+        manage.dispatchEvent(evt);
+        expect(confirmSpy).not.toHaveBeenCalled();
+        expect(evt.defaultPrevented).toBe(false);
+        confirmSpy.mockRestore();
+    });
 });
 
 describe("profile editorial — dirty draft save flow", () => {

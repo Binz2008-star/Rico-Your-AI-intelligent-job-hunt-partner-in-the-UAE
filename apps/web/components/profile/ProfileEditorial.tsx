@@ -729,6 +729,37 @@ export function ProfileEditorial({
         return () => window.removeEventListener("beforeunload", onBeforeUnload);
     }, [dirty]);
 
+    // Client-side navigation guard: `beforeunload` only covers refresh/close/hard
+    // nav. App Router <Link> clicks (e.g. a sidebar route) need a capture-phase
+    // interceptor — there is no official App-Router blocker. Profile-scoped: the
+    // listener exists only while /profile has unsaved edits and is removed on
+    // clean/unmount, so it never affects the rest of the app. A same-route click
+    // (a section change: same pathname, different ?section=) is always allowed —
+    // the draft is preserved — so switching sections never prompts.
+    useEffect(() => {
+        if (!dirty) return;
+        const onDocClickCapture = (e: MouseEvent) => {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            const anchor = (e.target as HTMLElement | null)?.closest?.("a");
+            const href = anchor?.getAttribute("href");
+            if (!anchor || !href || anchor.target === "_blank") return;
+            let dest: URL;
+            try {
+                dest = new URL(href, window.location.href);
+            } catch {
+                return;
+            }
+            if (dest.origin !== window.location.origin) return; // external → beforeunload owns it
+            if (dest.pathname === pathname) return; // same route (section change) → always allowed
+            if (!window.confirm(t("profileUnsavedLeaveConfirm"))) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+        document.addEventListener("click", onDocClickCapture, true);
+        return () => document.removeEventListener("click", onDocClickCapture, true);
+    }, [dirty, pathname, t]);
+
     /* derived hero facts */
     const pct = clampPct(profile.completeness_score);
     const subtitle = [profile.current_role, profile.current_company].filter((v) => v?.trim()).join(" · ");
