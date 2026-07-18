@@ -131,7 +131,9 @@ overlap is **38**, not 42.
 The UUID column already anchors profiles, chat, and recommendations with zero
 NULLs and zero orphans (§10), and 044 gives guest claims a durable owner key
 pointing at it. The text-keyed tables need a mapping layer, not a rewrite.
-Formalized as proposed decision DEC-20260718-001 in `DECISIONS.md`.
+Formalized as proposed decision DEC-20260718-001 in `DECISIONS.md`; that
+identity-spine row stays PROPOSED until Study 2 — Identity, Authentication,
+Authorization & Session Architecture Audit — verifies or revises it.
 
 ## 5. Application lifecycle map
 
@@ -426,6 +428,10 @@ combined in one slice. Traceable tasks: TASK-20260718-008 … -014 in
 - **1A** Enable protection on `br-restless-cherry-amq6wj7o` after confirming
   preview-branch automation (Vercel/GitHub create children of production —
   216 live examples) is unaffected; document the branch/backup model.
+  Depends only on explicit owner approval, that preview-branch verification,
+  and a documented toggle-off rollback — NOT on Data API status, the Render
+  runtime role, or acceptance of the DEC-20260718-001 matrix (those
+  verifications are slice 2A).
 
 **Phase 2 — Database access boundary and least privilege**
 - **2A** Verify Data API status and inventory every runtime access path

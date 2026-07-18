@@ -82,7 +82,10 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 Status: review (draft PR open; owner approval is the stop condition)
 Owner: Claude (WRITER on `claude/database-audit-results-qcurpe`)
-Branch: `claude/database-audit-results-qcurpe` (base: `main` @ `4ce678b6`)
+Branch: `claude/database-audit-results-qcurpe`
+- Audit baseline (evidence gathered at): `main` @ `4ce678b6`
+- Current PR base after reconciliation with main: `main` @ `197d946`
+- PR head before this correction pass: `c3cdb95`
 Issue/PR: Stage 1 audit PR #1160 (docs-only)
 Traceability: Vision: Rico Career OS — trustworthy user data
 → Epic: Neon data architecture remediation (DEC-20260718-001)
@@ -112,7 +115,9 @@ sourced (repo `file:line` or aggregate live query).
 - [ ] Owner approves DEC-20260718-001 rows (moves to Accepted)
 
 #### Rollback plan
-Revert the single docs commit; nothing else is affected.
+- Before merge: close PR #1160 without merge; production and runtime remain
+  unchanged.
+- After squash merge: revert the resulting squash-merge commit.
 
 Dependencies: none. Production impact: none. Neon changes: none.
 Documentation impact: adds the canonical audit + proposed decision + phased
@@ -120,7 +125,8 @@ task ledger (Phases 1–7 below).
 
 ### TASK-20260718-008 — Phase 1 (umbrella): protect and document the production Neon branch
 
-Status: proposed (blocked on DEC-20260718-001 approval)
+Status: proposed (execution gated only on explicit owner approval of branch
+protection itself — NOT on acceptance of the full DEC-20260718-001 matrix)
 Owner: owner-gated (Neon console) with agent-prepared checklist
 Traceability: Vision: Rico Career OS — trustworthy user data
 → Epic: Neon data architecture remediation (DEC-20260718-001)
@@ -141,9 +147,14 @@ window with exactly one objective. Slices are never combined.
   production — 216 live examples) must be confirmed unaffected first.
 - **Acceptance:** branch shows `protected: true`; a test preview branch still
   creates successfully; branch/backup model documented.
-- **Rollback:** toggle protection off (one console action).
-- **Depends on:** DEC-20260718-001 approval. **Production impact:** none to
-  data. **Docs impact:** branch model section in AI_WORKSPACE.
+- **Rollback:** toggle protection off (one console action, documented).
+- **Depends on (only):** (1) explicit owner approval; (2) verification that
+  protection does not break Vercel/GitHub preview-branch creation; (3) the
+  documented toggle-off rollback above. NOT gated on Neon Data API status,
+  the Render `DATABASE_URL` role, or acceptance of the full
+  DEC-20260718-001 matrix — those verifications live exclusively in slice
+  2A (TASK-20260718-009). **Production impact:** none to data.
+  **Docs impact:** branch model section in AI_WORKSPACE.
 
 ### TASK-20260718-009 — Phase 2 (umbrella): database access boundary and least privilege
 

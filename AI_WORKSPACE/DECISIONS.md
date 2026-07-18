@@ -58,6 +58,12 @@ one source of truth per domain is decided.
 | Legacy tables policy | classify (active / transitional / legacy / dormant / orphaned), freeze, isolate — never delete without proven code-path absence AND owner data-ownership confirmation (`leads` has zero code paths but unconfirmed ownership) | audit §12 |
 | Production DB access model | least-privilege runtime role for FastAPI (replace BYPASSRLS owner); revoke blanket `authenticated` CRUD; RLS policies designed and cross-user-denial-tested on a non-production branch before any production flip | audit §8 |
 
+> **Study-2 gate:** the authenticated identity-spine row (first row above)
+> cannot move to ACCEPTED until **Study 2 — Identity, Authentication,
+> Authorization & Session Architecture Audit** verifies or revises that
+> decision. The remaining rows may be accepted independently on owner
+> approval.
+
 #### Consequences
 
 - Positive: every remediation phase (TASK-20260718-008…014) inherits one
@@ -68,11 +74,18 @@ one source of truth per domain is decided.
 
 #### Follow-up
 
-- [ ] Owner verifies Neon Data API status in console (decides whether the P0
-      conditional in audit §8 is live)
-- [ ] Owner confirms Render `DATABASE_URL` role and `leads` data ownership
-- [ ] On approval, move this entry to Accepted and start Phase 1
-      (TASK-20260718-008)
+- [ ] Phase 1 branch protection (TASK-20260718-008, slice 1A) proceeds on
+      explicit owner approval alone — it is NOT gated on this matrix, on
+      Neon Data API status, or on the Render runtime role
+- [ ] Neon Data API status and Render `DATABASE_URL` runtime-role
+      verification happen exclusively in Phase 2 slice 2A
+      (TASK-20260718-009); they decide whether the P0 conditional in
+      audit §8 is live
+- [ ] `leads` data ownership confirmation gates only slice 7A
+      (TASK-20260718-014)
+- [ ] Identity-spine row: stays PROPOSED until Study 2 (Identity/Auth/
+      Session architecture audit) verifies or revises it; on owner approval
+      the remaining rows may move to Accepted independently
 
 ## Accepted decisions
 
