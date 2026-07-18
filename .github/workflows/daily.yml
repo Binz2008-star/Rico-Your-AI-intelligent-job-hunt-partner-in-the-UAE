@@ -130,9 +130,25 @@ jobs:
           git config user.name "GitHub Action"
           git checkout --orphan dashboard
           git rm -rf --quiet . || true
-          mkdir -p docs
+          mkdir -p docs apps/web
           cp dashboard.html docs/index.html
-          git add docs/index.html
+          # Suppress Vercel deployments for this generated orphan branch. The
+          # `web` Vercel project auto-builds every pushed branch, but the
+          # dashboard orphan carries no apps/web app tree and errored on every
+          # publish. git.deploymentEnabled.dashboard=false (evaluated at
+          # ingestion, before Root-Directory validation) makes Vercel skip it;
+          # GitHub Pages still serves docs/index.html. See TASK-20260717-005.
+          cat > apps/web/vercel.json <<'JSON'
+          {
+            "$schema": "https://openapi.vercel.sh/vercel.json",
+            "git": {
+              "deploymentEnabled": {
+                "dashboard": false
+              }
+            }
+          }
+          JSON
+          git add docs/index.html apps/web/vercel.json
           git commit -m "Publish dashboard $(date -u +%Y-%m-%dT%H:%MZ)"
           git push --force origin dashboard
 
