@@ -208,7 +208,7 @@ class TestJobMatchesActions:
         assert view["kind"] == "navigate"
         assert view["href"] == "/flow"
 
-    def test_save_search_uses_search_query_in_prompt(self):
+    def test_save_search_uses_search_query_in_message(self):
         from src.services.agentic_ui_composer import compose
         r = compose(None, {
             "type": "job_matches",
@@ -216,7 +216,7 @@ class TestJobMatchesActions:
             "search_query": "QHSE Engineer",
         })
         save = next(a for a in r["actions"] if a["id"] == "save-search")
-        assert "QHSE Engineer" in save["payload"]["prompt"]
+        assert "QHSE Engineer" in save["payload"]["message"]
         assert save["kind"] == "chat_continue"
 
     def test_save_search_falls_back_to_entities_job_title(self):
@@ -227,14 +227,23 @@ class TestJobMatchesActions:
             "entities": {"job_title": "Safety Officer"},
         })
         save = next(a for a in r["actions"] if a["id"] == "save-search")
-        assert "Safety Officer" in save["payload"]["prompt"]
+        assert "Safety Officer" in save["payload"]["message"]
 
-    def test_refine_is_chat_continue_with_prompt(self):
+    def test_refine_is_structured_open_drawer_never_chat(self):
+        """P1: refine must NEVER route UI wording through the chat/LLM —
+        it is a structured drawer action carrying the current search context."""
         from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "job_matches", "matches": [{}]})
+        r = compose(None, {
+            "type": "job_matches",
+            "matches": [{}],
+            "search_query": "Senior HSE Manager",
+        })
         refine = next(a for a in r["actions"] if a["id"] == "refine-search")
-        assert refine["kind"] == "chat_continue"
-        assert "prompt" in refine["payload"]
+        assert refine["kind"] == "open_drawer"
+        assert refine["payload"]["drawer"] == "refine_search"
+        assert refine["payload"]["search_query"] == "Senior HSE Manager"
+        assert "prompt" not in refine["payload"]
+        assert "message" not in refine["payload"]
 
     def test_returns_plain_dict_not_pydantic_model(self):
         from src.services.agentic_ui_composer import compose
@@ -267,11 +276,11 @@ class TestDeleteConfirmActions:
         assert yes["impact"] == "high"
         assert yes["requires_confirmation"] is True
 
-    def test_cancel_sends_no_type_prompt(self):
+    def test_cancel_sends_no_type_message(self):
         from src.services.agentic_ui_composer import compose
         r = compose(None, {"type": "delete_saved_jobs_confirm"})
         no = next(a for a in r["actions"] if a["id"] == "cancel-delete-jobs")
-        assert "no" in no["payload"]["prompt"].lower()
+        assert "no" in no["payload"]["message"].lower()
 
 
 # ── PR-C: delete_saved_jobs_done ──────────────────────────────────────────────
@@ -420,6 +429,53 @@ class TestUnknownType:
     def test_no_response_dict_returns_none(self):
         from src.services.agentic_ui_composer import compose
         assert compose(None, None) is None
+
+
+# ── Action payload contract (P1, 2026-07-19) ─────────────────────────────────
+# A button LABEL must never become chat input. Every chat_continue action the
+# composer can emit MUST carry a non-empty payload["message"]; the retired
+# "prompt" key (which the frontend never read — it silently fell back to the
+# label) must not reappear anywhere.
+
+_ALL_TYPE_RESPONSES = [
+    {"type": "job_matches", "matches": [{"title": "x"}], "search_query": "HSE Manager"},
+    {"type": "job_matches", "matches": [], "search_query": "PM"},
+    {"type": "delete_saved_jobs_confirm"},
+    {"type": "delete_saved_jobs_done"},
+    {"type": "profile_update"},
+    {"type": "profile_summary"},
+    {"type": "cv_first_profile"},
+    {"type": "application_list"},
+    {"type": "application_status"},
+    {"type": "application_status_update"},
+    {"type": "prepare_application"},
+    {"type": "save_job"},
+]
+
+
+class TestActionPayloadContract:
+
+    @pytest.mark.parametrize("resp", _ALL_TYPE_RESPONSES, ids=lambda r: r["type"] + str(len(r.get("matches", []))))
+    def test_no_action_ever_uses_the_retired_prompt_key(self, resp):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, resp)
+        for action in (r or {}).get("actions", []):
+            assert "prompt" not in (action.get("payload") or {}), (
+                f"{action['id']}: retired 'prompt' payload key reappeared — the "
+                "frontend reads 'message' and would fall back to sending the LABEL"
+            )
+
+    @pytest.mark.parametrize("resp", _ALL_TYPE_RESPONSES, ids=lambda r: r["type"] + str(len(r.get("matches", []))))
+    def test_every_chat_continue_carries_a_nonempty_message(self, resp):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, resp)
+        for action in (r or {}).get("actions", []):
+            if action["kind"] == "chat_continue":
+                message = (action.get("payload") or {}).get("message")
+                assert isinstance(message, str) and message.strip(), (
+                    f"{action['id']}: chat_continue without payload.message — "
+                    "the click would have nothing legitimate to send"
+                )
 
 
 # ── PR-C: runtime result priority ────────────────────────────────────────────

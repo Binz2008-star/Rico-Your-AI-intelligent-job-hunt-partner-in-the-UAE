@@ -3966,3 +3966,49 @@ pipeline's echo learning-signals (system output recorded as user behavior).
   production observations.
 - "Deploy to Production" run 29664542075 triggered on `4879c04d`
   (completion tracked via scheduled self check-in).
+
+---
+
+### TASK-20260719-001 — P1: "Refine search" as a structured action (never chat input)
+
+Status: review
+Owner: Claude (Fable session; owner CPO decision: fix before analytics/taste-loop)
+Branch: claude/refine-search-structured-action
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+The "Refine search" card sent its LABEL as a chat message; the intent router
+parsed it as a job role ("I didn't catch 'Refine search' as a specific
+role"). Separate UI actions from natural language: the card becomes an
+`open_drawer` structured action opening a refinement panel; the LLM only ever
+sees the final composed search query.
+
+#### Root cause (two layers)
+- Contract mismatch: composer sent `payload.prompt`; the frontend reads
+  `payload.message` — so the fallback `?? action.label` fired. Same silent
+  break affected "Save search" and "Find new jobs".
+- The fallback itself: a UI label must never become chat input.
+
+#### Changes
+- `src/services/agentic_ui_composer.py`: refine → `open_drawer`
+  (`drawer: "refine_search"`, carries `search_query`); all remaining
+  `chat_continue` payloads renamed `prompt` → `message`; contract documented
+  in the module docstring.
+- `apps/web/components/ui/rico/ChatActionCard.tsx`: `chat_continue` enabled
+  ONLY with non-empty `payload.message`; label fallback removed (disabled +
+  reason instead).
+- `apps/web/components/command/RefineSearchPanel.tsx` (new): role prefill +
+  UAE city chips; composes a real natural query (EN/AR) sent as a normal
+  user message; `page.tsx` `handleOpenDrawer` routes `refine_search` to it.
+- Bilingual keys `cmdRefine*` in translations.
+
+#### Acceptance criteria
+- [x] Backend contract tests: no `prompt` key anywhere; every chat_continue
+      carries non-empty `payload.message`; refine pinned as open_drawer
+      (tests/test_agentic_ui_composer.py — 70 green).
+- [x] Frontend pins: label NEVER sent as chat input (disabled without
+      message); open_drawer passes the full action; panel composes EN/AR
+      queries with zero UI wording (chat-action-card + refine-search-panel
+      suites; full vitest 724 green; `npm run build` clean).
+- [x] Analytics-purity side effect: no more synthetic "Refine search"
+      user messages polluting chat history or future analytics.

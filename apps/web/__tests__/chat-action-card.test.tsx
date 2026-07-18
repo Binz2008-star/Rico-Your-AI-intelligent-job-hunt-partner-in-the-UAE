@@ -148,8 +148,10 @@ describe("chat_continue action", () => {
         expect(handler).toHaveBeenCalledWith("Find UAE jobs that match my CV");
     });
 
-    it("falls back to action.label when payload.message is absent", async () => {
-        const user = userEvent.setup();
+    it("NEVER sends the label as chat input — no payload.message ⇒ disabled (P1 pin)", async () => {
+        // The old fallback sent the button LABEL ("Refine search") into the
+        // intent router, which parsed it as a job role. A label is
+        // presentation, never chat input.
         const handler = vi.fn();
         render(
             <ChatActionsRow
@@ -157,8 +159,49 @@ describe("chat_continue action", () => {
                 onChatContinue={handler}
             />,
         );
-        await user.click(screen.getByTestId("action-card-chat-continue"));
-        expect(handler).toHaveBeenCalledWith("Find jobs");
+        const btn = screen.getByTestId("action-card-disabled");
+        expect(btn).toBeDisabled();
+        expect(btn).toHaveAttribute("title", "No message configured for this action");
+        expect(screen.queryByTestId("action-card-chat-continue")).not.toBeInTheDocument();
+        expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("whitespace-only payload.message is treated as absent", () => {
+        render(
+            <ChatActionsRow
+                actions={[chatContinueAction({ payload: { message: "   " } })]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId("action-card-disabled")).toBeDisabled();
+    });
+});
+
+describe("open_drawer action with a handler", () => {
+    it("is enabled and passes the full action to onOpenDrawer", async () => {
+        const user = userEvent.setup();
+        const onOpenDrawer = vi.fn();
+        const action: RicoChatAction = {
+            id: "refine-search",
+            label: "Refine search",
+            kind: "open_drawer",
+            impact: "low",
+            requires_confirmation: false,
+            payload: { drawer: "refine_search", search_query: "HSE Manager" },
+        };
+        const onChatContinue = vi.fn();
+        render(
+            <ChatActionsRow
+                actions={[action]}
+                onChatContinue={onChatContinue}
+                onOpenDrawer={onOpenDrawer}
+            />,
+        );
+        await user.click(screen.getByTestId("action-card-open-drawer"));
+        expect(onOpenDrawer).toHaveBeenCalledOnce();
+        expect(onOpenDrawer).toHaveBeenCalledWith(action);
+        // The structured action must never leak into chat
+        expect(onChatContinue).not.toHaveBeenCalled();
     });
 });
 

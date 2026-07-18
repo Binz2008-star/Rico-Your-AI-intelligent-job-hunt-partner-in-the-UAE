@@ -23,6 +23,17 @@ function sanitizeHref(href: string | null | undefined): string | null {
 }
 
 /**
+ * The exact chat text a chat_continue click sends — payload.message ONLY.
+ * A button label is presentation, never chat input: falling back to the label
+ * put UI wording ("Refine search") into the intent router, which parsed it as
+ * a job role (P1, 2026-07-19). No message ⇒ the action renders disabled.
+ */
+function chatContinueMessage(action: RicoChatAction): string | null {
+    const message = (action.payload as Record<string, unknown>)?.message;
+    return typeof message === "string" && message.trim() ? message : null;
+}
+
+/**
  * Returns true only when the action can be executed in the current context.
  * High-impact and confirmation-required actions are always gated — they must
  * go through the PermissionRequestCard flow, never inline action cards.
@@ -31,7 +42,7 @@ function isEnabled(action: RicoChatAction): boolean {
     if (action.impact === "high") return false;
     if (action.requires_confirmation) return false;
     if (action.kind === "navigate") return !!sanitizeHref(action.href);
-    if (action.kind === "chat_continue") return true;
+    if (action.kind === "chat_continue") return !!chatContinueMessage(action);
     if (action.kind === "submit") return !!action.endpoint;
     if (action.kind === "open_drawer") return true;
     return false;
@@ -56,6 +67,9 @@ function disabledReason(action: RicoChatAction): string {
     }
     if (action.kind === "submit" && !action.endpoint) {
         return "No endpoint configured for this action";
+    }
+    if (action.kind === "chat_continue" && !chatContinueMessage(action)) {
+        return "No message configured for this action";
     }
     if (action.kind === "navigate" && !action.href) {
         return "No destination configured";
@@ -116,8 +130,7 @@ function ChatActionCard({
     }
 
     if (action.kind === "chat_continue" && enabled) {
-        const msg =
-            (action.payload as Record<string, string>)?.message ?? action.label;
+        const msg = chatContinueMessage(action)!;
         return (
             <button
                 type="button"
