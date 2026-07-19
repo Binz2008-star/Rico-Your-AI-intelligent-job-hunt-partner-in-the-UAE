@@ -4,6 +4,8 @@ import type {
   ExecutePermissionActionRequest,
   ExecutePermissionActionResponse,
   OnboardingStatusResponse,
+  RicoChatSession,
+  RicoChatSessionsResponse,
 } from "@/lib/schemas";
 import {
   AgentChatRequestSchema,
@@ -15,10 +17,13 @@ import {
   ProfileUpdateResponseSchema,
   RicoChatHistoryResponseSchema,
   RicoChatResponseSchema,
+  RicoChatSessionsResponseSchema,
   RicoProfileResponseSchema,
   SavedSearchesResponseSchema,
   UploadCVResponseSchema,
 } from "@/lib/schemas";
+
+export type { RicoChatSession, RicoChatSessionsResponse };
 import { getSignupAttribution } from "@/lib/signupAttribution";
 import type {
   Application,
@@ -1588,14 +1593,18 @@ export async function sendChatPublic(
 }
 
 // No user_id field — identity comes exclusively from the session cookie.
+// sessionId (#1193): the chat thread ("default" or a UUID minted by the
+// Sessions rail). Omitted = legacy single-thread behavior.
 export async function sendChat(
   message: string,
   signal?: AbortSignal,
   operationId?: string,
   language?: "en" | "ar",
+  sessionId?: string,
 ): Promise<ChatApiResponse> {
   const body: Record<string, unknown> = { message, operation_id: operationId };
   if (language) body.language = language;
+  if (sessionId) body.session_id = sessionId;
 
   const data = await requestJson<unknown>("/api/v1/rico/chat", {
     method: "POST",
@@ -1618,9 +1627,11 @@ export async function* sendChatStream(
   signal?: AbortSignal,
   language?: "en" | "ar",
   operationId?: string,
+  sessionId?: string,
 ): AsyncGenerator<ChatStreamEvent> {
   const body: Record<string, unknown> = { message, operation_id: operationId };
   if (language) body.language = language;
+  if (sessionId) body.session_id = sessionId;
   const res = await apiFetch(`${PROXY}/api/v1/rico/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1802,11 +1813,12 @@ export interface ChatHistoryResponse {
 export async function fetchChatHistory(
   limit = 20,
   before?: string,
+  sessionId?: string,
 ): Promise<ChatHistoryResponse> {
   const data = await requestJson<unknown>(
     "/api/v1/rico/chat/history",
     { method: "GET" },
-    { limit, before },
+    { limit, before, session_id: sessionId },
   );
   return validateShape(
     RicoChatHistoryResponseSchema,
@@ -1815,11 +1827,45 @@ export async function fetchChatHistory(
   );
 }
 
-export async function clearChatHistory(): Promise<void> {
-  await requestJson<unknown>("/api/v1/rico/chat/history", {
+// Scoped to one thread when sessionId is given; omitted = wipe everything
+// (the pre-session behavior, kept for backward compatibility).
+export async function clearChatHistory(sessionId?: string): Promise<void> {
+  const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+  await requestJson<unknown>(`/api/v1/rico/chat/history${qs}`, {
     method: "DELETE",
     credentials: "include",
   });
+}
+
+// ── Chat sessions (Sessions rail, #1193) ─────────────────────────────────────
+// Threads are derived server-side from chat history: "default" is the legacy
+// thread; every other id is a UUID minted client-side on "+ new".
+
+export const DEFAULT_CHAT_SESSION_ID = "default";
+
+export function mintChatSessionId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  // RFC-4122-shaped fallback for very old WebViews (non-crypto randomness is
+  // fine: the id only needs to be unique per user, and the backend validates
+  // shape, not entropy).
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+export async function fetchChatSessions(): Promise<RicoChatSessionsResponse> {
+  const data = await requestJson<unknown>("/api/v1/rico/chat/sessions", {
+    method: "GET",
+    credentials: "include",
+  });
+  return validateShape(
+    RicoChatSessionsResponseSchema,
+    data,
+    "Rico chat sessions",
+  );
 }
 
 export async function sendAgentChat(

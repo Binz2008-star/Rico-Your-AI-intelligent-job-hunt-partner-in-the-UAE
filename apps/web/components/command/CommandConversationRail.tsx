@@ -1,18 +1,25 @@
 "use client";
 
 /**
- * CommandConversationRail — C1 correction (owner directive 2026-07-16):
- * the canonical recording's left rail is a Sessions/conversation surface,
- * not general application navigation.
+ * CommandConversationRail — the /command Sessions surface.
  *
- * TRUTHFUL BY CONSTRUCTION: production Rico has exactly one conversation per
- * user (one chat-history endpoint; no multi-session API). This rail renders
- * only real state — the current conversation (title derived from the real
- * first user turn, live message count), the real history loading state, the
- * real history-load failure signal, and the page's real New-chat /
- * Clear-history handlers. It never fabricates previous sessions. True
- * multi-session history is documented as a separately scoped backend
- * capability gap in `design-handoffs/reviewed/2026-07-16-command-obsidian-v4/`.
+ * TRUTHFUL BY CONSTRUCTION (C1 correction, owner directive 2026-07-16): the
+ * rail renders only real state. Historically that meant exactly one
+ * conversation, because the backend had no multi-session API. That capability
+ * gap is now closed (#1193): `GET /api/v1/rico/chat/sessions` derives threads
+ * from real chat history, so in `multiSession` mode the rail lists every
+ * server-known thread — title from each thread's real first user turn, real
+ * turn counts — and switches between them via the page's real handlers. It
+ * still never fabricates sessions: a brand-new thread appears only as the
+ * user-minted draft it actually is.
+ *
+ * When `multiSession` is false (guest sessions, or a backend without the
+ * sessions endpoint yet) the rail renders the original single-conversation
+ * surface unchanged.
+ *
+ * Motion layer reuses the shell's established vocabulary (fade-up entrance
+ * with stagger, fade-in-scale, pulse) and always pairs with
+ * motion-reduce:animate-none.
  *
  * Presentation-only: every action is an existing CommandPage handler.
  */
@@ -22,6 +29,16 @@ import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation } from "@/lib/translations";
 import React from "react";
+
+/** One rail entry: a server-derived thread or the local unsent draft. */
+export interface RailSessionEntry {
+    id: string;
+    /** First real user turn of the thread; null = no user message yet. */
+    title: string | null;
+    userTurns: number;
+    /** Client-minted via "+ new", no server rows yet. */
+    draft?: boolean;
+}
 
 /** Derive the conversation title from the real transcript (pure, unit-tested):
  *  the first user turn, trimmed and capped — or the fallback when the user
@@ -65,6 +82,12 @@ export function CommandConversationRail({
     onNewChat,
     onClearHistory,
     onCancelClear,
+    multiSession = false,
+    sessions = [],
+    activeSessionId = "default",
+    switchingSessionId = null,
+    sessionSwitchError = false,
+    onSelectSession,
 }: {
     audience: "checking" | "public" | "authenticated";
     messages: Array<{ role: "user" | "rico"; text: string }>;
@@ -77,6 +100,15 @@ export function CommandConversationRail({
     onNewChat: () => void;
     onClearHistory: () => void;
     onCancelClear: () => void;
+    /** Multi-thread mode — on only when the sessions API answered (#1193). */
+    multiSession?: boolean;
+    sessions?: RailSessionEntry[];
+    activeSessionId?: string;
+    /** Thread whose history is being fetched right now (switch in flight). */
+    switchingSessionId?: string | null;
+    /** True when the last thread switch failed to load (real signal). */
+    sessionSwitchError?: boolean;
+    onSelectSession?: (id: string) => void;
 }) {
     const c = useWorkspaceTheme();
     const { language } = useLanguage();
@@ -96,6 +128,10 @@ export function CommandConversationRail({
     // transcript shows the fallback title with NO count and NO Clear History.
     const userTurnCount = countUserTurns(messages);
     const real = hasRealConversation(messages, historyState);
+    // Delete/clear is offered for a real live transcript, or (multi-session)
+    // an active thread with persisted user turns — never for an unsent draft.
+    const activeEntry = multiSession ? sessions.find((s) => s.id === activeSessionId) : undefined;
+    const clearable = multiSession ? real || (activeEntry ? activeEntry.userTurns > 0 : false) : real;
 
     return (
         <div data-testid="command-conversation-rail" className="flex w-[260px] flex-1 min-h-0 flex-col p-4">
@@ -124,6 +160,73 @@ export function CommandConversationRail({
                     >
                         {t("cmdSessionsLoading")}
                     </div>
+                ) : multiSession ? (
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="command-rail-sessions">
+                        {sessions.map((s, i) => {
+                            const isActive = s.id === activeSessionId;
+                            const isSwitching = switchingSessionId === s.id;
+                            // The active thread stays live: title/count derive from
+                            // the on-screen transcript, not the stale server summary.
+                            const rowTitle = isActive
+                                ? title
+                                : (s.title ?? t("cmdSessionsCurrentFallback"));
+                            const rowTurns = isActive ? userTurnCount : s.userTurns;
+                            const showCount = isActive ? real : s.userTurns > 0;
+                            return (
+                                <li
+                                    key={s.id}
+                                    className="animate-fade-up motion-reduce:animate-none"
+                                    style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => { if (!isActive) onSelectSession?.(s.id); }}
+                                        disabled={busy || clearingHistory || switchingSessionId !== null}
+                                        aria-current={isActive ? "true" : undefined}
+                                        aria-label={`${t("cmdSessionOpen")}: ${rowTitle}`}
+                                        data-testid={isActive ? "command-rail-current" : "command-rail-session"}
+                                        data-session-id={s.id}
+                                        className={`obs-session-row flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-start ${isActive ? "" : "obs-ghost"}`}
+                                        style={{
+                                            background: isActive ? c.panel : "transparent",
+                                            color: isActive ? c.ink : c.ink70,
+                                            border: "none",
+                                            cursor: isActive || busy || switchingSessionId !== null ? "default" : "pointer",
+                                            opacity: switchingSessionId !== null && !isSwitching && !isActive ? 0.55 : 1,
+                                        }}
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            className={`h-1 w-1 shrink-0 -translate-y-[2px] rounded-full ${(isActive && busy) || isSwitching ? "animate-pulse motion-reduce:animate-none" : ""}`}
+                                            style={{ background: isActive || isSwitching ? c.red : c.track }}
+                                        />
+                                        <span className="min-w-0 flex-1 truncate text-[13px] leading-snug">
+                                            {rowTitle}
+                                        </span>
+                                        {isSwitching ? (
+                                            <span
+                                                aria-hidden="true"
+                                                className="shrink-0 animate-pulse motion-reduce:animate-none"
+                                                style={{ ...eyebrow, fontSize: 10, color: c.ink55 }}
+                                            >
+                                                …
+                                            </span>
+                                        ) : showCount ? (
+                                            <span
+                                                dir="ltr"
+                                                className="shrink-0"
+                                                data-testid={isActive ? "command-rail-turn-count" : undefined}
+                                                title={t("cmdSessionsTurnCount")}
+                                                style={{ ...eyebrow, fontSize: 10, color: c.ink55 }}
+                                            >
+                                                {rowTurns}
+                                            </span>
+                                        ) : null}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
                 ) : (
                     <div
                         data-testid="command-rail-current"
@@ -156,14 +259,27 @@ export function CommandConversationRail({
                         {t("cmdSessionsLoadError")}
                     </p>
                 )}
+                {sessionSwitchError && (
+                    <p
+                        data-testid="command-rail-switch-error"
+                        className="mt-2 text-[11.5px] italic leading-relaxed animate-fade-in-scale motion-reduce:animate-none"
+                        style={{ color: c.ink55 }}
+                    >
+                        {t("cmdSessionSwitchError")}
+                    </p>
+                )}
             </div>
 
             {/* Controls: real Clear-history flow — authenticated AND a real
-                conversation only (never offered for a synthetic welcome). */}
-            {audience === "authenticated" && real && (
+                conversation only (never offered for a synthetic welcome). In
+                multi-session mode this deletes the ACTIVE thread only. */}
+            {audience === "authenticated" && clearable && (
                 <div className="mt-3 border-t pt-3" style={{ borderColor: c.hair }}>
                     {confirmClear ? (
-                        <div className="flex items-center gap-2" style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10 }}>
+                        <div
+                            className="flex items-center gap-2 animate-fade-in-scale motion-reduce:animate-none"
+                            style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10 }}
+                        >
                             <button
                                 type="button"
                                 onClick={onClearHistory}
@@ -172,7 +288,11 @@ export function CommandConversationRail({
                                 className="rounded px-2 py-1"
                                 style={{ border: `1px solid ${c.red}`, color: c.red, background: "transparent", cursor: "pointer", textTransform: "uppercase", letterSpacing: isAr ? "0.02em" : "0.14em" }}
                             >
-                                {clearingHistory ? t("cmdClearing") : t("cmdClearConfirm")}
+                                {clearingHistory
+                                    ? t("cmdClearing")
+                                    : multiSession
+                                        ? t("cmdSessionDeleteConfirm")
+                                        : t("cmdClearConfirm")}
                             </button>
                             <button
                                 type="button"
@@ -192,16 +312,36 @@ export function CommandConversationRail({
                             className="obs-ghost rounded px-1"
                             style={{ ...eyebrow, color: c.ink55, background: "transparent", border: "none", cursor: "pointer" }}
                         >
-                            {t("cmdClearHistory")}
+                            {multiSession ? t("cmdSessionDelete") : t("cmdClearHistory")}
                         </button>
                     )}
                 </div>
             )}
 
-            {/* Footer — truthful single-conversation count */}
+            {/* Footer — truthful thread count */}
             <div className="mt-3 border-t pt-3" style={{ ...eyebrow, color: c.ink55, borderColor: c.hair }}>
-                {t("cmdSessionsThread")}
+                {multiSession && sessions.length !== 1
+                    ? t("cmdSessionsThreadsCount").replace("{count}", String(sessions.length))
+                    : t("cmdSessionsThread")}
             </div>
+
+            {/* Session-row micro-motion: colors via obs-ghost (shell layer);
+                the inline-start hover nudge and its RTL mirror live here.
+                Reduced motion keeps color feedback, drops movement. */}
+            <style dangerouslySetInnerHTML={{ __html: `
+                [data-testid="command-conversation-rail"] .obs-session-row {
+                    transition: background-color .15s ease, color .15s ease, transform .18s ease;
+                }
+                [data-testid="command-conversation-rail"] .obs-session-row:not([aria-current]):not(:disabled):hover {
+                    transform: translateX(2px);
+                }
+                [dir="rtl"] [data-testid="command-conversation-rail"] .obs-session-row:not([aria-current]):not(:disabled):hover {
+                    transform: translateX(-2px);
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    [data-testid="command-conversation-rail"] .obs-session-row:hover { transform: none; }
+                }
+            ` }} />
         </div>
     );
 }

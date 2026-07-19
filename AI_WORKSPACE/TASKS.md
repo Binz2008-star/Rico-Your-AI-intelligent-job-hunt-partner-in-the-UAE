@@ -78,6 +78,69 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-016 — PR #1197: multi-session chat threads — Sessions rail lists and switches all conversations
+
+Status: review
+Owner: Claude (Fable session; owner directive 2026-07-19 "بدي كل الجلسات يطلعو بالشريط الجانبي"; owner start ruling "ابدأ")
+Branch: claude/sessions-sidebar-9zh6dq
+Issue/PR: #1197
+
+#### Objective
+
+Close the documented multi-session backend capability gap (DEC-20260719-002
+boundary 5 deferred item) for real: one authenticated user can hold many
+parallel chat threads, listed in the /command Sessions rail with switching,
+per-thread delete, and truthful live titles. The boundary forbade the
+frontend from SIMULATING multi-session history; this PR builds the real
+backend capability instead, so nothing is simulated.
+
+#### Freeze-lift record
+
+The `/command` design freeze (DEC-20260719-002) remains active. The owner
+message of 2026-07-19 directing "بدي كل الجلسات يطلعو بالشريط الجانبي حتى
+اتنقل بينهم اتصرف بحريه كامله" and the subsequent "ابدأ" ruling on the
+phase plan are the one-PR-only lift for PR #1197 alone; it expires on
+merge/close.
+
+#### Scope delivered
+
+- Migration 048 (+ idempotent startup DDL): nullable `session_id UUID` on
+  `rico_chat_history`; legacy rows stay NULL = the "default" thread.
+- `src/services/chat_session_context.py`: ambient per-request thread
+  context; SSE generator context pinning; session-id validation.
+- Session-scoped history/clear + derived `GET /chat/sessions`;
+  `session_id` accepted on POST /chat and /chat/stream. Omitted
+  session_id everywhere = byte-identical pre-session behavior.
+- Rail lists all threads (capability-gated on the sessions endpoint;
+  guests and older backends keep the original single-thread surface);
+  motion layer per existing vocabulary; EN/AR strings.
+- Drift guard registered (scripts/check_migration_drift.py 048).
+
+#### Acceptance criteria
+
+- [x] Backend: 16 unit + 9 route tests (incl. real-SSE context pinning);
+      tests/test_rico_routes.py 145 passed.
+- [x] Frontend: rail + page tests; full vitest 796 passed; build clean;
+      lint at pre-existing baseline.
+- [x] CI green on head 85192d5 (QA Tests run 29701608894, success).
+- [ ] Owner production smoke after deploy: two threads, switch, delete,
+      reload.
+
+- GitHub issue/PR: #1197
+- Branch: claude/sessions-sidebar-9zh6dq
+- Base branch: main
+- Last safe commit SHA: 826c7a3 (origin/main at cut)
+- Current head SHA: 85192d5 (+ this ledger entry at push time)
+- Status: review → merge on the owner's "ابدأ" ruling (Phase 0 of the
+  recorded v4 continuation plan)
+- What is complete: implementation + tests + CI green + this record
+- Validation still required: production smoke post-deploy (migration 048
+  self-applies via startup DDL; drift job verifies)
+- Next exact action: merge #1197; then Phase 1 (/applications compact
+  stage-tagged rows) as its own task/branch/PR
+- Rollback plan: revert the squash commit; session_id column is additive
+  and ignored by old code — no DB action needed
+
 ### TASK-20260719-012 — Live Paddle checkout failure on /subscription: diagnosis + fail-closed repair
 
 Status: review — live gates pending

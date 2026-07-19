@@ -1625,6 +1625,112 @@ class TestRicoChatHistoryRoute:
         r = auth_client.get("/api/v1/rico/chat/history?limit=1000")
         assert r.status_code == 422
 
+    def test_session_id_scopes_history(self, auth_client):
+        sid = "0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f"
+        with patch("src.services.chat_service.get_chat_history", return_value=[]) as mock_get:
+            r = auth_client.get(f"/api/v1/rico/chat/history?session_id={sid}")
+        assert r.status_code == 200
+        assert mock_get.call_args[1].get("session_id") == sid
+
+    def test_invalid_session_id_returns_422(self, auth_client):
+        r = auth_client.get("/api/v1/rico/chat/history?session_id=not-a-uuid")
+        assert r.status_code == 422
+
+
+class TestRicoChatSessionsRoute:
+    """GET /api/v1/rico/chat/sessions — Sessions rail thread listing (#1193)."""
+
+    def test_unauthenticated_returns_401(self, client):
+        r = client.get("/api/v1/rico/chat/sessions")
+        assert r.status_code == 401
+
+    def test_authenticated_returns_sessions_and_total(self, auth_client):
+        mock_sessions = [
+            {
+                "id": "default",
+                "title": "find me environmental roles",
+                "message_count": 6,
+                "user_turns": 3,
+                "started_at": "2026-07-01T09:00:00+00:00",
+                "last_activity": "2026-07-18T18:00:00+00:00",
+            }
+        ]
+        with patch("src.services.chat_service.list_chat_sessions", return_value=mock_sessions):
+            r = auth_client.get("/api/v1/rico/chat/sessions")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["total"] == 1
+        assert body["sessions"][0]["id"] == "default"
+        assert body["sessions"][0]["user_turns"] == 3
+
+    def test_scoped_delete_passes_session_to_service(self, auth_client):
+        sid = "0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f"
+        with patch("src.services.chat_service.clear_chat_history") as mock_clear:
+            r = auth_client.delete(f"/api/v1/rico/chat/history?session_id={sid}")
+        assert r.status_code == 204
+        assert mock_clear.call_args[1].get("session_id") == sid
+
+    def test_chat_accepts_default_and_uuid_session_id(self, auth_client):
+        with patch("src.services.chat_service.send_message", return_value=_CHAT_RESPONSE):
+            r1 = auth_client.post(
+                "/api/v1/rico/chat",
+                json={"message": "Hello", "session_id": "default"},
+            )
+            r2 = auth_client.post(
+                "/api/v1/rico/chat",
+                json={"message": "Hello", "session_id": "0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f"},
+            )
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+
+    def test_chat_rejects_malformed_session_id(self, auth_client):
+        r = auth_client.post(
+            "/api/v1/rico/chat",
+            json={"message": "Hello", "session_id": "definitely-not-a-uuid"},
+        )
+        assert r.status_code == 422
+
+    def test_chat_pins_ambient_session_for_send_message(self, auth_client):
+        """send_message must observe the request's chat thread via the ambient
+        context — that is what stamps every legacy _append_chat call site."""
+        from src.services.chat_session_context import get_active_chat_session
+        sid = "0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f"
+        seen: dict = {}
+
+        def fake_send(ctx, message, operation_id=None, language=None):
+            seen["session"] = get_active_chat_session()
+            return dict(_CHAT_RESPONSE)
+
+        with patch("src.services.chat_service.send_message", side_effect=fake_send):
+            r = auth_client.post(
+                "/api/v1/rico/chat", json={"message": "Hello", "session_id": sid},
+            )
+        assert r.status_code == 200
+        assert seen["session"] == sid
+
+    def test_chat_stream_pins_session_through_real_streaming(self, auth_client):
+        """The SSE generator runs OUTSIDE the endpoint's context (Starlette
+        threadpool copies per segment) — the run_generator_with_session wrapper
+        must still make the thread visible inside every generator segment."""
+        from src.services.chat_session_context import get_active_chat_session
+        sid = "0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f"
+        seen: dict = {}
+
+        def fake_send(ctx, message, operation_id=None, language=None):
+            seen["session"] = get_active_chat_session()
+            return dict(_CHAT_RESPONSE)
+
+        from src.services.chat_service import ChatPreflight
+        with patch("src.services.chat_service.run_chat_preflight", return_value=ChatPreflight(terminal=None, gate=None)), \
+             patch("src.services.chat_service.should_stream_ai", return_value=False), \
+             patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.services.chat_service.send_message", side_effect=fake_send):
+            r = auth_client.post(
+                "/api/v1/rico/chat/stream", json={"message": "Hello", "session_id": sid},
+            )
+        assert r.status_code == 200
+        assert seen["session"] == sid
+
 
 class TestRicoFeedbackRoute:
     """POST /api/v1/rico/feedback - record user feedback for learning."""
