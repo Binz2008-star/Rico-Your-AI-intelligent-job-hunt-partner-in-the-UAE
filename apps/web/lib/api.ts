@@ -52,6 +52,20 @@ const RICO_API =
 const PROXY = "/proxy";
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
+// #1101: every call in this module carries account-scoped data (identity,
+// profile, CV/files, applications, billing). `cache: "no-store"` keeps
+// response bodies out of the browser/data cache so logout leaves nothing
+// replayable on a shared device. The same boundary is enforced server-side
+// (FastAPI PrivateCacheHeadersMiddleware) and at the edge (/proxy headers in
+// next.config.js) — three independent layers. Public immutable assets never
+// go through this module. All fetches below MUST use apiFetch, not fetch.
+function apiFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  return fetch(input, { cache: "no-store", ...init });
+}
+
 export class ApiError extends Error {
   statusCode: number;
   data?: unknown;
@@ -103,7 +117,7 @@ export async function requestJson<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(buildProxyUrl(path, params), {
+  const res = await apiFetch(buildProxyUrl(path, params), {
     ...init,
     headers,
     credentials: init.credentials ?? "include",
@@ -151,7 +165,7 @@ export interface HealthResponse {
 
 // Server-side only — uses absolute URL (relative URLs don't resolve in Node.js).
 export async function fetchHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${RICO_API}/health`);
+  const res = await apiFetch(`${RICO_API}/health`);
   if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
   return res.json() as Promise<HealthResponse>;
 }
@@ -186,7 +200,7 @@ export interface MeResponse {
 }
 
 export async function fetchMe(signal?: AbortSignal): Promise<MeResponse> {
-  const res = await fetch(`${PROXY}/api/v1/me`, {
+  const res = await apiFetch(`${PROXY}/api/v1/me`, {
     credentials: "include",
     signal,
   });
@@ -214,7 +228,7 @@ export async function login(
   if (publicUserIdToMerge) {
     body.public_user_id_to_merge = publicUserIdToMerge;
   }
-  const res = await fetch(`${PROXY}/api/v1/auth/login`, {
+  const res = await apiFetch(`${PROXY}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -228,7 +242,7 @@ export async function login(
 }
 
 export async function logout(): Promise<void> {
-  await fetch(`${PROXY}/api/v1/auth/logout`, {
+  await apiFetch(`${PROXY}/api/v1/auth/logout`, {
     method: "POST",
     credentials: "include",
   });
@@ -263,7 +277,7 @@ export interface ProfileResponse {
 }
 
 export async function fetchProfile(): Promise<ProfileResponse> {
-  const res = await fetch(`${PROXY}/api/v1/rico/profile`, {
+  const res = await apiFetch(`${PROXY}/api/v1/rico/profile`, {
     credentials: "include",
   });
   if (!res.ok) throw new Error(`Profile fetch failed: ${res.status}`);
@@ -330,7 +344,7 @@ export async function uploadUserFile(
   const form = new FormData();
   form.append("file", file);
   form.append("doc_type", docType);
-  const res = await fetch(`${PROXY}/api/v1/user/files?doc_type=${docType}`, {
+  const res = await apiFetch(`${PROXY}/api/v1/user/files?doc_type=${docType}`, {
     method: "POST",
     body: form,
     credentials: "include",
@@ -357,7 +371,7 @@ export interface SavedSearchesResponse {
 }
 
 export async function fetchSavedSearches(): Promise<SavedSearchesResponse> {
-  const res = await fetch(`${PROXY}/api/v1/rico/settings/saved-searches`, {
+  const res = await apiFetch(`${PROXY}/api/v1/rico/settings/saved-searches`, {
     credentials: "include",
   });
   if (!res.ok) throw new Error(`Saved searches fetch failed: ${res.status}`);
@@ -372,7 +386,7 @@ export async function createSavedSearch(
   query: string,
   filters?: Record<string, unknown>,
 ): Promise<{ status: string; query: string }> {
-  const res = await fetch(`${PROXY}/api/v1/rico/settings/saved-searches`, {
+  const res = await apiFetch(`${PROXY}/api/v1/rico/settings/saved-searches`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -383,7 +397,7 @@ export async function createSavedSearch(
 }
 
 export async function deleteSavedSearch(id: string): Promise<void> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${PROXY}/api/v1/rico/settings/saved-searches/${id}`,
     {
       method: "DELETE",
@@ -1006,7 +1020,7 @@ export async function dismissGmailReviewItem(
 export async function forgotPassword(
   email: string,
 ): Promise<{ message: string }> {
-  const res = await fetch(`${PROXY}/api/v1/auth/forgot-password`, {
+  const res = await apiFetch(`${PROXY}/api/v1/auth/forgot-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -1019,7 +1033,7 @@ export async function resetPassword(
   token: string,
   new_password: string,
 ): Promise<{ message: string }> {
-  const res = await fetch(`${PROXY}/api/v1/auth/reset-password`, {
+  const res = await apiFetch(`${PROXY}/api/v1/auth/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, new_password }),
@@ -1316,7 +1330,7 @@ export type { OnboardingStatusResponse };
 export async function fetchOnboardingStatus(
   signal?: AbortSignal,
 ): Promise<OnboardingStatusResponse> {
-  const res = await fetch(`${PROXY}/api/v1/onboarding/status`, {
+  const res = await apiFetch(`${PROXY}/api/v1/onboarding/status`, {
     credentials: "include",
     signal,
   });
@@ -1336,7 +1350,7 @@ export async function fetchOnboardingStatus(
 export async function submitOnboarding(
   payload: OnboardingPayload,
 ): Promise<{ status: string; updated_fields: string[] }> {
-  const res = await fetch(`${PROXY}/api/v1/onboarding/submit`, {
+  const res = await apiFetch(`${PROXY}/api/v1/onboarding/submit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -1371,7 +1385,7 @@ export interface ApplicationUpdatePayload {
 export async function createApplication(
   payload: ApplicationCreatePayload,
 ): Promise<{ status: string; job_id: string; message: string }> {
-  const res = await fetch(`${PROXY}/api/v1/applications`, {
+  const res = await apiFetch(`${PROXY}/api/v1/applications`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -1401,7 +1415,7 @@ export interface ManualApplicationCreatePayload {
 export async function createManualApplication(
   payload: ManualApplicationCreatePayload,
 ): Promise<{ status: string; job_id: string; message: string }> {
-  const res = await fetch(`${PROXY}/api/v1/applications/manual`, {
+  const res = await apiFetch(`${PROXY}/api/v1/applications/manual`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -1427,7 +1441,7 @@ export async function updateApplication(
   jobId: string,
   payload: ApplicationUpdatePayload,
 ): Promise<{ status: string; job_id: string; message: string }> {
-  const res = await fetch(`${PROXY}/api/v1/applications/${jobId}`, {
+  const res = await apiFetch(`${PROXY}/api/v1/applications/${jobId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -1498,7 +1512,7 @@ export async function register(
   if (attribution) {
     body.signup_attribution = attribution;
   }
-  const res = await fetch(`${PROXY}/api/v1/auth/register`, {
+  const res = await apiFetch(`${PROXY}/api/v1/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -1519,7 +1533,7 @@ export async function register(
 export async function verifyEmail(
   token: string,
 ): Promise<{ message: string; email: string }> {
-  const res = await fetch(
+  const res = await apiFetch(
     buildProxyUrl("/api/v1/auth/verify-email", { token }),
     { method: "GET", credentials: "include" },
   );
@@ -1533,7 +1547,7 @@ export async function verifyEmail(
 export async function resendVerification(
   email: string,
 ): Promise<{ message: string }> {
-  const res = await fetch(`${PROXY}/api/v1/auth/resend-verification`, {
+  const res = await apiFetch(`${PROXY}/api/v1/auth/resend-verification`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -1605,7 +1619,7 @@ export async function* sendChatStream(
 ): AsyncGenerator<ChatStreamEvent> {
   const body: Record<string, unknown> = { message };
   if (language) body.language = language;
-  const res = await fetch(`${PROXY}/api/v1/rico/chat/stream`, {
+  const res = await apiFetch(`${PROXY}/api/v1/rico/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -1629,7 +1643,7 @@ export async function* sendChatStreamPublic(
   // session_id is correlation-only (#1070); identity is the capability cookie.
   const body: Record<string, unknown> = { message, session_id: sessionId };
   if (language) body.language = language;
-  const res = await fetch(`${PROXY}/api/v1/rico/chat/stream/public`, {
+  const res = await apiFetch(`${PROXY}/api/v1/rico/chat/stream/public`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

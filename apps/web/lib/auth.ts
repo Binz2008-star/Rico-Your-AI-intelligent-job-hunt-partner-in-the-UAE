@@ -17,9 +17,11 @@ export function isAuthenticated(): boolean {
 
 /** Call backend logout to clear the session cookie. */
 export async function clearAuth(): Promise<void> {
+  // #1101: no-store — the logout response must not enter any cache.
   await fetch("/proxy/api/v1/auth/logout", {
     method: "POST",
     credentials: "include",
+    cache: "no-store",
   });
 }
 
