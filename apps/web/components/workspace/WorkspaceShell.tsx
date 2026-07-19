@@ -27,7 +27,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { atelierFraunces, atelierNaskhArabic, atelierSansArabic } from "@/components/atelier-kit/fonts";
 import { Mono } from "@/components/atelier-kit/primitives";
+import { RailGoalMini } from "@/components/workspace/RailGoalMini";
 import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
+import { useMissionSummary } from "@/hooks/useMissionSummary";
 
 export type NavItem = { key: string; href: string; label: { en: string; ar: string }; icon: React.ReactNode };
 
@@ -87,6 +89,13 @@ export function WorkspaceShell({
     const c = dark ? WORKSPACE_THEME.dark : WORKSPACE_THEME.light;
     const SERIF = ATELIER_FONT.serif;
 
+    // Mission summary for the rail goal-mini + applications nav count
+    // (PR-V4-2a; single cached fetch, fail-hidden). Document routes only —
+    // the app variant (/command, public-capable) never fetches; /dashboard
+    // is skipped because its goal panel already renders the same data.
+    const missionSummary = useMissionSummary(!isApp && pathname !== "/dashboard");
+    const applicationsCount = missionSummary?.applications_sent ?? 0;
+
     const Brand = (
         <Link href="/dashboard" className="flex items-baseline gap-2" style={{ textDecoration: "none" }}>
             <span style={{ fontFamily: SERIF, fontSize: "1.35rem", color: c.ink, lineHeight: 1 }}>Rico</span>
@@ -113,6 +122,16 @@ export function WorkspaceShell({
                     >
                         <span style={{ color: active ? c.red : c.ink40, display: "inline-flex" }}>{item.icon}</span>
                         <span style={{ fontSize: 14 }}>{isAr ? item.label.ar : item.label.en}</span>
+                        {item.key === "applications" && applicationsCount > 0 && (
+                            <span
+                                dir="ltr"
+                                data-testid="nav-applications-count"
+                                className="ms-auto"
+                                style={{ fontFamily: ATELIER_FONT.mono, color: active ? c.red : c.ink40, fontSize: 10 }}
+                            >
+                                {applicationsCount}
+                            </span>
+                        )}
                     </Link>
                 );
             })}
@@ -165,6 +184,7 @@ export function WorkspaceShell({
                 >
                     <div className="flex flex-col gap-8">
                         <div className="pb-5" style={{ borderBottom: `1px solid ${c.hair}` }}>{Brand}</div>
+                        <RailGoalMini mission={missionSummary} language={language} c={c} />
                         {NavList}
                     </div>
                     {Controls}
@@ -183,6 +203,7 @@ export function WorkspaceShell({
                 )}
                 {showMobileChrome && open && (
                     <div className="lg:hidden px-5 py-4 flex shrink-0 flex-col gap-4" style={{ background: c.rail, borderBottom: `1px solid ${c.hair}` }}>
+                        <RailGoalMini mission={missionSummary} language={language} c={c} onNavigate={() => setOpen(false)} />
                         {NavList}
                         {Controls}
                         {mobileExtras}

@@ -78,6 +78,94 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-008 — PR-V4-2a (+folded 2b): WorkspaceShell rail goal-mini + applications nav count (fail-hidden, single cached fetch)
+
+Status: review
+Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
+Branch: claude/rico-workspace-audit-x65z30 (re-cut from main b262032 after #1186)
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+
+Add the frozen v4 reference's goal-mini card to the shared WorkspaceShell
+rail (desktop sidebar + mobile drawer) and an applications count chip on
+the Applications nav item — both from ONE cached read of the existing
+`GET /api/v1/mission/current`, strictly fail-hidden (loading/error/disabled
+render nothing; shell byte-identical to before).
+
+#### PR-V4-2b fold-in evidence (owner condition)
+
+`MissionState.applications_sent` already carries the applications count, so
+the nav chip rides the SAME single cached fetch as the goal-mini:
+- no duplicate fetching — module-level 60s cache + in-flight promise dedupe
+  (pinned by test: consecutive shell mounts = 1 request);
+- no weak caching — TTL cache shared across all shell consumers;
+- no blocking shell paint — chrome renders immediately, data fills in
+  fail-hidden;
+- no unnecessary shared-route cost — app-variant shells (/command,
+  public-capable) and /dashboard (goal panel already shows the data)
+  never fetch at all (pinned by tests).
+Per the owner ruling, 2b therefore folds into 2a.
+
+#### Constraints
+
+- Do not touch: backend, `/command` behavior/content (app variant renders
+  no new chrome and fires no request — freeze respected), routing, tokens.
+- Fail-hidden is a hard contract: any failure — including synchronous
+  throws — renders today's shell unchanged.
+
+#### Acceptance criteria
+
+- [x] Goal-mini renders only from loaded mission data: derived bilingual
+      title (structured fields; English-only server string never
+      rendered), progress bar, /dashboard link; mobile drawer closes on
+      navigate.
+- [x] Fail-hidden pinned: fetch failure → no card, no chip, nav intact.
+- [x] No fetch on /dashboard; no fetch and no card in the app variant.
+- [x] Count chip only when applications_sent > 0, same single fetch.
+- [x] rail-goal-mini suite 8/8; full vitest 751/751; `npm run build` clean.
+
+#### Required verification
+
+- [x] Unit tests: `rail-goal-mini.test.tsx` 8 passed; full vitest 751/751
+- [x] Frontend build: clean
+- [ ] CI green on the PR head
+
+#### Continuity Block
+
+- Task ID: TASK-20260719-008
+- GitHub issue/PR: draft PR from `claude/rico-workspace-audit-x65z30`
+- Branch: claude/rico-workspace-audit-x65z30
+- Base branch: main
+- Last safe commit SHA: b262032 (origin/main after #1186)
+- Current head SHA: set at push time
+- Uncommitted changes present: no (at push time)
+- Status: review
+- Files inspected: `components/workspace/WorkspaceShell.tsx`,
+  `components/atelier-kit/primitives.tsx` (Mono does not forward
+  data-testid/dir — chip/pct use styled spans instead),
+  `vitest.setup.ts` (font/navigation mocks),
+  `__tests__/command-workspace-shell.test.tsx` (mock patterns)
+- Files changed: `hooks/useMissionSummary.ts` (new — cached fail-hidden
+  read); `components/workspace/RailGoalMini.tsx` (new);
+  `components/workspace/WorkspaceShell.tsx` (goal-mini in sidebar +
+  drawer, count chip); `__tests__/rail-goal-mini.test.tsx` (new, 8
+  tests); this ledger entry
+- What is complete: implementation + tests + fold-in evidence
+- What is incomplete: CI on the PR head
+- Known blockers: none
+- Validation already run: focused 8/8; full vitest 751/751; build clean.
+  Regression note: the first full run failed 57 tests (existing suites
+  partially mock `@/lib/api` without `getMission`); fixed by honoring the
+  fail-hidden contract for synchronous throws in the hook — no unrelated
+  test files were modified.
+- Validation still required: CI on head
+- Next exact action: open Draft PR, verify gates, merge per mandate
+- Stop condition: any /command visual/behavior delta, or a reviewer
+  showing the shell paint blocked by the fetch
+- Rollback plan: revert the squash commit — shell returns to current
+  chrome; hook/component are additive files
+
 ### TASK-20260719-007 — PR-V4-1: /dashboard Overview goal panel + suggested next actions (real MissionState only)
 
 Status: in_progress
