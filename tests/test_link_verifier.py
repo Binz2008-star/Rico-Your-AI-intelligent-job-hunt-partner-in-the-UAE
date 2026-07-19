@@ -302,6 +302,69 @@ async def test_verify_link_blocks_redirect_to_private_ip(verifier):
 
 
 @pytest.mark.asyncio
+async def test_verify_link_blocks_initial_metadata_ip(verifier):
+    """Test that an initial URL to a cloud metadata IP is blocked before any fetch.
+
+    Regression for the SSRF gap where verify_link() fetched the initial URL
+    before validating it (only redirect targets were checked). Callers such as
+    the chat flow invoke verify_link() directly, bypassing route-level
+    validation, so the method must self-protect.
+    """
+    with patch.object(verifier, '_get_client') as mock_get_client:
+        mock_client = AsyncMock()
+        mock_get_client.return_value = mock_client
+
+        result = await verifier.verify_link("http://169.254.169.254/latest/meta-data/")
+
+        assert result.status == LinkStatus.BLOCKED
+        assert "SSRF protection" in result.error_message
+        # The request must never be issued for a blocked initial URL.
+        mock_client.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_verify_link_blocks_initial_localhost(verifier):
+    """Test that an initial URL to localhost is blocked before any fetch."""
+    with patch.object(verifier, '_get_client') as mock_get_client:
+        mock_client = AsyncMock()
+        mock_get_client.return_value = mock_client
+
+        result = await verifier.verify_link("http://localhost:8000/internal")
+
+        assert result.status == LinkStatus.BLOCKED
+        assert "SSRF protection" in result.error_message
+        mock_client.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_verify_link_blocks_initial_private_ip(verifier):
+    """Test that an initial URL to a private IP range is blocked before any fetch."""
+    with patch.object(verifier, '_get_client') as mock_get_client:
+        mock_client = AsyncMock()
+        mock_get_client.return_value = mock_client
+
+        result = await verifier.verify_link("http://192.168.1.1/admin")
+
+        assert result.status == LinkStatus.BLOCKED
+        assert "SSRF protection" in result.error_message
+        mock_client.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_verify_link_blocks_initial_non_http_scheme(verifier):
+    """Test that an initial file:// URL is blocked before any fetch."""
+    with patch.object(verifier, '_get_client') as mock_get_client:
+        mock_client = AsyncMock()
+        mock_get_client.return_value = mock_client
+
+        result = await verifier.verify_link("file:///etc/passwd")
+
+        assert result.status == LinkStatus.BLOCKED
+        assert "SSRF protection" in result.error_message
+        mock_client.get.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_verify_indeed_expired_job_page_200(verifier):
     """Test Indeed job page that returns HTTP 200 but body says expired."""
     with patch.object(verifier, '_get_client') as mock_get_client:
