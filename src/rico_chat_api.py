@@ -130,6 +130,20 @@ TELEGRAM_MENTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# UAE city names mentioned inline in a message (e.g. a job-search request
+# "find HSE jobs in Dubai and Abu Dhabi"). Used at the minimum-profile gate to
+# recover a city the user already stated so Rico never re-asks for a city that
+# was already provided. Global/data-driven — no per-user special casing.
+_UAE_CITY_SCAN_RE = re.compile(
+    r"\b(dubai|abu\s+dhabi|sharjah|ajman|ras\s+al\s+khaimah|fujairah|"
+    r"al\s+ain|umm\s+al\s+quwain|deira|bur\s+dubai|uae)\b",
+    re.IGNORECASE,
+)
+_UAE_CITY_SCAN_AR_RE = re.compile(
+    r"(دبي|أبوظبي|ابوظبي|الشارقة|عجمان|رأس\s+الخيمة|راس\s+الخيمة|"
+    r"الفجيرة|أم\s+القيوين|ام\s+القيوين|العين)"
+)
+
 # Settings/Notification commands: enable/disable notifications and alerts
 _SETTINGS_NOTIFICATION_ENABLE_RE = re.compile(
     r"\b(?:enable|turn\s+on|activate|start)\s+(?:telegram\s+)?(?:notifications?|alerts?|reminders?)\b",
@@ -3266,6 +3280,35 @@ class RicoChatAPI:
             return False
 
     @staticmethod
+    def _extract_uae_cities(message: str) -> list[str]:
+        """Extract UAE city names named inline in *message*.
+
+        Returns title-cased known cities (Arabic names kept as written),
+        de-duplicated and order-preserving. ``"uae"`` is treated as an all-UAE
+        scope and normalised to ``"UAE"``. Used by the minimum-profile gate to
+        recover a city the user already stated in a job-search request
+        ("find HSE jobs in Dubai and Abu Dhabi") instead of re-asking for it.
+        Global and data-driven — never keyed to a specific user or dataset.
+        """
+        text = message or ""
+        found: list[str] = []
+        seen: set[str] = set()
+        for m in _UAE_CITY_SCAN_RE.finditer(text):
+            raw = re.sub(r"\s+", " ", m.group(1).strip()).lower()
+            canon = "UAE" if raw == "uae" else raw.title()
+            key = canon.lower()
+            if key not in seen:
+                seen.add(key)
+                found.append(canon)
+        for m in _UAE_CITY_SCAN_AR_RE.finditer(text):
+            raw = re.sub(r"\s+", " ", m.group(1).strip())
+            key = raw.lower()
+            if key not in seen:
+                seen.add(key)
+                found.append(raw)
+        return found
+
+    @staticmethod
     def _looks_like_career_execution_request(message: str) -> bool:
         """True when the user expects Rico to execute career discovery/search."""
         text = (message or "").strip().lower()
@@ -5256,7 +5299,8 @@ class RicoChatAPI:
             "email address", "your email", "بريدك الإلكتروني",
         ),
         "preferred_cities": (
-            "preferred cities", "preferred city", "which city", "what city",
+            "preferred cities", "preferred city", "preferred uae city",
+            "which city", "what city", "city/cities",
             "city (e.g.", "city preference", "المدن المفضلة", "المدينة المفضلة",
         ),
     }
@@ -5395,11 +5439,21 @@ class RicoChatAPI:
                     normalised.append(c)
             upsert_profile(user_id=user_id, updates={"preferred_cities": normalised})
             ctx.pop("_pending_field", None)
-            ctx.pop("_pending_cv_generate", None)
+            _was_cv_generate = bool(ctx.pop("_pending_cv_generate", None))
+            _search_message = ctx.pop("_pending_search_message", None)
             self._store_recent_context(user_id, ctx)
-            # Reload profile so the CV draft picks up the new cities
-            updated_profile = self._resolve_profile(user_id)
-            return self._handle_cv_generate_from_profile(user_id, updated_profile, message)
+            # Route by WHY the city was requested. The CV builder sets
+            # `_pending_cv_generate`; a gated job search (minimum-profile gate)
+            # or a role-suggestion prompt ending in "which city?" did not — those
+            # wanted a SEARCH, so resume it instead of diverting into a CV draft.
+            # Keyed on the pending-flow flag, never on a specific user.
+            if _was_cv_generate:
+                # Reload profile so the CV draft picks up the new cities
+                updated_profile = self._resolve_profile(user_id)
+                return self._handle_cv_generate_from_profile(user_id, updated_profile, message)
+            # Resume the job search now that the city is saved. The caller
+            # re-dispatches this exactly once (single finalize).
+            return {"_redispatch_message": _search_message or "find matching jobs"}
 
         # ── Confirm profile update (BUG-04 consent gate) ──────────────────────
         # A 'profile_update' intent stashes the extracted preferences here and
@@ -6736,11 +6790,49 @@ class RicoChatAPI:
             if self._message_requires_job_profile(message):
                 _ctx = self._resolve_profile(user_id)
                 _gate_ok, _missing = evaluate_minimum_profile(_ctx)
+                # Recover a city the user named inline in the search request
+                # itself ("find HSE jobs in Dubai and Abu Dhabi") so the gate
+                # never asks for a city that was already provided. Global and
+                # data-driven — any user who names a UAE city gets it persisted.
+                if (
+                    not _gate_ok
+                    and "preferred_cities" in _missing
+                    and not _ctx.preferred_cities
+                    and getattr(self, "_persist", True)
+                ):
+                    _inline_cities = self._extract_uae_cities(message)
+                    if _inline_cities:
+                        upsert_profile(
+                            user_id=user_id,
+                            updates={"preferred_cities": _inline_cities},
+                        )
+                        _ctx = self._resolve_profile(user_id)
+                        _gate_ok, _missing = evaluate_minimum_profile(_ctx)
                 if _gate_ok:
                     return self._handle_active_user(user_id, message)
                 # Gate failed during a job-search request — downgrade and prompt.
                 if getattr(self, "_persist", True):
                     set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
+                # Remember that the city is being requested to unblock THIS job
+                # search, so the user's next reply (a bare city like "Ajman") is
+                # captured as a preferred city and the search resumes — instead
+                # of being misread as a role or diverted into a CV draft. Only
+                # when preferred_cities is the resolvable gap (the pending-field
+                # resolver handles cities, not roles).
+                if "preferred_cities" in _missing and getattr(self, "_persist", True):
+                    try:
+                        _pend_ctx = self._get_recent_context(user_id)
+                        if not isinstance(_pend_ctx, dict):
+                            _pend_ctx = {}
+                        _pend_ctx["_pending_field"] = "preferred_cities"
+                        _pend_ctx["_pending_search_message"] = message
+                        _pend_ctx.pop("_pending_cv_generate", None)
+                        self._store_recent_context(user_id, _pend_ctx)
+                    except Exception:
+                        logger.debug(
+                            "chat: failed to arm pending city for gated search",
+                            exc_info=True,
+                        )
                 import re as _re
                 _is_ar = language == "ar" or bool(_re.search(r'[؀-ۿ]', message))
                 _labels_en = {
@@ -6917,6 +7009,13 @@ class RicoChatAPI:
         # through to the unknown/fallback handler.
         pending_field_result = self._resolve_pending_field(user_id, message, profile)
         if pending_field_result is not None:
+            _redispatch = pending_field_result.get("_redispatch_message")
+            if _redispatch:
+                # City saved to unblock a gated job search — resume it now. Mirror
+                # the letter-choice resolver below: re-dispatch through the INNER
+                # handler so the outer _handle_active_user wrapper runs option
+                # injection / pending-search storage exactly once on the result.
+                return self._handle_active_user_inner(user_id, _redispatch)
             return self._finalize(pending_field_result, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Letter-choice resolver (BUG-02) ──────────────────────────────────
