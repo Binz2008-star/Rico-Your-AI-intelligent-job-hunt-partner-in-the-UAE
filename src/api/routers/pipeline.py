@@ -5,6 +5,7 @@ All state management lives in src.services.pipeline_service.
 """
 from __future__ import annotations
 
+import os
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -12,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from src.api.deps import get_current_user, require_admin, require_cron_secret
 from src.schemas.pipeline import (
     AdminDigestResponse,
+    AnalyticsPurgeResponse,
     JobAlertEmailsResponse,
     PipelineStatusResponse,
     PipelineTriggerResponse,
@@ -104,6 +106,60 @@ def run_profile_nudge(
     """
     summary = run_profile_nudge_sweep()
     return ProfileNudgeResponse(**summary)
+
+
+# Kill switch for the scheduled analytics retention purge (DEC-20260719-001).
+# Default OFF (fail-closed): disabled runs are an explicit 200 no-op that never
+# touches the repository, so a scheduled caller never pages on the gate.
+_ANALYTICS_PURGE_FLAG = "RICO_ENABLE_ANALYTICS_PURGE"
+
+
+def _analytics_purge_enabled() -> bool:
+    return os.getenv(_ANALYTICS_PURGE_FLAG, "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+@router.post("/analytics-purge", response_model=AnalyticsPurgeResponse)
+def run_analytics_purge(
+    request: Request,
+    _cron: None = Depends(require_cron_secret),
+) -> AnalyticsPurgeResponse:
+    """Scheduled analytics_events retention purge (migration 047 contract).
+
+    Deletes rows older than the fixed ``RETENTION_DAYS`` constant in
+    src/repositories/analytics_events_repo.py. The retention window is NEVER
+    caller-controlled: no query parameter or body field can change it —
+    changing the window is a reviewed code change (DEC-20260719-001).
+
+    Guarded twice: the X-Cron-Secret shared secret AND the
+    ``RICO_ENABLE_ANALYTICS_PURGE`` kill switch (default off). Idempotent —
+    reruns delete nothing new, and a table-absent database is a fail-soft
+    zero. Pass ``?dry_run=true`` to report the would-delete count (built from
+    the same predicate as the DELETE) without deleting.
+    """
+    from src.repositories.analytics_events_repo import (
+        RETENTION_DAYS,
+        count_expired,
+        purge_expired,
+    )
+
+    raw = (request.query_params.get("dry_run") or "").strip().lower()
+    dry_run = raw in {"1", "true", "yes", "on"}
+
+    if not _analytics_purge_enabled():
+        return AnalyticsPurgeResponse(
+            status="disabled", removed=0, retention_days=RETENTION_DAYS, dry_run=dry_run,
+        )
+    if dry_run:
+        return AnalyticsPurgeResponse(
+            status="dry_run",
+            removed=0,
+            would_remove=count_expired(),
+            retention_days=RETENTION_DAYS,
+            dry_run=True,
+        )
+    return AnalyticsPurgeResponse(
+        status="ok", removed=purge_expired(), retention_days=RETENTION_DAYS, dry_run=False,
+    )
 
 
 @router.post("/admin-digest", response_model=AdminDigestResponse)

@@ -290,6 +290,42 @@ def test_purge_bounds_accepts_normal_values():
         assert params == (180,)  # normal value passes through
 
 
+def test_count_and_purge_share_the_exact_predicate():
+    """DEC-20260719-001: dry-run count and DELETE are built from the SAME
+    predicate string, so the two queries cannot drift apart over time."""
+    assert repo._PURGE_SQL == "DELETE FROM analytics_events WHERE " + repo._EXPIRED_PREDICATE_SQL
+    assert repo._COUNT_EXPIRED_SQL == (
+        "SELECT count(*) FROM analytics_events WHERE " + repo._EXPIRED_PREDICATE_SQL
+    )
+
+
+def test_count_expired_counts_without_deleting():
+    conn, cursor = _mock_conn()
+    cursor.fetchone.return_value = (7,)
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn):
+        assert repo.count_expired() == 7
+    (sql, params) = cursor.execute.call_args[0]
+    assert sql == repo._COUNT_EXPIRED_SQL
+    assert params == (repo.RETENTION_DAYS,)
+    assert not conn.commit.called  # read-only — nothing to commit
+
+
+def test_count_expired_bounds_fail_closed():
+    """Same 1..3650 bounds as purge_expired; invalid values never touch DB."""
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection") as mock_conn:
+        for bad in (0, -5, 10000, "invalid"):
+            assert repo.count_expired(bad) == 0
+    mock_conn.assert_not_called()
+
+
+def test_count_expired_never_raises():
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", side_effect=RuntimeError("boom")):
+        assert repo.count_expired() == 0
+
+
 # ── 5. Guest identity correctness ─────────────────────────────────────────────
 # Distinct anonymous users must NEVER collapse onto a shared actor: guest
 # events require a bounded guest_session_id, stored only as a keyed HMAC.

@@ -4145,3 +4145,58 @@ Owner's independent repo verification found two blockers; both fixed:
   dropped value is deliberately never logged. New pins: interface-shape
   test covers BOTH emitters; unapproved-action-dropped test.
 - `Issue/PR` traceability completed: #1179.
+
+### TASK-20260719-004 — Analytics retention purge scheduling (endpoint + workflow, two-gate rollout)
+
+Status: review
+Owner: Claude (Fable session; owner audit approval "Approve with minor
+refinements", 2026-07-19)
+Branch: claude/analytics-purge-retention-audit-43dbwn
+Decision: DEC-20260719-001
+
+#### Objective
+Wire the scheduled invocation of `purge_expired()` promised by migration
+047 ("executed by a scheduled job wired in a LATER change") — the last
+engineering increment of the analytics foundation before baseline
+collection. One responsibility only: endpoint + workflow + flag + tests +
+docs. No migration, no schema change, no guest analytics, no new events,
+no batching (deferred until a backlog scenario exists), #1177 untouched.
+
+#### Scope delivered
+- `src/api/routers/pipeline.py` — `POST /api/v1/pipeline/analytics-purge`:
+  cron-secret guarded; gated by `RICO_ENABLE_ANALYTICS_PURGE` (default OFF,
+  fail-closed; disabled = explicit 200 no-op that never touches the repo);
+  `?dry_run=true` reports the would-delete count without deleting. The
+  retention window is NEVER caller-controlled — no query/body input exists;
+  the handler calls the repo with no arguments (internal constant only).
+- `src/repositories/analytics_events_repo.py` (minimal) — shared
+  `_EXPIRED_PREDICATE_SQL` now builds BOTH the purge DELETE and the new
+  read-only `count_expired()` (same bounds validation, never raises), so
+  dry-run and delete can never drift.
+- `src/schemas/pipeline.py` — `AnalyticsPurgeResponse`.
+- `.github/workflows/analytics-purge.yml` — dispatch (dry-run default
+  true) + daily schedule shipped COMMENTED OUT (job-alert-emails pattern);
+  concurrency group; hard-fail on non-200.
+- Docs: `.env.example`, `CLAUDE.md`, RUNBOOKS/047 addendum (flow diagram,
+  rollout gates, verification, emergency disable), DEC-20260719-001.
+
+#### Acceptance criteria
+- [x] Retention pin: handler signature exposes no retention parameter;
+      retention-shaped query params ignored; repo invoked with no
+      arguments; window stays the `RETENTION_DAYS=180` constant.
+- [x] Fail-closed pins: flag unset/false → 200 `status="disabled"`, zero
+      repository access (purge AND count); kill switch outranks dry-run.
+- [x] Dry-run pins: counts via the shared predicate, never deletes;
+      predicate-identity pinned at the SQL-string level.
+- [x] Guard pins: 503 with no `RICO_CRON_SECRET`, 403 on bad secret.
+      (tests/unit/test_analytics_purge_endpoint.py — 10 tests;
+      tests/unit/test_analytics_events_repo.py 36 tests incl. 4 new
+      count_expired pins; emitters 11 green alongside.)
+
+#### Rollout (owner-sequenced, two independent gates)
+047 production apply → emitters live → baseline starts → this PR merges
+(inert: flag OFF + schedule commented) → owner sets flag on Render →
+dry-run dispatch verification → owner uncomments the schedule. Emergency
+disable: workflow off (GitHub UI) → flag off (no deploy) → revert PR.
+Never clear `RICO_CRON_SECRET` as a disable path (it would 503 every
+pipeline sweep).
