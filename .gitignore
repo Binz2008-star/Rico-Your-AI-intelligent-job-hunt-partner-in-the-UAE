@@ -150,3 +150,4 @@ rico-job-automation-api.env
 
 # Decision regression harness run artifacts (harness + goldens are versioned)
 tests/decision_regression/reports/*.json
+data/*.lock

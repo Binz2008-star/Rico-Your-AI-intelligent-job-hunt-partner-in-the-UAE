@@ -303,6 +303,16 @@ class AgentRuntime:
             except Exception:
                 logger.debug("runtime: career_memory record failed", exc_info=True)
 
+        # 12. First-party analytics (v1: the job_action event only). The emitter
+        #     is fail-soft by contract and this call site is wrapped again —
+        #     analytics must never block or alter the action result.
+        if tool_ok and action in _MEMORY_ACTIONS and resolved_job:
+            try:
+                from src.services.analytics_emitters import emit_job_action
+                emit_job_action(user_id, action)
+            except Exception:
+                logger.debug("runtime: analytics emit failed action=%s", action, exc_info=True)
+
         return RuntimeResult(
             ok=tool_ok,
             message=message,

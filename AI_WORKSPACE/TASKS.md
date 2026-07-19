@@ -4088,3 +4088,45 @@ real-browser smoke) → Status: done.
 - **PR #1177 ruling (owner):** carries a conflicting
   `047_reasoning_traces.sql`; stays Draft; any future reopen restarts from
   `main` ≥ `c09a929a` with a NEW migration number and a NEW task.
+
+---
+
+### TASK-20260719-003 — Analytics emitters v1 (minimal wiring: 2 events)
+
+Status: review
+Owner: Claude (Fable session; owner gate "Analytics HMAC gate: PASS → Emitter PR: UNBLOCKED")
+Branch: claude/analytics-emitters-v1
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+Wire the MINIMUM emitter set into the live product so the Product Truth
+Sprint's primary metric (return-with-action) becomes measurable. Two events
+only — `job_action` + `search_performed` — from two central call sites.
+`session_start` deliberately deferred (adds noise, not needed for the metric).
+
+#### Scope delivered
+- `src/services/analytics_emitters.py` (new): fail-soft emitters; no
+  parameter can carry free text by signature; authenticated-only in v1
+  (`public:` sessions skipped — guest identity contract exists in the
+  foundation; guest emission is a later separately-approved change).
+- `src/agent/runtime.py`: step 12 — `job_action` after successful handled
+  actions (the mandated action path), double-wrapped fail-soft.
+- `src/rico_chat_api.py` `_finalize`: one `search_performed` per finalized
+  `job_matches` response — results_count only, NEVER query text.
+
+#### Constraints honored (owner list)
+- Minimal events; no scope expansion. No free text. Key used only via the
+  foundation's keyed HMAC. Allowlist respected (properties are exact
+  subsets). No purge/retention. #1177 untouched.
+
+#### Acceptance criteria
+- [x] Fail-soft pins: emitters never raise even when the foundation throws;
+      runtime action result and chat response both unaffected when the
+      emitter itself raises.
+- [x] No-PII pins: emitted properties are exactly {action} / {surface,
+      results_count}; signature-level pin that no query-text parameter
+      exists; public/missing identities emit nothing.
+- [x] Wiring pins: runtime success emits once with (user, action);
+      _finalize emits only for job_matches with the match count.
+      (tests/unit/test_analytics_emitters.py — 9 tests; foundation 31 +
+      runtime 58 suites green alongside.)

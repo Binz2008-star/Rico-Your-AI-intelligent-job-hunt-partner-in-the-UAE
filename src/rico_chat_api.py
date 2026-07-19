@@ -3761,6 +3761,20 @@ class RicoChatAPI:
         agentic_ui = compose(runtime_result, response)
         agent = self._get_openai_agent()
 
+        # First-party analytics (v1): one search_performed per finalized
+        # job_matches response — counts only, never query text; authenticated
+        # only (the emitter skips public: sessions). Fail-soft: analytics can
+        # never block or alter the chat response.
+        if response.get("type") == "job_matches":
+            try:
+                from src.services.analytics_emitters import emit_search_performed
+                emit_search_performed(
+                    getattr(profile, "user_id", None),
+                    len(response.get("matches") or []),
+                )
+            except Exception:
+                logger.debug("chat: analytics search emit skipped", exc_info=True)
+
         # Get Jotform form IDs from environment
         jotform_form_id = os.getenv("JOTFORM_FORM_ID") or os.getenv("JOTFORM_RICO_FORM_ID")
 
