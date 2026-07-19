@@ -32,9 +32,11 @@ import {
     ApiError,
     createPaddleCheckoutSession,
     createPaddleCustomerPortalSession,
+    createWhatsAppSubscriptionRequest,
     getBillingConfig,
     getMySubscription,
     getSubscriptionPlans,
+    getWhatsAppBillingConfig,
     recordSubscriptionIntent,
     type BillingConfig,
     type SubscriptionMeResponse,
@@ -169,6 +171,9 @@ function PlanCard({
     uiMode,
     configLoading,
     userEmail,
+    whatsappAvailable,
+    whatsappPending,
+    onWhatsAppSubscribe,
     t,
     c,
 }: {
@@ -186,6 +191,9 @@ function PlanCard({
     uiMode: BillingUiMode;
     configLoading: boolean;
     userEmail: string | null;
+    whatsappAvailable: boolean;
+    whatsappPending: boolean;
+    onWhatsAppSubscribe: () => void;
     t: (key: TranslationKey) => string;
     c: ReturnType<typeof useWorkspaceTheme>;
 }) {
@@ -318,6 +326,38 @@ function PlanCard({
                     {t("paymentTemporarilyUnavailableDesc")}
                 </p>
             )}
+
+            {/* Secondary ASSISTED channel — WhatsApp (DEC-20260719-003).
+                Paddle stays visually primary; this never claims payment or
+                activation. Hidden entirely when the server reports the
+                channel unavailable (fail-hidden). */}
+            {whatsappAvailable && isLoggedIn && !isCurrent && !isHigherPlan && !subLoading && !maintenanceMode && (
+                <div style={{ marginTop: "0.75rem" }}>
+                    <button
+                        type="button"
+                        data-testid="subscribe-via-whatsapp"
+                        onClick={onWhatsAppSubscribe}
+                        disabled={whatsappPending || anyCheckoutPending}
+                        style={{
+                            width: "100%",
+                            padding: "0.55rem 1rem",
+                            borderRadius: 8,
+                            border: `1px solid ${c.hair}`,
+                            background: "transparent",
+                            color: c.ink70,
+                            fontSize: "0.8rem",
+                            fontWeight: 600,
+                            cursor: whatsappPending || anyCheckoutPending ? "not-allowed" : "pointer",
+                            opacity: whatsappPending || anyCheckoutPending ? 0.5 : 1,
+                        }}
+                    >
+                        {whatsappPending ? t("whatsappPreparing") : t("subscribeViaWhatsApp")}
+                    </button>
+                    <p style={{ margin: "0.4rem 0 0", fontSize: "0.68rem", lineHeight: 1.4, color: c.ink40, textAlign: "center" }}>
+                        {t("whatsappAssistedLabel")} {t("whatsappActivationNote")}
+                    </p>
+                </div>
+            )}
         </div>
     );
 }
@@ -423,6 +463,20 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
         return () => { cancelled = true; };
     }, [maintenanceMode]);
 
+    // WhatsApp-assisted channel availability — server-decided, fail-hidden:
+    // config unreachable or channel disabled ⇒ the CTA never renders.
+    const [waActive, setWaActive] = useState(false);
+    const [waPending, setWaPending] = useState(false);
+
+    useEffect(() => {
+        if (maintenanceMode) return;
+        let cancelled = false;
+        getWhatsAppBillingConfig()
+            .then((cfg) => { if (!cancelled) setWaActive(Boolean(cfg.whatsapp_active)); })
+            .catch(() => { if (!cancelled) setWaActive(false); });
+        return () => { cancelled = true; };
+    }, [maintenanceMode]);
+
     const backendMaintenanceSubMessage = t("backendMaintenanceSub");
     const subscriptionCheckoutFailedMessage = t("subscriptionCheckoutFailed");
     const subscriptionPaymentConfiguringMessage = t("subscriptionPaymentConfiguring");
@@ -522,6 +576,34 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
     const handleIntent = useCallback((plan: "pro") => {
         void recordSubscriptionIntent(plan, "paddle", "/subscription");
     }, []);
+
+    const whatsappRequestFailedMessage = t("whatsappRequestFailed");
+    const whatsappActivationNoteMessage = t("whatsappActivationNote");
+
+    const handleWhatsAppSubscribe = useCallback(async () => {
+        if (maintenanceMode) { toast(backendMaintenanceSubMessage, "error"); return; }
+        if (waPending) return; // repeated-click protection
+        setWaPending(true);
+        try {
+            void recordSubscriptionIntent("pro", "whatsapp", "/subscription");
+            // The pending request MUST exist before WhatsApp opens — the
+            // server-built URL is the only thing we ever open, and opening
+            // WhatsApp never means payment or activation succeeded.
+            const req = await createWhatsAppSubscriptionRequest(language as "en" | "ar");
+            window.open(req.whatsapp_url, "_blank", "noopener,noreferrer");
+            toast(whatsappActivationNoteMessage, "info");
+        } catch (err) {
+            const msg =
+                err instanceof ApiError
+                    ? err.message
+                    : (err instanceof Error && err.message)
+                        ? err.message
+                        : whatsappRequestFailedMessage;
+            toast(msg, "error");
+        } finally {
+            setWaPending(false);
+        }
+    }, [backendMaintenanceSubMessage, language, maintenanceMode, toast, waPending, whatsappActivationNoteMessage, whatsappRequestFailedMessage]);
 
     const handleManage = useCallback(async () => {
         if (maintenanceMode) { toast(backendMaintenanceSubMessage, "error"); return; }
@@ -667,6 +749,9 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                                 uiMode={uiMode}
                                 configLoading={configLoading}
                                 userEmail={userEmail}
+                                whatsappAvailable={waActive}
+                                whatsappPending={waPending}
+                                onWhatsAppSubscribe={handleWhatsAppSubscribe}
                                 t={t}
                                 c={c}
                             />

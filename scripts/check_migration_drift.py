@@ -96,6 +96,11 @@ CHECKS: list[tuple[str, str, object]] = [
     # first backend boot after deploy — drift here means the deploy never
     # started, not that a manual apply is pending.
     ("048", "column", ("rico_chat_history", "session_id")),
+    # WhatsApp-assisted subscription pending requests (DEC-20260719-003).
+    # Additive, entitlement-neutral: rows here never grant access — the code
+    # fails closed (503 on the request endpoint) until 049 is applied.
+    ("049", "table", "whatsapp_subscription_requests"),
+    ("049", "index", "uq_whatsapp_sub_requests_user_pending"),
     ("048", "index", "idx_rico_chat_user_session_created"),
 ]
 

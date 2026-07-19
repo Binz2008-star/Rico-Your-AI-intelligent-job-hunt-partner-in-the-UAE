@@ -78,6 +78,58 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-015 — WhatsApp-assisted subscription as a secondary channel alongside Paddle
+
+Status: review
+Owner: Claude (Fable session; owner directive 2026-07-19 — DEC-20260719-003)
+Branch: feat/whatsapp-assisted-subscription (cut from main 38bf14a)
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+
+Restore WhatsApp-assisted subscription as a SECONDARY assisted channel.
+Paddle stays the primary automated provider (behavior/plans/prices
+untouched; Rico Monthly USD 21.50/month; no Stripe). WhatsApp is an
+assisted channel, not a payment processor: creating a request or opening
+WhatsApp NEVER grants entitlement — activation only via the existing
+admin-only manual mechanism after owner payment verification.
+
+#### Scope delivered
+
+- Migration 049 `whatsapp_subscription_requests` (additive; one pending
+  request per user via partial unique index; documented DROP rollback;
+  drift-check signatures registered).
+- `src/repositories/whatsapp_requests_repo.py` + new router
+  `src/api/routers/billing_whatsapp.py`: public `{whatsapp_active}` flag,
+  authenticated request endpoint — fail-closed config
+  (WHATSAPP_SUBSCRIPTIONS_ENABLED + E.164 WHATSAPP_SUBSCRIPTION_NUMBER),
+  server-resolved plan/price/currency, opaque RICO-… reference, sanitized
+  wa.me URL (EN/AR templates: reference/plan/price only — no email/JWT/
+  ids/CV data).
+- Admin activation (`payment_reference` = RICO-…) best-effort marks the
+  request approved (audit; never blocks activation).
+- `/subscription` secondary CTA "Subscribe via WhatsApp" / "اشترك عبر
+  واتساب": fail-hidden, request-before-open, repeated-click protected,
+  honest errors, mandated note "Activation occurs after payment
+  verification." / "يتم تفعيل الاشتراك بعد التحقق من الدفع."
+- Docs: DEC-20260719-003; handoff
+  `HANDOFFS/2026-07-19-whatsapp-assisted-subscription.md` (approval
+  procedure, env vars, risks, rollback); `.env.example` + CLAUDE.md env
+  additions.
+
+#### Required verification
+
+- [x] Backend: tests/test_whatsapp_subscription.py 23/23 (auth, fail-closed
+      config, forged-field rejection, idempotency, entitlement isolation,
+      no-PII response, admin linkage, Paddle routes untouched).
+- [x] Frontend: subscription-atelier suite 23/23 incl. 7 new CTA tests;
+      `npm run build` green.
+- [ ] Owner: Render env (`WHATSAPP_SUBSCRIPTIONS_ENABLED=true`,
+      `WHATSAPP_SUBSCRIPTION_NUMBER=971585989080` or a designated number)
+      + apply migration 049 + live assisted round-trip.
+
+---
+
 ### TASK-20260719-016 — PR #1197: multi-session chat threads — Sessions rail lists and switches all conversations
 
 Status: review
