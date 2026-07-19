@@ -310,6 +310,43 @@ Per the owner ruling, 2b therefore folds into 2a.
 - Rollback plan: revert the squash commit — shell returns to current
   chrome; hook/component are additive files
 
+### TASK-20260719-008 — Hotfix: chat verification_status contract drift (frontend schema)
+
+Status: review
+Owner: Claude (Fable session; owner hotfix authorization 2026-07-19 post-#1187 smoke)
+Branch: fix/chat-verification-status-contract
+Issue/PR: #1191
+
+#### Objective
+Align `JobMatchSchema.verification_status` with the backend's CURRENT emit
+vocabulary so a valid REST-fallback chat response is never discarded
+wholesale. Root cause (2026-07-19 16:22Z production smoke): the stale
+2-value enum (`live | lead_needs_verification`) rejected
+`aggregator_untrusted`, `validateShape` threw
+"Invalid authenticated Rico chat response" (lib/api.ts:89), and the user
+saw a generic error although the server had run exactly one cascade and
+stored the full reply. Reproduced deterministically with the stored
+production payload.
+
+#### Scope delivered
+- `apps/web/lib/schemas/index.ts` only: `KNOWN_VERIFICATION_STATUSES`
+  (owner-required five: live_verified / login_required / rate_limited /
+  aggregator_untrusted / needs_source_verification, plus still-emitted
+  google_intermediary / expired / live / lead_needs_verification —
+  file:line evidence in the PR body) + forward-compat normalization:
+  unknown value → `needs_source_verification` with console warning —
+  never promoted to a trusted status, never dropping the response.
+- 6 acceptance tests (`chat-verification-status-contract.test.ts`)
+  incl. the sanitized production payload shape and the REST-fallback
+  visibility pin (sendChat resolves; matches + message intact).
+- NOT in scope (owner order): backend/source-quality logic, SSE path,
+  #1187 operation ownership, relevance-floor (separate track).
+
+#### Verification
+- Full frontend suite 777 passed; build green.
+- Post-deploy gate (owner): repeat the REST-fallback smoke — the reply
+  must render instead of the generic error.
+
 ### TASK-20260719-007 — PR-V4-1: /dashboard Overview goal panel + suggested next actions (real MissionState only)
 
 Status: in_progress

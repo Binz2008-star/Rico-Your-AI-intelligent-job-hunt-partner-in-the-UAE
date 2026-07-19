@@ -1077,7 +1077,8 @@ export interface JobMatch {
   | "login_required"
   | "rate_limited"
   | "aggregator_untrusted"
-  | "google_intermediary";
+  | "google_intermediary"
+  | "expired";
 }
 
 export interface RicoOption {
