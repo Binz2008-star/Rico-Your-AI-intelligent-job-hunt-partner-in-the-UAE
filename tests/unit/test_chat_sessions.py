@@ -177,3 +177,36 @@ def test_clear_all_remains_unscoped():
     (sql, params), _ = _run_clear(None)
     assert "session_id" not in sql
     assert params == ("uid-1",)
+
+
+# ── background-thread persistence keeps the ambient session ──────────────────
+
+def test_append_chat_background_thread_sees_active_session():
+    """_append_chat dispatches the DB write to a daemon Thread. A bare thread
+    starts with an EMPTY contextvars context, so without copy_context the
+    ambient chat session reads None and every threaded turn is stamped into
+    the default thread — the exact defect the 38bf14a production-verification
+    smoke caught (2026-07-19). Pins that the worker observes the session."""
+    import threading
+
+    from src.rico_chat_api import RicoChatAPI
+
+    seen: dict = {}
+    done = threading.Event()
+
+    def capture(uid, role, message):
+        seen["session"] = get_active_chat_session()
+        done.set()
+
+    api = RicoChatAPI.__new__(RicoChatAPI)  # no heavy __init__
+    api.memory = MagicMock()
+    api._persist = True
+
+    token = set_active_chat_session(UUID_A)
+    try:
+        with patch("src.services.chat_service.db_append_chat", side_effect=capture):
+            api._append_chat("synthetic@example.com", "user", "hello threads")
+            assert done.wait(timeout=5), "background DB append never ran"
+    finally:
+        reset_active_chat_session(token)
+    assert seen["session"] == UUID_A

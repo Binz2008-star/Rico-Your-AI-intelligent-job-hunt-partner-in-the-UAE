@@ -2236,6 +2236,13 @@ class RicoChatAPI:
             return
         # Async DB persistence — non-blocking, daemon so worker shutdown is
         # not stalled by a slow or unreachable Postgres during deploys.
+        #
+        # The write MUST run inside a COPY of the dispatching context: a bare
+        # Thread starts with an empty contextvars context, so the ambient
+        # active chat session (chat_session_context, #1197) would read None
+        # and every threaded turn would be stamped into the default thread.
+        # Caught by the 38bf14a production-verification smoke (2026-07-19).
+        import contextvars
         import threading
         from src.services.chat_service import db_append_chat
 
@@ -2245,9 +2252,10 @@ class RicoChatAPI:
             except Exception:
                 logger.error("rico_chat_api: db_append_chat failed user=%s", uid, exc_info=True)
 
+        _dispatch_ctx = contextvars.copy_context()
         threading.Thread(
-            target=_safe_db_append,
-            args=(user_id, role, payload),
+            target=_dispatch_ctx.run,
+            args=(_safe_db_append, user_id, role, payload),
             daemon=True,
         ).start()
 
