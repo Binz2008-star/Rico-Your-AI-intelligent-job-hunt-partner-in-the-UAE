@@ -4,6 +4,7 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { linkifySubscriptionMentions } from "@/lib/subscriptionCta";
 
 const md: Components = {
   p: ({ children }) => (
@@ -66,14 +67,17 @@ const md: Components = {
     </pre>
   ),
   a: ({ href, children }) => {
-    const safe = href && (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:"))
-      ? href
-      : "#";
+    // In-app relative paths (e.g. /subscription — fix/command-subscription-cta)
+    // navigate in the SAME tab; the RicoReplyMarkdown safeHref policy applied
+    // here too. External http(s)/mailto keep the new-tab + noopener treatment;
+    // anything else stays inert.
+    const h = (href ?? "").trim();
+    const isInternal = h.startsWith("/") || h.startsWith("#");
+    const safe = isInternal || /^(https?:|mailto:)/i.test(h) ? h : "#";
     return (
       <a
         href={safe}
-        target="_blank"
-        rel="noopener noreferrer"
+        {...(isInternal ? {} : { target: "_blank", rel: "noopener noreferrer" })}
         className="text-[var(--rico-primary)] underline underline-offset-2 hover:opacity-75 transition-opacity"
       >
         {children}
@@ -122,7 +126,7 @@ export const RicoMarkdownContent = React.memo(function RicoMarkdownContent({ chi
   return (
     <div className="whitespace-normal text-[14px] leading-relaxed text-[var(--rico-fg-2)]">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={md} skipHtml>
-        {children}
+        {linkifySubscriptionMentions(children)}
       </ReactMarkdown>
     </div>
   );

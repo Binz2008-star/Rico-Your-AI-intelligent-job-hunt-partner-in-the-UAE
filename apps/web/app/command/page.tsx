@@ -9,6 +9,7 @@ import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/compo
 import { RefineSearchPanel } from "@/components/command/RefineSearchPanel";
 import { AtelierCardScope } from "@/components/command/CommandStates";
 import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
+import { SubscriptionCta } from "@/components/command/SubscriptionCta";
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
@@ -26,6 +27,7 @@ import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
 import { buildCopyText, getJobFallbackActions, resolveJobLink } from "@/lib/job-fallback";
+import { mentionsSubscription } from "@/lib/subscriptionCta";
 import { buildAuthHref } from "@/lib/redirect";
 import type { ExecuteAllowedAction, RicoAgenticUi, RicoAttachmentAnalysis, RicoChatAction, RicoProposedChange } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
@@ -2172,6 +2174,15 @@ export default function CommandPage() {
                                                 </AtelierMarkdownScope>
                                             )
                                             : <div className="whitespace-pre-wrap">{m.text}</div>
+                                    )}
+
+                                    {/* fix/command-subscription-cta: a reply that points at the
+                                        subscription surface gets a real localized CTA to the
+                                        internal /subscription route — the model's raw-text URL
+                                        is never the navigation affordance, and /subscription
+                                        stays the single source of truth for plan copy. */}
+                                    {m.role === "rico" && !m.isError && !!m.text && mentionsSubscription(m.text) && (
+                                        <SubscriptionCta />
                                     )}
 
                                     {/* Source rate-limited notice — keep the user inside Rico
