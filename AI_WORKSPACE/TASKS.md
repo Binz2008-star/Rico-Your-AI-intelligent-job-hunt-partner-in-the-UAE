@@ -4017,7 +4017,7 @@ sees the final composed search query.
 
 ### TASK-20260719-002 — analytics_events foundation (migration 047)
 
-Status: review
+Status: merged — production migration pending
 Owner: Claude (Fable session; owner directive post-#1175: single-objective PR)
 Branch: claude/analytics-events-foundation
 Issue/PR: (draft PR from this branch)
@@ -4066,3 +4066,25 @@ Revert the commit; drop the table if created — nothing references it.
 TASK-20260719-001 (Refine search structured action): merged as `d5f96f1e`
 on `main` (PR #1175, expected-head protection, CI green incl. the new
 real-browser smoke) → Status: done.
+
+##### Closeout (2026-07-19, post-merge of #1176)
+
+- Merged: head `25975b63a5e4c16cf24a6dbaf6aa1becb01687b3` → squash
+  `c09a929a5ea4baa01b5729387d22b8697e2d4f3b` on `main` (owner-staged
+  sequence: QA green on exact head → Ready → Neon Preview runbook →
+  expected-head squash).
+- Preview validation PASSED on temporary branch `br-tiny-truth-am61levn`
+  (details + commands: `AI_WORKSPACE/RUNBOOKS/047-analytics-events-migration.md`).
+- **Record correction — the merged PR body froze BEFORE the final round
+  and is stale on two points:** it says "NOT applied anywhere" (superseded:
+  047 WAS applied to the Neon preview branch as part of the merge gate;
+  production remains unapplied and owner-gated) and "Tests (22)"
+  (superseded: 31 analytics tests after the guest-identity correction).
+  The squash commit message on `main` is the accurate durable record.
+- Status is NOT "done" because, in order: production 047 application
+  (separate owner approval), `RICO_ANALYTICS_HMAC_KEY` on Render (owner),
+  emitters PR (must pass guest SID / honor identity contract +
+  allowlist↔DDL lockstep), purge scheduling PR — then baseline collection.
+- **PR #1177 ruling (owner):** carries a conflicting
+  `047_reasoning_traces.sql`; stays Draft; any future reopen restarts from
+  `main` ≥ `c09a929a` with a NEW migration number and a NEW task.
