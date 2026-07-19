@@ -11,9 +11,11 @@ Server-side analytics emitters — v1, deliberately minimal (owner gate,
 Contract (inherits the analytics_events_repo foundation, PR #1176):
   * NEVER raises and never alters product flow — every emitter swallows
     everything, and call sites are additionally wrapped.
-  * NO free text: emitters accept only enum tokens and counts by signature —
-    there is no parameter through which message text, CV text, or a search
-    query could even be passed.
+  * NO free text — enforced at the EMITTER level, not just by callers:
+    ``job_action`` accepts only values in the explicit ``_ALLOWED_ACTIONS``
+    set (anything else is dropped); ``search_performed`` exposes no string
+    parameter at all (surface is fixed internally) and carries only a
+    bounded count. The foundation's allowlist validates again underneath.
   * Authenticated users only in v1: ``public:`` guest sessions are skipped
     entirely. The guest identity contract (audience="guest" +
     guest_session_id) exists in the foundation; wiring guest emission is a
@@ -30,6 +32,15 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 
+# The only action values this emitter will ever record — mirrors the
+# runtime's handled-action set. Anything else (including free text a future
+# caller might pass by mistake) is DROPPED, never coerced.
+_ALLOWED_ACTIONS = frozenset({"apply", "save", "skip", "block", "not_relevant"})
+
+# v1 wires the command surface only; the value is fixed HERE, not caller-supplied.
+_SURFACE = "command"
+
+
 def _eligible_user(user_id: Any) -> Optional[str]:
     """v1 scope: real authenticated identities only; guests skipped."""
     uid = str(user_id or "").strip()
@@ -44,19 +55,25 @@ def emit_job_action(user_id: Any, action: Any) -> None:
         uid = _eligible_user(user_id)
         if uid is None:
             return
+        act = str(action or "").strip()
+        if act not in _ALLOWED_ACTIONS:
+            # Value deliberately not logged — an unapproved value could be text.
+            logger.debug("analytics: unapproved job_action value dropped")
+            return
         from src.repositories.analytics_events_repo import record_event
         record_event(
             "job_action",
             user_id=uid,
-            surface="command",
-            properties={"action": str(action)},
+            surface=_SURFACE,
+            properties={"action": act},
         )
     except Exception:
         logger.debug("analytics: emit_job_action skipped", exc_info=True)
 
 
-def emit_search_performed(user_id: Any, results_count: Any, surface: str = "command") -> None:
-    """Record one search_performed event (counts only — never query text)."""
+def emit_search_performed(user_id: Any, results_count: Any) -> None:
+    """Record one search_performed event (bounded count only — no string
+    parameter exists on this interface; surface is fixed internally)."""
     try:
         uid = _eligible_user(user_id)
         if uid is None:
@@ -65,8 +82,8 @@ def emit_search_performed(user_id: Any, results_count: Any, surface: str = "comm
         record_event(
             "search_performed",
             user_id=uid,
-            surface=surface,
-            properties={"surface": surface, "results_count": int(results_count)},
+            surface=_SURFACE,
+            properties={"surface": _SURFACE, "results_count": int(results_count)},
         )
     except Exception:
         logger.debug("analytics: emit_search_performed skipped", exc_info=True)

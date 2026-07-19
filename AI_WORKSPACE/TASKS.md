@@ -4096,7 +4096,7 @@ real-browser smoke) → Status: done.
 Status: review
 Owner: Claude (Fable session; owner gate "Analytics HMAC gate: PASS → Emitter PR: UNBLOCKED")
 Branch: claude/analytics-emitters-v1
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1179
 
 #### Objective
 Wire the MINIMUM emitter set into the live product so the Product Truth
@@ -4130,3 +4130,16 @@ only — `job_action` + `search_performed` — from two central call sites.
       _finalize emits only for job_matches with the match count.
       (tests/unit/test_analytics_emitters.py — 9 tests; foundation 31 +
       runtime 58 suites green alongside.)
+
+##### Addendum — owner review round (2026-07-19)
+
+Owner's independent repo verification found two blockers; both fixed:
+- The "signature-level free-text prevention" claim was OVERSTATED
+  (`action: Any` / `surface: str` could carry arbitrary text). Corrected to
+  real emitter-level enforcement: `emit_search_performed` no longer exposes
+  any string parameter (surface fixed internally); `emit_job_action`
+  records only values in the explicit `_ALLOWED_ACTIONS` set — anything
+  else (free text, unknown tokens, case variants) is dropped, and the
+  dropped value is deliberately never logged. New pins: interface-shape
+  test covers BOTH emitters; unapproved-action-dropped test.
+- `Issue/PR` traceability completed: #1179.

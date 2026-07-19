@@ -54,10 +54,31 @@ def test_search_emits_counts_only_never_query_text():
     args, kwargs = rec.call_args
     assert args == ("search_performed",)
     assert kwargs["properties"] == {"surface": "command", "results_count": 7}
-    # structural pin: the signature offers no path for query text
+
+
+def test_emitter_interfaces_expose_no_free_text_path():
+    """Owner review pin: NO emitter parameter may carry caller-supplied text.
+    search has no string parameter at all (surface fixed internally); action
+    is constrained to the explicit _ALLOWED_ACTIONS set below."""
     import inspect
-    params = set(inspect.signature(em.emit_search_performed).parameters)
-    assert params == {"user_id", "results_count", "surface"}
+    assert set(inspect.signature(em.emit_search_performed).parameters) == {
+        "user_id", "results_count",
+    }
+    assert set(inspect.signature(em.emit_job_action).parameters) == {
+        "user_id", "action",
+    }
+    assert em._ALLOWED_ACTIONS == {"apply", "save", "skip", "block", "not_relevant"}
+
+
+def test_unapproved_action_values_are_dropped_not_recorded():
+    """Free text or unknown tokens passed as `action` never reach the store."""
+    with patch("src.repositories.analytics_events_repo.record_event") as rec:
+        em.emit_job_action("user@x.com", "find me a job at ACME please")
+        em.emit_job_action("user@x.com", "why")
+        em.emit_job_action("user@x.com", "")
+        em.emit_job_action("user@x.com", None)
+        em.emit_job_action("user@x.com", "SAVE")  # not coerced — exact set only
+    assert not rec.called
 
 
 def test_emitters_never_raise_when_foundation_throws():
