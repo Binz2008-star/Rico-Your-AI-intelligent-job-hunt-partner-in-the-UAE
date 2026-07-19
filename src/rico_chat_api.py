@@ -2056,18 +2056,20 @@ class RicoChatAPI:
         """
         try:
             from src.services.operation_state import (
-                expire_if_stale,
+                expire_if_orphaned,
                 get_operation,
                 is_actively_running,
+                is_stale,
             )
 
             existing = get_operation(user_id, operation_id)
             if not existing or existing.get("type") != "job_search":
                 return None
-            # Over-ceiling live records transition to the terminal "expired"
-            # state here (ownership release) — the re-start below then bumps
-            # `attempt`, revoking the superseded execution's write rights.
-            existing = expire_if_stale(user_id, existing)
+            # Ownership is released ONLY on proof the executing process is
+            # dead (nonce mismatch) — never on age. The re-start after an
+            # orphan release bumps `attempt`, revoking the dead execution's
+            # write rights.
+            existing = expire_if_orphaned(user_id, existing)
             arabic = language == "ar" or self._is_arabic_text(message or "")
             base = {
                 "intent": "search_jobs",
@@ -2077,6 +2079,25 @@ class RicoChatAPI:
                 "response_source": "operation_guard",
             }
             if is_actively_running(existing):
+                if is_stale(existing):
+                    # Still owned (the cascade may be alive in this process —
+                    # there is no enforced cancellation) but past the stale
+                    # threshold: be honest, keep blocking same-id
+                    # re-execution, and point at the manual recovery path
+                    # (a NEW message = a new turn = a new operation).
+                    return {
+                        **base,
+                        "type": "search_in_progress",
+                        "operation_status": "running",
+                        "stale": True,
+                        "message": (
+                            "بحثك السابق يبدو عالقاً — لم أبدأ بحثاً ثانياً فوقه. "
+                            "إذا لم تظهر النتائج، أرسل رسالة بحث جديدة وسأبدأ بحثاً نظيفاً."
+                            if arabic else
+                            "Your earlier search looks stuck — I have NOT started a second one on top of it. "
+                            "If results don't appear, send a new search message and I'll start fresh."
+                        ),
+                    }
                 return {
                     **base,
                     "type": "search_in_progress",

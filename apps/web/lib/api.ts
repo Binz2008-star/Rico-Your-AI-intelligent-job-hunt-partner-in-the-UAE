@@ -1706,10 +1706,13 @@ export function mintOperationId(): string {
 
 export interface OperationStatusResponse {
   operation_id: string;
-  status: "running" | "completed" | "failed" | "timed_out" | string;
-  /** True while the server still treats the execution as live. */
+  status: "running" | "completed" | "failed" | "timed_out" | "cancelled" | "expired" | string;
+  /** True while the server still treats the execution as live (ownership held). */
   active: boolean;
-  /** True for definitively ended operations (completed/failed). */
+  /** Still owned but past the stale threshold — stop waiting; manual recovery
+   * is a NEW turn (new operation), never a same-id re-send. */
+  stale?: boolean;
+  /** True for definitively ended operations (completed/failed/cancelled/expired). */
   terminal: boolean;
   result_count: number | null;
   age_seconds: number | null;
@@ -1769,6 +1772,9 @@ export async function pollOperationUntilSettled(
       consecutiveErrors = 0;
       if (status.status === "completed") return "completed";
       if (status.terminal || !status.active) return "terminal";
+      // Owned but stale/unknown: stop waiting NOW — the caller surfaces the
+      // manual-retry affordance; a same-id auto re-send stays forbidden.
+      if (status.stale) return "still_running";
     } catch (err) {
       if (signal?.aborted) return "aborted";
       if (err instanceof ApiError && err.statusCode === 404) return "terminal";

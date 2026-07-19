@@ -1238,16 +1238,17 @@ def rico_operation_status(request: Request, operation_id: str) -> dict[str, Any]
 
     from src.services.operation_state import (
         TERMINAL_STATUSES,
-        expire_if_stale,
+        expire_if_orphaned,
         get_operation,
         is_actively_running,
+        is_stale,
         operation_age_seconds,
     )
 
     operation = get_operation(user["email"], operation_id)
     if not operation or operation.get("type") != "job_search":
         raise HTTPException(status_code=404, detail="Operation not found")
-    operation = expire_if_stale(user["email"], operation)
+    operation = expire_if_orphaned(user["email"], operation)
 
     # Deliberately narrow response: status/ownership metadata ONLY — never
     # the stored role/query text, provider payloads, or any profile data.
@@ -1256,6 +1257,7 @@ def rico_operation_status(request: Request, operation_id: str) -> dict[str, Any]
         "operation_id": str(operation.get("operation_id")),
         "status": status,
         "active": is_actively_running(operation),
+        "stale": is_stale(operation),
         "terminal": status in TERMINAL_STATUSES,
         "result_count": operation.get("result_count"),
         "age_seconds": operation_age_seconds(operation),

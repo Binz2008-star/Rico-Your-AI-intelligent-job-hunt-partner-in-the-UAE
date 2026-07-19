@@ -33,7 +33,8 @@ _OP = "op_test_endpoint_01"
 # The FULL public surface of a status response. Adding a key here is a
 # review-worthy event — it must never grow to include query/role text.
 _ALLOWED_KEYS = {
-    "operation_id", "status", "active", "terminal", "result_count", "age_seconds",
+    "operation_id", "status", "active", "stale", "terminal", "result_count",
+    "age_seconds",
 }
 
 
@@ -107,12 +108,27 @@ def test_completed_operation_reports_terminal():
     assert body["result_count"] == 4
 
 
-def test_read_settles_stale_records_to_expired():
+def test_stale_owned_operation_stays_active_and_reports_stale():
+    """Age never releases ownership: an over-threshold record owned by this
+    live process reads active+stale, NOT expired — the client stops waiting
+    but a same-id re-send stays blocked."""
     from datetime import datetime, timedelta, timezone
     ops.start_job_search_operation(user_id=_OWNER, role_or_query="hse", operation_id=_OP)
     ops._OPERATIONS[_OP]["created_at"] = (
-        datetime.now(timezone.utc) - timedelta(seconds=ops.MAX_EXECUTION_SECONDS + 1)
+        datetime.now(timezone.utc) - timedelta(seconds=ops.STALE_AFTER_SECONDS + 1)
     ).isoformat()
+    body = _client(_OWNER).get(f"/api/v1/rico/operations/{_OP}").json()
+    assert body["status"] == "running"
+    assert body["active"] is True
+    assert body["stale"] is True
+    assert body["terminal"] is False
+
+
+def test_read_settles_dead_process_records_to_expired():
+    """A record whose executor process is dead (nonce mismatch — e.g. after
+    a restart) settles to the terminal expired state on read."""
+    ops.start_job_search_operation(user_id=_OWNER, role_or_query="hse", operation_id=_OP)
+    ops._OPERATIONS[_OP]["process_nonce"] = "dead-process-nonce"
     body = _client(_OWNER).get(f"/api/v1/rico/operations/{_OP}").json()
     assert body["status"] == "expired"
     assert body["terminal"] is True

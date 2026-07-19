@@ -5,16 +5,23 @@ evidence: a 45s frontend timeout auto-retry re-ran a ~55s provider cascade,
 producing two server-side searches and two search_performed events for one
 user intent):
 
-1. While an operation is RUNNING (and younger than MAX_EXECUTION_SECONDS),
+1. While an operation is RUNNING/TIMED_OUT and owned by this live process,
    a request re-sending the same operation_id gets an in-progress status
-   reply and the pipeline does NOT re-execute.
+   reply and the pipeline does NOT re-execute — REGARDLESS OF AGE (there is
+   no enforced cascade cancellation, so age can never prove death; past
+   STALE_AFTER_SECONDS the reply is the honest stale/stuck variant).
 2. A COMPLETED operation returns a completed-status reply (result already
    in chat history) — never a re-execution.
-3. Terminal failed/timed_out operations, orphaned running records, unknown
-   ids, and requests without an operation_id all execute normally — a
-   legitimate retry is never suppressed.
+3. Ownership releases ONLY on proof of executor death (process-nonce
+   mismatch / pre-nonce legacy record) or terminal statuses
+   (failed/cancelled/expired); unknown ids and missing operation_id
+   execute normally — a legitimate retry is never suppressed.
 4. Guard replies are not job_matches: they emit NO analytics and append
    nothing to chat history.
+
+Production invariant (owner-accepted): safe only with exactly one Render
+instance and one uvicorn worker; scaling is blocked until ownership uses an
+atomic shared store.
 """
 from __future__ import annotations
 
@@ -136,20 +143,41 @@ def test_fresh_timed_out_still_blocks_reexecution():
     assert result["type"] == "search_in_progress"
 
 
-def test_over_ceiling_timed_out_expires_then_allows_retry():
+def test_stale_operation_cannot_coexist_with_second_execution():
+    """Owner invariant (round 3): crossing the stale threshold NEVER releases
+    ownership while the executor's process is alive — there is no enforced
+    cascade cancellation, so the old execution may still be running and a
+    same-id re-send must not start a second provider cascade. The reply is
+    the honest stale/stuck message with the manual-recovery pointer."""
+    ops.start_job_search_operation(
+        user_id=_USER, role_or_query="hse manager", operation_id=_OP
+    )
+    very_old = (
+        datetime.now(timezone.utc)
+        - timedelta(seconds=ops.STALE_AFTER_SECONDS * 10)
+    ).isoformat()
+    ops._OPERATIONS[_OP]["created_at"] = very_old
+    result, inner = _process()
+    assert not inner.called  # NO second cascade, no matter the age
+    assert result["type"] == "search_in_progress"
+    assert result["stale"] is True
+    # Ownership was NOT released: the record is still running, not expired.
+    assert ops.get_operation(_USER, _OP)["status"] == "running"
+
+
+def test_stale_timed_out_operation_also_keeps_blocking():
     ops.start_job_search_operation(
         user_id=_USER, role_or_query="hse manager", operation_id=_OP
     )
     ops.update_operation(user_id=_USER, operation_id=_OP, status="timed_out")
-    stale = (
+    ops._OPERATIONS[_OP]["created_at"] = (
         datetime.now(timezone.utc)
-        - timedelta(seconds=ops.MAX_EXECUTION_SECONDS + 1)
+        - timedelta(seconds=ops.STALE_AFTER_SECONDS + 1)
     ).isoformat()
-    ops._OPERATIONS[_OP]["created_at"] = stale
     result, inner = _process()
-    assert inner.called
-    # Ownership release is RECORDED: the read path transitioned it to expired.
-    assert ops.get_operation(_USER, _OP)["status"] == "expired"
+    assert not inner.called
+    assert result["type"] == "search_in_progress"
+    assert ops.get_operation(_USER, _OP)["status"] == "timed_out"
 
 
 def test_cancelled_operation_allows_retry():
@@ -198,29 +226,45 @@ def test_attemptless_writes_keep_legacy_behavior():
     assert ops.mark_completed(_USER, _OP, result_count=1) is not None
 
 
-def test_orphaned_running_operation_allows_retry():
-    """A 'running' record older than MAX_EXECUTION_SECONDS is an orphan
-    (worker restart / lost thread) — it must never block retries forever."""
+def test_dead_process_record_is_released_and_retry_allowed():
+    """Ownership release requires PROOF the executor died: a record stamped
+    by another (dead) process nonce — e.g. found in the mirror after a
+    restart — expires on read and the retry executes."""
     ops.start_job_search_operation(
         user_id=_USER, role_or_query="hse manager", operation_id=_OP
     )
-    stale = (
-        datetime.now(timezone.utc)
-        - timedelta(seconds=ops.MAX_EXECUTION_SECONDS + 1)
-    ).isoformat()
-    ops._OPERATIONS[_OP]["created_at"] = stale
+    ops._OPERATIONS[_OP]["process_nonce"] = "dead-process-nonce"
     result, inner = _process()
     assert inner.called
+    # The release was RECORDED before execution was allowed (the stubbed
+    # pipeline doesn't re-start the operation; a real one would, bumping
+    # `attempt` — pinned in test_superseded_execution_cannot_record_a_late_completion).
     assert ops.get_operation(_USER, _OP)["status"] == "expired"
 
 
-def test_unparseable_created_at_never_blocks():
+def test_pre_nonce_legacy_record_is_released():
+    """Records written before the nonce deploy have no process_nonce — their
+    process died with the previous deploy, so they release."""
+    ops.start_job_search_operation(
+        user_id=_USER, role_or_query="hse manager", operation_id=_OP
+    )
+    del ops._OPERATIONS[_OP]["process_nonce"]
+    result, inner = _process()
+    assert inner.called
+
+
+def test_unparseable_created_at_still_owned_by_live_process():
+    """Liveness is process-based, not clock-based: a garbage created_at on a
+    record owned by THIS live process still blocks re-execution (and reads
+    as stale for representation)."""
     ops.start_job_search_operation(
         user_id=_USER, role_or_query="hse manager", operation_id=_OP
     )
     ops._OPERATIONS[_OP]["created_at"] = "not-a-timestamp"
     result, inner = _process()
-    assert inner.called
+    assert not inner.called
+    assert result["type"] == "search_in_progress"
+    assert result["stale"] is True
 
 
 def test_unknown_operation_id_executes_normally():
@@ -271,32 +315,45 @@ def test_guard_reply_emits_no_analytics_and_appends_no_history():
 
 # ── Helper semantics (used by the status endpoint) ───────────────────────────
 
-def test_is_actively_running_semantics():
+def test_is_actively_running_and_stale_semantics():
     op = ops.start_job_search_operation(
         user_id=_USER, role_or_query="hse", operation_id=_OP
     )
+    # Fresh, owned by this process: live and not stale.
     assert ops.is_actively_running(op) is True
+    assert ops.is_stale(op) is False
+    # Age does NOT end liveness — only representation flips to stale.
+    old = dict(op)
+    old["created_at"] = (
+        datetime.now(timezone.utc)
+        - timedelta(seconds=ops.STALE_AFTER_SECONDS + 1)
+    ).isoformat()
+    assert ops.is_actively_running(old) is True
+    assert ops.is_stale(old) is True
+    # A foreign/dead process nonce ends liveness regardless of age.
+    foreign = dict(op)
+    foreign["process_nonce"] = "dead-process"
+    assert ops.is_actively_running(foreign) is False
+    # timed_out stays live while owned by this process.
+    timed_out = dict(op)
+    timed_out["status"] = "timed_out"
+    assert ops.is_actively_running(timed_out) is True
+    # Terminal ends liveness.
     ops.mark_completed(_USER, _OP, result_count=1)
     assert ops.is_actively_running(ops.get_operation(_USER, _OP)) is False
     assert ops.operation_age_seconds({"created_at": "garbage"}) is None
-    assert ops.is_actively_running({"status": "running", "created_at": "garbage"}) is False
-    # timed_out within the ceiling is STILL live (ownership retained).
-    fresh_timed_out = {
-        "status": "timed_out",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    assert ops.is_actively_running(fresh_timed_out) is True
 
 
-# ── Multi-worker / restart regression (owner item 6) ─────────────────────────
+# ── Process boundary / restart regression (owner items 3-4, round 3) ─────────
 #
-# Simulates the deployment boundary honestly: each "worker" has its OWN
-# in-process dicts, while both share the RicoMemoryStore context mirror
-# (data/rico/context_*.json — same disk on one instance). A process restart
-# is a worker with empty dicts and the surviving mirror.
+# Ownership is PROCESS-BASED. These tests pin the accepted production
+# invariant: safe with exactly ONE Render instance and ONE uvicorn worker.
+# Each simulated process has its own dicts AND its own _PROCESS_NONCE while
+# sharing the RicoMemoryStore mirror (same disk). A restart is a new process
+# (new nonce, empty dicts) reading the surviving mirror.
 
 class _SharedMirror:
-    """Stands in for the on-disk RicoMemoryStore context both workers see."""
+    """Stands in for the on-disk RicoMemoryStore context all processes see."""
 
     def __init__(self):
         self._data: dict = {}
@@ -308,49 +365,53 @@ class _SharedMirror:
         return self._data.get((user_id, key))
 
 
-class _WorkerSim:
-    """Context manager that swaps in a worker-local process state while
-    keeping the shared mirror in place."""
+class _ProcessSim:
+    """Swap in a process-local state (dicts + nonce) over a shared mirror."""
 
-    def __init__(self, monkeypatch, mirror):
+    def __init__(self, monkeypatch, mirror, nonce):
         self.monkeypatch = monkeypatch
         self.mirror = mirror
+        self.nonce = nonce
 
     def activate(self):
         self.monkeypatch.setattr(ops, "_OPERATIONS", {})
         self.monkeypatch.setattr(ops, "_LATEST_BY_USER", {})
         self.monkeypatch.setattr(ops, "_memory", self.mirror)
+        self.monkeypatch.setattr(ops, "_PROCESS_NONCE", self.nonce)
 
 
-def test_worker_b_blocks_duplicate_started_on_worker_a(monkeypatch):
+def test_restart_releases_ownership_of_the_dead_cascade(monkeypatch):
+    """After a process restart the old cascade is provably dead: the new
+    process treats the mirror's running record as orphaned (expired) and a
+    retry executes — retries are never blocked forever."""
     mirror = _SharedMirror()
-    worker_a = _WorkerSim(monkeypatch, mirror)
-    worker_b = _WorkerSim(monkeypatch, mirror)
+    before = _ProcessSim(monkeypatch, mirror, nonce="proc-old")
+    after_restart = _ProcessSim(monkeypatch, mirror, nonce="proc-new")
 
-    worker_a.activate()
+    before.activate()
     ops.start_job_search_operation(
         user_id=_USER, role_or_query="hse manager", operation_id=_OP
     )
 
-    worker_b.activate()  # fresh dicts — only the mirror is shared
-    assert ops._OPERATIONS == {}
+    after_restart.activate()  # old process died with its cascade
     result, inner = _process()
-    assert not inner.called  # no second provider cascade on worker B
-    assert result["type"] == "search_in_progress"
+    assert inner.called
 
 
-def test_worker_b_retrieves_completion_recorded_on_worker_a(monkeypatch):
+def test_restart_preserves_completed_result_retrievability(monkeypatch):
+    """A COMPLETED record is terminal — nonce-independent — so the late
+    result stays retrievable after a restart via the mirror."""
     mirror = _SharedMirror()
-    worker_a = _WorkerSim(monkeypatch, mirror)
-    worker_b = _WorkerSim(monkeypatch, mirror)
+    before = _ProcessSim(monkeypatch, mirror, nonce="proc-old")
+    after_restart = _ProcessSim(monkeypatch, mirror, nonce="proc-new")
 
-    worker_a.activate()
+    before.activate()
     ops.start_job_search_operation(
         user_id=_USER, role_or_query="hse manager", operation_id=_OP
     )
     ops.mark_completed(_USER, _OP, result_count=5, attempt=1)
 
-    worker_b.activate()
+    after_restart.activate()
     found = ops.get_operation(_USER, _OP)
     assert found is not None and found["status"] == "completed"
     assert found["result_count"] == 5
@@ -360,26 +421,30 @@ def test_worker_b_retrieves_completion_recorded_on_worker_a(monkeypatch):
     assert result["result_count"] == 5
 
 
-def test_restart_preserves_guard_and_result_via_mirror(monkeypatch):
+def test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker(monkeypatch):
+    """Documents WHY multi-worker/multi-instance is BLOCKED (production
+    invariant): a concurrently-ALIVE second process is indistinguishable
+    from a dead one under nonce ownership, so it would release ownership and
+    run a duplicate cascade. Scaling beyond one process requires moving
+    ownership to an atomic shared store first."""
     mirror = _SharedMirror()
-    before = _WorkerSim(monkeypatch, mirror)
-    after_restart = _WorkerSim(monkeypatch, mirror)
+    worker_a = _ProcessSim(monkeypatch, mirror, nonce="proc-a")
+    worker_b = _ProcessSim(monkeypatch, mirror, nonce="proc-b")
 
-    before.activate()
+    worker_a.activate()
     ops.start_job_search_operation(
         user_id=_USER, role_or_query="hse manager", operation_id=_OP
     )
 
-    after_restart.activate()  # process died; dicts gone; mirror survived
+    worker_b.activate()
     result, inner = _process()
-    assert not inner.called  # still guarded across the restart
-    assert result["type"] == "search_in_progress"
+    assert inner.called  # the documented unsafe release — hence the invariant
 
 
-def test_other_user_cannot_observe_or_block_across_workers(monkeypatch):
+def test_other_user_cannot_observe_or_block_across_processes(monkeypatch):
     mirror = _SharedMirror()
-    worker_a = _WorkerSim(monkeypatch, mirror)
-    worker_b = _WorkerSim(monkeypatch, mirror)
+    worker_a = _ProcessSim(monkeypatch, mirror, nonce="proc-a")
+    worker_b = _ProcessSim(monkeypatch, mirror, nonce="proc-b")
 
     worker_a.activate()
     ops.start_job_search_operation(
