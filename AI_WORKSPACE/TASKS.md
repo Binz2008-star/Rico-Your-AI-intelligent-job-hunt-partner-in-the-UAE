@@ -78,12 +78,19 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
-### TASK-20260719-015 — WhatsApp-assisted subscription as a secondary channel alongside Paddle
+### TASK-20260719-017 — WhatsApp-assisted subscription as a secondary channel alongside Paddle
 
-Status: review
+> Renumbered from TASK-20260719-015 during the 2026-07-19 ledger sync on
+> PR #1209's branch: two parallel sessions had both claimed -015 (this
+> entry via #1207 and the #1200 relevance-floor entry). Content unchanged.
+
+Status: **MERGED (#1207, `932fe9d`) — owner merge order 2026-07-19; migration
+049 applied to production and verified (table + both indexes, 0 rows);
+channel remains fail-closed until the owner sets
+WHATSAPP_SUBSCRIPTIONS_ENABLED + WHATSAPP_SUBSCRIPTION_NUMBER on Render**
 Owner: Claude (Fable session; owner directive 2026-07-19 — DEC-20260719-003)
-Branch: feat/whatsapp-assisted-subscription (cut from main 38bf14a)
-Issue/PR: (draft PR from this branch)
+Branch: feat/whatsapp-assisted-subscription (cut from main 38bf14a; merged)
+Issue/PR: #1207 (merged)
 
 #### Objective
 
