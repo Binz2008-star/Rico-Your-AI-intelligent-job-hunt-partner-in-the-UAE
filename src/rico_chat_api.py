@@ -144,6 +144,20 @@ _UAE_CITY_SCAN_AR_RE = re.compile(
     r"الفجيرة|أم\s+القيوين|ام\s+القيوين|العين)"
 )
 
+# "Refine search" / "narrow the results" — a request to adjust the PREVIOUS
+# search, not a new job role. Without an explicit guard this phrase falls
+# through to role extraction and Rico replies "I didn't catch 'Refine search'
+# as a specific role", which is confusing (it is a UI affordance / natural
+# phrasing, never a job title). Anchored on refine/narrow + search/results so it
+# never swallows a real role like "refined petroleum engineer".
+_REFINE_SEARCH_RE = re.compile(
+    r"^\s*refine(?:\s+(?:my|the|this|current))?\s+(?:search|results?)\b"
+    r"|\brefine\s+(?:my\s+|the\s+)?(?:search|results?)\b"
+    r"|\bnarrow(?:\s+down)?(?:\s+(?:my|the|this))?\s+(?:search|results?|list)\b"
+    r"|تحسين\s+(?:ال)?بحث|تضييق\s+(?:ال)?بحث|ضيّ?ق\s+(?:ال)?بحث|ضيّ?ق\s+النتائج",
+    re.IGNORECASE | re.UNICODE,
+)
+
 # Settings/Notification commands: enable/disable notifications and alerts
 _SETTINGS_NOTIFICATION_ENABLE_RE = re.compile(
     r"\b(?:enable|turn\s+on|activate|start)\s+(?:telegram\s+)?(?:notifications?|alerts?|reminders?)\b",
@@ -3307,6 +3321,39 @@ class RicoChatAPI:
                 seen.add(key)
                 found.append(raw)
         return found
+
+    def _handle_refine_search(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Answer a "refine search" / "narrow the results" request with concrete
+        refinement guidance instead of misreading it as an unknown job role.
+
+        Global and data-driven: the example uses the user's own target roles when
+        present, otherwise a neutral placeholder. Bilingual (AR/EN).
+        """
+        arabic = self._is_arabic_text(message)
+        roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role_hint = ", ".join(str(r) for r in roles[:2]) if roles else (
+            "مسمى وظيفي" if arabic else "a role"
+        )
+        if arabic:
+            msg = (
+                "لتحسين نتائج بحثك، حدّد أحد التالي:\n"
+                "• مدينة معيّنة (دبي، أبوظبي، الشارقة، عجمان…)\n"
+                "• مستوى الأقدمية (مدير، أول، تنفيذي)\n"
+                "• نوع التوظيف (دوام كامل، عقد، عن بُعد)\n"
+                "• أو مسمى وظيفي مختلف\n\n"
+                f"مثال: «{role_hint} في أبوظبي» أو «وظائف عن بُعد»."
+            )
+        else:
+            msg = (
+                "To refine your search, tell me one of:\n"
+                "• A specific city (Dubai, Abu Dhabi, Sharjah, Ajman…)\n"
+                "• Seniority level (Manager, Senior, Executive)\n"
+                "• Employment type (full-time, contract, remote)\n"
+                "• Or a different role\n\n"
+                f"e.g. \"{role_hint} in Abu Dhabi\" or \"remote roles\"."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "clarification", "message": msg, "intent": "refine_search"}
 
     @staticmethod
     def _looks_like_career_execution_request(message: str) -> bool:
@@ -7053,6 +7100,17 @@ class RicoChatAPI:
         _pending_delete = self._handle_pending_delete_saved_jobs(user_id, message)
         if _pending_delete is not None:
             return self._finalize(_pending_delete, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Refine-search command (UI affordance / natural phrasing) ─────────
+        # "Refine search", "narrow the results" — adjust the PREVIOUS search, not
+        # a new role. Fires before role classification so it never reaches the
+        # "I didn't catch 'Refine search' as a specific role" fallback.
+        if _REFINE_SEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_refine_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # ── Pipeline reset intent (explicit) ──────────────────────────────────
         # "clear all applications", "reset my pipeline", "start over", etc.
