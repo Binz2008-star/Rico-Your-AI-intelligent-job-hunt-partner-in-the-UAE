@@ -30,6 +30,7 @@ import time
 from typing import Any, Dict, Optional
 
 from src.agent.orchestrator.intent_detector import ACTION_TO_TOOL, PRIVILEGED_TOOLS, VALID_ACTION_TYPES
+from src.agent.reasoning import ReasoningTrace
 from src.agent.registry import tool_registry
 from src.agent.types import RuntimeResult
 from src.repositories.audit_repo import IDEMPOTENT_ACTION_TYPES, is_duplicate, log_action
@@ -102,15 +103,27 @@ class AgentRuntime:
         _idem_raw = f"{user_id}:{action}:{job_key}"
         action_id = hashlib.md5(_idem_raw.encode(), usedforsecurity=False).hexdigest()[:16]
 
+        # External reasoning layer: every gate below records its evidence here,
+        # so the final decision is traceable instead of implicit. Evidence
+        # values are operational facts only — never chat/document text (#1076).
+        trace = ReasoningTrace(
+            goal=f"Execute user action '{action}'", user_id=user_id, source=source,
+        )
+
         # 1. Validate action
         if action not in VALID_ACTION_TYPES:
-            return RuntimeResult(
+            trace.add_evidence(
+                "action validation", f"'{action}' is not a supported action",
+                source="intent contract", verified=True,
+            )
+            trace.decide("reject", f"unknown action '{action}'", confidence=1.0)
+            return self._finish_reasoning(trace, RuntimeResult(
                 ok=False,
                 message=f"Unknown action '{action}'. Supported: {sorted(VALID_ACTION_TYPES)}",
                 action=action, job_key=job_key, source=source, user_id=user_id,
                 error=f"unknown_action:{action}",
                 duration_ms=int((time.monotonic() - wall_start) * 1000),
-            )
+            ))
 
         # 1b. Privileged-tool authorization (#1093). Admin-only tools (the global
         #     pipeline) must never run for a non-admin actor, on any surface.
@@ -122,16 +135,30 @@ class AgentRuntime:
                 "runtime_privileged_denied action=%s user=%s source=%s",
                 action, user_id, source,
             )
-            return RuntimeResult(
+            trace.add_evidence(
+                "authorization",
+                f"tool '{ACTION_TO_TOOL[action]}' is admin-only; actor is not admin",
+                source="privileged-tool gate", verified=True,
+            )
+            trace.decide("reject", "admin-only tool denied for non-admin actor", confidence=1.0)
+            return self._finish_reasoning(trace, RuntimeResult(
                 ok=False,
                 message="This action requires an administrator.",
                 action=action, job_key=job_key, source=source, user_id=user_id,
                 error="admin_required",
                 duration_ms=int((time.monotonic() - wall_start) * 1000),
-            )
+            ))
 
         # 2. Resolve job dict
         resolved_job = self._resolve_job(job, job_key)
+        _title = resolved_job.get("title", "")
+        trace.add_evidence(
+            "job",
+            f"{_title} — {resolved_job.get('company', '')}" if _title
+            else f"unresolved (key {job_key[:16]})" if job_key else "no job context",
+            source="caller" if job else "job cache",
+            verified=bool(_title),
+        )
 
         # 2a. When the caller has already surfaced a PermissionRequestCard and the user
         #     explicitly clicked Approve, inject the sentinel so apply_job passes it
@@ -140,16 +167,34 @@ class AgentRuntime:
         #     recorded in `source` by execute_permission_action.
         if pre_approved and action == "apply":
             resolved_job = {**resolved_job, "_approved": True}
+            trace.add_evidence(
+                "user approval", "explicit approval via PermissionRequestCard",
+                source="permission flow", verified=True,
+            )
 
         # 3. Idempotency guard for state-changing actions
-        if action in _IDEMPOTENT and is_duplicate(action_id):
-            logger.info("runtime_duplicate_skipped action=%s user=%s", action, user_id)
-            return RuntimeResult(
-                ok=True,  # duplicate = already done = success; callers must not surface as error
-                message="This action was already executed for this job.",
-                action=action, job_key=job_key, source=source, user_id=user_id,
-                error=None,
-                duration_ms=int((time.monotonic() - wall_start) * 1000),
+        if action in _IDEMPOTENT:
+            if is_duplicate(action_id):
+                logger.info("runtime_duplicate_skipped action=%s user=%s", action, user_id)
+                trace.add_evidence(
+                    "idempotency guard", "duplicate action within TTL window",
+                    source="action_audit_log", verified=True,
+                )
+                trace.decide(
+                    "skip_duplicate",
+                    "action already executed for this job; side effects must not repeat",
+                    confidence=1.0,
+                )
+                return self._finish_reasoning(trace, RuntimeResult(
+                    ok=True,  # duplicate = already done = success; callers must not surface as error
+                    message="This action was already executed for this job.",
+                    action=action, job_key=job_key, source=source, user_id=user_id,
+                    error=None,
+                    duration_ms=int((time.monotonic() - wall_start) * 1000),
+                ))
+            trace.add_evidence(
+                "idempotency guard", "no prior execution in TTL window",
+                source="action_audit_log", verified=True,
             )
 
         # 4. Dry-run: return what would happen without executing
@@ -157,7 +202,12 @@ class AgentRuntime:
             tool_name = ACTION_TO_TOOL[action]
             msg = f"[DRY RUN] Would execute '{tool_name}' for '{resolved_job.get('title','unknown')}'"
             logger.info("runtime_dry_run action=%s tool=%s user=%s source=%s", action, tool_name, user_id, source)
-            return RuntimeResult(
+            trace.decide(
+                f"dry_run:{tool_name}",
+                "dry-run requested — log intent, skip side effects",
+                confidence=1.0,
+            )
+            return self._finish_reasoning(trace, RuntimeResult(
                 ok=True,
                 message=msg,
                 action=action, job_key=job_key, source=source, user_id=user_id,
@@ -165,7 +215,7 @@ class AgentRuntime:
                 confidence=_CONFIDENCE.get(action, 1.0),
                 explanation=f"dry_run: {tool_name} on {resolved_job.get('title','?')}",
                 duration_ms=int((time.monotonic() - wall_start) * 1000),
-            )
+            ))
 
         # 5. Subscription gate for apply actions.
         #    Only enforced when RICO_ENABLE_AUTO_APPLY=true. When the global flag is off,
@@ -179,6 +229,10 @@ class AgentRuntime:
             if _auto_apply_globally_enabled():
                 try:
                     _enforce_automation_allowed(user_id)
+                    trace.add_evidence(
+                        "subscription gate", "automation allowed for this account",
+                        source="apply_service", verified=True,
+                    )
                 except Exception as exc:
                     elapsed = int((time.monotonic() - wall_start) * 1000)
                     logger.info("runtime_apply_gated user=%s reason=%s", user_id, exc)
@@ -186,30 +240,46 @@ class AgentRuntime:
                     user_msg = (
                         detail.get("message") if isinstance(detail, dict) else str(exc)
                     )
-                    return RuntimeResult(
+                    trace.add_evidence(
+                        "subscription gate", "automation not allowed for this account/plan",
+                        source="apply_service", verified=True,
+                    )
+                    trace.decide("reject", "subscription gate blocked auto-apply", confidence=1.0)
+                    return self._finish_reasoning(trace, RuntimeResult(
                         ok=False,
                         message=user_msg,
                         action=action, job_key=job_key, source=source, user_id=user_id,
                         error="subscription_limit",
                         duration_ms=elapsed,
-                    )
+                    ))
 
         # 6. Execute tool
         tool_name = ACTION_TO_TOOL[action]
         try:
             tool_def = tool_registry.get(tool_name)
         except KeyError as exc:
-            return RuntimeResult(
+            trace.add_evidence(
+                "tool registry", f"tool '{tool_name}' is not registered",
+                source="tool_registry", verified=True,
+            )
+            trace.decide("reject", "required tool unavailable", confidence=1.0)
+            return self._finish_reasoning(trace, RuntimeResult(
                 ok=False, message="Tool not available.",
                 action=action, job_key=job_key, source=source, user_id=user_id,
                 error=str(exc),
                 duration_ms=int((time.monotonic() - wall_start) * 1000),
-            )
+            ))
 
         logger.info(
             "runtime_execute action=%s tool=%s user=%s source=%s job=%r",
             action, tool_name, user_id, source, resolved_job.get("title", ""),
         )
+        trace.decide(
+            tool_name,
+            f"explicit user action '{action}' routed to registered tool",
+            confidence=_CONFIDENCE.get(action, 1.0),
+        )
+        trace.set_next_action(f"execute {tool_name}")
 
         try:
             sig = inspect.signature(tool_def.fn)
@@ -218,6 +288,10 @@ class AgentRuntime:
             logger.exception("runtime_tool_error action=%s tool=%s", action, tool_name)
             tool_result = None
             error_str = str(exc)
+            trace.add_evidence(
+                "tool execution", f"{tool_name} raised {type(exc).__name__}",
+                source="tool_registry", verified=True,
+            )
         else:
             error_str = tool_result.error if tool_result and not tool_result.success else None
 
@@ -229,6 +303,14 @@ class AgentRuntime:
         #     so any caller (chat router, API layer) can surface the PermissionRequestCard
         #     without building the payload themselves.
         if action == "apply" and tool_ok and tool_data.get("status") == "approval_required":
+            trace.add_evidence(
+                "approval gate", "explicit user approval required before submitting",
+                source="apply flow", verified=True,
+            )
+            trace.block(
+                "waiting for explicit user approval",
+                next_action="surface PermissionRequestCard",
+            )
             try:
                 from src.services.permission_factory import build_apply_permission_dict
                 tool_data["permission_request"] = build_apply_permission_dict(
@@ -303,7 +385,7 @@ class AgentRuntime:
             except Exception:
                 logger.debug("runtime: career_memory record failed", exc_info=True)
 
-        return RuntimeResult(
+        return self._finish_reasoning(trace, RuntimeResult(
             ok=tool_ok,
             message=message,
             action=action,
@@ -316,9 +398,34 @@ class AgentRuntime:
             confidence=_CONFIDENCE.get(action, 1.0),
             explanation=f"{tool_name} executed via {source}",
             duration_ms=elapsed,
-        )
+        ))
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    # Actions whose success message carries generated user content (drafts,
+    # explanations). Their trace outcome uses a static label so the reasoning
+    # graph stores operational facts only.
+    _CONTENT_ACTIONS = frozenset({"draft", "why"})
+
+    @classmethod
+    def _finish_reasoning(cls, trace: ReasoningTrace, result: RuntimeResult) -> RuntimeResult:
+        """Close the reasoning trace with the action outcome, persist it
+        (fire-and-forget), and attach the visible execution state to the
+        result. Never raises — a trace failure must not affect the action."""
+        try:
+            if result.ok and result.action in cls._CONTENT_ACTIONS:
+                summary = "generated response delivered"
+            elif result.ok:
+                summary = result.message
+            else:
+                summary = result.error or result.message
+            trace.record_outcome(ok=result.ok, summary=summary)
+            result.data["reasoning"] = trace.summary_dict()
+            from src.repositories.reasoning_repo import save_trace
+            save_trace(trace)
+        except Exception:
+            logger.debug("runtime: reasoning trace persistence failed", exc_info=True)
+        return result
 
     @staticmethod
     def _resolve_job(job: Optional[Dict[str, Any]], job_key: str) -> Dict[str, Any]:

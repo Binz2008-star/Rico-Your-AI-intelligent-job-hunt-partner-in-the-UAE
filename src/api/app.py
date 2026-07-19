@@ -245,6 +245,19 @@ def _apply_cv_upload_artifacts() -> None:
     _apply_sql_migration("038_cv_upload_artifacts", sql)
 
 
+def _apply_reasoning_traces() -> None:
+    sql_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "migrations", "047_reasoning_traces.sql"
+    )
+    sql_path = os.path.normpath(sql_path)
+    if not os.path.exists(sql_path):
+        logger.warning("reasoning_traces_migration not found at %s", sql_path)
+        return
+    with open(sql_path) as f:
+        sql = f.read()
+    _apply_sql_migration("047_reasoning_traces", sql)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -266,6 +279,7 @@ async def lifespan(app: FastAPI):
     _apply_audit_helper_tables()
     _apply_uploaded_document_context()
     _apply_cv_upload_artifacts()
+    _apply_reasoning_traces()
     yield
 
 

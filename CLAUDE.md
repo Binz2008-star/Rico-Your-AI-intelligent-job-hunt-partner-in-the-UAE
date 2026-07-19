@@ -180,6 +180,8 @@ The repo combines three layers:
 - `src/rico_safety.py` — guardrails; blocks forged docs, unapproved applies, spam
 - `src/rico_repo_adapter.py` — bridge between agent layer and legacy pipeline
 - `src/agent/runtime.py` — central action dispatcher; idempotency, audit logging, dry-run
+- `src/agent/reasoning/trace.py` — external reasoning layer; structured, auditable execution state (never model chain-of-thought)
+- `src/repositories/reasoning_repo.py` — persistent Reasoning Graph (migration 047; fail-soft writes)
 - `src/agent/registry/tool_registry.py` — declarative tool system
 - `src/services/chat_service.py` — chat business logic
 - `src/db.py` — DB connection layer
@@ -225,6 +227,7 @@ The repo combines three layers:
 - `POST /api/v1/rico/webhooks/telegram`
 - `POST /api/v1/rico/webhooks/github`
 - `POST /api/v1/agent/chat`
+- `GET /api/v1/agent/reasoning` (+ `/{trace_id}`) — user-scoped reasoning traces
 - `POST /api/v1/actions/run`
 - `GET /api/v1/pipeline/status`
 - `POST /api/v1/pipeline/trigger`
@@ -337,6 +340,12 @@ RICO_ENABLE_USER_TELEGRAM_ALERTS=false
 # (POST /api/v1/pipeline/reminders, X-Cron-Secret header). Issue #355.
 RICO_CRON_SECRET=
 
+# External reasoning layer (migration 047). Kill switch for persisting agent
+# ReasoningTraces and serving GET /api/v1/agent/reasoning. Default ON; set
+# false to disable persistence/reads without a deploy. In-process trace
+# building is unaffected. See src/agent/reasoning/trace.py.
+RICO_REASONING_TRACES=true
+
 # Guest-session capability signing key (#1070). DEDICATED secret — never
 # derived from or shared with JWT_SECRET. Signs the versioned guest capability
 # token (rico_guest_proof cookie) that carries the server-minted guest SID.
@@ -414,6 +423,7 @@ Migration is complete. `apps/web/lib/client.ts` has been deleted. All API calls 
 - All job actions (apply/save/skip/block/draft/why/remind) MUST go through `agent_runtime.handle_action()` — never call repo layer directly from routers for actions.
 - Idempotency key: MD5 of `user_id:action:job_key`. Do not change this scheme without updating the audit log schema.
 - `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true` is the default. Any code path that bypasses this for apply actions is a safety violation.
+- Reasoning traces (`src/agent/reasoning/`) are the external reasoning layer: structured execution state, never model chain-of-thought. Trace persistence is fire-and-forget and must never affect the action result. Evidence values are operational facts only (gate states, action names, job title/company) — never chat/document text, contact identifiers, or tokens. Reads are always JWT-scoped to the trace owner.
 
 ## Safety Layer Rules
 

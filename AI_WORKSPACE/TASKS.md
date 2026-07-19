@@ -78,6 +78,61 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-001 — External reasoning layer: structured, auditable execution state
+
+Status: review
+Owner: Claude (owner directive 2026-07-19 — explicit feature request; noted
+deviation from the 2026-07-16 CONTAINMENT posture, approved by the request itself)
+Branch: `claude/rico-external-reasoning-x44s63`
+Issue/PR: PR opened from this branch
+
+#### Objective
+Replace hidden model chain-of-thought with an external reasoning layer: every
+agent decision produces a structured, persistent ReasoningTrace (goal,
+evidence, assumptions, contradictions, decision, confidence, next action,
+blocked state, outcome) that users can inspect and other agents can resume.
+
+#### Continuity Block
+- Task ID: TASK-20260719-001
+- GitHub issue/PR: draft PR from `claude/rico-external-reasoning-x44s63`
+- Branch: `claude/rico-external-reasoning-x44s63`
+- Base branch: main
+- Last safe commit SHA: d5f96f1 (main at branch time)
+- Current head SHA: see branch head
+- Uncommitted changes present: no (all work committed on the branch)
+- Status: review
+- Files inspected: src/agent/runtime.py, src/agent/orchestrator/orchestrator.py,
+  src/api/routers/agent.py, src/api/app.py, src/api/deps.py, src/api/rate_limit.py,
+  src/repositories/job_observations_repo.py, migrations/046_job_observations.sql,
+  tests/test_agent_runtime.py, tests/test_action_endpoint.py
+- Files changed:
+  - src/agent/reasoning/{__init__.py,trace.py} — new external reasoning core
+  - src/repositories/reasoning_repo.py — persistent Reasoning Graph (fail-soft)
+  - migrations/047_reasoning_traces.sql — idempotent table + index
+  - src/agent/runtime.py — trace built at every decision gate; fire-and-forget persist
+  - src/api/routers/agent.py — GET /api/v1/agent/reasoning[/{trace_id}] (JWT-scoped)
+  - src/api/app.py — startup application of migration 047
+  - tests/test_reasoning_layer.py — 29 tests (trace, repo, runtime, endpoints)
+  - CLAUDE.md — file map, env var, routes
+- Files intentionally not touched: src/rico_chat_api.py (20K-line chat layer —
+  runtime is the single action choke point; chat-surface rendering of traces is
+  a separate frontend task), src/rico_safety.py (no gate bypassed)
+- What is complete: core module, persistence, runtime integration, API, tests, docs
+- What is incomplete: frontend surface for reasoning state; wiring traces into
+  the NL chat pipeline's non-action answers (future task)
+- Known blockers: none
+- Validation already run:
+  - `python -m pytest tests/test_reasoning_layer.py -q` → 29 passed
+  - focused regression (agent runtime/endpoint/authz/approval/subscription/log-privacy)
+    → 211 passed; 4 failures pre-existing on clean main (apply-link/naukrigulf), proven via stash run
+- Validation still required: none for merge-review; Render deploy check after merge
+- Deployment/CI/Neon/Vercel state to check next: migration 047 auto-applies at
+  startup (idempotent); confirm `migration_ok label=047_reasoning_traces` in Render logs
+- Next exact action: owner review of the draft PR
+- Stop condition: any request to expose traces cross-user or bypass JWT scoping — stop
+- Rollback plan: revert the PR; table reasoning_traces is additive and can stay
+  (or set RICO_REASONING_TRACES=false to disable writes/reads without a deploy)
+
 ### TASK-20260718-022 — PR #1171: mobile usability pass on /command + /profile
 
 Status: verified — **MERGED + deployed**
