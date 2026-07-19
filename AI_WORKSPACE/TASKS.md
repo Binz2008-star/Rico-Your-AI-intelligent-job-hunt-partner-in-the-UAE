@@ -4105,8 +4105,10 @@ only — `job_action` + `search_performed` — from two central call sites.
 `session_start` deliberately deferred (adds noise, not needed for the metric).
 
 #### Scope delivered
-- `src/services/analytics_emitters.py` (new): fail-soft emitters; no
-  parameter can carry free text by signature; authenticated-only in v1
+- `src/services/analytics_emitters.py` (new): fail-soft emitters; free
+  text is blocked at emitter level: search exposes no caller-supplied
+  string payload, and job actions are restricted to the explicit
+  _ALLOWED_ACTIONS set; authenticated-only in v1
   (`public:` sessions skipped — guest identity contract exists in the
   foundation; guest emission is a later separately-approved change).
 - `src/agent/runtime.py`: step 12 — `job_action` after successful handled
@@ -4128,7 +4130,7 @@ only — `job_action` + `search_performed` — from two central call sites.
       exists; public/missing identities emit nothing.
 - [x] Wiring pins: runtime success emits once with (user, action);
       _finalize emits only for job_matches with the match count.
-      (tests/unit/test_analytics_emitters.py — 9 tests; foundation 31 +
+      (tests/unit/test_analytics_emitters.py — 11 tests; foundation 31 +
       runtime 58 suites green alongside.)
 
 ##### Addendum — owner review round (2026-07-19)
