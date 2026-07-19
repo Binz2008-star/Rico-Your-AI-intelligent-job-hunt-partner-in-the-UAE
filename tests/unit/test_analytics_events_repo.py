@@ -409,3 +409,77 @@ def test_event_allowlist_exactly_matches_migration_check_values():
         f"allowlist/DDL drift — only in code: {set(repo.EVENT_ALLOWLIST) - ddl_events}; "
         f"only in migration: {ddl_events - set(repo.EVENT_ALLOWLIST)}"
     )
+
+
+# ── 7. Malformed-input hardening (post-merge audit gates 1-2) ─────────────────
+# The never-raises contract must hold for EVERY caller, not only the emitter
+# layer: malformed argument types are rejected fail-closed before any DB
+# access, and row construction lives inside the try so residual construction
+# errors degrade to the logged skip path.
+
+@pytest.mark.parametrize("bad_props", [["x"], "free text", 42, {"a"}])
+def test_non_dict_properties_rejected_without_raising_or_db(bad_props):
+    conn, cursor = _mock_conn()
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn):
+        assert repo.record_event(
+            "job_action", user_id="u@x.com", properties=bad_props,
+        ) is False
+    assert not cursor.execute.called
+
+
+@pytest.mark.parametrize("bad_cid", [123, 1.5, b"evt-1", ["evt-1"]])
+def test_non_str_client_event_id_rejected_without_raising_or_db(bad_cid):
+    conn, cursor = _mock_conn()
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn):
+        assert repo.record_event(
+            "session_start", user_id="u@x.com", client_event_id=bad_cid,
+        ) is False
+    assert not cursor.execute.called
+
+
+@pytest.mark.parametrize("bad_when", ["2026-07-19", 1752900000, 1.5])
+def test_non_datetime_occurred_at_rejected_without_raising_or_db(bad_when):
+    conn, cursor = _mock_conn()
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn):
+        assert repo.record_event(
+            "session_start", user_id="u@x.com", occurred_at=bad_when,
+        ) is False
+    assert not cursor.execute.called
+
+
+def test_rejection_logs_never_contain_offending_values(caplog):
+    with caplog.at_level(logging.DEBUG, logger="src.repositories.analytics_events_repo"), \
+         patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=_mock_conn()[0]):
+        repo.record_event("job_action", user_id="u@x.com",
+                          properties="secret@leak.example")
+        repo.record_event("job_action", user_id="u@x.com",
+                          client_event_id=987654321)
+    joined = " ".join(r.getMessage() for r in caplog.records)
+    assert "secret@leak.example" not in joined
+    assert "987654321" not in joined
+
+
+def test_construction_failure_degrades_to_false_never_raises():
+    """Belt-and-braces pin: even if row construction itself throws, the
+    caller sees False, never an exception."""
+    conn, cursor = _mock_conn()
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection", return_value=conn), \
+         patch.object(repo, "_clean_properties", side_effect=RuntimeError("boom")):
+        assert repo.record_event("session_start", user_id="u@x.com") is False
+    assert not cursor.execute.called
+
+
+def test_purge_and_count_bounds_reject_bool():
+    """bool is an int subclass — True must never be accepted as a 1-day
+    retention window (near-total purge)."""
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection") as mock_conn:
+        assert repo.purge_expired(True) == 0
+        assert repo.purge_expired(False) == 0
+        assert repo.count_expired(True) == 0
+    mock_conn.assert_not_called()

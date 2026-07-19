@@ -78,9 +78,112 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-012 — Live Paddle checkout failure on /subscription: diagnosis + fail-closed repair
+
+Status: review — live gates pending
+Owner: Claude (session 2026-07-19)
+Branch: claude/paddle-checkout-subscription-fix-rsxety
+Issue/PR: #1194
+
+#### Gate (owner ruling, 2026-07-19)
+
+#1194 must be rebased clean onto current main (its TASKS entry updates
+THIS entry — no duplicate), reviewed, and mergeable before merge. The
+Paddle LIVE gates (real browser checkout smoke after deployment) remain
+mandatory regardless of CI state. Billing behavior changes are owner
+territory — this ledger entry tracks status only.
+
+---
+
+### TASK-20260719-013 — analytics: record_event malformed-input hardening (audit gates 1-2)
+
+Status: verified — **MERGED (#1195, `bd378c97`)**
+Owner: Claude (session 2026-07-19)
+Branch: claude/growth-lifecycle-automation-qiyzw6
+Issue/PR: #1195
+
+> Canonical-ID note (2026-07-19 sync): the owner's canonical map assigns
+> 011 → #1193, 012 → #1194, 013 → #1195. This entry is recorded under 013
+> accordingly.
+
+---
+
+### TASK-20260719-011 — fix/command-chat-response-tolerance: complementary fail-open hardening on top of the #1191 contract
+
+Status: verified — **MERGED (#1193, `aaa3cca3`)**
+Owner: Claude (Fable session; owner full execution delegation 2026-07-19)
+Branch: fix/command-chat-response-tolerance (rebuilt on main 826c7a3 after #1191 merged)
+Issue/PR: #1193
+
+#### Reconciliation record
+
+Two writers independently root-caused the 16:22Z production FAIL
+(closed `verification_status` enum rejecting `aggregator_untrusted` and
+discarding the whole successful reply). **#1191 merged first and its
+design is canonical** (KNOWN_VERIFICATION_STATUSES + unknown →
+`needs_source_verification`, never promoted). This PR was rebuilt on top
+of it, dropping the competing verification_status change, and now carries
+ONLY the complementary hardening #1191 did not cover — on main today, a
+null `confidence`, a numeric-string `score`, a null top-level
+boolean/record, or ANY one malformed match row still rejects the entire
+reply into the generic FAIL bubble.
+
+**Ledger correction:** #1191's entry reused the ID `TASK-20260719-008`,
+which already belongs to the merged PR #1188 rail goal-mini task — a
+collision from the parallel writer; recorded here rather than rewriting
+history. Forensic detail of the incident (Neon timeline; #1187 guard
+PASSED) lives in this PR's body and the session record.
+
+#### Scope
+
+- `confidence` → tolerant (known tiers pass; null/unknown → undefined).
+- `score` → numeric-string coercion; junk → undefined.
+- Top-level `success`/`profile_context_present`/`entities`/`tool_args` →
+  null-tolerant.
+- `matches` → per-row salvage: malformed row dropped with a console
+  warning; siblings and the reply survive (backend #887 philosophy).
+- Regression pins for the exact production payload + the #1191 contract
+  (values preserved; unknown → normalized, never rejected/promoted).
+
+#### Acceptance criteria
+
+- [x] All pins green (focused suite); full vitest green; `npm run build`
+      verified by EXIT CODE with unfiltered output (process lesson from
+      the first head: a grep filter masked a CI-visible type error).
+- [x] No competing verification_status change — #1191 design untouched.
+
+#### Continuity Block
+
+- Task ID: TASK-20260719-011
+- GitHub issue/PR: #1193
+- Branch: fix/command-chat-response-tolerance
+- Base branch: main
+- Last safe commit SHA: 826c7a3 (origin/main incl. #1191)
+- Current head SHA: set at push time (branch rewritten — force-with-lease)
+- Uncommitted changes present: no (at push time)
+- Status: review
+- Files inspected: `lib/schemas/index.ts` (post-#1191),
+  `git show 826c7a3` (the parallel fix), `lib/api.ts` (union incl.
+  'expired' — no change needed now)
+- Files changed: `lib/schemas/index.ts` (tolerant confidence/score,
+  null-tolerant top-levels, per-row salvage);
+  `__tests__/chat-response-tolerance.test.ts` (rewritten to #1191
+  semantics); this ledger entry
+- What is complete: reconciliation + implementation + tests
+- What is incomplete: CI on the new head; merge
+- Known blockers: none
+- Validation already run: pending this head (run before push)
+- Validation still required: CI; owner production re-smoke
+- Next exact action: run suites/build → force-with-lease push → update PR
+  body → gates → merge under delegation → consolidated report
+- Stop condition: any further main advancement touching these files —
+  re-reconcile before push
+- Rollback plan: revert the squash commit — boundary returns to the
+  post-#1191 state; nothing else affected
+
 ### TASK-20260719-010 — fix/command-subscription-cta: structured subscription CTA instead of a dead raw-text link
 
-Status: review
+Status: verified — **MERGED (#1192, `6caff77f`)**
 Owner: Claude (Fable session; owner defect ruling + one-PR-only /command freeze lift naming `fix/command-subscription-cta`, 2026-07-19)
 Branch: fix/command-subscription-cta (cut from main 07e95c3)
 Issue/PR: (draft PR from this branch)
@@ -164,7 +267,7 @@ one-PR-only lift for THIS PR alone; it expires on merge/close.
 
 ### TASK-20260719-009 — PR-V4-3: /dashboard Ask Rico affordance via existing /command?q= deep-link only
 
-Status: in_progress
+Status: verified — **MERGED (#1189, `e86c6f5`)**
 Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
 Branch: claude/rico-workspace-audit-x65z30 (re-cut from main d6a48a3 after #1188)
 Issue/PR: (draft PR from this branch)
@@ -224,7 +327,7 @@ localized, single-topic, guidance-only prompt (no execution claim; the
 
 ### TASK-20260719-008 — PR-V4-2a (+folded 2b): WorkspaceShell rail goal-mini + applications nav count (fail-hidden, single cached fetch)
 
-Status: review
+Status: verified — **MERGED (#1188, `d6a48a3`)**
 Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
 Branch: claude/rico-workspace-audit-x65z30 (re-cut from main b262032 after #1186)
 Issue/PR: (draft PR from this branch)
@@ -310,7 +413,7 @@ Per the owner ruling, 2b therefore folds into 2a.
 - Rollback plan: revert the squash commit — shell returns to current
   chrome; hook/component are additive files
 
-### TASK-20260719-009 — Relevance floor: cross-family single-token fix (Bybit/HSE case)
+### TASK-20260719-015 — Relevance floor: cross-family single-token fix (Bybit/HSE case)
 
 Status: review
 Owner: Claude (Fable session; owner full-ownership mandate 2026-07-19 evening — track ordered after the verification_status hotfix)
@@ -358,9 +461,13 @@ was the irrelevant one.
 - Post-merge product gate: repeat an HSE Manager production search — the
   Bybit-class result must be absent (honest empty/broaden reply instead).
 
-### TASK-20260719-008 — Hotfix: chat verification_status contract drift (frontend schema)
+### TASK-20260719-014 — Hotfix: chat verification_status contract drift (frontend schema)
 
-Status: review
+> Canonical-ID note (2026-07-19 sync): this entry originally reused
+> TASK-20260719-008, which belongs to the #1188 rail task above. Renamed
+> to the next free id (014) per the owner's unique-ID ruling.
+
+Status: verified — **MERGED (#1191, `826c7a3`)**
 Owner: Claude (Fable session; owner hotfix authorization 2026-07-19 post-#1187 smoke)
 Branch: fix/chat-verification-status-contract
 Issue/PR: #1191
@@ -397,7 +504,7 @@ production payload.
 
 ### TASK-20260719-007 — PR-V4-1: /dashboard Overview goal panel + suggested next actions (real MissionState only)
 
-Status: in_progress
+Status: verified — **MERGED (#1186, `b262032e`)**
 Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
 Branch: claude/rico-workspace-audit-x65z30 (re-cut from main fb21bda after #1185)
 Issue/PR: (draft PR from this branch)
@@ -498,7 +605,7 @@ route. Activity timeline stays omitted (no data source).
 
 ### TASK-20260719-006 — Governance: adopt the frozen Command Workspace v4 design reference + boundaries (docs-only)
 
-Status: review
+Status: verified — **MERGED (#1185, `fb21bda`)**
 Owner: Claude (Fable session; owner rulings 2026-07-19)
 Branch: claude/rico-workspace-audit-x65z30
 Issue/PR: (draft PR from this branch)
@@ -4825,3 +4932,66 @@ Gmail/analytics/design changes.
   old `public, max-age=0` default). Verify on the PR preview URL:
   Cache-Control + CDN-Cache-Control on `/proxy/api/v1/me`, HIT/MISS
   behavior, then on ricohunt.com after merge+deploy.
+
+---
+
+### TASK-20260719-011 — analytics record_event malformed-input hardening (audit gates 1-2)
+
+Status: review
+Owner: Claude (Fable session; owner autonomy grant 2026-07-19 — closes the
+ACTIVE gap recorded in TASK-20260719-002's post-merge audit)
+Branch: claude/growth-lifecycle-automation-qiyzw6
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+Close audit gates 1-2 from the #1176 post-merge audit (verdict B): the
+`record_event` "never raises" contract had three empirically confirmed
+breaches (non-dict `properties`, non-str `client_event_id`, non-datetime
+`occurred_at` — row construction sat outside the `try`), recorded as
+ACTIVE once emitters were wired (#1179). Plus the bool-retention hazard
+(`purge_expired(True)` → 1-day window, near-total purge).
+
+#### Scope delivered
+- `src/repositories/analytics_events_repo.py` — malformed argument TYPES
+  rejected fail-closed before any DB access (debug logs never include the
+  offending values); row construction moved inside the `try` so residual
+  construction errors degrade to the logged skip path (contract is now
+  structural, not caller-trust); `_validated_retention_days` rejects bool
+  explicitly; docstrings updated to match enforced behavior.
+- `tests/unit/test_analytics_events_repo.py` — new section 7 (6 test
+  functions / 13 cases): parametrized adversarial types for all three
+  arguments; no-value-leak log pin; construction-failure belt-and-braces
+  pin; bool purge/count rejection.
+
+#### Explicitly NOT in scope
+Allowlist growth policy (gate 3 — owner decision), Render HMAC key
+verification (gate 4 — owner-side), emitter changes, migrations, #1177.
+
+#### Rollback
+Revert the commit — behavior-narrowing only (inputs that previously
+raised now return False; no valid input's behavior changes).
+
+#### Acceptance criteria
+- [x] Never-raises pins: three malformed-type families return False with
+      zero DB access and zero raised exceptions.
+- [x] Privacy pin: rejection logs contain no offending values.
+- [x] Structural pin: `_clean_properties` raising inside construction
+      degrades to False, never an exception.
+- [x] Retention pin: `purge_expired(True/False)` and `count_expired(True)`
+      return 0 without DB connection.
+- [x] Full analytics suites green: repo 49, emitters 11, purge endpoint
+      10 — 69 passed, 1 warning; `py_compile` clean.
+
+##### Addendum — Gate 4 closed: HMAC key live, first production events (2026-07-19)
+
+- Owner added `RICO_ANALYTICS_HMAC_KEY` on Render (owner confirmation
+  2026-07-19 ~19:20 UTC; key value never accessed or printed by any agent
+  session).
+- Empirically verified end-to-end at 19:25:50 UTC (read-only, count/
+  aggregate only): production `analytics_events` row count **4** — all
+  `search_performed`. First behavioral data in the store; the full chain
+  (migration 047 → emitters v1 → keyed HMAC → rows) is proven live in
+  production. Baseline collection has begun.
+- Remaining open gate from the #1176 post-merge audit: **gate 3 only**
+  (additive allowlist-growth migration policy before event #9 — owner
+  decision).
