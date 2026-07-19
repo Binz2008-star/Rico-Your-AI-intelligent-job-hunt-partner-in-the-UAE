@@ -5564,68 +5564,107 @@ class RicoChatAPI:
     # Ultra-generic vocabulary that must never, on its own, qualify a job as a
     # relevance match for an explicit-title search (would over-match unrelated roles).
     _FLOOR_STOP_TERMS = frozenset({"management", "leadership", "reporting"})
+    # A family term mentioned by this many (or more) distinct taxonomy
+    # families is cross-domain vocabulary (WEAK evidence). Data-derived from
+    # job_role_taxonomy.json: audit=6, compliance=5, environment=5, risk=3
+    # span unrelated domains, while sustainability=2, inspection=2, quality=1
+    # stay discriminating. See cross_family_term_counts().
+    _CROSS_FAMILY_WEAK_MIN = 3
 
-    def _requested_domain_terms(self, requested_role: str) -> tuple[set[str], set[str]]:
+    def _requested_domain_terms(
+        self, requested_role: str
+    ) -> tuple[set[str], set[str], set[str]]:
         """Domain vocabulary for the explicit-title relevance floor.
 
-        Returns ``(single_word_terms, multi_word_phrases)`` built from the
-        requested role's own meaningful tokens plus its taxonomy-family synonyms
-        (``src/data/job_role_taxonomy.json``), with ultra-generic words removed.
-        Fully data-driven — no per-role or per-account hardcoding. Returns empty
-        sets when the role is blank or yields no discriminating vocabulary, in
-        which case the caller skips the floor rather than over-filtering.
+        Returns ``(strong_singles, weak_singles, phrases)`` — three evidence
+        layers (cross-family fix, 2026-07-19 production case: "Head of
+        Trading Risk" satisfied an HSE Manager floor via the lone family
+        word "risk"):
+
+          * STRONG — the requested/canonical role's OWN meaningful tokens,
+            single-word taxonomy aliases of the canonical role, and family
+            terms concentrated in few families (cross_family_term_counts <
+            _CROSS_FAMILY_WEAK_MIN — e.g. sustainability, inspection,
+            quality): one hit is direct evidence.
+          * WEAK — family terms shared across many families (risk / audit /
+            compliance / environment …): a single hit is NOT title
+            evidence — the matcher requires two distinct weak hits.
+          * PHRASES — multi-word terms, the canonical role text, and its
+            taxonomy alias phrases ("safety manager" → HSE Manager), so
+            genuinely-equivalent titles stay reachable without weak singles.
+
+        Fully data-driven from job_role_taxonomy.json — no per-role or
+        per-account hardcoding. Returns empty sets when the role is blank or
+        yields no discriminating vocabulary (e.g. Arabic-only role text),
+        in which case the caller skips the floor rather than over-filtering.
         """
         req = (requested_role or "").strip().lower()
         if not req:
-            return set(), set()
+            return set(), set(), set()
         try:
             from src.llm_scorer import _meaningful_role_tokens, _GENERIC_ROLE_TOKENS
         except Exception:
-            return set(), set()
-        terms: set[str] = set(_meaningful_role_tokens(req))
+            return set(), set(), set()
+        strong: set[str] = set(_meaningful_role_tokens(req))
+        weak: set[str] = set()
+        phrases: set[str] = set()
         try:
             from src.agent.intelligence.role_classifier import (
                 resolve_taxonomy_role as _rtr,
                 _role_family_terms as _rft,
+                role_alias_phrases as _rap,
+                cross_family_term_counts as _cfc,
             )
             canonical = _rtr(requested_role)
             if canonical:
-                terms |= {str(t).lower() for t in _rft(canonical)}
-                terms |= _meaningful_role_tokens(canonical.lower())
+                spread = _cfc()
+                for term in {str(t).lower() for t in _rft(canonical)}:
+                    if spread.get(term, 0) >= self._CROSS_FAMILY_WEAK_MIN:
+                        weak.add(term)
+                    else:
+                        strong.add(term)
+                strong |= _meaningful_role_tokens(canonical.lower())
+                for alias in _rap(canonical):
+                    (phrases if " " in alias else strong).add(alias)
         except Exception:
             pass
-        terms = {
-            t for t in terms
-            if t and t not in _GENERIC_ROLE_TOKENS and t not in self._FLOOR_STOP_TERMS
-        }
-        singles = {t for t in terms if " " not in t}
-        phrases = {t for t in terms if " " in t}
-        return singles, phrases
+
+        def _keep(terms: set[str]) -> set[str]:
+            return {
+                t for t in terms
+                if t and t not in _GENERIC_ROLE_TOKENS and t not in self._FLOOR_STOP_TERMS
+            }
+
+        strong = _keep(strong)
+        weak = _keep(weak)
+        phrases |= {t for t in (strong | weak) if " " in t}
+        strong = {t for t in strong if " " not in t}
+        weak = {t for t in weak if " " not in t} - strong
+        return strong, weak, phrases
 
     @staticmethod
     def _job_matches_requested_domain(
-        job: dict[str, Any], single_terms: set[str], phrase_terms: set[str]
+        job: dict[str, Any],
+        strong_terms: set[str],
+        weak_terms: set[str],
+        phrase_terms: set[str],
     ) -> bool:
-        """True when the job TITLE strongly matches the requested domain vocabulary.
+        """True when the job TITLE matches the requested domain vocabulary.
 
-        Token-level match for single words (so "tax" never matches "taxi") and
-        substring match for multi-word phrases. Title-only by design: a
-        description mention of a family word (e.g. "compliance") must not pull an
-        off-title job into an explicit-title result set.
+        Delegates to the single source of truth shared with the integrity
+        gate (job_integrity.role_text_supported): phrase substring OR one
+        strong token OR two distinct weak tokens. Title-only by design: a
+        description mention of a family word (e.g. "compliance") must not
+        pull an off-title job into an explicit-title result set.
         """
+        title = str(job.get("title") or "")
+        if not title.strip():
+            return False
         try:
-            from src.llm_scorer import _TOKEN_RE
+            from src.job_integrity import role_text_supported
         except Exception:
             return True  # cannot evaluate → do not drop
-        title = str(job.get("title") or "").lower()
-        if not title:
-            return False
-        title_tokens = set(_TOKEN_RE.findall(title))
-        if single_terms and (title_tokens & single_terms):
-            return True
-        if phrase_terms and any(p in title for p in phrase_terms):
-            return True
-        return False
+        return role_text_supported(title, strong_terms, phrase_terms, weak_terms)
 
     def _target_role_search_response(
         self, user_id: str, role: str, profile: Any,
@@ -5761,12 +5800,18 @@ class RicoChatAPI:
         if all_matches:
             try:
                 from src.job_integrity import filter_listings
-                _req_single, _req_phrase = self._requested_domain_terms(search_role)
+                _req_strong, _req_weak, _req_phrase = self._requested_domain_terms(search_role)
                 _pre_integrity = len(all_matches)
+                # The integrity gate deliberately keeps the LEGACY single-hit
+                # vocabulary (strong ∪ weak as its singles): it stays the
+                # coarse trust gate, while the display floor below applies the
+                # strict 3-layer rule — so an off-title-but-live listing is
+                # dropped by the FLOOR with the honest "didn't strongly match
+                # — broaden?" reply, never mislabeled as "couldn't retrieve".
                 all_matches, integrity_rejections = filter_listings(
                     all_matches,
                     requested_role=search_role,
-                    requested_terms=(_req_single, _req_phrase),
+                    requested_terms=(_req_strong | _req_weak, _req_phrase),
                     uae_only=True,  # Rico is a UAE-market product
                 )
                 if integrity_rejections:
@@ -5936,20 +5981,23 @@ class RicoChatAPI:
         # through to an honest "no strong matches — broaden?" reply instead of
         # showing irrelevant jobs. Data-driven via job_role_taxonomy.json; no
         # per-role or per-account hardcoding.
-        _floor_singles, _floor_phrases = self._requested_domain_terms(
+        _floor_strong, _floor_weak, _floor_phrases = self._requested_domain_terms(
             normalized_role or search_role
         )
-        if _floor_singles or _floor_phrases:
+        if _floor_strong or _floor_weak or _floor_phrases:
             _relevant = [
                 m for m in all_matches
-                if self._job_matches_requested_domain(m, _floor_singles, _floor_phrases)
+                if self._job_matches_requested_domain(
+                    m, _floor_strong, _floor_weak, _floor_phrases
+                )
             ]
         else:
             _relevant = all_matches  # degenerate/unknown role → do not over-filter
         # True only when live results existed but none matched the requested title,
         # so the message builder can say so honestly rather than claiming matches.
         _off_title_only = bool(
-            (_floor_singles or _floor_phrases) and all_matches and not _relevant
+            (_floor_strong or _floor_weak or _floor_phrases)
+            and all_matches and not _relevant
         )
         if _off_title_only:
             logger.info(

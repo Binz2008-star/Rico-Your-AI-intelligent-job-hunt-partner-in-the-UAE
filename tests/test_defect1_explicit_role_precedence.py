@@ -521,8 +521,10 @@ def test_strong_title_filter_and_adjacent_opt_in_unchanged():
     assert res.get("type") == "clarification"
     assert "accountant" in (res.get("message") or "").lower()
     assert "Environmental Manager" not in (res.get("message") or "")
-    # The strong-title matcher itself is unchanged and still title-only.
+    # The strong-title matcher is still title-only; signature now carries the
+    # (strong, weak, phrases) evidence layers — strong own-token semantics
+    # unchanged (cross-family fix 2026-07-19).
     assert RicoChatAPI._job_matches_requested_domain(
-        {"title": "Senior Accountant"}, {"accountant"}, set()) is True
+        {"title": "Senior Accountant"}, {"accountant"}, set(), set()) is True
     assert RicoChatAPI._job_matches_requested_domain(
-        {"title": "Environmental Manager"}, {"accountant"}, set()) is False
+        {"title": "Environmental Manager"}, {"accountant"}, set(), set()) is False
