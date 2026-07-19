@@ -393,6 +393,41 @@ export const OnboardingStatusResponseSchema = z.object({
     profile_completeness: z.number(),
 });
 
+// verification_status contract — mirrors the backend's CURRENT emit
+// vocabulary (2026-07-19 production incident: the old 2-value enum rejected
+// "aggregator_untrusted" and discarded an entire valid chat response on the
+// REST fallback path — validateShape threw, the user saw a generic error).
+// Sources of truth on the backend:
+//   * src/services/source_quality.py — live_verified / login_required /
+//     rate_limited / aggregator_untrusted / needs_source_verification
+//   * src/services/job_link.py — google_intermediary / expired
+//   * legacy chat pipeline defaults — live / lead_needs_verification
+export const KNOWN_VERIFICATION_STATUSES = [
+    'live_verified',
+    'login_required',
+    'rate_limited',
+    'aggregator_untrusted',
+    'needs_source_verification',
+    'google_intermediary',
+    'expired',
+    'live',
+    'lead_needs_verification',
+] as const;
+
+// Forward compatibility, fail-SAFE: an unknown future status must never
+// discard the response wholesale — and must never be promoted to a trusted
+// value. It normalizes to 'needs_source_verification' (the cautious
+// presentation) with a console warning so drift stays visible.
+const VerificationStatusSchema = z.preprocess((value) => {
+    if (value == null || value === '') return undefined;
+    if (typeof value !== 'string') return undefined;
+    if ((KNOWN_VERIFICATION_STATUSES as readonly string[]).includes(value)) return value;
+    console.warn(
+        `Unknown verification_status "${value}" — normalized to needs_source_verification`,
+    );
+    return 'needs_source_verification';
+}, z.enum(KNOWN_VERIFICATION_STATUSES).optional());
+
 export const JobMatchSchema = z.object({
     title: StringFromUnknownSchema.default('Untitled role'),
     company: StringFromUnknownSchema.default('Unknown company'),
@@ -408,7 +443,7 @@ export const JobMatchSchema = z.object({
     // Job authenticity fields — optional so existing responses without them still parse.
     apply_url: StringFromUnknownSchema,
     source_url: StringFromUnknownSchema,
-    verification_status: z.enum(['live', 'lead_needs_verification']).optional(),
+    verification_status: VerificationStatusSchema,
 }).passthrough();
 
 export const RicoOptionSchema = z.object({
