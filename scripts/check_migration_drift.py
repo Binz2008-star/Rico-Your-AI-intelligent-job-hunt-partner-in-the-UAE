@@ -91,6 +91,12 @@ CHECKS: list[tuple[str, str, object]] = [
     # code no-ops (fail-closed) until the table exists.
     ("047", "table", "analytics_events"),
     ("047", "index", "uq_analytics_events_dedupe"),
+    # Multi-session chat threads (#1193). Unlike 046/047 this one also lives
+    # in the idempotent startup DDL (026 pattern), so it self-applies on the
+    # first backend boot after deploy — drift here means the deploy never
+    # started, not that a manual apply is pending.
+    ("048", "column", ("rico_chat_history", "session_id")),
+    ("048", "index", "idx_rico_chat_user_session_created"),
 ]
 
 
