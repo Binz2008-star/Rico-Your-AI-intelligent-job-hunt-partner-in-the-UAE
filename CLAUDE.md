@@ -323,6 +323,14 @@ JOTFORM_API_KEY=
 JOTFORM_FORM_ID=
 JOTFORM_WEBHOOK_SECRET=
 
+# WhatsApp-assisted subscription channel (DEC-20260719-003). ASSISTED, not a
+# payment processor: creating a request/opening WhatsApp NEVER grants
+# entitlement — activation only via POST /api/v1/admin/subscriptions/activate
+# after owner payment verification. Fail-closed: flag default false; number
+# must be valid E.164 or the channel stays off. Paddle is unaffected.
+WHATSAPP_SUBSCRIPTIONS_ENABLED=false
+WHATSAPP_SUBSCRIPTION_NUMBER=
+
 RICO_ENABLE_AUTO_APPLY=false
 RICO_INTERACTIVE_APPLY=false
 RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true

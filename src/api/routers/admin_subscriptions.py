@@ -101,6 +101,25 @@ def admin_activate_subscription(
             detail="Database unavailable. Subscription could not be activated.",
         )
 
+    # WhatsApp-assisted channel bookkeeping (DEC-20260719-003): when the
+    # payment_reference is a pending assisted-request reference (RICO-…),
+    # mark it approved for the audit trail. Strictly best-effort — the
+    # entitlement above is already written and this must never undo it.
+    if body.payment_reference and body.payment_reference.strip().upper().startswith("RICO-"):
+        try:
+            from src.repositories import whatsapp_requests_repo
+            marked = whatsapp_requests_repo.mark_request_status(
+                body.payment_reference.strip().upper(),
+                "approved",
+                approved_by=admin.get("email"),
+            )
+            logger.info(
+                "admin_activate_whatsapp_request reference=%s marked=%s",
+                body.payment_reference.strip().upper(), marked,
+            )
+        except Exception:
+            logger.warning("admin_activate_whatsapp_request_mark_failed", exc_info=True)
+
     return AdminActivateResponse(
         success=True,
         email=email,

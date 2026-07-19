@@ -2112,7 +2112,9 @@ export async function submitAction(
 
 export async function recordSubscriptionIntent(
   plan: string,
-  billingMode: "paddle" = "paddle",
+  // "paddle" = automated checkout; "whatsapp" = assisted channel intent
+  // (DEC-20260719-003). Analytics only — never a mode decision.
+  billingMode: "paddle" | "whatsapp" = "paddle",
   sourcePage: string = "/subscription",
 ): Promise<void> {
   try {
@@ -2197,6 +2199,51 @@ export async function getBillingConfig(signal?: AbortSignal): Promise<BillingCon
     method: "GET",
     signal,
   });
+}
+
+/**
+ * WhatsApp-assisted subscription channel (secondary to Paddle).
+ *
+ * ASSISTED, NOT AUTOMATED: opening WhatsApp never activates a subscription —
+ * entitlement is granted only after server-side admin verification. The
+ * whatsapp_url is server-built (server-resolved plan/price and a validated
+ * server-configured number); the browser supplies nothing but the UI
+ * language.
+ */
+export interface WhatsAppBillingConfig {
+  whatsapp_active: boolean;
+}
+
+export async function getWhatsAppBillingConfig(
+  signal?: AbortSignal,
+): Promise<WhatsAppBillingConfig> {
+  return requestJson<WhatsAppBillingConfig>("/api/v1/billing/whatsapp/config", {
+    method: "GET",
+    signal,
+  });
+}
+
+export interface WhatsAppSubscriptionRequest {
+  reference: string;
+  status: string;
+  plan: string;
+  price: string;
+  currency: string;
+  whatsapp_url: string;
+  note_en: string;
+  note_ar: string;
+}
+
+export async function createWhatsAppSubscriptionRequest(
+  language: "en" | "ar" = "en",
+): Promise<WhatsAppSubscriptionRequest> {
+  return requestJson<WhatsAppSubscriptionRequest>(
+    "/api/v1/billing/whatsapp-subscription-request",
+    {
+      method: "POST",
+      body: JSON.stringify({ language }),
+    },
+  );
 }
 
 export interface PaddleBillingStatus {

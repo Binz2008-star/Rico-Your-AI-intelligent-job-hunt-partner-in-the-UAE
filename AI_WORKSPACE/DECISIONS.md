@@ -89,6 +89,55 @@ one source of truth per domain is decided.
 
 ## Accepted decisions
 
+### DEC-20260719-003 — WhatsApp-assisted subscription restored as a SECONDARY assisted channel; Paddle stays the primary automated provider; entitlement boundary unchanged
+
+Status: accepted
+Date: 2026-07-19
+Owner: Roben (owner directive, 2026-07-19) — recorded by Claude
+
+#### Decision
+
+Restore a WhatsApp-assisted subscription path alongside Paddle, amending the
+Paddle-only posture of #1143 (2026-07-17) for the ASSISTED-channel scope
+only. Binding rules:
+
+1. Paddle remains the primary automated payment provider; its behavior,
+   plans, prices, and currencies are unchanged (Rico Monthly — USD
+   21.50/month). No Stripe.
+2. WhatsApp is an assisted/manual subscription CHANNEL, not a payment
+   processor. Opening WhatsApp, sending a message, or uploading a payment
+   screenshot NEVER grants entitlement.
+3. The ONLY entitlement activation path for this channel is the existing
+   admin-only manual mechanism (`POST /api/v1/admin/subscriptions/activate`)
+   after the owner verifies payment out-of-band. Approval is authenticated,
+   auditable, idempotent, server-side.
+4. The channel is server-configured and fail-closed:
+   `WHATSAPP_SUBSCRIPTIONS_ENABLED` (default false) +
+   `WHATSAPP_SUBSCRIPTION_NUMBER` (validated E.164). Missing/invalid config
+   hides the CTA and 503s the request endpoint; Paddle is unaffected either
+   way.
+5. Requests are server-owned rows (`whatsapp_subscription_requests`,
+   migration 049): opaque `RICO-…` reference, authenticated user_id,
+   server-side plan/price/currency snapshot, status pending→approved/
+   rejected, one pending request per user (idempotent clicks). The
+   prefilled message carries reference/plan/price only — never JWTs,
+   emails, phone, CV data, DB ids, or credentials.
+
+Difference from the pre-#1143 implementation (and why that one stays
+removed): the old flow was client-built (`buildWhatsAppUpgradeUrl`), put the
+user's EMAIL in the message, labeled the price AED, and had no server-side
+request record — none of that returns. #1143's removal of the client-side
+manual-payment path remains in force; this decision adds a server-owned
+assisted flow, not a revival of the old code.
+
+Rollback: set `WHATSAPP_SUBSCRIPTIONS_ENABLED=false` (CTA disappears,
+endpoint 503s, pending rows preserved for audit); Paddle unaffected; no
+entitlement change for existing customers.
+
+Implementation: PR (draft) from `feat/whatsapp-assisted-subscription`;
+handoff `HANDOFFS/2026-07-19-whatsapp-assisted-subscription.md`; ledger
+TASK-20260719-015.
+
 ### DEC-20260719-002 — Command Workspace v4 is the adopted frozen design reference; modes map to routes; the /command design freeze remains active
 
 Status: accepted

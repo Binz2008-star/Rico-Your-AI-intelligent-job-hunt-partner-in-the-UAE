@@ -48,6 +48,7 @@ from src.api.routers.mission import router as mission_router
 from src.api.routers.user import router as user_router
 from src.api.routers.files import router as files_router
 from src.api.routers.paddle_billing import paddle_billing_router
+from src.api.routers.billing_whatsapp import billing_whatsapp_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -368,6 +369,7 @@ app.include_router(job_lifecycle_router)
 app.include_router(apply_queue_router)
 app.include_router(mission_router)
 app.include_router(paddle_billing_router)
+app.include_router(billing_whatsapp_router)
 
 
 @app.get("/health")

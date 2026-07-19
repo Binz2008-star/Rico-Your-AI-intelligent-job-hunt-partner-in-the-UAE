@@ -120,6 +120,19 @@ const mockRecordSubscriptionIntent = vi.fn().mockResolvedValue(undefined);
 const mockGetBillingConfig = vi.fn().mockResolvedValue({
   billing_mode: "paddle", paddle_active: true, sandbox: true,
 });
+// WhatsApp assisted channel — fail-hidden by default so Paddle-only tests
+// are unaffected; individual tests opt in.
+const mockGetWhatsAppBillingConfig = vi.fn().mockResolvedValue({ whatsapp_active: false });
+const mockCreateWhatsAppSubscriptionRequest = vi.fn().mockResolvedValue({
+  reference: "RICO-TEST123456",
+  status: "pending",
+  plan: "Rico Monthly",
+  price: "21.50",
+  currency: "USD",
+  whatsapp_url: "https://wa.me/971585989080?text=Hello",
+  note_en: "Activation occurs after payment verification.",
+  note_ar: "يتم تفعيل الاشتراك بعد التحقق من الدفع.",
+});
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error { },
@@ -129,6 +142,8 @@ vi.mock("@/lib/api", () => ({
   createPaddleCustomerPortalSession: (...args: unknown[]) => mockCreatePaddleCustomerPortalSession(...args),
   recordSubscriptionIntent: (...args: unknown[]) => mockRecordSubscriptionIntent(...args),
   getBillingConfig: (...args: unknown[]) => mockGetBillingConfig(...args),
+  getWhatsAppBillingConfig: (...args: unknown[]) => mockGetWhatsAppBillingConfig(...args),
+  createWhatsAppSubscriptionRequest: (...args: unknown[]) => mockCreateWhatsAppSubscriptionRequest(...args),
 }));
 
 // Paddle — capture the eventCallback so tests can fire synthetic events
@@ -408,5 +423,116 @@ describe("Pricing copy — USD, not AED", () => {
     await screen.findByText(/subscribeWithPaddle/i);
 
     expect(screen.getByText(/USD 21\.50/)).toBeDefined();
+  });
+});
+
+describe("SubscriptionAtelier — WhatsApp assisted channel (secondary to Paddle)", () => {
+  const user = { user_id: "u1", name: "Test User", email: "test@rico.ai" };
+  let openSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHasPaddleClientConfig = true;
+    mockGetBillingConfig.mockResolvedValue({ billing_mode: "paddle", paddle_active: true, sandbox: true });
+    mockGetWhatsAppBillingConfig.mockResolvedValue({ whatsapp_active: true });
+    mockCreateWhatsAppSubscriptionRequest.mockResolvedValue({
+      reference: "RICO-TEST123456",
+      status: "pending",
+      plan: "Rico Monthly",
+      price: "21.50",
+      currency: "USD",
+      whatsapp_url: "https://wa.me/971585989080?text=Hello",
+      note_en: "Activation occurs after payment verification.",
+      note_ar: "يتم تفعيل الاشتراك بعد التحقق من الدفع.",
+    });
+    openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+  });
+
+  afterEach(() => {
+    openSpy.mockRestore();
+  });
+
+  it("renders the WhatsApp CTA as secondary alongside the Paddle CTA when active", async () => {
+    render(React.createElement(SubscriptionAtelier, { user }));
+
+    const waBtn = await screen.findByTestId("subscribe-via-whatsapp");
+    expect(waBtn).toBeDefined();
+    // Paddle CTA still present and untouched (visual primary).
+    expect(screen.getByText(/subscribeWithPaddle/i)).toBeDefined();
+    // Honest expectation-setting copy is shown.
+    expect(screen.getByText(/whatsappActivationNote/i)).toBeDefined();
+  });
+
+  it("is hidden entirely when the server reports the channel unavailable", async () => {
+    mockGetWhatsAppBillingConfig.mockResolvedValue({ whatsapp_active: false });
+    render(React.createElement(SubscriptionAtelier, { user }));
+    await screen.findByText(/subscribeWithPaddle/i);
+    expect(screen.queryByTestId("subscribe-via-whatsapp")).toBeNull();
+  });
+
+  it("is hidden when the WhatsApp config fetch fails (fail-hidden)", async () => {
+    mockGetWhatsAppBillingConfig.mockRejectedValue(new Error("network down"));
+    render(React.createElement(SubscriptionAtelier, { user }));
+    await screen.findByText(/subscribeWithPaddle/i);
+    expect(screen.queryByTestId("subscribe-via-whatsapp")).toBeNull();
+  });
+
+  it("creates the pending request BEFORE opening WhatsApp, with the server URL", async () => {
+    render(React.createElement(SubscriptionAtelier, { user }));
+    const waBtn = await screen.findByTestId("subscribe-via-whatsapp");
+    fireEvent.click(waBtn);
+
+    await waitFor(() => expect(mockCreateWhatsAppSubscriptionRequest).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(openSpy).toHaveBeenCalledTimes(1));
+
+    const reqOrder = mockCreateWhatsAppSubscriptionRequest.mock.invocationCallOrder[0];
+    const openOrder = (openSpy.mock.invocationCallOrder as number[])[0];
+    expect(reqOrder).toBeLessThan(openOrder);
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://wa.me/971585989080?text=Hello", "_blank", "noopener,noreferrer",
+    );
+    // Never claims payment/activation succeeded — only the verification note.
+    expect(toastFn).toHaveBeenCalledWith("whatsappActivationNote", "info");
+  });
+
+  it("shows an honest error and never opens WhatsApp when the request fails", async () => {
+    mockCreateWhatsAppSubscriptionRequest.mockRejectedValue(new Error("request failed"));
+    render(React.createElement(SubscriptionAtelier, { user }));
+    const waBtn = await screen.findByTestId("subscribe-via-whatsapp");
+    fireEvent.click(waBtn);
+
+    await waitFor(() => expect(toastFn).toHaveBeenCalledWith("request failed", "error"));
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("blocks repeated clicks while the request is in flight", async () => {
+    let resolveReq: (v: unknown) => void = () => undefined;
+    mockCreateWhatsAppSubscriptionRequest.mockImplementation(
+      () => new Promise((resolve) => { resolveReq = resolve; }),
+    );
+    render(React.createElement(SubscriptionAtelier, { user }));
+    const waBtn = await screen.findByTestId("subscribe-via-whatsapp");
+
+    fireEvent.click(waBtn);
+    fireEvent.click(waBtn);
+    fireEvent.click(waBtn);
+
+    await waitFor(() => expect(mockCreateWhatsAppSubscriptionRequest).toHaveBeenCalledTimes(1));
+    resolveReq({
+      reference: "RICO-TEST123456", status: "pending", plan: "Rico Monthly",
+      price: "21.50", currency: "USD",
+      whatsapp_url: "https://wa.me/971585989080?text=Hello",
+      note_en: "", note_ar: "",
+    });
+    await waitFor(() => expect(openSpy).toHaveBeenCalledTimes(1));
+  });
+
+  it("records a whatsapp upgrade intent on click", async () => {
+    render(React.createElement(SubscriptionAtelier, { user }));
+    const waBtn = await screen.findByTestId("subscribe-via-whatsapp");
+    fireEvent.click(waBtn);
+    await waitFor(() =>
+      expect(mockRecordSubscriptionIntent).toHaveBeenCalledWith("pro", "whatsapp", "/subscription"),
+    );
   });
 });
