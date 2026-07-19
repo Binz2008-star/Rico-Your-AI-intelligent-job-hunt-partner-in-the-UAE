@@ -1675,6 +1675,24 @@ export async function* sendChatStreamPublic(
   yield* _readSSE(res.body);
 }
 
+/** SSE↔JSON parity for the tolerance contract (#1191/#1193): the structured
+ *  payload of a `done` event goes through the SAME tolerant schema as the
+ *  non-streaming path (verification_status normalization, per-row match
+ *  salvage, score/confidence coercion). Before this, the stream path yielded
+ *  the payload as a raw cast, so a malformed field the JSON path would
+ *  normalize could reach the UI unnormalized. If even the tolerant parse
+ *  fails, only the structured payload is dropped — the streamed text still
+ *  renders (and a tokenless stream falls back to the validated JSON
+ *  endpoint), so a reply is never rejected at this boundary.
+ *  Exported for tests. */
+export function normalizeStreamDoneEvent(event: ChatStreamEvent): ChatStreamEvent {
+  if (event?.type !== "done" || event.response == null) return event;
+  const parsed = RicoChatResponseSchema.safeParse(event.response);
+  if (parsed.success) return { ...event, response: parsed.data };
+  console.warn("Invalid streamed chat response payload; keeping streamed text only", parsed.error.flatten());
+  return { ...event, response: undefined };
+}
+
 async function* _readSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<ChatStreamEvent> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -1690,11 +1708,13 @@ async function* _readSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<ChatS
         if (!line.startsWith("data: ")) continue;
         const raw = line.slice(6).trim();
         if (!raw || raw === "[DONE]") continue;
+        let event: ChatStreamEvent | null = null;
         try {
-          yield JSON.parse(raw) as ChatStreamEvent;
+          event = JSON.parse(raw) as ChatStreamEvent;
         } catch {
           // malformed SSE line, skip
         }
+        if (event) yield normalizeStreamDoneEvent(event);
       }
     }
   } finally {
