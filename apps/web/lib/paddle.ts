@@ -173,6 +173,26 @@ export function initPaddle(): Promise<PaddleInstance> {
 /** Terminal outcome of an overlay checkout that did not error. */
 export type PaddleCheckoutOutcome = "completed" | "closed";
 
+const _EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/**
+ * Sanitize a Paddle error detail string before it reaches the console or a
+ * toast. Paddle's `type`/`code` are stable enum-like values and are passed
+ * through untouched; `detail` is free text and could echo customer input,
+ * so email addresses and the server-owned checkout session token are
+ * redacted. Diagnostic value (error codes, entity prefixes) is preserved.
+ */
+export function sanitizePaddleErrorDetail(
+    detail: string,
+    checkoutSessionId?: string,
+): string {
+    let out = detail.replace(_EMAIL_RE, "[redacted-email]");
+    if (checkoutSessionId) {
+        out = out.split(checkoutSessionId).join("[redacted-session]");
+    }
+    return out;
+}
+
 /**
  * Open the Paddle overlay checkout for a given price ID.
  *
@@ -217,15 +237,16 @@ export async function openPaddleCheckout(
                 // to distinguish env/price/domain misconfiguration from a
                 // payment problem.
                 const paddleErr = event.error;
-                const detail =
+                const rawDetail =
                     paddleErr?.detail ??
                     (event.data?.message as string | undefined) ??
                     (event.data?.error as string | undefined) ??
                     "Paddle checkout error";
+                // type/code are preserved exactly; the free-text detail is
+                // sanitized (emails + session token redacted) before it can
+                // reach the console or a user-facing toast.
+                const detail = sanitizePaddleErrorDetail(rawDetail, checkoutSessionId);
                 const message = paddleErr?.code ? `${detail} [${paddleErr.code}]` : detail;
-                // No customer PII lives in the Paddle error object — log it in
-                // full so production failures carry an exact code, not just
-                // "Something went wrong".
                 console.error("[paddle] checkout.error", {
                     type: paddleErr?.type,
                     code: paddleErr?.code,

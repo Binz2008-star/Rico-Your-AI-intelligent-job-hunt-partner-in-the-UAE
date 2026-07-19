@@ -176,7 +176,10 @@ fail-open.
 
 - `apps/web/lib/paddle.ts` — surface the exact Paddle error
   `detail [code]` (toast + console); Paddle.js environment derived from
-  the client-token prefix (flag is fallback only, contradiction logged).
+  the client-token prefix (flag is fallback only, contradiction logged);
+  `sanitizePaddleErrorDetail` redacts emails + the checkout session token
+  from the free-text `detail` before console/toast (type/code preserved
+  exactly; pinned by a test embedding both inside `error.detail`).
 - `apps/web/lib/billing.ts` — `resolveBillingUiMode` fails closed when
   the client token environment contradicts the backend `sandbox` flag.
 - `src/api/routers/paddle_billing.py` — `paddle_active` requires

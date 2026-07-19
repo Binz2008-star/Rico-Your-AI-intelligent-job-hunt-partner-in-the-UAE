@@ -143,6 +143,42 @@ describe("openPaddleCheckout — Paddle.js v2 event contract", () => {
         errSpy.mockRestore();
     });
 
+    it("redacts email + session token embedded in error.detail itself, keeping exact type/code", async () => {
+        const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+        const pending = openPaddleCheckout("pri_test", "sess_leaky_tok_42", "cust@rico.ai", "en");
+        await vi.waitFor(() => expect(checkoutOpen).toHaveBeenCalledTimes(1));
+
+        // Worst case: Paddle's free-text detail echoes customer input.
+        firePaddleEvent({
+            name: "checkout.error",
+            error: {
+                type: "request_error",
+                code: "checkout_customer_invalid",
+                detail: "customer cust@rico.ai with session sess_leaky_tok_42 was rejected",
+            },
+        });
+
+        // The rejection (toast source) keeps the exact code but neither secret.
+        const err = await pending.catch((e: Error) => e);
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain("[checkout_customer_invalid]");
+        expect((err as Error).message).toContain("[redacted-email]");
+        expect((err as Error).message).toContain("[redacted-session]");
+        expect((err as Error).message).not.toContain("cust@rico.ai");
+        expect((err as Error).message).not.toContain("sess_leaky_tok_42");
+
+        // The console log preserves exact type/code and redacts both secrets.
+        const logged = errSpy.mock.calls.find((c) => c[0] === "[paddle] checkout.error")?.[1] as {
+            type?: string; code?: string; detail?: string;
+        };
+        expect(logged.type).toBe("request_error");
+        expect(logged.code).toBe("checkout_customer_invalid");
+        const allLogged = JSON.stringify(errSpy.mock.calls);
+        expect(allLogged).not.toContain("cust@rico.ai");
+        expect(allLogged).not.toContain("sess_leaky_tok_42");
+        errSpy.mockRestore();
+    });
+
     it("resolves with \"completed\" on checkout.completed", async () => {
         const pending = openPaddleCheckout("pri_test", "sess_token_123", "u@rico.ai", "en");
         await vi.waitFor(() => expect(checkoutOpen).toHaveBeenCalledTimes(1));
