@@ -1948,6 +1948,95 @@ def profile_to_dict(profile: Any) -> dict[str, Any]:
     }
 
 
+# Multi-city detection for a single job-search request. When a user asks for
+# several UAE cities at once ("Data Analyst jobs in Dubai and Sharjah"), the
+# upstream single-value location extractor keeps only the first city, so Rico
+# silently searched (and reported) just one. This scanner recovers every named
+# city from the request text so the search covers all of them and the reply is
+# honest. Global/data-driven — no city or account is special-cased.
+_MULTI_CITY_SCAN_RE = re.compile(
+    r"\b(dubai|abu\s+dhabi|sharjah|ajman|ras\s+al\s+khaimah|fujairah|"
+    r"al\s+ain|umm\s+al\s+quwain|deira|bur\s+dubai)\b",
+    re.IGNORECASE,
+)
+_MULTI_CITY_SCAN_AR_RE = re.compile(
+    r"(دبي|أبوظبي|ابوظبي|الشارقة|عجمان|رأس\s+الخيمة|راس\s+الخيمة|"
+    r"الفجيرة|أم\s+القيوين|ام\s+القيوين|العين)"
+)
+
+
+def _requested_cities_from_text(text: str) -> list[str]:
+    """Return the distinct UAE cities named in *text*, order-preserving.
+
+    English names are title-cased ("abu dhabi" -> "Abu Dhabi"); Arabic names are
+    kept as written. Country-scope words ("UAE") are intentionally excluded — a
+    bare "UAE" is not a multi-city request.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for m in _MULTI_CITY_SCAN_RE.finditer(text or ""):
+        canon = re.sub(r"\s+", " ", m.group(1).strip()).lower().title()
+        if canon.lower() not in seen:
+            seen.add(canon.lower())
+            out.append(canon)
+    for m in _MULTI_CITY_SCAN_AR_RE.finditer(text or ""):
+        canon = re.sub(r"\s+", " ", m.group(1).strip())
+        if canon.lower() not in seen:
+            seen.add(canon.lower())
+            out.append(canon)
+    return out
+
+
+# Canonical UAE-city aliases (EN + AR + common districts) → canonical token.
+# Used to filter provider results to the cities the user actually asked for when
+# a multi-city request was widened to a single UAE-wide provider call.
+_UAE_CITY_CANON: dict[str, str] = {
+    "dubai": "dubai", "bur dubai": "dubai", "deira": "dubai",
+    "دبي": "dubai", "بر دبي": "dubai", "ديره": "dubai", "ديرة": "dubai",
+    "abu dhabi": "abu dhabi", "أبوظبي": "abu dhabi", "ابوظبي": "abu dhabi",
+    "أبو ظبي": "abu dhabi", "ابو ظبي": "abu dhabi",
+    "sharjah": "sharjah", "الشارقة": "sharjah", "الشارقه": "sharjah",
+    "ajman": "ajman", "عجمان": "ajman",
+    "ras al khaimah": "ras al khaimah", "rak": "ras al khaimah",
+    "رأس الخيمة": "ras al khaimah", "راس الخيمة": "ras al khaimah",
+    "fujairah": "fujairah", "الفجيرة": "fujairah", "الفجيره": "fujairah",
+    "umm al quwain": "umm al quwain", "أم القيوين": "umm al quwain",
+    "ام القيوين": "umm al quwain",
+    "al ain": "al ain", "العين": "al ain",
+}
+
+
+def _canonical_requested_cities(cities: list[str]) -> set[str]:
+    """Map requested city names to canonical tokens (unknown → lowercased as-is)."""
+    out: set[str] = set()
+    for c in cities or []:
+        key = re.sub(r"\s+", " ", str(c or "").strip()).lower()
+        if key:
+            out.add(_UAE_CITY_CANON.get(key, key))
+    return out
+
+
+def _location_matches_requested_cities(location: str, canon_cities: set[str]) -> bool:
+    """True when *location* names any of the canonical requested cities.
+
+    Alias-aware (EN/AR + districts) substring match, so a "Deira" or "بر دبي"
+    job matches a "Dubai" request and vice-versa. Empty *canon_cities* means no
+    city constraint (always True).
+    """
+    if not canon_cities:
+        return True
+    loc = re.sub(r"\s+", " ", (location or "").strip()).lower()
+    if not loc:
+        return False
+    for alias, canon in _UAE_CITY_CANON.items():
+        if canon in canon_cities and alias in loc:
+            return True
+    for canon in canon_cities:  # unknown-but-requested token appears literally
+        if canon and canon in loc:
+            return True
+    return False
+
+
 class RicoChatAPI:
     """Simple conversational controller for Rico AI."""
 
@@ -5711,6 +5800,18 @@ class RicoChatAPI:
         }
         _provider_location = "" if _country_scope else _requested_location
 
+        # Multi-city requests: the classifier now passes every requested city in
+        # `location` (e.g. "Dubai, Sharjah"). When two or more are present, (a)
+        # show all of them and (b) widen the provider query to UAE scope — a
+        # single, cost-neutral provider call whose results span every requested
+        # city — instead of silently limiting to the first. One city (or none,
+        # or a non-UAE location) is unchanged.
+        _requested_cities = _requested_cities_from_text(_requested_location)
+        if len(_requested_cities) >= 2:
+            _requested_location = ", ".join(_requested_cities)
+            _country_scope = False
+            _provider_location = ""  # UAE-wide single call covers all requested cities
+
         operation = self._begin_job_search_operation(user_id, search_role)
         operation_id = str(operation["operation_id"])
 
@@ -6005,6 +6106,26 @@ class RicoChatAPI:
                 search_role, len(all_matches), operation_id,
             )
 
+        # Server-side city filter (multi-city). When the user named 2+ cities the
+        # provider query was widened to UAE scope (one call), so restrict the
+        # results to jobs actually located in the requested cities. Off-city noise
+        # is dropped rather than shown. Single-city / country-scope searches
+        # already target the provider location and are left untouched.
+        _multi_city_filtered = False
+        if len(_requested_cities) >= 2:
+            _canon_cities = _canonical_requested_cities(_requested_cities)
+            _relevant = [
+                m for m in _relevant
+                if _location_matches_requested_cities(
+                    str(m.get("location") or m.get("city") or ""), _canon_cities
+                )
+            ]
+            _multi_city_filtered = True
+            logger.info(
+                "multi_city_filter: cities=%s kept=%d op=%s",
+                sorted(_canon_cities), len(_relevant), operation_id,
+            )
+
         top_matches = _relevant[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
 
@@ -6109,7 +6230,10 @@ class RicoChatAPI:
             self._store_search_matches_context(
                 user_id, formatted,
                 search_role=search_role,
-                search_location=location or ", ".join(map(str, cities[:2])),
+                # Prefer the full requested-location string (all cities when the
+                # user named several) so a follow-up "refine"/"more" reuses the
+                # complete scope, not just the first city.
+                search_location=_requested_location or location or ", ".join(map(str, cities[:2])),
             )
         return response
 
