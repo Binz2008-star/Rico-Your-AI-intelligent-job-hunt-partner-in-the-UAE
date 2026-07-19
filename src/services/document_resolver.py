@@ -33,8 +33,12 @@ def get_user_documents(user_id: str) -> List[Dict[str, Any]]:
         if not db.available:
             return []
         return db.list_user_documents(user_id)
-    except Exception:
-        logger.warning("document_resolver.get_user_documents failed user=%s", user_id)
+    except Exception as exc:
+        # Sanitized: exception type only — user_id is an email (PII) and must
+        # never reach logs (owner audit 2026-07-19, point 4).
+        logger.warning(
+            "document_resolver.get_user_documents failed (%s)", type(exc).__name__
+        )
         return []
 
 
@@ -44,6 +48,32 @@ def get_cv_candidates(user_id: str) -> List[Dict[str, Any]]:
     Does not include cover_letter, identity_document, or other types.
     """
     return [d for d in get_user_documents(user_id) if d.get("doc_type") in _CV_DOC_TYPES]
+
+
+def get_user_documents_strict(user_id: str) -> List[Dict[str, Any]]:
+    """Like get_user_documents but RAISES on store failure.
+
+    get_user_documents swallows store errors into [], which makes "store
+    down" indistinguishable from "no documents". Career-context resolution
+    must tell them apart: an unreachable store means CV-side values cannot
+    be verified (degraded state → omit absolutes), while an empty store
+    means the profile is legitimately the only source. An unconfigured
+    store (db.available False) returns [] — that is a deployment mode, not
+    a failure.
+    """
+    from src.rico_db import RicoDB
+    db = RicoDB()
+    if not db.available:
+        return []
+    return db.list_user_documents(user_id)
+
+
+def get_cv_candidates_strict(user_id: str) -> List[Dict[str, Any]]:
+    """CV documents, primary-first then newest; RAISES on store failure."""
+    return [
+        d for d in get_user_documents_strict(user_id)
+        if d.get("doc_type") in _CV_DOC_TYPES
+    ]
 
 
 def get_primary_cv(user_id: str) -> Optional[Dict[str, Any]]:
