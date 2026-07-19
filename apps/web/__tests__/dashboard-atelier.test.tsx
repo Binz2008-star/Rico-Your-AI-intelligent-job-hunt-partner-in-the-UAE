@@ -205,6 +205,40 @@ describe("DashboardAtelier — failure honesty", () => {
     });
 });
 
+describe("DashboardAtelier — Ask Rico deep-link (PR-V4-3)", () => {
+    it("links to /command with the encoded English guidance prompt", async () => {
+        getMissionMock.mockResolvedValue(FULL_MISSION);
+        renderWithProviders(<DashboardAtelier />);
+
+        const link = await screen.findByTestId("dashboard-ask-rico");
+        expect(link).toHaveAttribute(
+            "href",
+            `/command?q=${encodeURIComponent("Help me decide my next step toward my goal.")}`,
+        );
+        expect(link).toHaveTextContent("Ask Rico");
+    });
+
+    it("links to /command with the encoded Arabic prompt in Arabic mode", async () => {
+        window.localStorage.setItem("rico-language", "ar");
+        getMissionMock.mockResolvedValue(FULL_MISSION);
+        renderWithProviders(<DashboardAtelier />);
+
+        const link = await screen.findByTestId("dashboard-ask-rico");
+        expect(link).toHaveAttribute(
+            "href",
+            `/command?q=${encodeURIComponent("ساعدني في تحديد خطوتي التالية نحو هدفي.")}`,
+        );
+    });
+
+    it("does not render while the mission failed to load (error state)", async () => {
+        getMissionMock.mockRejectedValue(new Error("down"));
+        renderWithProviders(<DashboardAtelier />);
+
+        await screen.findByTestId("dashboard-error");
+        expect(screen.queryByTestId("dashboard-ask-rico")).toBeNull();
+    });
+});
+
 describe("DashboardAtelier — Arabic", () => {
     it("renders the localized goal title and actions in Arabic", async () => {
         window.localStorage.setItem("rico-language", "ar");
