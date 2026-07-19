@@ -1,7 +1,7 @@
 # Handoff — WhatsApp-assisted subscription (secondary channel alongside Paddle)
 
 Date: 2026-07-19
-Decision: DEC-20260719-003 · Ledger: TASK-20260719-015
+Decision: DEC-20260719-003 · Ledger: TASK-20260719-017 (renumbered from -015)
 Branch: `feat/whatsapp-assisted-subscription` (one Draft PR, one objective)
 
 Program mapping (Vision → Epic → Milestone → Phase → PR → Task):
@@ -9,7 +9,7 @@ Vision: trusted Career Operating System with sustainable revenue →
 Epic: Billing & Subscriptions → Milestone: dual-channel subscription
 (automated Paddle + assisted WhatsApp) → Phase: assisted-channel MVP
 (pending-request + contact flow; approval via existing admin path) →
-PR: this Draft PR → Task: TASK-20260719-015.
+PR: this Draft PR → Task: TASK-20260719-017.
 
 ## 1. Evidence-first findings
 

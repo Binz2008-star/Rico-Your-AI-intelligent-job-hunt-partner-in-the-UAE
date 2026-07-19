@@ -136,7 +136,7 @@ entitlement change for existing customers.
 
 Implementation: PR (draft) from `feat/whatsapp-assisted-subscription`;
 handoff `HANDOFFS/2026-07-19-whatsapp-assisted-subscription.md`; ledger
-TASK-20260719-015.
+TASK-20260719-017 (renumbered from -015 in the 2026-07-19 ledger sync).
 
 ### DEC-20260719-002 — Command Workspace v4 is the adopted frozen design reference; modes map to routes; the /command design freeze remains active
 
