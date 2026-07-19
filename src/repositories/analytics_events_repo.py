@@ -7,13 +7,13 @@ privacy guarantees, idempotency, and retention policy. NOTHING is
 instrumented yet — wiring emitters into routes is a separate change.
 
 Privacy contract (mirrors the job_observations pattern, owner-approved):
-  * NO raw message text, email, CV text, search query text, or other PII —
-    significantly reduced by structural enforcement: the per-event allowlist
-    admits only booleans, bounded numbers, and short enum-like tokens
-    (``_TOKEN_RE``). Free-form strings (emails with '@', phones with '+',
-    names with spaces) cannot pass. Note: the token validator still accepts
-    identifier-shaped strings and digit-only values, so caller discipline
-    remains required.
+  * Free-form text and common identifiers are blocked by structural
+    enforcement: the per-event allowlist admits only booleans, bounded
+    numbers, and short enum-like tokens (``_TOKEN_RE``). Free-form strings
+    (emails with '@', phones with '+', names with spaces) cannot pass.
+    However, the token validator still accepts identifier-shaped strings
+    and digit-only values, so token-shaped or numeric identifiers could
+    pass — caller discipline remains required.
   * The actor is stored only as keyed non-reversible HMAC-SHA256 under the
     dedicated ``RICO_ANALYTICS_HMAC_KEY`` (its own secret — never
     JWT_SECRET, never the archive key, never stored in the DB). Absent key
