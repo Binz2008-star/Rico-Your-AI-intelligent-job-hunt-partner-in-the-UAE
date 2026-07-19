@@ -428,14 +428,36 @@ const VerificationStatusSchema = z.preprocess((value) => {
     return 'needs_source_verification';
 }, z.enum(KNOWN_VERIFICATION_STATUSES).optional());
 
+/* ── Complementary fail-open hardening (on top of the #1191 contract) ─────
+   #1191 fixed verification_status; the SAME failure class remained open for
+   every other annotation field: a null confidence, a numeric-string score,
+   a null top-level boolean/record, or any one malformed match row would
+   still reject the ENTIRE reply at validateShape and show the generic FAIL
+   bubble. Annotation-grade fields may degrade — never reject a reply. */
+
+/** Tolerant number: numeric strings coerce; anything else → undefined. */
+const TolerantScoreSchema = z.preprocess((value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
+        return Number(value);
+    }
+    return undefined;
+}, z.number().optional());
+
+/** Tolerant confidence: known tiers pass; anything else (null, new tiers) → undefined. */
+const TolerantConfidenceSchema = z.preprocess(
+    (value) => (value === 'high' || value === 'medium' || value === 'low' ? value : undefined),
+    z.enum(['high', 'medium', 'low']).optional(),
+);
+
 export const JobMatchSchema = z.object({
     title: StringFromUnknownSchema.default('Untitled role'),
     company: StringFromUnknownSchema.default('Unknown company'),
     location: StringFromUnknownSchema,
-    score: z.number().optional(),
+    score: TolerantScoreSchema,
     why: StringFromUnknownSchema,
     actions: StringArrayFromUnknownSchema,
-    confidence: z.enum(['high', 'medium', 'low']).optional(),
+    confidence: TolerantConfidenceSchema,
     match_reasons: StringArrayFromUnknownSchema,
     match_concerns: StringArrayFromUnknownSchema,
     missing_facts: StringArrayFromUnknownSchema,
@@ -475,23 +497,39 @@ export const RicoChatResponseSchema = z.object({
         text: StringFromUnknownSchema,
     }).passthrough().optional(),
     type: StringFromUnknownSchema,
-    matches: z.array(JobMatchSchema).nullable().optional().transform((value) => value ?? undefined),
+    // Per-row salvage (batch-row-isolation, same philosophy as backend #887):
+    // one malformed match is DROPPED with a console warning — it can never
+    // reject the whole reply into the generic FAIL bubble.
+    matches: z
+        .array(z.unknown())
+        .nullable()
+        .optional()
+        .transform((value) => {
+            if (!value) return undefined;
+            const rows: Array<z.infer<typeof JobMatchSchema>> = [];
+            for (const item of value) {
+                const parsed = JobMatchSchema.safeParse(item);
+                if (parsed.success) rows.push(parsed.data);
+                else console.warn('Dropped malformed job match from chat response', parsed.error.flatten());
+            }
+            return rows;
+        }),
     options: z.array(RicoOptionSchema).nullable().optional().transform((value) => value ?? undefined),
     next_action: StringFromUnknownSchema,
     response_source: StringFromUnknownSchema,
     role: StringFromUnknownSchema,
     reasons: StringArrayFromUnknownSchema,
     next_actions: z.array(NextActionSchema).nullable().optional().transform((value) => value ?? undefined),
-    success: z.boolean().optional(),
+    success: z.boolean().nullable().optional().transform((v) => v ?? undefined),
     debug_id: StringFromUnknownSchema,
     error: StringFromUnknownSchema,
     error_ref: StringFromUnknownSchema,
     provider: StringFromUnknownSchema,
     model: StringFromUnknownSchema,
-    profile_context_present: z.boolean().optional(),
+    profile_context_present: z.boolean().nullable().optional().transform((v) => v ?? undefined),
     intent: StringFromUnknownSchema,
-    entities: z.record(z.string(), z.unknown()).optional(),
-    tool_args: z.record(z.string(), z.unknown()).optional(),
+    entities: z.record(z.string(), z.unknown()).nullable().optional().transform((v) => v ?? undefined),
+    tool_args: z.record(z.string(), z.unknown()).nullable().optional().transform((v) => v ?? undefined),
     field_status: StringFromUnknownSchema,
     updated: z.record(z.string(), z.unknown()).optional(),
     profile: z.record(z.string(), z.unknown()).optional(),
