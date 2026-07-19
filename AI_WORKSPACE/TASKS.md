@@ -231,7 +231,7 @@ Per the owner ruling, 2b therefore folds into 2a.
 Status: review
 Owner: Claude (Fable session; owner hotfix authorization 2026-07-19 post-#1187 smoke)
 Branch: fix/chat-verification-status-contract
-Issue/PR: #1188
+Issue/PR: #1191
 
 #### Objective
 Align `JobMatchSchema.verification_status` with the backend's CURRENT emit
