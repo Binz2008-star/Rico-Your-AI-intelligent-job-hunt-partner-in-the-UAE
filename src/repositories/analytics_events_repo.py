@@ -110,6 +110,9 @@ EVENT_ALLOWLIST: Dict[str, Dict[str, Any]] = {
 
 _AUDIENCES = frozenset({"user", "guest"})
 
+# Bounded caller-provided guest identifier (e.g. the server-minted guest SID).
+_GUEST_ID_MAX_LEN = 128
+
 _INSERT_SQL = """
     INSERT INTO analytics_events (
         occurred_at, schema_version, event_name, actor_hash,
@@ -124,24 +127,23 @@ _warned_no_key = False
 _warned_unknown_events: set[str] = set()
 
 
-def _actor_hash(user_id: Optional[str]) -> Optional[str]:
+def _hmac_identity(identity: str) -> Optional[str]:
     """Keyed non-reversible actor token; None ⇒ the store must skip writes.
 
-    Returns '' for anonymous rows (no user_id). NEVER falls back to an
-    unkeyed hash — identities are guessable, so an unkeyed hash would be
-    dictionary-attackable.
+    ``identity`` is a non-empty, domain-prefixed string ("user:…" or
+    "guest:…" — the prefix keeps the two identity spaces from colliding).
+    Raw identities never reach a row or a log line — only this HMAC does.
+    NEVER falls back to an unkeyed hash: identities are guessable, so an
+    unkeyed hash would be dictionary-attackable.
 
-    Guest dedupe limitation: all anonymous actors share actor_hash='', so
-    identical guest events in the same minute can collapse across different
-    users. This is accepted as a best-effort limitation for anonymous
-    sessions; authenticated users have per-user hashes and full dedupe.
+    Every event carries a real per-actor identity: record_event REJECTS
+    events with no identity (fail-closed, no DB access), so distinct
+    anonymous users can never collapse onto a shared empty actor.
     """
     key = os.getenv(_HMAC_KEY_ENV, "").strip()
     if not key:
         return None
-    if not user_id:
-        return ""
-    return hmac.new(key.encode("utf-8"), user_id.strip().lower().encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.new(key.encode("utf-8"), identity.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _clean_properties(event_name: str, properties: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -180,6 +182,7 @@ def record_event(
     event_name: str,
     *,
     user_id: Optional[str] = None,
+    guest_session_id: Optional[str] = None,
     audience: str = "user",
     surface: str = "",
     language: str = "",
@@ -188,6 +191,13 @@ def record_event(
     occurred_at: Optional[datetime] = None,
 ) -> bool:
     """Best-effort insert of one allowlisted event. Never raises.
+
+    Identity is REQUIRED: authenticated events pass ``user_id``; guest
+    events pass ``audience="guest"`` + a bounded ``guest_session_id`` (the
+    server-minted guest SID). Either is stored only as a keyed HMAC — the
+    raw value never reaches a row or a log line. Events with no valid
+    identity are rejected fail-closed before any DB access, so distinct
+    anonymous users can never collapse onto one shared actor.
 
     Returns True when a row was written; False on dedupe, validation
     rejection, or any skip/failure.
@@ -203,7 +213,26 @@ def record_event(
             logger.warning("analytics: unknown event %r rejected (allowlist only)", event_name)
         return False
 
-    actor = _actor_hash(user_id)
+    audience = audience if audience in _AUDIENCES else "user"
+
+    # Identity requirement — never a shared empty actor. Rejection messages
+    # deliberately never include the raw identifier values.
+    if audience == "guest":
+        gsid = (guest_session_id or "").strip()
+        if not (0 < len(gsid) <= _GUEST_ID_MAX_LEN):
+            logger.debug(
+                "analytics: guest %s without valid guest_session_id rejected", event_name,
+            )
+            return False
+        identity = "guest:" + gsid
+    else:
+        uid = (user_id or "").strip()
+        if not uid:
+            logger.debug("analytics: %s without user identity rejected", event_name)
+            return False
+        identity = "user:" + uid.lower()
+
+    actor = _hmac_identity(identity)
     if actor is None:
         if not _warned_no_key:
             _warned_no_key = True
@@ -220,7 +249,7 @@ def record_event(
         SCHEMA_VERSION,
         event_name,
         actor,
-        audience if audience in _AUDIENCES else "user",
+        audience,
         surface[:32] if _v_token(surface) or surface == "" else "",
         language[:8] if _v_token(language) or language == "" else "",
         _dedupe_key(actor, event_name, cleaned, client_event_id, when),

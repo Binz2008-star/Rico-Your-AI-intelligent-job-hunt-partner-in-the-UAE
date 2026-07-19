@@ -1,17 +1,26 @@
 """analytics_events foundation (migration 047).
 
-Pins the four contracts of the event store:
+Pins the contracts of the event store:
 
-1. PRIVACY — structurally no PII: only allowlisted events; properties limited
-   to booleans, bounded ints, and enum-like tokens (free text, emails, and
-   query strings cannot pass); the actor is a keyed HMAC (raw user id never
-   reaches a row); absent dedicated key ⇒ ALL writes skipped, no unkeyed
-   fallback.
-2. IDEMPOTENCY — stable dedupe keys (client_event_id first, else
+1. PRIVACY — allowlisted events only; property values limited to booleans,
+   bounded ints, and short enum-like tokens: free-form prose, full emails,
+   and query strings cannot pass, while token-shaped or digit-only
+   identifiers still could — the enforceable guarantee is the reviewed
+   allowlist + validator, not an absolute "no PII" claim. Identities (user
+   id / guest session id) are stored only as keyed HMACs — raw values never
+   reach rows or logs; absent dedicated key ⇒ ALL writes skipped, no
+   unkeyed fallback.
+2. IDENTITY — every event requires a real actor: user_id for authenticated,
+   a bounded guest_session_id for guests; no identity ⇒ fail-closed reject
+   before DB, so distinct anonymous users never collapse onto one actor.
+3. IDEMPOTENCY — stable dedupe keys (client_event_id first, else
    actor+event+canonical-props+minute bucket) inserted ON CONFLICT DO NOTHING.
-3. RESILIENCE — never raises: DB down, table absent (42P01 latches the store
+4. RESILIENCE — never raises: DB down, table absent (42P01 latches the store
    off per process), and transient errors all degrade to a no-op.
-4. RETENTION — purge_expired() implements the 180-day policy.
+5. RETENTION — purge_expired() implements the 180-day policy and rejects
+   unsafe bounds fail-closed.
+6. DRIFT — EVENT_ALLOWLIST and migration 047's event_name CHECK move in
+   lockstep.
 """
 from __future__ import annotations
 
@@ -95,18 +104,23 @@ def test_raw_user_id_never_reaches_the_row():
     assert result is True
     (_sql, row) = cursor.execute.call_args[0]
     assert not any(isinstance(v, str) and email in v for v in row)
-    expected = hmac.new(_TEST_KEY.encode(), email.encode(), hashlib.sha256).hexdigest()
+    expected = hmac.new(_TEST_KEY.encode(), f"user:{email}".encode(), hashlib.sha256).hexdigest()
     assert expected in row
 
 
-def test_actor_hash_differs_across_users_and_keys(monkeypatch):
-    a = repo._actor_hash("a@x.com")
-    assert repo._actor_hash("a@x.com") == a          # stable
-    assert repo._actor_hash("A@X.com ") == a         # normalized
-    assert repo._actor_hash("b@x.com") != a          # per-user
-    assert repo._actor_hash(None) == ""              # anonymous allowed
+def test_identity_hash_is_stable_per_identity_and_keyed(monkeypatch):
+    a = repo._hmac_identity("user:a@x.com")
+    assert repo._hmac_identity("user:a@x.com") == a      # stable
+    assert repo._hmac_identity("user:b@x.com") != a      # per-identity
+    assert repo._hmac_identity("guest:a@x.com") != a     # domain-separated
     monkeypatch.setenv(repo._HMAC_KEY_ENV, "another-key")
-    assert repo._actor_hash("a@x.com") != a          # keyed
+    assert repo._hmac_identity("user:a@x.com") != a      # keyed
+
+
+def test_user_identity_is_normalized_before_hashing():
+    _, _, c1 = _record("session_start", user_id="A@X.com ")
+    _, _, c2 = _record("session_start", user_id="a@x.com")
+    assert c1.execute.call_args[0][1][3] == c2.execute.call_args[0][1][3]
 
 
 def test_missing_key_skips_all_writes_failclosed(monkeypatch, caplog):
@@ -188,7 +202,7 @@ def test_transient_error_swallowed_and_does_not_latch():
 def test_row_shape_and_schema_version():
     result, _, cursor = _record(
         "search_performed",
-        user_id="u@x.com",
+        guest_session_id="public:sid-shape",
         audience="guest",
         surface="command",
         language="ar",
@@ -276,18 +290,86 @@ def test_purge_bounds_accepts_normal_values():
         assert params == (180,)  # normal value passes through
 
 
-def test_guest_dedupe_collision_is_accepted():
-    """Guest events share actor_hash='', so identical events in same minute collapse.
+# ── 5. Guest identity correctness ─────────────────────────────────────────────
+# Distinct anonymous users must NEVER collapse onto a shared actor: guest
+# events require a bounded guest_session_id, stored only as a keyed HMAC.
 
-    This is a documented best-effort limitation for anonymous sessions.
-    Authenticated users have per-user hashes and full dedupe.
-    """
-    # Two different guest users, same event, same minute → same dedupe key
-    key1 = repo._dedupe_key("", "session_start", {"surface": "command"}, None, _WHEN)
-    key2 = repo._dedupe_key("", "session_start", {"surface": "command"}, None, _WHEN)
-    assert key1 == key2  # collision expected and accepted
+def test_different_guest_session_ids_do_not_dedupe_together():
+    r1, _, c1 = _record("session_start", audience="guest",
+                        guest_session_id="public:sid-one",
+                        properties={"surface": "command"})
+    r2, _, c2 = _record("session_start", audience="guest",
+                        guest_session_id="public:sid-two",
+                        properties={"surface": "command"})
+    assert r1 is True and r2 is True
+    row1, row2 = c1.execute.call_args[0][1], c2.execute.call_args[0][1]
+    assert row1[3] != row2[3]  # distinct actor hashes
+    assert row1[7] != row2[7]  # distinct dedupe keys — no cross-guest collapse
 
-    # Authenticated users have distinct hashes
-    key3 = repo._dedupe_key("user1@example.com", "session_start", {"surface": "command"}, None, _WHEN)
-    key4 = repo._dedupe_key("user2@example.com", "session_start", {"surface": "command"}, None, _WHEN)
-    assert key3 != key4  # no collision for authenticated users
+
+def test_same_guest_session_id_stays_idempotent_for_identical_events():
+    r1, _, c1 = _record("session_start", audience="guest",
+                        guest_session_id="public:sid-one",
+                        properties={"surface": "command"})
+    r2, _, c2 = _record("session_start", audience="guest",
+                        guest_session_id="public:sid-one",
+                        properties={"surface": "command"})
+    assert r1 is True and r2 is True
+    key1, key2 = c1.execute.call_args[0][1][7], c2.execute.call_args[0][1][7]
+    assert key1 == key2  # identical event, same guest, same minute → one row via ON CONFLICT
+
+
+@pytest.mark.parametrize("bad_gsid", [None, "", "   ", "x" * 129])
+def test_guest_event_without_valid_session_id_is_rejected_without_db(bad_gsid):
+    conn, cursor = _mock_conn()
+    result, _, _ = _record("session_start", conn=conn, cursor=cursor,
+                           audience="guest", guest_session_id=bad_gsid,
+                           properties={"surface": "command"})
+    assert result is False
+    assert not cursor.execute.called  # fail-closed before any DB write
+
+
+def test_user_event_without_identity_is_rejected_without_db():
+    """No shared empty actor for the authenticated path either."""
+    conn, cursor = _mock_conn()
+    result, _, _ = _record("session_start", conn=conn, cursor=cursor, user_id=None)
+    assert result is False
+    assert not cursor.execute.called
+
+
+def test_raw_guest_session_id_never_in_rows_or_logs(caplog):
+    secret_sid = "public:guest-sid-SECRET-abc123"
+    with caplog.at_level(logging.DEBUG, logger="src.repositories.analytics_events_repo"):
+        result, _, cursor = _record("session_start", audience="guest",
+                                    guest_session_id=secret_sid,
+                                    properties={"surface": "command"})
+        # rejection path must not leak it either
+        conn2, cursor2 = _mock_conn()
+        _record("session_start", conn=conn2, cursor=cursor2,
+                audience="guest", guest_session_id="")
+    assert result is True
+    row = cursor.execute.call_args[0][1]
+    assert not any(isinstance(v, str) and secret_sid in v for v in row)
+    assert not any(secret_sid in r.getMessage() for r in caplog.records)
+    # stored actor is the keyed HMAC of the domain-prefixed identity
+    expected = hmac.new(_TEST_KEY.encode(), f"guest:{secret_sid}".encode(), hashlib.sha256).hexdigest()
+    assert expected in row
+
+
+# ── 6. Allowlist ↔ DDL drift protection ──────────────────────────────────────
+
+def test_event_allowlist_exactly_matches_migration_check_values():
+    """migration 047's event_name CHECK and EVENT_ALLOWLIST must move in
+    lockstep — a mismatch on either side silently drops events at insert
+    time (CHECK violation is swallowed as a transient error)."""
+    import re as _re
+    from pathlib import Path
+
+    sql = Path("migrations/047_analytics_events.sql").read_text(encoding="utf-8")
+    check_block = _re.search(r"event_name\s+VARCHAR\(64\)\s+NOT NULL\s+CHECK\s*\(\s*event_name\s+IN\s*\((.*?)\)\s*\)", sql, _re.S)
+    assert check_block, "event_name CHECK block not found in migration 047"
+    ddl_events = set(_re.findall(r"'([a-z0-9_]+)'", check_block.group(1)))
+    assert ddl_events == set(repo.EVENT_ALLOWLIST), (
+        f"allowlist/DDL drift — only in code: {set(repo.EVENT_ALLOWLIST) - ddl_events}; "
+        f"only in migration: {ddl_events - set(repo.EVENT_ALLOWLIST)}"
+    )
