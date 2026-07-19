@@ -25,6 +25,7 @@
 import React from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { linkifySubscriptionMentions } from "@/lib/subscriptionCta";
 
 /** Only allow schemes that can't execute script; anything else is inert. */
 function safeHref(href: string | undefined): string | undefined {
@@ -140,7 +141,7 @@ const components: Components = {
 export const RicoReplyMarkdown = React.memo(function RicoReplyMarkdown({ text }: { text: string }) {
     return (
         <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={components}>
-            {text}
+            {linkifySubscriptionMentions(text)}
         </ReactMarkdown>
     );
 });

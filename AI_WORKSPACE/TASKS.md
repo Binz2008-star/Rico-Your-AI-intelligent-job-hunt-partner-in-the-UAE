@@ -78,6 +78,90 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-010 — fix/command-subscription-cta: structured subscription CTA instead of a dead raw-text link
+
+Status: review
+Owner: Claude (Fable session; owner defect ruling + one-PR-only /command freeze lift naming `fix/command-subscription-cta`, 2026-07-19)
+Branch: fix/command-subscription-cta (cut from main 07e95c3)
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+
+Production defect (owner smoke, 2026-07-19 ~18:41Z): Rico's Arabic
+subscription reply wrote `ricohunt.com/subscription` as plain text — the
+markdown renderers don't autolink bare domains, so users saw a dead
+string. Fix: (1) a reply that references the subscription surface gets a
+real localized CTA ("View plans" / "عرض الباقات") navigating to the
+internal `/subscription` route; (2) bare `ricohunt.com/subscription`
+mentions are linkified in BOTH markdown renderers to the internal route so
+the text is never dead; (3) no plan copy in the CTA — `/subscription`
+stays the single source of truth for plans/prices.
+
+#### Freeze-lift record
+
+The `/command` design freeze (DEC-20260719-002) remains active. The owner
+message of 2026-07-19 naming `fix/command-subscription-cta` and directing
+"نسجل هذا كعيب منفصل ونصلحه قبل أي تحسين تصميم جديد في /command" is the
+one-PR-only lift for THIS PR alone; it expires on merge/close.
+
+#### Constraints
+
+- No billing/backend/price changes; no prompts change (the model's stale
+  plan copy in replies is a separate backend-prompt concern, documented,
+  out of scope here).
+- Detection is conservative (subscription URL/path mentions only — no
+  keyword heuristics).
+- Internal navigation only; external http(s) links keep new-tab+noopener.
+- EN/AR + RTL; works on both authenticated and public surfaces
+  (currentColor styling — no scope-variable dependency).
+- The FAIL render defect (16:22Z) stays code-frozen pending the owner's
+  DevTools capture — nothing in this PR touches response
+  validation/parsing/normalization.
+
+#### Acceptance criteria
+
+- [x] CTA renders under Rico replies that reference the subscription
+      surface (not on error bubbles), href `/subscription`, EN/AR labels,
+      RTL arrow; carries no plan copy (pinned).
+- [x] Bare mention linkified to internal `/subscription` in
+      RicoReplyMarkdown AND RicoMarkdownContent (same-tab; pinned);
+      existing markdown links untouched; look-alike domains
+      (`notricohunt.com`) never match (pinned).
+- [x] RicoMarkdownContent still forces new-tab+noopener for external
+      links (pinned).
+- [x] Focused suite 12/12; full vitest 783/783; `npm run build` clean.
+
+#### Continuity Block
+
+- Task ID: TASK-20260719-010
+- GitHub issue/PR: draft PR from `fix/command-subscription-cta`
+- Branch: fix/command-subscription-cta
+- Base branch: main
+- Last safe commit SHA: 07e95c3 (origin/main at cut)
+- Current head SHA: set at push time
+- Uncommitted changes present: no (at push time)
+- Status: review
+- Files inspected: `components/command/RicoReplyMarkdown.tsx` (safeHref
+  policy), `components/ui/rico/RicoMarkdownContent.tsx` (anchor policy),
+  `app/command/page.tsx` transcript-step block
+- Files changed: `lib/subscriptionCta.ts` (new — pure detection/linkify);
+  `components/command/SubscriptionCta.tsx` (new); `RicoReplyMarkdown.tsx`
+  + `RicoMarkdownContent.tsx` (linkify input; internal-link allowance in
+  the public renderer); `app/command/page.tsx` (CTA wiring, 2 lines +
+  imports); `__tests__/command-subscription-cta.test.tsx` (new, 12 tests);
+  this ledger entry
+- What is complete: implementation + tests + build
+- What is incomplete: CI on the PR head; owner merge ruling
+- Known blockers: none
+- Validation already run: focused 12/12; full vitest 783/783; build clean
+- Validation still required: CI on head; owner production smoke of the CTA
+- Next exact action: open Draft PR; verify CI; report — merge only on the
+  owner's ruling (no blanket merge authority for this PR)
+- Stop condition: any billing/backend surface change required — stop and
+  report
+- Rollback plan: revert the squash commit — CTA and linkify disappear;
+  renderers return to prior behavior; nothing else affected
+
 ### TASK-20260719-009 — PR-V4-3: /dashboard Ask Rico affordance via existing /command?q= deep-link only
 
 Status: in_progress
