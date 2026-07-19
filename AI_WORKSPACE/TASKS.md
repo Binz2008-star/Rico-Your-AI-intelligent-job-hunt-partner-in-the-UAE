@@ -195,10 +195,20 @@ merge/close.
 
 ### TASK-20260719-012 — Live Paddle checkout failure on /subscription: diagnosis + fail-closed repair
 
-Status: review — live gates pending
+Status: **MERGED (#1194, `c76165d`) — deployed; owner live gates 1–10 pending**
 Owner: Claude (session 2026-07-19)
-Branch: claude/paddle-checkout-subscription-fix-rsxety
-Issue/PR: #1194
+Branch: claude/paddle-checkout-subscription-fix-rsxety (merged by owner 2026-07-19 21:06Z; branch deleted)
+Issue/PR: #1194 (merged)
+
+> Deploy record (2026-07-19): "Deploy to Production" (Vercel) success and
+> "Deploy Render Backend" success on merge commit `c76165d` — both stacks
+> serve the fix. Production behavior now: exact Paddle error codes are
+> surfaced, and any incomplete/mismatched Paddle env fails CLOSED (disabled
+> button) instead of the opaque "Something went wrong" overlay. Remaining:
+> owner live gates 1–10 per
+> `HANDOFFS/2026-07-19-paddle-live-checkout-repair.md` (env matrix on
+> Render+Vercel, Paddle live domain approval, real transaction → webhook →
+> single entitlement → cancel/refund → duplicate redelivery).
 
 #### Gate (owner ruling, 2026-07-19)
 
