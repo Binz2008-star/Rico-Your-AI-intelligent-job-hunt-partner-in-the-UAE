@@ -78,6 +78,60 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-018 — Hotfix: threaded chat persistence loses the active session (contextvars copy)
+
+Status: review
+Owner: Claude (Fable session; owner branch authorization "نعم", 2026-07-19)
+Branch: fix/chat-session-thread-stamping
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+
+Fix the defect caught by the owner-ordered 38bf14a production-verification
+smoke: `RicoChatAPI._append_chat` dispatches the DB write to a daemon
+`threading.Thread`, and a bare thread starts with an EMPTY contextvars
+context — so the ambient active chat session (#1197) read None and every
+turn was stamped into the default thread in the real uvicorn runtime.
+TestClient-based tests never crossed the thread boundary, which is why CI
+was green. Fix: run the worker inside `contextvars.copy_context()`.
+
+The smoke-test flow exposed the bug, but the fix is global — it affects
+every authenticated user's threaded writes on every runtime.
+
+#### Evidence
+
+- Local full-stack smoke on the byte-identical 38bf14a backend (real
+  PostgreSQL 16 + uvicorn + HTTP, two synthetic users): 15 failures before
+  the fix (all thread writes landed in default), **26/26 green after** —
+  A/B isolation, SSE mid-flight cancel pinned to the right thread,
+  cross-user denial, scoped delete, legacy access, zero empty/dup rows.
+- Production Neon (read-only): migration 048 objects present exactly once;
+  0 threaded rows existed at verification time, so no production data needs
+  repair — writes simply stayed in the default thread until this fix.
+
+#### Scope
+
+- `src/rico_chat_api.py` — `_append_chat` dispatch runs in a copied
+  context (comment documents the failure mode).
+- `tests/unit/test_chat_sessions.py` — regression test pinning that the
+  background worker observes the active session.
+- No schema, route, or frontend change.
+
+#### Acceptance criteria
+
+- [x] Regression test fails on the bare-Thread dispatch, passes with
+      copy_context.
+- [x] tests/unit/test_chat_sessions.py 17 passed; tests/test_rico_routes.py
+      145 passed; chat-history persistence suites green.
+- [ ] CI green on head; owner merge ruling; post-deploy re-verification
+      (production smoke re-run) before #1197 is declared PRODUCTION
+      VERIFIED.
+
+#### Rollback plan
+
+Revert the squash commit — dispatch returns to the bare thread (writes
+fall back to the default thread; no data loss, no schema impact).
+
 ### TASK-20260719-017 — WhatsApp-assisted subscription as a secondary channel alongside Paddle
 
 > Renumbered from TASK-20260719-015 during the 2026-07-19 ledger sync on
