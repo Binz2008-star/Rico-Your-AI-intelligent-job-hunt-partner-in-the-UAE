@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: "Rico Hunt",
         description:
             "Manage your entire UAE job search with AI — CV analysis, job matching, application tracking, follow-ups, and interview preparation.",
-        start_url: "/command",
+        start_url: "/",
         scope: "/",
         display: "standalone",
         orientation: "portrait",
