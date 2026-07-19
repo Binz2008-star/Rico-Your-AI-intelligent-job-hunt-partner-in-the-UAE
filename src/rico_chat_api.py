@@ -209,8 +209,14 @@ _DOC_FOLLOWUP_RE = re.compile(
 # Explicit Arabic search-command triggers. If any of these appear, the message
 # is a real search request and the guard must NOT intercept it.
 #   ابحث / بحث = "search", دور عن / دوّر = "look for", ساعدني في إيجاد = "help me find"
+#   Colloquial imperatives with an attached/detached object pronoun are equally
+#   explicit commands and must NOT be swallowed by the guard:
+#     دوّرلي / دور لي / دورلنا = "search for me/us"
+#     لقّيلي / لاقيلي / لقي لي  = "find me"
+#     شوفلي / شوف لي          = "look for me"
 _ARABIC_SEARCH_TRIGGER_RE = re.compile(
-    r"(ابحث|بحث|دوّر|دور\s+عن|ساعدني\s+في\s+(?:إيجاد|ايجاد)|هل\s+(?:يوجد|في)\s+وظائف)",
+    r"(ابحث|بحث|دوّر|دور\s+عن|دوّ?ر\s*ل(?:ي|نا)|لا?قّ?ي\s*لي|شوف\s*لي"
+    r"|ساعدني\s+في\s+(?:إيجاد|ايجاد)|هل\s+(?:يوجد|في)\s+وظائف)",
 )
 # Resolved legacy intents that route to the (expensive) job-search path. Only a
 # message classified into one of these is a guard candidate — structured Arabic
