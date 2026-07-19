@@ -4826,3 +4826,17 @@ raised now return False; no valid input's behavior changes).
       return 0 without DB connection.
 - [x] Full analytics suites green: repo 49, emitters 11, purge endpoint
       10 — 69 passed, 1 warning; `py_compile` clean.
+
+##### Addendum — Gate 4 closed: HMAC key live, first production events (2026-07-19)
+
+- Owner added `RICO_ANALYTICS_HMAC_KEY` on Render (owner confirmation
+  2026-07-19 ~19:20 UTC; key value never accessed or printed by any agent
+  session).
+- Empirically verified end-to-end at 19:25:50 UTC (read-only, count/
+  aggregate only): production `analytics_events` row count **4** — all
+  `search_performed`. First behavioral data in the store; the full chain
+  (migration 047 → emitters v1 → keyed HMAC → rows) is proven live in
+  production. Baseline collection has begun.
+- Remaining open gate from the #1176 post-merge audit: **gate 3 only**
+  (additive allowlist-growth migration policy before event #9 — owner
+  decision).
