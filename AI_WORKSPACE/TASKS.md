@@ -4207,10 +4207,16 @@ Issue/PR: follow-up to #1085
 
 ### TASK-20260717-001 — Stabilize flaky chat-confirm-profile vitest file (CI tax)
 
-Status: in review (owner granted execution autonomy in-session 2026-07-17 to finish outstanding work; test-only change)
-Owner: Claude
-Branch: `claude/rico-film-rotation-fix-g7tua4` (restarted from main after #1116 merged)
-Issue/PR: follow-up; flaked 3x on 2026-07-16 (#1085 and #1116 CI, plus one local run) always in `chat-confirm-profile.test.tsx`
+Status: review (re-executed 2026-07-19 under owner authorization "next after
+#1195"; test-only change)
+Owner: Claude (Fable session)
+Branch: `claude/growth-lifecycle-automation-qiyzw6` (restarted from main after
+#1195 merged; the 2026-07-17 branch `claude/rico-film-rotation-fix-g7tua4` was
+NEVER pushed to origin — verified absent 2026-07-19 — and its validated fix was
+lost with its session)
+Issue/PR: follow-up; flaked 3x on 2026-07-16 (#1085 and #1116 CI, plus one
+local run) and 2x on 2026-07-19 (#1195 CI, both heads) — always
+`chat-confirm-profile.test.tsx > handleConfirmProfile`
 
 #### Objective
 
@@ -4229,6 +4235,28 @@ Remove the two flake modes without weakening the guard:
 - Files touched: `apps/web/__tests__/chat-confirm-profile.test.tsx` only
 - Validation: file passed 10/10 consecutive local runs post-fix
 - Next exact action: PR, CI green, merge under the in-session autonomy grant
+
+#### Re-execution addendum (2026-07-19)
+
+The two 2026-07-17 fix modes (15s test timeouts; non-`/me` call counting) had
+already landed in the file, yet the flake recurred 2x on #1195's CI — proving
+them insufficient. Stress reproduction (parallel double-vitest load, failure
+caught at ~1/40 runs with full output) isolated two REAL causes, each cured
+test-side only:
+
+1. **Lost upload** — a single dispatched upload can be silently dropped
+   (`handleCVUpload` returns early while `chatAudience === "checking"`; an
+   upload onto a just-detached input during a composer re-render goes
+   nowhere). Cure: `uploadCVUntilAccepted()` retries fresh-query → upload
+   until the accepted upload's `/api/v1/rico/upload-cv` request is observed
+   on the fetch mock.
+2. **CPU starvation** — with the upload provably accepted, the preview card
+   took >5s to render under load (caught at 5.4s), blowing the 5s findBy.
+   Cure: 15s affordance timeouts under a 30s per-test budget.
+
+Validation (this head): single run 3/3; **30/30 parallel-stress runs**
+(the same load that reproduced the failure pre-fix); full vitest suite
+**789/789 across 76 files**. No product code touched.
 
 ---
 
