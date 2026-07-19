@@ -34,7 +34,11 @@ built from the same predicate.
 
 ``record_event`` NEVER raises and adds no meaningful latency: DB down,
 migration 047 unapplied (pgcode 42P01 latches the store off per process),
-or a missing key all degrade to a silent no-op for the product flow.
+a missing key, or malformed argument types (non-dict ``properties``,
+non-str ``client_event_id``, non-datetime ``occurred_at``) all degrade to
+a silent no-op for the product flow — the malformed-type gate plus
+in-``try`` row construction make the contract structural, not caller-trust
+(post-merge audit gates 1-2, TASK-20260719-002).
 """
 from __future__ import annotations
 
@@ -203,6 +207,10 @@ def record_event(
     identity are rejected fail-closed before any DB access, so distinct
     anonymous users can never collapse onto one shared actor.
 
+    Malformed argument TYPES (non-dict ``properties``, non-str
+    ``client_event_id``, non-datetime ``occurred_at``) are rejected
+    fail-closed before any DB access — never raised to the caller.
+
     Returns True when a row was written; False on dedupe, validation
     rejection, or any skip/failure.
     """
@@ -246,22 +254,37 @@ def record_event(
             )
         return False
 
-    when = occurred_at or datetime.now(timezone.utc)
-    cleaned = _clean_properties(event_name, properties)
-    row = (
-        when,
-        SCHEMA_VERSION,
-        event_name,
-        actor,
-        audience,
-        surface[:32] if _v_token(surface) or surface == "" else "",
-        language[:8] if _v_token(language) or language == "" else "",
-        _dedupe_key(actor, event_name, cleaned, client_event_id, when),
-        json.dumps(cleaned, sort_keys=True),
-    )
+    # Malformed argument TYPES are rejected fail-closed before any row
+    # construction — the never-raises contract must hold for every caller,
+    # not only the emitter layer (audit gates 1-2, TASK-20260719-002).
+    # Rejection messages deliberately never include the offending values.
+    if properties is not None and not isinstance(properties, dict):
+        logger.debug("analytics: %s with non-dict properties rejected", event_name)
+        return False
+    if client_event_id is not None and not isinstance(client_event_id, str):
+        logger.debug("analytics: %s with non-str client_event_id rejected", event_name)
+        return False
+    if occurred_at is not None and not isinstance(occurred_at, datetime):
+        logger.debug("analytics: %s with non-datetime occurred_at rejected", event_name)
+        return False
 
     conn = None
     try:
+        # Row construction lives INSIDE the try so any residual construction
+        # error degrades to the logged skip path instead of raising.
+        when = occurred_at or datetime.now(timezone.utc)
+        cleaned = _clean_properties(event_name, properties)
+        row = (
+            when,
+            SCHEMA_VERSION,
+            event_name,
+            actor,
+            audience,
+            surface[:32] if _v_token(surface) or surface == "" else "",
+            language[:8] if _v_token(language) or language == "" else "",
+            _dedupe_key(actor, event_name, cleaned, client_event_id, when),
+            json.dumps(cleaned, sort_keys=True),
+        )
         conn = get_db_connection()
         if conn is None:
             return False
@@ -298,6 +321,9 @@ _COUNT_EXPIRED_SQL = "SELECT count(*) FROM analytics_events WHERE " + _EXPIRED_P
 
 def _validated_retention_days(retention_days: Any) -> Optional[int]:
     """Shared bounds check: 1..3650 days (10 years) or None (fail-closed)."""
+    if isinstance(retention_days, bool):
+        # bool is an int subclass — True would silently mean a 1-day purge.
+        return None
     try:
         days = int(retention_days)
     except (ValueError, TypeError):
