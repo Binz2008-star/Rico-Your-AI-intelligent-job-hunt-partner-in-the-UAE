@@ -185,6 +185,23 @@ _MARK_APPLIED_CARD_ACTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Job-card "Skip" action — the /command job card sends the literal message
+# "Skip {title} at {company}" (JobMatchCardAtelier). The central intent
+# classifier has no skip vocabulary, so without this deterministic route the
+# message fell into the unknown-intent fallback (generic reply, or a provider
+# error surfaced as "Something went wrong"). Skip is a SUPPRESSION action: it
+# must succeed even when the job is no longer in the current results (a stale
+# card from an earlier session) — recording the skip is exactly what keeps the
+# job out of future results.
+_SKIP_CARD_ACTION_RE = re.compile(
+    r"^\s*(?:please\s+)?skip\s+(?:the\s+job\s+)?(?P<title>.+?)\s+at\s+(?P<company>.+?)\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+# Arabic skip verbs (تجاهل / تخطَّ / لا تعرض) with "في/لدى <company>" attachment.
+_SKIP_CARD_ACTION_AR_RE = re.compile(
+    r"^\s*(?:تجاهل|تخط[ىَّ]?|تخطي|لا\s+تعرض)\s+(?:وظيفة\s+)?(?P<title>.+?)\s+(?:في|لدى)\s+(?P<company>.+?)\s*[.!؟]?\s*$"
+)
+
 # CV improvement follow-up phrases — used ONLY when last_flow_state == "cv_builder".
 # Never apply this pattern without flow-state context or it will misfire on
 # "improve my cover letter", "enhance it" for other content, etc.
@@ -7080,6 +7097,58 @@ class RicoChatAPI:
         mark_onboarding_complete(user_id)
         return self._handle_active_user(user_id, message)
 
+    def _handle_skip_card_action(
+        self, user_id: str, title: str, company: str, profile, arabic: bool = False,
+    ) -> dict[str, Any]:
+        """Execute a job-card Skip as a suppression action.
+
+        Works for BOTH a job in the current results and a stale card from an
+        earlier session: skip records the suppression (learning signal + no
+        future reappearance), so a job that is "not in the list" is still a
+        valid — and useful — skip. Only a runtime failure (e.g. DB down) is
+        reported as an honest retry message, never a generic error.
+        """
+        title = (title or "").strip().rstrip(".!؟")
+        company = (company or "").strip().rstrip(".!؟")
+        resolved = self._resolve_card_job(user_id, title, company)
+        title = ((resolved.get("title") if resolved else None) or title).strip()
+        company = ((resolved.get("company") if resolved else None) or company).strip()
+
+        job_dict = {
+            "title": title,
+            "company": company,
+            "apply_url": ((resolved.get("apply_url") if resolved else "") or "").strip(),
+            "source_url": ((resolved.get("source_url") if resolved else "") or "").strip(),
+        }
+        job_key = self._derive_lifecycle_job_key(title, company)
+        result = agent_runtime.handle_action(
+            user_id=user_id, action="skip", job=job_dict, job_key=job_key, source="chat",
+        )
+        if result.ok:
+            msg = (
+                f"تم التجاهل — {title} لدى {company}. لن تظهر هذه الوظيفة في نتائجك القادمة."
+                if arabic else
+                f"Skipped — {title} at {company}. It won't appear in future results."
+            )
+        else:
+            logger.warning(
+                "rico_chat: skip action not ok user=%s title=%s err=%s",
+                user_ref(user_id), title, result.error,
+            )
+            msg = (
+                f"تعذّر تجاهل {title} لدى {company} الآن — يرجى المحاولة مرة أخرى."
+                if arabic else
+                f"I couldn't skip {title} at {company} just now — please try again."
+            )
+        response = {
+            "type": "skip_job",
+            "intent": "skip_job",
+            "message": msg,
+            "entities": {"title": title, "company": company},
+        }
+        self._append_chat(user_id, "assistant", msg)
+        return self._finalize(response, self.SOURCE_KEYWORD, profile=profile, runtime_result=result)
+
     def _resolve_profile(self, user_id: str):
         """Load and normalise profile into a ProfileContext.
 
@@ -7303,6 +7372,25 @@ class RicoChatAPI:
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
+
+        # ── Job-card Skip action (deterministic, before classification) ──────
+        # "Skip {title} at {company}" comes from the /command job card — the
+        # intent classifier has no skip vocabulary, so route it here or it
+        # falls into the unknown-intent fallback. Suppression must work for
+        # stale cards too (job no longer in current results).
+        _skip_m = (
+            _SKIP_CARD_ACTION_AR_RE.match(message)
+            if self._is_arabic_text(message)
+            else _SKIP_CARD_ACTION_RE.match(message)
+        )
+        if _skip_m:
+            return self._handle_skip_card_action(
+                user_id,
+                _skip_m.group("title"),
+                _skip_m.group("company"),
+                profile,
+                arabic=self._is_arabic_text(message),
+            )
 
         # ── Manual Application Status: English (before Arabic block for priority) ─
         # Handle English "I applied" / "submitted" / "mark as applied" BEFORE
