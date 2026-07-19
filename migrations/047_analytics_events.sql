@@ -4,13 +4,13 @@
 -- lives in Rico's own Postgres, never a third-party analytics service.
 --
 -- Privacy contract (owner-approved pattern, mirrors 046):
---   * NO raw message text, email, CV text, search query text, or any other
---     PII — ever. Enforced in the application layer by a strict per-event
---     property allowlist that only admits booleans, bounded numbers, and
---     short enum-like tokens (^[a-z0-9_.:-]{1,64}$); free-form strings are
---     significantly reduced. Note: the token validator still accepts
+--   * Free-form text and common identifiers are blocked: the per-event
+--     property allowlist admits only booleans, bounded numbers, and
+--     short enum-like tokens (^[a-z0-9_.:-]{1,64}$). This blocks
+--     emails (with '@'), phones (with '+'), names (with spaces), and
+--     free text. Note: the token validator still accepts
 --     identifier-shaped strings and digit-only values, so caller discipline
---     remains required.
+--     remains required to avoid recording token-shaped identifiers.
 --   * The actor is stored ONLY as a keyed, non-reversible HMAC-SHA256
 --     (`actor_hash`) under the dedicated RICO_ANALYTICS_HMAC_KEY — its own
 --     secret (never JWT_SECRET, never RICO_ARCHIVE_HMAC_KEY, never stored

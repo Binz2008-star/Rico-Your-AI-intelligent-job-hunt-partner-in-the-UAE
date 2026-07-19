@@ -3945,7 +3945,7 @@ record: market/country normalization.
 
 ### TASK-20260718-023 — Data-integrity foundation: posting-history archive + learning-signal hygiene
 
-Status: done
+Status: review
 Owner: Claude (Fable session, owner-directed "choose highest long-term impact and execute")
 Branch: claude/release-captain-queue-76nrwz
 Issue/PR: (draft PR from this branch)
@@ -4033,24 +4033,6 @@ pipeline's echo learning-signals (system output recorded as user behavior).
   to the one-task-one-PR rule (rationale in Addendum 1).
 - Operational note: `RICO_ARCHIVE_HMAC_KEY` must be set on Render for the
   archive to record in production; until then it is safely OFF (fail-closed).
-
-##### Closeout (2026-07-18, post-merge)
-
-- Merged: squash `4879c04d` on `main` (PR #1173; expected-head `fbe1b2e4`
-  protection; CI green; 0 review threads).
-- Migration 046 applied to Neon `production`
-  (`robenjob`/`br-restless-cherry-amq6wj7o`, db `neondb`) with owner
-  approval AFTER preview-branch validation; post-apply verification: 17
-  columns exact, `query_context_hmac` present, no stale
-  `query_context`/`query_hash` columns, both indexes, 0 rows (no synthetic
-  data in production). Scheduled drift check reads 046 green from its first
-  run (apply-before-merge ordering — no alert window).
-- `RICO_ARCHIVE_HMAC_KEY` generated and set on Render by the OWNER
-  (value never transited this session); deploy Live confirmed by owner.
-  Archive fully armed — first real user search writes the first
-  production observations.
-- "Deploy to Production" run 29664542075 triggered on `4879c04d`
-  (completion tracked via scheduled self check-in).
 
 ---
 
@@ -4151,8 +4133,9 @@ Revert the commit; drop the table if created — nothing references it.
       order-independent minute-bucket keys; conflict ⇒ False, no error.
 - [x] Resilience pins: DB-down no-op; 42P01 latch; transient errors don't
       latch.
-- [x] Retention pin: purge SQL + 180-day constant.
-      (tests/unit/test_analytics_events_repo.py — 16 tests.)
+- [x] Retention pin: purge SQL + 180-day constant; bounds validation
+      (rejects zero/negative/non-numeric/>3650 without DB connection).
+      (tests/unit/test_analytics_events_repo.py — 21 tests.)
 
 ##### Housekeeping
 

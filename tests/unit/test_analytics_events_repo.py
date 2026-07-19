@@ -230,37 +230,44 @@ def test_purge_never_raises():
         assert repo.purge_expired() == 0
 
 
-def test_purge_bounds_clamps_zero_to_one():
-    conn, cursor = _mock_conn(rowcount=0)  # No rows deleted in this test
+def test_purge_bounds_rejects_zero():
+    """Zero retention_days returns 0 without DB connection."""
     with patch.object(repo, "is_db_available", return_value=True), \
-         patch.object(repo, "get_db_connection", return_value=conn):
+         patch.object(repo, "get_db_connection") as mock_conn:
         removed = repo.purge_expired(0)
     assert removed == 0
-    (sql, params) = cursor.execute.call_args[0]
-    assert params == (1,)  # clamped to 1
+    mock_conn.assert_not_called()  # No DB connection attempted
 
 
-def test_purge_bounds_clamps_negative_to_one():
-    conn, cursor = _mock_conn(rowcount=0)  # No rows deleted in this test
+def test_purge_bounds_rejects_negative():
+    """Negative retention_days returns 0 without DB connection."""
     with patch.object(repo, "is_db_available", return_value=True), \
-         patch.object(repo, "get_db_connection", return_value=conn):
+         patch.object(repo, "get_db_connection") as mock_conn:
         removed = repo.purge_expired(-100)
     assert removed == 0
-    (sql, params) = cursor.execute.call_args[0]
-    assert params == (1,)  # clamped to 1
+    mock_conn.assert_not_called()  # No DB connection attempted
 
 
-def test_purge_bounds_clamps_extreme_to_max():
-    conn, cursor = _mock_conn(rowcount=0)  # No rows deleted in this test
+def test_purge_bounds_rejects_extreme():
+    """Values >3650 return 0 without DB connection."""
     with patch.object(repo, "is_db_available", return_value=True), \
-         patch.object(repo, "get_db_connection", return_value=conn):
+         patch.object(repo, "get_db_connection") as mock_conn:
         removed = repo.purge_expired(10000)
     assert removed == 0
-    (sql, params) = cursor.execute.call_args[0]
-    assert params == (3650,)  # clamped to 10 years
+    mock_conn.assert_not_called()  # No DB connection attempted
+
+
+def test_purge_bounds_rejects_non_numeric():
+    """Non-numeric values return 0 without DB connection."""
+    with patch.object(repo, "is_db_available", return_value=True), \
+         patch.object(repo, "get_db_connection") as mock_conn:
+        removed = repo.purge_expired("invalid")
+    assert removed == 0
+    mock_conn.assert_not_called()  # No DB connection attempted
 
 
 def test_purge_bounds_accepts_normal_values():
+    """Valid values (1-3650) proceed to DB."""
     conn, cursor = _mock_conn()
     with patch.object(repo, "is_db_available", return_value=True), \
          patch.object(repo, "get_db_connection", return_value=conn):

@@ -263,13 +263,20 @@ def purge_expired(retention_days: int = RETENTION_DAYS) -> int:
     single implementation point.
 
     Bounds: retention_days must be between 1 and 3650 (10 years).
-    Values outside this range are clamped to the nearest bound.
+    Invalid, zero, negative, non-numeric, or >3650 values return 0
+    without touching the database (fail-closed).
     """
-    if not is_db_available():
+    # Validate bounds before any DB interaction
+    try:
+        retention_days_int = int(retention_days)
+    except (ValueError, TypeError):
         return 0
 
-    # Clamp to safe positive range
-    retention_days = max(1, min(int(retention_days), 3650))
+    if retention_days_int < 1 or retention_days_int > 3650:
+        return 0
+
+    if not is_db_available():
+        return 0
     conn = None
     try:
         conn = get_db_connection()
@@ -278,7 +285,7 @@ def purge_expired(retention_days: int = RETENTION_DAYS) -> int:
         with conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM analytics_events WHERE occurred_at < NOW() - (%s * INTERVAL '1 day')",
-                (int(retention_days),),
+                (retention_days_int,),
             )
             removed = cur.rowcount
         conn.commit()
