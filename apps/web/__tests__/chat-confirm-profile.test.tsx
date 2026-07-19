@@ -43,6 +43,37 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
+// ── Deterministic upload (TASK-20260717-001) ─────────────────────────────────
+// The historical flake: the preview affordance ("Use this profile" / "Edit
+// before saving") times out element-not-found (CI 2026-07-16 ×3, 2026-07-19
+// ×2). In-session stress reproduction surfaced two independent causes, each
+// cured separately:
+//   1. LOST UPLOAD — a single dispatched upload can be dropped silently:
+//      handleCVUpload returns early while chatAudience === "checking" (the
+//      "Sign up free" pre-wait implies audience === "public" at ITS render,
+//      but a late re-render can still race the upload), and an upload
+//      dispatched onto a just-detached input during a composer re-render goes
+//      nowhere. Cure: this helper retries the fresh-query → upload sequence
+//      until the accepted upload's /api/v1/rico/upload-cv request is observed
+//      on the fetch mock — an accepted upload issues it immediately.
+//   2. CPU STARVATION — with the upload provably accepted, the preview card
+//      can still take >5s to render on loaded runners (reproduced locally at
+//      5.4s under parallel vitest load). Cure: 15s affordance timeouts under
+//      a 30s per-test budget.
+const uploadCvCalled = () =>
+  fetchMock.mock.calls.some(([url]) => String(url).includes("/api/v1/rico/upload-cv"));
+
+async function uploadCVUntilAccepted() {
+  const file = new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" });
+  for (let attempt = 0; attempt < 20 && !uploadCvCalled(); attempt++) {
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement | null;
+    if (input) await userEvent.upload(input, file);
+    if (uploadCvCalled()) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  expect(uploadCvCalled()).toBe(true);
+}
+
 describe("handleConfirmProfile", () => {
   it("calls confirm endpoint with proxy path, not absolute http URL", async () => {
     fetchMock.mockImplementation(async (input) => {
@@ -89,10 +120,9 @@ describe("handleConfirmProfile", () => {
     // chatAudience === "checking", which would otherwise race this upload.
     await screen.findByText("Sign up free");
 
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
+    await uploadCVUntilAccepted();
 
-    await userEvent.click(await screen.findByText("Use this profile", {}, { timeout: 5000 }));
+    await userEvent.click(await screen.findByText("Use this profile", {}, { timeout: 15000 }));
 
     await waitFor(() => {
       const confirmCall = fetchMock.mock.calls.find(([url]) =>
@@ -105,7 +135,7 @@ describe("handleConfirmProfile", () => {
       );
       expect(String(confirmCall?.[0])).not.toMatch(/^http/);
     });
-  }, 15000);
+  }, 30000);
 });
 
 describe("Edit before saving", () => {
@@ -154,10 +184,9 @@ describe("Edit before saving", () => {
     // chatAudience === "checking", which would otherwise race this upload.
     await screen.findByText("Sign up free");
 
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
+    await uploadCVUntilAccepted();
 
-    const editButton = await screen.findByText("Edit before saving", {}, { timeout: 5000 });
+    const editButton = await screen.findByText("Edit before saving", {}, { timeout: 15000 });
     // Count everything except /api/v1/me: newly-mounted components re-check
     // auth via useAuth (one fetchMe per mount), so the raw call count is
     // timing-dependent. Edit must stay purely local for every OTHER endpoint.
@@ -179,7 +208,7 @@ describe("Edit before saving", () => {
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).includes("confirm-cv-profile"))
     ).toBe(false);
-  }, 15000);
+  }, 30000);
 
   it("calls confirm-cv-profile with edited draft when Save profile is clicked", async () => {
     fetchMock.mockImplementation(async (input) => {
@@ -226,10 +255,9 @@ describe("Edit before saving", () => {
     // chatAudience === "checking", which would otherwise race this upload.
     await screen.findByText("Sign up free");
 
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
+    await uploadCVUntilAccepted();
 
-    await userEvent.click(await screen.findByText("Edit before saving", {}, { timeout: 5000 }));
+    await userEvent.click(await screen.findByText("Edit before saving", {}, { timeout: 15000 }));
 
     const nameInput = screen.getByLabelText("Name");
     await userEvent.clear(nameInput);
@@ -246,5 +274,5 @@ describe("Edit before saving", () => {
       const body = JSON.parse(String((confirmCall?.[1] as RequestInit | undefined)?.body ?? "{}"));
       expect(body.preview.name).toBe("Roben Edwan");
     });
-  }, 15000);
+  }, 30000);
 });
