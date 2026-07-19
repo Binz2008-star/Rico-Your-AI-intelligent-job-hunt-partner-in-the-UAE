@@ -95,7 +95,8 @@ export function deriveNextActions(mission: MissionState | null): NextActionKey[]
 
 const T: Record<Lang, {
     eyebrow: string; title: string; intro: string;
-    goalEyebrow: string; goalSubtitle: string; goalEdit: string; progressAria: string;
+    goalEyebrow: string; goalSubtitle: string; goalEdit: string;
+    askRico: string; askRicoPrompt: string; progressAria: string;
     milestones: Record<FactorToken, string>;
     savedRoles: string; savedRolesSub: string;
     applications: string; applicationsSub: string;
@@ -114,6 +115,10 @@ const T: Record<Lang, {
         goalEyebrow: "Current goal",
         goalSubtitle: "Everything Rico surfaces should serve this.",
         goalEdit: "Edit goal",
+        askRico: "Ask Rico",
+        // Guidance-only prompt (no execution claim) — opens the existing
+        // /command conversation via the established one-shot ?q= pattern.
+        askRicoPrompt: "Help me decide my next step toward my goal.",
         progressAria: "Goal progress",
         milestones: {
             cv_uploaded: "CV uploaded",
@@ -148,6 +153,8 @@ const T: Record<Lang, {
         goalEyebrow: "الهدف الحالي",
         goalSubtitle: "كل ما يعرضه ريكو يجب أن يخدم هذا الهدف.",
         goalEdit: "تعديل الهدف",
+        askRico: "اسأل ريكو",
+        askRicoPrompt: "ساعدني في تحديد خطوتي التالية نحو هدفي.",
         progressAria: "تقدّم الهدف",
         milestones: {
             cv_uploaded: "السيرة مرفوعة",
@@ -322,14 +329,27 @@ export function DashboardAtelier() {
                                 ))}
                             </ul>
 
-                            <Link
-                                href="/profile?section=goals"
-                                data-testid="dashboard-goal-edit"
-                                className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold"
-                                style={{ color: c.ink, borderBottom: `1px solid ${c.ink}`, textDecoration: "none", paddingBottom: 1 }}
-                            >
-                                {t.goalEdit} <span aria-hidden="true">{language === "ar" ? "←" : "→"}</span>
-                            </Link>
+                            <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
+                                <Link
+                                    href="/profile?section=goals"
+                                    data-testid="dashboard-goal-edit"
+                                    className="inline-flex items-center gap-1.5 text-sm font-semibold"
+                                    style={{ color: c.ink, borderBottom: `1px solid ${c.ink}`, textDecoration: "none", paddingBottom: 1 }}
+                                >
+                                    {t.goalEdit} <span aria-hidden="true">{language === "ar" ? "←" : "→"}</span>
+                                </Link>
+                                {/* PR-V4-3: guidance-only deep link into the existing
+                                    /command conversation (one-shot ?q= pattern) — no
+                                    embedded chat surface, no execution claim. */}
+                                <Link
+                                    href={`/command?q=${encodeURIComponent(t.askRicoPrompt)}`}
+                                    data-testid="dashboard-ask-rico"
+                                    className="inline-flex items-center gap-1.5 text-sm font-semibold"
+                                    style={{ color: c.red, borderBottom: `1px solid ${c.red}`, textDecoration: "none", paddingBottom: 1 }}
+                                >
+                                    {t.askRico} <span aria-hidden="true">{language === "ar" ? "←" : "→"}</span>
+                                </Link>
+                            </div>
                         </section>
 
                         {/* Stat plates — real counters */}

@@ -78,6 +78,66 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-009 — PR-V4-3: /dashboard Ask Rico affordance via existing /command?q= deep-link only
+
+Status: in_progress
+Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
+Branch: claude/rico-workspace-audit-x65z30 (re-cut from main d6a48a3 after #1188)
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+
+Add an "Ask Rico" affordance to the /dashboard goal panel that deep-links
+to /command with the established one-shot `?q=` prompt pattern
+(`lib/deepLinkPrompt.ts`). Replaces the held embedded-copilot direction
+(owner ruling): no panel, no second chat surface, no second chat runtime,
+no new API surface — a link that opens the existing conversation with a
+localized, single-topic, guidance-only prompt (no execution claim; the
+#1002 "Discuss with Rico" honesty precedent).
+
+#### Constraints
+
+- Existing routing only; `/command` behavior untouched (freeze respected —
+  the route already consumes `?q=` in production).
+- Bilingual prompt; claims no execution or success.
+- One affordance; no scope growth.
+
+#### Acceptance criteria
+
+- [x] Link renders in the goal panel (ready state only) with
+      `href=/command?q=<encoded localized prompt>`; EN and AR pinned;
+      absent in the error state (pinned).
+- [x] The PR-V4-1 scope guard (no `?q=` on suggested-next cards) still
+      passes — the affordance is a distinct element.
+- [x] Focused suite 18/18; full vitest 754/754; build clean.
+
+#### Continuity Block
+
+- Task ID: TASK-20260719-009
+- GitHub issue/PR: draft PR from `claude/rico-workspace-audit-x65z30`
+- Branch: claude/rico-workspace-audit-x65z30
+- Base branch: main
+- Last safe commit SHA: d6a48a3 (origin/main after #1188)
+- Current head SHA: set at push time
+- Uncommitted changes present: no (at push time)
+- Status: in_progress
+- Files inspected: `apps/web/lib/deepLinkPrompt.ts` (?q= contract),
+  `AI_WORKSPACE/HANDOFFS/2026-07-12-atelier-settings-ask-rico.md`
+  (honest-label precedent)
+- Files changed: `apps/web/components/workspace/DashboardAtelier.tsx` —
+  Ask Rico link + copy; `apps/web/__tests__/dashboard-atelier.test.tsx` —
+  href/localization pins; this ledger entry
+- What is complete: contract verification
+- What is incomplete: implementation + tests at entry-creation time
+- Known blockers: none
+- Validation already run: none yet (entry created at cut)
+- Validation still required: vitest, build, CI on head
+- Next exact action: implement, test, open Draft PR, verify gates, merge
+  per mandate
+- Stop condition: anything requiring a /command change — stop and report
+- Rollback plan: revert the squash commit; the link disappears; nothing
+  else affected
+
 ### TASK-20260719-008 — PR-V4-2a (+folded 2b): WorkspaceShell rail goal-mini + applications nav count (fail-hidden, single cached fetch)
 
 Status: review
