@@ -78,6 +78,54 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-017 — PR-V4 continuation Phase 1: /applications stage-semantic accents + compact rows
+
+Status: review
+Owner: Claude (Fable session; owner "ابدأ" ruling on the recorded v4 continuation plan, 2026-07-19)
+Branch: claude/sessions-sidebar-9zh6dq (re-cut from main 38bf14a after #1197)
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+
+Align the /applications surface with the frozen v4 reference's stage-tagged
+application rows ("Interview sun / Waiting reply amber / Closed muted"):
+a per-status accent carried by BOTH the list chips and the board card dots
+(shared STATUS_ACCENT map — the views can never disagree), compact list
+rows, and the established fade-up entrance stagger. Presentation-only: no
+API, routing, taxonomy, or backend change; /command untouched (no freeze
+lift needed — the freeze scopes /command only).
+
+#### Constraints
+
+- Production tokens only (DEC-20260719-002 boundary 3): the reference's
+  amber/success hexes are NOT adopted — sun marks the states that need the
+  user (interview / offer / follow_up_due), muted marks closed outcomes,
+  neutral ink for lead/applied.
+- Canonical taxonomy untouched (lib/applicationStatus.ts, BUG-6).
+- Motion pairs with motion-reduce:animate-none.
+
+#### Acceptance criteria
+
+- [x] STATUS_ACCENT covers every canonical status; sun = exactly
+      {interview, offer, follow_up_due}; muted = exactly
+      {rejected, decision_made} (pinned).
+- [x] List chips + board dots both carry data-accent per status (pinned).
+- [x] Focused suites: applications-stage-semantics 6/6 +
+      flow-manual-application 12/12.
+- [ ] Full vitest + build + CI on head.
+
+#### Continuity Block
+
+- Task ID: TASK-20260719-017
+- Branch: claude/sessions-sidebar-9zh6dq (re-cut from 38bf14a)
+- Files changed: `components/applications/ApplicationsAtelier.tsx`
+  (STATUS_ACCENT + StatusChip + compact rows + motion);
+  `__tests__/applications-stage-semantics.test.tsx` (new, 6 tests); this
+  ledger entry
+- Next exact action: full vitest + build; open Draft PR; owner merge ruling
+- Rollback plan: revert the squash commit — presentation returns to the
+  prior neutral chips; nothing else affected
+
 ### TASK-20260719-016 — PR #1197: multi-session chat threads — Sessions rail lists and switches all conversations
 
 Status: review

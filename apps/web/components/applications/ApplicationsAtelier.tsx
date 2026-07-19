@@ -86,6 +86,55 @@ const STATUS_LABEL_KEYS: Record<ApplicationStatus, TranslationKey> = {
 
 const STATUS_OPTIONS: ApplicationStatus[] = APPLICATION_STATUSES;
 
+// Stage-semantic accent per the frozen v4 reference's application rows
+// ("Interview sun / Waiting reply amber / Closed muted"), mapped onto
+// PRODUCTION tokens only (DEC-20260719-002 boundary 3 — the reference's
+// success/amber hexes are composition guidance, not a token source). This
+// system carries one accent: sun marks the states that need the user
+// (interview, offer, follow-up due), muted marks closed outcomes, and the
+// lead/applied states stay neutral ink.
+type StatusAccent = "sun" | "muted" | "neutral";
+
+export const STATUS_ACCENT: Record<ApplicationStatus, StatusAccent> = {
+    saved: "neutral",
+    opened: "neutral",
+    opened_external: "neutral",
+    prepared: "neutral",
+    applied: "neutral",
+    follow_up_due: "sun",
+    interview: "sun",
+    offer: "sun",
+    rejected: "muted",
+    decision_made: "muted",
+};
+
+/** Stage-tagged status chip: accent dot + localized label. Shared by the
+ *  list rows and board cards so the two views can never disagree. */
+function StatusChip({
+    status,
+    label,
+    c,
+}: {
+    status: ApplicationStatus;
+    label: string;
+    c: Palette;
+}) {
+    const accent = STATUS_ACCENT[status];
+    const dot = accent === "sun" ? c.red : accent === "muted" ? c.track : c.ink40;
+    return (
+        <span
+            data-testid="application-status-chip"
+            data-status={status}
+            data-accent={accent}
+            className="inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1"
+            style={{ border: `1px solid ${accent === "sun" ? c.red : c.hair}`, background: c.inset, opacity: accent === "muted" ? 0.75 : 1 }}
+        >
+            <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dot }} />
+            <Mono style={{ color: accent === "sun" ? c.red : accent === "muted" ? c.ink40 : c.ink70 }}>{label}</Mono>
+        </span>
+    );
+}
+
 const NEXT_ACTION_KEYS: Record<ApplicationStatus, TranslationKey> = {
     saved: "flowNextSaved",
     opened: "flowNextOpened",
@@ -422,13 +471,20 @@ export function ApplicationsAtelier() {
                                                 {colApps.length === 0 && (
                                                     <p className="py-4 text-center text-[11px]" style={{ color: c.ink40 }}>—</p>
                                                 )}
-                                                {colApps.map((item) => (
+                                                {colApps.map((item, i) => (
                                                     <div
                                                         key={item.application_id}
-                                                        className="wsx-action rounded-[4px] p-3"
-                                                        style={{ background: c.panel, border: `1px solid ${c.hair}` }}
+                                                        className="wsx-action rounded-[4px] p-3 animate-fade-up motion-reduce:animate-none"
+                                                        style={{ background: c.panel, border: `1px solid ${c.hair}`, animationDelay: `${Math.min(i, 6) * 40}ms`, opacity: STATUS_ACCENT[item.status] === "muted" ? 0.82 : 1 }}
                                                     >
-                                                        <p className="text-[0.95rem] leading-snug [overflow-wrap:anywhere]" style={{ fontFamily: SERIF, color: c.ink }}>
+                                                        <p className="flex items-baseline gap-1.5 text-[0.95rem] leading-snug [overflow-wrap:anywhere]" style={{ fontFamily: SERIF, color: c.ink }}>
+                                                            <span
+                                                                aria-hidden="true"
+                                                                data-testid="board-card-accent"
+                                                                data-accent={STATUS_ACCENT[item.status]}
+                                                                className="h-1.5 w-1.5 shrink-0 -translate-y-[1px] rounded-full"
+                                                                style={{ background: STATUS_ACCENT[item.status] === "sun" ? c.red : STATUS_ACCENT[item.status] === "muted" ? c.track : c.ink40 }}
+                                                            />
                                                             {item.title}
                                                         </p>
                                                         <p className="mt-0.5 text-[12px] [overflow-wrap:anywhere]" style={{ color: c.ink55 }}>
@@ -465,28 +521,26 @@ export function ApplicationsAtelier() {
                             </div>
                         </div>
                     ) : (
-                        /* ── List ── */
-                        <div className="mt-6 flex flex-col gap-3">
-                            {applications.map((item) => (
+                        /* ── List — compact stage-tagged rows (v4 reference) ── */
+                        <div className="mt-6 flex flex-col gap-2.5">
+                            {applications.map((item, i) => (
                                 <div
                                     key={item.application_id}
-                                    className="wsx-action rounded-[4px] p-5 sm:p-6"
-                                    style={{ background: c.panel, border: `1px solid ${c.hair}` }}
+                                    className="wsx-action rounded-[4px] p-4 sm:p-5 animate-fade-up motion-reduce:animate-none"
+                                    style={{ background: c.panel, border: `1px solid ${c.hair}`, animationDelay: `${Math.min(i, 8) * 40}ms`, opacity: STATUS_ACCENT[item.status] === "muted" ? 0.82 : 1 }}
                                 >
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
                                         <div className="min-w-0">
-                                            <h3 className="text-[1.25rem] font-normal leading-snug [overflow-wrap:anywhere]" style={{ fontFamily: SERIF, color: c.ink }}>
+                                            <h3 className="text-[1.05rem] font-normal leading-snug [overflow-wrap:anywhere]" style={{ fontFamily: SERIF, color: c.ink }}>
                                                 {item.title}
                                             </h3>
-                                            <p className="text-[0.95rem] [overflow-wrap:anywhere]" style={{ color: c.ink70 }}>{item.company}</p>
-                                            {item.location && (
-                                                <p className="mt-0.5 text-[12px] [overflow-wrap:anywhere]" style={{ color: c.ink40 }}>{item.location}</p>
-                                            )}
+                                            <p className="mt-0.5 text-[12.5px] [overflow-wrap:anywhere]" style={{ color: c.ink70 }}>
+                                                {item.company}
+                                                {item.location && <span style={{ color: c.ink40 }}> · {item.location}</span>}
+                                            </p>
                                         </div>
                                         <div className="shrink-0 self-start">
-                                            <span className="inline-flex rounded-[3px] px-2 py-1" style={{ border: `1px solid ${c.hair}`, background: c.inset }}>
-                                                <Mono style={{ color: c.ink70 }}>{t(STATUS_LABEL_KEYS[item.status])}</Mono>
-                                            </span>
+                                            <StatusChip status={item.status} label={t(STATUS_LABEL_KEYS[item.status])} c={c} />
                                         </div>
                                     </div>
 
@@ -509,7 +563,7 @@ export function ApplicationsAtelier() {
                                         </a>
                                     )}
 
-                                    <div className="mt-4 flex flex-col gap-3 pt-4 sm:flex-row sm:items-center" style={{ borderTop: `1px solid ${c.hair}` }}>
+                                    <div className="mt-3 flex flex-col gap-3 pt-3 sm:flex-row sm:items-center" style={{ borderTop: `1px solid ${c.hair}` }}>
                                         <DateProvenance app={item} language={language} t={t} c={c} />
                                         <div className="hidden flex-1 sm:block" />
                                         <StatusSelect
@@ -522,7 +576,7 @@ export function ApplicationsAtelier() {
                                         />
                                     </div>
 
-                                    <p className="mt-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]" style={{ color: c.ink55 }}>
+                                    <p className="mt-2.5 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]" style={{ color: c.ink55 }}>
                                         {t(NEXT_ACTION_KEYS[item.status])}
                                     </p>
                                 </div>
