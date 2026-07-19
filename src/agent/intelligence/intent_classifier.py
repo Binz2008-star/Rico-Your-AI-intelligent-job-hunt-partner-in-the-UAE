@@ -892,37 +892,52 @@ _ROLE_TOKEN_TAIL_RE = re.compile(
 # and the words "and" / "or".
 _ROLE_LIST_SPLIT_RE = re.compile(r"\s*(?:,|;|/|&|\band\b|\bor\b|\bplus\b)\s*", re.IGNORECASE)
 
-# Known compound-title connectives (#812): these "X and Y" phrases are themselves
-# job-title vocabulary, not two roles joined by "and" — e.g. "environmental
-# health and safety manager" is ONE title, not "environmental health" +
-# "safety manager". Shielded before the "and" split above, then restored.
-_COMPOUND_ROLE_PHRASES = (
-    "health and safety",
-    "food and beverage",
-    "oil and gas",
-    "facilities and maintenance",
+# Known compound-title connectives (#812): these "X and/& Y" phrases are
+# themselves job-title vocabulary, not two roles joined by a list connector —
+# e.g. "environmental health and safety manager" is ONE title, and
+# "Risk & Compliance Officer" is ONE role, not "Risk" + "Compliance Officer".
+# The connector may be written "and" OR "&" ("Oil & Gas", "Health & Safety"),
+# so both are shielded before the list split, then restored to the original form.
+# Stored as (left, right) pairs so the connector is matched generically.
+_COMPOUND_ROLE_PAIRS = (
+    ("health", "safety"),
+    ("food", "beverage"),
+    ("oil", "gas"),
+    ("facilities", "maintenance"),
+    ("risk", "compliance"),          # "Risk & Compliance Officer" (prod: split → search error)
+    ("governance", "compliance"),
+    ("research", "development"),
+    ("learning", "development"),
+    ("mergers", "acquisitions"),
+    ("sales", "marketing"),
 )
 _COMPOUND_ROLE_RE = re.compile(
-    r"\b(?:" + "|".join(p.replace(" ", r"\s+") for p in _COMPOUND_ROLE_PHRASES) + r")\b",
+    r"\b(?:" + "|".join(rf"{l}\s*(?:and|&)\s*{r}" for l, r in _COMPOUND_ROLE_PAIRS) + r")\b",
     re.IGNORECASE,
 )
-_COMPOUND_ROLE_AND_SENTINEL = "\x00ROLECONNECTOR\x00"
-_INNER_AND_RE = re.compile(r"\s+and\s+", re.IGNORECASE)
+_COMPOUND_ROLE_AND_SENTINEL = "\x00RCAND\x00"
+_COMPOUND_ROLE_AMP_SENTINEL = "\x00RCAMP\x00"
+# Connector inside a shielded phrase — either "&" or the word "and".
+_INNER_CONNECTOR_RE = re.compile(r"\s*(&|and)\s*", re.IGNORECASE)
 
 
 def _shield_compound_role_phrases(segment: str) -> str:
-    """Replace " and " inside a known compound-title phrase with a sentinel so
-    `_ROLE_LIST_SPLIT_RE` doesn't split it into two fragment roles (#812)."""
-    return _COMPOUND_ROLE_RE.sub(
-        lambda m: _INNER_AND_RE.sub(_COMPOUND_ROLE_AND_SENTINEL, m.group(0)),
-        segment,
-    )
+    """Replace the connector (" and " / " & ") inside a known compound-title
+    phrase with a sentinel so `_ROLE_LIST_SPLIT_RE` doesn't split it into two
+    fragment roles. The exact connector is preserved for restoration (#812)."""
+    def _shield(m: "re.Match[str]") -> str:
+        def _conn(cm: "re.Match[str]") -> str:
+            return (_COMPOUND_ROLE_AMP_SENTINEL if cm.group(1) == "&"
+                    else _COMPOUND_ROLE_AND_SENTINEL)
+        return _INNER_CONNECTOR_RE.sub(_conn, m.group(0))
+    return _COMPOUND_ROLE_RE.sub(_shield, segment)
 
 
 def _unshield_compound_role_phrases(token: str) -> str:
-    """Restore the sentinel inserted by `_shield_compound_role_phrases` back to
-    " and " once splitting on the real list connectors is done."""
-    return token.replace(_COMPOUND_ROLE_AND_SENTINEL, " and ")
+    """Restore the sentinels inserted by `_shield_compound_role_phrases` back to
+    their original connector once splitting on the real list connectors is done."""
+    return (token.replace(_COMPOUND_ROLE_AMP_SENTINEL, " & ")
+                 .replace(_COMPOUND_ROLE_AND_SENTINEL, " and "))
 
 # Leading filler dropped from a single role token. Reuses the role-prefix
 # stopwords plus list-specific qualifiers ("pure Software Engineer" -> "Software
