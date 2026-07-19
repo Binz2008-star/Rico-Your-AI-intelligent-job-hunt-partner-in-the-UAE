@@ -94,12 +94,19 @@ affordance — not a production surface).
 5. **Deferred until real capabilities exist — do not build:** Memory tab /
    context persistence (Career Memory Engine is Draft #1025, flag OFF,
    frozen), Interview prep mode, Learning mode, Activity timeline/route
-   (requires an owner-approved read-only endpoint first), **embedded Copilot
-   surfaces** (the former multi-route/dashboard copilot direction is HOLD;
-   the approved replacement is a simple Ask Rico deep-link to `/command`
-   using existing routing), and **per-mode transcripts / multi-session
-   history** (documented backend capability gap — the frontend must never
-   simulate it).
+   (requires an owner-approved read-only endpoint first), and **embedded
+   Copilot surfaces** (the former multi-route/dashboard copilot direction is
+   HOLD; the approved replacement is a simple Ask Rico deep-link to
+   `/command` using existing routing).
+
+   **Register update (2026-07-19, post-adoption):** *multi-session history*
+   left this deferred list because the REAL backend capability shipped in
+   PR #1197 (squash `38bf14a5` — migration 048, session-scoped chat
+   history, `GET /chat/sessions`; owner-authorized one-PR freeze lift
+   recorded in TASK-20260719-016; issue #1190 closed). The Sessions rail
+   now lists and switches real threads — nothing is simulated. Any
+   *per-mode transcript* UI beyond the shipped rail is still NOT authorized
+   by this reference and requires its own freeze lift.
 6. **No fake states:** any reference block without a real production data
    source is omitted, not stubbed (per the migration program's binding rules
    and DEC-20260710-002).

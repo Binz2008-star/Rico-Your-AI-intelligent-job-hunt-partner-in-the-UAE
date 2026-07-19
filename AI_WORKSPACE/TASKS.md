@@ -78,6 +78,60 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-019 — fix/sse-done-tolerant-parse: SSE done payloads through the tolerant chat schema (JSON↔SSE parity)
+
+Status: verified — **MERGED (#1210, squash `b656c79c`)**; CI 9/9 green on
+head `d8307c36`; frontend-only, Vercel production deploy auto-fires;
+production stream smoke rides the owner's next pass
+Owner: Claude (Fable session; owner full-execution authorization 2026-07-19 "do it")
+Branch: fix/sse-done-tolerant-parse
+Issue/PR: #1210 (merged)
+
+#### Objective
+
+Close the last loose end of the 2026-07-19 16:22Z render-FAIL incident
+class: the SSE path yielded the `done` event's structured payload as a raw
+cast (`JSON.parse(raw) as ChatStreamEvent`), bypassing the tolerant
+`RicoChatResponseSchema` that guards the JSON path (#1191/#1193) — the two
+paths could disagree on the same payload. `normalizeStreamDoneEvent`
+(exported for tests) now normalizes every `done` payload through the same
+schema; if even the tolerant parse fails, only the structured payload is
+dropped (streamed text still renders; a tokenless stream already falls back
+to the validated JSON endpoint). `token`/`error` events pass through by
+identity. Global and user-agnostic: authenticated + public streams, EN/AR,
+all providers.
+
+#### Required verification
+
+- [x] New suite `chat-stream-tolerance.test.ts` 5/5; existing
+      `chat-response-tolerance` 8/8.
+- [x] Full vitest 78 files / 821 passed; `npm run build` exit code 0
+      (unfiltered).
+- [x] CI 9/9 green on head; Vercel preview Ready; merged as squash
+      `b656c79c` (2026-07-19).
+- [ ] Post-deploy stream smoke rides the owner's next production pass.
+
+#### Continuity Block
+- Task ID: TASK-20260719-019
+- GitHub issue/PR: #1210 (merged)
+- Branch: fix/sse-done-tolerant-parse
+- Base branch: main
+- Last safe commit SHA: c76165d2 (origin/main at cut)
+- Current head SHA: d8307c36 (merged as squash b656c79c)
+- Uncommitted changes present: no
+- Status: verified
+- Files changed: apps/web/lib/api.ts (normalizeStreamDoneEvent + _readSSE
+  normalization); apps/web/__tests__/chat-stream-tolerance.test.ts (new)
+- Files intentionally not touched: app/command/page.tsx (consumer already
+  handles a done event without response; no UI change, freeze respected)
+- What is complete: implementation + 5 parity pins + full local suite/build
+  + CI 9/9 + merged as squash `b656c79c` (2026-07-19)
+- Validation still required: production stream smoke (owner's next pass)
+- Next exact action: none — done pending the production smoke note above
+- Stop condition: n/a (merged)
+- Rollback plan: revert the squash commit (stream returns to raw-cast; no
+  contract/data migration)
+
 ### TASK-20260719-018 — Hotfix: threaded chat persistence loses the active session (contextvars copy)
 
 Status: review
@@ -193,7 +247,9 @@ admin-only manual mechanism after owner payment verification.
 
 ### TASK-20260719-016 — PR #1197: multi-session chat threads — Sessions rail lists and switches all conversations
 
-Status: review
+Status: verified — **MERGED (#1197, squash `38bf14a5`)**; Render deploy
+success on that SHA (deploy-render run 29702750101 gates /version+/health);
+issue #1190 closed as resolved; owner production smoke of the rail pending
 Owner: Claude (Fable session; owner directive 2026-07-19 "بدي كل الجلسات يطلعو بالشريط الجانبي"; owner start ruling "ابدأ")
 Branch: claude/sessions-sidebar-9zh6dq
 Issue/PR: #1197
@@ -244,13 +300,15 @@ merge/close.
 - Base branch: main
 - Last safe commit SHA: 826c7a3 (origin/main at cut)
 - Current head SHA: 85192d5 (+ this ledger entry at push time)
-- Status: review → merge on the owner's "ابدأ" ruling (Phase 0 of the
-  recorded v4 continuation plan)
-- What is complete: implementation + tests + CI green + this record
-- Validation still required: production smoke post-deploy (migration 048
-  self-applies via startup DDL; drift job verifies)
-- Next exact action: merge #1197; then Phase 1 (/applications compact
-  stage-tagged rows) as its own task/branch/PR
+- Status: verified — MERGED (#1197, squash `38bf14a5`, 2026-07-19); Render
+  deploy success on that SHA
+- What is complete: implementation + tests + CI green + merge + backend
+  deploy + issue #1190 closed with evidence
+- Validation still required: owner production smoke (two threads, switch,
+  delete, reload; migration 048 self-applies via startup DDL; drift job
+  verifies)
+- Next exact action: Phase 1 (/applications compact stage-tagged rows) as
+  its own task/branch/PR, when the owner schedules it
 - Rollback plan: revert the squash commit; session_id column is additive
   and ignored by old code — no DB action needed
 
