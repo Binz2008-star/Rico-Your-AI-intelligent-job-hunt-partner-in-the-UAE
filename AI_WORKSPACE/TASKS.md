@@ -78,6 +78,92 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-006 — Governance: adopt the frozen Command Workspace v4 design reference + boundaries (docs-only)
+
+Status: review
+Owner: Claude (Fable session; owner rulings 2026-07-19)
+Branch: claude/rico-workspace-audit-x65z30
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+
+Record the owner-approved `Rico Command Workspace v4.dc.html` as a frozen
+design reference with binding boundaries — one reviewed handoff, one decision
+record (DEC-20260719-002), and this single governance task. Docs-only. This
+task does NOT authorize implementation work, and no implementation tasks are
+created in advance: each future implementation PR creates its own task entry
+at cut time, under its own owner approval.
+
+#### Context
+
+- Relevant files:
+  `design-handoffs/reviewed/2026-07-19-command-workspace-v4/README.md` (new),
+  `AI_WORKSPACE/DECISIONS.md` (DEC-20260719-002), this ledger entry.
+- Relevant docs: `AI_WORKSPACE/ATELIER_FULL_SITE_MIGRATION.md` (program
+  inventory + /command freeze authority), DEC-20260717-001, DEC-20260716-001.
+- Existing behavior: none changed — zero runtime files in the diff.
+
+#### Constraints
+
+- Do not touch: runtime files (`apps/web`, `src`), backend, auth, chat logic,
+  database/migrations, billing, Career Memory, production configuration,
+  PR #1177.
+- Required statements (owner): the reference is frozen/approved; modes map to
+  existing routes; production Ctrl/Cmd+K behavior remains unchanged; Memory,
+  Interview, Learning, Activity, embedded Copilot, and per-mode transcripts
+  remain deferred; the /command design freeze remains active; this PR does
+  not authorize any implementation work.
+- Keep scope limited to: exactly the three documentation artifacts above.
+
+#### Acceptance criteria
+
+- [x] Reviewed handoff records provenance, acceptance contracts, known
+      limitations, boundaries, and the not-canonical list; raw HTML stays
+      uncommitted (obsidian-v4 precedent).
+- [x] One decision record (DEC-20260719-002) with the required statements.
+- [x] Exactly one governance task (this entry); no implementation tasks
+      pre-created.
+- [x] No runtime file changes; no deploy-relevant diff.
+
+#### Required verification
+
+- [x] Unit tests: n/a — docs-only, no runtime surface.
+- [x] Frontend build: n/a — no frontend files touched.
+- [ ] CI green on the PR head (docs-only jobs).
+- [x] Local smoke: n/a.
+
+#### Continuity Block
+
+- Task ID: TASK-20260719-006
+- GitHub issue/PR: draft PR from `claude/rico-workspace-audit-x65z30`
+- Branch: claude/rico-workspace-audit-x65z30
+- Base branch: main
+- Last safe commit SHA: 1e45c47 (origin/main at branch cut)
+- Current head SHA: see branch head on origin (set at push time)
+- Uncommitted changes present: no (at push time)
+- Status: review
+- Files inspected: `AI_WORKSPACE/DECISIONS.md`, `AI_WORKSPACE/TASKS.md`,
+  `AI_WORKSPACE/ATELIER_FULL_SITE_MIGRATION.md`,
+  `design-handoffs/reviewed/2026-07-16-command-obsidian-v4/README.md`
+  (precedent), open-PR file overlap (#1136/#1138/#1177 — see PR body)
+- Files changed:
+  `design-handoffs/reviewed/2026-07-19-command-workspace-v4/README.md` — new
+  reviewed handoff; `AI_WORKSPACE/DECISIONS.md` — DEC-20260719-002;
+  `AI_WORKSPACE/TASKS.md` — this governance task
+- What is complete: audit, owner rulings, the three artifacts
+- What is incomplete: nothing within this task's scope
+- Known blockers: none
+- Validation already run: repo-verified next free IDs (TASK-20260719-006,
+  DEC-20260719-002); working tree clean at cut; branch anchored on
+  origin/main 1e45c47
+- Validation still required: CI on the PR head
+- Next exact action: open Draft PR; verify CI; merge on green (owner
+  execution mandate 2026-07-19); then re-anchor for the next approved PR
+- Stop condition: any reviewer/CI finding that the diff exceeds the three
+  documentation artifacts
+- Rollback plan: revert the single squash commit — removes the handoff and
+  both ledger entries; nothing else is affected
+
 ### TASK-20260718-022 — PR #1171: mobile usability pass on /command + /profile
 
 Status: verified — **MERGED + deployed**
