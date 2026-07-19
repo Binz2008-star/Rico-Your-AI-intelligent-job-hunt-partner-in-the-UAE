@@ -315,7 +315,7 @@ Per the owner ruling, 2b therefore folds into 2a.
 Status: review
 Owner: Claude (Fable session; owner full-ownership mandate 2026-07-19 evening — track ordered after the verification_status hotfix)
 Branch: rico/relevance-floor-cross-family
-Issue/PR: #1192
+Issue/PR: #1200
 
 #### Objective
 Stop cross-family single words from satisfying the explicit-title relevance
