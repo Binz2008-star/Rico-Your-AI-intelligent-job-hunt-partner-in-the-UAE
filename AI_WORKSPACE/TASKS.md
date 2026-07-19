@@ -78,6 +78,107 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-007 — PR-V4-1: /dashboard Overview goal panel + suggested next actions (real MissionState only)
+
+Status: in_progress
+Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
+Branch: claude/rico-workspace-audit-x65z30 (re-cut from main fb21bda after #1185)
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+
+Evolve `DashboardAtelier` toward the frozen v4 reference's Overview goal
+panel + "Suggested next" block using ONLY real `MissionState` data
+(`GET /api/v1/mission/current`): localized goal title derived from the
+structured `target_roles`/`target_locations` fields, milestone pills from
+the server's `missing_factors` tokens, and max-3 suggested next actions
+derived from the same tokens + real stats, each linking to an existing
+route. Activity timeline stays omitted (no data source).
+
+#### Context
+
+- Relevant files: `apps/web/components/workspace/DashboardAtelier.tsx`,
+  new `apps/web/__tests__/dashboard-atelier.test.tsx`.
+- Relevant docs: DEC-20260719-002 (boundaries),
+  `design-handoffs/reviewed/2026-07-19-command-workspace-v4/README.md`.
+- Existing behavior: mission progress + checklist + stat plates + static
+  quick actions; `/onboarding` redirect in `app/dashboard/page.tsx`
+  (untouched); backend `goal`/`next_recommendation` strings are
+  English-only, so bilingual presentation derives client-side from the
+  structured fields and stable `missing_factors` tokens
+  (`cv_uploaded`/`roles_set`/`locations_set`/`pipeline_active`).
+
+#### Constraints
+
+- Do not touch: backend, `/command`, shell chrome, routing, other routes.
+- Real data only; no fake states; EN/AR + RTL; production tokens via
+  `useWorkspaceTheme()`.
+- `?q=` Ask Rico deep-links are PR-V4-3 scope — this PR uses plain route
+  links only.
+
+#### Intentional decisions (documented deviations)
+
+- Static "Quick actions" grid replaced by the derived "Suggested next"
+  block (max 3) — same destinations remain reachable from the sidebar nav.
+- English-only `mission.goal`/`next_recommendation`/`blocking_reason`
+  strings are not rendered; localized equivalents derive from structured
+  fields/tokens (same server truth, bilingual presentation).
+- Stat-plate label "In pipeline" → "Applications" (plain-language
+  terminology rule from #1157; adjacent copy was already being edited).
+- Error state becomes explicit (message + Retry) instead of rendering
+  zeroed panels — zeros on failure were untruthful data.
+
+#### Acceptance criteria
+
+- [x] Goal panel: localized title from role/city fields; empty mission
+      falls back to the existing "Set your first mission" copy; progress
+      bar has progressbar ARIA; milestone pills mirror the 4 server
+      factors; "Edit goal" links to `/profile?section=goals` (real link).
+- [x] Suggested next: pure exported derivation, priority = server
+      `missing_factors` order, deduped, capped at 3, never empty; all
+      hrefs are existing routes (pinned: no `?q=` links — PR-V4-3 scope).
+- [x] Explicit loading / error(+retry) / empty handling; EN + AR.
+- [x] Tests green (dashboard-atelier suite 15/15; full vitest 743/743);
+      `npm run build` clean.
+
+#### Required verification
+
+- [x] Unit tests: `dashboard-atelier.test.tsx` 15 passed; full vitest
+      71 files / 743 passed
+- [x] Frontend build: `npm run build` clean
+- [ ] CI green on the PR head
+
+#### Continuity Block
+
+- Task ID: TASK-20260719-007
+- GitHub issue/PR: draft PR from `claude/rico-workspace-audit-x65z30`
+- Branch: claude/rico-workspace-audit-x65z30
+- Base branch: main
+- Last safe commit SHA: fb21bda (origin/main after #1185)
+- Current head SHA: set at push time
+- Uncommitted changes present: no (at push time)
+- Status: in_progress
+- Files inspected: `apps/web/components/workspace/DashboardAtelier.tsx`,
+  `apps/web/lib/api.ts` (MissionState), `src/services/mission_service.py`
+  (factor tokens; read-only), `components/profile/ProfileEditorial.tsx`
+  (?section=goals), `__tests__/test-utils.tsx`,
+  `contexts/LanguageContext.tsx`
+- Files changed: `apps/web/components/workspace/DashboardAtelier.tsx` —
+  goal panel + suggested next; `apps/web/__tests__/dashboard-atelier.test.tsx`
+  — new suite; this ledger entry
+- What is complete: contract verification (MissionState fields, factor
+  tokens, ?section=goals deep link)
+- What is incomplete: implementation + tests at entry-creation time
+- Known blockers: none
+- Validation already run: none yet (entry created at cut)
+- Validation still required: vitest, build, CI on head
+- Next exact action: implement, test, open Draft PR, verify gates, merge
+  per mandate
+- Stop condition: any need for backend change, new API surface, or
+  /command scope — stop and report
+- Rollback plan: revert the squash commit; `/dashboard` returns to the
+  current layout; nothing else affected
+
 ### TASK-20260719-006 — Governance: adopt the frozen Command Workspace v4 design reference + boundaries (docs-only)
 
 Status: review
