@@ -78,9 +78,39 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-012 — Live Paddle checkout failure on /subscription: diagnosis + fail-closed repair
+
+Status: review — live gates pending
+Owner: Claude (session 2026-07-19)
+Branch: claude/paddle-checkout-subscription-fix-rsxety
+Issue/PR: #1194
+
+#### Gate (owner ruling, 2026-07-19)
+
+#1194 must be rebased clean onto current main (its TASKS entry updates
+THIS entry — no duplicate), reviewed, and mergeable before merge. The
+Paddle LIVE gates (real browser checkout smoke after deployment) remain
+mandatory regardless of CI state. Billing behavior changes are owner
+territory — this ledger entry tracks status only.
+
+---
+
+### TASK-20260719-013 — analytics: record_event malformed-input hardening (audit gates 1-2)
+
+Status: verified — **MERGED (#1195, `bd378c97`)**
+Owner: Claude (session 2026-07-19)
+Branch: claude/growth-lifecycle-automation-qiyzw6
+Issue/PR: #1195
+
+> Canonical-ID note (2026-07-19 sync): the owner's canonical map assigns
+> 011 → #1193, 012 → #1194, 013 → #1195. This entry is recorded under 013
+> accordingly.
+
+---
+
 ### TASK-20260719-011 — fix/command-chat-response-tolerance: complementary fail-open hardening on top of the #1191 contract
 
-Status: review
+Status: verified — **MERGED (#1193, `aaa3cca3`)**
 Owner: Claude (Fable session; owner full execution delegation 2026-07-19)
 Branch: fix/command-chat-response-tolerance (rebuilt on main 826c7a3 after #1191 merged)
 Issue/PR: #1193
@@ -153,7 +183,7 @@ PASSED) lives in this PR's body and the session record.
 
 ### TASK-20260719-010 — fix/command-subscription-cta: structured subscription CTA instead of a dead raw-text link
 
-Status: review
+Status: verified — **MERGED (#1192, `6caff77f`)**
 Owner: Claude (Fable session; owner defect ruling + one-PR-only /command freeze lift naming `fix/command-subscription-cta`, 2026-07-19)
 Branch: fix/command-subscription-cta (cut from main 07e95c3)
 Issue/PR: (draft PR from this branch)
@@ -237,7 +267,7 @@ one-PR-only lift for THIS PR alone; it expires on merge/close.
 
 ### TASK-20260719-009 — PR-V4-3: /dashboard Ask Rico affordance via existing /command?q= deep-link only
 
-Status: in_progress
+Status: verified — **MERGED (#1189, `e86c6f5`)**
 Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
 Branch: claude/rico-workspace-audit-x65z30 (re-cut from main d6a48a3 after #1188)
 Issue/PR: (draft PR from this branch)
@@ -297,7 +327,7 @@ localized, single-topic, guidance-only prompt (no execution claim; the
 
 ### TASK-20260719-008 — PR-V4-2a (+folded 2b): WorkspaceShell rail goal-mini + applications nav count (fail-hidden, single cached fetch)
 
-Status: review
+Status: verified — **MERGED (#1188, `d6a48a3`)**
 Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
 Branch: claude/rico-workspace-audit-x65z30 (re-cut from main b262032 after #1186)
 Issue/PR: (draft PR from this branch)
@@ -383,9 +413,13 @@ Per the owner ruling, 2b therefore folds into 2a.
 - Rollback plan: revert the squash commit — shell returns to current
   chrome; hook/component are additive files
 
-### TASK-20260719-008 — Hotfix: chat verification_status contract drift (frontend schema)
+### TASK-20260719-014 — Hotfix: chat verification_status contract drift (frontend schema)
 
-Status: review
+> Canonical-ID note (2026-07-19 sync): this entry originally reused
+> TASK-20260719-008, which belongs to the #1188 rail task above. Renamed
+> to the next free id (014) per the owner's unique-ID ruling.
+
+Status: verified — **MERGED (#1191, `826c7a3`)**
 Owner: Claude (Fable session; owner hotfix authorization 2026-07-19 post-#1187 smoke)
 Branch: fix/chat-verification-status-contract
 Issue/PR: #1191
@@ -422,7 +456,7 @@ production payload.
 
 ### TASK-20260719-007 — PR-V4-1: /dashboard Overview goal panel + suggested next actions (real MissionState only)
 
-Status: in_progress
+Status: verified — **MERGED (#1186, `b262032e`)**
 Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
 Branch: claude/rico-workspace-audit-x65z30 (re-cut from main fb21bda after #1185)
 Issue/PR: (draft PR from this branch)
@@ -523,7 +557,7 @@ route. Activity timeline stays omitted (no data source).
 
 ### TASK-20260719-006 — Governance: adopt the frozen Command Workspace v4 design reference + boundaries (docs-only)
 
-Status: review
+Status: verified — **MERGED (#1185, `fb21bda`)**
 Owner: Claude (Fable session; owner rulings 2026-07-19)
 Branch: claude/rico-workspace-audit-x65z30
 Issue/PR: (draft PR from this branch)
