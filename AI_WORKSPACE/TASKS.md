@@ -4017,7 +4017,9 @@ sees the final composed search query.
 
 ### TASK-20260719-002 — analytics_events foundation (migration 047)
 
-Status: merged — production migration pending
+Status: done — merged `c09a929a`; production 047 verified applied
+(post-merge audit 2026-07-19); residual gates tracked in
+`AI_WORKSPACE/HANDOFFS/2026-07-19-analytics-047-postmerge-audit.md`
 Owner: Claude (Fable session; owner directive post-#1175: single-objective PR)
 Branch: claude/analytics-events-foundation
 Issue/PR: (draft PR from this branch)
@@ -4088,6 +4090,50 @@ real-browser smoke) → Status: done.
 - **PR #1177 ruling (owner):** carries a conflicting
   `047_reasoning_traces.sql`; stays Draft; any future reopen restarts from
   `main` ≥ `c09a929a` with a NEW migration number and a NEW task.
+
+##### Post-merge audit & production reconciliation (2026-07-19, owner-directed)
+
+Read-only audit of squash `c09a929a` (full six-file diff). Canonical
+record: `AI_WORKSPACE/HANDOFFS/2026-07-19-analytics-047-postmerge-audit.md`.
+
+- Verdict: **B — safe with follow-up** (no corrective PR, no rollback).
+- Tests at the merge commit: **31/31 passed** (28 functions; supersedes the
+  frozen PR body's "22 tests", consistent with the #1178 correction above).
+- Production 047: **applied and verified** on Neon branch `production`
+  (`br-restless-cherry-amq6wj7o`, the project default): table + PK + all 3
+  migration indexes present; all 4 applied CHECK constraints match the
+  migration file exactly; `analytics_events` row count 0 at ≈09:55 UTC and
+  again at 10:10:13 UTC. This supersedes "production migration pending"
+  (this task's prior status) and the runbook's "NOT been performed" header
+  (corrected in the same reconciliation PR).
+- **Governance exception (recorded):** #1176 merged with ZERO completed
+  GitHub reviews (Codex attempt failed on usage quota 06:41:04 UTC; merge
+  06:44:41 UTC) — the stated pre-merge review gate was not completed by any
+  reviewer. Compensating control: the owner-directed post-merge audit above.
+- `RICO_ANALYTICS_HMAC_KEY` on Render: unverifiable from the audit
+  environment (nothing printed); TASK-20260719-003 separately records the
+  owner-side "Analytics HMAC gate: PASS" — the owner record is
+  authoritative.
+- Context at reconciliation time: emitters v1 merged (#1179) and purge
+  scheduling merged inert (#1180, flag OFF + schedule commented) — both
+  post-date the audit target `c09a929a`; "no emitters / no purge" remain
+  true only OF THE AUDIT TARGET, not of live `main`.
+
+Required future gates (owner-directed, detail in the handoff):
+
+1. Fix `record_event` malformed-input exceptions (row construction outside
+   the `try`; three empirically confirmed repro cases) before or within the
+   next PR adding any caller outside `src/services/analytics_emitters.py`;
+   until then ALL emission goes through the emitter layer.
+2. Add adversarial tests: non-dict `properties`, non-str `client_event_id`,
+   non-datetime `occurred_at`, boolean `retention_days` (bool passes the
+   `int()` bounds today).
+3. Define the additive allowlist-growth migration policy BEFORE event #9
+   (new ALTER migration + lockstep-test redesign; never an in-place 047
+   edit now that it is applied).
+4. Record owner confirmation of `RICO_ANALYTICS_HMAC_KEY` on Render in the
+   workspace before relying on measurement (emitters no-op fail-closed
+   without it).
 
 ---
 

@@ -1,9 +1,11 @@
 # Runbook — Migration 047 (`analytics_events`)
 
 Canonical apply / verify / rollback procedure. This exact procedure was
-executed on the Neon **preview** branch on 2026-07-19; the **production**
-application is GATED on a separate explicit owner approval and has NOT
-been performed.
+executed on the Neon **preview** branch on 2026-07-19. The **production**
+application has SINCE been performed and verified — see the addendum
+"Production application — verified (2026-07-19)" at the end of this
+runbook. (The original "NOT been performed" statement here was accurate
+when written at 06:52 UTC and was superseded the same day.)
 
 ## Identity of the migration
 
@@ -82,6 +84,14 @@ identities → distinct actors/rows; zero raw-identity leaks.
   is fail-closed (writes skipped) until the owner sets the key.
 - Nothing reads the table. The applied table sits inert.
 
+> Superseded 2026-07-19 (same day, post-#1179/#1180): the three bullets
+> above describe the state AT APPLY TIME and remain accurate for that
+> moment. Since then: emitters v1 call `record_event` from
+> `src/agent/runtime.py` and `src/rico_chat_api.py` via
+> `src/services/analytics_emitters.py` (#1179), and TASK-20260719-003
+> records the owner-side "Analytics HMAC gate: PASS". The purge endpoint
+> exists but is inert (#1180: flag OFF, schedule commented out).
+
 ## Rollback
 
 - Ownership: the OWNER holds the apply/rollback decision gate. The agent
@@ -146,3 +156,27 @@ set the flag off on Render (no deploy) → revert the PR. Do NOT clear
 
 Deleted rows are unrecoverable by design; disaster recovery is Neon PITR /
 branch restore only.
+
+## Addendum — production application verified (2026-07-19)
+
+Verified by the owner-directed post-merge audit
+(`AI_WORKSPACE/HANDOFFS/2026-07-19-analytics-047-postmerge-audit.md`),
+read-only queries against Neon branch **`production`**
+(`br-restless-cherry-amq6wj7o` — the project default), db `neondb`:
+
+- `to_regclass('public.analytics_events')` → present.
+- Indexes: `analytics_events_pkey`, `uq_analytics_events_dedupe`,
+  `idx_analytics_events_name_occurred`, `idx_analytics_events_occurred`
+  (4/4 expected).
+- All 4 applied CHECK constraints match the migration file exactly
+  (event-name allowlist 8/8, audience, properties-object, schema_version).
+- `SELECT count(*) FROM analytics_events` → **0** at ≈09:55 UTC and again
+  **0** at 10:10:13 UTC (post-#1179 merge; deployed backend SHA was not
+  verifiable from the audit environment, so a 0 count says nothing about
+  emitter/key status).
+
+The apply actor and exact timestamp are not recorded in the workspace; the
+apply occurred between the 06:52 UTC "production pending" record (#1178)
+and the ≈09:55 UTC audit query. Owner may backfill the apply event.
+Audit verdict for the merged foundation: **B — safe with follow-up**; the
+four required future gates live in the handoff and in TASK-20260719-002.
