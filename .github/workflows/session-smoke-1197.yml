@@ -1,0 +1,44 @@
+name: "#1197 Multi-Session Threads Smoke (manual)"
+
+# Dispatch-only. Runs the #1197 production-verification smoke against the live
+# backend using ONE synthetic user with distinctive markers; always cleans up
+# (chat rows, rico_users row, verification tokens, users row). Mirrors the
+# followup-smoke precedent. Never runs automatically. Requires typing the
+# confirmation string (APPLY-712 gate pattern) because it exercises production.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type SMOKE-1197 to confirm running the production smoke"
+        required: true
+      expected_sha:
+        description: "Commit production must serve (default: tip of the dispatched ref = current main)"
+        required: false
+        default: ""
+      deploy_floor:
+        description: "OPTIONAL ISO-8601 fallback floor for started_at, used ONLY when Render reports commit=unknown"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: "#1197 Sessions Production Smoke"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --quiet psycopg2-binary
+      - name: Run #1197 sessions smoke
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SMOKE_CONFIRM: ${{ inputs.confirm }}
+          # github.sha at workflow_dispatch = the tip of the dispatched ref
+          # (main), so with no override the check tracks CURRENT main.
+          EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
+          DEPLOY_FLOOR_ISO: ${{ inputs.deploy_floor }}
+        run: python scripts/session_smoke_1197.py
