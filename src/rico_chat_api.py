@@ -2025,7 +2025,106 @@ class RicoChatAPI:
             operation_id=self._current_operation_id,
         )
         self._current_operation_id = str(operation["operation_id"])
+        # Attempt fence: outcome writes from THIS execution carry this token;
+        # if the operation is later expired + legitimately re-started, the
+        # bumped attempt makes this execution's late writes refusable.
+        self._current_operation_attempt = int(operation.get("attempt") or 1)
         return operation
+
+    def _operation_attempt(self) -> int | None:
+        return getattr(self, "_current_operation_attempt", None)
+
+    def _duplicate_operation_guard(
+        self, user_id: str, operation_id: str, message: str, language: str | None
+    ) -> dict[str, Any] | None:
+        """One operation_id maps to one search execution.
+
+        When a request carries an operation_id this user already started
+        (frontend timeout auto-retry, SSE→JSON fallback, double submit), a
+        still-running original gets an honest in-progress reply and a
+        completed original gets a completed-status reply — the full result
+        already sits in chat history, so the client recovers from there
+        instead of paying for a second provider cascade. Terminal
+        operations (failed / cancelled / expired) return None so a
+        legitimate retry re-executes normally; "timed_out" is only a
+        client-presentation state, so it keeps blocking until the
+        MAX_EXECUTION_SECONDS ownership ceiling releases it via
+        expire_if_stale. These status replies are never type job_matches,
+        so they emit no analytics and append nothing to chat history (a
+        duplicate is not a new turn). Never raises — any error falls
+        through to normal processing.
+        """
+        try:
+            from src.services.operation_state import (
+                expire_if_orphaned,
+                get_operation,
+                is_actively_running,
+                is_stale,
+            )
+
+            existing = get_operation(user_id, operation_id)
+            if not existing or existing.get("type") != "job_search":
+                return None
+            # Ownership is released ONLY on proof the executing process is
+            # dead (nonce mismatch) — never on age. The re-start after an
+            # orphan release bumps `attempt`, revoking the dead execution's
+            # write rights.
+            existing = expire_if_orphaned(user_id, existing)
+            arabic = language == "ar" or self._is_arabic_text(message or "")
+            base = {
+                "intent": "search_jobs",
+                "success": True,
+                "operation_id": str(existing.get("operation_id")),
+                "operation_type": "job_search",
+                "response_source": "operation_guard",
+            }
+            if is_actively_running(existing):
+                if is_stale(existing):
+                    # Still owned (the cascade may be alive in this process —
+                    # there is no enforced cancellation) but past the stale
+                    # threshold: be honest, keep blocking same-id
+                    # re-execution, and point at the manual recovery path
+                    # (a NEW message = a new turn = a new operation).
+                    return {
+                        **base,
+                        "type": "search_in_progress",
+                        "operation_status": "running",
+                        "stale": True,
+                        "message": (
+                            "بحثك السابق يبدو عالقاً — لم أبدأ بحثاً ثانياً فوقه. "
+                            "إذا لم تظهر النتائج، أرسل رسالة بحث جديدة وسأبدأ بحثاً نظيفاً."
+                            if arabic else
+                            "Your earlier search looks stuck — I have NOT started a second one on top of it. "
+                            "If results don't appear, send a new search message and I'll start fresh."
+                        ),
+                    }
+                return {
+                    **base,
+                    "type": "search_in_progress",
+                    "operation_status": "running",
+                    "message": (
+                        "ما زلت أعمل على بحثك الحالي — النتائج ستظهر هنا خلال لحظات، ولم أبدأ بحثاً ثانياً."
+                        if arabic else
+                        "I'm still working on your current job search — results will appear here shortly. "
+                        "I didn't start a second search."
+                    ),
+                }
+            if existing.get("status") == "completed":
+                return {
+                    **base,
+                    "type": "search_status",
+                    "operation_status": "completed",
+                    "result_count": existing.get("result_count"),
+                    "recover_from_history": True,
+                    "message": (
+                        "هذا البحث اكتمل بالفعل — النتائج محفوظة في المحادثة."
+                        if arabic else
+                        "That search already finished — its results are saved in this conversation."
+                    ),
+                }
+        except Exception:
+            logger.debug("rico_chat_api: duplicate-operation guard skipped", exc_info=True)
+        return None
 
     _ALLOWED_CHAT_ROLES: frozenset[str] = frozenset({"user", "assistant", "system"})
 
@@ -5617,7 +5716,7 @@ class RicoChatAPI:
                 "job_search_failed: role=%r elapsed=%.2fs op=%s err=%s",
                 search_role, _search_elapsed, operation_id, type(exc).__name__,
             )
-            mark_failed(user_id, operation_id, str(exc))
+            mark_failed(user_id, operation_id, str(exc), attempt=self._operation_attempt())
             _graceful_msg = (
                 "عذراً، لم أتمكن من إتمام البحث الآن. "
                 "حاول تحديد اسم الوظيفة — مثلاً: 'وظائف مدير الامتثال في دبي'."
@@ -5641,7 +5740,7 @@ class RicoChatAPI:
         )
         if not all_matches and _provider_failed:
             try:
-                mark_completed(user_id, operation_id, 0)
+                mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
             except Exception:
                 pass
             return self._provider_degraded_response(
@@ -5942,7 +6041,7 @@ class RicoChatAPI:
             response["role_intelligence"] = role_intelligence_data
 
         self._append_chat(user_id, "assistant", response)
-        mark_completed(user_id, operation_id, len(formatted))
+        mark_completed(user_id, operation_id, len(formatted), attempt=self._operation_attempt())
         # Defect 1 continuity contract: a TECHNICALLY COMPLETED search — including
         # one that truthfully returned zero jobs — becomes the current search
         # context. A degraded/failed/unconfigured provider must NOT overwrite the
@@ -6143,7 +6242,18 @@ class RicoChatAPI:
     ) -> dict[str, Any]:
         debug_id = _generate_debug_id()
         self._current_operation_id = operation_id
+        self._current_operation_attempt = None
         try:
+            # Duplicate-execution guard: a client retry/fallback re-sending the
+            # SAME operation_id must never start a second provider cascade while
+            # the first is live (or re-run one that already completed).
+            if operation_id:
+                guard = self._duplicate_operation_guard(
+                    user_id, operation_id, message, language
+                )
+                if guard is not None:
+                    guard.setdefault("debug_id", debug_id)
+                    return guard
             result = self._process_message_inner(user_id, message, language=language)
             # Guarantee debug_id on every response
             if isinstance(result, dict):
@@ -6186,7 +6296,7 @@ class RicoChatAPI:
             return result
         except Exception as exc:
             if self._current_operation_id:
-                mark_failed(user_id, self._current_operation_id, str(exc))
+                mark_failed(user_id, self._current_operation_id, str(exc), attempt=self._operation_attempt())
             return build_error_response(
                 "Something went wrong processing your message.",
                 debug_id=debug_id,
@@ -6195,6 +6305,7 @@ class RicoChatAPI:
             )
         finally:
             self._current_operation_id = None
+            self._current_operation_attempt = None
 
     def _answer_with_ai_fallback(
         self,
@@ -9084,7 +9195,7 @@ class RicoChatAPI:
             try:
                 workflow_result = self.system.run_for_profile(profile)
             except Exception as exc:
-                mark_failed(user_id, operation_id, str(exc))
+                mark_failed(user_id, operation_id, str(exc), attempt=self._operation_attempt())
                 raise
 
             # Handle blocked status from job search
@@ -9093,6 +9204,7 @@ class RicoChatAPI:
                     user_id,
                     operation_id,
                     workflow_result.get("message", "Job search was blocked by incomplete profile."),
+                    attempt=self._operation_attempt(),
                 )
                 response = {
                     "type": "profile_incomplete",
@@ -9129,12 +9241,12 @@ class RicoChatAPI:
                     "result_count": len(formatted),
                 }
                 self._append_chat(user_id, "assistant", response)
-                mark_completed(user_id, operation_id, len(formatted))
+                mark_completed(user_id, operation_id, len(formatted), attempt=self._operation_attempt())
                 if formatted:
                     self._store_search_matches_context(user_id, formatted)
                 return self._finalize(response, routed.source, profile=profile)
             else:
-                mark_completed(user_id, operation_id, 0)
+                mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
                 if has_cv:
                     response = self._handle_no_results_recovery(user_id, profile, target_roles, message)
                     response.update({

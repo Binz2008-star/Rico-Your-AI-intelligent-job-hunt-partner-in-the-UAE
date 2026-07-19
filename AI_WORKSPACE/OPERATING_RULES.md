@@ -155,6 +155,23 @@ If `main` is ahead of Render, report: `backend not live yet` and identify the de
 - Owner-side requirement: the GitHub `production` environment must exist with **required reviewers**
   and hold `RENDER_API_KEY`; environment protection lives in repo Settings, not in code.
 
+### Backend concurrency invariant (job-search operation ownership, PR #1187)
+
+- Job-search duplicate-execution ownership (`src/services/operation_state.py`)
+  is **process-nonce based** and is safe ONLY with **exactly one Render
+  instance and one uvicorn worker** (`render.yaml` startCommand has no
+  `--workers`; plan `starter`, no autoscaling).
+- **Increasing uvicorn workers or Render instances is BLOCKED** until
+  operation ownership moves to an atomic shared store (Redis/Postgres): a
+  concurrently-alive second process is indistinguishable from a dead one
+  under nonce ownership and would run a duplicate provider cascade
+  (pinned by `test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker`).
+- Ownership is never released by age: there is no enforced end-to-end
+  cancellation of the provider cascade (per-call timeouts only —
+  `jsearch_client.py` `_TIMEOUT_S`, `job_providers.py` `_HTTP_TIMEOUT_S`),
+  so only terminal status or executor-process death (nonce mismatch, e.g.
+  restart/deploy) releases an operation_id.
+
 ## Frontend / Vercel Verification
 
 For frontend changes:

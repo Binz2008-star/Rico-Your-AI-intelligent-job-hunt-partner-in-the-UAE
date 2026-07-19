@@ -1616,8 +1616,9 @@ export async function* sendChatStream(
   message: string,
   signal?: AbortSignal,
   language?: "en" | "ar",
+  operationId?: string,
 ): AsyncGenerator<ChatStreamEvent> {
-  const body: Record<string, unknown> = { message };
+  const body: Record<string, unknown> = { message, operation_id: operationId };
   if (language) body.language = language;
   const res = await apiFetch(`${PROXY}/api/v1/rico/chat/stream`, {
     method: "POST",
@@ -1639,9 +1640,14 @@ export async function* sendChatStreamPublic(
   sessionId: string,
   signal?: AbortSignal,
   language?: "en" | "ar",
+  operationId?: string,
 ): AsyncGenerator<ChatStreamEvent> {
   // session_id is correlation-only (#1070); identity is the capability cookie.
-  const body: Record<string, unknown> = { message, session_id: sessionId };
+  const body: Record<string, unknown> = {
+    message,
+    session_id: sessionId,
+    operation_id: operationId,
+  };
   if (language) body.language = language;
   const res = await apiFetch(`${PROXY}/api/v1/rico/chat/stream/public`, {
     method: "POST",
@@ -1682,6 +1688,102 @@ async function* _readSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<ChatS
   } finally {
     reader.releaseLock();
   }
+}
+
+// ── Job-search operation ownership (duplicate-execution guard) ──────────────
+// One user turn mints ONE operation_id; every transport attempt for that turn
+// (SSE, JSON fallback, timeout retry) carries the SAME id so the backend can
+// refuse to start a second provider cascade for a search that is still
+// running. See /api/v1/rico/operations/{id} + process_message guard.
+
+export function mintOperationId(): string {
+  const uuid =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
+  return `op_web_${uuid.replace(/-/g, "")}`.slice(0, 80);
+}
+
+export interface OperationStatusResponse {
+  operation_id: string;
+  status: "running" | "completed" | "failed" | "timed_out" | "cancelled" | "expired" | string;
+  /** True while the server still treats the execution as live (ownership held). */
+  active: boolean;
+  /** Still owned but past the stale threshold — stop waiting; manual recovery
+   * is a NEW turn (new operation), never a same-id re-send. */
+  stale?: boolean;
+  /** True for definitively ended operations (completed/failed/cancelled/expired). */
+  terminal: boolean;
+  result_count: number | null;
+  age_seconds: number | null;
+}
+
+export async function fetchOperationStatus(
+  operationId: string,
+  signal?: AbortSignal,
+): Promise<OperationStatusResponse> {
+  return requestJson<OperationStatusResponse>(
+    `/api/v1/rico/operations/${encodeURIComponent(operationId)}`,
+    { method: "GET", credentials: "include", signal },
+  );
+}
+
+export type OperationPollVerdict =
+  | "completed" // finished — recover the late result from chat history
+  | "terminal" // failed / timed out / unknown — a single retry is legitimate
+  | "still_running" // budget exhausted while active — do NOT re-send
+  | "unavailable" // status API unreachable — caller falls back to legacy retry
+  | "aborted"; // user cancelled while waiting
+
+function _pollWait(ms: number, signal?: AbortSignal): Promise<"aborted" | "waited"> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve("waited");
+    }, ms);
+    function onAbort() {
+      clearTimeout(timer);
+      resolve("aborted");
+    }
+    if (signal) {
+      if (signal.aborted) return onAbort();
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+  });
+}
+
+/** Wait on a slow job-search operation instead of re-executing it.
+ *
+ * Polls the read-only status endpoint until the operation settles, the
+ * budget runs out, or the user aborts. Pure decision logic — the caller
+ * renders messages and performs any (single, legitimate) retry.
+ */
+export async function pollOperationUntilSettled(
+  operationId: string,
+  signal?: AbortSignal,
+  { intervalMs = 4_000, budgetMs = 60_000 }: { intervalMs?: number; budgetMs?: number } = {},
+): Promise<OperationPollVerdict> {
+  const startedAt = Date.now();
+  let consecutiveErrors = 0;
+  while (Date.now() - startedAt < budgetMs) {
+    if (signal?.aborted) return "aborted";
+    try {
+      const status = await fetchOperationStatus(operationId, signal);
+      consecutiveErrors = 0;
+      if (status.status === "completed") return "completed";
+      if (status.terminal || !status.active) return "terminal";
+      // Owned but stale/unknown: stop waiting NOW — the caller surfaces the
+      // manual-retry affordance; a same-id auto re-send stays forbidden.
+      if (status.stale) return "still_running";
+    } catch (err) {
+      if (signal?.aborted) return "aborted";
+      if (err instanceof ApiError && err.statusCode === 404) return "terminal";
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 3) return "unavailable";
+    }
+    if ((await _pollWait(intervalMs, signal)) === "aborted") return "aborted";
+  }
+  return "still_running";
 }
 
 export interface ChatHistoryMessage {
