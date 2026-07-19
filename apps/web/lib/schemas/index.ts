@@ -591,6 +591,22 @@ export const RicoChatHistoryResponseSchema = z.object({
     has_more: z.boolean(),
 }).passthrough();
 
+// Sessions rail (#1193): one entry per chat thread, derived server-side from
+// rico_chat_history. id "default" is the legacy thread; others are UUIDs.
+export const RicoChatSessionSchema = z.object({
+    id: z.string(),
+    title: z.string().nullable().optional(),
+    message_count: z.number(),
+    user_turns: z.number(),
+    started_at: z.string().nullable().optional(),
+    last_activity: z.string().nullable().optional(),
+}).passthrough();
+
+export const RicoChatSessionsResponseSchema = z.object({
+    sessions: z.array(RicoChatSessionSchema),
+    total: z.number(),
+}).passthrough();
+
 export const ParsedCVSchema = z.object({
     text: z.string(),
     emails: z.array(z.string()),
@@ -854,6 +870,8 @@ export type RicoProfileResponse = z.infer<typeof RicoProfileResponseSchema>;
 export type SavedSearch = z.infer<typeof SavedSearchSchema>;
 export type SavedSearchesResponse = z.infer<typeof SavedSearchesResponseSchema>;
 export type RicoChatHistoryResponse = z.infer<typeof RicoChatHistoryResponseSchema>;
+export type RicoChatSession = z.infer<typeof RicoChatSessionSchema>;
+export type RicoChatSessionsResponse = z.infer<typeof RicoChatSessionsResponseSchema>;
 export type ParsedCV = z.infer<typeof ParsedCVSchema>;
 export type ProfilePreview = z.infer<typeof ProfilePreviewSchema>;
 export type UploadCVResponse = z.infer<typeof UploadCVResponseSchema>;

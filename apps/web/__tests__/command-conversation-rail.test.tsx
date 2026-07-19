@@ -151,3 +151,93 @@ describe("CommandConversationRail", () => {
         expect(screen.queryByTestId("command-rail-clear-history")).not.toBeInTheDocument();
     });
 });
+
+/* ── Multi-session mode (#1193): the rail lists every real server thread ── */
+
+describe("CommandConversationRail multi-session", () => {
+    const sessions = [
+        { id: "default", title: "Find me HSE Manager jobs in Dubai", userTurns: 3 },
+        { id: "0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f", title: "Tailor my CV for AESG", userTurns: 2 },
+        { id: "draft-1", title: null, userTurns: 0, draft: true },
+    ];
+    const multiProps = {
+        ...baseProps,
+        multiSession: true,
+        sessions,
+        activeSessionId: "default",
+        switchingSessionId: null as string | null,
+        onSelectSession: vi.fn(),
+    };
+
+    beforeEach(() => {
+        multiProps.onSelectSession = vi.fn();
+        multiProps.onNewChat = vi.fn();
+        multiProps.onClearHistory = vi.fn();
+        multiProps.onCancelClear = vi.fn();
+    });
+
+    it("lists every thread; the active row is live, others use server titles", () => {
+        render(<CommandConversationRail {...multiProps} />);
+        expect(screen.getAllByTestId("command-rail-current")).toHaveLength(1);
+        const others = screen.getAllByTestId("command-rail-session");
+        expect(others).toHaveLength(2);
+        // Active row title comes from the live transcript (baseProps messages).
+        expect(screen.getByTestId("command-rail-current")).toHaveTextContent("Find me HSE Manager jobs in Dubai");
+        expect(others[0]).toHaveTextContent("Tailor my CV for AESG");
+        // A titleless draft shows the honest fallback label.
+        expect(others[1]).toHaveTextContent("New conversation");
+        // Footer reports the real thread count.
+        expect(screen.getByText("3 threads")).toBeInTheDocument();
+    });
+
+    it("clicking another thread calls onSelectSession with its id", () => {
+        render(<CommandConversationRail {...multiProps} />);
+        fireEvent.click(screen.getAllByTestId("command-rail-session")[0]);
+        expect(multiProps.onSelectSession).toHaveBeenCalledWith("0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f");
+    });
+
+    it("clicking the active thread never re-selects", () => {
+        render(<CommandConversationRail {...multiProps} />);
+        fireEvent.click(screen.getByTestId("command-rail-current"));
+        expect(multiProps.onSelectSession).not.toHaveBeenCalled();
+    });
+
+    it("rows are disabled while busy or while a switch is in flight", () => {
+        const { rerender } = render(<CommandConversationRail {...multiProps} busy />);
+        screen.getAllByTestId("command-rail-session").forEach((el) => expect(el).toBeDisabled());
+        rerender(
+            <CommandConversationRail
+                {...multiProps}
+                switchingSessionId="0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f"
+            />,
+        );
+        screen.getAllByTestId("command-rail-session").forEach((el) => expect(el).toBeDisabled());
+    });
+
+    it("delete control uses the per-thread label and the two-step confirm", () => {
+        const { rerender } = render(<CommandConversationRail {...multiProps} />);
+        const del = screen.getByTestId("command-rail-clear-history");
+        expect(del).toHaveTextContent(/delete conversation/i);
+        fireEvent.click(del);
+        expect(multiProps.onClearHistory).toHaveBeenCalledTimes(1);
+        rerender(<CommandConversationRail {...multiProps} confirmClear />);
+        expect(screen.getByTestId("command-rail-clear-confirm")).toHaveTextContent(/yes, delete/i);
+    });
+
+    it("an unsent draft thread offers no delete control", () => {
+        render(
+            <CommandConversationRail
+                {...multiProps}
+                activeSessionId="draft-1"
+                historyState="empty"
+                messages={[msg("rico", "New chat started.")]}
+            />,
+        );
+        expect(screen.queryByTestId("command-rail-clear-history")).not.toBeInTheDocument();
+    });
+
+    it("surfaces the real switch-failure note", () => {
+        render(<CommandConversationRail {...multiProps} sessionSwitchError />);
+        expect(screen.getByTestId("command-rail-switch-error")).toHaveTextContent(/couldn't open/i);
+    });
+});

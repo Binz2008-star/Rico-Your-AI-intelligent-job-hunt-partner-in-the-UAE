@@ -122,6 +122,10 @@ class RicoChatRequest(BaseModel):
     message: str = Field(..., max_length=4096)
     operation_id: str | None = Field(None, min_length=8, max_length=80)
     language: str | None = Field(None, pattern="^(en|ar)$")
+    # Chat thread selector (#1193): "default" = the legacy thread, a UUID = a
+    # named thread from the Sessions rail. Omitted = pre-session behavior.
+    # NOT the public-chat session_id — that one is guest identity correlation.
+    session_id: str | None = Field(None, max_length=64)
 
     @field_validator("message")
     @classmethod
@@ -129,6 +133,12 @@ class RicoChatRequest(BaseModel):
         if not v or not v.strip():
             raise ValueError("Message cannot be empty")
         return v.strip()
+
+    @field_validator("session_id")
+    @classmethod
+    def safe_chat_session_id(cls, v: str | None) -> str | None:
+        from src.services.chat_session_context import normalize_chat_session_id
+        return normalize_chat_session_id(v)
 
 
 class RicoPublicChatRequest(BaseModel):
@@ -683,12 +693,23 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
             request_ref,
         )
 
-        result = chat_service.send_message(
-            ctx=ctx,
-            message=payload.message,
-            operation_id=payload.operation_id,
-            language=payload.language,
+        # Pin the chat thread for every persistence/read inside this turn.
+        # Sync endpoints run in a threadpool with their own context copy, so
+        # the token-reset in finally is defensive tidiness, not correctness.
+        from src.services.chat_session_context import (
+            reset_active_chat_session,
+            set_active_chat_session,
         )
+        _session_token = set_active_chat_session(payload.session_id)
+        try:
+            result = chat_service.send_message(
+                ctx=ctx,
+                message=payload.message,
+                operation_id=payload.operation_id,
+                language=payload.language,
+            )
+        finally:
+            reset_active_chat_session(_session_token)
 
         logger.info(
             "chat_response user=%s intent=%s matches=%d request_ref=%s",
@@ -844,8 +865,13 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
             logger.error("chat_stream_error user=%s err=%s", user_ref(user_id), safe_exc(e))
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
 
+    # A ContextVar set here would NOT reach the generator (each SSE segment
+    # runs in a fresh copy of the ASGI task's context), so the wrapper drives
+    # every segment — including the finally-block assistant persist — inside
+    # one Context with the thread pinned (#1193).
+    from src.services.chat_session_context import run_generator_with_session
     return StreamingResponse(
-        _event_stream(),
+        run_generator_with_session(_event_stream(), payload.session_id),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
@@ -1184,17 +1210,52 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest, response:
         )
 
 
+def _parse_chat_session_param(session_id: str | None) -> str | None:
+    """Validate the optional ?session_id= query param ('default' or UUID)."""
+    from src.services.chat_session_context import normalize_chat_session_id
+    try:
+        return normalize_chat_session_id(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail="session_id must be 'default' or a UUID"
+        )
+
+
+@router.get("/chat/sessions")
+@limiter.limit(LIMIT_CHAT)
+def rico_chat_sessions(request: Request) -> dict[str, Any]:
+    """List the authenticated user's chat threads (Sessions rail, #1193).
+
+    Threads are derived from rico_chat_history — the id "default" is the
+    legacy thread (rows written before multi-session existed), every other id
+    is a client-minted UUID. Title is the thread's first user turn, or null
+    for a thread with no user message yet (frontend shows its fallback label).
+    """
+    start_time = time.time()
+    user = get_current_user(request)
+    sessions = chat_service.list_chat_sessions(user["email"])
+    _metrics.record_request((time.time() - start_time) * 1000)
+    return {"sessions": sessions, "total": len(sessions)}
+
+
 @router.get("/chat/history")
 @limiter.limit(LIMIT_CHAT)
 def rico_chat_history(
     request: Request,
     limit: int = Query(20, ge=1, le=100),
     before: str | None = None,
+    session_id: str | None = Query(None, max_length=64),
 ) -> dict[str, Any]:
-    """Get conversation history with pagination."""
+    """Get conversation history with pagination.
+
+    session_id (optional): scope to one chat thread — "default" for the
+    legacy thread, a UUID for a rail-created thread. Omitted = unfiltered
+    (pre-session behavior, all threads mixed newest-first).
+    """
     start_time = time.time()
     user = get_current_user(request)
     user_id = user["email"]
+    session = _parse_chat_session_param(session_id)
 
     before_ts = None
     if before:
@@ -1203,7 +1264,9 @@ def rico_chat_history(
         except ValueError:
             raise HTTPException(status_code=422, detail="Invalid timestamp format")
 
-    history = chat_service.get_chat_history(user_id, limit=limit, before=before_ts)
+    history = chat_service.get_chat_history(
+        user_id, limit=limit, before=before_ts, session_id=session,
+    )
 
     _metrics.record_request((time.time() - start_time) * 1000)
     return {
@@ -1215,11 +1278,19 @@ def rico_chat_history(
 
 @router.delete("/chat/history", status_code=204)
 @limiter.limit(LIMIT_CHAT)
-def rico_clear_chat_history(request: Request) -> None:
-    """Delete all chat history for the authenticated user (chat messages only)."""
+def rico_clear_chat_history(
+    request: Request,
+    session_id: str | None = Query(None, max_length=64),
+) -> None:
+    """Delete chat history for the authenticated user (chat messages only).
+
+    session_id (optional): delete one thread only ("default" or a UUID).
+    Omitted = delete everything (pre-session behavior).
+    """
     user = get_current_user(request)
     user_id = user["email"]
-    chat_service.clear_chat_history(user_id)
+    session = _parse_chat_session_param(session_id)
+    chat_service.clear_chat_history(user_id, session_id=session)
 
 
 @router.get("/operations/{operation_id}")

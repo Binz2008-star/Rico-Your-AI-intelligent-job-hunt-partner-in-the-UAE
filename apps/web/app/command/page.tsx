@@ -1,7 +1,7 @@
 "use client";
 
 import { CommandComposer } from "@/components/command/CommandComposer";
-import { CommandConversationRail } from "@/components/command/CommandConversationRail";
+import { CommandConversationRail, countUserTurns, deriveConversationTitle, type RailSessionEntry } from "@/components/command/CommandConversationRail";
 import { classifyMessage } from "@/components/command/CommandEventAdapter";
 import { AtelierMarkdownScope, CommandEmptyState } from "@/components/command/CommandMessages";
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
@@ -22,7 +22,7 @@ import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
-import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, executePermissionAction, fetchChatHistory, fetchMe, getCvQuotaError, logout, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
+import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, DEFAULT_CHAT_SESSION_ID, executePermissionAction, fetchChatHistory, fetchChatSessions, fetchMe, getCvQuotaError, logout, mintChatSessionId, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
@@ -277,6 +277,27 @@ function parseHistoryContent(content: string, id: number): Partial<Message> {
         // Fall through to plain text
     }
     return { id, role: "rico", text: content };
+}
+
+/** Map server history rows to transcript Messages — deduplicated by
+ *  (role, content) and id'd in the reserved negative namespace (welcome is
+ *  -1) so nextId()-generated ids (1, 2, …) can never collide with them.
+ *  Shared by the initial history load and Sessions-rail thread switches. */
+function mapHistoryToMessages(rows: Array<{ role: string; content: string }>): Message[] {
+    const seen = new Set<string>();
+    const mapped: Message[] = [];
+    rows.forEach((msg, idx) => {
+        const key = `${msg.role}:${msg.content}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        if (msg.role === "user") {
+            mapped.push({ id: -(idx + 2), role: "user", text: msg.content });
+        } else {
+            // Parse JSON assistant payloads (job_matches, etc.) into rich messages
+            mapped.push(parseHistoryContent(msg.content, -(idx + 2)) as Message);
+        }
+    });
+    return mapped;
 }
 
 
@@ -844,6 +865,16 @@ export default function CommandPage() {
     const [userName, setUserName] = useState<string | null>(null);
     // "pending" = history not yet checked; "has_history" = history loaded; "empty" = no history
     const [historyState, setHistoryState] = useState<"pending" | "has_history" | "empty">("pending");
+    // ── Multi-session chat threads (#1193) ─────────────────────────────────
+    // multiSession turns on ONLY after GET /chat/sessions answers, so an older
+    // backend (or any fetch failure) degrades to the original single-thread
+    // rail with zero behavior change. sessions is the rail's thread list —
+    // server-derived entries plus at most one local unsent draft.
+    const [multiSession, setMultiSession] = useState(false);
+    const [chatSessions, setChatSessions] = useState<RailSessionEntry[]>([]);
+    const [activeChatSession, setActiveChatSession] = useState<string>(DEFAULT_CHAT_SESSION_ID);
+    const [switchingSessionId, setSwitchingSessionId] = useState<string | null>(null);
+    const [sessionSwitchError, setSessionSwitchError] = useState(false);
     const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
     const [initialContentReady, setInitialContentReady] = useState(false);
     // id of the message whose "Copy" button most recently confirmed a copy
@@ -933,6 +964,16 @@ export default function CommandPage() {
     // preserved) from the 45s hard timeout (error row + Retry). Slice C2.
     const stopRequestedRef = useRef(false);
 
+    // Live mirrors for sendMessage (a stable useCallback): the active chat
+    // thread and whether the backend supports threads. Refs, not deps, so the
+    // send pipeline is never re-created on a session switch.
+    const activeChatSessionRef = useRef<string>(DEFAULT_CHAT_SESSION_ID);
+    const multiSessionRef = useRef(false);
+    useEffect(() => {
+        activeChatSessionRef.current = activeChatSession;
+        multiSessionRef.current = multiSession;
+    }, [activeChatSession, multiSession]);
+
     /** Cancel any in-flight request and reset UI to idle state. The stopped
      *  presentation itself is appended by the AbortError handler in
      *  sendMessage, which also finalizes any partial streamed message. */
@@ -1006,52 +1047,76 @@ export default function CommandPage() {
         };
     }, [useMock]);
 
-    // Load chat history for authenticated users; result gates the welcome message
+    // Load chat threads + history for authenticated users; result gates the
+    // welcome message. Sessions-rail flow (#1193): list the user's real
+    // threads first, open the most recently active one, and scope the history
+    // fetch to it. Any sessions-endpoint failure (older backend, network)
+    // falls back to the original unscoped single-thread load unchanged.
     useEffect(() => {
         if (chatAudience !== "authenticated") return;
         if (useMock) { setHistoryState("empty"); return; }
 
         let cancelled = false;
 
+        const withTimeout = <T,>(p: Promise<T>): Promise<T> =>
+            Promise.race([
+                p,
+                new Promise<never>((_, reject) =>
+                    window.setTimeout(() => reject(new Error("history timeout")), 8000)),
+            ]);
+
+        const applyHistory = (rows: Array<{ role: string; content: string }>): boolean => {
+            if (rows.length === 0) return false;
+            const mappedMessages = mapHistoryToMessages(rows);
+            // If the user already started chatting while history was in
+            // flight, prepend history instead of wiping their live turns.
+            setMessages((prev) => (prev.length > 0 ? [...mappedMessages, ...prev] : mappedMessages));
+            promptSentRef.current = true;
+            setHistoryState("has_history");
+            setInitialContentReady(true);
+            return true;
+        };
+
         (async () => {
+            // ── Threads-first path ────────────────────────────────────────
             try {
-                // Hard 8s cap: a hung history fetch otherwise leaves
-                // historyState "pending" forever (no welcome, no transcript).
-                const history = await Promise.race([
-                    fetchChatHistory(20),
-                    new Promise<never>((_, reject) =>
-                        window.setTimeout(() => reject(new Error("history timeout")), 8000)),
-                ]);
+                // Hard 8s cap: a hung fetch otherwise leaves historyState
+                // "pending" forever (no welcome, no transcript).
+                const listed = await withTimeout(fetchChatSessions());
                 if (cancelled) return;
-                if (history.messages.length > 0) {
-                    // Deduplicate by (role, content) pairs to avoid double-rendering
-                    // if history is loaded more than once.
-                    const seen = new Set<string>();
-                    const mappedMessages: Message[] = [];
-                    history.messages.forEach((msg: { role: string; content: string }, idx: number) => {
-                        const key = `${msg.role}:${msg.content}`;
-                        if (seen.has(key)) return;
-                        seen.add(key);
-                        // History ids live in a reserved negative namespace
-                        // (welcome is -1) so nextId()-generated ids (1, 2, …)
-                        // can never collide with them. A collision makes the
-                        // per-token map-append write streamed text into an old
-                        // history row, which applyDoneResponse then deletes.
-                        if (msg.role === "user") {
-                            mappedMessages.push({ id: -(idx + 2), role: "user", text: msg.content });
-                        } else {
-                            // Parse JSON assistant payloads (job_matches, etc.) into rich messages
-                            mappedMessages.push(parseHistoryContent(msg.content, -(idx + 2)) as Message);
-                        }
-                    });
-                    // If the user already started chatting while history was in
-                    // flight, prepend history instead of wiping their live turns.
-                    setMessages((prev) => (prev.length > 0 ? [...mappedMessages, ...prev] : mappedMessages));
-                    promptSentRef.current = true;
-                    setHistoryState("has_history");
-                    setInitialContentReady(true);
+                setMultiSession(true);
+                setChatSessions(
+                    listed.sessions.map((s) => ({
+                        id: s.id,
+                        title: s.title ?? null,
+                        userTurns: s.user_turns,
+                    })),
+                );
+                if (listed.sessions.length === 0) {
+                    // No server threads yet — the rail shows the truthful
+                    // unsent draft this fresh conversation actually is.
+                    setChatSessions([{ id: DEFAULT_CHAT_SESSION_ID, title: null, userTurns: 0, draft: true }]);
+                    setHistoryState("empty");
                     return;
                 }
+                const mostRecent = listed.sessions[0].id;
+                setActiveChatSession(mostRecent);
+                const history = await withTimeout(fetchChatHistory(50, undefined, mostRecent));
+                if (cancelled) return;
+                if (applyHistory(history.messages)) return;
+                setHistoryState("empty");
+                return;
+            } catch {
+                if (cancelled) return;
+                // Older backend or transient failure — legacy single-thread
+                // load below; the rail keeps its original one-entry surface.
+            }
+
+            // ── Legacy unscoped fallback (pre-sessions behavior, unchanged) ──
+            try {
+                const history = await withTimeout(fetchChatHistory(20));
+                if (cancelled) return;
+                if (applyHistory(history.messages)) return;
             } catch {
                 // If history fetch fails, fall through to show welcome. The
                 // conversation rail surfaces this real failure (no behavior change).
@@ -1064,6 +1129,27 @@ export default function CommandPage() {
             cancelled = true;
         };
     }, [chatAudience, useMock]);
+
+    // The rail's displayed thread list: chatSessions (server truth + explicit
+    // handler updates) with a LIVE overlay for the active thread — title from
+    // the real first user turn, real turn count, floated to the top on new
+    // activity. Pure derivation (no state sync effect), so the list can never
+    // drift from the transcript it describes.
+    const railSessions = React.useMemo<RailSessionEntry[]>(() => {
+        if (!multiSession) return chatSessions;
+        const idx = chatSessions.findIndex((s) => s.id === activeChatSession);
+        if (idx === -1) return chatSessions;
+        const current = chatSessions[idx];
+        const turns = countUserTurns(messages);
+        const live: RailSessionEntry = {
+            ...current,
+            title: turns > 0 ? deriveConversationTitle(messages, "") || current.title : current.title,
+            userTurns: Math.max(current.userTurns, turns),
+            draft: current.draft && turns === 0,
+        };
+        if (turns > 0 && idx > 0) return [live, ...chatSessions.filter((s) => s.id !== activeChatSession)];
+        return [...chatSessions.slice(0, idx), live, ...chatSessions.slice(idx + 1)];
+    }, [multiSession, chatSessions, activeChatSession, messages]);
 
     // Load locally-persisted history for public/guest sessions (no server-side
     // history exists for guests). Mirrors the authenticated effect above: sets
@@ -1202,6 +1288,10 @@ export default function CommandPage() {
         // partial streamed message on a deliberate user Stop (slice C2).
         const streamId = nextId();
         let streamStarted = false;
+        // Thread binding (#1193), hoisted for the retry path too: only sent
+        // once the sessions API has answered (multiSession) so an older
+        // backend never sees the field.
+        const chatThread = multiSessionRef.current ? activeChatSessionRef.current : undefined;
 
         try {
             // Use SSE streaming for conversational messages; fall back to JSON for errors
@@ -1273,7 +1363,7 @@ export default function CommandPage() {
             }
 
             const streamGen = chatAudience === "authenticated"
-                ? sendChatStream(trimmed, controller.signal, language, operationId)
+                ? sendChatStream(trimmed, controller.signal, language, operationId, chatThread)
                 : sendChatStreamPublic(trimmed, getSessionId(sessionIdRef), controller.signal, language, operationId);
 
             for await (const event of streamGen) {
@@ -1294,7 +1384,7 @@ export default function CommandPage() {
                 } else if (event.type === "error") {
                     const res: ChatApiResponse =
                         chatAudience === "authenticated"
-                            ? await sendChat(trimmed, controller.signal, operationId, language)
+                            ? await sendChat(trimmed, controller.signal, operationId, language, chatThread)
                             : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal, operationId, language);
                     applyDoneResponse(res);
                 }
@@ -1307,7 +1397,7 @@ export default function CommandPage() {
             if (!streamStarted && !responseApplied) {
                 const res: ChatApiResponse =
                     chatAudience === "authenticated"
-                        ? await sendChat(trimmed, controller.signal, operationId, language)
+                        ? await sendChat(trimmed, controller.signal, operationId, language, chatThread)
                         : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal, operationId, language);
                 applyDoneResponse(res);
             }
@@ -1387,7 +1477,11 @@ export default function CommandPage() {
                                     // render "whatever assistant message is newest", which
                                     // could belong to a different turn or conversation.
                                     try {
-                                        const history = await fetchChatHistory(10);
+                                        const history = await fetchChatHistory(
+                                            10,
+                                            undefined,
+                                            multiSessionRef.current ? activeChatSessionRef.current : undefined,
+                                        );
                                         const exact = [...history.messages].reverse().find((m) => {
                                             if (m.role === "user") return false;
                                             try {
@@ -1431,7 +1525,7 @@ export default function CommandPage() {
                             const retryTimeoutId = setTimeout(() => retryController.abort(), 45_000);
                             const retryRes: ChatApiResponse =
                                 chatAudience === "authenticated"
-                                    ? await sendChat(trimmed, retryController.signal, operationId, language)
+                                    ? await sendChat(trimmed, retryController.signal, operationId, language, chatThread)
                                     : await sendChatPublic(trimmed, getSessionId(sessionIdRef), retryController.signal, operationId, language);
                             clearTimeout(retryTimeoutId);
                             const retryReply =
@@ -1718,13 +1812,87 @@ export default function CommandPage() {
         router.push("/login");
     }
 
+    /** Persist the active thread's live overlay (title/turns from the real
+     *  transcript) into chatSessions before switching away, so the rail keeps
+     *  showing truthful entries for inactive threads. */
+    function snapshotActiveSession() {
+        if (!multiSession) return;
+        const turns = countUserTurns(messages);
+        setChatSessions((prev) => prev.map((s) =>
+            s.id === activeChatSession
+                ? {
+                    ...s,
+                    title: turns > 0 ? deriveConversationTitle(messages, "") || s.title : s.title,
+                    userTurns: Math.max(s.userTurns, turns),
+                    draft: s.draft && turns === 0,
+                }
+                : s,
+        ));
+    }
+
     function handleNewChat() {
+        setConfirmClear(false);
+        setSessionSwitchError(false);
+        if (chatAudience === "authenticated" && multiSession) {
+            snapshotActiveSession();
+            // One truthful draft at a time: reuse an existing unsent draft
+            // instead of stacking empty threads in the rail.
+            const existingDraft = railSessions.find((s) => s.draft && s.userTurns === 0);
+            const id = existingDraft?.id ?? mintChatSessionId();
+            if (!existingDraft) {
+                setChatSessions((prev) => [{ id, title: null, userTurns: 0, draft: true }, ...prev]);
+            }
+            setActiveChatSession(id);
+            setHistoryState("empty");
+        }
         const greeting =
             chatAudience === "authenticated"
                 ? t("cmdNewChatAuth")
                 : t("cmdNewChatPublic");
         setMessages([{ id: nextId(), role: "rico", text: greeting }]);
         setInput("");
+    }
+
+    /** Load one thread's transcript into the pane (no guards — callers guard).
+     *  Returns true on success so callers can keep or revert selection. */
+    async function loadSessionTranscript(id: string): Promise<boolean> {
+        const target = railSessions.find((s) => s.id === id);
+        // Unsent draft: no server rows — present the fresh-thread greeting.
+        if (target?.draft) {
+            setActiveChatSession(id);
+            setHistoryState("empty");
+            setMessages([{ id: nextId(), role: "rico", text: t("cmdNewChatAuth") }]);
+            setInput("");
+            return true;
+        }
+        setSwitchingSessionId(id);
+        try {
+            const history = await fetchChatHistory(50, undefined, id);
+            const mapped = mapHistoryToMessages(history.messages);
+            setActiveChatSession(id);
+            setHistoryState(mapped.length > 0 ? "has_history" : "empty");
+            setMessages(
+                mapped.length > 0
+                    ? mapped
+                    : [{ id: nextId(), role: "rico", text: t("cmdNewChatAuth") }],
+            );
+            setInput("");
+            return true;
+        } catch {
+            setSessionSwitchError(true);
+            return false;
+        } finally {
+            setSwitchingSessionId(null);
+        }
+    }
+
+    /** Sessions-rail click: switch to another thread. */
+    function handleSelectSession(id: string) {
+        if (id === activeChatSession || thinking || clearingHistory || switchingSessionId) return;
+        setConfirmClear(false);
+        setSessionSwitchError(false);
+        snapshotActiveSession();
+        void loadSessionTranscript(id);
     }
 
     function handleClearChat() {
@@ -1742,14 +1910,12 @@ export default function CommandPage() {
         setConfirmClear(false);
         setClearHistoryError(null);
         try {
-            await clearChatHistory();
-            setMessages([]);
-            promptSentRef.current = false;
+            // Multi-session mode deletes the ACTIVE thread only; legacy mode
+            // keeps the original clear-everything behavior.
+            await clearChatHistory(multiSession ? activeChatSession : undefined);
         } catch (err) {
             // Server-side delete failed — keep local UI cleared but warn the user
             // so they know history may reappear on next load.
-            setMessages([]);
-            promptSentRef.current = false;
             const msg = err instanceof Error ? err.message : String(err);
             const isAuth = msg.includes("401") || msg.toLowerCase().includes("unauthorized");
             setClearHistoryError(
@@ -1760,6 +1926,29 @@ export default function CommandPage() {
         } finally {
             setClearingHistory(false);
         }
+
+        if (multiSession) {
+            // Drop the deleted thread from the rail, then open the next most
+            // recent one — or a fresh truthful draft when none remain.
+            const remaining = railSessions.filter((s) => s.id !== activeChatSession);
+            if (remaining.length > 0) {
+                setChatSessions(remaining);
+                const opened = await loadSessionTranscript(remaining[0].id);
+                if (opened) return;
+            }
+            const freshId =
+                remaining.length > 0 || activeChatSession !== DEFAULT_CHAT_SESSION_ID
+                    ? mintChatSessionId()
+                    : DEFAULT_CHAT_SESSION_ID;
+            setChatSessions((prev) => [
+                { id: freshId, title: null, userTurns: 0, draft: true },
+                ...prev.filter((s) => s.id !== activeChatSession && s.id !== freshId),
+            ]);
+            setActiveChatSession(freshId);
+            setHistoryState("empty");
+        }
+        setMessages([]);
+        promptSentRef.current = false;
     }
 
     function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -1942,6 +2131,12 @@ export default function CommandPage() {
                     onNewChat={handleNewChat}
                     onClearHistory={() => void handleClearHistory()}
                     onCancelClear={() => setConfirmClear(false)}
+                    multiSession={multiSession}
+                    sessions={railSessions}
+                    activeSessionId={activeChatSession}
+                    switchingSessionId={switchingSessionId}
+                    sessionSwitchError={sessionSwitchError}
+                    onSelectSession={handleSelectSession}
                 />
             }
         >

@@ -184,6 +184,12 @@ CREATE TABLE IF NOT EXISTS telegram_alert_log (
 );
 CREATE INDEX IF NOT EXISTS idx_tal_user_sent ON telegram_alert_log (user_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rico_chat_user_created ON rico_chat_history(user_id, created_at DESC);
+-- Idempotent column migration for existing installations (migration 048):
+-- nullable session_id threads one user's chat into multiple conversations.
+-- Legacy rows stay NULL and surface as the single "default" thread.
+ALTER TABLE rico_chat_history ADD COLUMN IF NOT EXISTS session_id UUID;
+CREATE INDEX IF NOT EXISTS idx_rico_chat_user_session_created
+    ON rico_chat_history(user_id, session_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rico_signals_user_created ON rico_learning_signals(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rico_recommendations_user_status ON rico_job_recommendations(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_rico_saved_searches_user_created ON rico_saved_searches(user_id, created_at DESC);
@@ -1186,15 +1192,25 @@ class RicoDB:
 
     _ALLOWED_CHAT_ROLES: frozenset = frozenset({"user", "assistant", "system"})
 
-    def append_chat(self, user_id: str, role: str, message: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+    def append_chat(
+        self,
+        user_id: str,
+        role: str,
+        message: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+    ) -> None:
+        """session_id: UUID string of the chat thread; None = the legacy/default
+        thread (stored as NULL, exactly what every pre-session caller wrote)."""
         if role not in self._ALLOWED_CHAT_ROLES:
             logger.warning("rico_db: append_chat rejected unknown role=%r user=%s", role, user_id)
             return
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO rico_chat_history (user_id, role, message, metadata) VALUES (%s, %s, %s, %s)",
-                    (user_id, role, message, Json(metadata or {})),
+                    "INSERT INTO rico_chat_history (user_id, role, message, metadata, session_id) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (user_id, role, message, Json(metadata or {}), session_id),
                 )
 
     def record_signal(self, user_id: str, job_id: Optional[str], action: str, metadata: Optional[Dict[str, Any]] = None) -> None:

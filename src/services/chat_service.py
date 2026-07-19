@@ -803,9 +803,19 @@ def _resolve_db_user_id(user_id: str):
 
 
 def _db_get_chat_history(
-    db_user_id: str, limit: int = 50, before: datetime | None = None,
+    db_user_id: str,
+    limit: int = 50,
+    before: datetime | None = None,
+    session_id: str | None = None,
 ) -> list[Dict[str, Any]] | None:
-    """Fetch chat history rows from PostgreSQL. Returns None on failure."""
+    """Fetch chat history rows from PostgreSQL. Returns None on failure.
+
+    session_id: None = unfiltered (legacy, all threads mixed);
+    DEFAULT_SESSION = the legacy thread (rows with NULL session_id);
+    a UUID string = that thread only.
+    """
+    from src.services.chat_session_context import DEFAULT_SESSION
+
     try:
         from src.rico_db import RicoDB
         db = RicoDB()
@@ -813,6 +823,11 @@ def _db_get_chat_history(
             return None
         where = "WHERE user_id = %s"
         params: list = [db_user_id]
+        if session_id == DEFAULT_SESSION:
+            where += " AND session_id IS NULL"
+        elif session_id is not None:
+            where += " AND session_id = %s"
+            params.append(session_id)
         if before:
             where += " AND created_at < %s"
             params.append(before)
@@ -848,11 +863,18 @@ _ALLOWED_CHAT_ROLES: frozenset[str] = frozenset({"user", "assistant", "system"})
 
 
 def db_append_chat(user_id: str, role: str, message: str) -> None:
-    """Best-effort write of a chat message to PostgreSQL."""
+    """Best-effort write of a chat message to PostgreSQL.
+
+    Stamps the ambient active chat session (set by the API router for the
+    current request) so every legacy _append_chat call site threads correctly
+    without signature changes. No active session, or the default session,
+    writes NULL — byte-identical to pre-session behavior.
+    """
     if role not in _ALLOWED_CHAT_ROLES:
         logger.warning("chat_service: db_append_chat rejected unknown role=%r user=%s", role, user_id)
         return
     try:
+        from src.services.chat_session_context import DEFAULT_SESSION, get_active_chat_session
         from src.rico_db import RicoDB
         db = RicoDB()
         if not db.available:
@@ -860,7 +882,9 @@ def db_append_chat(user_id: str, role: str, message: str) -> None:
         db_uid = _resolve_db_user_id(user_id)
         if not db_uid:
             return
-        db.append_chat(db_uid, role, message)
+        active = get_active_chat_session()
+        session_id = None if active in (None, DEFAULT_SESSION) else active
+        db.append_chat(db_uid, role, message, session_id=session_id)
     except Exception as exc:
         logger.debug("chat_service: db_append_chat failed: %s", exc)
 
@@ -876,7 +900,12 @@ def _message_is_before(message: Any, before: datetime) -> bool:
         return False
 
 
-def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = None) -> list[Dict[str, Any]]:
+def get_chat_history(
+    user_id: str,
+    limit: int = 50,
+    before: datetime | None = None,
+    session_id: str | None = None,
+) -> list[Dict[str, Any]]:
     """
     Get conversation history for a user with pagination support.
 
@@ -886,20 +915,36 @@ def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = No
         user_id: User identifier (email or public-id)
         limit: Maximum number of messages to return (default: 50)
         before: Optional timestamp for pagination (fetch messages before this time)
+        session_id: Optional chat thread filter — DEFAULT_SESSION for the
+            legacy thread, a UUID for a named thread. When omitted, the
+            ambient active session (set by the chat router) applies, so the
+            AI conversational context reads the same thread it writes to.
 
     Returns:
         List of message dictionaries with role, content, and timestamp
     """
+    from src.services.chat_session_context import DEFAULT_SESSION, get_active_chat_session
+
+    effective_session = session_id if session_id is not None else get_active_chat_session()
+
     # --- DB path (primary) ---
     db_uid = _resolve_db_user_id(user_id)
     if db_uid:
-        db_rows = _db_get_chat_history(db_uid, limit=limit, before=before)
+        db_rows = _db_get_chat_history(
+            db_uid, limit=limit, before=before, session_id=effective_session,
+        )
         # Truthy check: only use DB result when it actually has rows. An empty
         # list (DB query succeeded but 0 rows) falls through to the JSON memory
         # fallback so that history written before DB persistence was active is
         # still visible on refresh.
         if db_rows:
             return db_rows
+
+    # A named (UUID) thread is DB-backed by definition: an empty result is
+    # authoritative and the DB being unreachable yields an empty thread. The
+    # user-scoped JSON memory would leak other threads' turns into it.
+    if effective_session is not None and effective_session != DEFAULT_SESSION:
+        return []
 
     # --- Fallback: local JSON memory ---
     from src.rico_chat_api import RicoChatAPI
@@ -930,8 +975,15 @@ def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = No
     return result
 
 
-def clear_chat_history(user_id: str) -> None:
-    """Delete all chat history rows for a user (chat only — profile/applications unaffected)."""
+def clear_chat_history(user_id: str, session_id: str | None = None) -> None:
+    """Delete chat history rows for a user (chat only — profile/applications unaffected).
+
+    session_id: None deletes every thread (legacy full clear);
+    DEFAULT_SESSION deletes only the legacy thread (NULL session rows);
+    a UUID deletes only that thread.
+    """
+    from src.services.chat_session_context import DEFAULT_SESSION
+
     db_uid = _resolve_db_user_id(user_id)
     if db_uid:
         try:
@@ -941,12 +993,31 @@ def clear_chat_history(user_id: str) -> None:
                 conn = db.connect()
                 try:
                     with conn.cursor() as cur:
-                        cur.execute("DELETE FROM rico_chat_history WHERE user_id = %s", (db_uid,))
+                        if session_id is None:
+                            cur.execute(
+                                "DELETE FROM rico_chat_history WHERE user_id = %s",
+                                (db_uid,),
+                            )
+                        elif session_id == DEFAULT_SESSION:
+                            cur.execute(
+                                "DELETE FROM rico_chat_history WHERE user_id = %s AND session_id IS NULL",
+                                (db_uid,),
+                            )
+                        else:
+                            cur.execute(
+                                "DELETE FROM rico_chat_history WHERE user_id = %s AND session_id = %s",
+                                (db_uid, session_id),
+                            )
                     conn.commit()
                 finally:
                     conn.close()
         except Exception as exc:
             logger.warning("chat_service: clear_chat_history failed for user=%s: %s", user_id, exc)
+
+    # A UUID thread lives only in the DB — the user-scoped JSON file holds the
+    # legacy thread and must survive a scoped delete of another thread.
+    if session_id is not None and session_id != DEFAULT_SESSION:
+        return
 
     # Best-effort: clear the local JSON chat file as well
     try:
@@ -957,3 +1028,100 @@ def clear_chat_history(user_id: str) -> None:
             chat_path.unlink()
     except Exception:
         pass
+
+
+_SESSION_LIST_LIMIT = 50
+
+
+def list_chat_sessions(user_id: str) -> list[Dict[str, Any]]:
+    """List a user's chat threads, most recently active first.
+
+    Sessions are DERIVED from rico_chat_history (no separate table to drift):
+    one row per distinct session_id, with NULL rows folded into the single
+    "default" thread. Title is the thread's first real user turn — never
+    invented. DB unavailable degrades to the JSON-memory legacy thread (if
+    any) so the rail stays truthful rather than erroring.
+    """
+    from src.services.chat_session_context import DEFAULT_SESSION, derive_session_title
+
+    db_uid = _resolve_db_user_id(user_id)
+    if db_uid:
+        try:
+            from src.rico_db import RicoDB
+            db = RicoDB()
+            if db.available:
+                conn = db.connect()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT COALESCE(session_id::text, %s) AS sid,
+                                   MIN(created_at) AS started_at,
+                                   MAX(created_at) AS last_activity,
+                                   COUNT(*) AS message_count,
+                                   COUNT(*) FILTER (WHERE role = 'user') AS user_turns
+                            FROM rico_chat_history
+                            WHERE user_id = %s
+                            GROUP BY COALESCE(session_id::text, %s)
+                            ORDER BY MAX(created_at) DESC
+                            LIMIT %s
+                            """,
+                            (DEFAULT_SESSION, db_uid, DEFAULT_SESSION, _SESSION_LIST_LIMIT),
+                        )
+                        rows = cur.fetchall()
+                        cur.execute(
+                            """
+                            SELECT DISTINCT ON (COALESCE(session_id::text, %s))
+                                   COALESCE(session_id::text, %s) AS sid,
+                                   message
+                            FROM rico_chat_history
+                            WHERE user_id = %s AND role = 'user'
+                            ORDER BY COALESCE(session_id::text, %s), created_at ASC
+                            """,
+                            (DEFAULT_SESSION, DEFAULT_SESSION, db_uid, DEFAULT_SESSION),
+                        )
+                        titles = {r["sid"]: r["message"] for r in cur.fetchall()}
+                finally:
+                    conn.close()
+                return [
+                    {
+                        "id": r["sid"],
+                        "title": derive_session_title(titles.get(r["sid"])),
+                        "message_count": int(r["message_count"]),
+                        "user_turns": int(r["user_turns"]),
+                        "started_at": r["started_at"].isoformat() if r.get("started_at") else None,
+                        "last_activity": r["last_activity"].isoformat() if r.get("last_activity") else None,
+                    }
+                    for r in rows
+                ]
+        except Exception as exc:
+            logger.warning("chat_service: list_chat_sessions failed for user=%s: %s", user_id, exc)
+
+    # Fallback: the JSON-memory legacy thread as a single "default" session.
+    try:
+        from src.rico_chat_api import RicoChatAPI
+        messages = RicoChatAPI().memory.get_chat_messages(user_id, limit=200)
+    except Exception:
+        messages = []
+    if not messages:
+        return []
+    first_user = next(
+        (
+            m.get("message") or m.get("content")
+            for m in messages
+            if isinstance(m, dict) and m.get("role") == "user"
+        ),
+        None,
+    )
+    return [
+        {
+            "id": DEFAULT_SESSION,
+            "title": derive_session_title(first_user),
+            "message_count": len(messages),
+            "user_turns": sum(
+                1 for m in messages if isinstance(m, dict) and m.get("role") == "user"
+            ),
+            "started_at": (messages[0].get("created_at") if isinstance(messages[0], dict) else None),
+            "last_activity": (messages[-1].get("created_at") if isinstance(messages[-1], dict) else None),
+        }
+    ]

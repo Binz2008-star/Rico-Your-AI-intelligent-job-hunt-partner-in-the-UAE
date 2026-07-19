@@ -217,6 +217,7 @@ The repo combines three layers:
 - `POST /api/v1/auth/forgot-password`
 - `POST /api/v1/auth/reset-password`
 - `POST /api/v1/rico/chat`
+- `GET /api/v1/rico/chat/sessions`
 - `POST /api/v1/rico/chat/public`
 - `POST /api/v1/rico/upload-cv`
 - `GET /api/v1/rico/profile`
