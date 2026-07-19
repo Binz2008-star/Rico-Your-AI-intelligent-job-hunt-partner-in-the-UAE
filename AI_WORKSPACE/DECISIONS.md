@@ -89,6 +89,66 @@ one source of truth per domain is decided.
 
 ## Accepted decisions
 
+### DEC-20260719-002 — Command Workspace v4 is the adopted frozen design reference; modes map to routes; the /command design freeze remains active
+
+Status: accepted
+Date: 2026-07-19
+Owner: Roben (owner rulings, 2026-07-19) — recorded by Claude
+Related task: TASK-20260719-006; handoff:
+`design-handoffs/reviewed/2026-07-19-command-workspace-v4/README.md`
+
+#### Context
+
+The owner approved `Rico Command Workspace v4.dc.html` (1,859 lines,
+165,606 bytes, full verification PASS matrix) as the design direction for the
+authenticated workspace (Career OS). A read-only repository audit mapped the
+reference onto the current architecture and the owner issued explicit rulings
+on scope and boundaries. A durable record is required so future work cannot
+misread the prototype as an architecture mandate or as implementation
+authorization.
+
+#### Decision
+
+- **`Rico Command Workspace v4.dc.html` is a frozen approved design
+  reference.** The raw artifact stays uncommitted (obsidian-v4 precedent);
+  the reviewed handoff README is the committed record of its contracts.
+- **Modes map to existing routes** (Overview → `/dashboard`, Search →
+  `/command`, Applications → `/applications`, Documents → `/upload`). No
+  single-page mode switcher is built; the shared `WorkspaceShell`
+  architecture (DEC-20260717-001) stands.
+- **Production Ctrl/Cmd+K behavior remains unchanged** (focuses the
+  `/command` composer). The prototype's ⌘K-toggles-copilot contract is not
+  adopted.
+- Production tokens only (`WORKSPACE_THEME`, `atelier-kit`); the reference's
+  palette/fonts are composition guidance, never a token source.
+- **Memory, Interview, Learning, Activity, embedded Copilot, and per-mode
+  transcripts remain deferred** until the corresponding real capabilities
+  exist. No fake states: blocks without a real data source are omitted, not
+  stubbed.
+- **The `/command` design freeze remains active.** Every future `/command`
+  PR requires its own separate, recorded, one-PR-only freeze lift naming
+  that PR; lifts are never blanket and expire on merge/close.
+- **This adoption does not authorize any implementation work**, and **no
+  implementation tasks are created in advance** — each implementation PR
+  creates its own task entry at cut time.
+
+#### Consequences
+
+- Positive: one canonical record of the approved direction and its
+  boundaries; prototype contracts (default-open policy, responsive
+  breakpoints, trust/action vocabulary, context-source labels) are preserved
+  for future implementation PRs without freezing them into code prematurely.
+- Negative/trade-off: the reference and production will visibly diverge
+  until implementation PRs are individually approved; contributors must read
+  the handoff boundaries before quoting the prototype.
+
+#### Follow-up
+
+- [ ] Implementation PRs proceed only under their own owner approval,
+      sequenced per the recorded plan (dashboard Overview parity first).
+- [ ] Any future `/command` slice: obtain a one-PR-only freeze lift before
+      cutting the branch.
+
 ### DEC-20260719-001 — Analytics retention: fixed 180-day window, never caller-controlled; cron-secret endpoint + GitHub Actions scheduler; two-gate rollout
 
 Status: accepted
