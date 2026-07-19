@@ -98,3 +98,51 @@ DROP TABLE IF EXISTS analytics_events;
 - Drift note: while 047 is unapplied on production (or after a rollback),
   the scheduled migration-drift check alerts — that alert is the
   intended reminder, not an incident.
+
+## Addendum — retention purge scheduling (DEC-20260719-001)
+
+The "scheduled job wired in a LATER change" promised by the migration header
+now exists. Architecture (no new infrastructure — the proven cron-secret
+pattern only):
+
+```text
+emitters (src/services/analytics_emitters.py)
+  ↓
+analytics_events (migration 047)
+  ↓
+POST /api/v1/pipeline/analytics-purge
+  (X-Cron-Secret + RICO_ENABLE_ANALYTICS_PURGE, default off)
+  ↓
+.github/workflows/analytics-purge.yml (scheduled GitHub Actions caller)
+```
+
+Governance invariants:
+
+- The retention window is the fixed `RETENTION_DAYS` (180) constant in
+  `src/repositories/analytics_events_repo.py` — NEVER an API input, never an
+  env var. Changing it is a reviewed code change plus a DECISIONS.md update.
+- The dry-run count (`count_expired`) and the DELETE (`purge_expired`) are
+  built from the same `_EXPIRED_PREDICATE_SQL` string, so the reported count
+  is exactly what a real run would remove (pinned by unit test).
+- Deletion uses `idx_analytics_events_occurred`; no batching in v1 — at
+  daily cadence each run removes roughly one day of events. Revisit batching
+  only if a large backlog scenario ever materialises.
+
+Rollout gates (owner-sequenced; either gate alone keeps the purge off):
+
+1. `RICO_ENABLE_ANALYTICS_PURGE` on Render — default off; disabled runs
+   return `{"status": "disabled"}` (HTTP 200) and never touch the repository.
+2. The workflow schedule ships COMMENTED OUT (job-alert-emails.yml pattern).
+   Uncomment only after, in order: 047 applied to production → emitters
+   live → baseline collection established → owner approval.
+
+Verification before enabling: with the flag on, dispatch the workflow with
+`dry_run=true` and confirm `would_remove` matches expectations. A
+table-absent database yields 0 (fail-soft, never an error).
+
+Emergency disable (fastest first): disable the workflow in the GitHub UI →
+set the flag off on Render (no deploy) → revert the PR. Do NOT clear
+`RICO_CRON_SECRET` — that would 503 every pipeline sweep, not just this one.
+
+Deleted rows are unrecoverable by design; disaster recovery is Neon PITR /
+branch restore only.

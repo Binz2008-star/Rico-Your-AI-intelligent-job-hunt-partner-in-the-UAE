@@ -1,0 +1,65 @@
+name: "Analytics Retention Purge"
+
+# Daily purge of analytics_events rows beyond the fixed 180-day retention
+# window (migration 047 contract; DEC-20260719-001). Calls the cron-secret
+# endpoint; the endpoint is additionally gated by RICO_ENABLE_ANALYTICS_PURGE
+# (default off, fail-closed) on Render, so dispatching this workflow is safe
+# at any time — a disabled flag is a 200 no-op, not a failure.
+#
+# The schedule ships COMMENTED OUT (same rollout pattern as
+# job-alert-emails.yml): the owner enables it in a follow-up change only after
+# migration 047 is applied to production, emitters are live, and the analytics
+# baseline is established. See AI_WORKSPACE/RUNBOOKS/047-analytics-events-migration.md.
+#
+# Requires the RICO_API_URL / RICO_CRON_SECRET secrets.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report the would-delete count without deleting"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  # schedule:               # enable after owner approval — see RUNBOOKS/047 addendum
+  #   - cron: '45 4 * * *'  # daily 04:45 UTC (off-peak, before the 06:00 pipeline)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: analytics-purge
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    name: Analytics Retention Purge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger purge
+        env:
+          API_URL: ${{ secrets.RICO_API_URL }}
+          CRON_SECRET: ${{ secrets.RICO_CRON_SECRET }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::RICO_API_URL and RICO_CRON_SECRET secrets are required."
+            exit 1
+          fi
+          BASE="${API_URL%/}"
+          DRY="${DRY_RUN:-false}"
+          echo "Triggering analytics retention purge (dry_run=${DRY})"
+          HTTP=$(curl -sS -o /tmp/resp.json -w "%{http_code}" -X POST \
+            -H "X-Cron-Secret: ${CRON_SECRET}" \
+            "${BASE}/api/v1/pipeline/analytics-purge?dry_run=${DRY}")
+          echo "HTTP ${HTTP}"
+          cat /tmp/resp.json || true
+          echo
+          if [ "${HTTP}" != "200" ]; then
+            echo "::error::Analytics purge failed with HTTP ${HTTP}"
+            exit 1
+          fi

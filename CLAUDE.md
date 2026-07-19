@@ -337,6 +337,14 @@ RICO_ENABLE_USER_TELEGRAM_ALERTS=false
 # (POST /api/v1/pipeline/reminders, X-Cron-Secret header). Issue #355.
 RICO_CRON_SECRET=
 
+# Kill switch for the scheduled analytics_events retention purge
+# (POST /api/v1/pipeline/analytics-purge; workflow analytics-purge.yml).
+# Default OFF (fail-closed) — disabled runs are a 200 no-op. The 180-day
+# window is the RETENTION_DAYS code constant in
+# src/repositories/analytics_events_repo.py — never an env var, never an
+# API input. See DEC-20260719-001.
+RICO_ENABLE_ANALYTICS_PURGE=false
+
 # Guest-session capability signing key (#1070). DEDICATED secret — never
 # derived from or shared with JWT_SECRET. Signs the versioned guest capability
 # token (rico_guest_proof cookie) that carries the server-minted guest SID.

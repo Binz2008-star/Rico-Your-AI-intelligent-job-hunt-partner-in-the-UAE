@@ -44,6 +44,14 @@ class JobAlertEmailsResponse(BaseModel):
     dry_run: bool = False
 
 
+class AnalyticsPurgeResponse(BaseModel):
+    status: str  # "disabled" | "dry_run" | "ok"
+    removed: int = 0
+    would_remove: Optional[int] = None  # dry-run only: rows a real run would delete
+    retention_days: int
+    dry_run: bool = False
+
+
 class AdminDigestResponse(BaseModel):
     status: str
     sent: bool = False

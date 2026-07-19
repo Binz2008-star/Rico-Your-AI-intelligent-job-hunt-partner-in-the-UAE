@@ -89,6 +89,63 @@ one source of truth per domain is decided.
 
 ## Accepted decisions
 
+### DEC-20260719-001 — Analytics retention: fixed 180-day window, never caller-controlled; cron-secret endpoint + GitHub Actions scheduler; two-gate rollout
+
+Status: accepted
+Date: 2026-07-19
+Owner: Roben (audit prepared by Claude; owner ruling "Approve with minor refinements")
+Related task: TASK-20260719-004
+
+#### Context
+
+Migration 047 shipped `analytics_events` with a 180-day retention contract
+and `purge_expired()` as the policy's single implementation point, but no
+scheduled invocation ("wired in a LATER change"). A read-only audit of the
+repository confirmed: the proven scheduling architecture is GitHub Actions
+scheduled workflows calling `X-Cron-Secret`-guarded pipeline endpoints
+(weekly-admin-digest precedent); no Render cron, worker service, Celery, or
+DB-side scheduling exists or is approved; `purge_expired()`'s bounds accept
+`retention_days=1`, so exposing retention to any caller would allow a
+near-total purge.
+
+#### Decision
+
+1. The retention window is the `RETENTION_DAYS = 180` constant in
+   `src/repositories/analytics_events_repo.py` — NEVER an API input (no
+   query parameter, no body field, no override for any caller including
+   authenticated cron) and never an env var. Changing it is a reviewed code
+   change plus a DECISIONS.md update.
+2. The scheduled path is `POST /api/v1/pipeline/analytics-purge`
+   (cron-secret pattern) called by `.github/workflows/analytics-purge.yml`.
+   No new infrastructure.
+3. Dry-run and delete share one predicate string
+   (`_EXPIRED_PREDICATE_SQL`) so they cannot drift.
+4. Two-gate rollout: `RICO_ENABLE_ANALYTICS_PURGE` defaults OFF
+   (fail-closed 200 no-op), and the workflow schedule ships commented out.
+   Enable order: 047 applied to production → emitters live → baseline
+   starts → merge (inert) → flag on → dry-run verification → schedule on.
+5. Batching is deliberately deferred — at daily cadence each run deletes
+   roughly one day of events; revisit only if a real backlog materialises.
+
+#### Consequences
+
+- Positive: retention becomes enforced product behavior, not a comment;
+  privacy exposure of pseudonymous events is time-bounded; the purge is
+  independently disableable at three levels (workflow, flag, revert) with
+  no deploy needed for the first two.
+- Negative/trade-off: purged rows are unrecoverable by design (mitigated by
+  the fixed constant, dry-run-first verification, and Neon PITR for
+  disasters); account deletion still leaves pseudonymous analytics rows
+  inside the window — the time-based purge is the operative control there
+  (any actor-level erasure would be a separate decision).
+
+#### Follow-up
+
+- [ ] Owner applies 047 to production per the runbook (separate gate).
+- [ ] Owner sets `RICO_ENABLE_ANALYTICS_PURGE=true` on Render after
+      baseline is established; dry-run dispatch verification.
+- [ ] Follow-up change uncomments the workflow schedule.
+
 ### DEC-20260717-001 — `/command` is unified with the shared WorkspaceShell; light-first default, dark by choice (implements DEC-20260716-001 for `/command`)
 
 Status: accepted

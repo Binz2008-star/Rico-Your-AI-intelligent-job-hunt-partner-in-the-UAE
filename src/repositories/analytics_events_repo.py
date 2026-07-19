@@ -25,8 +25,12 @@ Idempotency: every row carries a unique ``dedupe_key``; duplicate deliveries
 with a natural idempotency token pass ``client_event_id``; otherwise the key
 derives from (actor, event, canonical properties, minute bucket).
 
-Retention: ``RETENTION_DAYS`` (180) enforced by ``purge_expired()`` — the
-scheduled invocation is wired in a LATER change.
+Retention: ``RETENTION_DAYS`` (180) enforced by ``purge_expired()``, invoked
+by the cron-secret endpoint POST /api/v1/pipeline/analytics-purge behind the
+``RICO_ENABLE_ANALYTICS_PURGE`` kill switch (default off). The window is a
+code constant only — never an env var, never an API input
+(DEC-20260719-001). ``count_expired()`` is the read-only dry-run companion
+built from the same predicate.
 
 ``record_event`` NEVER raises and adds no meaningful latency: DB down,
 migration 047 unapplied (pgcode 42P01 latches the store off per process),
@@ -284,27 +288,39 @@ def record_event(
                 pass
 
 
+# Retention predicate — the ONE definition of "expired". The purge DELETE and
+# the dry-run count are both built from this exact string so the two queries
+# can never drift apart (DEC-20260719-001).
+_EXPIRED_PREDICATE_SQL = "occurred_at < NOW() - (%s * INTERVAL '1 day')"
+_PURGE_SQL = "DELETE FROM analytics_events WHERE " + _EXPIRED_PREDICATE_SQL
+_COUNT_EXPIRED_SQL = "SELECT count(*) FROM analytics_events WHERE " + _EXPIRED_PREDICATE_SQL
+
+
+def _validated_retention_days(retention_days: Any) -> Optional[int]:
+    """Shared bounds check: 1..3650 days (10 years) or None (fail-closed)."""
+    try:
+        days = int(retention_days)
+    except (ValueError, TypeError):
+        return None
+    if days < 1 or days > 3650:
+        return None
+    return days
+
+
 def purge_expired(retention_days: int = RETENTION_DAYS) -> int:
     """Delete rows older than the retention window. Never raises.
 
-    Returns the number of rows removed (0 on any skip/failure). The
-    scheduled invocation is wired in a later change — this is the policy's
-    single implementation point.
+    Returns the number of rows removed (0 on any skip/failure). This is the
+    policy's single implementation point; the scheduled caller
+    (POST /api/v1/pipeline/analytics-purge) invokes it with the module
+    constant only — retention is never caller-controlled.
 
     Bounds: retention_days must be between 1 and 3650 (10 years).
     Invalid, zero, negative, non-numeric, or >3650 values return 0
     without touching the database (fail-closed).
     """
-    # Validate bounds before any DB interaction
-    try:
-        retention_days_int = int(retention_days)
-    except (ValueError, TypeError):
-        return 0
-
-    if retention_days_int < 1 or retention_days_int > 3650:
-        return 0
-
-    if not is_db_available():
+    days = _validated_retention_days(retention_days)
+    if days is None or not is_db_available():
         return 0
     conn = None
     try:
@@ -312,10 +328,7 @@ def purge_expired(retention_days: int = RETENTION_DAYS) -> int:
         if conn is None:
             return 0
         with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM analytics_events WHERE occurred_at < NOW() - (%s * INTERVAL '1 day')",
-                (retention_days_int,),
-            )
+            cur.execute(_PURGE_SQL, (days,))
             removed = cur.rowcount
         conn.commit()
         if removed:
@@ -323,6 +336,37 @@ def purge_expired(retention_days: int = RETENTION_DAYS) -> int:
         return removed
     except Exception as exc:
         logger.debug("analytics: purge skipped err=%s", type(exc).__name__)
+        return 0
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def count_expired(retention_days: int = RETENTION_DAYS) -> int:
+    """Count rows the purge would delete — same predicate, no deletion.
+
+    Read-only dry-run companion to purge_expired(): built from the same
+    _EXPIRED_PREDICATE_SQL and the same bounds validation, so the reported
+    count is exactly what a real run would remove. Never raises; returns 0
+    on any skip/failure (including table-absent).
+    """
+    days = _validated_retention_days(retention_days)
+    if days is None or not is_db_available():
+        return 0
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return 0
+        with conn.cursor() as cur:
+            cur.execute(_COUNT_EXPIRED_SQL, (days,))
+            row = cur.fetchone()
+        return int(row[0]) if row else 0
+    except Exception as exc:
+        logger.debug("analytics: expired-count skipped err=%s", type(exc).__name__)
         return 0
     finally:
         if conn is not None:
