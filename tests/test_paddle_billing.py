@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import os
+import sys
 import time
 import unittest
 from typing import Any, Dict, Optional
@@ -760,9 +761,15 @@ class TestPaddleWebhookFailureSemantics(unittest.TestCase):
 
         mock_request.json = _fake_json
 
+        active_env = {
+            "BILLING_MODE": "paddle",
+            "PADDLE_API_KEY": "test_api_key",
+            "PADDLE_WEBHOOK_SECRET": "test_webhook_secret",
+            "PADDLE_PRO_MONTHLY_PRICE_ID": "pri_pro_monthly",
+        }
         with patch("src.repositories.paddle_repo.create_checkout_session"), \
              patch("sys.modules", {**__import__('sys').modules, "src.db": MagicMock()}), \
-             patch.dict(os.environ, {"PADDLE_PRO_MONTHLY_PRICE_ID": "pri_pro_monthly"}):
+             patch.dict(os.environ, active_env):
             import asyncio as _asyncio
             resp = _asyncio.run(
                 create_checkout_session(mock_request, user_id="user_cs1")
@@ -786,11 +793,52 @@ class TestPaddleWebhookFailureSemantics(unittest.TestCase):
 
         mock_request.json = _fake_json
 
-        with self.assertRaises(HTTPException) as ctx:
-            asyncio.run(
-                create_checkout_session(mock_request, user_id="user_bad")
-            )
+        active_env = {
+            "BILLING_MODE": "paddle",
+            "PADDLE_API_KEY": "test_api_key",
+            "PADDLE_WEBHOOK_SECRET": "test_webhook_secret",
+            "PADDLE_PRO_MONTHLY_PRICE_ID": "pri_pro_monthly",
+        }
+        with patch.dict(os.environ, active_env):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(
+                    create_checkout_session(mock_request, user_id="user_bad")
+                )
         self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_checkout_session_fails_closed_when_paddle_inactive(self):
+        """No checkout session is issued when Paddle billing is not fully active.
+
+        Covers both BILLING_MODE != paddle and an incomplete server credential
+        set — a stale client bundle must never start a checkout the backend
+        cannot complete end-to-end (payment → webhook → entitlement).
+        """
+        import asyncio
+        from fastapi import HTTPException
+        from src.api.routers.paddle_billing import create_checkout_session
+
+        mock_request = MagicMock()
+
+        async def _fake_json():
+            return {"plan": "pro", "billing_cycle": "monthly"}
+
+        mock_request.json = _fake_json
+
+        inactive_envs = [
+            {"BILLING_MODE": "manual",
+             "PADDLE_API_KEY": "k", "PADDLE_WEBHOOK_SECRET": "s",
+             "PADDLE_PRO_MONTHLY_PRICE_ID": "pri_x"},
+            {"BILLING_MODE": "paddle",
+             "PADDLE_API_KEY": "k", "PADDLE_PRO_MONTHLY_PRICE_ID": "pri_x"},  # no webhook secret
+        ]
+        for env in inactive_envs:
+            with patch.dict(os.environ, env, clear=True):
+                with self.assertRaises(HTTPException) as ctx:
+                    asyncio.run(
+                        create_checkout_session(mock_request, user_id="user_blocked")
+                    )
+            self.assertEqual(ctx.exception.status_code, 503,
+                             f"checkout-session must 503 for env {env}")
 
 
 # ---------------------------------------------------------------------------
@@ -879,8 +927,18 @@ class TestBillingConfigEndpoint(unittest.TestCase):
             r = client.get("/api/v1/billing/config")
         self.assertEqual(r.status_code, 200)
 
+    # Full server credential set — paddle_active requires ALL of these
+    # (fail-closed: a checkout the webhook can't complete is never offered).
+    _FULL_PADDLE_ENV = {
+        "BILLING_MODE": "paddle",
+        "PADDLE_SANDBOX": "true",
+        "PADDLE_API_KEY": "test_api_key",
+        "PADDLE_WEBHOOK_SECRET": "test_webhook_secret",
+        "PADDLE_PRO_MONTHLY_PRICE_ID": "pri_test",
+    }
+
     def test_paddle_mode_fields(self):
-        with patch.dict(os.environ, {"BILLING_MODE": "paddle", "PADDLE_SANDBOX": "true"}):
+        with patch.dict(os.environ, self._FULL_PADDLE_ENV, clear=True):
             from fastapi.testclient import TestClient
             from fastapi import FastAPI
             from src.api.routers.paddle_billing import router
@@ -892,6 +950,39 @@ class TestBillingConfigEndpoint(unittest.TestCase):
         self.assertEqual(data["billing_mode"], "paddle")
         self.assertTrue(data["paddle_active"])
         self.assertTrue(data["sandbox"])
+
+    def test_paddle_mode_incomplete_credentials_fails_closed(self):
+        """BILLING_MODE=paddle with ANY missing server credential → paddle_active=false."""
+        for missing in ("PADDLE_API_KEY", "PADDLE_WEBHOOK_SECRET", "PADDLE_PRO_MONTHLY_PRICE_ID"):
+            env = {k: v for k, v in self._FULL_PADDLE_ENV.items() if k != missing}
+            with patch.dict(os.environ, env, clear=True):
+                from fastapi.testclient import TestClient
+                from fastapi import FastAPI
+                from src.api.routers.paddle_billing import router
+                app = FastAPI()
+                app.include_router(router)
+                client = TestClient(app)
+                r = client.get("/api/v1/billing/config")
+            data = r.json()
+            self.assertEqual(data["billing_mode"], "paddle",
+                             f"billing_mode must still report paddle without {missing}")
+            self.assertFalse(data["paddle_active"],
+                             f"paddle_active must fail closed without {missing}")
+
+    def test_paddle_mode_live_sandbox_false(self):
+        """PADDLE_SANDBOX=false is reported so the client can cross-check environments."""
+        env = {**self._FULL_PADDLE_ENV, "PADDLE_SANDBOX": "false"}
+        with patch.dict(os.environ, env, clear=True):
+            from fastapi.testclient import TestClient
+            from fastapi import FastAPI
+            from src.api.routers.paddle_billing import router
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app)
+            r = client.get("/api/v1/billing/config")
+        data = r.json()
+        self.assertTrue(data["paddle_active"])
+        self.assertFalse(data["sandbox"])
 
     def test_manual_mode_fields(self):
         with patch.dict(os.environ, {"BILLING_MODE": "manual", "PADDLE_SANDBOX": "true"}):
@@ -905,6 +996,49 @@ class TestBillingConfigEndpoint(unittest.TestCase):
         data = r.json()
         self.assertEqual(data["billing_mode"], "manual")
         self.assertFalse(data["paddle_active"])
+
+    def test_webhook_keeps_processing_under_manual_rollback(self):
+        """Rollback continuity: BILLING_MODE=manual must NOT stop webhook processing.
+
+        The rollback path (set BILLING_MODE=manual on Render) disables NEW
+        checkouts only. Signed webhooks for existing subscriptions must keep
+        processing so renewals/cancellations still update entitlements —
+        the webhook route gates on the signature, never on billing mode.
+        """
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        from src.api.routers.paddle_billing import router
+
+        app = FastAPI()
+        app.include_router(router)
+
+        body = json.dumps(
+            {"event_id": "evt_rollback_1", "event_type": "subscription.updated"}
+        ).encode("utf-8")
+        secret = "rollback_secret"
+        header = _make_sig_header(body, secret)
+
+        rollback_env = {
+            "BILLING_MODE": "manual",  # checkout disabled…
+            "PADDLE_WEBHOOK_SECRET": secret,  # …but webhook credentials intact
+        }
+        with patch.dict(os.environ, rollback_env, clear=True), \
+             patch("sys.modules", {**sys.modules, "src.db": MagicMock()}), \
+             patch(
+                 "src.services.paddle_webhook_service.process_paddle_webhook",
+                 return_value={"status": "processed"},
+             ) as processor:
+            client = TestClient(app)
+            r = client.post(
+                "/api/v1/billing/paddle/webhook",
+                content=body,
+                headers={"Paddle-Signature": header, "Content-Type": "application/json"},
+            )
+
+        self.assertEqual(r.status_code, 200,
+                         "signed webhook must be accepted under BILLING_MODE=manual")
+        self.assertTrue(processor.called,
+                        "webhook processing must run under BILLING_MODE=manual")
 
     def test_no_secrets_in_response(self):
         with patch.dict(os.environ, {"BILLING_MODE": "paddle", "PADDLE_SANDBOX": "true",

@@ -50,6 +50,50 @@ describe("resolveBillingUiMode — Paddle-only, everything else fails closed", (
     });
 });
 
+describe("resolveBillingUiMode — client/backend Paddle environment cross-check", () => {
+    // A sandbox/live mismatch between the client token (test_/live_ prefix)
+    // and the backend credentials (PADDLE_SANDBOX) can only fail at purchase
+    // time with Paddle's opaque "Something went wrong" — it must fail closed
+    // up front instead.
+    const active = { billing_mode: "paddle", paddle_active: true };
+
+    it("sandbox backend + test_ token → paddle", () => {
+        vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "test_abc");
+        expect(resolveBillingUiMode({ ...active, sandbox: true })).toBe("paddle");
+    });
+
+    it("live backend + live_ token → paddle", () => {
+        vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "live_abc");
+        expect(resolveBillingUiMode({ ...active, sandbox: false })).toBe("paddle");
+    });
+
+    it("sandbox backend + live_ token → unavailable (fail closed)", () => {
+        const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+        vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "live_abc");
+        expect(resolveBillingUiMode({ ...active, sandbox: true })).toBe("unavailable");
+        expect(errSpy).toHaveBeenCalled();
+        errSpy.mockRestore();
+    });
+
+    it("live backend + test_ token → unavailable (fail closed)", () => {
+        const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+        vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "test_abc");
+        expect(resolveBillingUiMode({ ...active, sandbox: false })).toBe("unavailable");
+        expect(errSpy).toHaveBeenCalled();
+        errSpy.mockRestore();
+    });
+
+    it("unrecognized token prefix → cross-check skipped, still paddle", () => {
+        vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "opaque_token");
+        expect(resolveBillingUiMode({ ...active, sandbox: false })).toBe("paddle");
+    });
+
+    it("config without sandbox field (older backend) → cross-check skipped", () => {
+        vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "live_abc");
+        expect(resolveBillingUiMode(active)).toBe("paddle");
+    });
+});
+
 describe("hasPaddleClientConfig — client capability only", () => {
     it("true when NEXT_PUBLIC_PADDLE_CLIENT_TOKEN is set", () => {
         vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "tok");

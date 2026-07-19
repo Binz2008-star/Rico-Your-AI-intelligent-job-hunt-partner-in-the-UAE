@@ -21,6 +21,7 @@
  */
 
 import type { BillingConfig } from "@/lib/api";
+import { getPaddleTokenEnvironment } from "@/lib/paddle";
 
 /** How the subscription UI should offer the upgrade action. */
 export type BillingUiMode = "paddle" | "unavailable";
@@ -38,18 +39,42 @@ export function hasPaddleClientConfig(): boolean {
 /**
  * Resolve the runtime UI mode from the backend billing config.
  *
- *  - backend says Paddle active + client can run Paddle.js → "paddle"
- *  - anything else                                         → "unavailable"
+ *  - backend says Paddle active + client can run Paddle.js
+ *    + client/backend Paddle environments agree                → "paddle"
+ *  - anything else                                             → "unavailable"
  *
  * "unavailable" is the fail-closed state: no checkout is offered. A backend
  * config reporting Paddle inactive (e.g. a stale `billing_mode: "manual"`)
  * also fails closed — Paddle is the only billing path.
+ *
+ * Environment cross-check: the backend's `sandbox` flag reflects the
+ * environment of the server-side credentials (price ID, API key, webhook
+ * secret); the client token's `test_`/`live_` prefix reflects the Paddle.js
+ * environment. A mismatched pair can only fail at purchase time with
+ * Paddle's opaque "Something went wrong" overlay, so it is refused up
+ * front. The check is skipped when the backend omits `sandbox` (older
+ * backend) or the token prefix is unrecognized.
  */
 export function resolveBillingUiMode(
-    config: Pick<BillingConfig, "billing_mode" | "paddle_active"> | null,
+    config:
+        | (Pick<BillingConfig, "billing_mode" | "paddle_active"> &
+              Partial<Pick<BillingConfig, "sandbox">>)
+        | null,
 ): BillingUiMode {
-    if (config?.paddle_active && hasPaddleClientConfig()) return "paddle";
-    return "unavailable";
+    if (!config?.paddle_active || !hasPaddleClientConfig()) return "unavailable";
+    const tokenEnv = getPaddleTokenEnvironment();
+    if (typeof config.sandbox === "boolean" && tokenEnv !== null) {
+        const backendEnv = config.sandbox ? "sandbox" : "production";
+        if (tokenEnv !== backendEnv) {
+            console.error(
+                `[billing] Paddle environment mismatch: backend credentials are ` +
+                `${backendEnv} (PADDLE_SANDBOX) but the client token is ${tokenEnv} — ` +
+                `failing closed. Align Render and Vercel Paddle env vars.`,
+            );
+            return "unavailable";
+        }
+    }
+    return "paddle";
 }
 
 /**

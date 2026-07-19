@@ -18,6 +18,13 @@ declare global {
 export interface PaddleEventDetail {
     name: string;
     data?: Record<string, unknown>;
+    /** Paddle.js v2 delivers checkout.error detail here — NOT inside data. */
+    error?: {
+        type?: string;
+        code?: string;
+        detail?: string;
+        documentation_url?: string;
+    };
 }
 
 export interface PaddleInstance {
@@ -50,6 +57,24 @@ export interface PaddleCheckoutOptions {
 }
 
 let _initPromise: Promise<PaddleInstance> | null = null;
+
+/** Paddle environment a client-side token belongs to. */
+export type PaddleEnvironment = "sandbox" | "production";
+
+/**
+ * Derive the Paddle environment from the client token itself.
+ * Paddle client-side tokens are prefixed `test_` (sandbox) or `live_`
+ * (production) — a token only ever works in its own environment, so the
+ * prefix is authoritative. Returns null when the token is missing or has an
+ * unrecognized prefix.
+ */
+export function getPaddleTokenEnvironment(): PaddleEnvironment | null {
+    const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim();
+    if (!token) return null;
+    if (token.startsWith("test_")) return "sandbox";
+    if (token.startsWith("live_")) return "production";
+    return null;
+}
 
 /**
  * The listener for the currently open overlay checkout. Paddle renders one
@@ -94,8 +119,21 @@ export function initPaddle(): Promise<PaddleInstance> {
         }
 
         const configure = (paddle: PaddleInstance): void => {
-            const sandbox =
+            // The token prefix (test_/live_) is authoritative: a token only
+            // works in its own environment, so initializing against the flag
+            // when the two disagree can only produce Paddle's opaque
+            // "Something went wrong" overlay at purchase time.
+            const flagSandbox =
                 (process.env.NEXT_PUBLIC_PADDLE_SANDBOX ?? "true").trim().toLowerCase() !== "false";
+            const tokenEnv = getPaddleTokenEnvironment();
+            const sandbox = tokenEnv !== null ? tokenEnv === "sandbox" : flagSandbox;
+            if (tokenEnv !== null && (tokenEnv === "sandbox") !== flagSandbox) {
+                console.error(
+                    `[paddle] NEXT_PUBLIC_PADDLE_SANDBOX=${flagSandbox} contradicts the ` +
+                    `client token prefix (${token.slice(0, 5)}…) — using the token's ` +
+                    `environment (${tokenEnv}). Align the Vercel env vars.`,
+                );
+            }
             if (sandbox) {
                 paddle.Environment.set("sandbox");
             }
@@ -135,6 +173,26 @@ export function initPaddle(): Promise<PaddleInstance> {
 /** Terminal outcome of an overlay checkout that did not error. */
 export type PaddleCheckoutOutcome = "completed" | "closed";
 
+const _EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/**
+ * Sanitize a Paddle error detail string before it reaches the console or a
+ * toast. Paddle's `type`/`code` are stable enum-like values and are passed
+ * through untouched; `detail` is free text and could echo customer input,
+ * so email addresses and the server-owned checkout session token are
+ * redacted. Diagnostic value (error codes, entity prefixes) is preserved.
+ */
+export function sanitizePaddleErrorDetail(
+    detail: string,
+    checkoutSessionId?: string,
+): string {
+    let out = detail.replace(_EMAIL_RE, "[redacted-email]");
+    if (checkoutSessionId) {
+        out = out.split(checkoutSessionId).join("[redacted-session]");
+    }
+    return out;
+}
+
 /**
  * Open the Paddle overlay checkout for a given price ID.
  *
@@ -173,11 +231,28 @@ export async function openPaddleCheckout(
         // Paddle.js v2 ignores eventCallback on Checkout.open().
         _activeCheckoutListener = (event: PaddleEventDetail) => {
             if (event.name === "checkout.error") {
-                const detail =
+                // Paddle.js v2 carries the failure in the TOP-LEVEL error
+                // object ({type, code, detail}); data.message/data.error are
+                // legacy fallbacks. Keep the exact code — it is the only way
+                // to distinguish env/price/domain misconfiguration from a
+                // payment problem.
+                const paddleErr = event.error;
+                const rawDetail =
+                    paddleErr?.detail ??
                     (event.data?.message as string | undefined) ??
                     (event.data?.error as string | undefined) ??
                     "Paddle checkout error";
-                settle(() => reject(new Error(detail)));
+                // type/code are preserved exactly; the free-text detail is
+                // sanitized (emails + session token redacted) before it can
+                // reach the console or a user-facing toast.
+                const detail = sanitizePaddleErrorDetail(rawDetail, checkoutSessionId);
+                const message = paddleErr?.code ? `${detail} [${paddleErr.code}]` : detail;
+                console.error("[paddle] checkout.error", {
+                    type: paddleErr?.type,
+                    code: paddleErr?.code,
+                    detail,
+                });
+                settle(() => reject(new Error(message)));
             } else if (event.name === "checkout.completed") {
                 settle(() => resolve("completed"));
             } else if (event.name === "checkout.closed") {
