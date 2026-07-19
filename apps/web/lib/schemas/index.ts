@@ -540,7 +540,15 @@ export const RicoChatResponseSchema = z.object({
     provider_available: z.boolean().optional(),
     openai_model: StringFromUnknownSchema,
     jotform_form_id: StringFromUnknownSchema.nullable(),
-    agentic_ui: RicoAgenticUiSchema.optional(),
+    // Tolerant like every other field here: older backends (and any cached
+    // reply) send agentic_ui: null for card-less text replies — that null
+    // must normalize to "absent", never reject the whole reply into the
+    // generic FAIL bubble (2026-07-19 profile-report incident). The new
+    // backend omits the key entirely; a real object passes through unchanged.
+    agentic_ui: RicoAgenticUiSchema
+        .nullable()
+        .optional()
+        .transform((value) => value ?? undefined),
 }).passthrough();
 
 export const RicoProfileResponseSchema = z.object({

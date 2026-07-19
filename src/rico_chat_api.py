@@ -4158,7 +4158,7 @@ class RicoChatAPI:
         # Admin diagnostics available at /health/ai-provider endpoint
         from src.rico_env import get_ai_provider as _get_active_provider
         _active = _get_active_provider()
-        return {
+        envelope = {
             **response,
             "agentic_ui": agentic_ui,
             "response_source": response.get("response_source", source),
@@ -4173,6 +4173,17 @@ class RicoChatAPI:
             # Always a string — null would fail frontend Zod schema validation.
             "jotform_form_id": jotform_form_id or "",
         }
+        # Same contract as jotform_form_id: the frontend schema accepts a real
+        # agentic_ui object or an ABSENT key — never null. compose() returns
+        # None for replies with no cards (every plain AI text reply), and a
+        # null here is what turned complete profile-report replies into the
+        # generic error bubble (2026-07-19 smoke FAIL: zod "expected object,
+        # received null" → SSE payload dropped + REST throw). Omit the key —
+        # never substitute an empty object, which would render an empty card
+        # shell.
+        if envelope.get("agentic_ui") is None:
+            envelope.pop("agentic_ui", None)
+        return envelope
 
     # Phrases that signal the user wants to provide a CV — either uploading now
     # or announcing that they have one. None of these require an actual file to
