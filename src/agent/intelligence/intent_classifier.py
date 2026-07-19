@@ -2018,14 +2018,25 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         extracted_role = _strip_role_qualifiers(extracted_role)
         # Extract location and employment_type entities for richer search queries.
         _search_entities: dict = {}
-        _city_m = _UAE_CITY_EXTRACT_RE.search(text)
-        if _city_m:
-            _loc = _city_m.group(1).strip()
-            # Country-level "UAE" is captured as the requested scope (so the reply
-            # can show it instead of the profile's default city); the search layer
-            # maps it back to the default provider scope, leaving provider
-            # behaviour unchanged. A specific city is title-cased.
-            _search_entities["location"] = "UAE" if _loc.lower() == "uae" else _loc.title()
+        # Capture EVERY requested city, not just the first: "jobs in Dubai and
+        # Sharjah" must not be searched (or reported) as "Dubai" alone. Cities are
+        # de-duplicated (case-insensitive), order-preserving, and title-cased;
+        # country-level "UAE" is kept only when it is the sole location (a specific
+        # city always wins). The search layer maps "UAE" back to the default
+        # provider scope, so single-city behaviour is byte-for-byte unchanged.
+        _city_matches = [m.group(1).strip() for m in _UAE_CITY_EXTRACT_RE.finditer(text)]
+        if _city_matches:
+            _seen: set[str] = set()
+            _locs: list[str] = []
+            for _c in _city_matches:
+                _canon = "UAE" if _c.lower() == "uae" else " ".join(_c.split()).title()
+                if _canon.lower() not in _seen:
+                    _seen.add(_canon.lower())
+                    _locs.append(_canon)
+            _specific = [c for c in _locs if c != "UAE"]
+            if _specific:
+                _locs = _specific  # drop bare "UAE" when a real city is also named
+            _search_entities["location"] = ", ".join(_locs)
         _emp_m = _EMPLOYMENT_TYPE_EXTRACT_RE.search(text)
         if _emp_m:
             _search_entities["employment_type"] = _emp_m.group(1).lower()
