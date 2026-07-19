@@ -78,6 +78,79 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-011 — fix/command-chat-response-tolerance: complementary fail-open hardening on top of the #1191 contract
+
+Status: review
+Owner: Claude (Fable session; owner full execution delegation 2026-07-19)
+Branch: fix/command-chat-response-tolerance (rebuilt on main 826c7a3 after #1191 merged)
+Issue/PR: #1193
+
+#### Reconciliation record
+
+Two writers independently root-caused the 16:22Z production FAIL
+(closed `verification_status` enum rejecting `aggregator_untrusted` and
+discarding the whole successful reply). **#1191 merged first and its
+design is canonical** (KNOWN_VERIFICATION_STATUSES + unknown →
+`needs_source_verification`, never promoted). This PR was rebuilt on top
+of it, dropping the competing verification_status change, and now carries
+ONLY the complementary hardening #1191 did not cover — on main today, a
+null `confidence`, a numeric-string `score`, a null top-level
+boolean/record, or ANY one malformed match row still rejects the entire
+reply into the generic FAIL bubble.
+
+**Ledger correction:** #1191's entry reused the ID `TASK-20260719-008`,
+which already belongs to the merged PR #1188 rail goal-mini task — a
+collision from the parallel writer; recorded here rather than rewriting
+history. Forensic detail of the incident (Neon timeline; #1187 guard
+PASSED) lives in this PR's body and the session record.
+
+#### Scope
+
+- `confidence` → tolerant (known tiers pass; null/unknown → undefined).
+- `score` → numeric-string coercion; junk → undefined.
+- Top-level `success`/`profile_context_present`/`entities`/`tool_args` →
+  null-tolerant.
+- `matches` → per-row salvage: malformed row dropped with a console
+  warning; siblings and the reply survive (backend #887 philosophy).
+- Regression pins for the exact production payload + the #1191 contract
+  (values preserved; unknown → normalized, never rejected/promoted).
+
+#### Acceptance criteria
+
+- [x] All pins green (focused suite); full vitest green; `npm run build`
+      verified by EXIT CODE with unfiltered output (process lesson from
+      the first head: a grep filter masked a CI-visible type error).
+- [x] No competing verification_status change — #1191 design untouched.
+
+#### Continuity Block
+
+- Task ID: TASK-20260719-011
+- GitHub issue/PR: #1193
+- Branch: fix/command-chat-response-tolerance
+- Base branch: main
+- Last safe commit SHA: 826c7a3 (origin/main incl. #1191)
+- Current head SHA: set at push time (branch rewritten — force-with-lease)
+- Uncommitted changes present: no (at push time)
+- Status: review
+- Files inspected: `lib/schemas/index.ts` (post-#1191),
+  `git show 826c7a3` (the parallel fix), `lib/api.ts` (union incl.
+  'expired' — no change needed now)
+- Files changed: `lib/schemas/index.ts` (tolerant confidence/score,
+  null-tolerant top-levels, per-row salvage);
+  `__tests__/chat-response-tolerance.test.ts` (rewritten to #1191
+  semantics); this ledger entry
+- What is complete: reconciliation + implementation + tests
+- What is incomplete: CI on the new head; merge
+- Known blockers: none
+- Validation already run: pending this head (run before push)
+- Validation still required: CI; owner production re-smoke
+- Next exact action: run suites/build → force-with-lease push → update PR
+  body → gates → merge under delegation → consolidated report
+- Stop condition: any further main advancement touching these files —
+  re-reconcile before push
+- Rollback plan: revert the squash commit — boundary returns to the
+  post-#1191 state; nothing else affected
+
 ### TASK-20260719-010 — fix/command-subscription-cta: structured subscription CTA instead of a dead raw-text link
 
 Status: review
