@@ -4777,3 +4777,66 @@ Gmail/analytics/design changes.
   old `public, max-age=0` default). Verify on the PR preview URL:
   Cache-Control + CDN-Cache-Control on `/proxy/api/v1/me`, HIT/MISS
   behavior, then on ricohunt.com after merge+deploy.
+
+---
+
+### TASK-20260719-011 — analytics record_event malformed-input hardening (audit gates 1-2)
+
+Status: review
+Owner: Claude (Fable session; owner autonomy grant 2026-07-19 — closes the
+ACTIVE gap recorded in TASK-20260719-002's post-merge audit)
+Branch: claude/growth-lifecycle-automation-qiyzw6
+Issue/PR: (draft PR from this branch)
+
+#### Objective
+Close audit gates 1-2 from the #1176 post-merge audit (verdict B): the
+`record_event` "never raises" contract had three empirically confirmed
+breaches (non-dict `properties`, non-str `client_event_id`, non-datetime
+`occurred_at` — row construction sat outside the `try`), recorded as
+ACTIVE once emitters were wired (#1179). Plus the bool-retention hazard
+(`purge_expired(True)` → 1-day window, near-total purge).
+
+#### Scope delivered
+- `src/repositories/analytics_events_repo.py` — malformed argument TYPES
+  rejected fail-closed before any DB access (debug logs never include the
+  offending values); row construction moved inside the `try` so residual
+  construction errors degrade to the logged skip path (contract is now
+  structural, not caller-trust); `_validated_retention_days` rejects bool
+  explicitly; docstrings updated to match enforced behavior.
+- `tests/unit/test_analytics_events_repo.py` — new section 7 (6 test
+  functions / 13 cases): parametrized adversarial types for all three
+  arguments; no-value-leak log pin; construction-failure belt-and-braces
+  pin; bool purge/count rejection.
+
+#### Explicitly NOT in scope
+Allowlist growth policy (gate 3 — owner decision), Render HMAC key
+verification (gate 4 — owner-side), emitter changes, migrations, #1177.
+
+#### Rollback
+Revert the commit — behavior-narrowing only (inputs that previously
+raised now return False; no valid input's behavior changes).
+
+#### Acceptance criteria
+- [x] Never-raises pins: three malformed-type families return False with
+      zero DB access and zero raised exceptions.
+- [x] Privacy pin: rejection logs contain no offending values.
+- [x] Structural pin: `_clean_properties` raising inside construction
+      degrades to False, never an exception.
+- [x] Retention pin: `purge_expired(True/False)` and `count_expired(True)`
+      return 0 without DB connection.
+- [x] Full analytics suites green: repo 49, emitters 11, purge endpoint
+      10 — 69 passed, 1 warning; `py_compile` clean.
+
+##### Addendum — Gate 4 closed: HMAC key live, first production events (2026-07-19)
+
+- Owner added `RICO_ANALYTICS_HMAC_KEY` on Render (owner confirmation
+  2026-07-19 ~19:20 UTC; key value never accessed or printed by any agent
+  session).
+- Empirically verified end-to-end at 19:25:50 UTC (read-only, count/
+  aggregate only): production `analytics_events` row count **4** — all
+  `search_performed`. First behavioral data in the store; the full chain
+  (migration 047 → emitters v1 → keyed HMAC → rows) is proven live in
+  production. Baseline collection has begun.
+- Remaining open gate from the #1176 post-merge audit: **gate 3 only**
+  (additive allowlist-growth migration policy before event #9 — owner
+  decision).
