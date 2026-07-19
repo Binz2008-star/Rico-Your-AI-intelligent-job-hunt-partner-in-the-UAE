@@ -2589,6 +2589,73 @@ class RicoChatAPI:
                 except Exception:
                     pass
 
+        # Canonical career context: the SAME resolver the job search consults,
+        # so the profile report can never disagree with the search basis again
+        # (provenance incident 2026-07-19). On a years conflict the absolute
+        # figure is withheld and both sources are exposed; a CV-title line in
+        # the identity-name field is flagged and never presented as the name.
+        # Fail SAFE, never soft: if the resolver is unavailable the legacy
+        # values it exists to verify (absolute years, stored name) are
+        # withheld with neutral copy — the legacy read is what produced the
+        # incident and must not be the fallback.
+        if user_id:
+            try:
+                from src.services.career_context import resolve_career_context
+                _cc = resolve_career_context(user_id, profile)
+                ctx["career_context"] = {
+                    "active_cv_filename": (
+                        (_cc.active_cv or {}).get("original_filename")
+                        or (_cc.active_cv or {}).get("filename")
+                    ),
+                    "active_cv_source": _cc.active_cv_source,
+                    "years_display": _cc.display_years,
+                    "years_conflict": _cc.years_conflict,
+                    "years_sources": {
+                        "profile": _cc.profile_years,
+                        "primary_cv": _cc.cv_years,
+                    },
+                }
+                # The shared parity triple (active_document_id,
+                # career_context_source, identity_state) — same method the
+                # search response uses, so the two can never disagree.
+                ctx["career_context"].update(_cc.parity_snapshot())
+                if _cc.degraded:
+                    ctx["career_context"]["status"] = "degraded"
+                if _cc.display_years is None and (
+                    _cc.profile_years is not None or _cc.cv_years is not None
+                ):
+                    # A figure exists somewhere but is conflicted, degraded,
+                    # or uncorroborated — withhold the absolute number.
+                    ctx.pop("years_experience", None)
+                    ctx["career_context"]["years_note"] = (
+                        "Experience figures conflict — do not state an "
+                        "absolute number; ask the user to confirm."
+                        if _cc.years_conflict
+                        else "Years of experience could not be verified — do "
+                        "not state an absolute number; ask the user to confirm."
+                    )
+                if _cc.name_value is not None and not _cc.name_trusted:
+                    ctx.pop("name", None)
+                    ctx["identity_name_flagged"] = True
+            except Exception as exc:
+                # Degrade safely: neutral copy, sanitized diagnostic (type
+                # only — never user data), and the unverifiable fields gone.
+                logger.warning(
+                    "career_context unavailable in profile context (%s); "
+                    "withholding years and name",
+                    type(exc).__name__,
+                )
+                ctx.pop("years_experience", None)
+                ctx.pop("name", None)
+                ctx["career_context"] = {
+                    "status": "unavailable",
+                    "note": (
+                        "Career context could not be verified — do not state "
+                        "absolute years of experience and do not address the "
+                        "user by a stored name."
+                    ),
+                }
+
         # Embed last 8 turns so the AI has conversation context for yes/no and follow-ups
         if user_id:
             # Inject uploaded documents FIRST: the serialized context is truncated
@@ -6245,7 +6312,27 @@ class RicoChatAPI:
         formatted = [self._format_match(m, profile) for m in top_matches]
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]
-        years = self._profile_value(profile, "years_experience")
+        # Canonical career context (2026-07-19 provenance incident): the search
+        # basis must consult the SAME resolver as the profile report. On a
+        # profile-vs-primary-CV years conflict the absolute figure is omitted
+        # from the user-facing basis line rather than silently picking a side.
+        # Fail SAFE: if the resolver is unavailable the absolute figure is
+        # omitted — never read from the legacy path that caused the incident.
+        try:
+            from src.services.career_context import resolve_career_context
+            _cc = resolve_career_context(user_id, profile)
+            years = _cc.display_years
+            # Same parity triple as the profile report (one shared method) —
+            # the two surfaces must return identical claims about the active
+            # document and identity state.
+            _career_context_block = _cc.parity_snapshot()
+        except Exception as exc:
+            logger.warning(
+                "career_context unavailable in search (%s); omitting years",
+                type(exc).__name__,
+            )
+            years = None
+            _career_context_block = {"status": "unavailable"}
         # Drop any corrupted non-city value (e.g. a misfiled chat message) so it
         # never poisons the search location or fit score.
         from src.services.city_validation import sanitize_cities
@@ -6303,6 +6390,9 @@ class RicoChatAPI:
             "search_query": search_role,
             "broadened": len(all_matches) == 0,
             "rate_limited": rate_limited,
+            # Identical triple to the profile report's career_context (owner
+            # audit point 3) — produced by the same parity_snapshot method.
+            "career_context": _career_context_block,
         }
 
         # Safe aggregate summary of the integrity gate — counts only, never the

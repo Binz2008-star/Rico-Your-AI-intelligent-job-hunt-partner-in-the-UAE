@@ -1190,6 +1190,36 @@ class RicoDB:
             if should_close:
                 conn.close()
 
+    def count_identity_rows(self, user_id: str) -> Optional[int]:
+        """READ-ONLY: how many rico_users rows match this authenticated
+        identifier, using the SAME predicate as get_user_bundle.
+
+        >1 is the duplicate-identity condition: get_user_bundle then picks
+        one row by ORDER BY heuristics (rule 5: updated_at DESC), so
+        row-scoped values (profile years, name) are ambiguous. Readers use
+        this to expose an explicit ambiguous_identity state instead of
+        silently trusting the floating row. Returns None when the store is
+        unavailable (cardinality unknown — NOT the same as 1).
+        """
+        if not self.available:
+            return None
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                if "@" in user_id:
+                    cur.execute(
+                        "SELECT COUNT(*) AS cnt FROM rico_users u "
+                        "WHERE LOWER(u.email) = LOWER(%s) OR LOWER(u.external_user_id) = LOWER(%s)",
+                        (user_id, user_id),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT COUNT(*) AS cnt FROM rico_users u "
+                        "WHERE u.id::text = %s OR u.external_user_id = %s OR u.telegram_username = %s",
+                        (user_id, user_id, user_id),
+                    )
+                row = cur.fetchone()
+        return int(row["cnt"] if isinstance(row, dict) else row[0])
+
     _ALLOWED_CHAT_ROLES: frozenset = frozenset({"user", "assistant", "system"})
 
     def append_chat(

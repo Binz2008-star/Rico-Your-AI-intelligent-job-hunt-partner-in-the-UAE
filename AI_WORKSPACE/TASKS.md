@@ -78,6 +78,110 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260719-020 — Canonical Career Context and Active-CV Provenance (M1, read-side)
+
+Status: review
+Owner: Claude (Fable session; owner order 2026-07-19 "Open one Draft PR only: Canonical Career Context and Active-CV Provenance")
+Branch: rico/canonical-career-context
+Issue/PR: #1205 (Draft)
+
+#### Objective
+
+One legal READ-side resolver (`src/services/career_context.py`) for
+active-CV provenance, years-of-experience provenance, and identity-name
+validity, consulted by BOTH the profile report context
+(`_build_openai_context`) and the job search
+(`_target_role_search_response`), so the two surfaces can never diverge
+again. On a profile-vs-primary-CV years conflict the absolute figure is
+omitted and provenance is exposed; null CV extraction never replaces a
+known profile value; job-title-like identity names are flagged, never
+displayed.
+
+#### Context
+
+- Program doc: `AI_WORKSPACE/CAREER_CONTEXT_PROGRAM.md` (Vision → Epic →
+  Milestone → Phase → PR → Task, full reader/writer map, and the proof
+  that years/name have no canonical source: five duplicate `rico_users`
+  rows + `get_user_bundle` rule-5 `updated_at DESC` floating + email-
+  scoped `user_documents` vs row-scoped `rico_profiles`).
+- Relevant files: `src/services/career_context.py` (new),
+  `src/rico_chat_api.py:2469` and `:6053` (wire points, fail-soft),
+  `src/services/document_resolver.py` (existing CV precedence, reused),
+  `src/rico_db.py` (primary-slot atomicity — already correct, untouched).
+
+#### Constraints
+
+- READ-ONLY: no writes, no schema changes, no migrations, no production
+  data mutation. Duplicate-row merge is M2, owner-gated, separate PR.
+- Do not touch: context follow-up, chat sessions, analytics, retention,
+  ranking, locale, #1177.
+- Keep Draft. No auto-merge. Owner review required.
+
+#### Acceptance criteria
+
+- [x] Owner-required test categories in
+      `tests/unit/test_career_context.py` (10-vs-8 conflict, null
+      extraction, primary switching, conflicting primary flags,
+      report/search resolver parity, job-title-like name rejection,
+      user-confirmed professional-term name, cross-user scope,
+      duplicate same-email identity rows → explicit ambiguity + no
+      leakage, resolver-exception SAFE degradation) — 17 tests pass.
+- [x] Fail SAFE, not fail soft (owner gate 1): resolver failure withholds
+      absolute years and unverified name with neutral copy + sanitized
+      diagnostic — never falls back to the legacy read.
+- [x] Ownership boundary (owner gate 2): `rico_db.count_identity_rows`
+      (read-only, same predicate as `get_user_bundle`) →
+      `ambiguous_identity` state; profile figures displayable only when
+      CV-corroborated under ambiguity; unconfirmed names untrusted.
+- [x] Architecture claim corrected (owner gate 3): `is_primary` =
+      active-document selector, NOT identity source; M1 read-path
+      mitigation / M2 duplicate rows / M3 writer hardening.
+- [x] Full `tests/unit/` suite: 3300 passed, 0 failed;
+      `tests/test_rico_routes.py` 145 passed (baseline).
+- [x] `py_compile` clean on touched files.
+- [ ] Wait for #1194 to settle, rebase onto exact latest main, TASKS.md
+      resolved with main canonical (owner gate 5).
+- [ ] Exact-head CI green + full state report with READY/HOLD verdict
+      (owner gate 6).
+- [ ] Owner review (merge gate). Keep Draft — no auto-merge.
+
+#### Continuity Block
+- Task ID: TASK-20260719-020
+- GitHub issue/PR: #1205
+- Branch: rico/canonical-career-context
+- Base branch: main (38bf14a5)
+- Last safe commit SHA: 38bf14a5
+- Current head SHA: cc5b3b85
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files inspected: src/services/document_resolver.py, src/rico_db.py,
+  src/repositories/profile_repo.py, src/rico_chat_api.py,
+  src/llm_scorer.py, src/agent/intelligence/role_classifier.py
+- Files changed: src/services/career_context.py (new resolver),
+  src/rico_db.py (count_identity_rows read-only helper),
+  src/services/document_resolver.py (strict raising fetch variants),
+  src/rico_chat_api.py (two fail-SAFE wire points),
+  tests/unit/test_career_context.py (new),
+  AI_WORKSPACE/CAREER_CONTEXT_PROGRAM.md (new), AI_WORKSPACE/TASKS.md
+- Files intentionally not touched: src/rico_db.py (primary switching
+  already atomic), src/services/document_resolver.py (reused as-is),
+  any migration/data path (M2)
+- What is complete: mapping, program doc, resolver, wires, tests, local
+  verification
+- What is incomplete: Draft PR creation, CI, owner review
+- Known blockers: none
+- Validation already run: pytest tests/unit/test_career_context.py -q →
+  17 passed; pytest tests/unit/ -q → 3300 passed; py_compile → OK
+- Validation still required: CI on PR head
+- Deployment/CI/Neon/Vercel state to check next: QA Tests workflow on PR
+- Next exact action: push branch, open Draft PR, fill Issue/PR numbers
+- Stop condition: Draft PR open + CI green → STOP and wait for owner
+  review; any production data mutation is out of bounds
+- Rollback plan: revert the squash commit. NOTE (owner gate 1): the wire
+  points intentionally do NOT fall back to the legacy read at runtime —
+  resolver failure degrades to neutral copy (years/name withheld); full
+  legacy behavior returns only via the git revert itself
+
 ### TASK-20260719-019 — fix/sse-done-tolerant-parse: SSE done payloads through the tolerant chat schema (JSON↔SSE parity)
 
 Status: verified — **MERGED (#1210, squash `b656c79c`)**; CI 9/9 green on
