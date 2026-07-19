@@ -751,6 +751,26 @@ SSE_HEADERS = {
 }
 
 
+def _sanitized_frames(exc: BaseException, limit: int = 12) -> str:
+    """Code locations of *exc*'s traceback — and NOTHING else.
+
+    Diagnostic for chat_stream_error (2026-07-19: a production TypeError in
+    the done-only SSE branch was untraceable because safe_exc logs the type
+    only). Emits ``basename:function:lineno`` per frame — never the exception
+    message, never source lines, never locals/values — so the #1076 privacy
+    contract (no chat text, no emails, no payloads in logs) holds.
+    """
+    import os as _os
+    import traceback as _tb
+    try:
+        frames = _tb.extract_tb(exc.__traceback__, limit=limit)
+        return " > ".join(
+            f"{_os.path.basename(f.filename)}:{f.name}:{f.lineno}" for f in frames
+        )
+    except Exception:
+        return "unavailable"
+
+
 @router.post("/chat/stream")
 @limiter.limit(LIMIT_CHAT)
 def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingResponse:
@@ -778,6 +798,12 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
     ctx = RicoSessionContext.for_authenticated(user_id)
 
     def _event_stream():
+        # Diagnostic stage marker: the LAST completed checkpoint before a
+        # failure, so chat_stream_error can distinguish a throw inside
+        # envelope building vs json serialization vs the yield itself.
+        # Logged only from the except below — never per stage.
+        _stage = "stream_begin"
+        _diag_ref = generate_error_ref()
         # SSE comment line first: starts the chunked body immediately so
         # proxies flush headers and hold the connection open through the
         # first-token wait (cold provider calls can take seconds). Comment
@@ -804,7 +830,13 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                     operation_id=payload.operation_id,
                     language=payload.language,
                 )
-                yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
+                _stage = "finalize_complete"
+                _done_event = {"type": "done", "response": result}
+                _stage = "done_envelope_ready"
+                _done_json = _json.dumps(_done_event)
+                _stage = "done_json_serialized"
+                yield f"data: {_done_json}\n\n"
+                _stage = "done_yielded"
                 return
 
             # Streaming conversational-AI path (already past the entitlement gate).
@@ -862,7 +894,15 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                     done_response["messages_limit"] = pre.gate.limit
             yield f'data: {_json.dumps({"type":"done","response":done_response})}\n\n'
         except Exception as e:
-            logger.error("chat_stream_error user=%s err=%s", user_ref(user_id), safe_exc(e))
+            # Sanitized diagnostics only: exception TYPE (safe_exc), the last
+            # completed stage, a correlation ref, and code locations
+            # (basename:function:lineno). Never the exception message, chat
+            # text, emails, payloads, or response bodies (#1076).
+            logger.error(
+                "chat_stream_error user=%s err=%s stage=%s ref=%s frames=%s",
+                user_ref(user_id), safe_exc(e), _stage, _diag_ref,
+                _sanitized_frames(e),
+            )
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
 
     # A ContextVar set here would NOT reach the generator (each SSE segment
