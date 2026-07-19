@@ -284,14 +284,28 @@ class LinkVerifier:
                 verified_at=datetime.now(timezone.utc),
             )
         
+        # Validate the initial URL for SSRF before any request is made.
+        # Redirect targets are validated inside the loop, but the first URL
+        # must be checked here too: callers such as the chat flow
+        # (rico_chat_api._verify_link_sync) invoke verify_link() directly and
+        # bypass the route-level Pydantic validation. Self-protecting the
+        # method keeps every entry point safe. (SSRF / HIGH-1)
+        if not await _is_safe_url_async(url):
+            return VerificationResult(
+                status=LinkStatus.BLOCKED,
+                http_status=None,
+                error_message="URL blocked (SSRF protection)",
+                verified_at=datetime.now(timezone.utc),
+            )
+
         try:
             client = await self._get_client()
             headers = {"User-Agent": self.USER_AGENTS[0]}
-            
+
             # Manually follow redirects with SSRF validation at each step
             current_url = url
             redirect_count = 0
-            
+
             while redirect_count <= self.MAX_REDIRECTS:
                 response = await client.get(current_url, headers=headers, follow_redirects=False)
                 
