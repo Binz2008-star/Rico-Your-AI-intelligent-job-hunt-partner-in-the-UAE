@@ -158,19 +158,6 @@ territory — this ledger entry tracks status only.
 
 ---
 
-### TASK-20260719-013 — analytics: record_event malformed-input hardening (audit gates 1-2)
-
-Status: verified — **MERGED (#1195, `bd378c97`)**
-Owner: Claude (session 2026-07-19)
-Branch: claude/growth-lifecycle-automation-qiyzw6
-Issue/PR: #1195
-
-> Canonical-ID note (2026-07-19 sync): the owner's canonical map assigns
-> 011 → #1193, 012 → #1194, 013 → #1195. This entry is recorded under 013
-> accordingly.
-
----
-
 ### TASK-20260719-011 — fix/command-chat-response-tolerance: complementary fail-open hardening on top of the #1191 contract
 
 Status: verified — **MERGED (#1193, `aaa3cca3`)**
@@ -249,7 +236,7 @@ PASSED) lives in this PR's body and the session record.
 Status: verified — **MERGED (#1192, `6caff77f`)**
 Owner: Claude (Fable session; owner defect ruling + one-PR-only /command freeze lift naming `fix/command-subscription-cta`, 2026-07-19)
 Branch: fix/command-subscription-cta (cut from main 07e95c3)
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1192 (squash `6caff77ff132b7997a34f23ba2d45c7fc8df0d7d`)
 
 #### Objective
 
@@ -300,7 +287,7 @@ one-PR-only lift for THIS PR alone; it expires on merge/close.
 #### Continuity Block
 
 - Task ID: TASK-20260719-010
-- GitHub issue/PR: draft PR from `fix/command-subscription-cta`
+- GitHub issue/PR: #1192 (squash `6caff77ff132b7997a34f23ba2d45c7fc8df0d7d`)
 - Branch: fix/command-subscription-cta
 - Base branch: main
 - Last safe commit SHA: 07e95c3 (origin/main at cut)
@@ -333,7 +320,7 @@ one-PR-only lift for THIS PR alone; it expires on merge/close.
 Status: verified — **MERGED (#1189, `e86c6f5`)**
 Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
 Branch: claude/rico-workspace-audit-x65z30 (re-cut from main d6a48a3 after #1188)
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1189 (squash `e86c6f5453ab8b4d54f13dcaf5fe468c44f6cd0e`)
 
 #### Objective
 
@@ -364,7 +351,7 @@ localized, single-topic, guidance-only prompt (no execution claim; the
 #### Continuity Block
 
 - Task ID: TASK-20260719-009
-- GitHub issue/PR: draft PR from `claude/rico-workspace-audit-x65z30`
+- GitHub issue/PR: #1189 (squash `e86c6f5453ab8b4d54f13dcaf5fe468c44f6cd0e`)
 - Branch: claude/rico-workspace-audit-x65z30
 - Base branch: main
 - Last safe commit SHA: d6a48a3 (origin/main after #1188)
@@ -393,7 +380,7 @@ localized, single-topic, guidance-only prompt (no execution claim; the
 Status: verified — **MERGED (#1188, `d6a48a3`)**
 Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
 Branch: claude/rico-workspace-audit-x65z30 (re-cut from main b262032 after #1186)
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1188 (squash `d6a48a351f1ef5098100c0f480413447a214d3b9`)
 
 #### Objective
 
@@ -444,7 +431,7 @@ Per the owner ruling, 2b therefore folds into 2a.
 #### Continuity Block
 
 - Task ID: TASK-20260719-008
-- GitHub issue/PR: draft PR from `claude/rico-workspace-audit-x65z30`
+- GitHub issue/PR: #1188 (squash `d6a48a351f1ef5098100c0f480413447a214d3b9`)
 - Branch: claude/rico-workspace-audit-x65z30
 - Base branch: main
 - Last safe commit SHA: b262032 (origin/main after #1186)
@@ -570,7 +557,7 @@ production payload.
 Status: verified — **MERGED (#1186, `b262032e`)**
 Owner: Claude (Fable session; owner execution mandate 2026-07-19, Command Workspace v4 program)
 Branch: claude/rico-workspace-audit-x65z30 (re-cut from main fb21bda after #1185)
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1186 (squash `b262032e97fa6fa4f2c95a09a91c46a7a7d4f52c`)
 
 #### Objective
 
@@ -638,7 +625,7 @@ route. Activity timeline stays omitted (no data source).
 #### Continuity Block
 
 - Task ID: TASK-20260719-007
-- GitHub issue/PR: draft PR from `claude/rico-workspace-audit-x65z30`
+- GitHub issue/PR: #1186 (squash `b262032e97fa6fa4f2c95a09a91c46a7a7d4f52c`)
 - Branch: claude/rico-workspace-audit-x65z30
 - Base branch: main
 - Last safe commit SHA: fb21bda (origin/main after #1185)
@@ -671,7 +658,7 @@ route. Activity timeline stays omitted (no data source).
 Status: verified — **MERGED (#1185, `fb21bda`)**
 Owner: Claude (Fable session; owner rulings 2026-07-19)
 Branch: claude/rico-workspace-audit-x65z30
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1185 (squash `fb21bda0950b2f867132ebf83131dac72bcd72bb`)
 
 #### Objective
 
@@ -723,7 +710,7 @@ at cut time, under its own owner approval.
 #### Continuity Block
 
 - Task ID: TASK-20260719-006
-- GitHub issue/PR: draft PR from `claude/rico-workspace-audit-x65z30`
+- GitHub issue/PR: #1185 (squash `fb21bda0950b2f867132ebf83131dac72bcd72bb`)
 - Branch: claude/rico-workspace-audit-x65z30
 - Base branch: main
 - Last safe commit SHA: 1e45c47 (origin/main at branch cut)
@@ -4541,7 +4528,7 @@ record: market/country normalization.
 Status: done
 Owner: Claude (Fable session, owner-directed "choose highest long-term impact and execute")
 Branch: claude/release-captain-queue-76nrwz
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1173 (squash `4879c04d`)
 
 #### Objective
 Start the two time-sensitive data-integrity foundations of the Product Truth
@@ -4648,7 +4635,7 @@ pipeline's echo learning-signals (system output recorded as user behavior).
 Status: done
 Owner: Claude (Fable session; owner CPO decision: fix before analytics/taste-loop)
 Branch: claude/refine-search-structured-action
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1175 (squash `d5f96f1e`)
 
 #### Objective
 The "Refine search" card sent its LABEL as a chat message; the intent router
@@ -4998,13 +4985,16 @@ Gmail/analytics/design changes.
 
 ---
 
-### TASK-20260719-011 — analytics record_event malformed-input hardening (audit gates 1-2)
+### TASK-20260719-013 — analytics record_event malformed-input hardening (audit gates 1-2)
 
-Status: review
+> Canonical-ID note (2026-07-19 sync): originally recorded as 011; the
+> owner's canonical map assigns 011 → #1193, 012 → #1194, 013 → #1195.
+
+Status: verified — **MERGED (#1195, `bd378c97`)**
 Owner: Claude (Fable session; owner autonomy grant 2026-07-19 — closes the
 ACTIVE gap recorded in TASK-20260719-002's post-merge audit)
 Branch: claude/growth-lifecycle-automation-qiyzw6
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1195 (squash `bd378c97`)
 
 #### Objective
 Close audit gates 1-2 from the #1176 post-merge audit (verdict B): the
