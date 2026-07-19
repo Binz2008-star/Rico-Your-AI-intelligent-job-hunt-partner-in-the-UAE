@@ -4020,7 +4020,7 @@ sees the final composed search query.
 Status: merged — production migration applied and drift-verified (2026-07-19)
 Owner: Claude (Fable session; owner directive post-#1175: single-objective PR)
 Branch: claude/analytics-events-foundation
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1176 — merged as c09a929a
 
 #### Objective
 Product Truth Sprint track 1 ("eyes"): first-party behavioral event store —
@@ -4106,8 +4106,9 @@ stands unchanged.
 - Drift: full signature sweep replicated read-only on the production
   branch — **55/55 objects PRESENT, 0 missing** (entire `CHECKS` list of
   `scripts/check_migration_drift.py` at `main`, not only 047). The
-  scheduled drift runs of 2026-07-18 and 2026-07-19 08:35Z FAILED as the
-  intended pre-apply reminder; the next scheduled run is expected green.
+  scheduled drift-run failures of 2026-07-18 and 2026-07-19 08:35Z
+  predated the production application; a future scheduled workflow run
+  must independently confirm the current drift state.
 - Row count: **0** (count-only query; no payloads were read).
 
 Component status (stated separately, per owner directive):
@@ -4117,19 +4118,40 @@ Component status (stated separately, per owner directive):
    `agent_runtime.handle_action` step 12, `search_performed` in the chat
    search path) and DEPLOYED — `deploy-render.yml` (blocks until
    `/version.commit` matches) succeeded for `11cfbdb6` and `a03b12f1`.
-3. **`RICO_ANALYTICS_HMAC_KEY`:** not directly verifiable from the
-   verifying session (no Render env read access; production host is
-   network-blocked from the sandbox). Documented state (runbook, #1178):
-   NOT set on Render — emitter writes remain fail-closed; row count 0
-   with deployed emitters is consistent with that state. Owner-side
-   confirmation on Render is the authoritative check.
+   **No claim is made that analytics collection is operational** — that
+   claim requires owner-side verification of the Render HMAC key status.
+3. **`RICO_ANALYTICS_HMAC_KEY`:** status **UNVERIFIED from this
+   session** — no value was accessed or printed; the verifying session
+   has no Render env read access and the production host is
+   network-blocked from the sandbox. Row count 0 does **not** prove the
+   key's presence or absence (it is equally consistent with an unset
+   key, with no qualifying traffic since deploy, or with rejected
+   events). Owner-side Render verification is required.
 4. **Purge scheduling:** NOT active by design — endpoint + workflow merged
    (#1180), but the workflow `schedule:` ships COMMENTED OUT and
    `RICO_ENABLE_ANALYTICS_PURGE` defaults off (two-gate rollout; see the
    runbook addendum / DEC-20260719-001).
 
-Remaining before "done": owner sets `RICO_ANALYTICS_HMAC_KEY` on Render →
-baseline collection → purge schedule enablement (owner-gated).
+Remaining before "done": owner verifies (and, if absent, sets)
+`RICO_ANALYTICS_HMAC_KEY` on Render → baseline collection → purge
+schedule enablement (owner-gated).
+
+##### Post-merge audit (2026-07-19) — verdict B: safe with follow-up
+
+Compensating review control: **#1176 was merged without a completed
+GitHub review**; this post-merge audit is the compensating review
+control for that merge.
+
+- Audit result: **31/31 audit cases passed** — verdict **B: safe with
+  follow-up** (no corrective PR, no rollback).
+- Open gap: the **malformed-input never-raises** hardening of the event
+  recording path remains. With #1179 emitters now wired into live
+  runtime paths, this is an **ACTIVE follow-up**, not merely a
+  prerequisite for future emitters.
+- Policy gap: an **allowlist-growth policy** is required before any
+  event #9 is added to `EVENT_ALLOWLIST` (currently 8 events, enforced
+  in both the repository layer and the 047 DB CHECK — the lockstep rule
+  needs an owner-approved change procedure).
 
 ---
 
