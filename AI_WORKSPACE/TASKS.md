@@ -4148,7 +4148,9 @@ Owner's independent repo verification found two blockers; both fixed:
 
 ### TASK-20260719-004 — Analytics retention purge scheduling (endpoint + workflow, two-gate rollout)
 
-Status: review
+Status: done (merged as `a03b12f` via #1180; Render deploy verified by
+deploy-render run 29680082010 — /version match + /health green. Enablement
+gates remain closed per DEC-20260719-001: flag OFF, schedule commented.)
 Owner: Claude (Fable session; owner audit approval "Approve with minor
 refinements", 2026-07-19)
 Branch: claude/analytics-purge-retention-audit-43dbwn
@@ -4200,3 +4202,58 @@ dry-run dispatch verification → owner uncomments the schedule. Emergency
 disable: workflow off (GitHub UI) → flag off (no deploy) → revert PR.
 Never clear `RICO_CRON_SECRET` as a disable path (it would 503 every
 pipeline sweep).
+
+### TASK-20260719-005 — #1101: private-response cache boundary (backend + edge + client)
+
+Status: review
+Owner: Claude (Fable session; owner approval "Approved to start #1101 only")
+Branch: fix/1101-private-response-cache-boundary
+Issue/PR: #1101
+
+#### Objective
+No account-scoped API response (identity, profile, CV/files, applications,
+billing) can be stored or shared through browser, proxy, Vercel BFF/CDN, or
+application-managed caches. One logical change: a three-layer no-store
+boundary. Explicitly out of scope: #1104, #1130, migration 045, billing/
+Gmail/analytics/design changes.
+
+#### Scope delivered
+- `src/api/cache_privacy.py` (new): pure-ASGI `PrivateCacheHeadersMiddleware`
+  — every response without a route-set Cache-Control gets
+  `private, no-store, max-age=0` + `Pragma: no-cache` + `Expires: 0`;
+  `Cookie`/`Authorization`/`Origin` merged into `Vary` (never clobbers,
+  `Vary: *` respected). Registered outermost in `src/api/app.py`. SSE keeps
+  its route-set `no-cache, no-transform` (preserved, proven by test).
+- `apps/web/next.config.js`: `/proxy/:path*` headers block —
+  `Cache-Control: private, no-store, max-age=0`, `CDN-Cache-Control` +
+  `Vercel-CDN-Cache-Control: no-store`, `Pragma`, `Vary` — public static
+  assets untouched.
+- `apps/web/lib/api.ts`: `apiFetch` wrapper (`cache: "no-store"`); all 22
+  call sites migrated; `lib/auth.ts` logout fetch no-store. No
+  application-managed response caches exist client-side (verified: the
+  only prior no-store was dashboard/page.tsx; no module-level caches).
+
+#### Acceptance evidence
+- Backend tests `tests/test_1101_private_response_cache.py` (9): default
+  boundary on /me (200 auth + unauth), representative sensitive endpoints,
+  health/version not public; SSE preservation; middleware never overrides
+  route-set Cache-Control; Vary merge + `Vary: *`; replay regression — a
+  shared cache with worst-case URL-only keys can never store account A's
+  response nor replay it to account B or post-logout.
+- Frontend tests `__tests__/private-cache-no-store.test.ts` (4): requestJson/
+  fetchMe/clearAuth send no-store + static guard (zero raw `await fetch(`
+  in api.ts).
+- Live header verification (local): direct FastAPI :8123 → /api/v1/me 200
+  `private, no-store, max-age=0` + Pragma + Expires + Vary; /health same;
+  SSE stream 200 `no-cache, no-transform`. Via Next dev :3123
+  /proxy/api/v1/me → upstream no-store headers pass through intact.
+- Regression: backend 3,459 passed / 1 xfailed; frontend vitest 728/728;
+  `npm run build` clean.
+
+#### Remaining verification (preview/production — close gate items)
+- Vercel edge behavior for the `/proxy` headers block on an actual
+  deployment (next dev does not apply custom headers to external-rewrite
+  paths; Vercel's production edge does — the same layer that injected the
+  old `public, max-age=0` default). Verify on the PR preview URL:
+  Cache-Control + CDN-Cache-Control on `/proxy/api/v1/me`, HIT/MISS
+  behavior, then on ricohunt.com after merge+deploy.

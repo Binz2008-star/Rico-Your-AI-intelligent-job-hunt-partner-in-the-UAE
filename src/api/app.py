@@ -314,6 +314,13 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
+# Private-response cache boundary (#1101): registered LAST so it is the
+# outermost layer and stamps the final headers of every response (including
+# CORS's Vary: Origin merge). Routes that set their own Cache-Control (the
+# SSE stream) are left untouched.
+from src.api.cache_privacy import PrivateCacheHeadersMiddleware  # noqa: E402
+app.add_middleware(PrivateCacheHeadersMiddleware)
+
 
 @app.middleware("http")
 async def hydrate_request_auth_context(request: Request, call_next):

@@ -64,6 +64,22 @@ const nextConfig = {
                     { key: "Content-Security-Policy-Report-Only", value: csp },
                 ],
             },
+            {
+                // #1101: everything under /proxy/* carries account data (identity,
+                // profile, CV/files, applications, billing). It must never be
+                // storable by the browser, the Vercel CDN, or any intermediary —
+                // regardless of upstream or platform defaults. Listed AFTER the
+                // catch-all so these keys win where both match. Public static
+                // assets and pages are untouched (this block matches /proxy/* only).
+                source: "/proxy/:path*",
+                headers: [
+                    { key: "Cache-Control", value: "private, no-store, max-age=0" },
+                    { key: "CDN-Cache-Control", value: "no-store" },
+                    { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+                    { key: "Pragma", value: "no-cache" },
+                    { key: "Vary", value: "Cookie, Authorization, Origin" },
+                ],
+            },
         ];
     },
 
