@@ -18,6 +18,13 @@ declare global {
 export interface PaddleEventDetail {
     name: string;
     data?: Record<string, unknown>;
+    /** Paddle.js v2 delivers checkout.error detail here — NOT inside data. */
+    error?: {
+        type?: string;
+        code?: string;
+        detail?: string;
+        documentation_url?: string;
+    };
 }
 
 export interface PaddleInstance {
@@ -50,6 +57,24 @@ export interface PaddleCheckoutOptions {
 }
 
 let _initPromise: Promise<PaddleInstance> | null = null;
+
+/** Paddle environment a client-side token belongs to. */
+export type PaddleEnvironment = "sandbox" | "production";
+
+/**
+ * Derive the Paddle environment from the client token itself.
+ * Paddle client-side tokens are prefixed `test_` (sandbox) or `live_`
+ * (production) — a token only ever works in its own environment, so the
+ * prefix is authoritative. Returns null when the token is missing or has an
+ * unrecognized prefix.
+ */
+export function getPaddleTokenEnvironment(): PaddleEnvironment | null {
+    const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim();
+    if (!token) return null;
+    if (token.startsWith("test_")) return "sandbox";
+    if (token.startsWith("live_")) return "production";
+    return null;
+}
 
 /**
  * The listener for the currently open overlay checkout. Paddle renders one
@@ -94,8 +119,21 @@ export function initPaddle(): Promise<PaddleInstance> {
         }
 
         const configure = (paddle: PaddleInstance): void => {
-            const sandbox =
+            // The token prefix (test_/live_) is authoritative: a token only
+            // works in its own environment, so initializing against the flag
+            // when the two disagree can only produce Paddle's opaque
+            // "Something went wrong" overlay at purchase time.
+            const flagSandbox =
                 (process.env.NEXT_PUBLIC_PADDLE_SANDBOX ?? "true").trim().toLowerCase() !== "false";
+            const tokenEnv = getPaddleTokenEnvironment();
+            const sandbox = tokenEnv !== null ? tokenEnv === "sandbox" : flagSandbox;
+            if (tokenEnv !== null && (tokenEnv === "sandbox") !== flagSandbox) {
+                console.error(
+                    `[paddle] NEXT_PUBLIC_PADDLE_SANDBOX=${flagSandbox} contradicts the ` +
+                    `client token prefix (${token.slice(0, 5)}…) — using the token's ` +
+                    `environment (${tokenEnv}). Align the Vercel env vars.`,
+                );
+            }
             if (sandbox) {
                 paddle.Environment.set("sandbox");
             }
@@ -173,11 +211,27 @@ export async function openPaddleCheckout(
         // Paddle.js v2 ignores eventCallback on Checkout.open().
         _activeCheckoutListener = (event: PaddleEventDetail) => {
             if (event.name === "checkout.error") {
+                // Paddle.js v2 carries the failure in the TOP-LEVEL error
+                // object ({type, code, detail}); data.message/data.error are
+                // legacy fallbacks. Keep the exact code — it is the only way
+                // to distinguish env/price/domain misconfiguration from a
+                // payment problem.
+                const paddleErr = event.error;
                 const detail =
+                    paddleErr?.detail ??
                     (event.data?.message as string | undefined) ??
                     (event.data?.error as string | undefined) ??
                     "Paddle checkout error";
-                settle(() => reject(new Error(detail)));
+                const message = paddleErr?.code ? `${detail} [${paddleErr.code}]` : detail;
+                // No customer PII lives in the Paddle error object — log it in
+                // full so production failures carry an exact code, not just
+                // "Something went wrong".
+                console.error("[paddle] checkout.error", {
+                    type: paddleErr?.type,
+                    code: paddleErr?.code,
+                    detail,
+                });
+                settle(() => reject(new Error(message)));
             } else if (event.name === "checkout.completed") {
                 settle(() => resolve("completed"));
             } else if (event.name === "checkout.closed") {

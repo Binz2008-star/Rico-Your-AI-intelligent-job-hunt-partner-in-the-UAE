@@ -37,18 +37,49 @@ _PADDLE_TIMESTAMP_TOLERANCE_SECONDS = 300  # 5 minutes
 # Unauthenticated config endpoint — safe for smoke-test health checks
 # ---------------------------------------------------------------------------
 
+# Server-side vars that must ALL be set for checkout to be offered. A checkout
+# opened without the webhook secret (or API key / price ID) could charge a
+# customer whose entitlement then never activates — so an incomplete set fails
+# closed as paddle_active=false.
+_REQUIRED_PADDLE_SERVER_VARS = (
+    "PADDLE_API_KEY",
+    "PADDLE_WEBHOOK_SECRET",
+    "PADDLE_PRO_MONTHLY_PRICE_ID",
+)
+
+
+def _paddle_checkout_active() -> bool:
+    """True only when BILLING_MODE=paddle AND every server-side Paddle
+    credential is present. Fail-closed gate for offering checkout."""
+    from src.billing_mode import is_paddle_billing_mode
+
+    if not is_paddle_billing_mode():
+        return False
+    missing = [v for v in _REQUIRED_PADDLE_SERVER_VARS if not os.getenv(v, "").strip()]
+    if missing:
+        logger.warning(
+            "paddle_checkout_inactive: BILLING_MODE=paddle but missing %s — "
+            "reporting paddle_active=false (fail closed)",
+            ",".join(missing),
+        )
+        return False
+    return True
+
+
 @router.get("/config")
 async def billing_config() -> Dict[str, Any]:
     """Return public billing configuration. No auth required, no secrets exposed.
 
     Used by smoke tests and the frontend to confirm the billing mode is active
     before attempting an authenticated checkout. Returns only non-secret flags.
+    ``paddle_active`` is true only when BILLING_MODE=paddle AND the full
+    server-side credential set is configured (fail closed otherwise).
     """
     from src.billing_mode import is_paddle_billing_mode
     sandbox = os.getenv("PADDLE_SANDBOX", "true").strip().lower() != "false"
     return {
         "billing_mode": "paddle" if is_paddle_billing_mode() else os.getenv("BILLING_MODE", "manual"),
-        "paddle_active": is_paddle_billing_mode(),
+        "paddle_active": _paddle_checkout_active(),
         "sandbox": sandbox,
     }
 
@@ -311,7 +342,17 @@ async def create_checkout_session(
     ``custom_data.checkout_session_id`` in the Paddle.js checkout overlay.
     The webhook resolves the Rico user via this DB record — never via
     browser-supplied ``custom_data.user_id``.
+
+    Fail-closed: refuses when Paddle billing is not fully active
+    (BILLING_MODE != paddle or incomplete server credentials), so a stale
+    client bundle can never start a checkout the backend cannot complete.
     """
+    if not _paddle_checkout_active():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Paddle billing is not active",
+        )
+
     try:
         body = await request.json()
     except Exception:

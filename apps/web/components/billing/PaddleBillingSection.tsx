@@ -12,8 +12,9 @@
  */
 
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { PaddleBillingStatus } from "@/lib/api";
-import { createPaddleCheckoutSession, createPaddleCustomerPortalSession, getPaddleBillingStatus } from "@/lib/api";
+import type { BillingConfig, PaddleBillingStatus } from "@/lib/api";
+import { createPaddleCheckoutSession, createPaddleCustomerPortalSession, getBillingConfig, getPaddleBillingStatus } from "@/lib/api";
+import { resolveBillingUiMode, type BillingUiMode } from "@/lib/billing";
 import { getPaddlePriceId, openPaddleCheckout } from "@/lib/paddle";
 import { useTranslation } from "@/lib/translations";
 import { useCallback, useEffect, useState } from "react";
@@ -42,6 +43,21 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
     const [error, setError] = useState<string | null>(null);
     const [portalLoading, setPortalLoading] = useState(false);
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+    // Runtime billing mode — same fail-closed contract as /subscription:
+    // undefined while GET /api/v1/billing/config is in flight, null when it
+    // failed; both resolve to "unavailable" (no checkout is offered).
+    const [billingCfg, setBillingCfg] = useState<BillingConfig | null | undefined>(undefined);
+    const configLoading = billingCfg === undefined;
+    const uiMode: BillingUiMode = resolveBillingUiMode(billingCfg ?? null);
+
+    useEffect(() => {
+        let cancelled = false;
+        getBillingConfig()
+            .then((cfg) => { if (!cancelled) setBillingCfg(cfg); })
+            .catch(() => { if (!cancelled) setBillingCfg(null); });
+        return () => { cancelled = true; };
+    }, []);
 
     const fetchStatus = useCallback(async (signal?: AbortSignal) => {
         setLoading(true);
@@ -76,9 +92,10 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
     };
 
     const handleCheckout = async () => {
-        const priceId = getPaddlePriceId();
-        if (!priceId) {
-            setError(t("paddleNotConfigured"));
+        if (configLoading) return;
+        if (uiMode !== "paddle") {
+            // Fail closed: no configured/consistent checkout path.
+            setError(t("paymentTemporarilyUnavailable"));
             return;
         }
         setCheckoutLoading("pro_monthly");
@@ -86,6 +103,13 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
             // Server-owned checkout session first — the webhook resolves
             // identity via this record, never via a browser-supplied user_id.
             const session = await createPaddleCheckoutSession("pro", "monthly");
+            // Server-resolved price ID is authoritative (Render env); the
+            // build-time NEXT_PUBLIC_ var is only a legacy fallback.
+            const priceId = session.price_id ?? getPaddlePriceId();
+            if (!priceId) {
+                setError(t("paddleNotConfigured"));
+                return;
+            }
             await openPaddleCheckout(priceId, session.session_token, userEmail, language as "en" | "ar");
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -275,10 +299,30 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
                                     ? t("paddleManageSubscriptionLoading")
                                     : t("paddleManageSubscription")}
                             </button>
+                        ) : uiMode !== "paddle" && !configLoading ? (
+                            /* Fail-closed: checkout is not available (config
+                               unreachable, Paddle inactive, or client/backend
+                               Paddle environments mismatched). */
+                            <button
+                                disabled
+                                data-testid="settings-payment-unavailable"
+                                style={{
+                                    padding: "0.5rem 1rem",
+                                    fontSize: "0.82rem",
+                                    borderRadius: 6,
+                                    border: `1px solid ${colors.borderDefault}`,
+                                    background: "transparent",
+                                    color: colors.ink40,
+                                    cursor: "not-allowed",
+                                    opacity: 0.6,
+                                }}
+                            >
+                                {t("paymentTemporarilyUnavailable")}
+                            </button>
                         ) : (
                             <button
                                 onClick={() => handleCheckout()}
-                                disabled={!!checkoutLoading}
+                                disabled={!!checkoutLoading || configLoading}
                                 style={{
                                     padding: "0.5rem 1rem",
                                     fontSize: "0.82rem",
@@ -286,8 +330,8 @@ export function PaddleBillingSection({ userId, userEmail, colors }: Props) {
                                     border: "none",
                                     background: colors.red,
                                     color: "#fff",
-                                    cursor: checkoutLoading ? "not-allowed" : "pointer",
-                                    opacity: checkoutLoading ? 0.6 : 1,
+                                    cursor: checkoutLoading || configLoading ? "not-allowed" : "pointer",
+                                    opacity: checkoutLoading || configLoading ? 0.6 : 1,
                                 }}
                             >
                                 {checkoutLoading === "pro_monthly"

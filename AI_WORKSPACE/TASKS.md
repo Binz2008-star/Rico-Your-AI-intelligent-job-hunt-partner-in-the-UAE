@@ -151,10 +151,56 @@ Issue/PR: #1194
 #### Gate (owner ruling, 2026-07-19)
 
 #1194 must be rebased clean onto current main (its TASKS entry updates
-THIS entry — no duplicate), reviewed, and mergeable before merge. The
-Paddle LIVE gates (real browser checkout smoke after deployment) remain
-mandatory regardless of CI state. Billing behavior changes are owner
-territory — this ledger entry tracks status only.
+THIS entry — no duplicate), reviewed, and mergeable before merge.
+**Merge is owner-only.** The Paddle LIVE gates 1–10 (real browser
+checkout smoke after deployment, per the handoff) remain mandatory
+regardless of CI state — billing is never declared production-verified
+before all gates pass.
+
+#### Objective
+
+Repair the live "Something went wrong" Paddle overlay failure on
+ricohunt.com/subscription without weakening the fail-closed posture.
+Root cause (owner screenshots + repo evidence): a client/server Paddle
+environment mismatch introduced during the partial live cutover — the
+2026-07-17 sandbox smoke passed, Render was switched toward live while
+Vercel still carries sandbox-era vars (`/settings` proved the production
+bundle has no `NEXT_PUBLIC_PADDLE_PRO_MONTHLY_PRICE_ID`) — while the code
+(a) discarded Paddle.js v2's top-level `event.error` code, (b) chose
+sandbox/production from a standalone flag instead of the authoritative
+`test_`/`live_` token prefix, (c) reported `paddle_active: true` without
+the full server credential set, and (d) left the /settings upgrade button
+fail-open.
+
+#### What changed (per #1194)
+
+- `apps/web/lib/paddle.ts` — surface the exact Paddle error
+  `detail [code]` (toast + console); Paddle.js environment derived from
+  the client-token prefix (flag is fallback only, contradiction logged).
+- `apps/web/lib/billing.ts` — `resolveBillingUiMode` fails closed when
+  the client token environment contradicts the backend `sandbox` flag.
+- `src/api/routers/paddle_billing.py` — `paddle_active` requires
+  BILLING_MODE=paddle AND API key + webhook secret + price ID;
+  checkout-session 503s when inactive (rollback is authoritative
+  server-side).
+- `apps/web/components/billing/PaddleBillingSection.tsx` — /settings
+  upgrade gated by the same runtime config; server-resolved price_id.
+- Docs: `HANDOFFS/2026-07-19-paddle-live-checkout-repair.md` (diagnosis,
+  live env matrix, 10 go-live gates, error-code interpretation); rollback
+  section of `paddle_billing_setup_rollback.md` corrected;
+  `.env.local.example` token-prefix contract.
+
+#### Required verification
+
+- [x] Backend billing suites green (`test_paddle_billing`,
+      `test_billing_mode`, `test_billing_hardening`,
+      `test_billing_ops_no_stripe`, `test_paddle_webhook_body_cap`).
+- [x] Frontend: billing-mode + paddle-event-callback suites; full vitest;
+      `npm run build` verified by exit code.
+- [ ] CI green on the rebased head; mergeable against main.
+- [ ] Owner review + owner merge.
+- [ ] Post-deploy: Paddle LIVE gates 1–10 (owner-run; production access
+      required).
 
 ---
 

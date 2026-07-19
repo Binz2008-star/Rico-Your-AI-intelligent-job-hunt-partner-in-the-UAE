@@ -175,16 +175,20 @@ Run through at least one of them end-to-end; both call the same backend.
 ### Immediate (no DB change needed)
 
 ```bash
-# Revert BILLING_MODE to manual in Render & Vercel
-BILLING_MODE=manual
-NEXT_PUBLIC_BILLING_MODE=manual
+# On Render only:
+BILLING_MODE=manual   # or unset it — "manual" is the default
 ```
 
-The Paddle billing UI is gated on `isPaddleBillingMode()` — setting mode back to
-`manual` hides all Paddle checkout/portal UI instantly (WhatsApp-assisted activation
-takes over), no redeploy required for env-var changes on Render/Vercel. Note: Stripe
-has been fully removed from this codebase (no code path, no `stripe` dependency) —
-`manual` is the only fallback mode.
+Checkout dies server-side within one request cycle: `GET /api/v1/billing/config`
+reports `paddle_active: false`, so `/subscription` and `/settings` render the
+fail-closed "Payment is temporarily unavailable" state, and
+`POST /api/v1/billing/paddle/checkout-session` returns 503 — even an
+already-loaded (stale) client bundle cannot start a checkout. No Vercel change
+is required (`NEXT_PUBLIC_BILLING_MODE` no longer exists; the runtime backend
+config is the only mode switch — see `apps/web/lib/billing.ts`). There is no
+manual/WhatsApp payment fallback: rolled-back means payments are OFF.
+Already-active subscriptions are unaffected — webhooks keep processing and
+entitlements keep resolving from `paddle_subscriptions`.
 
 ### Full rollback (remove Paddle tables)
 
