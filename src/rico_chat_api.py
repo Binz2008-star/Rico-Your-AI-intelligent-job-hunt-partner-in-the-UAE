@@ -2025,7 +2025,14 @@ class RicoChatAPI:
             operation_id=self._current_operation_id,
         )
         self._current_operation_id = str(operation["operation_id"])
+        # Attempt fence: outcome writes from THIS execution carry this token;
+        # if the operation is later expired + legitimately re-started, the
+        # bumped attempt makes this execution's late writes refusable.
+        self._current_operation_attempt = int(operation.get("attempt") or 1)
         return operation
+
+    def _operation_attempt(self) -> int | None:
+        return getattr(self, "_current_operation_attempt", None)
 
     def _duplicate_operation_guard(
         self, user_id: str, operation_id: str, message: str, language: str | None
@@ -2038,18 +2045,29 @@ class RicoChatAPI:
         completed original gets a completed-status reply — the full result
         already sits in chat history, so the client recovers from there
         instead of paying for a second provider cascade. Terminal
-        failed/timed_out operations and orphaned running records return
-        None so a legitimate retry re-executes normally. These status
-        replies are never type job_matches, so they emit no analytics and
-        append nothing to chat history (a duplicate is not a new turn).
-        Never raises — any error falls through to normal processing.
+        operations (failed / cancelled / expired) return None so a
+        legitimate retry re-executes normally; "timed_out" is only a
+        client-presentation state, so it keeps blocking until the
+        MAX_EXECUTION_SECONDS ownership ceiling releases it via
+        expire_if_stale. These status replies are never type job_matches,
+        so they emit no analytics and append nothing to chat history (a
+        duplicate is not a new turn). Never raises — any error falls
+        through to normal processing.
         """
         try:
-            from src.services.operation_state import get_operation, is_actively_running
+            from src.services.operation_state import (
+                expire_if_stale,
+                get_operation,
+                is_actively_running,
+            )
 
             existing = get_operation(user_id, operation_id)
             if not existing or existing.get("type") != "job_search":
                 return None
+            # Over-ceiling live records transition to the terminal "expired"
+            # state here (ownership release) — the re-start below then bumps
+            # `attempt`, revoking the superseded execution's write rights.
+            existing = expire_if_stale(user_id, existing)
             arabic = language == "ar" or self._is_arabic_text(message or "")
             base = {
                 "intent": "search_jobs",
@@ -5677,7 +5695,7 @@ class RicoChatAPI:
                 "job_search_failed: role=%r elapsed=%.2fs op=%s err=%s",
                 search_role, _search_elapsed, operation_id, type(exc).__name__,
             )
-            mark_failed(user_id, operation_id, str(exc))
+            mark_failed(user_id, operation_id, str(exc), attempt=self._operation_attempt())
             _graceful_msg = (
                 "عذراً، لم أتمكن من إتمام البحث الآن. "
                 "حاول تحديد اسم الوظيفة — مثلاً: 'وظائف مدير الامتثال في دبي'."
@@ -5701,7 +5719,7 @@ class RicoChatAPI:
         )
         if not all_matches and _provider_failed:
             try:
-                mark_completed(user_id, operation_id, 0)
+                mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
             except Exception:
                 pass
             return self._provider_degraded_response(
@@ -6002,7 +6020,7 @@ class RicoChatAPI:
             response["role_intelligence"] = role_intelligence_data
 
         self._append_chat(user_id, "assistant", response)
-        mark_completed(user_id, operation_id, len(formatted))
+        mark_completed(user_id, operation_id, len(formatted), attempt=self._operation_attempt())
         # Defect 1 continuity contract: a TECHNICALLY COMPLETED search — including
         # one that truthfully returned zero jobs — becomes the current search
         # context. A degraded/failed/unconfigured provider must NOT overwrite the
@@ -6203,6 +6221,7 @@ class RicoChatAPI:
     ) -> dict[str, Any]:
         debug_id = _generate_debug_id()
         self._current_operation_id = operation_id
+        self._current_operation_attempt = None
         try:
             # Duplicate-execution guard: a client retry/fallback re-sending the
             # SAME operation_id must never start a second provider cascade while
@@ -6256,7 +6275,7 @@ class RicoChatAPI:
             return result
         except Exception as exc:
             if self._current_operation_id:
-                mark_failed(user_id, self._current_operation_id, str(exc))
+                mark_failed(user_id, self._current_operation_id, str(exc), attempt=self._operation_attempt())
             return build_error_response(
                 "Something went wrong processing your message.",
                 debug_id=debug_id,
@@ -6265,6 +6284,7 @@ class RicoChatAPI:
             )
         finally:
             self._current_operation_id = None
+            self._current_operation_attempt = None
 
     def _answer_with_ai_fallback(
         self,
@@ -9154,7 +9174,7 @@ class RicoChatAPI:
             try:
                 workflow_result = self.system.run_for_profile(profile)
             except Exception as exc:
-                mark_failed(user_id, operation_id, str(exc))
+                mark_failed(user_id, operation_id, str(exc), attempt=self._operation_attempt())
                 raise
 
             # Handle blocked status from job search
@@ -9163,6 +9183,7 @@ class RicoChatAPI:
                     user_id,
                     operation_id,
                     workflow_result.get("message", "Job search was blocked by incomplete profile."),
+                    attempt=self._operation_attempt(),
                 )
                 response = {
                     "type": "profile_incomplete",
@@ -9199,12 +9220,12 @@ class RicoChatAPI:
                     "result_count": len(formatted),
                 }
                 self._append_chat(user_id, "assistant", response)
-                mark_completed(user_id, operation_id, len(formatted))
+                mark_completed(user_id, operation_id, len(formatted), attempt=self._operation_attempt())
                 if formatted:
                     self._store_search_matches_context(user_id, formatted)
                 return self._finalize(response, routed.source, profile=profile)
             else:
-                mark_completed(user_id, operation_id, 0)
+                mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
                 if has_cv:
                     response = self._handle_no_results_recovery(user_id, profile, target_roles, message)
                     response.update({

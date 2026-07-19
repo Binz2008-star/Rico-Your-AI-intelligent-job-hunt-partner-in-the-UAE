@@ -1379,22 +1379,36 @@ export default function CommandPage() {
                                 }
                                 if (verdict === "completed") {
                                     // The late result was appended to chat history by the
-                                    // server — recover it instead of searching again.
+                                    // server — recover it instead of searching again. The
+                                    // recovered row is bound to THIS turn's exact
+                                    // operation_id (server responses embed it); we never
+                                    // render "whatever assistant message is newest", which
+                                    // could belong to a different turn or conversation.
                                     try {
-                                        const history = await fetchChatHistory(5);
-                                        const lastAssistant = [...history.messages].reverse().find((m) => m.role !== "user");
-                                        if (lastAssistant) {
-                                            const parsed = parseHistoryContent(lastAssistant.content, retryId);
+                                        const history = await fetchChatHistory(10);
+                                        const exact = [...history.messages].reverse().find((m) => {
+                                            if (m.role === "user") return false;
+                                            try {
+                                                const parsed = JSON.parse(m.content) as Record<string, unknown>;
+                                                return parsed?.operation_id === operationId;
+                                            } catch {
+                                                return false; // non-JSON rows carry no operation binding
+                                            }
+                                        });
+                                        if (exact) {
+                                            const parsed = parseHistoryContent(exact.content, retryId);
                                             setMessages((prev) => prev.map((m) =>
                                                 m.id === retryId ? ({ ...m, ...parsed, id: retryId } as Message) : m
                                             ));
                                             return;
                                         }
                                     } catch {
-                                        // History fetch failed — fall through to the single
-                                        // re-send below; the server-side guard still answers
-                                        // with the completed status instead of re-executing.
+                                        // History fetch failed — fall through below.
                                     }
+                                    // Exact result row not visible (append raced/lost) —
+                                    // fall through to the single re-send: the server-side
+                                    // guard answers with the completed status instead of
+                                    // re-executing, so this can never start a second search.
                                 }
                                 if (verdict === "still_running") {
                                     // Budget exhausted while the search is still live —

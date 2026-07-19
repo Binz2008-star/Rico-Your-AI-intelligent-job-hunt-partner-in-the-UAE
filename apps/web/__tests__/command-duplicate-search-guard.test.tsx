@@ -121,27 +121,73 @@ describe("duplicate-search guard — authenticated timeout path", () => {
         expect(mockPoll.mock.calls[0][0]).toBe(FIXED_OP_ID);
     });
 
-    it("recovers a late completed result from history instead of re-searching", async () => {
+    it("recovers the late result bound to the EXACT operation_id — never the newest row", async () => {
         mockPoll.mockResolvedValue("completed");
-        const lateRow = {
+        const exactRow = {
             role: "assistant",
             content: JSON.stringify({
                 type: "job_matches",
+                operation_id: FIXED_OP_ID,
                 message: "I found 5 strong UAE job matches for you.",
                 matches: [{ title: "QHSE Manager", company: "Combi Lift", score: 90 }],
             }),
         };
+        // NEWER decoy from a different turn/conversation — must NOT be rendered.
+        const decoyRow = {
+            role: "assistant",
+            content: JSON.stringify({
+                type: "job_matches",
+                operation_id: "op_web_some_other_turn",
+                message: "Decoy result from another turn.",
+                matches: [],
+            }),
+        };
         mockFetchChatHistory.mockImplementation(async (limit: number) =>
-            limit === 5 ? { messages: [lateRow], total: 1, has_more: false } : EMPTY_HISTORY,
+            limit === 10
+                ? { messages: [exactRow, decoyRow], total: 2, has_more: false }
+                : EMPTY_HISTORY,
         );
         await renderAuthenticated();
 
         await typeSearchAndSend();
 
         await screen.findByText("I found 5 strong UAE job matches for you.");
+        expect(screen.queryByText("Decoy result from another turn.")).toBeNull();
         // The late result was recovered, not silently discarded — and without
         // a second execution.
         expect(mockSendChat).not.toHaveBeenCalled();
+    });
+
+    it("falls back to ONE guard-protected re-send when the exact result row is not visible", async () => {
+        mockPoll.mockResolvedValue("completed");
+        // History only holds rows from other turns — no exact-operation match.
+        const decoyRow = {
+            role: "assistant",
+            content: JSON.stringify({
+                type: "job_matches",
+                operation_id: "op_web_some_other_turn",
+                message: "Decoy result from another turn.",
+                matches: [],
+            }),
+        };
+        mockFetchChatHistory.mockImplementation(async (limit: number) =>
+            limit === 10
+                ? { messages: [decoyRow], total: 1, has_more: false }
+                : EMPTY_HISTORY,
+        );
+        // The server guard answers the duplicate send with the completed
+        // status instead of re-executing.
+        mockSendChat.mockResolvedValue({
+            type: "search_status",
+            message: "That search already finished — its results are saved in this conversation.",
+        });
+        await renderAuthenticated();
+
+        await typeSearchAndSend();
+
+        await waitFor(() => expect(mockSendChat).toHaveBeenCalledTimes(1));
+        expect(mockSendChat.mock.calls[0][2]).toBe(FIXED_OP_ID);
+        expect(screen.queryByText("Decoy result from another turn.")).toBeNull();
     });
 
     it("allows exactly one retry after a terminal operation, same id (T3)", async () => {
