@@ -86,6 +86,11 @@ CHECKS: list[tuple[str, str, object]] = [
     ("046", "index", "idx_job_observations_fingerprint_observed"),
     # Detects a stale pre-review table shape (raw query_context / query_hash).
     ("046", "column", ("job_observations", "query_context_hmac")),
+    # External reasoning layer — persistent Reasoning Graph. Applied
+    # automatically at API startup (src/api/app.py), so drift self-resolves
+    # on the first Render deploy after merge.
+    ("047", "table", "reasoning_traces"),
+    ("047", "index", "idx_reasoning_traces_user_created"),
 ]
 
 
