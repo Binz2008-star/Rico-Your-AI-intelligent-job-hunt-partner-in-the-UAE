@@ -125,6 +125,40 @@ def _role_family_terms(canonical_role: str) -> Set[str]:
     return terms
 
 
+def cross_family_term_counts() -> Dict[str, int]:
+    """How many distinct role families mention each single-word family term.
+
+    Data-driven ambiguity signal for relevance gating: a term shared by many
+    families (audit=6, compliance=5, environment=5, risk=3 in the current
+    taxonomy) is weak cross-domain vocabulary, while a term concentrated in
+    one or two families (sustainability=2, inspection=2, quality=1) is
+    discriminating evidence for its domain."""
+    tax = _load_taxonomy()
+    counts: Dict[str, int] = {}
+    for _role, terms in (tax.get("families") or {}).items():
+        for t in {str(x).strip().lower() for x in (terms or [])}:
+            if t and " " not in t:
+                counts[t] = counts.get(t, 0) + 1
+    return counts
+
+
+def role_alias_phrases(canonical_role: str) -> Set[str]:
+    """Lowered alias texts that resolve to *canonical_role* in the taxonomy,
+    plus the canonical text itself — e.g. {"safety manager", "hse manager"}
+    for "HSE Manager". Lets a relevance gate keep genuinely-equivalent titles
+    reachable without leaning on cross-family single words. Data-driven from
+    job_role_taxonomy.json; empty for blank/unknown roles."""
+    canonical = (canonical_role or "").strip()
+    if not canonical:
+        return set()
+    tax = _load_taxonomy()
+    out: Set[str] = {canonical.lower()}
+    for alias, canon in (tax.get("aliases") or {}).items():
+        if str(canon) == canonical:
+            out.add(str(alias).strip().lower())
+    return {a for a in out if a}
+
+
 def classify_role_candidate(
     text: str,
     profile: Any,

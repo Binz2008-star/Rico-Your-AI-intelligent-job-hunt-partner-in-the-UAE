@@ -413,6 +413,54 @@ Per the owner ruling, 2b therefore folds into 2a.
 - Rollback plan: revert the squash commit — shell returns to current
   chrome; hook/component are additive files
 
+### TASK-20260719-015 — Relevance floor: cross-family single-token fix (Bybit/HSE case)
+
+Status: review
+Owner: Claude (Fable session; owner full-ownership mandate 2026-07-19 evening — track ordered after the verification_status hotfix)
+Branch: rico/relevance-floor-cross-family
+Issue/PR: #1200
+
+#### Objective
+Stop cross-family single words from satisfying the explicit-title relevance
+floor. Production evidence (twice on 2026-07-19, 13:26Z and 16:22Z smokes):
+a search for "HSE Manager" surfaced "Head of Trading Risk" at Bybit as its
+only confident "match" — the taxonomy family expansion contributes "risk",
+and one single-token title hit cleared the floor. In the 16:22Z incident the
+integrity gate honestly filtered 21 off-title results and the lone survivor
+was the irrelevant one.
+
+#### Scope delivered
+- Shared 3-layer evidence rule in `src/job_integrity.py`
+  (`role_text_supported`): phrase substring (incl. taxonomy alias phrases
+  — "safety manager" → HSE Manager) OR one STRONG token OR >= 2 distinct
+  WEAK tokens. The strong/weak split is data-derived per term from
+  `cross_family_term_counts()` (role_classifier, additive): a family term
+  mentioned by >= 3 distinct families (audit=6, compliance=5,
+  environment=5, risk=3) is WEAK cross-domain vocabulary; concentrated
+  terms (sustainability=2, inspection=2, quality=1) stay STRONG — so an
+  ESG search still reaches "Sustainability Manager" while an HSE search
+  never reaches "Head of Trading Risk".
+- The strict rule applies at the DISPLAY FLOOR only; the integrity gate
+  keeps its legacy single-hit vocabulary (strong ∪ weak) so off-title
+  live listings are dropped by the floor with the honest "didn't strongly
+  match — broaden?" reply, never mislabeled as "couldn't retrieve".
+  (filter_listings gained optional 3-tuple support, tested, unused by the
+  pipeline for now.)
+- `_requested_domain_terms` returns (strong, weak, phrases);
+  `role_alias_phrases()` + `cross_family_term_counts()` added
+  (additive). No per-role/per-account hardcoding.
+- Tests: 14 new regression pins incl. the exact production case, ESG→
+  Sustainability preserved, cross-domain collisions, AR/degenerate inputs,
+  integrity 3-tuple + legacy modes; the pre-existing
+  test_search_title_relevance_floor suite passes except one test that
+  fails identically on pristine main in this container (env artifact).
+
+#### Verification
+- Full-tree failure set on this branch matches the pristine-main baseline
+  (30 pre-existing container artifacts; zero new) — evidence in PR body.
+- Post-merge product gate: repeat an HSE Manager production search — the
+  Bybit-class result must be absent (honest empty/broaden reply instead).
+
 ### TASK-20260719-014 — Hotfix: chat verification_status contract drift (frontend schema)
 
 > Canonical-ID note (2026-07-19 sync): this entry originally reused

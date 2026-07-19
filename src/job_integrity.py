@@ -174,16 +174,50 @@ def _dominant_protected_domain(text: str, *, min_hits: int = 2) -> Optional[str]
     return best if best_hits >= min_hits else None
 
 
-def _role_supported(text: str, single_terms: set[str], phrase_terms: set[str]) -> bool:
-    """True when *text* contains any requested-role single token or phrase."""
+def role_text_supported(
+    text: str,
+    strong_terms: set[str],
+    phrase_terms: set[str],
+    weak_terms: set[str] | frozenset[str] = frozenset(),
+) -> bool:
+    """True when *text* is supported by the requested-role vocabulary.
+
+    Three evidence layers (cross-family fix, 2026-07-19 production case:
+    "Head of Trading Risk" must never satisfy an HSE Manager request via the
+    lone family word "risk"):
+
+      * any multi-word PHRASE substring — includes the canonical role text
+        and its taxonomy alias phrases ("safety manager" → HSE Manager); OR
+      * any STRONG single token — the requested/canonical role's OWN
+        meaningful words, direct evidence of intent; OR
+      * at least TWO distinct WEAK single tokens — family-expansion synonyms
+        (risk / audit / compliance / environment …) are shared across many
+        role families, so one alone is not title evidence.
+
+    Callers that pass no weak set keep the legacy semantics: their curated
+    single-term vocabulary acts as strong evidence.
+    """
     low = _norm(text)
     if not low:
         return False
     if phrase_terms and any(p in low for p in phrase_terms):
         return True
-    if single_terms and (_tokens(low) & single_terms):
+    toks = _tokens(low)
+    if strong_terms and (toks & strong_terms):
+        return True
+    if weak_terms and len(toks & set(weak_terms)) >= 2:
         return True
     return False
+
+
+def _role_supported(
+    text: str,
+    single_terms: set[str],
+    phrase_terms: set[str],
+    weak_terms: set[str] | frozenset[str] = frozenset(),
+) -> bool:
+    """Back-compat wrapper — single_terms behave as STRONG evidence."""
+    return role_text_supported(text, single_terms, phrase_terms, weak_terms)
 
 
 def _apply_url_present_but_invalid(rec: dict) -> bool:
@@ -248,6 +282,7 @@ def validate_listing(
     requested_role: str = "",
     single_terms: Optional[set[str]] = None,
     phrase_terms: Optional[set[str]] = None,
+    weak_terms: Optional[set[str]] = None,
     uae_only: bool = True,
 ) -> Optional[RejectionReason]:
     """Return the FIRST failing integrity reason for *rec*, or None if it passes.
@@ -257,6 +292,7 @@ def validate_listing(
     """
     single_terms = single_terms or set()
     phrase_terms = phrase_terms or set()
+    weak_terms = weak_terms or set()
 
     title = _record_field(rec, "title", "job_title")
     description = _record_field(rec, "description", "job_description", "snippet")
@@ -279,9 +315,9 @@ def validate_listing(
     title_domain = _dominant_protected_domain(title, min_hits=1)
     desc_domain = _dominant_protected_domain(description)
     title_is_ar = _is_arabic(title)
-    title_ok = _role_supported(title, single_terms, phrase_terms) if not title_is_ar else False
+    title_ok = _role_supported(title, single_terms, phrase_terms, weak_terms) if not title_is_ar else False
     desc_ok = (
-        _role_supported(description, single_terms, phrase_terms)
+        _role_supported(description, single_terms, phrase_terms, weak_terms)
         if (description and not _is_arabic(description)) else False
     )
 
@@ -297,7 +333,7 @@ def validate_listing(
     #     protected domain equalling the request), else by a strongly-supporting
     #     body; a generic/mismatched title carrying only a body claim for a
     #     protected-domain request is not sufficiently aligned.
-    if not title_is_ar and (single_terms or phrase_terms):
+    if not title_is_ar and (single_terms or phrase_terms or weak_terms):
         title_confirms = title_ok or (requested_domain is not None and title_domain == requested_domain)
         if not title_confirms:
             if not desc_ok:
@@ -319,8 +355,8 @@ def validate_listing(
         ttl_domain = _dominant_protected_domain(title, min_hits=1)
         if src_domain and src_domain != ttl_domain:
             return RejectionReason.SOURCE_PAGE_MISMATCH
-        if single_terms or phrase_terms:
-            if not _role_supported(src_title, single_terms, phrase_terms) and _role_supported(title, single_terms, phrase_terms):
+        if single_terms or phrase_terms or weak_terms:
+            if not _role_supported(src_title, single_terms, phrase_terms, weak_terms) and _role_supported(title, single_terms, phrase_terms, weak_terms):
                 # Provider title matches the role but the real page does not.
                 if not _tokens(_norm(src_title)) & _tokens(_norm(title)):
                     return RejectionReason.SOURCE_PAGE_MISMATCH
@@ -345,7 +381,7 @@ def filter_listings(
     records: Iterable[dict],
     *,
     requested_role: str = "",
-    requested_terms: Optional[tuple[set[str], set[str]]] = None,
+    requested_terms: Optional[tuple[set[str], ...]] = None,
     uae_only: bool = True,
 ) -> tuple[list[dict], dict[str, int]]:
     """Split *records* into (trustworthy, rejection-count-by-reason).
@@ -354,7 +390,13 @@ def filter_listings(
     dropped entirely and counted by reason for a safe aggregate summary — the
     per-record reasons are never surfaced to the user.
     """
-    single_terms, phrase_terms = requested_terms or (set(), set())
+    # requested_terms: legacy 2-tuple (strong_singles, phrases) or the
+    # cross-family 3-tuple (strong_singles, weak_singles, phrases).
+    weak_terms: set[str] = set()
+    if requested_terms and len(requested_terms) == 3:
+        single_terms, weak_terms, phrase_terms = requested_terms
+    else:
+        single_terms, phrase_terms = requested_terms or (set(), set())
     kept: list[dict] = []
     rejected: dict[str, int] = {}
     for rec in records or []:
@@ -365,6 +407,7 @@ def filter_listings(
             requested_role=requested_role,
             single_terms=single_terms,
             phrase_terms=phrase_terms,
+            weak_terms=weak_terms,
             uae_only=uae_only,
         )
         if reason is None:
