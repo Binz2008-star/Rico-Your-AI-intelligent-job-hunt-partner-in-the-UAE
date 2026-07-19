@@ -1,9 +1,11 @@
 # Runbook — Migration 047 (`analytics_events`)
 
 Canonical apply / verify / rollback procedure. This exact procedure was
-executed on the Neon **preview** branch on 2026-07-19; the **production**
-application is GATED on a separate explicit owner approval and has NOT
-been performed.
+executed on the Neon **preview** branch on 2026-07-19. The **production**
+application — gated on separate explicit owner approval — HAS since been
+performed and drift-verified on 2026-07-19; see "Addendum — production
+verification" at the end of this file. The preview record below is
+preserved unchanged as the historical validation evidence.
 
 ## Identity of the migration
 
@@ -78,8 +80,11 @@ identities → distinct actors/rows; zero raw-identity leaks.
 
 - ZERO call sites of `analytics_events_repo.record_event` exist outside
   the module and its tests — no emitters are wired.
-- `RICO_ANALYTICS_HMAC_KEY` is NOT set on Render — even a future caller
-  is fail-closed (writes skipped) until the owner sets the key.
+- `RICO_ANALYTICS_HMAC_KEY` was recorded as unset in this pre-apply
+  snapshot; its current status is **UNVERIFIED from agent sessions** (no
+  value accessed or printed) — owner-side Render verification required;
+  see the production-verification addendum. While unset, any caller is
+  fail-closed (writes skipped).
 - Nothing reads the table. The applied table sits inert.
 
 ## Rollback
@@ -146,3 +151,48 @@ set the flag off on Render (no deploy) → revert the PR. Do NOT clear
 
 Deleted rows are unrecoverable by design; disaster recovery is Neon PITR /
 branch restore only.
+
+## Addendum — production verification (2026-07-19, read-only)
+
+Migration 047 has been applied to production (owner-gated apply) and was
+verified read-only at **2026-07-19T10:08:50Z** (database clock) against
+Neon project `robenjob` (`old-frog-88141983`), branch **`production`**
+(`br-restless-cherry-amq6wj7o`), db `neondb`:
+
+- `analytics_events` PRESENT; `uq_analytics_events_dedupe`,
+  `idx_analytics_events_name_occurred`, `idx_analytics_events_occurred`
+  all PRESENT.
+- Verify targets met exactly: 10 columns / 4 indexes (PK + 3 explicit) /
+  4 CHECK constraints.
+- Row count **0** (count-only; payloads never read).
+- Full drift sweep replicated read-only on the production branch:
+  **55/55 signature objects PRESENT, 0 missing** (the entire `CHECKS`
+  list of `scripts/check_migration_drift.py` at `main`). The scheduled
+  drift-run failures of 2026-07-18 and 2026-07-19 08:35Z predated the
+  production application; a future scheduled workflow run must
+  independently confirm the current drift state.
+
+State updates relative to the sections above (which are preserved as the
+pre-apply record):
+
+- "Safety of production application" described the pre-#1179 state.
+  Emitters are NOW wired on `main` (#1179: `job_action`,
+  `search_performed`) and deployed (`deploy-render.yml` success for
+  `11cfbdb6` and `a03b12f1`, which gates on `/version.commit` match).
+  **No claim is made that analytics collection is operational** until
+  the owner verifies the Render HMAC key status.
+- `RICO_ANALYTICS_HMAC_KEY`: status **UNVERIFIED from this session** —
+  no value was accessed or printed (no Render env read access from the
+  verifying session). Row count 0 does **not** prove the key's presence
+  or absence (equally consistent with an unset key, no qualifying
+  traffic since deploy, or rejected events). Owner-side Render
+  verification is required.
+- Purge scheduling: NOT active — `schedule:` remains commented out and
+  `RICO_ENABLE_ANALYTICS_PURGE` defaults off (two-gate rollout above).
+- Post-merge audit (2026-07-19): verdict **B — safe with follow-up**;
+  #1176 was merged without a completed GitHub review and this audit is
+  the compensating review control; 31/31 audit cases passed. Open items:
+  malformed-input never-raises hardening is an **ACTIVE follow-up** now
+  that emitters are wired (not merely a future-emitter prerequisite),
+  and an allowlist-growth policy is required before any event #9.
+  Ledger detail: TASKS.md TASK-20260719-002.

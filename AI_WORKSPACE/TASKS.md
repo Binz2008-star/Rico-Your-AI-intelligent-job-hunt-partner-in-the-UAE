@@ -4017,10 +4017,10 @@ sees the final composed search query.
 
 ### TASK-20260719-002 — analytics_events foundation (migration 047)
 
-Status: merged — production migration pending
+Status: merged — production migration applied and drift-verified (2026-07-19)
 Owner: Claude (Fable session; owner directive post-#1175: single-objective PR)
 Branch: claude/analytics-events-foundation
-Issue/PR: (draft PR from this branch)
+Issue/PR: #1176 — merged as c09a929a
 
 #### Objective
 Product Truth Sprint track 1 ("eyes"): first-party behavioral event store —
@@ -4088,6 +4088,70 @@ real-browser smoke) → Status: done.
 - **PR #1177 ruling (owner):** carries a conflicting
   `047_reasoning_traces.sql`; stays Draft; any future reopen restarts from
   `main` ≥ `c09a929a` with a NEW migration number and a NEW task.
+
+##### Production verification (2026-07-19, read-only)
+
+Migration 047 IS applied to production and drift-verified — this
+supersedes the "Status is NOT done" sequencing bullet above on the
+apply step only. The preview validation record above is historical and
+stands unchanged.
+
+- Verified: **2026-07-19T10:08:50Z** (database clock, read-only session).
+- Identity: Neon project `robenjob` (`old-frog-88141983`), branch
+  **`production`** (`br-restless-cherry-amq6wj7o`), db `neondb`.
+- Schema: `analytics_events` PRESENT; explicit indexes
+  `uq_analytics_events_dedupe`, `idx_analytics_events_name_occurred`,
+  `idx_analytics_events_occurred` all PRESENT; 10 columns / 4 indexes
+  (PK + 3) / 4 CHECK constraints — exactly the runbook Verify targets.
+- Drift: full signature sweep replicated read-only on the production
+  branch — **55/55 objects PRESENT, 0 missing** (entire `CHECKS` list of
+  `scripts/check_migration_drift.py` at `main`, not only 047). The
+  scheduled drift-run failures of 2026-07-18 and 2026-07-19 08:35Z
+  predated the production application; a future scheduled workflow run
+  must independently confirm the current drift state.
+- Row count: **0** (count-only query; no payloads were read).
+
+Component status (stated separately, per owner directive):
+
+1. **Schema:** applied to production and drift-verified (above).
+2. **Emitters:** wired on `main` (#1179: `job_action` in
+   `agent_runtime.handle_action` step 12, `search_performed` in the chat
+   search path) and DEPLOYED — `deploy-render.yml` (blocks until
+   `/version.commit` matches) succeeded for `11cfbdb6` and `a03b12f1`.
+   **No claim is made that analytics collection is operational** — that
+   claim requires owner-side verification of the Render HMAC key status.
+3. **`RICO_ANALYTICS_HMAC_KEY`:** status **UNVERIFIED from this
+   session** — no value was accessed or printed; the verifying session
+   has no Render env read access and the production host is
+   network-blocked from the sandbox. Row count 0 does **not** prove the
+   key's presence or absence (it is equally consistent with an unset
+   key, with no qualifying traffic since deploy, or with rejected
+   events). Owner-side Render verification is required.
+4. **Purge scheduling:** NOT active by design — endpoint + workflow merged
+   (#1180), but the workflow `schedule:` ships COMMENTED OUT and
+   `RICO_ENABLE_ANALYTICS_PURGE` defaults off (two-gate rollout; see the
+   runbook addendum / DEC-20260719-001).
+
+Remaining before "done": owner verifies (and, if absent, sets)
+`RICO_ANALYTICS_HMAC_KEY` on Render → baseline collection → purge
+schedule enablement (owner-gated).
+
+##### Post-merge audit (2026-07-19) — verdict B: safe with follow-up
+
+Compensating review control: **#1176 was merged without a completed
+GitHub review**; this post-merge audit is the compensating review
+control for that merge.
+
+- Audit result: **31/31 audit cases passed** — verdict **B: safe with
+  follow-up** (no corrective PR, no rollback).
+- Open gap: the **malformed-input never-raises** hardening of the event
+  recording path remains. With #1179 emitters now wired into live
+  runtime paths, this is an **ACTIVE follow-up**, not merely a
+  prerequisite for future emitters.
+- Policy gap: an **allowlist-growth policy** is required before any
+  event #9 is added to `EVENT_ALLOWLIST` (currently 8 events, enforced
+  in both the repository layer and the 047 DB CHECK — the lockstep rule
+  needs an owner-approved change procedure).
 
 ---
 
