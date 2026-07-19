@@ -21,7 +21,7 @@ import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
-import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, executePermissionAction, fetchChatHistory, fetchMe, getCvQuotaError, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
+import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, executePermissionAction, fetchChatHistory, fetchMe, getCvQuotaError, logout, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
@@ -1134,6 +1134,11 @@ export default function CommandPage() {
         const trimmed = text.trim();
         if (!trimmed || sendingRef.current) return;
 
+        // One user turn = ONE operation id, shared by every transport attempt
+        // (SSE, JSON fallback, timeout recovery). The backend refuses to start
+        // a second search execution for an id that is still running.
+        const operationId = mintOperationId();
+
         sendingRef.current = true;
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: displayText?.trim() ?? trimmed }]);
         setThinking(true);
@@ -1266,8 +1271,8 @@ export default function CommandPage() {
             }
 
             const streamGen = chatAudience === "authenticated"
-                ? sendChatStream(trimmed, controller.signal, language)
-                : sendChatStreamPublic(trimmed, getSessionId(sessionIdRef), controller.signal, language);
+                ? sendChatStream(trimmed, controller.signal, language, operationId)
+                : sendChatStreamPublic(trimmed, getSessionId(sessionIdRef), controller.signal, language, operationId);
 
             for await (const event of streamGen) {
                 if (event.type === "token" && event.text) {
@@ -1287,8 +1292,8 @@ export default function CommandPage() {
                 } else if (event.type === "error") {
                     const res: ChatApiResponse =
                         chatAudience === "authenticated"
-                            ? await sendChat(trimmed, controller.signal, undefined, language)
-                            : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal, undefined, language);
+                            ? await sendChat(trimmed, controller.signal, operationId, language)
+                            : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal, operationId, language);
                     applyDoneResponse(res);
                 }
             }
@@ -1300,8 +1305,8 @@ export default function CommandPage() {
             if (!streamStarted && !responseApplied) {
                 const res: ChatApiResponse =
                     chatAudience === "authenticated"
-                        ? await sendChat(trimmed, controller.signal, undefined, language)
-                        : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal, undefined, language);
+                        ? await sendChat(trimmed, controller.signal, operationId, language)
+                        : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal, operationId, language);
                 applyDoneResponse(res);
             }
         } catch (err) {
@@ -1355,12 +1360,63 @@ export default function CommandPage() {
                                 controller.abort();
                             }
                             const retryController = new AbortController();
-                            abortRef.current = retryController;  // cancel button targets retry too
+                            abortRef.current = retryController;  // cancel button targets recovery too
+
+                            // Duplicate-execution guard: the server is usually STILL
+                            // WORKING on this exact search (provider cascades can pass
+                            // 45s) — re-sending would start a second cascade and burn
+                            // provider quota. Wait on the operation instead; only a
+                            // definitively ended/unknown operation may be re-sent.
+                            if (chatAudience === "authenticated") {
+                                const verdict = await pollOperationUntilSettled(operationId, retryController.signal);
+                                if (verdict === "aborted") {
+                                    setMessages((prev) => prev.map((m) =>
+                                        m.id === retryId
+                                            ? { ...m, type: "stopped", text: t("cmdStoppedNoPartial"), retryText: trimmed }
+                                            : m
+                                    ));
+                                    return;
+                                }
+                                if (verdict === "completed") {
+                                    // The late result was appended to chat history by the
+                                    // server — recover it instead of searching again.
+                                    try {
+                                        const history = await fetchChatHistory(5);
+                                        const lastAssistant = [...history.messages].reverse().find((m) => m.role !== "user");
+                                        if (lastAssistant) {
+                                            const parsed = parseHistoryContent(lastAssistant.content, retryId);
+                                            setMessages((prev) => prev.map((m) =>
+                                                m.id === retryId ? ({ ...m, ...parsed, id: retryId } as Message) : m
+                                            ));
+                                            return;
+                                        }
+                                    } catch {
+                                        // History fetch failed — fall through to the single
+                                        // re-send below; the server-side guard still answers
+                                        // with the completed status instead of re-executing.
+                                    }
+                                }
+                                if (verdict === "still_running") {
+                                    // Budget exhausted while the search is still live —
+                                    // surface the manual retry affordance, never a blind
+                                    // auto re-send against an active operation.
+                                    setMessages((prev) => prev.map((m) =>
+                                        m.id === retryId
+                                            ? { ...m, text: t("cmdErrTimeout"), isError: true, retryText: trimmed }
+                                            : m
+                                    ));
+                                    return;
+                                }
+                                // "terminal" (failed/timed_out/unknown) or "unavailable"
+                                // (status API unreachable) → one legitimate re-send below,
+                                // carrying the SAME operationId so the server guard has the
+                                // final word even if our view of the state was stale.
+                            }
                             const retryTimeoutId = setTimeout(() => retryController.abort(), 45_000);
                             const retryRes: ChatApiResponse =
                                 chatAudience === "authenticated"
-                                    ? await sendChat(trimmed, retryController.signal, undefined, language)
-                                    : await sendChatPublic(trimmed, getSessionId(sessionIdRef), retryController.signal, undefined, language);
+                                    ? await sendChat(trimmed, retryController.signal, operationId, language)
+                                    : await sendChatPublic(trimmed, getSessionId(sessionIdRef), retryController.signal, operationId, language);
                             clearTimeout(retryTimeoutId);
                             const retryReply =
                                 retryRes.response ?? retryRes.reply ?? retryRes.message ?? retryRes.content ??

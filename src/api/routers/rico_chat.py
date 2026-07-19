@@ -777,7 +777,12 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
             # arrives correctly. Only pure conversational replies are token-streamed.
             profile = get_profile(user_id)
             if not chat_service.should_stream_ai(ctx, payload.message, profile):
-                result = chat_service.send_message(ctx=ctx, message=payload.message, language=payload.language)
+                result = chat_service.send_message(
+                    ctx=ctx,
+                    message=payload.message,
+                    operation_id=payload.operation_id,
+                    language=payload.language,
+                )
                 yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
                 return
 
@@ -934,7 +939,12 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
 
             profile = get_profile(user_id)
             if not chat_service.should_stream_ai(ctx, payload.message, profile):
-                result = chat_service.send_message(ctx=ctx, message=payload.message, language=payload.language)
+                result = chat_service.send_message(
+                    ctx=ctx,
+                    message=payload.message,
+                    operation_id=payload.operation_id,
+                    language=payload.language,
+                )
                 yield f'data: {_json.dumps({"type":"done","response":_strip_internal_fields(result)})}\n\n'
                 return
 
@@ -1210,6 +1220,41 @@ def rico_clear_chat_history(request: Request) -> None:
     user = get_current_user(request)
     user_id = user["email"]
     chat_service.clear_chat_history(user_id)
+
+
+@router.get("/operations/{operation_id}")
+@limiter.limit(LIMIT_CHAT)
+def rico_operation_status(request: Request, operation_id: str) -> dict[str, Any]:
+    """Read-only status of a job-search operation owned by the current user.
+
+    Lets the command surface WAIT on a slow search (poll → recover the late
+    result from chat history) instead of blindly re-sending it after the
+    client-side timeout — the write path stays the chat endpoints; this
+    route never starts, retries, or mutates a search.
+    """
+    user = get_current_user(request)
+    if not (8 <= len(operation_id) <= 80):
+        raise HTTPException(status_code=404, detail="Operation not found")
+
+    from src.services.operation_state import (
+        get_operation,
+        is_actively_running,
+        operation_age_seconds,
+    )
+
+    operation = get_operation(user["email"], operation_id)
+    if not operation or operation.get("type") != "job_search":
+        raise HTTPException(status_code=404, detail="Operation not found")
+
+    status = str(operation.get("status") or "")
+    return {
+        "operation_id": str(operation.get("operation_id")),
+        "status": status,
+        "active": is_actively_running(operation),
+        "terminal": status in ("completed", "failed"),
+        "result_count": operation.get("result_count"),
+        "age_seconds": operation_age_seconds(operation),
+    }
 
 
 # ============================================================================

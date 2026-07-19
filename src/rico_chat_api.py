@@ -2027,6 +2027,66 @@ class RicoChatAPI:
         self._current_operation_id = str(operation["operation_id"])
         return operation
 
+    def _duplicate_operation_guard(
+        self, user_id: str, operation_id: str, message: str, language: str | None
+    ) -> dict[str, Any] | None:
+        """One operation_id maps to one search execution.
+
+        When a request carries an operation_id this user already started
+        (frontend timeout auto-retry, SSE→JSON fallback, double submit), a
+        still-running original gets an honest in-progress reply and a
+        completed original gets a completed-status reply — the full result
+        already sits in chat history, so the client recovers from there
+        instead of paying for a second provider cascade. Terminal
+        failed/timed_out operations and orphaned running records return
+        None so a legitimate retry re-executes normally. These status
+        replies are never type job_matches, so they emit no analytics and
+        append nothing to chat history (a duplicate is not a new turn).
+        Never raises — any error falls through to normal processing.
+        """
+        try:
+            from src.services.operation_state import get_operation, is_actively_running
+
+            existing = get_operation(user_id, operation_id)
+            if not existing or existing.get("type") != "job_search":
+                return None
+            arabic = language == "ar" or self._is_arabic_text(message or "")
+            base = {
+                "intent": "search_jobs",
+                "success": True,
+                "operation_id": str(existing.get("operation_id")),
+                "operation_type": "job_search",
+                "response_source": "operation_guard",
+            }
+            if is_actively_running(existing):
+                return {
+                    **base,
+                    "type": "search_in_progress",
+                    "operation_status": "running",
+                    "message": (
+                        "ما زلت أعمل على بحثك الحالي — النتائج ستظهر هنا خلال لحظات، ولم أبدأ بحثاً ثانياً."
+                        if arabic else
+                        "I'm still working on your current job search — results will appear here shortly. "
+                        "I didn't start a second search."
+                    ),
+                }
+            if existing.get("status") == "completed":
+                return {
+                    **base,
+                    "type": "search_status",
+                    "operation_status": "completed",
+                    "result_count": existing.get("result_count"),
+                    "recover_from_history": True,
+                    "message": (
+                        "هذا البحث اكتمل بالفعل — النتائج محفوظة في المحادثة."
+                        if arabic else
+                        "That search already finished — its results are saved in this conversation."
+                    ),
+                }
+        except Exception:
+            logger.debug("rico_chat_api: duplicate-operation guard skipped", exc_info=True)
+        return None
+
     _ALLOWED_CHAT_ROLES: frozenset[str] = frozenset({"user", "assistant", "system"})
 
     def _append_chat(self, user_id: str, role: str, message: str | dict[str, Any]) -> None:
@@ -6144,6 +6204,16 @@ class RicoChatAPI:
         debug_id = _generate_debug_id()
         self._current_operation_id = operation_id
         try:
+            # Duplicate-execution guard: a client retry/fallback re-sending the
+            # SAME operation_id must never start a second provider cascade while
+            # the first is live (or re-run one that already completed).
+            if operation_id:
+                guard = self._duplicate_operation_guard(
+                    user_id, operation_id, message, language
+                )
+                if guard is not None:
+                    guard.setdefault("debug_id", debug_id)
+                    return guard
             result = self._process_message_inner(user_id, message, language=language)
             # Guarantee debug_id on every response
             if isinstance(result, dict):

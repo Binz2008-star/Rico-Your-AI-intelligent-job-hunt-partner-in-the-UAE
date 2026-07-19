@@ -14,6 +14,12 @@ from src.rico_memory import RicoMemoryStore
 OperationStatus = Literal["running", "timed_out", "failed", "completed"]
 
 CLIENT_TIMEOUT_SECONDS = 45
+# Duplicate-execution guard ceiling: past this age a "running" record is
+# treated as an orphan (worker restart, lost thread) rather than a live
+# execution, so retries are never blocked forever. The production provider
+# cascade has been observed at ~55s end-to-end (2026-07-19 smoke), so 120s
+# comfortably covers a slow-but-alive search.
+MAX_EXECUTION_SECONDS = 120
 MAX_IN_MEMORY_OPERATIONS = 500
 _LATEST_JOB_SEARCH_KEY = "latest_job_search_operation"
 _OPERATION_KEY_PREFIX = "operation:"
@@ -152,6 +158,32 @@ def mark_failed(user_id: str, operation_id: str, error: str) -> dict[str, Any] |
         status="failed",
         error=error,
     )
+
+
+def operation_age_seconds(operation: dict[str, Any]) -> float | None:
+    """Seconds since the operation was created; None when unparseable."""
+    try:
+        created_at = datetime.fromisoformat(str(operation["created_at"]).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    return (datetime.now(timezone.utc) - created_at).total_seconds()
+
+
+def is_actively_running(operation: dict[str, Any]) -> bool:
+    """True while this operation's search execution must be treated as live.
+
+    The duplicate-execution guard blocks re-execution only in this window.
+    Terminal states (completed/failed), the client-facing "timed_out" state,
+    an unparseable created_at, and running records older than
+    MAX_EXECUTION_SECONDS are all NOT active — so a legitimate retry after a
+    genuine failure or an orphaned record is never suppressed.
+    """
+    if operation.get("status") != "running":
+        return False
+    age = operation_age_seconds(operation)
+    if age is None:
+        return False
+    return age < MAX_EXECUTION_SECONDS
 
 
 def maybe_mark_timed_out(user_id: str, operation: dict[str, Any]) -> dict[str, Any]:
