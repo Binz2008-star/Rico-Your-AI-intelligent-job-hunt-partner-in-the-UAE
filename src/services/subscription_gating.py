@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from src.schemas.chat import RicoSessionContext
+from src.schemas.subscription import SubscriptionTier
 from src.subscription_plans import resolve_effective_user_plan
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,10 @@ class GateCheck:
     remaining: int | None
     plan: str
     message: str
+    # When the usage window rolls over and the allowance refills. For the Free
+    # AI-message allowance this is the next 00:00 UTC (daily reset); for a paid
+    # plan it is the current billing-period end. None when not applicable.
+    reset_at: datetime | None = None
 
     def to_response(self) -> dict[str, Any]:
         return {
@@ -34,6 +39,7 @@ class GateCheck:
             "limit": self.limit,
             "remaining": self.remaining,
             "plan": self.plan,
+            "reset_at": self.reset_at.isoformat() if self.reset_at else None,
             "next_action": "upgrade_subscription",
             "options": [
                 {
@@ -114,6 +120,12 @@ def _db_user_uuid(user_id: str) -> str | None:
 
 
 def count_monthly_ai_messages(user_id: str, since: datetime) -> int:
+    """Count a user's AI chat messages sent at/after ``since``.
+
+    Window-agnostic despite the historical name: callers pass the window start
+    (start-of-day for the Free daily allowance, or the billing-period start for
+    a paid plan). Kept named for patch/import compatibility.
+    """
     db_user_id = _db_user_uuid(user_id)
     if db_user_id:
         try:
@@ -215,17 +227,60 @@ def count_profile_optimizations(user_id: str, since: datetime) -> int:
         return 0
 
 
+def _humanize_reset(reset_at: datetime, now: datetime) -> str:
+    """Render the time until ``reset_at`` as e.g. "6 hours and 24 minutes"."""
+    total_minutes = max(0, int((reset_at - now).total_seconds() // 60))
+    hours, minutes = divmod(total_minutes, 60)
+    parts = []
+    if hours:
+        parts.append(f"{hours} hour" + ("s" if hours != 1 else ""))
+    if minutes or not hours:
+        parts.append(f"{minutes} minute" + ("s" if minutes != 1 else ""))
+    return " and ".join(parts)
+
+
 def check_ai_message_allowed_for_user(user_id: str) -> GateCheck:
-    """Monthly AI-message cap check keyed purely by ``user_id``.
+    """AI-message allowance check keyed purely by ``user_id``.
 
     Independent of how the request was authenticated. The public chat endpoint uses this
     to enforce the cap on a *registered* user identified only by email, who would otherwise
     dodge the limit by routing through /chat/public instead of the authenticated /chat.
+
+    Free tier is a DAILY allowance that resets at 00:00 UTC (not a monthly cap);
+    paid tiers keep their monthly billing-cycle window. The returned GateCheck
+    carries ``reset_at`` so callers can surface a "resets in …" countdown.
     """
     resolved = resolve_effective_user_plan(user_id)
-    since = _usage_window_start(resolved)
-    usage = count_monthly_ai_messages(user_id, since)
-    return _build_gate_check(user_id, "monthly_ai_message_limit", usage, resolved)
+    now = datetime.now(_UTC)
+    is_free = (not resolved.is_active) or resolved.subscription.plan == SubscriptionTier.FREE
+
+    if is_free:
+        # Daily free allowance: window is the current UTC day; refills at 00:00 UTC.
+        window_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        reset_at: datetime | None = window_start + timedelta(days=1)
+    else:
+        window_start = _usage_window_start(resolved)
+        reset_at = getattr(resolved.subscription, "current_period_end", None)
+
+    usage = count_monthly_ai_messages(user_id, window_start)
+    base = _build_gate_check(user_id, "monthly_ai_message_limit", usage, resolved)
+
+    if base.limit is None:
+        return replace(base, reset_at=reset_at)
+
+    # Compose Free-tier copy in daily terms — never "monthly".
+    if is_free:
+        if base.allowed:
+            message = f"{base.remaining} free AI messages remaining today."
+        else:
+            when = _humanize_reset(reset_at, now) if reset_at else "24 hours"
+            message = (
+                f"You've used your {base.limit} free AI messages for today. "
+                f"Your allowance resets in {when}."
+            )
+        return replace(base, message=message, reset_at=reset_at)
+
+    return replace(base, reset_at=reset_at)
 
 
 def check_ai_message_allowed(ctx: RicoSessionContext) -> GateCheck | None:

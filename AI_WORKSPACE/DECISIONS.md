@@ -89,6 +89,53 @@ one source of truth per domain is decided.
 
 ## Accepted decisions
 
+### DEC-20260720-001 — Free plan AI messages become a daily allowance (10 / 24h) with a reset countdown, replacing the 50-per-month cap
+
+Status: accepted
+Date: 2026-07-20
+Owner: Roben (owner directive, 2026-07-20) — implemented by Claude
+Related task: branch `claude/rico-free-plan-pricing-fuh4er`
+
+#### Context
+
+The free tier previously granted 50 AI messages per **calendar month**. A
+monthly cap makes a user who exhausts it wait up to a full month before they
+can try Rico again, which encourages abandonment. A daily allowance lets users
+return every day, keeps the try-again friction low, and preserves a clear
+reason to upgrade for heavy use. A daily cap must also be small enough that it
+cannot be abused to run up AI-provider cost.
+
+#### Decision
+
+1. Free tier = **10 AI messages per 24 hours**, resetting at **00:00 UTC**
+   (a fixed daily window, deterministic reset time for the countdown).
+2. Rico Monthly is **unchanged**: 300 AI messages per month on the Paddle
+   billing cycle.
+3. All user-facing copy for the free tier says "per day" / "resets every 24
+   hours" — never "monthly AI message limit". The over-quota chat message
+   surfaces a live "resets in Xh Ym" countdown.
+4. Enforcement stays on the existing `monthly_ai_message_limit` entitlement
+   field (shared with the paid plan) to avoid a schema/API rename; the window
+   is chosen by plan in `subscription_gating.check_ai_message_allowed_for_user`
+   (daily for Free, billing-cycle for paid). `reset_at` is added to `GateCheck`
+   / the gate response / the `messages_remaining` banner payload.
+
+This is a global, user-agnostic product change (no account is special-cased);
+Free covers authenticated free users on both the authenticated and public chat
+paths. Profile-optimization and saved-job quotas are untouched (still monthly /
+absolute).
+
+#### Consequences
+- Positive: daily return cadence; lower abandonment; small daily cap caps AI
+  cost exposure; clear upgrade reason for heavy users.
+- Negative/trade-off: the entitlement field name (`monthly_ai_message_limit`)
+  now means "daily" for Free and "monthly" for paid — documented in code
+  comments to prevent confusion; a future rename is deferred as out of scope.
+
+#### Follow-up
+- [ ] (Optional) Frontend live countdown timer using `messages_reset_at`; today
+      the countdown is rendered server-side in the over-quota message.
+
 ### DEC-20260719-003 — WhatsApp-assisted subscription restored as a SECONDARY assisted channel; Paddle stays the primary automated provider; entitlement boundary unchanged
 
 Status: accepted

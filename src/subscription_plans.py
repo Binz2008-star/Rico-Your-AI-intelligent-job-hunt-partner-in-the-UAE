@@ -25,8 +25,14 @@ from src.schemas.subscription import (
 # a past_due subscription keeps paid entitlements until this window elapses.
 PAST_DUE_GRACE_PERIOD = timedelta(days=7)
 
+# Free-tier AI messages are enforced as a DAILY allowance that resets at 00:00
+# UTC, not a monthly cap (see src/services/subscription_gating.py
+# check_ai_message_allowed_for_user). The entitlement field is shared with the
+# paid plan for schema/API compatibility, so the value here is the per-day cap
+# for Free while it stays a per-month cap for Rico Monthly. User-facing copy must
+# say "per day / resets every 24 hours" for Free — never "per month".
 FREE_ENTITLEMENTS = SubscriptionEntitlements(
-    monthly_ai_message_limit=50,
+    monthly_ai_message_limit=10,
     saved_jobs_limit=10,
     profile_optimization_limit=1,
     cv_storage_limit=1,

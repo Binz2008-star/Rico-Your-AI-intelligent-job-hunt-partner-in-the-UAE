@@ -246,10 +246,11 @@ def send_message(
     else:
         result = _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)
 
-    # Warn authenticated users who are approaching their monthly AI-message limit.
-    # Threshold: ≤10 remaining (roughly the last 20% of the free-tier 50-msg cap).
+    # Warn authenticated users who are approaching their AI-message allowance.
+    # Threshold: ≤10 remaining. For the Free daily allowance (10/day) this shows
+    # the counter throughout the day; for Rico Monthly (300/mo) only near the end.
     # Injected into every allowed response so the frontend can surface a persistent
-    # banner without a separate API call.
+    # banner (and reset countdown) without a separate API call.
     if (
         isinstance(result, dict)
         and gate
@@ -260,6 +261,9 @@ def send_message(
         result["messages_remaining"] = gate.remaining
         if gate.limit is not None:
             result["messages_limit"] = gate.limit
+        reset_at = getattr(gate, "reset_at", None)
+        if reset_at is not None:
+            result["messages_reset_at"] = reset_at.isoformat()
 
     return result
 
@@ -530,7 +534,8 @@ def _account_service_response(ctx: RicoSessionContext) -> Dict[str, Any]:
             except Exception:
                 monthly_label = "USD 21.50/mo (≈ AED 79)"
             msg = (
-                f"You are on the **Free** plan — {limit} AI messages per month. "
+                f"You are on the **Free** plan — {limit} AI messages per day "
+                f"(your allowance resets every 24 hours). "
                 f"Upgrade to Rico Monthly ({monthly_label}) for higher limits."
             )
 

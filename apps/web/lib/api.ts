@@ -1130,6 +1130,8 @@ export interface ChatApiResponse {
   rate_limit_notice?: string;
   messages_remaining?: number;
   messages_limit?: number;
+  /** ISO-8601 time the free daily allowance (or paid billing window) refills. */
+  messages_reset_at?: string;
   agentic_ui?: unknown;
 }
 
