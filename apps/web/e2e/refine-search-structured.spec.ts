@@ -93,6 +93,19 @@ async function mockCommand(page: Page): Promise<Array<Record<string, unknown>>> 
             body: JSON.stringify({ messages: [], total: 0, has_more: false }),
         }),
     );
+    // /command loads GET /chat/sessions on mount and its result drives
+    // setMessages. Left unmocked it 404s from the dev server and its late
+    // catch → legacy-history fallback fired AFTER the test had sent its search,
+    // clobbering the optimistic transcript back to the welcome state (no cards).
+    // Mock it to an empty, deterministic result so mount takes the early-return
+    // "no threads yet" branch and never resets messages sent later.
+    await page.route(`${PROXY_API}/rico/chat/sessions`, (route) =>
+        route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ sessions: [], total: 0 }),
+        }),
+    );
     await page.route(`${PROXY_API}/rico/chat/stream`, async (route) => {
         const body = route.request().postDataJSON() as Record<string, unknown>;
         chatBodies.push(body);
@@ -112,11 +125,73 @@ async function mockCommand(page: Page): Promise<Array<Record<string, unknown>>> 
     return chatBodies;
 }
 
-async function searchAndOpenCards(page: Page, query: string) {
-    const input = page.getByTestId("atelier-composer").locator("textarea");
-    await input.fill(query);
-    await input.press("Enter");
+// The mocked stream emits a `token` then a `done` event (mockCommand above), so
+// the transcript renders twice and the structured action-card buttons remount
+// when the `done` frame is applied. Waiting only for the `chat-actions-row`
+// container let a test interact during that remount, detaching the button
+// (element was detached from the DOM → 30s timeout). These helpers gate every
+// interaction on the settled, final card state instead.
+const JOB_MATCH_CARD_IDS = [
+    "action-card-navigate",
+    "action-card-chat-continue",
+    "action-card-open-drawer",
+] as const;
+
+/** Wait for the streamed job-match cards to reach their final rendered state.
+ *  Gates on attachment + visibility of all three structured cards (not their
+ *  text) so both EN and AR (translated labels) are covered; per-card text stays
+ *  asserted by the individual tests. */
+async function waitForJobMatchCards(page: Page) {
     await expect(page.getByTestId("chat-actions-row")).toBeVisible();
+    // Streaming has fully settled once the caret is gone; after this the
+    // transcript stops re-rendering, so the fade-in cards no longer remount
+    // under a subsequent click (the detached-DOM race).
+    await expect(page.getByTestId("transcript-streaming-caret")).toHaveCount(0);
+    for (const id of JOB_MATCH_CARD_IDS) {
+        await expect(page.getByTestId(id)).toBeVisible();
+    }
+}
+
+/** Re-resolve a streamed card and confirm it is attached, visible and enabled
+ *  immediately before clicking — the post-`done` remount can invalidate a
+ *  handle captured earlier, so the click must act on a freshly resolved,
+ *  settled element. */
+async function clickSettledCard(page: Page, testId: string) {
+    const card = page.getByTestId(testId);
+    await expect(card).toBeVisible();
+    await expect(card).toBeEnabled();
+    await card.click();
+}
+
+async function searchAndOpenCards(
+    page: Page,
+    query: string,
+    chatBodies: Array<Record<string, unknown>>,
+) {
+    const input = page.getByTestId("atelier-composer").locator("textarea");
+    const send = page.getByTestId("send-button");
+    await expect(input).toBeVisible();
+    // Hydration guard: /command's textarea is a controlled React input, so a
+    // fill/submit issued before hydration is silently discarded — React takes
+    // over the textarea, the value is lost, Send stays disabled, and nothing is
+    // sent (the test then saw the welcome state with no cards). Retry the
+    // fill+submit until the request has actually registered (`chatBodies` grew),
+    // and skip the action entirely once it has, so the tests' exact request-count
+    // assertions still hold (no double-send). `send.click()` is used instead of a
+    // keyboard Enter because it drives the same onSend the product uses without a
+    // keypress race. Condition-based retry with a bounded local budget — not a
+    // fixed sleep and not a global-timeout bump.
+    await expect(async () => {
+        if (chatBodies.length === 0) {
+            await input.fill(query);
+            await expect(send).toBeEnabled({ timeout: 1000 });
+            await send.click();
+        }
+        await expect.poll(() => chatBodies.length, { timeout: 2000 }).toBeGreaterThan(0);
+    }).toPass({ timeout: 20000 });
+    // Settle gate: the full, final card set must be rendered before any test
+    // interacts with a card (removes the streamed re-render race).
+    await waitForJobMatchCards(page);
 }
 
 function shot(page: Page, name: string) {
@@ -129,7 +204,7 @@ test.describe("Refine search — structured action (P1)", () => {
     test("EN: refine opens panel with ZERO chat traffic; only the composed query is sent", async ({ page }) => {
         const chatBodies = await mockCommand(page);
         await page.goto("/command");
-        await searchAndOpenCards(page, "Find me Senior HSE Manager jobs in Dubai");
+        await searchAndOpenCards(page, "Find me Senior HSE Manager jobs in Dubai", chatBodies);
         expect(chatBodies).toHaveLength(1);
 
         // The three cards render; refine is the structured open_drawer one.
@@ -141,7 +216,7 @@ test.describe("Refine search — structured action (P1)", () => {
 
         // Click refine: panel opens, NO chat request fires, no "Refine search"
         // user bubble ever appears in the transcript.
-        await refine.click();
+        await clickSettledCard(page, "action-card-open-drawer");
         await expect(page.getByTestId("refine-search-panel")).toBeVisible();
         expect(chatBodies).toHaveLength(1); // unchanged — nothing was sent
         await expect(page.getByTestId("refine-role-input")).toHaveValue("Senior HSE Manager");
@@ -154,8 +229,15 @@ test.describe("Refine search — structured action (P1)", () => {
         await expect(page.getByTestId("refine-search-panel")).toBeHidden();
         await expect.poll(() => chatBodies.length).toBe(2);
         expect(chatBodies[1].message).toBe("Find Senior HSE Manager jobs in Abu Dhabi");
+        // The composed query renders as a normal user turn. Scope to the user
+        // transcript row that contains it: RicoUserBubble nests the text in two
+        // elements that each exact-match, so an unscoped exact getByText hits a
+        // 2-element strict violation. This asserts the same product fact — the
+        // composed query is displayed to the user — against the semantic row.
         await expect(
-            page.getByText("Find Senior HSE Manager jobs in Abu Dhabi", { exact: true }),
+            page
+                .getByTestId("transcript-you-row")
+                .filter({ hasText: "Find Senior HSE Manager jobs in Abu Dhabi" }),
         ).toBeVisible();
         await shot(page, "3-en-composed-query-sent");
 
@@ -168,9 +250,9 @@ test.describe("Refine search — structured action (P1)", () => {
     test("EN: Save search sends its payload message, never the label", async ({ page }) => {
         const chatBodies = await mockCommand(page);
         await page.goto("/command");
-        await searchAndOpenCards(page, "Find me Senior HSE Manager jobs in Dubai");
+        await searchAndOpenCards(page, "Find me Senior HSE Manager jobs in Dubai", chatBodies);
 
-        await page.getByTestId("action-card-chat-continue").click();
+        await clickSettledCard(page, "action-card-chat-continue");
         await expect.poll(() => chatBodies.length).toBe(2);
         expect(chatBodies[1].message).toBe("save this search for Senior HSE Manager");
         expect(chatBodies[1].message).not.toBe("Save search");
@@ -181,9 +263,9 @@ test.describe("Refine search — structured action (P1)", () => {
         const chatBodies = await mockCommand(page);
         await page.addInitScript(() => localStorage.setItem("rico-language", "ar"));
         await page.goto("/command");
-        await searchAndOpenCards(page, "ابحث عن وظائف مدير سلامة في دبي");
+        await searchAndOpenCards(page, "ابحث عن وظائف مدير سلامة في دبي", chatBodies);
 
-        await page.getByTestId("action-card-open-drawer").click();
+        await clickSettledCard(page, "action-card-open-drawer");
         const panel = page.getByTestId("refine-search-panel");
         await expect(panel).toBeVisible();
         await expect(panel).toContainText("حسّن بحثك");
