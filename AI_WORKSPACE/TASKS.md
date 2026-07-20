@@ -78,6 +78,105 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260720-001 — hotfix #1225: agentic_ui option buttons as plain dict (stream TypeError) — PRODUCTION VERIFIED
+
+Status: done — **MERGED (#1225, squash `4ecb5d80`) + PRODUCTION VERIFIED — PASS; incident closed (owner ruling 2026-07-20)**
+Owner: Claude (Fable session; owner order 2026-07-20 "افتح فرع hotfix واحدًا من أحدث main… نفّذ الإصلاح الأدنى فقط")
+Branch: hotfix/option-buttons-plain-dict (head `9276e79e`, cut from `55e68ad5` = main at cut)
+Issue/PR: #1225
+
+#### Objective
+
+Close the production `chat_stream_error err=TypeError` (2026-07-19 23:21:03Z /
+23:21:28Z): `_inject_option_buttons` attached a raw `RicoAgenticUi` Pydantic
+model to `result["agentic_ui"]`; the `/chat/stream` non-conversational
+fallback serializes the done event with bare `json.dumps`, which cannot encode
+Pydantic models — every letter-choice response over the stream crashed (e.g.
+the ambiguous profile-match clarification for a multi-family seven-role
+profile answering "find matching jobs"). The JSON `/chat` path masked the
+defect (`RicoChatResponse.agentic_ui` accepts the model instance). Latent
+since `224e3ead` (2026-06-20, audit 1-A); #1216 / #1200 / #1205 empirically
+ruled out — identical repro at each PR's parent.
+
+#### Scope delivered
+
+- `src/rico_chat_api.py` — single return site in `_inject_option_buttons`:
+  `updated_ui.model_dump(exclude_none=True)` (both action enums are `str`
+  subclasses, so the dumped dict is `json.dumps`-safe end-to-end).
+- `tests/unit/test_option_buttons_serialization.py` — new, 7 pins: seven-role
+  profile-match clarification serializes exactly as the SSE done event does;
+  `agentic_ui` is a dict, never a model; four `chat_continue` buttons with
+  `payload.message`; "Risk & Compliance Officer" unsplit; intent stays
+  `job_search_profile_match`; existing-model-input merge stays serializable;
+  REST contract `RicoChatResponse(**result)` unregressed.
+- `tests/unit/test_option_action_buttons.py` — existing audit 1-A pins
+  adapted from model-attribute access to the plain-dict wire contract.
+
+#### Explicitly NOT in scope (owner order)
+
+No `jsonable_encoder` in the router; no fix for the `existing_ui`-as-dict
+merge branch (see TASK-20260720-002); no `learning_repo` change (see
+TASK-20260720-003); no routing/fallback/provider/timeout change.
+
+#### Rollback
+
+Revert the squash commit — stream path resumes throwing on letter-choice
+responses; JSON path unaffected; no data/schema/API-shape effects.
+
+#### Acceptance criteria / verification chain
+
+- [x] Exact-head gates on `9276e79e`: QA Tests success (run 29709215575),
+      Workflow Security Guards success (run 29709215581), mergeable clean,
+      0 review threads, base == main-at-cut (`55e68ad5`).
+- [x] Local: new suite 7/7; tests/unit 3411 passed; neighboring
+      chat/profile-match suites 80 passed; exact QA invocation with CI env
+      4259 passed / 1 xfailed.
+- [x] Owner squash merge as-is (no added commits) → `4ecb5d80`.
+- [x] Deploy: "Deploy Render Backend" run #416 (29709499067) success
+      00:29:09Z; live `/version` returned `commit=4ecb5d80…5250`,
+      `started_at=2026-07-20T00:28:54Z` (owner browser evidence;
+      `deployed_at` field is stale by design — not relied on).
+- [x] Production smoke (owner browser, one attempt, 2026-07-20): multi-family
+      account, literal "find matching jobs" → A/B/C/D options rendered, no
+      "Something went wrong", stream uninterrupted, compound role intact.
+      Owner verdict: **#1225 Production Verified — PASS; stream incident
+      closed.**
+
+### TASK-20260720-002 — /command option-surface duplication + `existing_ui` dict-merge branch (follow-up, not urgent)
+
+Status: proposed — owner-gated ("متابعة مستقلة، غير عاجلة", owner ruling 2026-07-20)
+Owner: unassigned (needs owner gate to start)
+Branch: —
+Issue/PR: —
+
+#### Objective
+
+The #1225 production smoke surfaced a visual duplication on /command: the
+clarification renders the role list twice — one row of plain role chips (from
+`options[]`) and a second row repeating the first four as mirrored `A)`–`D)`
+`agentic_ui` buttons. Related latent defect in the same helper: when
+`result["agentic_ui"]` is already a plain dict (the composer's output), the
+`else` branch of `_inject_option_buttons` replaces it, dropping pre-existing
+actions instead of merging. Neither re-triggers the stream incident. Fix must
+be one presentation contract (single option surface) + a merge branch for
+dict-shaped `existing_ui`, with pins; global, user-agnostic.
+
+### TASK-20260720-003 — learning_repo `_db_load_profile` json.loads on already-decoded JSONB (separate log, not urgent)
+
+Status: proposed — logged separately per owner order during the 2026-07-19
+TypeError investigation ("لا تلمس عيب learning_repo في هذا التحقيق؛ سجّله منفصلًا فقط")
+Owner: unassigned (needs owner gate to start)
+Branch: —
+Issue/PR: —
+
+#### Objective
+
+`src/repositories/learning_repo.py` (`_db_load_profile`, ~357-359) calls
+`json.loads` on a value the driver already decoded to a dict (JSONB column),
+producing the logged json error seen alongside the 2026-07-19 23:21Z window.
+Fix is a type-aware load (accept dict as-is, parse only str) + a pin; verify
+no caller depends on the current failure path. Untouched by #1225 by design.
+
 ### TASK-20260719-020 — Canonical Career Context and Active-CV Provenance (M1, read-side)
 
 Status: review
