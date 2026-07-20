@@ -1004,8 +1004,11 @@ def get_users_with_telegram_alerts() -> list[dict[str, Any]]:
                      ORDER BY updated_at DESC
                     """
                 )
-                cols = [d[0] for d in cur.description]
-                return [dict(zip(cols, row)) for row in cur.fetchall()]
+                # RicoDB.connect() uses RealDictCursor — each row is already a
+                # dict. Iterating a dict yields its KEYS, so the old
+                # dict(zip(cols, row)) produced {col: col} (values lost). Use
+                # dict(row), matching get_users_with_email_alerts below.
+                return [dict(row) for row in cur.fetchall()]
         finally:
             conn.close()
     except Exception:
