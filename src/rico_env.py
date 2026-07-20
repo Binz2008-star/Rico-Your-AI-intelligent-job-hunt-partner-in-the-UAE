@@ -86,6 +86,7 @@ ENV_SPECS = [
     ("REDIS_URL", False, "Background jobs, reminders, and alert queues"),
     ("RICO_ENABLE_AUTO_APPLY", False, "Feature flag; should default to false"),
     ("RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS", False, "Feature flag; should default to true"),
+    ("RICO_ENABLE_SCHEDULED_SEARCHES", False, "Scheduled saved-search sweep (#1249); should default to false"),
 ]
 
 

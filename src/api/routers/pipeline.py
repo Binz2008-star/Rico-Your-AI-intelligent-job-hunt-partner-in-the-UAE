@@ -19,6 +19,7 @@ from src.schemas.pipeline import (
     PipelineTriggerResponse,
     ProfileNudgeResponse,
     RemindersResponse,
+    ScheduledSearchSweepResponse,
 )
 from src.services.followup_service import DEFAULT_FOLLOWUP_INTERVAL_DAYS, run_due_scan
 from src.services.pipeline_service import get_status, trigger
@@ -91,6 +92,32 @@ def run_job_alert_emails(
     dry_run = raw in {"1", "true", "yes", "on"}
     summary = run_email_alert_sweep(dry_run=dry_run)
     return JobAlertEmailsResponse(**summary)
+
+
+@router.post("/scheduled-searches", response_model=ScheduledSearchSweepResponse)
+def run_scheduled_searches(
+    request: Request,
+    _cron: None = Depends(require_cron_secret),
+) -> ScheduledSearchSweepResponse:
+    """Scheduled saved-search sweep (#1249), called by cron (Render/GitHub).
+
+    Guarded by the X-Cron-Secret shared secret (not JWT). Executes each
+    ENABLED scheduled search with its saved constraints (city, minimum AED
+    salary) and stores new results in-app on the schedule row. Sends NO email
+    — email alerts remain the separate opt-in sweep. Idempotent across runs
+    via per-schedule delivered-key dedup.
+
+    Execution requires ``RICO_ENABLE_SCHEDULED_SEARCHES`` to be truthy. Pass
+    ``?dry_run=true`` to evaluate matching and report counts WITHOUT
+    persisting results or dedup keys (bypasses the kill switch for smoke
+    testing, mirroring the email sweep's semantics).
+    """
+    from src.services.scheduled_search_service import run_scheduled_search_sweep
+
+    raw = (request.query_params.get("dry_run") or "").strip().lower()
+    dry_run = raw in {"1", "true", "yes", "on"}
+    summary = run_scheduled_search_sweep(dry_run=dry_run)
+    return ScheduledSearchSweepResponse(**summary)
 
 
 @router.post("/profile-nudge", response_model=ProfileNudgeResponse)

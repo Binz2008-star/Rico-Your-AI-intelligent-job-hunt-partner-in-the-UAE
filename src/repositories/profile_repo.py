@@ -685,6 +685,48 @@ def delete_search(user_id: str, search_id: str) -> bool:
         return False
 
 
+def list_enabled_scheduled_searches(limit: int = 200) -> list[dict[str, Any]]:
+    """All ENABLED scheduled searches across users, for the cron sweep (#1249).
+
+    A saved search is scheduled when its filters JSONB carries a "schedule"
+    object; enabled state lives at filters->'schedule'->>'enabled'. Joins
+    rico_users so the sweep gets the external identity without extra lookups.
+    Returns [] on DB unavailability. Never raises.
+    """
+    db = _db()
+    if not db:
+        return []
+    try:
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT s.id, s.query, s.filters, s.updated_at,
+                           u.external_user_id
+                      FROM rico_saved_searches s
+                      JOIN rico_users u ON u.id = s.user_id
+                     WHERE (s.filters->'schedule'->>'enabled')::boolean IS TRUE
+                     ORDER BY s.updated_at DESC
+                     LIMIT %s
+                    """,
+                    (limit,),
+                )
+                # RicoDB.connect() uses RealDictCursor — rows are dicts.
+                rows = []
+                for row in cur.fetchall():
+                    r = dict(row)
+                    if "filters" in r and hasattr(r["filters"], "get"):
+                        r["filters"] = dict(r["filters"])
+                    rows.append(r)
+                return rows
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("profile_repo: list_enabled_scheduled_searches failed")
+        return []
+
+
 def get_search_by_id(user_id: str, search_id: str) -> dict[str, Any] | None:
     """Get a single saved search by ID."""
     db = _db()

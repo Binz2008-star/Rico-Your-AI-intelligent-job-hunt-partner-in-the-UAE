@@ -1677,6 +1677,24 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if not has_arabic and _NONSENSE_RE.match(text):
         return IntentResult("nonsense", 0.95, "regex")
 
+    # ── 1c. Scheduled saved searches (#1249) — deterministic routing ─────
+    # "ابحث يوميًا عن وظائف في دبي براتب 10,000+ درهم" / "search daily for
+    # jobs in Dubai" must reach the scheduled-search handler, never the
+    # one-shot search flow or the AI fallback. Management commands ("أوقف
+    # البحث اليومي", "delete my daily search") are checked first — they carry
+    # the cadence word but target the schedule itself. Detection delegates to
+    # the service's parsers so routing and parameter extraction cannot drift.
+    from src.services.scheduled_search_service import (
+        parse_management_command,
+        parse_scheduled_search_command,
+    )
+
+    _ss_action = parse_management_command(text)
+    if _ss_action is not None:
+        return IntentResult(f"scheduled_search_{_ss_action}", 0.97, "regex")
+    if parse_scheduled_search_command(text) is not None:
+        return IntentResult("scheduled_search_create", 0.97, "regex")
+
     # ── 2. Exact-phrase fast paths (continued) ───────────────────────────
     if lower in _PROFILE_MATCH_PHRASES:
         return IntentResult("job_search_profile_match", 1.0, "exact")

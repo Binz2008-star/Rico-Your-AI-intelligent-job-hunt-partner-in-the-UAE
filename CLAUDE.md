@@ -346,6 +346,13 @@ RICO_ENABLE_USER_TELEGRAM_ALERTS=false
 # (POST /api/v1/pipeline/reminders, X-Cron-Secret header). Issue #355.
 RICO_CRON_SECRET=
 
+# Kill switch for the scheduled saved-search sweep (#1249)
+# (POST /api/v1/pipeline/scheduled-searches, X-Cron-Secret guarded).
+# Default OFF (fail-closed): disabled runs are a no-op; ?dry_run=true
+# evaluates matching without persisting anything. In-app delivery only —
+# email job alerts stay behind RICO_ENABLE_EMAIL_ALERTS + per-user opt-in.
+RICO_ENABLE_SCHEDULED_SEARCHES=false
+
 # Kill switch for the scheduled analytics_events retention purge
 # (POST /api/v1/pipeline/analytics-purge; workflow analytics-purge.yml).
 # Default OFF (fail-closed) — disabled runs are a 200 no-op. The 180-day
