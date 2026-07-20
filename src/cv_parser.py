@@ -10,19 +10,21 @@ from __future__ import annotations
 import io
 import logging
 import re
-import zipfile
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from src.services.docx_safety import (
+    MAX_DOCX_RATIO as _MAX_DOCX_RATIO,
+    MAX_DOCX_UNCOMPRESSED as _MAX_DOCX_UNCOMPRESSED,
+    is_docx_bomb,
+)
+
 logger = logging.getLogger(__name__)
 
-# DOCX decompression-bomb guard: a small (<25 MB) malicious .docx is a zip that can
-# declare gigabytes of uncompressed content and OOM the worker when python-docx inflates
-# it. We inspect the zip's *declared* uncompressed sizes (central directory metadata — no
-# actual decompression) before opening the document and reject obvious bombs.
-_MAX_DOCX_UNCOMPRESSED = 200 * 1024 * 1024  # 200 MB total inflated cap
-_MAX_DOCX_RATIO = 200  # compressed→uncompressed ratio ceiling
+# DOCX decompression-bomb guard lives in src/services/docx_safety.is_docx_bomb —
+# the single check shared with document_classifier so the two upload paths can
+# never diverge. _MAX_DOCX_* re-exported above for back-compat.
 
 
 @dataclass
@@ -344,26 +346,13 @@ class CVParser:
             raise RuntimeError(f"PDF parsing failed: {exc}") from exc
 
     def _parse_docx(self, data: bytes) -> str:
-        # Reject decompression bombs before python-docx inflates the zip. Reading
-        # ZipInfo.file_size uses the central-directory metadata only — nothing is
-        # decompressed here, so an oversized declaration costs nothing to detect.
-        try:
-            zf = zipfile.ZipFile(io.BytesIO(data))
-            total = sum(i.file_size for i in zf.infolist())
-            ratio = total / max(len(data), 1)
-            if total > _MAX_DOCX_UNCOMPRESSED or (
-                len(data) > 0 and ratio > _MAX_DOCX_RATIO and total > 10 * 1024 * 1024
-            ):
-                logger.warning(
-                    "cv_parser: rejecting DOCX (inflated=%d ratio=%.0f)", total, ratio
-                )
-                # Empty text → caller treats this as a needs-clearer-file response.
-                # Do NOT raise: a bomb must not crash the request path.
-                return ""
-        except zipfile.BadZipFile:
-            # Not a real zip (e.g. a mislabelled .docx) — fall through to the
-            # existing python-docx attempt + UTF-8 decode fallback below.
-            pass
+        # Reject decompression bombs before python-docx inflates the zip. The
+        # check reads central-directory metadata only (nothing is decompressed).
+        # Shared with document_classifier via docx_safety so the two upload paths
+        # can never diverge. Empty text → caller treats this as a
+        # needs-clearer-file response; a bomb must never crash the request path.
+        if is_docx_bomb(data):
+            return ""
 
         try:
             from docx import Document
