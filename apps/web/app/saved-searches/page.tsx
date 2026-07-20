@@ -1,17 +1,25 @@
 "use client";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { ScheduledSearchCard } from "@/components/ScheduledSearchCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
 import { useAuth } from "@/hooks/useAuth";
-import { fetchSavedSearches, logout as apiLogout, type SavedSearch } from "@/lib/api";
+import {
+    fetchSavedSearches,
+    fetchScheduledSearches,
+    logout as apiLogout,
+    type SavedSearch,
+    type ScheduledSearch,
+} from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 export default function SavedSearchesPage() {
     const [searches, setSearches] = useState<SavedSearch[]>([]);
+    const [scheduled, setScheduled] = useState<ScheduledSearch[]>([]);
     const [error, setError] = useState(false);
     const [loading, setLoading] = useState(true);
     const { user } = useAuth();
@@ -23,8 +31,21 @@ export default function SavedSearchesPage() {
 
     const loadSearches = useCallback(async () => {
         try {
-            const response = await fetchSavedSearches();
-            setSearches(response.searches);
+            // Scheduled searches (#1249) render as first-class cards; plain
+            // saved searches keep the simple list. The generic endpoint also
+            // returns schedule rows, so they're filtered out of the plain list
+            // to avoid double-rendering the same row.
+            const [plain, sched] = await Promise.all([
+                fetchSavedSearches(),
+                fetchScheduledSearches().catch(
+                    () => ({ schedules: [], total: 0 }),
+                ),
+            ]);
+            const scheduledIds = new Set(
+                sched.schedules.map((s) => s.id).filter(Boolean),
+            );
+            setSearches(plain.searches.filter((s) => !scheduledIds.has(s.id)));
+            setScheduled(sched.schedules);
             setError(false);
         } catch {
             setError(true);
@@ -64,10 +85,24 @@ export default function SavedSearchesPage() {
                     />
                 )}
 
-                {!loading && !error && searches.length === 0 && (
+                {!loading && !error && scheduled.length > 0 && (
+                    <div className="mb-4 flex flex-col gap-3">
+                        {scheduled.map((item) => (
+                            <ScheduledSearchCard
+                                key={item.id ?? item.query ?? "schedule"}
+                                item={item}
+                                onChanged={() => {
+                                    void loadSearches();
+                                }}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                {!loading && !error && scheduled.length === 0 && searches.length === 0 && (
                     <EmptyState
                         title="No saved searches yet"
-                        description="Use the Rico chat to save a job search."
+                        description="Use the Rico chat to save a job search — or say “search daily for jobs in Dubai” to schedule one."
                         actionLabel="Open chat"
                         actionHref="/command"
                     />

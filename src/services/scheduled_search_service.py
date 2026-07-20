@@ -295,6 +295,23 @@ def set_schedules_enabled(user_id: str, enabled: bool) -> int:
     return count
 
 
+def set_schedule_enabled_by_id(user_id: str, search_id: str, enabled: bool) -> bool:
+    """Pause/resume ONE schedule by id, strictly within the user's own rows.
+
+    Returns False when the id doesn't resolve to one of the user's scheduled
+    searches — the caller maps that to 404, so ids can't be probed cross-user.
+    """
+    from src.repositories.profile_repo import save_search
+
+    for item in get_user_schedules(user_id):
+        if str(item.get("id")) == str(search_id):
+            sched = dict(item["schedule"])
+            sched["enabled"] = bool(enabled)
+            return bool(save_search(user_id, item["query"], {_SCHEDULE_KEY: sched},
+                                    search_id=item["id"]))
+    return False
+
+
 def delete_schedules(user_id: str) -> int:
     """Delete every scheduled search the user owns. Returns deleted count."""
     from src.repositories.profile_repo import delete_search

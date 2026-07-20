@@ -20,6 +20,7 @@ import {
   RicoChatSessionsResponseSchema,
   RicoProfileResponseSchema,
   SavedSearchesResponseSchema,
+  ScheduledSearchesResponseSchema,
   UploadCVResponseSchema,
 } from "@/lib/schemas";
 
@@ -410,6 +411,65 @@ export async function deleteSavedSearch(id: string): Promise<void> {
     },
   );
   if (!res.ok) throw new Error(`Delete search failed: ${res.status}`);
+}
+
+// ── Scheduled searches (#1249) ────────────────────────────────────────────────
+
+export interface ScheduledSearchResult {
+  title: string;
+  company: string;
+  location: string;
+  score: number;
+  link: string;
+  salary_known: boolean;
+  salary_aed?: number | null;
+  why: string;
+}
+
+export interface ScheduledSearchSchedule {
+  enabled: boolean;
+  cadence: string;
+  city?: string | null;
+  min_salary_aed?: number | null;
+  last_run_at?: string | null;
+  last_run_new: number;
+  last_results: ScheduledSearchResult[];
+}
+
+export interface ScheduledSearch {
+  id: string | null;
+  query?: string | null;
+  schedule: ScheduledSearchSchedule;
+}
+
+export interface ScheduledSearchesResponse {
+  schedules: ScheduledSearch[];
+  total: number;
+}
+
+export async function fetchScheduledSearches(): Promise<ScheduledSearchesResponse> {
+  const res = await apiFetch(`${PROXY}/api/v1/rico/scheduled-searches`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Scheduled searches fetch failed: ${res.status}`);
+  return validateShape(
+    ScheduledSearchesResponseSchema,
+    await res.json(),
+    "scheduled searches",
+  ) as ScheduledSearchesResponse;
+}
+
+export async function setScheduledSearchEnabled(
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  const res = await apiFetch(`${PROXY}/api/v1/rico/scheduled-searches/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error(`Toggle scheduled search failed: ${res.status}`);
 }
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────

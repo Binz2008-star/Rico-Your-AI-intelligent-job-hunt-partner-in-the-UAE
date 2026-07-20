@@ -385,3 +385,60 @@ class TestEndpoints:
         assert r.status_code == 200, r.text
         assert r.json()["total"] == 1
         gus.assert_called_once_with("alice@rico.ai")
+
+    def test_toggle_endpoint_requires_auth(self):
+        r = self._client().patch("/api/v1/rico/scheduled-searches/1",
+                                 json={"enabled": False})
+        assert r.status_code in (401, 403)
+
+    def test_toggle_endpoint_scopes_to_jwt_identity(self):
+        from src.api.auth import create_access_token
+
+        client = self._client()
+        client.cookies.set("access_token",
+                           create_access_token({"sub": "alice@rico.ai", "role": "user"}))
+        with patch("src.services.scheduled_search_service.set_schedule_enabled_by_id",
+                   return_value=True) as setter:
+            r = client.patch("/api/v1/rico/scheduled-searches/42",
+                             json={"enabled": False})
+        assert r.status_code == 200, r.text
+        assert r.json() == {"id": "42", "enabled": False, "status": "updated"}
+        setter.assert_called_once_with("alice@rico.ai", "42", False)
+
+    def test_toggle_endpoint_404_for_foreign_or_unknown_id(self):
+        """An id outside the caller's own schedules is a plain 404 — ids can't
+        be probed or toggled cross-user."""
+        from src.api.auth import create_access_token
+
+        client = self._client()
+        client.cookies.set("access_token",
+                           create_access_token({"sub": "alice@rico.ai", "role": "user"}))
+        with patch("src.services.scheduled_search_service.set_schedule_enabled_by_id",
+                   return_value=False):
+            r = client.patch("/api/v1/rico/scheduled-searches/999",
+                             json={"enabled": True})
+        assert r.status_code == 404
+
+
+class TestSetScheduleEnabledById:
+    def test_toggles_only_the_matching_schedule(self):
+        items = [
+            {"id": "1", "query": "q1", "schedule": {"enabled": True, "cadence": "daily"}},
+            {"id": "2", "query": "q2", "schedule": {"enabled": True, "cadence": "daily"}},
+        ]
+        saved = {}
+
+        def fake_save(user_id, query, filters, search_id=None):
+            saved[search_id] = filters["schedule"]["enabled"]
+            return search_id
+
+        with patch.object(sss, "get_user_schedules", return_value=items), \
+             patch("src.repositories.profile_repo.save_search", side_effect=fake_save):
+            assert sss.set_schedule_enabled_by_id("alice@rico.ai", "2", False) is True
+        assert saved == {"2": False}  # schedule 1 untouched
+
+    def test_unknown_id_returns_false_without_writes(self):
+        with patch.object(sss, "get_user_schedules", return_value=[]), \
+             patch("src.repositories.profile_repo.save_search") as save:
+            assert sss.set_schedule_enabled_by_id("alice@rico.ai", "404", True) is False
+        save.assert_not_called()

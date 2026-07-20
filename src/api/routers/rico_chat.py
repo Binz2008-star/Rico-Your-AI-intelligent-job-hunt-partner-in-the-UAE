@@ -191,6 +191,11 @@ class SavedSearchResponse(BaseModel):
     status: str = "saved"
 
 
+class ScheduledSearchToggleRequest(BaseModel):
+    """Pause/resume a single scheduled search (#1249 step 3)."""
+    enabled: bool
+
+
 class FeedbackRequest(BaseModel):
     """Feedback on job matches."""
     job_id: str = Field(..., min_length=1, max_length=100)
@@ -638,6 +643,29 @@ def rico_list_scheduled_searches(request: Request) -> dict[str, Any]:
     schedules = get_user_schedules(user_id)
     _metrics.record_request((time.time() - start_time) * 1000)
     return {"schedules": schedules, "total": len(schedules)}
+
+
+@router.patch("/scheduled-searches/{search_id}")
+def rico_toggle_scheduled_search(
+    request: Request, search_id: str, body: ScheduledSearchToggleRequest
+) -> dict[str, Any]:
+    """Pause or resume ONE scheduled search owned by the current user (#1249).
+
+    Identity comes from the JWT only; the id is resolved strictly within the
+    authenticated user's own schedules, so a user can never toggle (or probe
+    the existence of) another user's search — unknown ids are a plain 404.
+    """
+    start_time = time.time()
+    user = get_current_user(request)
+    user_id = user["email"]
+
+    from src.services.scheduled_search_service import set_schedule_enabled_by_id
+
+    ok = set_schedule_enabled_by_id(user_id, search_id, body.enabled)
+    _metrics.record_request((time.time() - start_time) * 1000)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Scheduled search not found")
+    return {"id": search_id, "enabled": body.enabled, "status": "updated"}
 
 
 @router.get("/settings/saved-searches")
