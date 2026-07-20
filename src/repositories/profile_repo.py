@@ -552,26 +552,34 @@ def save_search(
             user_row = db.upsert_user({"external_user_id": user_id}, conn=conn)
             db_user_id = str(user_row["id"])
 
-            # Use upsert pattern with ON CONFLICT (if unique constraint exists)
-            # Fallback to simple insert if constraint doesn't exist
-            try:
-                with conn.cursor() as cur:
-                    if search_id:
-                        # Update existing
-                        cur.execute(
-                            """
-                            UPDATE rico_saved_searches
-                            SET query = %s, filters = %s, updated_at = NOW()
-                            WHERE id = %s AND user_id = %s
-                            RETURNING id
-                            """,
-                            (query.strip(), Json(filters or {}), search_id, db_user_id)
-                        )
-                        result = cur.fetchone()
-                        if result:
-                            return str(result["id"])
+            with conn.cursor() as cur:
+                if search_id:
+                    # Update existing
+                    cur.execute(
+                        """
+                        UPDATE rico_saved_searches
+                        SET query = %s, filters = %s, updated_at = NOW()
+                        WHERE id = %s AND user_id = %s
+                        RETURNING id
+                        """,
+                        (query.strip(), Json(filters or {}), search_id, db_user_id)
+                    )
+                    result = cur.fetchone()
+                    if result:
+                        return str(result["id"])
 
-                    # Try upsert by unique constraint (user_id, query)
+                # Atomic upsert on UNIQUE(user_id, query), attempted inside a
+                # SAVEPOINT: the live table has no such constraint (confirmed
+                # against production during the #1249 step-4 dry run), so
+                # ON CONFLICT raises — and without a savepoint that error
+                # aborted the WHOLE transaction, which made the old
+                # "simple insert" fallback fail too ("current transaction is
+                # aborted") and every saved-search write return None. Rolling
+                # back to the savepoint keeps the transaction usable for the
+                # manual upsert below, which preserves the same canonical
+                # (user_id, query) identity without needing the constraint.
+                cur.execute("SAVEPOINT saved_search_upsert")
+                try:
                     cur.execute(
                         """
                         INSERT INTO rico_saved_searches (user_id, query, filters)
@@ -585,14 +593,24 @@ def save_search(
                     row = cur.fetchone()
                     if row:
                         return str(row["id"])
-            except Exception:
-                # Fallback to simple insert if ON CONFLICT not supported
-                with conn.cursor() as cur:
+                except Exception:
+                    cur.execute("ROLLBACK TO SAVEPOINT saved_search_upsert")
                     cur.execute(
-                        "INSERT INTO rico_saved_searches (user_id, query, filters) VALUES (%s, %s, %s) RETURNING id",
-                        (db_user_id, query.strip(), Json(filters or {}))
+                        """
+                        UPDATE rico_saved_searches
+                        SET filters = %s, updated_at = NOW()
+                        WHERE user_id = %s AND query = %s
+                        RETURNING id
+                        """,
+                        (Json(filters or {}), db_user_id, query.strip())
                     )
                     row = cur.fetchone()
+                    if not row:
+                        cur.execute(
+                            "INSERT INTO rico_saved_searches (user_id, query, filters) VALUES (%s, %s, %s) RETURNING id",
+                            (db_user_id, query.strip(), Json(filters or {}))
+                        )
+                        row = cur.fetchone()
                     if row:
                         return str(row["id"])
 
