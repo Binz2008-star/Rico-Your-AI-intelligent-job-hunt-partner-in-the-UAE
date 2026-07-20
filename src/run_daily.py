@@ -589,6 +589,25 @@ def _auto_apply_naukrigulf(matches: List[Tuple[Dict[str, Any], int]]) -> None:
         logger.info("naukrigulf_apply_skipped RICO_ENABLE_AUTO_APPLY=false")
         return
 
+    # Approval contract (tests/test_apply_approval_gate.py): apply_to_job() is
+    # the approval-gated chokepoint for real submissions, but this scheduled
+    # path calls the NaukriGulf engine directly and has NO user in the loop, so
+    # it can never collect the per-application approval that
+    # RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS (default true) demands. Submitting
+    # here would silently bypass the same gate every other apply path enforces.
+    # Autonomous scheduled submission therefore requires the owner's explicit
+    # double opt-in: RICO_ENABLE_AUTO_APPLY=true AND
+    # RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=false.
+    from src.rico_env import env_bool
+
+    if env_bool("RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS", True):
+        logger.info(
+            "naukrigulf_apply_skipped approval_required_no_user_in_loop "
+            "(autonomous scheduled applies additionally require "
+            "RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=false)"
+        )
+        return
+
     try:
         from src.naukrigulf_apply import run_naukrigulf_apply, NGApplyStatus
 

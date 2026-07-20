@@ -97,3 +97,53 @@ def test_jobs_apply_route_passes_approved():
     assert r.status_code == 200, r.text
     # The explicit user route must opt in to approval.
     assert mock_apply.call_args.kwargs.get("approved") is True
+
+
+# ── Scheduled pipeline path must honor the same approval contract ────────────
+
+class TestScheduledAutoApplyApprovalGate:
+    """run_daily._auto_apply_naukrigulf calls the NaukriGulf engine DIRECTLY,
+    not through apply_to_job(), so the approval chokepoint above never sees it.
+    The scheduled pipeline has no user in the loop and can never collect the
+    per-application approval RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS demands —
+    so while approval is required (the default), the scheduled path must not
+    submit. Autonomous scheduled submission requires the owner's explicit
+    double opt-in: RICO_ENABLE_AUTO_APPLY=true AND
+    RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=false.
+    """
+
+    def _run_scheduled_apply(self, monkeypatch, *, flag_on: bool, approval: str | None):
+        import src.run_daily as rd
+
+        # The flag is read at module import; patch the module constant the
+        # function actually consults.
+        monkeypatch.setattr(rd, "RICO_ENABLE_AUTO_APPLY", flag_on)
+        if approval is None:
+            monkeypatch.delenv("RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS", raising=False)
+        else:
+            monkeypatch.setenv("RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS", approval)
+
+        with patch("src.naukrigulf_apply.run_naukrigulf_apply", return_value=[]) as engine, \
+             patch.object(rd, "get_applied_jobs_count", return_value=0):
+            rd._auto_apply_naukrigulf([])
+        return engine
+
+    def test_scheduled_apply_blocked_while_approval_required(self, monkeypatch):
+        """Flag on + approval required (explicit true) → engine never runs."""
+        engine = self._run_scheduled_apply(monkeypatch, flag_on=True, approval="true")
+        engine.assert_not_called()
+
+    def test_scheduled_apply_blocked_by_default_when_env_unset(self, monkeypatch):
+        """Flag on + approval env missing → default is approval-required → no submit."""
+        engine = self._run_scheduled_apply(monkeypatch, flag_on=True, approval=None)
+        engine.assert_not_called()
+
+    def test_scheduled_apply_runs_only_with_double_opt_in(self, monkeypatch):
+        """Owner explicitly set BOTH flags → the autonomous engine may run."""
+        engine = self._run_scheduled_apply(monkeypatch, flag_on=True, approval="false")
+        engine.assert_called_once()
+
+    def test_scheduled_apply_skipped_when_flag_off(self, monkeypatch):
+        """Approval disabled but auto-apply flag off → still no engine run."""
+        engine = self._run_scheduled_apply(monkeypatch, flag_on=False, approval="false")
+        engine.assert_not_called()
