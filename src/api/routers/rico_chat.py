@@ -2376,9 +2376,17 @@ async def confirm_cv_profile(
 
         confirmed_cv_text: str | None = (artifact or {}).get("cv_text") or None
 
-        # Confirmation defense-in-depth: reject artifacts with unreadable cv_text
-        # Use shared parse-quality contract for consistency
-        if confirmed_cv_text is not None:
+        # Confirmation defense-in-depth: reject artifacts with unreadable cv_text.
+        # Use shared parse-quality contract for consistency. For a CV artifact
+        # the check runs even when cv_text is missing/empty —
+        # validate_artifact_quality(None) exists to flag exactly that state
+        # (PARSE_FAILED), but the previous `is not None` guard skipped it, so an
+        # empty-text CV confirmed "successfully": the My Files row and skills
+        # persisted while rico_profiles.cv_text stayed NULL, leaving chat and
+        # matching with a CV they could not actually read. Guest confirms
+        # (artifact is None) and non-CV documents keep the previous behaviour.
+        _is_cv_artifact = artifact is not None and artifact.get("doc_type") == "cv"
+        if confirmed_cv_text is not None or _is_cv_artifact:
             from src.cv_parse_quality import validate_artifact_quality
 
             quality_result = validate_artifact_quality(confirmed_cv_text)

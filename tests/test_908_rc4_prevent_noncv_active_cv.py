@@ -259,14 +259,26 @@ def _confirm_payload(filename="upload.pdf", doc_type="cv", upload_id="artifact-1
     return payload
 
 
+_READABLE_ARTIFACT_TEXT = (
+    "Sara Ali. Professional Summary: HSE professional seeking a new role. "
+    "Work Experience: HSE Officer at BuildCo 2018-2026. "
+    "Education: BSc Environmental Science, University of Sharjah. "
+    "Skills: hse, safety, compliance, incident reporting. linkedin.com/in/saraali"
+)
+
+
 def _artifact_for(*, filename, doc_type, content_hash="deadbeef" * 4, file_size=2048):
     """A complete, trustworthy artifact matching the given filename/doc_type --
     the doc_type here is the SERVER-DERIVED value (set by upload-cv's
     classifier at upload time), which is what #963's strict-reject confirm
-    now persists from -- payload.doc_type (client-echoed) is never used."""
+    now persists from -- payload.doc_type (client-echoed) is never used.
+    Carries readable cv_text: a CV artifact with empty text is now rejected
+    at confirm (the empty-grounding gate), which is covered separately in
+    tests/test_963_onboarding_cv_persistence.py."""
     return {
         "filename": filename, "doc_type": doc_type,
-        "content_hash": content_hash, "file_size": file_size, "cv_text": "",
+        "content_hash": content_hash, "file_size": file_size,
+        "cv_text": _READABLE_ARTIFACT_TEXT,
     }
 
 

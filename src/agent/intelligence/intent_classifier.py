@@ -484,7 +484,17 @@ _CV_ANALYSIS_RE = re.compile(
     r"|\bwhat.{0,20}wrong\b.{0,20}\b(cv|resume|profile)\b"
     r"|\bstrengthen.{0,20}\b(cv|resume|profile)\b"
     r"|\breview\s+my\s+(cv|resume)\b"
-    r"|\b(cv|resume)\s+review\b",
+    r"|\b(cv|resume)\s+review\b"
+    # CV-quality questions ("is my cv good?") must get the deterministic
+    # profile-grounded review, not an AI fallback that may claim it cannot
+    # see the CV at all.
+    r"|\bis\s+my\s+(cv|resume)\s+(good|ok|okay|fine|strong|solid|decent)\b"
+    r"|\bhow\s+(good|strong)\s+is\s+my\s+(cv|resume)\b"
+    r"|\bhow\s+(is|does)\s+my\s+(cv|resume)\s+look(ing)?\b"
+    r"|\bhow\s+is\s+my\s+(cv|resume)\s*\?*\s*$"
+    r"|\brate\s+my\s+(cv|resume)\b"
+    r"|\b(cv|resume)\s+feedback\b"
+    r"|\bfeedback\s+on\s+my\s+(cv|resume)\b",
     re.IGNORECASE,
 )
 
