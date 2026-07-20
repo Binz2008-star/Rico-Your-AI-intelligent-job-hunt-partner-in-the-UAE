@@ -585,6 +585,28 @@ class TestProductionFallbackGuard:
             result = verify_credentials("admin@test.com", "TestPass123")
         assert result is None
 
+    def test_production_marked_only_via_app_env_rejects_login(self):
+        """Production detected via APP_ENV/ENVIRONMENT (not RICO_ENV/ENV) must
+        also disable the env-var admin fallback on a DB error. The old check read
+        only RICO_ENV/ENV and would have allowed the fallback here."""
+        from src.api.auth import verify_credentials
+        env = {
+            "ADMIN_EMAIL": "admin@test.com",
+            "ADMIN_PASSWORD": "TestPass123",
+            "ADMIN_PASSWORD_HASH": "",
+            # Production marked ONLY via APP_ENV; RICO_ENV/ENV neutralized so the
+            # old detection would have missed it.
+            "RICO_ENV": "",
+            "ENV": "",
+            "APP_ENV": "production",
+            "ALLOW_ENV_AUTH_FALLBACK": "",
+        }
+        with patch("src.repositories.users_repo.get_user_by_email",
+                   side_effect=psycopg2.OperationalError("db down")), \
+             patch.dict(os.environ, env, clear=False):
+            result = verify_credentials("admin@test.com", "TestPass123")
+        assert result is None
+
     def test_production_fallback_allowed_when_flag_set(self):
         """ALLOW_ENV_AUTH_FALLBACK=true re-enables fallback even in production."""
         from src.api.auth import verify_credentials
