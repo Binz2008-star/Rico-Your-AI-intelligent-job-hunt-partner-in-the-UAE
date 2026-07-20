@@ -75,6 +75,37 @@ def test_chat_allows_when_monthly_ai_message_usage_remains():
     assert result == legacy_response
 
 
+def test_limit_message_has_no_doubled_limit_word():
+    """Live-QA 2026-07-19: the free-tier block read 'ai message limit limit'.
+
+    The feature key already ends in '_limit', and the message template appends
+    its own ' limit', so the label must have its trailing 'limit' stripped.
+    """
+    from src.services.subscription_gating import _build_gate_check
+
+    with patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=_resolved_free()):
+        gate = _build_gate_check("limit@rico.ai", "monthly_ai_message_limit", usage=50)
+
+    assert gate.allowed is False
+    assert "limit limit" not in gate.message
+    assert gate.message == (
+        "You have reached your monthly ai message limit on the Free plan "
+        "(50/50). Upgrade to continue."
+    )
+
+
+def test_limit_message_keeps_single_limit_for_non_limit_suffixed_feature():
+    """A feature key that does not end in 'limit' still reads correctly."""
+    from src.services.subscription_gating import _build_gate_check
+
+    with patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=_resolved_free()):
+        gate = _build_gate_check("limit@rico.ai", "saved_jobs_limit", usage=10)
+
+    assert gate.allowed is False
+    assert "limit limit" not in gate.message
+    assert "saved jobs limit" in gate.message
+
+
 def test_saved_job_gate_raises_402_when_free_limit_reached():
     from src.services.subscription_gating import enforce_saved_job_allowed
 
