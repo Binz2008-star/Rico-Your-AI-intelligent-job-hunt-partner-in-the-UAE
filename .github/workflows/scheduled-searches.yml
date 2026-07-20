@@ -1,0 +1,61 @@
+name: "Scheduled Search Sweep (manual)"
+
+# #1249 step 4: production dry-run of the scheduled saved-search sweep.
+# Dispatch-only — the daily schedule is enabled in a later PR (rollout step 5)
+# after the dry run validates matching with the exact saved criteria and the
+# owner flips RICO_ENABLE_SCHEDULED_SEARCHES on the backend.
+#
+# Real execution also requires RICO_ENABLE_SCHEDULED_SEARCHES to be truthy on
+# the backend (kill switch, default false). Run with dry_run=true (default) to
+# evaluate matching WITHOUT persisting results or dedup keys.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Evaluate matching without persisting results"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  # schedule:              # enabled in a later PR (rollout step 5)
+  #   - cron: '0 5 * * *'  # 05:00 UTC daily
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-searches
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Scheduled Search Sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger sweep
+        env:
+          API_URL: ${{ secrets.RICO_API_URL }}
+          CRON_SECRET: ${{ secrets.RICO_CRON_SECRET }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::RICO_API_URL and RICO_CRON_SECRET secrets are required."
+            exit 1
+          fi
+          BASE="${API_URL%/}"
+          DRY="${DRY_RUN:-true}"
+          echo "Triggering scheduled-searches sweep (dry_run=${DRY})"
+          HTTP=$(curl -sS -o /tmp/resp.json -w "%{http_code}" -X POST \
+            -H "X-Cron-Secret: ${CRON_SECRET}" \
+            "${BASE}/api/v1/pipeline/scheduled-searches?dry_run=${DRY}")
+          echo "HTTP ${HTTP}"
+          cat /tmp/resp.json || true
+          echo
+          if [ "${HTTP}" != "200" ]; then
+            echo "::error::Sweep failed with HTTP ${HTTP}"
+            exit 1
+          fi
