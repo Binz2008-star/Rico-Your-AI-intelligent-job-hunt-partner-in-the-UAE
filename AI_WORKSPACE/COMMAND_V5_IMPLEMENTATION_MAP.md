@@ -19,8 +19,8 @@ never deployed and never copied wholesale.
 | Epic | Command Workspace v5 implementation (this document) |
 | Milestone | v5 visual system live on production workspace routes without behavior regressions |
 | Phases | PR 1 foundation → PR 2 shell → PR 3 live modes → PR 4 message/action styling → PR 5 motion + final QA |
-| PR (current) | PR 1 — Command v5 visual foundation (branch `claude/command-v5-pr1-visual-foundation`) |
-| Task | `AI_WORKSPACE/TASKS.md` → TASK-20260720-004 |
+| PR (current) | PR 2 — workspace shell (branch `claude/command-v5-pr2-workspace-shell`); PR 1 merged as #1242 (squash `984edfa`) |
+| Task | `AI_WORKSPACE/TASKS.md` → TASK-20260720-004 (PR 1, done) · TASK-20260720-005 (PR 2) |
 
 ## Artifact → production map (exact)
 
@@ -56,7 +56,7 @@ never deployed and never copied wholesale.
 
 | PR | Scope | Explicitly out of scope |
 | --- | --- | --- |
-| **PR 1 — visual foundation** (this PR) | v5 tokens (AA-audited), typography (Space Grotesk + Fraunces roles), surfaces, motion primitives, RicoPresence, contrast gate, internal specimen | chat logic, APIs, routing, backend, any production-route render change |
+| **PR 1 — visual foundation** (merged #1242) | v5 tokens (AA-audited), typography (Space Grotesk + Fraunces roles), surfaces, motion primitives, RicoPresence, contrast gate, internal specimen | chat logic, APIs, routing, backend, any production-route render change |
 | PR 2 — workspace shell | rail + layout + panels + responsive + keyboard/a11y contracts on the real `WorkspaceShell` | chat behavior changes |
 | PR 3 — live modes | Overview `/dashboard`, Search `/command` frame, Applications `/applications`, Documents `/upload` mapped to REAL data/contracts only; unsupported modes hidden | mock data, new endpoints |
 | PR 4 — messages & action cards | chat messages, job/application cards, tool/action states, state family styling | intent/mutation logic |

@@ -251,7 +251,13 @@ describe("field mapping and direct navigation", () => {
             expect(anchor!.className).toContain("profile-ed-field-flash");
         });
         // screen readers hear the move
-        expect(screen.getByRole("status")).toHaveTextContent("Moved to Cities");
+        // Scoped to the sr-only announcer: the shell also exposes the Rico
+        // presence indicator as a status region (Command v5 PR 2), so the
+        // bare single-status query is ambiguous by design now.
+        const announcer = screen
+            .getAllByRole("status")
+            .find((el) => el.classList.contains("sr-only"));
+        expect(announcer).toHaveTextContent("Moved to Cities");
     });
 
     it("target-roles warnings focus the target-roles field container", async () => {
