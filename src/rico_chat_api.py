@@ -10575,11 +10575,13 @@ class RicoChatAPI:
                 else:
                     logger.warning(
                         "rico_chat: save action not ok user=%s title=%s err=%s",
-                        user_id, title, result.error,
+                        user_ref(user_id), title, result.error,
                     )
+                    # Honest failure — never claim the job was saved when the
+                    # write reported failure (#764 mutation-confirmation contract;
+                    # mirrors the Skip handler).
                     success_msg = (
-                        f"Noted — {title} at {company} is in your tracker. "
-                        "I'll keep it with your saved jobs."
+                        f"I couldn't save {title} at {company} just now — please try again."
                     )
                 response = {
                     "type": "save_job",
@@ -10626,7 +10628,7 @@ class RicoChatAPI:
                     success_msg = (
                         f"Saved — {title} at {company}. I'll keep it in your tracked jobs."
                         if result.ok else
-                        f"Noted — {title} at {company} is in your tracker."
+                        f"I couldn't save {title} at {company} just now — please try again."
                     )
                     response = {
                         "type": "save_job",
