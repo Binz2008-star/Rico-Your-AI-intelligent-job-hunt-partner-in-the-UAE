@@ -229,3 +229,79 @@ test.describe("/command composer stability", () => {
     expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(844 + 1);
   });
 });
+
+test.describe("bootstrap race — late empty history must not wipe a live chat", () => {
+  /**
+   * Regression for the QA-blocking flake (#1239 dependency): the sessions/
+   * history bootstrap resolving "empty" AFTER the user already started
+   * chatting used to run the welcome effect unconditionally, replacing the
+   * live transcript with the welcome message ("element was detached" click
+   * loops in refine-search-structured, transcript reset to welcome in the
+   * failure snapshot). Deterministic here: bootstrap is delayed until well
+   * after the first exchange completes. Fails pre-fix; the fix mirrors the
+   * has_history guard (preserve live turns, never replace).
+   */
+  test("delayed empty sessions+history keep the live transcript intact", async ({ page }) => {
+    // Sessions then history resolve SERIALLY, each delayed — the bootstrap
+    // outcome ("empty") lands well after the user's first exchange. The
+    // historyDone flag makes the wait deterministic: we assert only after
+    // the whole chain has actually completed, not after a guessed timeout.
+    const BOOTSTRAP_DELAY_MS = 1_200;
+    let historyDone = false;
+
+    await page.route(`${PROXY_API}/me`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ email: "test@example.com", role: "user", authenticated: true }),
+      }),
+    );
+    await page.route(`${PROXY_API}/rico/chat/sessions`, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, BOOTSTRAP_DELAY_MS));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ sessions: [] }),
+      });
+    });
+    await page.route(`${PROXY_API}/rico/chat/history**`, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, BOOTSTRAP_DELAY_MS));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ messages: [], total: 0, has_more: false }),
+      });
+      historyDone = true;
+    });
+    await page.route(`${PROXY_API}/rico/chat/stream`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body:
+          'data: {"type":"token","text":"Here are your matches."}\n\n' +
+          'data: {"type":"done","response":{"response":"Here are your matches.","type":"chat","messages_remaining":9}}\n\n',
+      }),
+    );
+
+    await page.goto("/command");
+
+    // User starts chatting BEFORE the bootstrap answers.
+    const input = page.getByTestId("atelier-composer").locator("textarea");
+    await input.fill("Find me Senior HSE Manager jobs in Dubai");
+    await input.press("Enter");
+
+    await expect(page.getByText("Here are your matches.", { exact: true })).toBeVisible();
+
+    // Wait for the FULL delayed bootstrap chain to land, then settle.
+    await expect.poll(() => historyDone, { timeout: 15_000 }).toBe(true);
+    await page.waitForTimeout(600);
+
+    // The live exchange must still be on the TRANSCRIPT — not replaced by
+    // welcome. Scoped to the transcript rows (the sessions rail may echo the
+    // first turn as the thread title, which is fine and not what we assert).
+    await expect(
+      page.getByTestId("transcript-you-row").getByText("Find me Senior HSE Manager jobs in Dubai", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Here are your matches.", { exact: true })).toBeVisible();
+  });
+});
