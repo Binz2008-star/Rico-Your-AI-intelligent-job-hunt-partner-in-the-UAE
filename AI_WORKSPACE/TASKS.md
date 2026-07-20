@@ -5512,7 +5512,7 @@ raised now return False; no valid input's behavior changes).
 
 ### TASK-20260720-004 — Command v5 PR 1: visual foundation (tokens, motion, presence)
 
-Status: review
+Status: done (merged #1242, squash 984edfa; production-deployed via Vercel auto-deploy)
 Owner: Claude (agent) / owner review
 Branch: claude/command-v5-pr1-visual-foundation
 Issue/PR: PR — Command v5 visual foundation (draft)
@@ -5562,7 +5562,7 @@ routing behavior, or backend.
 
 ### TASK-20260720-005 — Command v5 PR 2: workspace shell skin
 
-Status: review
+Status: done (merged #1243, squash 7b40b70; production-deployed via Vercel auto-deploy)
 Owner: Claude (agent) / owner review
 Branch: claude/command-v5-pr2-workspace-shell
 Issue/PR: PR — Command v5 workspace shell (opened from this task)
@@ -5608,3 +5608,31 @@ behavior and the dark island untouched.
 - Status: review
 - Files inspected: WorkspaceShell.tsx, RailGoalMini.tsx, useMissionSummary.ts, command-workspace-shell.test.tsx, single-shell.spec.ts, playwright.config.ts
 - Files changed: WorkspaceShell.tsx — v5 skin (light island); RailGoalMini.tsx — accentFill prop; app/design-gallery/command-v5-shell/* — specimen; __tests__/command-v5-shell.test.tsx — contracts; __tests__/profile-actionable-warnings.test.tsx — disambiguated status query; AI_WORKSPACE — task/map/eval
+
+### TASK-20260720-006 — Audit/reliability delivery closure (merge, verify, hand over)
+
+Status: done
+Owner: Claude (agent), owner-directed
+Branch: n/a (closure across existing PRs)
+Issue/PR: #1231 #1232 #1233 #1234 #1235 #1236 #1239 #1240 #1244 #1246 (all merged); #1237 reconciliation is this closure's own PR
+
+#### Objective
+Close the 2026-07-20 audit delivery: merge every approved fix one at a time
+with exact-head CI and verified rollback, finish the #1239 QA-stability
+dependency (test-side #1244 + product-side #1246), reconcile the audit
+record, and verify production.
+
+#### Acceptance criteria
+- [x] All approved audit fixes merged sequentially (squash SHAs in the audit closure table)
+- [x] QA blocker root-caused and fixed both sides, regression proven fail-pre/pass-post
+- [x] Audit record reconciled to actual merged state (AUDITS/2026-07-20-full-system-audit.md)
+- [x] AI_WORKSPACE statuses reflect reality (004/005 done; no stale review entries)
+- [ ] Production verification (deploy-production run + SMOKE-1197 dispatch) — recorded in the session handover
+
+#### Continuity Block
+- Task ID: TASK-20260720-006
+- GitHub issue/PR: #1237 (reconciliation), merged-fix set above
+- Branch: claude/rico-system-audit-324rkq (reconciliation commit)
+- Base branch: main
+- Last safe commit SHA: 6c4879b2 (main tip at closure)
+- Status: done

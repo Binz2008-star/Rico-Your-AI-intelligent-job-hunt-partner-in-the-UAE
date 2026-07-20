@@ -19,8 +19,8 @@ never deployed and never copied wholesale.
 | Epic | Command Workspace v5 implementation (this document) |
 | Milestone | v5 visual system live on production workspace routes without behavior regressions |
 | Phases | PR 1 foundation → PR 2 shell → PR 3 live modes → PR 4 message/action styling → PR 5 motion + final QA |
-| PR (current) | PR 2 — workspace shell (branch `claude/command-v5-pr2-workspace-shell`); PR 1 merged as #1242 (squash `984edfa`) |
-| Task | `AI_WORKSPACE/TASKS.md` → TASK-20260720-004 (PR 1, done) · TASK-20260720-005 (PR 2) |
+| PR (current) | PR 1 merged (#1242 `984edfa`) · PR 2 merged (#1243 `7b40b70`) · PRs 3–5 not started (owner hold: no further Command v5 work) |
+| Task | `AI_WORKSPACE/TASKS.md` → TASK-20260720-004 (done) · TASK-20260720-005 (done) |
 
 ## Artifact → production map (exact)
 
