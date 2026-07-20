@@ -2555,6 +2555,301 @@ class RicoChatAPI:
 
         return None
 
+    # ── Stored-CV reference / analysis ─────────────────────────────────────────
+
+    _CV_ANALYZE_ASK_RE = re.compile(
+        r"\b(?:analy[sz]e|review|feedback|assess|evaluate|check)\b"
+        r"|حلل|تحليل|راجع|مراجعة|قيّم|قيم|تقييم",
+        re.IGNORECASE,
+    )
+
+    # Words commonly wrapped around a filename mention — stripped when echoing
+    # the referenced name back, because CV_FILE_RE greedily captures the words
+    # before the filename too ("the previous uploaded cv of Name 2026.pdf").
+    _FILENAME_LEAD_STOPWORDS = frozenset({
+        "the", "my", "a", "an", "of", "for", "to", "and", "but", "not",
+        "previous", "previously", "uploaded", "upload", "cv", "resume",
+        "file", "document", "profile", "please", "analyze", "analyse",
+        "review", "check", "assess", "evaluate", "is", "it", "this", "that",
+        "saved", "stored", "earlier", "old", "new", "was", "you", "i",
+    })
+
+    @staticmethod
+    def _normalize_doc_name(text: Any) -> str:
+        """Lowercased, punctuation-collapsed form used for filename matching."""
+        return re.sub(r"[\W_]+", " ", str(text or "").lower()).strip()
+
+    @classmethod
+    def _referenced_filename_display(cls, message: str) -> Optional[str]:
+        """Best-effort echo of the filename the user mentioned, or None."""
+        m = CV_FILE_RE.search(message or "")
+        if not m:
+            return None
+        tokens = m.group(0).strip().split()
+        while tokens and tokens[0].lower().strip(".,()") in cls._FILENAME_LEAD_STOPWORDS:
+            tokens.pop(0)
+        return " ".join(tokens) or None
+
+    def _collect_documents_detailed(self, user_id: str, profile: Any) -> list[dict[str, Any]]:
+        """Full user_documents rows plus the legacy profile-CV fallback entry.
+
+        Unlike _collect_uploaded_documents (a trimmed projection for the file
+        list), this keeps skills_json / current_role / original_filename so a
+        referenced document can be analysed from its stored extraction.
+        """
+        from src.rico_db import RicoDB as _RicoDB
+
+        _docs_db = _RicoDB()
+        docs = list(_docs_db.list_user_documents(user_id)) if _docs_db.available else []
+        has_active_cv = any(
+            d.get("doc_type") == "cv" and d.get("is_primary") for d in docs
+        )
+        if not has_active_cv and profile is not None:
+            cv_filename = self._profile_value(profile, "cv_filename")
+            if cv_filename:
+                docs.insert(
+                    0,
+                    {
+                        "filename": cv_filename,
+                        "original_filename": cv_filename,
+                        "label": cv_filename,
+                        "doc_type": "cv",
+                        "is_primary": True,
+                        "is_legacy": True,
+                        "skills_json": self._as_list(self._profile_value(profile, "skills")),
+                        "years_experience": self._profile_value(profile, "years_experience"),
+                        "current_role": self._profile_value(profile, "current_role"),
+                    },
+                )
+        return docs
+
+    def _match_stored_document(
+        self, docs: list[dict[str, Any]], message: str
+    ) -> Optional[dict[str, Any]]:
+        """Return the stored document the message refers to by name, or None."""
+        norm_msg = self._normalize_doc_name(message)
+        if not norm_msg:
+            return None
+        for d in docs:
+            for key in ("filename", "original_filename", "label"):
+                name = d.get(key)
+                if not name:
+                    continue
+                full = self._normalize_doc_name(name)
+                stem = self._normalize_doc_name(
+                    re.sub(r"\.[A-Za-z0-9]{2,5}$", "", str(name))
+                )
+                if full and full in norm_msg:
+                    return d
+                # Short stems ("cv") would match almost any message — require
+                # a reasonably distinctive name for stem-only matching.
+                if len(stem) >= 4 and stem in norm_msg:
+                    return d
+        return None
+
+    def _handle_stored_cv_reference(
+        self, user_id: str, profile: Any, message: str
+    ) -> Optional[dict[str, Any]]:
+        """Deterministic reply when the user names an uploaded file, or asks
+        for a review of their uploaded CV, after the profile is parsed.
+
+        Returns None when the message neither names a file nor asks for
+        analysis, so existing routing continues unchanged. Without this, a
+        message like "analyse the uploaded cv Name 2026.pdf" dead-ended in the
+        canned "Your CV is already parsed" reply.
+        """
+        text = message or ""
+        has_file_token = bool(CV_FILE_RE.search(text))
+        asks_analysis = bool(self._CV_ANALYZE_ASK_RE.search(text))
+        if not has_file_token and not asks_analysis:
+            return None
+
+        arabic = self._is_arabic_text(text)
+        try:
+            docs = self._collect_documents_detailed(user_id, profile)
+        except Exception as exc:
+            logger.warning("stored_cv_reference_db_failed (%s)", type(exc).__name__)
+            docs = []
+
+        matched = self._match_stored_document(docs, text) if has_file_token else None
+        if has_file_token and matched is None:
+            return self._stored_cv_not_found_response(user_id, docs, text, arabic)
+        if matched is None:
+            cvs = [d for d in docs if d.get("doc_type") == "cv"]
+            matched = next(
+                (d for d in cvs if d.get("is_primary")), cvs[0] if cvs else None
+            )
+        if matched is None:
+            return None
+        return self._stored_cv_analysis_response(user_id, profile, matched, arabic)
+
+    def _stored_cv_analysis_response(
+        self, user_id: str, profile: Any, doc: dict[str, Any], arabic: bool
+    ) -> dict[str, Any]:
+        """Analysis of one stored document, grounded in its saved extraction."""
+        filename = doc.get("filename") or doc.get("label") or ("السيرة الذاتية" if arabic else "your CV")
+        is_active = bool(doc.get("is_primary")) and doc.get("doc_type") == "cv"
+        skills = [str(s) for s in self._as_list(doc.get("skills_json")) if s]
+        years = doc.get("years_experience")
+        role = doc.get("current_role")
+        if is_active:
+            # The parsed profile IS the active CV's extraction — it fills
+            # anything the document row does not carry.
+            skills = skills or [
+                str(s) for s in self._as_list(self._profile_value(profile, "skills")) if s
+            ]
+            if years is None:
+                years = self._profile_value(profile, "years_experience")
+            role = role or self._profile_value(profile, "current_role")
+        certs = (
+            [str(c) for c in self._as_list(self._profile_value(profile, "certifications")) if c]
+            if is_active
+            else []
+        )
+        try:
+            years_int: Optional[int] = int(float(years)) if years is not None else None
+        except (TypeError, ValueError):
+            years_int = None
+
+        if arabic:
+            header = (
+                f"**{filename}** هي سيرتك الذاتية النشطة — هذا التحليل مبني على محتواها المحلَّل:"
+                if is_active
+                else f"**{filename}** محفوظة ضمن مستنداتك (ليست السيرة النشطة). هذا ما لديّ من بياناتها المستخرجة:"
+            )
+            facts = []
+            if role:
+                facts.append(f"• الدور الحالي: {role}")
+            if years_int is not None:
+                facts.append(f"• سنوات الخبرة: {years_int}")
+            if skills:
+                facts.append(f"• المهارات المسجلة ({len(skills)}): " + "، ".join(skills[:10]))
+            if certs:
+                facts.append("• الشهادات: " + "، ".join(certs[:6]))
+            if not facts:
+                facts.append("• لا توجد بيانات مستخرجة محفوظة لهذا الملف بعد.")
+            gaps = []
+            if not skills:
+                gaps.append("• لا توجد مهارات مسجلة — أضف المهارات الأساسية لدورك المستهدف.")
+            if years_int is None:
+                gaps.append("• سنوات الخبرة غير محددة — هذا يؤثر على مطابقة مستوى الأقدمية.")
+            if is_active and not certs:
+                gaps.append("• لا توجد شهادات — شهادة واحدة ذات صلة تحسّن نتائج المطابقة بشكل ملحوظ.")
+            parts = [header, "\n".join(facts)]
+            if gaps:
+                parts.append("**فجوات ينبغي معالجتها:**\n" + "\n".join(gaps))
+            if is_active:
+                parts.append("لإعادة كتابة كاملة قل: **'أعد كتابة سيرتي الذاتية'**.")
+            else:
+                parts.append(
+                    "أحتفظ بالمحتوى المحلَّل الكامل للسيرة الذاتية **النشطة** فقط. "
+                    "للحصول على مراجعة كاملة لهذا الملف، افتح صفحة **My Files** واجعله سيرتك النشطة — "
+                    "وسأعيد مزامنة ملفك المهني منه."
+                )
+            msg = "\n\n".join(parts)
+        else:
+            header = (
+                f"**{filename}** is your active CV — this analysis comes from its parsed content:"
+                if is_active
+                else f"**{filename}** is saved in your documents (not your active CV). Here is what I have from its stored extraction:"
+            )
+            facts = []
+            if role:
+                facts.append(f"• Current role: {role}")
+            if years_int is not None:
+                facts.append(f"• Experience: {years_int} year(s)")
+            if skills:
+                facts.append(f"• Skills on file ({len(skills)}): " + ", ".join(skills[:10]))
+            if certs:
+                facts.append("• Certifications: " + ", ".join(certs[:6]))
+            if not facts:
+                facts.append("• No extracted details are stored for this file yet.")
+            gaps = []
+            if not skills:
+                gaps.append("• No skills listed — add key technical and soft skills relevant to your target role.")
+            if years_int is None:
+                gaps.append("• Years of experience not set — this affects seniority matching.")
+            if is_active and not certs:
+                gaps.append("• No certifications — even one relevant certification (ISO, NEBOSH, CMA, etc.) significantly improves match rates.")
+            parts = [header, "\n".join(facts)]
+            if gaps:
+                parts.append("**Gaps worth fixing:**\n" + "\n".join(gaps))
+            if is_active:
+                parts.append("For a full rewrite, say: **'Rewrite my CV'**.")
+            else:
+                parts.append(
+                    "I keep the full parsed content only for your **active** CV. "
+                    "For a complete review of this file, open the **My Files** page and set it "
+                    "as your active CV — I'll re-sync your profile from it."
+                )
+            msg = "\n\n".join(parts)
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "cv_analysis",
+            "message": msg,
+            "filename": filename,
+            "is_active_cv": is_active,
+        }
+
+    def _stored_cv_not_found_response(
+        self, user_id: str, docs: list[dict[str, Any]], message: str, arabic: bool
+    ) -> dict[str, Any]:
+        """Honest answer when the referenced file is not among saved documents.
+
+        The most common cause is an upload rejected at the storage limit —
+        nothing over the limit is ever saved, so the file the user believes is
+        "uploaded" does not exist server-side. Explains how to free a slot
+        instead of pretending the file is available.
+        """
+        display = self._referenced_filename_display(message)
+        cv_names = [
+            str(d.get("filename") or d.get("label"))
+            for d in docs
+            if d.get("doc_type") == "cv" and (d.get("filename") or d.get("label"))
+        ]
+        if arabic:
+            name_part = f'"{display}"' if display else "هذا الملف"
+            lines = [f"لم أجد {name_part} ضمن مستنداتك المحفوظة."]
+            if cv_names:
+                lines.append(
+                    "السير الذاتية المحفوظة في حسابك: "
+                    + "، ".join(f"**{n}**" for n in cv_names[:6])
+                    + "."
+                )
+            else:
+                lines.append("لا توجد سير ذاتية محفوظة في حسابك حالياً.")
+            lines.append(
+                "إذا رُفض الرفع بسبب امتلاء مساحة التخزين، فالملف لم يُحفظ أصلاً. "
+                "لتحليله: احذف سيرة ذاتية لم تعد بحاجتها من صفحة **My Files** لتفريغ مكان، ثم ارفع الملف مجدداً — "
+                "أو قم بترقية خطتك لمساحة أكبر. إعادة رفع ملف محفوظ بالفعل لا تُحتسب من حدّك أبداً."
+            )
+        else:
+            name_part = f'"{display}"' if display else "that file"
+            lines = [f"I couldn't find {name_part} among your saved documents."]
+            if cv_names:
+                lines.append(
+                    "Saved CVs on your account: "
+                    + ", ".join(f"**{n}**" for n in cv_names[:6])
+                    + "."
+                )
+            else:
+                lines.append("There are no saved CVs on your account right now.")
+            lines.append(
+                "If that upload was rejected because your storage limit was full, the file was never saved. "
+                "To analyse it: free a slot by deleting a CV you no longer need from the **My Files** page, "
+                "then upload the file again — or upgrade your plan for more storage. "
+                "Re-uploading a file that is already saved never counts against your limit."
+            )
+        msg = "\n\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "cv_reference_not_found",
+            "message": msg,
+            "referenced_filename": display,
+            "next_action": "manage_files",
+        }
+
     def _build_openai_context(self, profile: Any, user_id: str | None = None) -> dict[str, Any]:
         """Build context for OpenAI agent from profile and recent conversation history."""
         if profile is None:
@@ -9030,6 +9325,16 @@ class RicoChatAPI:
                         self._handle_profile_role_suggestions(profile, message),
                         self.SOURCE_KEYWORD,
                         profile=profile,
+                    )
+                # A reference to a specific uploaded file, or an explicit
+                # analysis ask, gets a real answer from stored documents —
+                # never the canned "already parsed" dead end below.
+                _stored_cv_response = self._handle_stored_cv_reference(
+                    user_id, profile, message
+                )
+                if _stored_cv_response is not None:
+                    return self._finalize(
+                        _stored_cv_response, self.SOURCE_KEYWORD, profile=profile
                     )
                 response = {
                     "type": "profile_summary",

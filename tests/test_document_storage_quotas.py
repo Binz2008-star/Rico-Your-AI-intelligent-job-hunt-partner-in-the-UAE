@@ -440,3 +440,96 @@ class TestUploadCvEndpointQuota:
         assert uid == "authed@example.com", f"must use JWT identity, got: {uid!r}"
         assert not uid.startswith("public:"), f"must NOT be a guest ID, got: {uid!r}"
         assert doc_type == "cv"
+
+
+# ── 7. /api/v1/rico/upload-cv — exact re-upload is never quota-blocked ─────────
+
+class TestUploadCvDedupeBeforeQuota:
+    """An exact re-upload of already-stored bytes must never be quota-blocked.
+
+    The quota gate runs after the content hash is computed and is skipped when
+    the same bytes are already stored for this user (same dedupe-before-quota
+    order #960 gave /api/v1/user/files). A distinct new file at the limit is
+    still blocked, and a store failure fails closed — quota applies.
+    """
+
+    def _upload(self, *, hash_found, db_available=True, hash_lookup_raises=False):
+        from io import BytesIO
+        from fastapi import HTTPException
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+
+        pdf_bytes = b"%PDF-1.4 minimal"
+
+        mock_db = MagicMock()
+        mock_db.available = db_available
+        if hash_lookup_raises:
+            mock_db.find_user_document_by_hash.side_effect = RuntimeError("db down")
+        else:
+            mock_db.find_user_document_by_hash.return_value = (
+                {"id": "doc-1", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True}
+                if hash_found
+                else None
+            )
+
+        quota_mock = MagicMock(
+            side_effect=HTTPException(
+                status_code=422,
+                detail={
+                    "detail": "cv_storage_limit_exceeded",
+                    "plan": "free",
+                    "used": 1,
+                    "limit": 1,
+                    "upgrade_hint": "Upgrade to Pro",
+                    "doc_type": "cv",
+                    "message": "CV limit reached",
+                },
+            )
+        )
+
+        with (
+            patch("src.api.routers.rico_chat._resolve_upload_user_id",
+                  return_value="authed@example.com"),
+            patch("src.api.routers.rico_chat.is_valid_public_user_id", return_value=False),
+            patch("src.rico_db.RicoDB", return_value=mock_db),
+            patch("src.services.subscription_gating.enforce_document_quota", quota_mock),
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            r = client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("cv.pdf", BytesIO(pdf_bytes), "application/pdf")},
+            )
+        return r, quota_mock
+
+    @staticmethod
+    def _is_quota_422(response):
+        if response.status_code != 422:
+            return False
+        detail = response.json().get("detail")
+        return isinstance(detail, dict) and detail.get("detail") == "cv_storage_limit_exceeded"
+
+    def test_duplicate_reupload_at_quota_is_not_blocked(self):
+        """Same bytes already stored: the quota enforcer must never run."""
+        r, quota_mock = self._upload(hash_found=True)
+        quota_mock.assert_not_called()
+        assert not self._is_quota_422(r), (
+            "exact re-upload of a stored document was blocked by the storage limit"
+        )
+
+    def test_new_file_at_quota_is_still_blocked(self):
+        """Distinct bytes at the limit: 422 quota error exactly as before."""
+        r, quota_mock = self._upload(hash_found=False)
+        assert quota_mock.call_count == 1
+        assert self._is_quota_422(r)
+
+    def test_db_unavailable_fails_closed_quota_applies(self):
+        """Store unavailable: the dedupe pre-check must not open the gate."""
+        r, quota_mock = self._upload(hash_found=False, db_available=False)
+        assert quota_mock.call_count == 1
+        assert self._is_quota_422(r)
+
+    def test_hash_lookup_error_fails_closed_quota_applies(self):
+        """Hash lookup raising: quota still applies — never fail open."""
+        r, quota_mock = self._upload(hash_found=False, hash_lookup_raises=True)
+        assert quota_mock.call_count == 1
+        assert self._is_quota_422(r)

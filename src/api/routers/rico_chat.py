@@ -1661,6 +1661,27 @@ def rico_metrics(request: Request) -> MetricsResponse:
 # CV Upload Endpoint
 # ============================================================================
 
+def _stored_document_with_hash_exists(user_id: str, content_hash: str) -> bool:
+    """True when these exact bytes are already stored for this user.
+
+    Checked across the confirmable doc types because the upload's real type is
+    not classified yet at quota time. Returns False on any store failure so the
+    quota gate still applies — fail closed on the limit, never open.
+    """
+    try:
+        from src.rico_db import RicoDB
+        db = RicoDB()
+        if not db.available:
+            return False
+        return any(
+            db.find_user_document_by_hash(user_id, doc_type, content_hash)
+            for doc_type in ("cv", "cover_letter", "other")
+        )
+    except Exception:
+        logger.warning("upload_dedupe_precheck_failed user=%s", user_ref(user_id))
+        return False
+
+
 @router.post("/upload-cv")
 @limiter.limit(LIMIT_UPLOAD)
 async def rico_upload_cv(
@@ -1674,12 +1695,6 @@ async def rico_upload_cv(
     start_time = time.time()
     request_ref = generate_error_ref()
     resolved_user_id = _resolve_upload_user_id(request, user_id, form_user_id, response)
-
-    # Enforce per-plan CV quota for authenticated users.
-    # Guest/public sessions (public:*) are exempt — they have no plan record.
-    if not is_valid_public_user_id(resolved_user_id):
-        from src.services.subscription_gating import enforce_document_quota
-        enforce_document_quota(resolved_user_id, "cv")
 
     try:
         # Layered size enforcement (#1080): the app-level ingress middleware
@@ -1709,6 +1724,19 @@ async def rico_upload_cv(
         # later resolve it server-side by upload_id instead of trusting a
         # client-echoed hash or re-parsing.
         content_hash = hashlib.sha256(data).hexdigest()
+
+        # Enforce per-plan CV quota for authenticated users — but never for an
+        # exact re-upload of bytes already stored for this user. A duplicate
+        # consumes no storage, so the limit must not block it (same
+        # dedupe-before-quota order #960 gave /api/v1/user/files). Without
+        # this, a user at their limit cannot re-upload their own saved CV to
+        # refresh its parse — the exact flow Rico itself suggests in chat.
+        # Guest/public sessions (public:*) are exempt — they have no plan record.
+        if not is_valid_public_user_id(resolved_user_id) and not _stored_document_with_hash_exists(
+            resolved_user_id, content_hash
+        ):
+            from src.services.subscription_gating import enforce_document_quota
+            enforce_document_quota(resolved_user_id, "cv")
 
         safe_name = _safe_filename(file.filename)
 
