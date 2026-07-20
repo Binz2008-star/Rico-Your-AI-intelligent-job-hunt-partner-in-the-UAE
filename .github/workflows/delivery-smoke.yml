@@ -1,0 +1,35 @@
+name: "Delivery Smoke (manual)"
+
+# Dispatch-only. Real-domain verification of the user-facing surfaces:
+# ricohunt.com routes (/command, /profile, /jobs, /applications, /upload,
+# /login), unauthenticated public chat, register→DB-verify→login auth flow,
+# and the authenticated SSE stream (terminal done event must parse — the
+# #1239 encoder, live). One synthetic user; always cleans up (mirrors the
+# session-smoke-1197 precedent). Never runs automatically. Requires typing
+# the confirmation string (APPLY-712 gate pattern) because it exercises
+# production.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DELIVERY-SMOKE to confirm running the production smoke"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: "Delivery Production Smoke"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --quiet psycopg2-binary
+      - name: Run delivery smoke
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SMOKE_CONFIRM: ${{ inputs.confirm }}
+        run: python scripts/delivery_smoke.py
