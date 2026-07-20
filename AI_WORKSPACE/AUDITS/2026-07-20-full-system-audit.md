@@ -130,3 +130,35 @@ account-specific), each with a documented rollback (revert the squash commit).
 
 _No merges, deploys, production migrations, secret changes, or environment
 mutations were performed. All work is in isolated Draft PRs or documented above._
+
+---
+
+## Closure (2026-07-20, same day — owner-directed delivery)
+
+Owner approved and directed the delivery closure ("finish current work and
+pendings → merge safely"). Every fix merged **one at a time** with exact-head
+CI green (QA Tests), zero unresolved review threads, and a single-revert
+rollback path verified before each merge; state re-checked after every merge.
+
+| Finding / fix | PR | Head SHA | Squash on main | Status |
+| --- | --- | --- | --- | --- |
+| P0 DOCX decompression bomb — classifier path | #1231 | `52b54c5e` | `3c3f58f9` | **merged** |
+| P1 /agent/chat idempotency cross-user scope | #1234 | `a5744f62` | `bebab29e` | **merged** |
+| P1 whatsapp_requests_repo connection leak | #1232 | `d0f6b715` | `247bc1e3` | **merged** |
+| P2 auth env-fallback production detection | #1240 | `774d18a2` | `4b120316` | **merged** |
+| P2 telegram roster RealDictCursor decode | #1233 | `fc4f1838` | `5f461211` | **merged** |
+| P2 save-card honest failure copy | #1235 | `f50a3c08` | `73979eaa` | **merged** |
+| P2 /subscription/intent rate-limit + caps | #1236 | `a120cf7f` | `6c4879b2` | **merged** |
+| P2 SSE done-event total encoder | #1239 | `d2caa548` | `09dbe9d9` | **merged** |
+| QA stability — spec-side (baseline Playwright race) | #1244 | — | `3e967cd0` | **merged** |
+| QA stability — product-side (late empty bootstrap wiped live transcript; deterministic regression, proven fail-pre/pass-post) | #1246 | `5962bbae` | `bc6d8ba0` | **merged** |
+
+The #1239 QA blocker was the refine-search flake: #1244 closed the test-side
+race (sessions mock + settle gates, assertions preserved) and #1246 closed the
+product-side root cause (welcome effect no longer replaces a non-empty
+transcript — same guard contract as the has_history path).
+
+Deferred/owner-decision items above remain open and unchanged (billing
+questions, #1138 migration-045 window, PDF extraction bounds, broader
+rate-limit coverage, `RegisterRequest.role` dead field, orchestrator→runtime
+delegation refactor).
