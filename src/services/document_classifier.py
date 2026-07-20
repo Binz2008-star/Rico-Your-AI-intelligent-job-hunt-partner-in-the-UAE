@@ -414,6 +414,15 @@ class DocumentClassifier:
         return data.decode("latin-1", errors="ignore")
 
     def _extract_docx(self, data: bytes) -> str:
+        # Refuse decompression bombs before python-docx/lxml inflates the zip.
+        # Classification runs on the raw bytes BEFORE the CV parser, so the guard
+        # must live here too (shared with cv_parser via docx_safety).
+        from src.services.docx_safety import is_docx_bomb
+
+        if is_docx_bomb(data):
+            # No text → the document is treated as unreadable downstream; a bomb
+            # must never crash or exhaust the request path.
+            return ""
         try:
             import docx  # type: ignore[import]
             import io
