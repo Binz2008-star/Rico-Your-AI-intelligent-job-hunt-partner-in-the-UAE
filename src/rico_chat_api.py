@@ -12687,7 +12687,12 @@ class RicoChatAPI:
         else:
             updated_ui = RicoAgenticUi(actions=new_actions)
 
-        return {**result, "agentic_ui": updated_ui}
+        # Serialize to a plain dict: this runs AFTER _finalize, so a raw
+        # RicoAgenticUi model here reaches the SSE done-only branch's
+        # json.dumps un-encoded and raises TypeError (the profile-match
+        # clarification path that broke the live profile report). A dict is
+        # what every other agentic_ui producer (compose) already emits.
+        return {**result, "agentic_ui": updated_ui.model_dump(exclude_none=True)}
 
     def _resolve_letter_choice(self, user_id: str, message: str) -> str | None:
         """Map a single-letter (A/B/C/D) or single-digit (1/2/3/4) reply to the
