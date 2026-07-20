@@ -80,7 +80,7 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ### TASK-20260720-001 — hotfix #1225: agentic_ui option buttons as plain dict (stream TypeError) — PRODUCTION VERIFIED
 
-Status: verified — **MERGED (#1225, squash `4ecb5d80`) + PRODUCTION VERIFIED — PASS (owner ruling 2026-07-20)**
+Status: done — **MERGED (#1225, squash `4ecb5d80`) + PRODUCTION VERIFIED — PASS; incident closed (owner ruling 2026-07-20)**
 Owner: Claude (Fable session; owner order 2026-07-20 "افتح فرع hotfix واحدًا من أحدث main… نفّذ الإصلاح الأدنى فقط")
 Branch: hotfix/option-buttons-plain-dict (head `9276e79e`, cut from `55e68ad5` = main at cut)
 Issue/PR: #1225
@@ -144,7 +144,7 @@ responses; JSON path unaffected; no data/schema/API-shape effects.
 
 ### TASK-20260720-002 — /command option-surface duplication + `existing_ui` dict-merge branch (follow-up, not urgent)
 
-Status: open — owner-gated ("متابعة مستقلة، غير عاجلة", owner ruling 2026-07-20)
+Status: proposed — owner-gated ("متابعة مستقلة، غير عاجلة", owner ruling 2026-07-20)
 Owner: unassigned (needs owner gate to start)
 Branch: —
 Issue/PR: —
@@ -163,7 +163,7 @@ dict-shaped `existing_ui`, with pins; global, user-agnostic.
 
 ### TASK-20260720-003 — learning_repo `_db_load_profile` json.loads on already-decoded JSONB (separate log, not urgent)
 
-Status: open — logged separately per owner order during the 2026-07-19
+Status: proposed — logged separately per owner order during the 2026-07-19
 TypeError investigation ("لا تلمس عيب learning_repo في هذا التحقيق؛ سجّله منفصلًا فقط")
 Owner: unassigned (needs owner gate to start)
 Branch: —
