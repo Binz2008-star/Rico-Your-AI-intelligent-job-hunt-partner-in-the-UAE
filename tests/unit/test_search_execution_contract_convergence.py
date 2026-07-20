@@ -187,3 +187,66 @@ class TestPromiseExecutesForExplicitSearch:
             profile={"skills": ["excel"]},  # no target_roles
         )
         search.assert_not_called()
+
+
+# ── Assistant turn is persisted only when it is the delivered reply ───────────
+
+class TestPromisePersistenceOrdering:
+    """The hollow-promise guard must run BEFORE the assistant turn is persisted.
+
+    A promise ("I'll search now…") that Rico replaces with a real search must
+    never land in chat history — otherwise session recovery, later AI context,
+    and analytics all see an orphan assistant turn the user never received.
+    """
+
+    def _run_capture(self, api, message, ai_text, profile=_PROFILE):
+        agent = MagicMock()
+        agent.respond.return_value = {"message": ai_text, "type": "openai_response"}
+        append = MagicMock()
+        with patch.object(api, "_get_openai_agent", return_value=agent), \
+             patch.object(api, "_build_openai_context", return_value={}), \
+             patch.object(api, "_get_blocked_questions", return_value=[]), \
+             patch.object(api, "_preserve_ai_message", side_effect=lambda text, _bq: text), \
+             patch.object(api, "_append_chat", append), \
+             patch.object(api, "_classified_role_search", return_value=dict(_SEARCH_RESULT)), \
+             patch.object(api, "_finalize", side_effect=lambda resp, _src, profile=None: dict(resp)):
+            result = api._answer_with_ai_fallback(
+                user_id="u1", message=message, profile=profile, save_user_message=True,
+            )
+        assistant_texts = [
+            c.args[2] for c in append.call_args_list
+            if len(c.args) >= 3 and c.args[1] == "assistant"
+        ]
+        return result, assistant_texts
+
+    def test_promise_replaced_by_search_is_not_persisted(self):
+        # Explicit search request + hollow promise → real search is returned and
+        # the promise is NOT written to history (the search path persists itself).
+        api = _make_api()
+        result, assistant_texts = self._run_capture(
+            api,
+            message="Find UAE jobs that match my CV and experience.",
+            ai_text="I'll search now — one moment.",
+        )
+        assert result.get("response_source") == "search_contract"
+        assert assistant_texts == []
+
+    def test_ambiguous_promise_reply_is_persisted(self):
+        # Non-search message + promise → arm-the-slot path; the promise IS the
+        # delivered reply, so it must be persisted exactly once.
+        api = _make_api()
+        result, assistant_texts = self._run_capture(
+            api,
+            message="tell me about my profile",
+            ai_text="One moment while I gather that.",
+        )
+        assert assistant_texts == ["One moment while I gather that."]
+
+    def test_normal_reply_is_persisted(self):
+        api = _make_api()
+        result, assistant_texts = self._run_capture(
+            api,
+            message="Find UAE jobs that match my CV and experience.",
+            ai_text="Here are strategies to improve your search…",
+        )
+        assert assistant_texts == ["Here are strategies to improve your search…"]

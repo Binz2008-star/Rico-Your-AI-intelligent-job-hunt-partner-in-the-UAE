@@ -76,6 +76,32 @@ class TestInjectOptionButtons:
         assert actions[0]["label"] == "Existing"
         assert actions[1]["label"] == "A) New opt"
 
+    def test_existing_dict_agentic_ui_content_is_preserved(self):
+        # #4 regression: compose() emits agentic_ui as a plain DICT (model_dump),
+        # which is the real production shape reaching this method. Its existing
+        # card/action must survive injection, not be overwritten by the option
+        # buttons (the pre-fix else branch dropped any composed dict content).
+        # test_existing_agentic_ui_actions_are_preserved covers the model input;
+        # this covers the dict input, which no other test exercised.
+        existing_ui_dict = RicoAgenticUi(
+            actions=[
+                RicoChatAction(
+                    id="apply-1",
+                    label="Apply to job",
+                    kind=RicoActionKind.navigate,
+                    href="https://example.com/apply",
+                )
+            ]
+        ).model_dump(exclude_none=True)
+        opts = _opts(("Yes", "yes please"), ("No", "no thanks"))
+        result = RicoChatProcessor._inject_option_buttons(
+            {"message": "confirm?", "agentic_ui": existing_ui_dict}, opts
+        )
+        ui = result["agentic_ui"]
+        assert isinstance(ui, dict)
+        labels = [a["label"] for a in ui["actions"]]
+        assert labels == ["Apply to job", "A) Yes", "B) No"]
+
     def test_label_already_prefixed_not_doubled(self):
         opts = [{"label": "A) Software Engineer", "message": "find SE jobs", "action": ""}]
         result = RicoChatProcessor._inject_option_buttons({}, opts)
