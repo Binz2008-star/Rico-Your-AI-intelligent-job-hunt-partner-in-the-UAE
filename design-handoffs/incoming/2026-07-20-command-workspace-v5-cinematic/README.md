@@ -5,6 +5,15 @@ the Command Workspace design reference. It is design-only and awaits owner
 review per `design-handoffs/README.md`. Nothing here is production code and
 nothing here lifts any freeze.
 
+**Owner ruling (2026-07-20), binding for this package:** the original v4 file
+is not in the repo; v5 is a rebuild from the recorded handoff contracts, not a
+direct port of the v4 file; visual comparison against the original v4 is not
+possible from this repo; this package does not replace the approved design;
+and merging its PR stores a review artifact only — it is neither design
+adoption nor authorization to implement. Review-gate evidence (contract map,
+size/performance report, font licensing, network proof, accessibility audit)
+lives in [`EVIDENCE.md`](./EVIDENCE.md).
+
 ## 1. Prototype name
 
 `Rico Command Workspace v5.dc.html` — a single self-contained HTML prototype
@@ -147,11 +156,13 @@ modes as a whole remain deferred until real capabilities exist (v4 boundary
 - **Performance:** constant ambient animations are limited to focal zones and
   transform/opacity only; blur layers (glass, blobs) are the main GPU cost —
   audit on low-end devices before adopting any of it.
-- **Accessibility:** color-pair contrast was chosen against AA for text on
-  paper/deep panels, but a full audit (incl. the funnel label overlays and
-  gap-node labels) is required at implementation; focus-visible ring is
-  implemented globally; closed panels are `visibility:hidden` so keyboard
-  focus cannot escape into off-canvas content.
+- **Accessibility:** a computed WCAG AA contrast audit was performed on every
+  token pair in use — 19 initially-failing pairs were fixed in this version
+  (details in `EVIDENCE.md` §6); keyboard traversal, ⌘K/Escape order,
+  Enter/Space activation on role=button elements, and reduced-motion were all
+  verified. Remaining prototype-grade gaps (control-border contrast,
+  screen-reader semantics) are listed in `EVIDENCE.md` for the production
+  pass.
 - **File size:** ~400KB single file (fonts embedded) — fine as a reference,
   not a production pattern.
 - **Governance:** the `/command` design freeze and all v4 boundaries remain in
