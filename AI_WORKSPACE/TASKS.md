@@ -5509,3 +5509,53 @@ raised now return False; no valid input's behavior changes).
 - Remaining open gate from the #1176 post-merge audit: **gate 3 only**
   (additive allowlist-growth migration policy before event #9 — owner
   decision).
+
+### TASK-20260720-004 — Command v5 PR 1: visual foundation (tokens, motion, presence)
+
+Status: review
+Owner: Claude (agent) / owner review
+Branch: claude/command-v5-pr1-visual-foundation
+Issue/PR: PR — Command v5 visual foundation (draft)
+
+#### Objective
+Ship the approved Command Workspace v5 visual foundation as a self-contained,
+unconsumed-by-production module set: AA-audited tokens, typography roles,
+surface + motion primitives, RicoPresence indicator, a CI contrast gate, and
+an internal gallery specimen — with zero changes to chat logic, APIs,
+routing behavior, or backend.
+
+#### Context
+- Relevant files: apps/web/components/workspace/v5/{tokens.ts,fonts.ts,motion.css,RicoPresence.tsx}; apps/web/scripts/check-contrast-v5.mjs; apps/web/app/design-gallery/command-v5/{page.tsx,_specimen.tsx}; apps/web/__tests__/command-v5-foundation.test.tsx
+- Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md; design-handoffs/incoming/2026-07-20-command-workspace-v5-cinematic/EVIDENCE.md (visual acceptance reference, commit 69074a8)
+- Existing behavior: WORKSPACE_THEME + atelier-kit untouched; /design-gallery is production-blocked via assertInternalPreviewAccess.
+
+#### Constraints
+- Do not touch: chat logic, APIs, auth, sessions, billing, production routes' rendering, WORKSPACE_THEME, atelier-kit values.
+- No migrations unless explicitly required: none.
+- Keep scope limited to: foundation modules + internal specimen + gates + docs.
+
+#### Acceptance criteria
+- [x] Every v5 color token AA-gated (scripts/check-contrast-v5.mjs, 19 pairs PASS)
+- [x] motion.css ↔ tokens.ts drift guard in vitest
+- [x] RicoPresence: 5 states × 3 sizes, status semantics, decorative mode, reduced-motion collapse
+- [x] Specimen renders at /design-gallery/command-v5 (internal-only, 404 in production)
+- [x] No production route renders differently (no imports from production code)
+
+#### Required verification
+- [x] Unit tests: vitest run (full suite)
+- [ ] Integration tests: n/a (no behavior surface)
+- [x] Frontend build: npm run build
+- [x] Local smoke: next start + Playwright screenshots of the specimen (desktop/mobile/reduced-motion)
+- [ ] Production/deploy smoke if applicable: n/a (gallery is production-blocked)
+
+#### Continuity Block
+- Task ID: TASK-20260720-004
+- GitHub issue/PR: PR — Command v5 visual foundation (draft, opened from this task)
+- Branch: claude/command-v5-pr1-visual-foundation
+- Base branch: main
+- Last safe commit SHA: e44466b
+- Current head SHA: (set at PR open)
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: apps/web/components/workspace/{WorkspaceShell.tsx,theme.ts}, apps/web/components/atelier-kit/{tokens.ts,fonts.ts}, apps/web/app/design-gallery/*, apps/web/lib/internalPreview.ts, apps/web/scripts/check-contrast.mjs, apps/web/vitest.config.ts
+- Files changed: apps/web/components/workspace/v5/* — new foundation; apps/web/scripts/check-contrast-v5.mjs — AA gate; apps/web/app/design-gallery/command-v5/* — internal specimen; apps/web/__tests__/command-v5-foundation.test.tsx — guards; apps/web/package.json — check:contrast:v5 script; AI_WORKSPACE/{COMMAND_V5_IMPLEMENTATION_MAP.md,TASKS.md} — traceability
