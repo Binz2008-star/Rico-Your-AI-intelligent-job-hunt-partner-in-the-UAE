@@ -535,7 +535,7 @@ def _account_service_response(ctx: RicoSessionContext) -> Dict[str, Any]:
                 monthly_label = "USD 21.50/mo (≈ AED 79)"
             msg = (
                 f"You are on the **Free** plan — {limit} AI messages per day "
-                f"(your allowance resets every 24 hours). "
+                f"(resets daily at 00:00 UTC). "
                 f"Upgrade to Rico Monthly ({monthly_label}) for higher limits."
             )
 

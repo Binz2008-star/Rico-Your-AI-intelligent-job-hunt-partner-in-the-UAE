@@ -268,15 +268,20 @@ def check_ai_message_allowed_for_user(user_id: str) -> GateCheck:
     if base.limit is None:
         return replace(base, reset_at=reset_at)
 
-    # Compose Free-tier copy in daily terms — never "monthly".
+    # Compose Free-tier copy in daily terms — never "monthly", never "24 hours"
+    # (the window is the fixed UTC calendar day, not a rolling 24h span).
     if is_free:
         if base.allowed:
             message = f"{base.remaining} free AI messages remaining today."
-        else:
-            when = _humanize_reset(reset_at, now) if reset_at else "24 hours"
+        elif reset_at:
             message = (
                 f"You've used your {base.limit} free AI messages for today. "
-                f"Your allowance resets in {when}."
+                f"Your allowance resets in {_humanize_reset(reset_at, now)}."
+            )
+        else:
+            message = (
+                f"You've used your {base.limit} free AI messages for today. "
+                f"Your allowance resets daily at 00:00 UTC."
             )
         return replace(base, message=message, reset_at=reset_at)
 

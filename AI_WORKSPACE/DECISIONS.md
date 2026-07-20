@@ -89,7 +89,7 @@ one source of truth per domain is decided.
 
 ## Accepted decisions
 
-### DEC-20260720-001 — Free plan AI messages become a daily allowance (10 / 24h) with a reset countdown, replacing the 50-per-month cap
+### DEC-20260720-001 — Free plan AI messages become a daily allowance (10/day, UTC calendar day) with a reset countdown, replacing the 50-per-month cap
 
 Status: accepted
 Date: 2026-07-20
@@ -107,13 +107,20 @@ cannot be abused to run up AI-provider cost.
 
 #### Decision
 
-1. Free tier = **10 AI messages per 24 hours**, resetting at **00:00 UTC**
-   (a fixed daily window, deterministic reset time for the countdown).
+1. Free tier = **10 AI messages per UTC calendar day**, resetting at **00:00
+   UTC** — a single, unambiguous contract. This is a fixed calendar-day window,
+   NOT a rolling 24-hour span: usage is counted from 00:00 UTC of the current
+   day, so the whole allowance refills at midnight UTC regardless of when it was
+   consumed. Copy must therefore never say "per 24 hours" / "every 24 hours"
+   (which would imply a rolling window).
 2. Rico Monthly is **unchanged**: 300 AI messages per month on the Paddle
    billing cycle.
-3. All user-facing copy for the free tier says "per day" / "resets every 24
-   hours" — never "monthly AI message limit". The over-quota chat message
-   surfaces a live "resets in Xh Ym" countdown.
+3. All user-facing copy for the free tier says "per day" / "resets daily at
+   00:00 UTC" — never "monthly AI message limit", never "24 hours". Canonical
+   strings: EN `10 AI messages per day. Resets daily at 00:00 UTC.` / AR
+   `10 رسائل ذكاء اصطناعي يوميًا. تتجدد يوميًا عند الساعة 00:00 بتوقيت UTC.`
+   The over-quota chat message additionally surfaces a live "resets in Xh Ym"
+   countdown to the next 00:00 UTC.
 4. Enforcement stays on the existing `monthly_ai_message_limit` entitlement
    field (shared with the paid plan) to avoid a schema/API rename; the window
    is chosen by plan in `subscription_gating.check_ai_message_allowed_for_user`
@@ -122,15 +129,17 @@ cannot be abused to run up AI-provider cost.
 
 This is a global, user-agnostic product change (no account is special-cased);
 Free covers authenticated free users on both the authenticated and public chat
-paths. Profile-optimization and saved-job quotas are untouched (still monthly /
-absolute).
+paths. Profile-optimization (monthly) and saved-job (absolute) quotas are
+untouched — Free copy keeps "/month" on the profile-optimization item.
 
 #### Consequences
 - Positive: daily return cadence; lower abandonment; small daily cap caps AI
-  cost exposure; clear upgrade reason for heavy users.
-- Negative/trade-off: the entitlement field name (`monthly_ai_message_limit`)
-  now means "daily" for Free and "monthly" for paid — documented in code
-  comments to prevent confusion; a future rename is deferred as out of scope.
+  cost exposure; clear upgrade reason for heavy users; one unambiguous reset
+  contract (fixed UTC day) that the countdown and copy both describe correctly.
+- Negative/trade-off: `monthly_ai_message_limit` is now a **LEGACY ENTITLEMENT
+  KEY** whose meaning is plan-dependent (per-UTC-day for Free, per-month for
+  paid). This is explicitly flagged in `src/subscription_plans.py` so the name
+  is not misread; a future rename to a clearer key is deferred as out of scope.
 
 #### Follow-up
 - [ ] (Optional) Frontend live countdown timer using `messages_reset_at`; today

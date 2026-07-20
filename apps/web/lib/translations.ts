@@ -282,7 +282,7 @@ export const translations = {
     checkoutCancelledDesc:
       "No payment was made. You can try again whenever you're ready.",
     freePlan: "Free",
-    freePlanDesc: "10 AI messages/day · 10 saved jobs · 1 profile optimisation",
+    freePlanDesc: "10 AI messages/day · 10 saved jobs · 1 profile optimisation/mo",
     current: "Current",
     openRico: "Open Rico",
     subscriptionTitle: "Subscription",
@@ -1648,7 +1648,7 @@ export const translations = {
       "لم يتم الدفع. يمكنك المحاولة مرة أخرى عندما تكون جاهزًا.",
     freePlan: "مجاني",
     freePlanDesc:
-      "10 رسائل ذكاء اصطناعي/يوم · 10 وظائف محفوظة · 1 تحسين ملف شخصي",
+      "10 رسائل ذكاء اصطناعي/يوم · 10 وظائف محفوظة · 1 تحسين ملف شخصي/شهر",
     current: "الحالي",
     openRico: "افتح ريكو",
     subscriptionTitle: "الاشتراك",

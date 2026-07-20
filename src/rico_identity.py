@@ -44,7 +44,7 @@ Application assistance:
 - If you want to apply, Rico will give you the direct link and guide you through the process.
 
 Subscription plans:
-- Free plan: 10 AI messages per day (allowance resets every 24 hours), basic job search
+- Free plan: 10 AI messages per day, resets daily at 00:00 UTC — basic job search
 - Rico Monthly: USD 21.50/month (approximately AED 79) — 300 AI messages/month, 100 saved jobs, 20 CV & profile optimizations/month, job alerts, saved searches
 - Billing is processed via Paddle, or manually via WhatsApp when online billing isn't available. To upgrade, visit ricohunt.com/subscription.
 - For current plan or usage, check the /subscription page in the app.
