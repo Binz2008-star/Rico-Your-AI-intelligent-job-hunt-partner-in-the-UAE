@@ -21,7 +21,7 @@ def _resolved_free():
     )
 
     entitlements = SubscriptionEntitlements(
-        monthly_ai_message_limit=50,
+        monthly_ai_message_limit=10,  # Free tier: enforced as a DAILY allowance
         saved_jobs_limit=10,
         profile_optimization_limit=1,
     )
@@ -41,7 +41,7 @@ def test_chat_blocks_when_monthly_ai_message_limit_reached():
 
     ctx = RicoSessionContext.for_authenticated("limit@rico.ai")
     with patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=_resolved_free()), \
-         patch("src.services.subscription_gating.count_monthly_ai_messages", return_value=50), \
+         patch("src.services.subscription_gating.count_monthly_ai_messages", return_value=10), \
          patch("src.repositories.profile_repo.get_profile") as get_profile, \
          patch("src.services.chat_service._legacy_send_message") as legacy, \
          patch("src.services.chat_service._conversational_ai_reply") as ai:
@@ -53,9 +53,14 @@ def test_chat_blocks_when_monthly_ai_message_limit_reached():
     assert result["type"] == "subscription_limit"
     assert result["response_source"] == "subscription_gate"
     assert result["feature"] == "monthly_ai_message_limit"
-    assert result["usage"] == 50
-    assert result["limit"] == 50
+    assert result["usage"] == 10
+    assert result["limit"] == 10
     assert result["next_action"] == "upgrade_subscription"
+    # Free tier is a daily allowance: the block message must be day-framed and
+    # carry a reset time, never "monthly" copy.
+    assert result["reset_at"] is not None
+    assert "month" not in result["message"].lower()
+    assert "today" in result["message"].lower()
 
 
 def test_chat_allows_when_monthly_ai_message_usage_remains():
@@ -64,7 +69,7 @@ def test_chat_allows_when_monthly_ai_message_usage_remains():
     ctx = RicoSessionContext.for_authenticated("limit@rico.ai")
     legacy_response = {"type": "legacy", "message": "ok", "response_source": "legacy"}
     with patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=_resolved_free()), \
-         patch("src.services.subscription_gating.count_monthly_ai_messages", return_value=49), \
+         patch("src.services.subscription_gating.count_monthly_ai_messages", return_value=9), \
          patch("src.repositories.profile_repo.get_profile", return_value=None), \
          patch("src.services.chat_service._legacy_send_message", return_value=legacy_response) as legacy, \
          patch("src.services.chat_service._conversational_ai_reply") as ai:
@@ -165,7 +170,7 @@ def test_resolve_falls_back_to_free_for_a_non_email_identity():
 
     assert resolved.is_active is False
     assert resolved.subscription.plan.value == "free"
-    assert resolved.subscription.entitlements.monthly_ai_message_limit == 50
+    assert resolved.subscription.entitlements.monthly_ai_message_limit == 10
 
 
 def test_gating_passes_identity_through_to_plan_resolution_unchanged():
@@ -183,3 +188,46 @@ def test_gating_passes_identity_through_to_plan_resolution_unchanged():
         enforce_document_quota(_PAID_EMAIL, "cv")
 
     assert seen["user_id"] == _PAID_EMAIL
+
+
+# ── Free daily AI-message allowance (resets 00:00 UTC, not a monthly cap) ────────
+
+
+def test_free_ai_allowance_uses_daily_window_and_carries_reset_time():
+    """Free users are counted over the current UTC day; reset_at is next 00:00 UTC."""
+    from src.services.subscription_gating import check_ai_message_allowed_for_user
+
+    with patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=_resolved_free()), \
+         patch("src.services.subscription_gating.count_monthly_ai_messages", return_value=3) as counted:
+        gate = check_ai_message_allowed_for_user("free@rico.ai")
+
+    # The window handed to the counter is start-of-day UTC — a daily allowance,
+    # not the calendar-month / billing-cycle window used for paid plans.
+    window_start = counted.call_args.args[1]
+    assert (window_start.hour, window_start.minute, window_start.second) == (0, 0, 0)
+    assert window_start.tzinfo is not None
+
+    assert gate.allowed is True
+    assert gate.limit == 10
+    assert gate.remaining == 7
+    assert gate.reset_at == window_start + timedelta(days=1)
+    assert "month" not in gate.message.lower()
+
+
+def test_free_ai_allowance_blocks_at_cap_with_resets_in_countdown():
+    """At the daily cap the block message is day-framed with a reset countdown."""
+    from src.services.subscription_gating import check_ai_message_allowed_for_user
+
+    with patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=_resolved_free()), \
+         patch("src.services.subscription_gating.count_monthly_ai_messages", return_value=10):
+        gate = check_ai_message_allowed_for_user("free@rico.ai")
+
+    assert gate.allowed is False
+    assert gate.reset_at is not None
+    low = gate.message.lower()
+    assert "resets in" in low
+    assert "month" not in low
+
+    resp = gate.to_response()
+    assert resp["type"] == "subscription_limit"
+    assert resp["reset_at"] == gate.reset_at.isoformat()

@@ -25,8 +25,18 @@ from src.schemas.subscription import (
 # a past_due subscription keeps paid entitlements until this window elapses.
 PAST_DUE_GRACE_PERIOD = timedelta(days=7)
 
+# Free-tier AI messages are enforced as a DAILY allowance over the UTC calendar
+# day (resets at 00:00 UTC), NOT a monthly cap (see
+# src/services/subscription_gating.py check_ai_message_allowed_for_user).
+#
+# LEGACY ENTITLEMENT KEY: the field name `monthly_ai_message_limit` is retained
+# only for schema/API compatibility. Its meaning is plan-dependent — a per-UTC-
+# calendar-day cap for Free, and a per-billing-month cap for Rico Monthly. Do not
+# read the "monthly" in the name as the Free semantics. User-facing copy for Free
+# must say "per day / resets daily at 00:00 UTC" — never "per month", and never
+# "24 hours" (which would imply a rolling window, not the fixed calendar-day one).
 FREE_ENTITLEMENTS = SubscriptionEntitlements(
-    monthly_ai_message_limit=50,
+    monthly_ai_message_limit=10,
     saved_jobs_limit=10,
     profile_optimization_limit=1,
     cv_storage_limit=1,

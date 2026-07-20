@@ -91,7 +91,7 @@ export default function LandingPage() {
         perMonth: isAr ? "/شهر" : "/mo",
 
         freeName: isAr ? "مجانية" : "Free",
-        freeF1: isAr ? "٥٠ رسالة ذكاء اصطناعي" : "50 AI messages",
+        freeF1: isAr ? "١٠ رسائل ذكاء اصطناعي/يوم" : "10 AI messages/day",
         freeF2: isAr ? "١٠ وظائف محفوظة" : "10 saved jobs",
         freeBtn: isAr ? "ابدأ مجاناً" : "Start free",
 

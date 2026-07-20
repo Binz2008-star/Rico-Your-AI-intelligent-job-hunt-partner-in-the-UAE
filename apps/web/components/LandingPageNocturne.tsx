@@ -172,7 +172,7 @@ export default function LandingPageNocturne() {
         pricingTitle: isAr ? "ابدأ مجاناً. ادفع فقط عندما يثبت ريكو جدارته." : "Start free. Pay only when Rico earns it.",
         freeName: isAr ? "مجانية" : "Free",
         freePrice: isAr ? "٠ درهم" : "AED 0",
-        freeF1: isAr ? "٥٠ رسالة ذكاء اصطناعي/شهر" : "50 AI messages/month",
+        freeF1: isAr ? "١٠ رسائل ذكاء اصطناعي/يوم" : "10 AI messages/day",
         freeF2: isAr ? "١٠ وظائف محفوظة" : "10 saved jobs",
         freeF3: isAr ? "تقييم ملاءمة السيرة والأسباب" : "CV fit scoring & reasons",
         proName: isAr ? "ريكو الشهرية" : "Rico Monthly",

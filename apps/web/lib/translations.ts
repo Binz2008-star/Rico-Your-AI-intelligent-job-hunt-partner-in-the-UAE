@@ -282,7 +282,7 @@ export const translations = {
     checkoutCancelledDesc:
       "No payment was made. You can try again whenever you're ready.",
     freePlan: "Free",
-    freePlanDesc: "50 AI messages · 10 saved jobs · 1 profile optimisation/mo",
+    freePlanDesc: "10 AI messages/day · 10 saved jobs · 1 profile optimisation/mo",
     current: "Current",
     openRico: "Open Rico",
     subscriptionTitle: "Subscription",
@@ -395,7 +395,7 @@ export const translations = {
     landingSectionPricing: "Pricing",
     landingSectionPricingTitle: "Simple plans for serious career moves",
     landingSectionPricingBody:
-      "Start free with 50 AI messages and 10 saved jobs. Upgrade when you need more.",
+      "Start free with 10 AI messages a day and 10 saved jobs. Upgrade when you need more.",
     landingSectionStartFree: "Start free",
 
     // Landing page footer
@@ -899,9 +899,9 @@ export const translations = {
     cmdIncompletePrefix: "Incomplete — ",
     cmdShowOld: "Show",
     cmdStaleNote: "(broad search — may be outdated)",
-    cmdMsgLimitReached: "You've used all your messages this month.",
-    cmdMsgLimitOne: "1 message left this month.",
-    cmdMsgLimitFew: "{n} messages left this month.",
+    cmdMsgLimitReached: "You've used all your free messages for today.",
+    cmdMsgLimitOne: "1 message left today.",
+    cmdMsgLimitFew: "{n} messages left today.",
     cmdUpgrade: "Upgrade",
 
     // Application Flow page (/flow)
@@ -1648,7 +1648,7 @@ export const translations = {
       "لم يتم الدفع. يمكنك المحاولة مرة أخرى عندما تكون جاهزًا.",
     freePlan: "مجاني",
     freePlanDesc:
-      "50 رسالة ذكاء اصطناعي · 10 وظائف محفوظة · 1 تحسين ملف شخصي/شهر",
+      "10 رسائل ذكاء اصطناعي/يوم · 10 وظائف محفوظة · 1 تحسين ملف شخصي/شهر",
     current: "الحالي",
     openRico: "افتح ريكو",
     subscriptionTitle: "الاشتراك",
@@ -1758,7 +1758,7 @@ export const translations = {
     landingSectionPricing: "التسعير",
     landingSectionPricingTitle: "خطط بسيطة للحركات المهنية الجادة",
     landingSectionPricingBody:
-      "ابدأ مجانًا مع 50 رسالة ذكاء اصطناعي و 10 وظائف محفوظة. ترق عندما تحتاج المزيد.",
+      "ابدأ مجانًا مع 10 رسائل ذكاء اصطناعي يوميًا و 10 وظائف محفوظة. ترق عندما تحتاج المزيد.",
     landingSectionStartFree: "ابدأ مجانًا",
 
     // Landing page footer
@@ -2262,9 +2262,9 @@ export const translations = {
     cmdIncompletePrefix: "غير مكتمل — ",
     cmdShowOld: "عرض",
     cmdStaleNote: "(بحث موسَّع — قد تكون منتهية)",
-    cmdMsgLimitReached: "لقد استخدمت جميع رسائلك هذا الشهر.",
-    cmdMsgLimitOne: "تبقّت رسالة واحدة هذا الشهر.",
-    cmdMsgLimitFew: "تبقّت {n} رسائل هذا الشهر.",
+    cmdMsgLimitReached: "لقد استخدمت جميع رسائلك المجانية اليوم.",
+    cmdMsgLimitOne: "تبقّت رسالة واحدة اليوم.",
+    cmdMsgLimitFew: "تبقّت {n} رسائل اليوم.",
     cmdUpgrade: "ترقية الخطة",
 
     // Application Flow page (/flow)
