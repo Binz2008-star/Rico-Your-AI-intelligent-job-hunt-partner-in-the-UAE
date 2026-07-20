@@ -23,6 +23,8 @@ re-verified by direct code reading in this session.
 | 4 | `/agent/chat` action idempotency keyed on `sha256(action_type:link)` (no user) + global `is_duplicate` SQL → one user's action suppresses another user's identical action for 1h. Runtime path was safe (its key folds user_id). | **P1** (cross-user) | `orchestrator.py:86`; `audit_repo.py:67` (no user in SQL); `response_builder.py:487` | #1234 | 4 new; 116 pass; cross-user fail-pre-fix demonstrated | review |
 | 5 | Save-job card claimed success on failure — on `handle_action` failure still said "Noted … is in your tracker", violating the #764 mutation-confirmation contract (Skip handler #1220 is honest). | **P2** (trust) | `src/rico_chat_api.py:10580,10628` | #1235 | 2 new; 173 pass; stash-proven fail pre-fix | review |
 | 6 | `POST /subscription/intent` unauthenticated with no rate limit and no field length caps → anonymous storage flood of `subscription_intents`. | **P2** | `src/api/routers/subscription.py:28`; `src/schemas/subscription.py:78` | #1236 | 4 new; 62 pass | review |
+| 7 | SSE `done` events serialized with bare `_json.dumps`; a stray non-JSON field raises TypeError mid-stream → generic "Stream error", dropping the persisted reply. Recurred 3× in a week (#1210/#1222/#1225). | **P2** | `src/api/routers/rico_chat.py` (7 done-event sites) | #1239 | 4 new; 162 pass | review |
+| 8 | `verify_credentials` env-fallback prod-detection read only `RICO_ENV`/`ENV`; a deploy marking prod via `APP_ENV`/`ENVIRONMENT` left env admin login enabled during a DB outage. | **P2** | `src/api/auth.py:226` vs `_is_production()` `:358` | #1240 | 1 new; 49 pass | review |
 
 All six are backend-only, no schema/migration/env change, global (not
 account-specific), each with a documented rollback (revert the squash commit).
@@ -59,10 +61,6 @@ account-specific), each with a documented rollback (revert the squash commit).
 
 ## Recommended smaller hardenings (not yet PR'd — low risk, owner may greenlight)
 
-- **SSE `done`-event serialization (chat P2).** All terminal events use bare
-  `_json.dumps(full_response)`; three fixes to this exact boundary shipped in one
-  week (#1210/#1222/#1225). Add `default=str` (total encoder) to close the class.
-  `rico_chat.py:793,807,863,956,963,974,1014`.
 - **`RegisterRequest.role: Literal["admin","user"]` footgun (L1).** Currently
   ignored (endpoint hardcodes `role="user"`), but advertised in the schema; a
   future refactor passing `req.role` through would reopen public admin creation.
@@ -86,6 +84,12 @@ account-specific), each with a documented rollback (revert the squash commit).
 - **`job_tools.save_job` masks persistence (chat).** Returns `success=True`
   unconditionally, discarding the `saved` bool — orchestrator-tool path only
   (production uses the DB runtime path fixed in #1235). `job_tools.py:121`.
+- **CI flakiness (test-quality).** Two frontend/e2e tests are intermittently
+  red on unrelated backend PRs and pass on re-run: `chat-confirm-profile.test.tsx`
+  ("Use this profile", 832/833) and `e2e/refine-search-structured.spec.ts:168`
+  (DOM detachment mid card re-render). Observed red on #1239's first run
+  (backend-only) and green after re-trigger. A stability follow-up would stop
+  these masking real regressions and forcing re-kicks.
 
 ---
 
