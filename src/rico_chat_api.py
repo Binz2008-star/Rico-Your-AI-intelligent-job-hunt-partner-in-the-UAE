@@ -12687,7 +12687,9 @@ class RicoChatAPI:
         else:
             updated_ui = RicoAgenticUi(actions=new_actions)
 
-        return {**result, "agentic_ui": updated_ui}
+        # Plain dict, never the Pydantic model: the SSE done-event serializes
+        # with raw json.dumps, which cannot encode RicoAgenticUi.
+        return {**result, "agentic_ui": updated_ui.model_dump(exclude_none=True)}
 
     def _resolve_letter_choice(self, user_id: str, message: str) -> str | None:
         """Map a single-letter (A/B/C/D) or single-digit (1/2/3/4) reply to the
