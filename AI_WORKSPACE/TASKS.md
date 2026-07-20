@@ -5559,3 +5559,52 @@ routing behavior, or backend.
 - Status: review
 - Files inspected: apps/web/components/workspace/{WorkspaceShell.tsx,theme.ts}, apps/web/components/atelier-kit/{tokens.ts,fonts.ts}, apps/web/app/design-gallery/*, apps/web/lib/internalPreview.ts, apps/web/scripts/check-contrast.mjs, apps/web/vitest.config.ts
 - Files changed: apps/web/components/workspace/v5/* — new foundation; apps/web/scripts/check-contrast-v5.mjs — AA gate; apps/web/app/design-gallery/command-v5/* — internal specimen; apps/web/__tests__/command-v5-foundation.test.tsx — guards; apps/web/package.json — check:contrast:v5 script; AI_WORKSPACE/{COMMAND_V5_IMPLEMENTATION_MAP.md,TASKS.md} — traceability
+
+### TASK-20260720-005 — Command v5 PR 2: workspace shell skin
+
+Status: review
+Owner: Claude (agent) / owner review
+Branch: claude/command-v5-pr2-workspace-shell
+Issue/PR: PR — Command v5 workspace shell (opened from this task)
+
+#### Objective
+Apply the approved v5 visual language to the shared WorkspaceShell chrome
+(light island only): per-route accents, rail energy marker, ember wordmark,
+route atmosphere, document entrance, Rico presence — preserving all shell
+behavior and the dark island untouched.
+
+#### Context
+- Relevant files: apps/web/components/workspace/{WorkspaceShell.tsx,RailGoalMini.tsx}; apps/web/app/design-gallery/command-v5-shell/*; apps/web/__tests__/command-v5-shell.test.tsx
+- Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md (PR 2 row)
+- Existing behavior: single-shell ruling (2026-07-18); WORKSPACE_NAV as nav source of truth; fail-hidden mission summary.
+
+#### Constraints
+- Do not touch: chat behavior, APIs, auth, sessions, routing behavior, dark-island palette.
+- No migrations unless explicitly required: none.
+- Keep scope limited to: shell chrome skin + specimen + tests + docs.
+
+#### Acceptance criteria
+- [x] Active nav: aria-current preserved + v5 energy marker + AA accent text (light)
+- [x] Rico presence in shell controls with status semantics (localized label)
+- [x] Route atmosphere light-only; dark island byte-identical accents
+- [x] Document entrance collapses under reduced motion (v5 primitives)
+- [x] All existing shell/nav/count contracts green without weakening
+
+#### Required verification
+- [x] Unit tests: vitest 845/845
+- [ ] Integration tests: n/a
+- [x] Frontend build: PASS
+- [x] Local smoke: next start + Playwright (specimen light/dark/mobile/drawer + public /command unchanged)
+- [ ] Production/deploy smoke if applicable: post-merge production smoke recorded in the handover
+
+#### Continuity Block
+- Task ID: TASK-20260720-005
+- GitHub issue/PR: PR — Command v5 workspace shell
+- Branch: claude/command-v5-pr2-workspace-shell
+- Base branch: main
+- Last safe commit SHA: 984edfa
+- Current head SHA: (set at PR open)
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: WorkspaceShell.tsx, RailGoalMini.tsx, useMissionSummary.ts, command-workspace-shell.test.tsx, single-shell.spec.ts, playwright.config.ts
+- Files changed: WorkspaceShell.tsx — v5 skin (light island); RailGoalMini.tsx — accentFill prop; app/design-gallery/command-v5-shell/* — specimen; __tests__/command-v5-shell.test.tsx — contracts; __tests__/profile-actionable-warnings.test.tsx — disambiguated status query; AI_WORKSPACE — task/map/eval

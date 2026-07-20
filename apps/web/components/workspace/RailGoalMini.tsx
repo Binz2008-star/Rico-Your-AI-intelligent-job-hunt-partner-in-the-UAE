@@ -24,11 +24,15 @@ export function RailGoalMini({
     mission,
     language,
     c,
+    accentFill,
     onNavigate,
 }: {
     mission: MissionState | null;
     language: "en" | "ar";
     c: WorkspacePalette;
+    /** Optional v5 gradient for the progress fill (light island); falls back
+     *  to the palette accent so the dark island is untouched. */
+    accentFill?: string;
     /** Close the mobile drawer when the card navigates. */
     onNavigate?: () => void;
 }) {
@@ -54,7 +58,7 @@ export function RailGoalMini({
                 {title}
             </div>
             <div className="mt-2 h-1 rounded-full overflow-hidden" style={{ background: c.track }} aria-hidden="true">
-                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.red }} />
+                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: accentFill ?? c.red }} />
             </div>
             <div className="mt-1">
                 <span dir="ltr" style={{ fontFamily: ATELIER_FONT.mono, color: c.ink40, fontSize: 10 }}>{pct}%</span>
