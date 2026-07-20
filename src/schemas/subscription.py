@@ -76,9 +76,11 @@ class UsageCheckResponse(BaseModel):
 
 
 class SubscriptionIntentRequest(BaseModel):
-    plan: str
-    billing_mode: str = "manual"
-    source_page: str = "/subscription"
+    # Length caps bound anonymous writes to subscription_intents (the endpoint is
+    # unauthenticated). Values are for analytics only — never entitlement.
+    plan: str = Field(..., max_length=64)
+    billing_mode: str = Field("manual", max_length=32)
+    source_page: str = Field("/subscription", max_length=256)
 
 
 class SubscriptionIntentResponse(BaseModel):
