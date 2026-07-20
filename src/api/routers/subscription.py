@@ -13,6 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request
 
 from src.api.deps import get_current_user_id
+from src.api.rate_limit import LIMIT_INTENT, limiter
 from src.db import record_subscription_intent
 from src.schemas.subscription import (
     PlansResponse,
@@ -26,11 +27,17 @@ router = APIRouter(prefix="/api/v1/subscription", tags=["subscription"])
 
 
 @router.post("/intent", response_model=SubscriptionIntentResponse)
+@limiter.limit(LIMIT_INTENT)
 async def record_upgrade_intent(
     body: SubscriptionIntentRequest,
     request: Request,
 ) -> SubscriptionIntentResponse:
-    """Fire-and-forget upgrade intent log. Works for both authenticated and anonymous users."""
+    """Fire-and-forget upgrade intent log. Works for both authenticated and anonymous users.
+
+    Unauthenticated by design, so it is rate-limited (LIMIT_INTENT) and the body
+    fields are length-capped (schema) to bound anonymous writes to
+    subscription_intents.
+    """
     user_id: Optional[str] = None
     email: Optional[str] = None
     try:
