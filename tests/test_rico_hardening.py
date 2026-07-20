@@ -496,3 +496,37 @@ class TestEdgeCases:
         classification, canonical = classify_role_candidate("", None)
         assert classification == "unknown"
         assert canonical is None
+
+
+# ── CV-quality question routing ──────────────────────────────────────────────
+
+
+class TestCvQualityQuestionRouting:
+    """CV-quality questions must route to the deterministic cv_analysis
+    handler, never the AI fallback (which could claim it cannot see the CV
+    at all — the "is my cv good?" live regression)."""
+
+    @pytest.mark.parametrize("phrase", [
+        "is my cv good?",
+        "is my resume good enough?",
+        "how good is my cv",
+        "how is my cv?",
+        "how does my cv look?",
+        "rate my cv",
+        "cv feedback",
+        "give me feedback on my cv",
+    ])
+    def test_quality_questions_classify_as_cv_analysis(self, phrase) -> None:
+        result = classify_intent(phrase)
+        assert result.intent == "cv_analysis", (
+            f"{phrase!r} must get the deterministic CV review, got {result.intent!r}"
+        )
+
+    def test_cv_job_match_question_is_not_swallowed(self) -> None:
+        """A CV-vs-job question is not a CV-quality review request."""
+        result = classify_intent("how does my cv match this job")
+        assert result.intent != "cv_analysis"
+
+    def test_existing_review_phrases_still_route(self) -> None:
+        assert classify_intent("review my cv").intent == "cv_analysis"
+        assert classify_intent("what is wrong with my cv").intent == "cv_analysis"

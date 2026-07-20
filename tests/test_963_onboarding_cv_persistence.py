@@ -815,3 +815,82 @@ class TestProfileRepoRequireDb:
         with patch.multiple(pr, _memory=MagicMock(return_value=mem), _db=MagicMock(return_value=None)):
             with pytest.raises(Exception):
                 pr.upsert_profile("alice@rico.ai", {"skills": ["x"]}, require_db=True)
+
+
+# ── route: /confirm-cv-profile — empty/missing cv_text on a CV artifact ───────
+
+class TestConfirmCvProfileEmptyTextGate:
+    """A CV artifact with missing or empty cv_text must be rejected at confirm.
+
+    validate_artifact_quality(None) was designed to flag exactly this state
+    (PARSE_FAILED / "Artifact has no cv_text"), but the old `is not None`
+    guard skipped the check entirely, so an empty-text CV confirmed
+    "successfully": the My Files row and skills persisted while
+    rico_profiles.cv_text stayed NULL — chat and matching were left with an
+    active CV they could not actually read ("I don't have the full parsed
+    text of your CV"). Non-CV artifacts keep the previous behaviour.
+    """
+
+    def _post_confirm(self, client, *, resolve_return):
+        get_or_create_mock = MagicMock()
+        upsert_mock = MagicMock()
+        with (
+            patch("src.api.routers.rico_chat.upsert_profile", upsert_mock),
+            patch("src.api.routers.rico_chat.get_profile", return_value=None),
+            patch("src.services.profile_context_resolver.evaluate_minimum_profile", return_value=(True, [])),
+            patch("src.repositories.onboarding_repo.set_onboarding_status") as set_status_mock,
+            patch("src.services.subscription_gating.enforce_profile_optimization_allowed"),
+            patch("src.services.subscription_gating.record_profile_optimization_usage"),
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact",
+                return_value=resolve_return,
+            ),
+            patch("src.rico_db.RicoDB", _make_fake_ricodb(get_or_create_mock)),
+        ):
+            r = client.post(
+                f"/api/v1/rico/confirm-cv-profile?user_id={_AUTH_UID}",
+                json=_confirm_payload(upload_id="artifact-1"),
+            )
+        return r, get_or_create_mock, upsert_mock, set_status_mock
+
+    def _assert_rejected_no_side_effects(self, r, get_or_create_mock, upsert_mock, set_status_mock):
+        assert r.status_code == 409, r.text
+        assert r.json()["status"] == "cv_confirmation_required"
+        upsert_mock.assert_not_called()
+        get_or_create_mock.assert_not_called()
+        set_status_mock.assert_not_called()
+
+    def test_cv_artifact_with_empty_text_is_rejected(self, client):
+        artifact = {**_ARTIFACT, "cv_text": ""}
+        r, get_or_create_mock, upsert_mock, set_status_mock = self._post_confirm(
+            client, resolve_return=artifact,
+        )
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
+
+    def test_cv_artifact_with_missing_text_key_is_rejected(self, client):
+        artifact = {k: v for k, v in _ARTIFACT.items() if k != "cv_text"}
+        r, get_or_create_mock, upsert_mock, set_status_mock = self._post_confirm(
+            client, resolve_return=artifact,
+        )
+        self._assert_rejected_no_side_effects(r, get_or_create_mock, upsert_mock, set_status_mock)
+
+    def test_non_cv_artifact_with_empty_text_still_confirms(self, client):
+        """cover_letter/other artifacts carry no CV grounding requirement —
+        their confirm behaviour is unchanged by the tightened CV gate."""
+        artifact = {**_ARTIFACT, "doc_type": "cover_letter", "cv_text": ""}
+        r, get_or_create_mock, upsert_mock, _ = self._post_confirm(
+            client, resolve_return=artifact,
+        )
+        assert r.status_code == 200, r.text
+        get_or_create_mock.assert_called_once()
+        assert get_or_create_mock.call_args.kwargs["doc_type"] == "cover_letter"
+        assert upsert_mock.call_args.kwargs["cv_text"] is None
+
+    def test_cv_artifact_with_readable_text_still_confirms(self, client):
+        r, get_or_create_mock, upsert_mock, _ = self._post_confirm(
+            client, resolve_return=dict(_ARTIFACT),
+        )
+        assert r.status_code == 200, r.text
+        get_or_create_mock.assert_called_once()
+        assert upsert_mock.call_args.kwargs["cv_text"] == _ARTIFACT["cv_text"]
