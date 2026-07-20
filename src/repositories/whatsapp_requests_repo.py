@@ -115,6 +115,13 @@ def get_or_create_pending_request(
         except Exception:
             pass
         return None
+    finally:
+        # get_db_connection() opens a fresh psycopg2 connection each call (no
+        # pool); without this close every request strands a Neon connection.
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def get_request_by_reference(reference: str) -> Optional[Dict[str, Any]]:
@@ -135,6 +142,11 @@ def get_request_by_reference(reference: str) -> Optional[Dict[str, Any]]:
     except Exception as exc:
         logger.warning("whatsapp_request_lookup failed: %s", exc)
         return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def mark_request_status(
@@ -174,3 +186,8 @@ def mark_request_status(
         except Exception:
             pass
         return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
