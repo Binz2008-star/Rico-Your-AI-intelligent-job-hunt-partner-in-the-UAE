@@ -1625,11 +1625,21 @@ export default function CommandPage() {
                 // page load (_id = 0 → streamId = 1, since queued setMessages
                 // updaters run after streamId is taken), making every token
                 // map-append into the welcome row as well as the stream row.
-                setMessages([{ id: WELCOME_MESSAGE_ID, role: "rico", text: msg }]);
+                // Late-bootstrap guard: if the user already started chatting
+                // while the sessions/history fetch was in flight, an "empty"
+                // result must NOT wipe their live turns — the same contract
+                // the has_history path (applyHistory) already enforces by
+                // prepending instead of replacing.
+                setMessages((prev) =>
+                    prev.length > 0 ? prev : [{ id: WELCOME_MESSAGE_ID, role: "rico", text: msg }],
+                );
                 setInitialContentReady(true);
                 return;
             }
-            setMessages([{ id: WELCOME_MESSAGE_ID, role: "rico", text: t("cmdWelcomePublic") }]);
+            // Same late-bootstrap guard for the public surface.
+            setMessages((prev) =>
+                prev.length > 0 ? prev : [{ id: WELCOME_MESSAGE_ID, role: "rico", text: t("cmdWelcomePublic") }],
+            );
             setInitialContentReady(true);
         }, 0);
         return () => window.clearTimeout(timeoutId);
