@@ -44,6 +44,16 @@ class JobAlertEmailsResponse(BaseModel):
     dry_run: bool = False
 
 
+class ScheduledSearchSweepResponse(BaseModel):
+    status: str  # "disabled" | "ok" | "error"
+    searches: int = 0
+    users: int = 0
+    new_results: int = 0
+    skipped: int = 0
+    failed: int = 0
+    dry_run: bool = False
+
+
 class AnalyticsPurgeResponse(BaseModel):
     status: str  # "disabled" | "dry_run" | "ok"
     removed: int = 0

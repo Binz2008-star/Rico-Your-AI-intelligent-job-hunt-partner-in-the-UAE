@@ -621,6 +621,25 @@ def rico_get_profile(request: Request) -> ProfileResponse:
 # Saved Search Endpoints
 # ============================================================================
 
+@router.get("/scheduled-searches")
+def rico_list_scheduled_searches(request: Request) -> dict[str, Any]:
+    """Scheduled-search status + latest in-app results for the current user.
+
+    #1249: identity comes from the JWT only — a user can never read another
+    user's schedules or results. Results were stored by the cron sweep; this
+    endpoint is read-only and works with email alerts fully disabled.
+    """
+    start_time = time.time()
+    user = get_current_user(request)
+    user_id = user["email"]
+
+    from src.services.scheduled_search_service import get_user_schedules
+
+    schedules = get_user_schedules(user_id)
+    _metrics.record_request((time.time() - start_time) * 1000)
+    return {"schedules": schedules, "total": len(schedules)}
+
+
 @router.get("/settings/saved-searches")
 def rico_list_saved_searches(request: Request) -> dict[str, Any]:
     """List all saved searches for the authenticated user."""

@@ -9142,6 +9142,18 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", ack_text)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
+        # Scheduled saved searches (#1249) — deterministic CRUD on the user's
+        # daily search, no AI dependency. Create/status/pause/resume/delete all
+        # resolve inside the service; public identities get a sign-in prompt.
+        if legacy_intent.startswith("scheduled_search_"):
+            from src.services.scheduled_search_service import handle_chat_intent
+
+            _ss_resp = handle_chat_intent(
+                user_id, legacy_intent, message, arabic=self._is_arabic_text(message)
+            )
+            self._append_chat(user_id, "assistant", _ss_resp.get("message", ""))
+            return self._finalize(_ss_resp, self.SOURCE_KEYWORD, profile=profile)
+
         # Emotional support / frustration (BUG #9) — empathetic reply before any action.
         # Never jump straight to a job search when the user is expressing frustration.
         # Route via AI fallback so the reply is context-aware, not a canned string.
