@@ -223,8 +223,11 @@ def verify_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
 
     # In production, never silently fall back to env-var auth on a DB error.
     # Set ALLOW_ENV_AUTH_FALLBACK=true to override during an incident.
-    _env = os.getenv("RICO_ENV", os.getenv("ENV", "")).lower()
-    _is_prod = _env in ("production", "prod")
+    # Use the canonical _is_production() (also honors APP_ENV / ENVIRONMENT) so a
+    # deploy that marks prod only via those vars still disables the fallback —
+    # the old RICO_ENV/ENV-only check missed it and would allow env admin login
+    # during a DB outage.
+    _is_prod = _is_production()
     _fallback_allowed = os.getenv("ALLOW_ENV_AUTH_FALLBACK", "").lower() in ("1", "true", "yes")
     if _db_error and _is_prod and not _fallback_allowed:
         logger.error("db_auth_error in production — env fallback disabled; rejecting login for %r", email)
