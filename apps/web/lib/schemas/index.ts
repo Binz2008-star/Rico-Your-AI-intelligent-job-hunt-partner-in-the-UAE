@@ -587,6 +587,40 @@ export const SavedSearchesResponseSchema = z.object({
     total: z.number(),
 });
 
+// #1249 — scheduled saved searches (schedule metadata lives in filters.schedule
+// on the backend; the status endpoint surfaces it as a first-class object).
+export const ScheduledSearchResultSchema = z.object({
+    title: z.string(),
+    company: z.string(),
+    location: z.string().optional().default(""),
+    score: z.number().optional().default(0),
+    link: z.string(),
+    salary_known: z.boolean().optional().default(false),
+    salary_aed: z.number().nullable().optional(),
+    why: z.string().optional().default(""),
+}).passthrough();
+
+export const ScheduledSearchScheduleSchema = z.object({
+    enabled: z.boolean(),
+    cadence: z.string().optional().default("daily"),
+    city: z.string().nullable().optional(),
+    min_salary_aed: z.number().nullable().optional(),
+    last_run_at: z.string().nullable().optional(),
+    last_run_new: z.number().optional().default(0),
+    last_results: z.array(ScheduledSearchResultSchema).optional().default([]),
+}).passthrough();
+
+export const ScheduledSearchSchema = z.object({
+    id: z.string().nullable(),
+    query: z.string().nullable().optional(),
+    schedule: ScheduledSearchScheduleSchema,
+}).passthrough();
+
+export const ScheduledSearchesResponseSchema = z.object({
+    schedules: z.array(ScheduledSearchSchema),
+    total: z.number(),
+});
+
 export const RicoChatHistoryMessageSchema = z.object({
     role: z.string(),
     content: z.string(),
