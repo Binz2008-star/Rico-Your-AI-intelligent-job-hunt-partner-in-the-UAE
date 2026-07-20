@@ -11,6 +11,7 @@ All executed actions are logged to the audit repository.
 """
 from __future__ import annotations
 
+import hashlib
 import inspect
 import logging
 import time
@@ -82,22 +83,31 @@ def _execute_action(action: AgentAction, user_email: str, actor_is_admin: bool =
         _audit(action, user_email, result, int((time.monotonic() - start) * 1000))
         return result
 
-    # 2. Idempotency guard (apply/skip/save/block only)
-    if action.type in IDEMPOTENT_ACTION_TYPES and is_duplicate(action.action_id):
-        logger.info(
-            "action_duplicate_rejected action_id=%s type=%s user=%s",
-            action.action_id, action.type, user_email,
-        )
-        result = ToolExecutionResult(
-            success=False,
-            tool_name=ACTION_TO_TOOL.get(action.type, "unknown"),
-            error=(
-                f"Duplicate action: {action.type!r} for this job was already executed. "
-                "No side effects were repeated."
-            ),
-        )
-        _audit(action, user_email, result, int((time.monotonic() - start) * 1000), status_override="duplicate")
-        return result
+    # 2. Idempotency guard (apply/skip/save/block only). Scope the dedup key to
+    #    the acting user: the client-supplied action_id is derived from the job
+    #    link only (response_builder._deterministic_action_id), so two different
+    #    users acting on the same job share it — an unscoped global dedup would
+    #    let one user's action suppress another's. Folding the user in mirrors
+    #    agent_runtime's md5(user:action:job) scheme and keeps genuine same-user
+    #    double-clicks idempotent. Stamp it back onto the action so the execute
+    #    log and audit row record the same user-scoped id that was checked.
+    if action.type in IDEMPOTENT_ACTION_TYPES:
+        action.action_id = _user_scoped_action_id(user_email, action)
+        if is_duplicate(action.action_id):
+            logger.info(
+                "action_duplicate_rejected action_id=%s type=%s user=%s",
+                action.action_id, action.type, user_email,
+            )
+            result = ToolExecutionResult(
+                success=False,
+                tool_name=ACTION_TO_TOOL.get(action.type, "unknown"),
+                error=(
+                    f"Duplicate action: {action.type!r} for this job was already executed. "
+                    "No side effects were repeated."
+                ),
+            )
+            _audit(action, user_email, result, int((time.monotonic() - start) * 1000), status_override="duplicate")
+            return result
 
     # 3. Resolve tool
     tool_name = ACTION_TO_TOOL[action.type]
@@ -167,6 +177,22 @@ def _build(
 ) -> AgentUIResponse:
     from src.agent.response_builder.response_builder import build_response
     return build_response(result, original_message=message, original_action=action)
+
+
+# ── Idempotency helper ────────────────────────────────────────────────────────
+
+def _user_scoped_action_id(user_email: str, action: AgentAction) -> str:
+    """Deterministic per-user, per-job idempotency id for a direct action.
+
+    Folds the acting user into the key so the same job (link/id) acted on by two
+    different users yields two different ids — no cross-user suppression — while
+    a genuine same-user double-click still dedups. Mirrors agent_runtime's
+    md5(user:action:job) scheme. The job component prefers the stable job_id and
+    falls back to the client-supplied action_id (link-derived).
+    """
+    job_component = action.job_id or action.action_id or ""
+    raw = f"{user_email}:{action.type}:{job_component}"
+    return hashlib.md5(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 # ── Audit helper ──────────────────────────────────────────────────────────────

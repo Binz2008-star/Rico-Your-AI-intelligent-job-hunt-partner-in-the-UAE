@@ -5509,3 +5509,102 @@ raised now return False; no valid input's behavior changes).
 - Remaining open gate from the #1176 post-merge audit: **gate 3 only**
   (additive allowlist-growth migration policy before event #9 — owner
   decision).
+
+### TASK-20260720-004 — Command v5 PR 1: visual foundation (tokens, motion, presence)
+
+Status: review
+Owner: Claude (agent) / owner review
+Branch: claude/command-v5-pr1-visual-foundation
+Issue/PR: PR — Command v5 visual foundation (draft)
+
+#### Objective
+Ship the approved Command Workspace v5 visual foundation as a self-contained,
+unconsumed-by-production module set: AA-audited tokens, typography roles,
+surface + motion primitives, RicoPresence indicator, a CI contrast gate, and
+an internal gallery specimen — with zero changes to chat logic, APIs,
+routing behavior, or backend.
+
+#### Context
+- Relevant files: apps/web/components/workspace/v5/{tokens.ts,fonts.ts,motion.css,RicoPresence.tsx}; apps/web/scripts/check-contrast-v5.mjs; apps/web/app/design-gallery/command-v5/{page.tsx,_specimen.tsx}; apps/web/__tests__/command-v5-foundation.test.tsx
+- Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md; design-handoffs/incoming/2026-07-20-command-workspace-v5-cinematic/EVIDENCE.md (visual acceptance reference, commit 69074a8)
+- Existing behavior: WORKSPACE_THEME + atelier-kit untouched; /design-gallery is production-blocked via assertInternalPreviewAccess.
+
+#### Constraints
+- Do not touch: chat logic, APIs, auth, sessions, billing, production routes' rendering, WORKSPACE_THEME, atelier-kit values.
+- No migrations unless explicitly required: none.
+- Keep scope limited to: foundation modules + internal specimen + gates + docs.
+
+#### Acceptance criteria
+- [x] Every v5 color token AA-gated (scripts/check-contrast-v5.mjs, 19 pairs PASS)
+- [x] motion.css ↔ tokens.ts drift guard in vitest
+- [x] RicoPresence: 5 states × 3 sizes, status semantics, decorative mode, reduced-motion collapse
+- [x] Specimen renders at /design-gallery/command-v5 (internal-only, 404 in production)
+- [x] No production route renders differently (no imports from production code)
+
+#### Required verification
+- [x] Unit tests: vitest run (full suite)
+- [ ] Integration tests: n/a (no behavior surface)
+- [x] Frontend build: npm run build
+- [x] Local smoke: next start + Playwright screenshots of the specimen (desktop/mobile/reduced-motion)
+- [ ] Production/deploy smoke if applicable: n/a (gallery is production-blocked)
+
+#### Continuity Block
+- Task ID: TASK-20260720-004
+- GitHub issue/PR: PR — Command v5 visual foundation (draft, opened from this task)
+- Branch: claude/command-v5-pr1-visual-foundation
+- Base branch: main
+- Last safe commit SHA: e44466b
+- Current head SHA: (set at PR open)
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: apps/web/components/workspace/{WorkspaceShell.tsx,theme.ts}, apps/web/components/atelier-kit/{tokens.ts,fonts.ts}, apps/web/app/design-gallery/*, apps/web/lib/internalPreview.ts, apps/web/scripts/check-contrast.mjs, apps/web/vitest.config.ts
+- Files changed: apps/web/components/workspace/v5/* — new foundation; apps/web/scripts/check-contrast-v5.mjs — AA gate; apps/web/app/design-gallery/command-v5/* — internal specimen; apps/web/__tests__/command-v5-foundation.test.tsx — guards; apps/web/package.json — check:contrast:v5 script; AI_WORKSPACE/{COMMAND_V5_IMPLEMENTATION_MAP.md,TASKS.md} — traceability
+
+### TASK-20260720-005 — Command v5 PR 2: workspace shell skin
+
+Status: review
+Owner: Claude (agent) / owner review
+Branch: claude/command-v5-pr2-workspace-shell
+Issue/PR: PR — Command v5 workspace shell (opened from this task)
+
+#### Objective
+Apply the approved v5 visual language to the shared WorkspaceShell chrome
+(light island only): per-route accents, rail energy marker, ember wordmark,
+route atmosphere, document entrance, Rico presence — preserving all shell
+behavior and the dark island untouched.
+
+#### Context
+- Relevant files: apps/web/components/workspace/{WorkspaceShell.tsx,RailGoalMini.tsx}; apps/web/app/design-gallery/command-v5-shell/*; apps/web/__tests__/command-v5-shell.test.tsx
+- Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md (PR 2 row)
+- Existing behavior: single-shell ruling (2026-07-18); WORKSPACE_NAV as nav source of truth; fail-hidden mission summary.
+
+#### Constraints
+- Do not touch: chat behavior, APIs, auth, sessions, routing behavior, dark-island palette.
+- No migrations unless explicitly required: none.
+- Keep scope limited to: shell chrome skin + specimen + tests + docs.
+
+#### Acceptance criteria
+- [x] Active nav: aria-current preserved + v5 energy marker + AA accent text (light)
+- [x] Rico presence in shell controls with status semantics (localized label)
+- [x] Route atmosphere light-only; dark island byte-identical accents
+- [x] Document entrance collapses under reduced motion (v5 primitives)
+- [x] All existing shell/nav/count contracts green without weakening
+
+#### Required verification
+- [x] Unit tests: vitest 845/845
+- [ ] Integration tests: n/a
+- [x] Frontend build: PASS
+- [x] Local smoke: next start + Playwright (specimen light/dark/mobile/drawer + public /command unchanged)
+- [ ] Production/deploy smoke if applicable: post-merge production smoke recorded in the handover
+
+#### Continuity Block
+- Task ID: TASK-20260720-005
+- GitHub issue/PR: PR — Command v5 workspace shell
+- Branch: claude/command-v5-pr2-workspace-shell
+- Base branch: main
+- Last safe commit SHA: 984edfa
+- Current head SHA: (set at PR open)
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: WorkspaceShell.tsx, RailGoalMini.tsx, useMissionSummary.ts, command-workspace-shell.test.tsx, single-shell.spec.ts, playwright.config.ts
+- Files changed: WorkspaceShell.tsx — v5 skin (light island); RailGoalMini.tsx — accentFill prop; app/design-gallery/command-v5-shell/* — specimen; __tests__/command-v5-shell.test.tsx — contracts; __tests__/profile-actionable-warnings.test.tsx — disambiguated status query; AI_WORKSPACE — task/map/eval

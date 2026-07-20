@@ -96,6 +96,7 @@ LIMIT_PASSWORD_RESET = "3/minute"  # forgot/reset — anti-enumeration & token b
 LIMIT_VERIFY_EMAIL   = "5/minute"  # verify + resend — prevent token-brute-force & spam
 LIMIT_PROFILE  = "20/minute"    # profile reads/writes — prevent storage DoS
 LIMIT_ADMIN    = "10/minute"    # admin endpoints — low ceiling, sensitive operations
+LIMIT_INTENT   = "20/minute"    # unauth upgrade-intent log — cap anonymous storage flood
 LIMIT_INTEGRATIONS = "20/minute"       # integration status/connect/review reads+actions
 LIMIT_INTEGRATIONS_SYNC = "5/minute"   # manual Gmail sync — mailbox scan is heavy
 

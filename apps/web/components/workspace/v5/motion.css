@@ -1,0 +1,495 @@
+/**
+ * Command Workspace v5 — motion + surface primitives (PR 1, foundation).
+ *
+ * Everything is scoped under `.wsx5` and prefixed `wsx5-`: importing this
+ * file changes nothing outside an explicit `.wsx5` island. The custom
+ * properties below mirror `./tokens.ts` (V5 / V5_GRADIENT / V5_MOTION) —
+ * a unit test parses this file and fails on drift, edit both together.
+ *
+ * Performance rules carried from the accepted evidence package
+ * (EVIDENCE.md §3): transform/opacity animations only; no filter:blur on
+ * animated layers; no full-viewport blend modes; ambient motion stays in
+ * focal zones. Reduced-motion collapses every primitive to its end state.
+ */
+
+.wsx5 {
+    /* paper world */
+    --wsx5-paper: #f1eadd;
+    --wsx5-panel: #f7f1e6;
+    --wsx5-panel2: #ede5d6;
+    --wsx5-inset: #eae1d0;
+    --wsx5-raise: #fbf7ee;
+    /* ink scale (ink55 = AA-corrected secondary text; ink40 = borders only) */
+    --wsx5-ink: #1f1b15;
+    --wsx5-ink85: rgba(31, 27, 21, 0.85);
+    --wsx5-ink70: rgba(31, 27, 21, 0.7);
+    --wsx5-ink55: rgba(31, 27, 21, 0.62);
+    --wsx5-ink40: rgba(31, 27, 21, 0.38);
+    --wsx5-ink25: rgba(31, 27, 21, 0.24);
+    --wsx5-hair: rgba(31, 27, 21, 0.14);
+    --wsx5-hair2: rgba(31, 27, 21, 0.08);
+    /* deep cinematic plane */
+    --wsx5-deep: #191d2e;
+    --wsx5-deepPanel: #171b2b;
+    --wsx5-deepPanel2: #1f2439;
+    --wsx5-deepEdge: #131627;
+    --wsx5-lightInk: #f2ecdd;
+    --wsx5-lightInk70: rgba(242, 236, 221, 0.72);
+    --wsx5-lightInk58: rgba(242, 236, 221, 0.58);
+    --wsx5-lightInk50: rgba(242, 236, 221, 0.5);
+    --wsx5-lightInk30: rgba(242, 236, 221, 0.3);
+    --wsx5-deepHair: rgba(242, 236, 221, 0.14);
+    /* energy palette (decorative) */
+    --wsx5-terra: #c6492e;
+    --wsx5-terraDeep: #9e3520;
+    --wsx5-coral: #e0895a;
+    --wsx5-amber: #e8a33d;
+    --wsx5-gold: #ca8a04;
+    --wsx5-goldSoft: #e7c46b;
+    --wsx5-moss: #3e7c4f;
+    --wsx5-mossSoft: #dce8d8;
+    --wsx5-purple: #7a5cf0;
+    --wsx5-electric: #3d5bf5;
+    --wsx5-electricSoft: rgba(61, 91, 245, 0.14);
+    /* AA text-safe accent inks (EVIDENCE.md §6) */
+    --wsx5-terraText: #a83a22;
+    --wsx5-amberText: #8a5e0e;
+    --wsx5-goldText: #77560a;
+    --wsx5-goldTextL: #9c6705;
+    --wsx5-coralTextL: #c05a28;
+    --wsx5-electricText: #2f48d1;
+    --wsx5-purpleText: #5b3ed6;
+    --wsx5-emberBtnEnd: #be452b;
+    --wsx5-onEmber: #fff7ec;
+    /* gradients */
+    --wsx5-g-ember: linear-gradient(98deg, #c6492e 0%, #e0895a 52%, #e8a33d 100%);
+    --wsx5-g-ember-display-text: linear-gradient(98deg, #a83a22, #c6492e 50%, #b25419);
+    --wsx5-g-ember-button: linear-gradient(98deg, #a83a22, #be452b);
+    --wsx5-g-gold: linear-gradient(98deg, #b07507 0%, #ca8a04 45%, #e7c46b 100%);
+    --wsx5-g-gold-numeral-text: linear-gradient(98deg, #8f6203, #9c6705 60%, #b07507);
+    --wsx5-g-ai: linear-gradient(98deg, #3d5bf5, #7a5cf0 60%, #e0895a);
+    /* per-mode accents — PR 2 shell sets these per active mode */
+    --wsx5-modeA: var(--wsx5-terra);
+    --wsx5-modeB: var(--wsx5-amber);
+    --wsx5-modeAText: var(--wsx5-terraText);
+    /* motion language */
+    --wsx5-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --wsx5-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --wsx5-swift: cubic-bezier(0.4, 0, 0.2, 1);
+    --wsx5-t-fast: 180ms;
+    --wsx5-t-med: 420ms;
+    --wsx5-t-slow: 760ms;
+    /* radii */
+    --wsx5-radius-card: 18px;
+    --wsx5-radius-hero: 26px;
+}
+
+.wsx5 :focus-visible {
+    outline: 2.5px solid var(--wsx5-electric);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* ── surfaces ──────────────────────────────────────────────────────────── */
+.wsx5-card {
+    position: relative;
+    background: var(--wsx5-panel);
+    border: 1px solid var(--wsx5-hair);
+    border-radius: var(--wsx5-radius-card);
+    box-shadow:
+        0 1px 2px rgba(31, 27, 21, 0.05),
+        0 10px 30px -18px rgba(31, 27, 21, 0.25);
+    transition:
+        transform var(--wsx5-t-fast) var(--wsx5-swift),
+        box-shadow var(--wsx5-t-med) var(--wsx5-swift),
+        border-color var(--wsx5-t-med);
+}
+.wsx5-deepcard {
+    background: linear-gradient(
+        160deg,
+        var(--wsx5-deepPanel2),
+        var(--wsx5-deepPanel) 55%,
+        var(--wsx5-deepEdge)
+    );
+    border: 1px solid var(--wsx5-deepHair);
+    color: var(--wsx5-lightInk);
+    border-radius: var(--wsx5-radius-hero);
+}
+.wsx5-glass {
+    background: color-mix(in srgb, var(--wsx5-panel) 78%, transparent);
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+}
+
+/* ── typography helpers ────────────────────────────────────────────────── */
+.wsx5-micro {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--wsx5-ink55);
+}
+.wsx5-micro .wsx5-tick {
+    color: var(--wsx5-modeAText);
+    font-weight: 700;
+}
+.wsx5-display {
+    font-optical-sizing: auto;
+    font-weight: 540;
+    letter-spacing: -0.028em;
+    line-height: 1.02;
+    color: var(--wsx5-ink);
+    text-wrap: balance;
+}
+.wsx5-display em {
+    font-style: italic;
+    font-weight: 480;
+    background: var(--wsx5-g-ember-display-text);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    padding-right: 0.04em;
+}
+
+/* ── entrance primitives (replayable: toggle .wsx5-play on the section) ── */
+[data-wsx5-anim] {
+    opacity: 0;
+}
+.wsx5-play [data-wsx5-anim] {
+    animation-duration: var(--wsx5-t-slow);
+    animation-timing-function: var(--wsx5-out-expo);
+    animation-fill-mode: both;
+    animation-delay: calc(var(--i, 0) * 70ms);
+}
+.wsx5-play [data-wsx5-anim="rise"] {
+    animation-name: wsx5-rise;
+}
+.wsx5-play [data-wsx5-anim="unfold"] {
+    animation-name: wsx5-unfold;
+    transform-origin: top center;
+}
+.wsx5-play [data-wsx5-anim="mask"] {
+    animation-name: wsx5-mask;
+}
+.wsx5-play [data-wsx5-anim="scale"] {
+    animation-name: wsx5-scale;
+}
+.wsx5-play [data-wsx5-anim="tiltin"] {
+    animation-name: wsx5-tiltin;
+    transform-origin: center 120%;
+}
+.wsx5-play [data-wsx5-anim="slide"] {
+    animation-name: wsx5-slide;
+}
+@keyframes wsx5-rise {
+    from {
+        opacity: 0;
+        transform: translateY(34px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes wsx5-unfold {
+    from {
+        opacity: 0;
+        transform: scaleY(0.86) translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes wsx5-mask {
+    from {
+        opacity: 0;
+        clip-path: inset(0 34% 0 0 round 20px);
+    }
+    60% {
+        opacity: 1;
+    }
+    to {
+        opacity: 1;
+        clip-path: inset(0 0 0 0 round 20px);
+    }
+}
+@keyframes wsx5-scale {
+    from {
+        opacity: 0;
+        transform: scale(0.92);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes wsx5-tiltin {
+    from {
+        opacity: 0;
+        transform: perspective(900px) rotateX(9deg) translateY(26px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes wsx5-slide {
+    from {
+        opacity: 0;
+        transform: translateX(calc(var(--dir, 1) * 44px));
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* ── ambient primitives (focal-zone use only) ──────────────────────────── */
+@keyframes wsx5-breathe {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(0.55);
+        opacity: 0.45;
+    }
+}
+.wsx5-breathe-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--wsx5-modeA);
+    animation: wsx5-breathe 2.6s ease-in-out infinite;
+}
+@keyframes wsx5-sweep {
+    from {
+        transform: translateX(-130%) skewX(-14deg);
+    }
+    to {
+        transform: translateX(560%) skewX(-14deg);
+    }
+}
+.wsx5-lightsweep {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+}
+.wsx5-lightsweep::after {
+    content: "";
+    position: absolute;
+    top: -40%;
+    bottom: -40%;
+    width: 26%;
+    left: 0;
+    background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.34), transparent);
+    animation: wsx5-sweep 4.4s var(--wsx5-swift) infinite;
+    animation-delay: 1.2s;
+}
+.wsx5-deepcard .wsx5-lightsweep::after {
+    background: linear-gradient(105deg, transparent, rgba(242, 236, 221, 0.14), transparent);
+}
+@keyframes wsx5-skel-sweep {
+    to {
+        transform: translateX(100%);
+    }
+}
+.wsx5-skel {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--wsx5-radius-card);
+    background: var(--wsx5-panel2);
+    border: 1px solid var(--wsx5-hair2);
+}
+.wsx5-skel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.5) 50%, transparent 80%);
+    animation: wsx5-skel-sweep 1.6s var(--wsx5-swift) infinite;
+}
+@keyframes wsx5-pip-pulse {
+    0% {
+        transform: scale(0.6);
+        opacity: 1;
+    }
+    80%,
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+.wsx5-pip {
+    position: relative;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--wsx5-terra);
+}
+.wsx5-pip::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 2px solid rgba(198, 73, 46, 0.5);
+    animation: wsx5-pip-pulse 1.8s var(--wsx5-swift) infinite;
+}
+@keyframes wsx5-bar-grow {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
+    }
+}
+@keyframes wsx5-draw-ring {
+    to {
+        stroke-dashoffset: var(--target, 0);
+    }
+}
+@keyframes wsx5-pop-in {
+    0% {
+        transform: scale(0.4);
+        opacity: 0;
+    }
+    70% {
+        transform: scale(1.12);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+@keyframes wsx5-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@keyframes wsx5-floaty {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-9px);
+    }
+}
+
+/* ── Rico presence orb (RicoPresence.tsx) ──────────────────────────────── */
+@keyframes wsx5-orb-breathe {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.06);
+    }
+}
+.wsx5-orb {
+    position: relative;
+    display: inline-block;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background: radial-gradient(
+        circle at 32% 30%,
+        #ffe9c9 0%,
+        var(--wsx5-amber) 34%,
+        var(--wsx5-terra) 72%,
+        var(--wsx5-terraDeep) 100%
+    );
+    box-shadow:
+        0 0 0 1px rgba(31, 27, 21, 0.12),
+        0 6px 18px -6px rgba(198, 73, 46, 0.6),
+        inset 0 -4px 10px rgba(120, 30, 10, 0.35);
+    animation: wsx5-orb-breathe 4.2s ease-in-out infinite;
+}
+.wsx5-orb[data-size="sm"] {
+    width: 26px;
+    height: 26px;
+}
+.wsx5-orb[data-size="md"] {
+    width: 38px;
+    height: 38px;
+}
+.wsx5-orb[data-size="lg"] {
+    width: 52px;
+    height: 52px;
+}
+.wsx5-orb::before {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    padding: 1.5px;
+    background: conic-gradient(
+        from 0deg,
+        transparent 12%,
+        color-mix(in srgb, var(--wsx5-modeA) 85%, white 20%) 32%,
+        transparent 55%,
+        rgba(61, 91, 245, 0.7) 78%,
+        transparent 92%
+    );
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: wsx5-spin 7s linear infinite;
+    opacity: 0.85;
+}
+.wsx5-orb::after {
+    content: "";
+    position: absolute;
+    inset: 26%;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 60%);
+    opacity: 0.7;
+}
+.wsx5-orb[data-state="thinking"] {
+    animation-duration: 1.5s;
+}
+.wsx5-orb[data-state="thinking"]::before {
+    animation-duration: 1.6s;
+    opacity: 1;
+}
+.wsx5-orb[data-state="acting"] {
+    animation-duration: 0.9s;
+}
+.wsx5-orb[data-state="acting"]::before {
+    animation-duration: 1s;
+    opacity: 1;
+}
+.wsx5-orb[data-state="completed"] {
+    background: radial-gradient(circle at 32% 30%, #eaf5df 0%, #8fbf7f 40%, var(--wsx5-moss) 100%);
+}
+.wsx5-orb[data-state="warning"] {
+    background: radial-gradient(circle at 32% 30%, #ffedc9 0%, var(--wsx5-amber) 55%, #b0722a 100%);
+}
+
+/* ── reduced motion: every primitive lands on its end state ────────────── */
+@media (prefers-reduced-motion: reduce) {
+    .wsx5 *,
+    .wsx5 *::before,
+    .wsx5 *::after,
+    .wsx5-orb,
+    .wsx5-orb::before {
+        animation-duration: 0.001s !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001s !important;
+    }
+    .wsx5 [data-wsx5-anim] {
+        opacity: 1 !important;
+    }
+    .wsx5-play [data-wsx5-anim] {
+        animation: none !important;
+    }
+    .wsx5-lightsweep::after,
+    .wsx5-skel::after {
+        display: none;
+    }
+}

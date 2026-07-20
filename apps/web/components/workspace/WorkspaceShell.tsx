@@ -5,19 +5,21 @@
  * approved /design-preview reference (DEC-20260710-002 + DEC-20260712-001:
  * owner adopted the reference left-sidebar for the workspace).
  *
- * PR 5A wires this shell to /dashboard only. Other workspace routes
- * (/profile, /settings, /applications, /upload, /subscription) keep their
- * current shell until their own follow-up PRs — this component just links to
- * them.
+ * Single approved shell on the authenticated workspace routes (2026-07-18
+ * single-shell ruling). Command v5 PR 2 (owner-approved v5 program,
+ * AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md) applies the v5 visual skin
+ * to the LIGHT island only: per-route accents, rail energy marker, ember
+ * wordmark, route atmosphere, document-content entrance, and the Rico
+ * presence indicator. Behavior (nav source of truth, language, drawer,
+ * mission summary, app/document variants) is unchanged, and the dark island
+ * keeps its existing accent language untouched.
  *
  * Self-contained light-first Atelier "island": everything is scoped under
- * `.wsx-root`, uses the shared atelier-kit tokens, and applies a LOCAL
- * light/dark theme (default light, matching the reference). Like
- * AtelierAuthShell it deliberately does NOT read/write the global
- * ThemeContext, so the dark Nocturne app default is never disturbed.
- * Language comes from the global useLanguage(); dir/lang mirror onto the root.
- *
- * /command is out of scope for any redesign — the sidebar only *links* to it.
+ * `.wsx-root` (+ the `.wsx5` token island), uses the shared atelier-kit and
+ * v5 tokens, and applies a LOCAL light/dark theme. Like AtelierAuthShell it
+ * deliberately does NOT read/write the global ThemeContext, so the dark
+ * Nocturne app default is never disturbed. Language comes from the global
+ * useLanguage(); dir/lang mirror onto the root.
  */
 
 import Link from "next/link";
@@ -30,6 +32,10 @@ import { Mono } from "@/components/atelier-kit/primitives";
 import { RailGoalMini } from "@/components/workspace/RailGoalMini";
 import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
 import { useMissionSummary } from "@/hooks/useMissionSummary";
+import "@/components/workspace/v5/motion.css";
+import { V5, V5_FONT, V5_GRADIENT, V5_MODE_ACCENTS, type V5ModeKey } from "@/components/workspace/v5/tokens";
+import { v5SpaceGrotesk } from "@/components/workspace/v5/fonts";
+import { RicoPresence } from "@/components/workspace/v5/RicoPresence";
 
 export type NavItem = { key: string; href: string; label: { en: string; ar: string }; icon: React.ReactNode };
 
@@ -50,6 +56,23 @@ export const WORKSPACE_NAV: NavItem[] = [
     { key: "subscription", href: "/subscription", label: { en: "Subscription", ar: "الاشتراك" }, icon: ic(<><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20M6 15h4" /></>) },
     { key: "settings", href: "/settings", label: { en: "Settings", ar: "الإعدادات" }, icon: ic(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>) },
 ];
+
+/* v5 per-route accents (AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md):
+   live v5 modes map to their accent triple; every other workspace route
+   shares the neutral overview terra. Light theme only — the dark island
+   keeps its existing accent language untouched. */
+const ROUTE_V5_MODE: Record<string, V5ModeKey> = {
+    "/dashboard": "overview",
+    "/command": "search",
+    "/applications": "applications",
+    "/upload": "documents",
+};
+function v5ModeForPath(path: string): V5ModeKey {
+    for (const [prefix, mode] of Object.entries(ROUTE_V5_MODE)) {
+        if (path === prefix || path.startsWith(prefix + "/")) return mode;
+    }
+    return "overview";
+}
 
 export function WorkspaceShell({
     children,
@@ -96,9 +119,29 @@ export function WorkspaceShell({
     const missionSummary = useMissionSummary(!isApp && pathname !== "/dashboard");
     const applicationsCount = missionSummary?.applications_sent ?? 0;
 
+    const routeAcc = V5_MODE_ACCENTS[v5ModeForPath(pathname)];
+
     const Brand = (
         <Link href="/dashboard" className="flex items-baseline gap-2" style={{ textDecoration: "none" }}>
-            <span style={{ fontFamily: SERIF, fontSize: "1.35rem", color: c.ink, lineHeight: 1 }}>Rico</span>
+            <span
+                style={{
+                    fontFamily: SERIF,
+                    fontSize: "1.35rem",
+                    lineHeight: 1,
+                    ...(dark
+                        ? { color: c.ink }
+                        : {
+                              fontStyle: "italic",
+                              background: V5_GRADIENT.emberDisplayText,
+                              WebkitBackgroundClip: "text",
+                              backgroundClip: "text",
+                              color: "transparent",
+                              paddingInlineEnd: "0.06em",
+                          }),
+                }}
+            >
+                Rico
+            </span>
             <Mono style={{ color: c.ink40, letterSpacing: "0.18em" }}>{isAr ? "مساحة العمل" : "Workspace"}</Mono>
         </Link>
     );
@@ -107,6 +150,9 @@ export function WorkspaceShell({
         <nav className="flex flex-col gap-1">
             {WORKSPACE_NAV.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                const acc = V5_MODE_ACCENTS[v5ModeForPath(item.href)];
+                const activeInk = dark ? c.ink : acc.modeAText;
+                const activeIcon = dark ? c.red : acc.modeAText;
                 return (
                     <Link
                         key={item.key}
@@ -114,20 +160,62 @@ export function WorkspaceShell({
                         onClick={() => setOpen(false)}
                         className="wsx-nav flex items-center gap-3 rounded-[7px] px-3 py-2.5"
                         style={{
-                            color: active ? c.ink : c.ink70,
-                            background: active ? c.activeBg : "transparent",
+                            position: "relative",
+                            color: active ? activeInk : c.ink70,
+                            background: active
+                                ? dark
+                                    ? c.activeBg
+                                    : `linear-gradient(96deg, ${acc.modeA}24, transparent 70%)`
+                                : "transparent",
                             textDecoration: "none",
                         }}
                         aria-current={active ? "page" : undefined}
                     >
-                        <span style={{ color: active ? c.red : c.ink40, display: "inline-flex" }}>{item.icon}</span>
-                        <span style={{ fontSize: 14 }}>{isAr ? item.label.ar : item.label.en}</span>
+                        {active && (
+                            <span
+                                aria-hidden="true"
+                                data-testid="wsx5-nav-marker"
+                                style={{
+                                    position: "absolute",
+                                    insetInlineStart: -2,
+                                    top: 8,
+                                    bottom: 8,
+                                    width: 3.5,
+                                    borderRadius: 4,
+                                    background: dark ? c.red : V5_GRADIENT.ember,
+                                    boxShadow: dark ? "none" : `0 0 12px ${acc.modeA}8C`,
+                                }}
+                            />
+                        )}
+                        <span
+                            style={{
+                                color: active ? activeIcon : c.ink40,
+                                display: "inline-flex",
+                                animation: active ? "wsx5-pop-in 480ms var(--wsx5-spring)" : undefined,
+                            }}
+                        >
+                            {item.icon}
+                        </span>
+                        <span style={{ fontSize: 14, fontFamily: V5_FONT.sans, fontWeight: active ? 650 : 500 }}>
+                            {isAr ? item.label.ar : item.label.en}
+                        </span>
                         {item.key === "applications" && applicationsCount > 0 && (
                             <span
                                 dir="ltr"
                                 data-testid="nav-applications-count"
                                 className="ms-auto"
-                                style={{ fontFamily: ATELIER_FONT.mono, color: active ? c.red : c.ink40, fontSize: 10 }}
+                                style={{
+                                    fontFamily: ATELIER_FONT.mono,
+                                    fontSize: 10,
+                                    ...(active && !dark
+                                        ? {
+                                              background: acc.modeAText,
+                                              color: V5.onEmber,
+                                              padding: "1px 6px",
+                                              borderRadius: 6,
+                                          }
+                                        : { color: active ? c.red : c.ink40 }),
+                                }}
                             >
                                 {applicationsCount}
                             </span>
@@ -140,6 +228,8 @@ export function WorkspaceShell({
 
     const Controls = (
         <div className="flex items-center gap-2">
+            <RicoPresence state="ready" size="sm" label={isAr ? "ريكو جاهز" : "Rico is ready"} />
+            <span className="flex-1" aria-hidden="true" />
             <span className="inline-flex items-center rounded-[3px] overflow-hidden" style={{ border: `1px solid ${c.hair}` }}>
                 <button type="button" onClick={() => setLanguage("en")} aria-pressed={!isAr} style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10, padding: "3px 7px", background: !isAr ? c.ink : "transparent", color: !isAr ? c.bg : c.ink40, cursor: "pointer" }}>EN</button>
                 <button type="button" onClick={() => setLanguage("ar")} aria-pressed={isAr} style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10, padding: "3px 7px", background: isAr ? c.ink : "transparent", color: isAr ? c.bg : c.ink40, cursor: "pointer" }}>عربي</button>
@@ -163,7 +253,7 @@ export function WorkspaceShell({
 
     return (
         <div
-            className={`wsx-root ${isAr ? "wsx-ar" : ""} ${isApp ? "h-[100dvh] overflow-hidden" : "min-h-screen"} ${atelierFraunces.variable} ${atelierNaskhArabic.variable} ${atelierSansArabic.variable}`}
+            className={`wsx-root wsx5 ${isAr ? "wsx-ar" : ""} ${isApp ? "h-[100dvh] overflow-hidden" : "min-h-screen"} ${atelierFraunces.variable} ${atelierNaskhArabic.variable} ${atelierSansArabic.variable} ${v5SpaceGrotesk.variable}`}
             dir={isAr ? "rtl" : "ltr"}
             lang={language}
             style={{ background: c.bg, color: c.ink, fontFamily: ATELIER_FONT.body }}
@@ -176,7 +266,24 @@ export function WorkspaceShell({
                 .wsx-root a:focus-visible, .wsx-root button:focus-visible { outline: 2px solid ${c.red}; outline-offset: 2px; border-radius: 4px; }
                 .wsx-root.wsx-ar * { letter-spacing: 0 !important; }
             ` }} />
-            <div className={`lg:grid ${isApp ? "h-full flex flex-col" : ""}`} style={{ gridTemplateColumns: "244px 1fr" }}>
+            {/* v5 route atmosphere — light island only, decorative, zero pointer impact */}
+            {!dark && (
+                <div
+                    aria-hidden="true"
+                    data-testid="wsx5-atmosphere"
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        pointerEvents: "none",
+                        zIndex: 0,
+                        background: `radial-gradient(52% 44% at 12% -4%, ${routeAcc.modeB}3D, transparent 66%), radial-gradient(44% 40% at 104% 88%, ${routeAcc.modeA}1F, transparent 62%)`,
+                    }}
+                />
+            )}
+            <div
+                className={`lg:grid ${isApp ? "h-full flex flex-col" : ""}`}
+                style={{ gridTemplateColumns: "244px 1fr", position: "relative", zIndex: 1 }}
+            >
                 {/* ── Desktop sidebar ── */}
                 <aside
                     className="hidden lg:flex flex-col justify-between sticky top-0 h-screen px-5 py-6"
@@ -184,7 +291,7 @@ export function WorkspaceShell({
                 >
                     <div className="flex flex-col gap-8">
                         <div className="pb-5" style={{ borderBottom: `1px solid ${c.hair}` }}>{Brand}</div>
-                        <RailGoalMini mission={missionSummary} language={language} c={c} />
+                        <RailGoalMini mission={missionSummary} language={language} c={c} accentFill={dark ? undefined : V5_GRADIENT.ember} />
                         {NavList}
                     </div>
                     {Controls}
@@ -203,7 +310,7 @@ export function WorkspaceShell({
                 )}
                 {showMobileChrome && open && (
                     <div className="lg:hidden px-5 py-4 flex shrink-0 flex-col gap-4" style={{ background: c.rail, borderBottom: `1px solid ${c.hair}` }}>
-                        <RailGoalMini mission={missionSummary} language={language} c={c} onNavigate={() => setOpen(false)} />
+                        <RailGoalMini mission={missionSummary} language={language} c={c} accentFill={dark ? undefined : V5_GRADIENT.ember} onNavigate={() => setOpen(false)} />
                         {NavList}
                         {Controls}
                         {mobileExtras}
@@ -213,7 +320,15 @@ export function WorkspaceShell({
                 {/* ── Main content ── */}
                 <main className={isApp ? "flex flex-1 lg:h-full min-h-0 w-full flex-col overflow-hidden" : "px-5 sm:px-8 lg:px-12 py-8 lg:py-12 max-w-5xl w-full"}>
                     <WorkspaceThemeContext.Provider value={c}>
-                        {children}
+                        {isApp ? (
+                            children
+                        ) : (
+                            /* v5 entrance: document content rises in once per
+                               navigation; collapses under reduced motion. */
+                            <div className="wsx5-play">
+                                <div data-wsx5-anim="rise">{children}</div>
+                            </div>
+                        )}
                     </WorkspaceThemeContext.Provider>
                 </main>
             </div>
