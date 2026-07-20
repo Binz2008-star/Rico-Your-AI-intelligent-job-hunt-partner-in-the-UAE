@@ -6743,11 +6743,12 @@ class RicoChatAPI:
         ai_response["message"] = filtered_ai_message
 
         if filtered_ai_message:
-            self._append_chat(user_id, "assistant", filtered_ai_message)
-            # If the AI produced a hollow promise ("ببحث الآن...", "Searching now...") but did
-            # not actually fetch jobs, arm the pending-search slot so the user's next
-            # confirmation ("تمام"/"ok") triggers _classified_role_search instead of
-            # receiving another promise.
+            # Promise-guard runs BEFORE persisting the assistant turn. If the AI
+            # produced a hollow promise ("ببحث الآن...", "Searching now...") that
+            # we go on to replace with a real search, that promise must never be
+            # written to chat history — otherwise session recovery, later AI
+            # context, and analytics all see an orphan assistant turn the user
+            # never actually received. Persist exactly one canonical reply.
             if self._is_promise_only_reply(filtered_ai_message) and profile:
                 _promise_roles = self._as_list(self._profile_value(profile, "target_roles"))
                 if _promise_roles:
@@ -6763,12 +6764,18 @@ class RicoChatAPI:
                             user_id, str(_promise_roles[0]), profile
                         )
                         if isinstance(_search_result, dict):
+                            # _classified_role_search persists its own assistant
+                            # reply; the promise was never delivered, so it is
+                            # deliberately NOT appended to history here.
                             _search_result.setdefault("success", True)
                             _search_result.setdefault("response_source", "search_contract")
                             return _search_result
                     # Ambiguous promise (user message wasn't an explicit search
-                    # request) — keep the original arm-the-slot behavior.
+                    # request) — arm the slot; the promise IS the delivered reply,
+                    # so it is persisted below.
                     self._store_pending_job_search(user_id, role=str(_promise_roles[0]))
+            # Persist the canonical assistant turn actually returned to the user.
+            self._append_chat(user_id, "assistant", filtered_ai_message)
 
         result = self._finalize(
             ai_response,
@@ -12680,7 +12687,16 @@ class RicoChatAPI:
             return result
 
         existing_ui = result.get("agentic_ui")
-        if isinstance(existing_ui, RicoAgenticUi):
+        if isinstance(existing_ui, dict):
+            # compose() (the finalize step before this) emits agentic_ui as a
+            # plain dict — the real production shape. Preserve its existing
+            # cards/actions and append the option buttons instead of discarding
+            # them (the else branch used to drop any composed content here).
+            base = RicoAgenticUi(**existing_ui)
+            updated_ui = base.model_copy(
+                update={"actions": list(base.actions) + new_actions}
+            )
+        elif isinstance(existing_ui, RicoAgenticUi):
             updated_ui = existing_ui.model_copy(
                 update={"actions": list(existing_ui.actions) + new_actions}
             )
