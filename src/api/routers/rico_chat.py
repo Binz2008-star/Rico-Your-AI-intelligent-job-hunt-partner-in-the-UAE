@@ -751,6 +751,20 @@ SSE_HEADERS = {
 }
 
 
+def _sse_done(response: Any) -> str:
+    """Serialize a terminal SSE ``done`` event with a total JSON encoder.
+
+    ``default=str`` guarantees the terminal event is always serializable: a
+    stray non-JSON field (datetime, Decimal, or a pydantic model that slipped
+    through) renders as its string form instead of raising ``TypeError``
+    mid-stream — which the generator's ``except`` would otherwise collapse into a
+    generic "Stream error", dropping the already-persisted reply from the wire.
+    This is the boundary that #1210 / #1222 / #1225 each patched one field at a
+    time; the encoder closes the whole class.
+    """
+    return f'data: {json.dumps({"type": "done", "response": response}, default=str)}\n\n'
+
+
 @router.post("/chat/stream")
 @limiter.limit(LIMIT_CHAT)
 def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingResponse:
@@ -790,7 +804,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
             # provider is never called (#1078).
             pre = chat_service.run_chat_preflight(ctx, payload.message)
             if pre.terminal is not None:
-                yield f'data: {_json.dumps({"type":"done","response":pre.terminal})}\n\n'
+                yield _sse_done(pre.terminal)
                 return
 
             # For non-conversational intents (job search, CV ops) fall back to the
@@ -804,7 +818,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                     operation_id=payload.operation_id,
                     language=payload.language,
                 )
-                yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
+                yield _sse_done(result)
                 return
 
             # Streaming conversational-AI path (already past the entitlement gate).
@@ -860,7 +874,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                 done_response["messages_remaining"] = pre.gate.remaining
                 if pre.gate.limit is not None:
                     done_response["messages_limit"] = pre.gate.limit
-            yield f'data: {_json.dumps({"type":"done","response":done_response})}\n\n'
+            yield _sse_done(done_response)
         except Exception as e:
             logger.error("chat_stream_error user=%s err=%s", user_ref(user_id), safe_exc(e))
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
@@ -953,14 +967,14 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
         yield ": connected\n\n"
         # Registered user over their cap — refuse before any provider work.
         if anti_dodge_terminal is not None:
-            yield f'data: {_json.dumps({"type":"done","response":anti_dodge_terminal})}\n\n'
+            yield _sse_done(anti_dodge_terminal)
             return
         try:
             # Shared, transport-independent preflight (policy gateway etc.); public
             # sessions are not per-user capped (the gate is authenticated-only).
             pre = chat_service.run_chat_preflight(ctx, payload.message)
             if pre.terminal is not None:
-                yield f'data: {_json.dumps({"type":"done","response":_strip_internal_fields(pre.terminal)})}\n\n'
+                yield _sse_done(_strip_internal_fields(pre.terminal))
                 return
 
             profile = get_profile(user_id)
@@ -971,7 +985,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
                     operation_id=payload.operation_id,
                     language=payload.language,
                 )
-                yield f'data: {_json.dumps({"type":"done","response":_strip_internal_fields(result)})}\n\n'
+                yield _sse_done(_strip_internal_fields(result))
                 return
 
             api = RicoChatAPI(persist=False)
@@ -1011,7 +1025,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
                             user_ref(user_id), safe_exc(e),
                         )
 
-            yield f'data: {_json.dumps({"type":"done","response":{"message":assembled,"type":"conversational","response_source":"stream"}})}\n\n'
+            yield _sse_done({"message": assembled, "type": "conversational", "response_source": "stream"})
         except Exception as e:
             logger.error("chat_stream_public_error user=%s err=%s", user_ref(user_id), safe_exc(e))
             yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
