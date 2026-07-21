@@ -162,3 +162,41 @@ class TestSystemPromptUserContext:
         prompt = get_rico_system_prompt()
         assert "Rico Hunt" in prompt
         assert "79" in prompt
+
+
+class TestLanguageAndStylePolicy:
+    """Systemic quality directives (owner escalation, 2026-07-21): a Jordanian
+    user was addressed in hardcoded Gulf dialect ("Use natural, professional
+    Gulf Arabic" lived in the runtime lang-rule), replies rambled with emoji
+    menus, and a named bank was silently swapped for a different one from
+    search context. These pins keep the cures in the central prompt."""
+
+    def test_arabic_rule_mandates_msa_never_dialect(self):
+        from src.rico_identity import get_language_rule
+        rule = get_language_rule("ar")
+        assert "الفصحى" in rule
+        assert "Modern Standard Arabic" in rule
+        assert "NEVER use a regional dialect" in rule
+        # The old directive must never come back.
+        assert "natural, professional Gulf Arabic" not in rule
+
+    def test_english_rule_concise(self):
+        from src.rico_identity import get_language_rule
+        rule = get_language_rule("en")
+        assert "Reply in English" in rule
+        assert "concise" in rule
+
+    def test_system_prompt_carries_style_policies(self):
+        prompt = get_rico_system_prompt()
+        assert "Modern Standard Arabic" in prompt
+        assert "Named-entity fidelity" in prompt
+        assert "NEVER substitute a similar entity" in prompt
+        assert "concise" in prompt
+
+    def test_runtime_no_longer_hardcodes_gulf_arabic(self):
+        # The runtime must delegate to get_language_rule — grep-level pin on
+        # the retired hardcoded directive.
+        import pathlib
+        src = pathlib.Path("src/rico_openai_runtime.py").read_text(encoding="utf-8")
+        assert "Gulf Arabic" not in src
+        assert "get_language_rule" in src

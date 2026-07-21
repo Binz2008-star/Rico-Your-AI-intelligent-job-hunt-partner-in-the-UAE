@@ -1,0 +1,44 @@
+name: Keep Warm
+
+# Keeps the Render backend from idling out (cold-start fix, owner decision
+# 2026-07-21 — «نفذ أ»): the instance sleeps after ~15 minutes without
+# traffic, so the first request each morning paid the full boot (observed
+# 41.75s end-to-end in production). A tiny read-only /health GET every 10
+# minutes keeps it resident.
+#
+# - Read-only, no secrets, no repo checkout, no state.
+# - This is a HEATER, not a monitor: a non-200 emits a warning, never a red
+#   run — deploy gates (deploy-render.yml) and smoke workflows own alerting.
+# - Kill switch: disable this workflow from the Actions UI.
+# - Render budget: one always-warm instance stays within the plan's monthly
+#   instance-hours for a single service.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping backend /health
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 \
+              "https://rico-job-automation-api.onrender.com/health" || true)
+            if [ "$code" = "200" ]; then
+              echo "healthy (200)"
+              exit 0
+            fi
+            echo "attempt $i: HTTP ${code:-error} — retrying in 10s"
+            sleep 10
+          done
+          echo "::warning::backend /health not 200 after 3 attempts (wake-up may be in progress)"
