@@ -114,6 +114,21 @@ def main() -> int:
             row = cur.fetchone()
             rico_uid = str(row[0]) if row else None
 
+        # ── 4a. control probes: isolate cookie transport vs the stream route ──
+        # Evidence for the 2026-07-21 SSE 'Unauthorized' frame: (1) does the jar
+        # still hold access_token? (2) does a NON-stream authenticated POST on
+        # the same connection succeed? Together these separate a smoke-side
+        # cookie-transport fault from a stream-route-specific auth fault.
+        has_token = any(c.name == "access_token" for c in jar)
+        record("jar holds access_token before stream", has_token, f"cookies={[c.name for c in jar]}")
+        code, _, body = call(
+            "POST",
+            f"{BACKEND}/api/v1/rico/chat",
+            {"message": "SMOKE-DELIVERY control ping"},
+            timeout=120,
+        )
+        record("authenticated JSON chat (control)", code == 200, f"HTTP {code} bytes={len(body)}")
+
         # ── 4. authenticated SSE stream ───────────────────────────────────
         req = urllib.request.Request(f"{BACKEND}/api/v1/rico/chat/stream", method="POST")
         req.add_header("Content-Type", "application/json")
