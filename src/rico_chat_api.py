@@ -5041,6 +5041,25 @@ class RicoChatAPI:
                 job["location"] = location
             return _finalize(job)
 
+        # Institution-name company mid-sentence: «اكتبلي ايميل لبنك دبي الاسلامي
+        # استعلم به عن وظائف …». The connectors above (في شركة/لدى/لشركة) miss
+        # the bare "لـ<مؤسسة>" form, and the end-anchored patterns below fail
+        # whenever the sentence continues past the company. Capture the
+        # institution noun + up to 4 following words, stopping at an
+        # inquiry/continuation verb or punctuation.
+        ar_institution = re.search(
+            r"(?:^|\s)(?:ل|إلى\s+|الى\s+)"
+            r"(?P<company>(?:بنك|مصرف|هيئ[ةه]|مجموع[ةه]|"
+            r"مستشفى|جامع[ةه]|فندق|وزار[ةه])\s+\S+(?:\s+\S+){0,3}?)"
+            r"(?=\s+(?:استعلم|أستعلم|اسال|أسال|اسأل|أسأل|اطلب|أطلب|اعرض|أعرض|"
+            r"واعرض|وأعرض|بخصوص|حول|عن|لأستفسر|لاستفسر)\b|[.?!,؛;]|\s*$)",
+            text,
+        )
+        if ar_institution:
+            return _finalize(
+                {"company": cls._clean_explicit_job_value(ar_institution.group("company"))}
+            )
+
         ar_company = re.search(
             rf"{_ar_company_conn}\s+"
             r"(?:شرك[ةه]\s+)?(?P<company>.+?)"
@@ -5120,13 +5139,36 @@ class RicoChatAPI:
             bool((job or {}).get("company")),
         )
 
+    # Words that mark a "name" as actually being a job title. CV parsing can
+    # land a CV HEADLINE in profile.name (seen in production: a user greeted as
+    # "Vip Relationship Manager") — a vocative must never use such a string.
+    _ROLE_LIKE_NAME_RE = re.compile(
+        r"\b(manager|officer|specialist|engineer|consultant|analyst|director|"
+        r"supervisor|coordinator|executive|accountant|relationship|assistant)\b"
+        r"|مدير|مسؤول|أخصائي|اخصائي|مهندس|محاسب|منسق|مشرف|مستشار",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _vocative_name(profile: Any) -> str:
+        """Profile name that is SAFE to greet the user with.
+
+        Returns "" (templates then omit the vocative) when the stored name is
+        empty, implausibly long, or looks like a job title — a global guard
+        against CV-parse pollution of profile.name, for every user.
+        """
+        name = str(RicoChatAPI._profile_value(profile, "name") or "").strip()
+        if not name or len(name) > 40 or RicoChatAPI._ROLE_LIKE_NAME_RE.search(name):
+            return ""
+        return name
+
     def _cover_letter_clarification_message(
         self,
         profile: Any,
         partial_job: dict[str, Any] | None = None,
         arabic: bool | None = None,
     ) -> str:
-        name = self._profile_value(profile, "name") or ""
+        name = self._vocative_name(profile)
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         title = self._job_context_value(partial_job or {}, "title")
         company = self._job_context_value(partial_job or {}, "company")
@@ -5231,7 +5273,9 @@ class RicoChatAPI:
         recruiter_email = EMAIL_RE.search(message or "")
         if wants_draft:
             self._log_document_draft_context_source("clarification_required", {})
-            msg = self._cover_letter_clarification_message(profile)
+            msg = self._cover_letter_clarification_message(
+                profile, arabic=self._is_arabic_text(message)
+            )
             return {
                 "type": "cover_letter_prompt",
                 "intent": "draft_message",
@@ -8331,7 +8375,9 @@ class RicoChatAPI:
                     profile=profile,
                     save_user_message=False,
                 )
-            _cl_msg = self._cover_letter_clarification_message(profile)
+            _cl_msg = self._cover_letter_clarification_message(
+                profile, arabic=self._is_arabic_text(message)
+            )
             self._append_chat(user_id, "assistant", _cl_msg)
             return self._finalize(
                 {
@@ -8605,7 +8651,9 @@ class RicoChatAPI:
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
-                _cl_msg = self._cover_letter_clarification_message(profile, _cl_draft_job)
+                _cl_msg = self._cover_letter_clarification_message(
+                    profile, _cl_draft_job, arabic=self._is_arabic_text(message)
+                )
                 self._append_chat(user_id, "assistant", _cl_msg)
                 return self._finalize(
                     {"type": "cover_letter_prompt", "message": _cl_msg, "next_action": "provide_job_for_cover_letter"},
@@ -11262,7 +11310,9 @@ class RicoChatAPI:
                 draft_job, context_source = self._resolve_explicit_draft_job_context(user_id, explicit_draft_job)
                 if not (self._job_context_value(draft_job, "title", "job_title") and self._job_context_value(draft_job, "company", "company_name")):
                     self._log_document_draft_context_source("clarification_required", draft_job)
-                    msg = self._cover_letter_clarification_message(profile, draft_job)
+                    msg = self._cover_letter_clarification_message(
+                        profile, draft_job, arabic=self._is_arabic_text(message)
+                    )
                     self._append_chat(user_id, "assistant", msg)
                     return self._finalize(
                         {"type": "cover_letter_prompt", "message": msg, "next_action": "provide_job_for_cover_letter"},
