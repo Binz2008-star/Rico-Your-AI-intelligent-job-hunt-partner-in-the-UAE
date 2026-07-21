@@ -108,7 +108,10 @@ def test_arabic_draft_and_send_request_asks_for_job_without_recent_context() -> 
 
     msg = result["message"]
     assert result["type"] == "cover_letter_prompt"
-    assert "Which role and company" in msg
+    # Arabic request → Arabic clarification (the old English "Which role and
+    # company" reply was the bug this pin used to freeze — fixed 2026-07-21).
+    assert "ما المسمى الوظيفي والشركة المستهدفان" in msg
+    assert "Which role and company" not in msg
     assert "Send where" not in msg
     assert all(marker not in msg for marker in ("A)", "B)", "C)"))
     _assert_recent_job_context_not_used(msg)
