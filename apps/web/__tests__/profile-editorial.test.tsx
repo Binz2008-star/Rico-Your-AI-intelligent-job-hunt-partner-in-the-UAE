@@ -105,6 +105,10 @@ vi.mock("@/lib/api", () => ({
             this.statusCode = statusCode;
         }
     },
+    // ProfileAvatar (hero) — resolves to no avatar; suites assert the form, not the photo.
+    getAvatar: () => Promise.resolve({ avatar: null }),
+    uploadAvatar: () => Promise.resolve({ ok: true, avatar: "" }),
+    deleteAvatar: () => Promise.resolve({ ok: true, deleted: false }),
     fetchProfile: fetchProfileMock,
     updateProfile: updateProfileMock,
     listUserFiles: listUserFilesMock,

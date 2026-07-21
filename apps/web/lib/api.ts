@@ -362,6 +362,40 @@ export async function uploadUserFile(
   return res.json() as Promise<{ ok: boolean; id: string; filename: string; doc_type: string }>;
 }
 
+// ── Profile avatar ────────────────────────────────────────────────────────────
+
+/** GET /api/v1/user/avatar — the stored avatar data URL, or null. */
+export async function getAvatar(): Promise<{ avatar: string | null }> {
+  return requestJson<{ avatar: string | null }>("/api/v1/user/avatar", {
+    method: "GET",
+    credentials: "include",
+  });
+}
+
+/** POST /api/v1/user/avatar — upload a (client-downscaled) image. */
+export async function uploadAvatar(file: Blob, filename = "avatar.jpg"): Promise<{ ok: boolean; avatar: string }> {
+  const form = new FormData();
+  form.append("file", file, filename);
+  const res = await apiFetch(`${PROXY}/api/v1/user/avatar`, {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new ApiError(err.detail ?? "Avatar upload failed", res.status, err);
+  }
+  return res.json() as Promise<{ ok: boolean; avatar: string }>;
+}
+
+/** DELETE /api/v1/user/avatar — remove the stored avatar. */
+export async function deleteAvatar(): Promise<{ ok: boolean; deleted: boolean }> {
+  return requestJson<{ ok: boolean; deleted: boolean }>("/api/v1/user/avatar", {
+    method: "DELETE",
+    credentials: "include",
+  });
+}
+
 // ── Saved searches ────────────────────────────────────────────────────────────
 
 export interface SavedSearch {

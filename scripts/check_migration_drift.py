@@ -99,6 +99,9 @@ CHECKS: list[tuple[str, str, object]] = [
     # WhatsApp-assisted subscription pending requests (DEC-20260719-003).
     # Additive, entitlement-neutral: rows here never grant access — the code
     # fails closed (503 on the request endpoint) until 049 is applied.
+    # 050: profile avatars (owner request 2026-07-21). Avatar endpoints fail
+    # open on reads and 503 on writes until 050 is applied.
+    ("050", "table", "user_avatars"),
     ("049", "table", "whatsapp_subscription_requests"),
     ("049", "index", "uq_whatsapp_sub_requests_user_pending"),
     ("048", "index", "idx_rico_chat_user_session_created"),
