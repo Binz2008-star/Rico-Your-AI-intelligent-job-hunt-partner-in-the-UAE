@@ -420,6 +420,29 @@ class TestEndpoints:
         assert r.status_code == 404
 
 
+class TestShouldOfferScheduledSearch:
+    """The contextual offer is per-user and scenario-gated: only an
+    authenticated user WITHOUT an existing schedule ever sees it."""
+
+    def test_public_identity_never_offered(self):
+        assert sss.should_offer_scheduled_search("public-session-x") is False
+        assert sss.should_offer_scheduled_search("") is False
+        assert sss.should_offer_scheduled_search("e-" + "a" * 40) is False
+
+    def test_user_with_schedule_not_offered(self):
+        with patch.object(sss, "get_user_schedules",
+                          return_value=[{"id": "1", "query": "q", "schedule": {"enabled": True}}]):
+            assert sss.should_offer_scheduled_search("alice@rico.ai") is False
+
+    def test_user_without_schedule_is_offered(self):
+        with patch.object(sss, "get_user_schedules", return_value=[]):
+            assert sss.should_offer_scheduled_search("alice@rico.ai") is True
+
+    def test_lookup_failure_fails_quiet(self):
+        with patch.object(sss, "get_user_schedules", side_effect=RuntimeError("db down")):
+            assert sss.should_offer_scheduled_search("alice@rico.ai") is False
+
+
 class TestSetScheduleEnabledById:
     def test_toggles_only_the_matching_schedule(self):
         items = [

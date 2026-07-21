@@ -295,6 +295,22 @@ def set_schedules_enabled(user_id: str, enabled: bool) -> int:
     return count
 
 
+def should_offer_scheduled_search(user_id: str) -> bool:
+    """Whether the contextual "daily search" offer fits THIS user right now.
+
+    Appropriate only for an authenticated, non-public user who doesn't
+    already own a schedule — everyone else (guests, users who opted in
+    already) sees nothing. Never raises; any failure means "don't offer"
+    (a missed suggestion is harmless, a wrong one is noise).
+    """
+    try:
+        if _is_public_identity(user_id):
+            return False
+        return not get_user_schedules(user_id)
+    except Exception:
+        return False
+
+
 def set_schedule_enabled_by_id(user_id: str, search_id: str, enabled: bool) -> bool:
     """Pause/resume ONE schedule by id, strictly within the user's own rows.
 

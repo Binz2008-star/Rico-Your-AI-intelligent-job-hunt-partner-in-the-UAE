@@ -4429,7 +4429,27 @@ class RicoChatAPI:
     ) -> dict[str, Any]:
         """Finalize response with metadata."""
         from src.services.agentic_ui_composer import compose
-        agentic_ui = compose(runtime_result, response)
+
+        # Contextual scheduled-search offer (#1249): only on a job-match
+        # response WITH results, for an authenticated user who has no daily
+        # schedule yet. Fail-soft — an eligibility error must never block or
+        # alter the chat response, it just withholds the suggestion.
+        offer_scheduled = False
+        if response.get("type") == "job_matches" and response.get("matches"):
+            try:
+                from src.services.scheduled_search_service import (
+                    should_offer_scheduled_search,
+                )
+
+                offer_scheduled = should_offer_scheduled_search(
+                    getattr(profile, "user_id", None) or ""
+                )
+            except Exception:
+                offer_scheduled = False
+
+        agentic_ui = compose(
+            runtime_result, response, offer_scheduled_search=offer_scheduled
+        )
         agent = self._get_openai_agent()
 
         # First-party analytics (v1): one search_performed per finalized
