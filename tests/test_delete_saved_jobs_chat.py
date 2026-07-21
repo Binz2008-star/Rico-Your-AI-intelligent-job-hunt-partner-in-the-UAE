@@ -151,8 +151,8 @@ class TestDeleteSavedJobsExecution(unittest.TestCase):
                 MockDB.return_value.delete_saved_jobs.return_value = deleted
             return self.api._handle_pending_delete_saved_jobs("u1", message), MockDB
 
-    def test_yes_executes_deletion(self):
-        result, _ = self._run_confirm("yes")
+    def test_strict_phrase_executes_deletion(self):
+        result, _ = self._run_confirm("yes, delete")
         self.assertEqual(result["type"], "delete_saved_jobs_done")
         self.assertEqual(result["deleted_count"], 5)
 
@@ -162,30 +162,86 @@ class TestDeleteSavedJobsExecution(unittest.TestCase):
             "src.repositories.applications_repo.get_stats", return_value={"saved": 0}
         ):
             MockDB.return_value.delete_saved_jobs.return_value = 3
-            result = self.api._handle_pending_delete_saved_jobs("u1", "نعم")
+            result = self.api._handle_pending_delete_saved_jobs("u1", "نعم احذف")
         self.assertEqual(result["type"], "delete_saved_jobs_done")
         self.assertEqual(result["deleted_count"], 3)
 
-    def test_yes_empty_saved_list(self):
-        result, _ = self._run_confirm("yes", deleted=0)
+    def test_legacy_card_payload_phrase_still_confirms(self):
+        # The retired card sent this exact text — users who learned it (or old
+        # transcripts replayed) must keep working.
+        result, _ = self._run_confirm("yes delete all my saved jobs")
+        self.assertEqual(result["type"], "delete_saved_jobs_done")
+
+    def test_strict_phrase_empty_saved_list(self):
+        result, _ = self._run_confirm("yes, delete", deleted=0)
         self.assertEqual(result["type"], "delete_saved_jobs_done")
         self.assertEqual(result["deleted_count"], 0)
 
     def test_success_message_contains_count(self):
-        result, _ = self._run_confirm("yes", deleted=7, saved_remaining=0)
+        result, _ = self._run_confirm("yes, delete", deleted=7, saved_remaining=0)
         self.assertIn("7", result["message"])
 
     def test_readback_still_shows_saved_jobs_does_not_claim_success(self):
         # DB reports rows deleted, but the read-after-write check still sees
         # saved jobs — the guard must not let success copy through (Issue #764).
-        result, _ = self._run_confirm("yes", deleted=7, saved_remaining=3)
+        result, _ = self._run_confirm("yes, delete", deleted=7, saved_remaining=3)
         self.assertNotIn("7", result["message"])
         for phrase in ("deleted.", "تم حذف"):
             self.assertNotIn(phrase, result["message"])
 
     def test_db_failure_returns_failed_type(self):
-        result, _ = self._run_confirm("yes", raise_exc=Exception("DB error"))
+        result, _ = self._run_confirm("yes, delete", raise_exc=Exception("DB error"))
         self.assertEqual(result["type"], "delete_saved_jobs_failed")
+
+
+# ── Strict gate (#1262 phase 4): loose affirmatives must NOT delete ───────────
+
+class TestDeleteSavedJobsStrictGate(unittest.TestCase):
+    """With the Yes/No buttons retired, execution requires the literal
+    delete-verb phrase the prompt instructs. A loose affirmative inside the
+    2-minute window — possibly meant for a different question — must
+    re-prompt, never delete."""
+
+    def setUp(self):
+        self.api = _make_api()
+
+    def _reply(self, message: str):
+        _set_pending(self.api, "u1")
+        with patch("src.rico_db.RicoDB") as MockDB:
+            result = self.api._handle_pending_delete_saved_jobs("u1", message)
+        return result, MockDB
+
+    def test_bare_yes_re_prompts_without_deleting(self):
+        result, MockDB = self._reply("yes")
+        self.assertEqual(result["type"], "delete_saved_jobs_confirm")
+        MockDB.return_value.delete_saved_jobs.assert_not_called()
+
+    def test_loose_affirmatives_never_delete(self):
+        for phrase in ("ok", "sure", "go ahead", "do it", "يلا", "اه", "نعم", "طبعا"):
+            result, MockDB = self._reply(phrase)
+            self.assertEqual(
+                result["type"], "delete_saved_jobs_confirm",
+                f"loose affirmative {phrase!r} must re-prompt, not delete",
+            )
+            MockDB.return_value.delete_saved_jobs.assert_not_called()
+
+    def test_re_prompt_instructs_the_exact_accepted_phrase(self):
+        # Transcript parity: what the re-prompt tells the user to type must
+        # be exactly what the gate accepts.
+        result, _ = self._reply("maybe?")
+        self.assertIn("yes, delete", result["message"])
+        self.assertTrue(RicoChatAPI._is_delete_confirmation("yes, delete"))
+
+    def test_loose_reply_keeps_window_open_for_strict_confirm(self):
+        _set_pending(self.api, "u1")
+        with patch("src.rico_db.RicoDB") as MockDB, patch(
+            "src.repositories.applications_repo.get_stats", return_value={"saved": 0}
+        ):
+            MockDB.return_value.delete_saved_jobs.return_value = 2
+            first = self.api._handle_pending_delete_saved_jobs("u1", "ok")
+            self.assertEqual(first["type"], "delete_saved_jobs_confirm")
+            second = self.api._handle_pending_delete_saved_jobs("u1", "yes, delete")
+        self.assertEqual(second["type"], "delete_saved_jobs_done")
 
     def test_success_clears_pending_flag(self):
         _set_pending(self.api, "u1")
@@ -203,7 +259,7 @@ class TestDeleteSavedJobsExecution(unittest.TestCase):
             "src.repositories.applications_repo.get_stats", return_value={"saved": 0}
         ):
             MockDB.return_value.delete_saved_jobs.return_value = 2
-            self.api._handle_pending_delete_saved_jobs("u1", "yes")
+            self.api._handle_pending_delete_saved_jobs("u1", "yes, delete")
         self.assertIn("u1", cleared)
 
 
@@ -282,7 +338,7 @@ class TestDeleteSavedJobsExpiredWindow(unittest.TestCase):
     def test_expired_confirmation_window_returns_none(self):
         _set_pending(self.api, "u1", expired=True)
         with patch("src.rico_db.RicoDB") as MockDB:
-            result = self.api._handle_pending_delete_saved_jobs("u1", "yes")
+            result = self.api._handle_pending_delete_saved_jobs("u1", "yes, delete")
         self.assertIsNone(result)
         MockDB.return_value.delete_saved_jobs.assert_not_called()
 

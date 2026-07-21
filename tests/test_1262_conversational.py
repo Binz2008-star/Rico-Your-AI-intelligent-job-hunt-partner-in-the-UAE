@@ -193,3 +193,59 @@ class TestSaveSearchDispatch:
             result = self._call_inner("احفظ هذا البحث", recent_context=ctx)
         assert result.get("action") == "created"
         assert "[بحوثك المحفوظة](/saved-searches)" in result.get("message", "")
+
+
+# ---------------------------------------------------------------------------
+# 4. Phase 4 — strict spoken confirm for the destructive delete
+# ---------------------------------------------------------------------------
+
+class TestStrictDeleteConfirmPhrases:
+    """The Yes/No buttons are retired; execution is gated by
+    _is_delete_confirmation — literal phrases only, carrying the delete verb.
+    The full pending-flow behavior is pinned in test_delete_saved_jobs_chat.py;
+    here we pin the gate itself and its transcript parity with the prompts."""
+
+    def _gate(self, text: str) -> bool:
+        from src.rico_chat_api import RicoChatAPI
+        return RicoChatAPI._is_delete_confirmation(text)
+
+    def test_instructed_phrases_pass(self):
+        assert self._gate("yes, delete")
+        assert self._gate("Yes delete")
+        assert self._gate("نعم احذف")
+        assert self._gate("نعم أحذف")
+
+    def test_legacy_card_payload_passes(self):
+        assert self._gate("yes delete all my saved jobs")
+
+    def test_loose_affirmatives_fail(self):
+        for phrase in ("yes", "ok", "okay", "sure", "go ahead", "do it",
+                       "please", "نعم", "يلا", "اه", "طبعا", "اكيد"):
+            assert not self._gate(phrase), (
+                f"{phrase!r} must NOT confirm an irreversible delete"
+            )
+
+    def test_sentences_containing_the_phrase_fail(self):
+        # Exact-set membership, not substring: no smart interpretation.
+        assert not self._gate("yes delete my account")
+        assert not self._gate("I think yes, delete maybe?")
+
+    def test_prompts_instruct_exactly_what_the_gate_accepts(self):
+        """Transcript parity: the ask prompt (EN and AR) must contain a phrase
+        that passes the gate verbatim."""
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api.memory = MagicMock()
+        api._append_chat = MagicMock()
+
+        api._is_arabic_text = MagicMock(return_value=False)
+        en = api._intercept_unsupported_delete_mutation("u1", "delete all my saved jobs")
+        assert en["type"] == "delete_saved_jobs_confirm"
+        assert "yes, delete" in en["message"] and self._gate("yes, delete")
+
+        api._is_arabic_text = MagicMock(return_value=True)
+        ar = api._intercept_unsupported_delete_mutation("u1", "احذف جميع الوظائف المحفوظة")
+        assert ar["type"] == "delete_saved_jobs_confirm"
+        assert "نعم احذف" in ar["message"] and self._gate("نعم احذف")
