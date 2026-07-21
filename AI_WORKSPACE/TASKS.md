@@ -6690,7 +6690,7 @@ cancellation lands (a separate follow-up PR).
 Owner: Claude (agent), owner-directed (slice 4 per DEC-20260721-001 —
 "إثبات وتشديد أمان التشغيل متعدد العمال" 2026-07-21)
 Branch: claude/ricco-research-improvements-dkmhin (restarted from main e3a5780)
-Issue/PR: (opens with this branch's new PR)
+Issue/PR: #1304 (Draft; head 09b6ab6)
 
 #### Objective
 **PARTIAL HARDENING ONLY — slice 4 is NOT complete and the multi-worker
@@ -6752,20 +6752,19 @@ larger follow-up PR). Workers/instances MUST stay at 1 until then.
 - AI_WORKSPACE/TASKS.md (this entry; TASK-013 closure).
 
 #### Continuity Block
-- Current head SHA: 756694e (+ follow-up commit correcting this block and the
-  self-fence lifecycle)
+- Current head SHA: 09b6ab6
 - Status: in_review — Draft PR; slice 4 NOT complete, gate CLOSED. NO merge by
   agent, NO deploy, NO Render worker/instance change, NO LOW-1/LOW-2, NO daily
   loop (owner stop conditions). Owner may merge as PARTIAL hardening.
-- Validation already run: full tests/unit 3,447 passed; multiworker
+- Validation already run: full tests/unit 3,449 passed; multiworker
   integration 8/8 on real local Postgres 16 (fork processes, short lease);
-  ownership integration 9/9; mandatory-failclosed 11/11; py_compile OK; full
-  CI (pytest + postgres-integration + frontend + playwright + guards) green on
-  head 756694e. Fail-before demonstrated for THREE paths: mandatory→memory
-  (unit assertion), the claim insert-race (UniqueViolation on pre-ON-CONFLICT
-  code), and the post-claim partition duplicate-cascade window (the new test
-  asserts a second cascade runs).
-- Validation still required: re-run full CI on the follow-up head.
+  ownership integration 9/9; mandatory-failclosed 13/13; py_compile OK; CI 9/9
+  complete and green on 09b6ab6 (pytest + postgres-integration + frontend +
+  playwright + guards + Neon). Fail-before demonstrated for THREE paths:
+  mandatory→memory (unit assertion), the claim insert-race (UniqueViolation on
+  pre-ON-CONFLICT code), and the post-claim partition duplicate-cascade window
+  (the new test asserts a second cascade runs).
+- Validation still required: none for this partial-hardening PR.
 - Deployment: none. What IS proven safe: simultaneous claim race → one
   cascade; first-insert race fixed; dead worker → safe takeover after lease;
   late stale write refused; mandatory-mode outage BEFORE claim fails closed;
