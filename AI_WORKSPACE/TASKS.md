@@ -5639,10 +5639,10 @@ record, and verify production.
 
 ### TASK-20260721-001 — System audit: test-truth repair (thread-racing mock leak + stale pre-#354 apply tests) + dead-tool inventory
 
-Status: review
+Status: done
 Owner: Claude (agent), owner-requested ad-hoc audit
 Branch: claude/system-tools-analysis-wc4o4g
-Issue/PR: #1256 (draft)
+Issue/PR: #1256 (merged 2026-07-21, squash 6111fa21)
 
 #### Objective
 Audit the system for errors, designed-but-never-executed tools, and anomalies;
@@ -5683,13 +5683,13 @@ owner-gated recommendations.
 
 #### Continuity Block
 - Task ID: TASK-20260721-001
-- GitHub issue/PR: #1256 (draft)
+- GitHub issue/PR: #1256 (merged, squash 6111fa21)
 - Branch: claude/system-tools-analysis-wc4o4g
 - Base branch: main
 - Last safe commit SHA: 48e932e8 (main tip at branch start)
-- Current head SHA: 730b154 (+ this TASKS.md registration commit)
+- Current head SHA: 6111fa21 (main after squash merge)
 - Uncommitted changes present: no
-- Status: review
+- Status: done
 - Files inspected: src/agent/** (registry, runtime, orchestrator, workflow,
   identity, coordinator), src/services/{apply_service,job_link_trust,
   source_quality,stateful_chat_adapter}.py, src/repositories/{audit_repo,
@@ -5705,14 +5705,14 @@ owner-gated recommendations.
   src/linkedin_demo.py, src/test_refactored_system.py — import-broken dead
   code; removal is destructive and owner-gated (handoff F1/F2)
 - What is complete: audit (F1–F5), both test repairs, handoff, PR #1256 CI green
-- What is incomplete: owner decisions — (a) merge #1256, (b) dead-stack
-  removal PR, (c) add focused test set to qa-tests.yml
+- What is incomplete: owner decisions still open — (a) dead-stack removal PR,
+  (b) add focused test set to qa-tests.yml (#1256 itself is merged)
 - Known blockers: none
-- Validation already run: pytest focused set x5 → 228/228 each; PR CI on
-  730b154 → all 9 checks green
+- Validation already run: pytest focused set x5 → 228/228 each; PR CI 9/9
+  green on both heads 730b154 and 5d294d8; merged as 6111fa21 (owner-approved)
 - Validation still required: none for this scope
 - Deployment/CI/Neon/Vercel state to check next: none — no deploy involved
-- Next exact action: owner reviews and merges draft PR #1256
+- Next exact action: none for this task; open owner decisions above
 - Stop condition: any request to delete the dead stack or change CI scope →
   stop, that is a separate owner-approved PR
 - Rollback plan: revert PR #1256 (test + docs only; no deploy/migration/env)
