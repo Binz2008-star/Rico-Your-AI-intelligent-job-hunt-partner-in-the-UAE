@@ -6481,3 +6481,52 @@ production save outage) to the remaining core paths:
 - Rollback plan: revert the PR
 - Next exact action: open draft PR, CI green, owner review/merge
 - Stop condition: any CI regression → fix before merge
+
+### TASK-20260721-011 — Launch-readiness reconciliation report (owner: "هل المنتج جاهز للنشر")
+
+Status: review
+Owner: Claude (agent), owner-directed ("تفضل" 2026-07-21)
+Branch: claude/system-tools-analysis-wc4o4g (restarted from main 0b94c55)
+Issue/PR: set at PR open
+
+#### Objective
+Answer the owner's launch-readiness question with a fact-based control-plane
+reconciliation: live snapshot, LAUNCH_EXECUTION_PLAN gate status, full open-PR
+triage (15), route matrix, new anomalies, and a numbered owner decision list.
+
+#### Deliverable
+AI_WORKSPACE/LAUNCH_READINESS_2026-07-21.md — verdict: LIVE STABLE OPEN BETA,
+not commercially launch-ready; blockers are owner decisions (billing activation,
+rotation confirmation, PR dispositions, invitations, owner smoke, legal
+sign-off), not missing code.
+
+#### Notable findings recorded
+- Duplicate migration number 050 in main (chat_operations + user_avatars)
+- #1177 would collide on migration 047 (analytics_events already in main)
+- PROJECT_STATUS snapshot still 2026-07-18 — superseded for readiness purposes
+  by this report; refresh to ride the next control-plane docs PR
+
+#### Continuity Block
+- Task ID: TASK-20260721-011
+- GitHub issue/PR: set at PR open
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: 0b94c55
+- Current head SHA: set at commit
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files changed: AI_WORKSPACE/LAUNCH_READINESS_2026-07-21.md (new);
+  AI_WORKSPACE/TASKS.md — this entry
+- Files intentionally not touched: PROJECT_STATUS.md (avoid racing parallel
+  active sessions; refresh recommended as its own docs PR)
+- What is complete: report compiled from live evidence (main 0b94c55, fresh
+  PR list, deploy-run gating, routes, migrations, decisions/tasks ledgers)
+- What is incomplete: owner decisions 1–8 in the report's §6
+- Known blockers: none for this docs task
+- Validation already run: n/a — docs-only
+- Validation still required: none (docs-only per merge policy)
+- Next exact action: owner reads §6 and issues decisions; agent executes on
+  request (e.g. migration renumber, ACTIVE security merges, PROJECT_STATUS refresh)
+- Stop condition: any conflict between this report and live GitHub state →
+  live state wins; report to owner
+- Rollback plan: revert the PR (single new doc + ledger entry)
