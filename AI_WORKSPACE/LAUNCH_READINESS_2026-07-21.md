@@ -102,6 +102,13 @@ Classification per plan Phase 0: ACTIVE / REVIEW / HOLD / STALE-CLOSE / REFERENC
    `050_user_avatars.sql`. Alphabetical application order keeps them working
    today, but the numbering invariant is broken — renumber one (e.g. 051) in a
    small PR before any further migration lands.
+   **RESOLVED (owner-directed, 2026-07-21 — TASK-20260721-012):**
+   `chat_operations` renumbered to **051** (user_avatars kept 050: earlier in
+   git history AND created earlier in production per pg_class oid order —
+   both tables verified present in production via read-only Neon check).
+   All code/test/drift-guard/ledger references updated, and a permanent
+   uniqueness test (`test_migration_numbers_are_unique`) now blocks this
+   collision class in CI.
 2. **#1177 migration collision** (047) — recorded in triage above.
 3. `PROJECT_STATUS.md` "Verified control snapshot" still dated 2026-07-18 —
    this report supplies the current reconciliation; a PROJECT_STATUS refresh
@@ -118,7 +125,7 @@ Classification per plan Phase 0: ACTIVE / REVIEW / HOLD / STALE-CLOSE / REFERENC
    price presentation (USD 21.50 authoritative vs AED 79 display).
 3. **Disposition the PR board** per §3 (approve ACTIVE security merges #1295,
    #1206, #1138, #1129; close STALE; keep HOLDs frozen).
-4. **Renumber the duplicate 050 migration** (small PR — can be done on request).
+4. ~~**Renumber the duplicate 050 migration**~~ — DONE (TASK-20260721-012: chat_operations → 051; uniqueness now CI-enforced).
 5. **Invitations workflow** go/no-go (Phase 5 of the plan — not started).
 6. **Owner end-to-end smoke** on the live product (signup → onboarding → CV →
    search → apply-link → subscription page, EN + AR) — record the evidence.

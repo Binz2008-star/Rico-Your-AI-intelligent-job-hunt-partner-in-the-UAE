@@ -6273,16 +6273,19 @@ ID collision with the profile-avatar task entry above.
 Move chat job-search operation ownership from the in-process
 process-nonce model (safe ONLY single-instance/single-worker — pinned by
 test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker)
-to an atomic shared Postgres store: table `chat_operations` (migration 050),
+to an atomic shared Postgres store: table `chat_operations` (migration 051 —
+originally numbered 050; renumbered 2026-07-21 to resolve the duplicate-050
+collision with 050_user_avatars, see TASK-20260721-012),
 row-lock-serialized claims, heartbeat-lease liveness (renewal thread; missed
 lease = proof of executor death), SQL-enforced attempt fence, and an
 atomic-claim refusal path so a losing racer never runs a duplicate provider
-cascade. Deploy-order safe: until migration 050 is applied the code falls
+cascade. Deploy-order safe: until the migration is applied the code falls
 back to the legacy in-process behavior unchanged (single-worker invariant
 still stands; scaling stays blocked until slice-4 validation).
 
 #### Scope
-- migrations/050_chat_operations.sql (new, idempotent, additive)
+- migrations/051_chat_operations.sql (new, idempotent, additive; filename
+  was 050_chat_operations.sql at merge time — renumbered by TASK-20260721-012)
 - src/repositories/chat_operations_repo.py (new)
 - src/services/operation_state.py (dual backend: postgres + memory fallback;
   RICO_OPERATION_STORE=auto|postgres|memory, default auto)
@@ -6308,20 +6311,18 @@ still stands; scaling stays blocked until slice-4 validation).
   test_jotform_webhook_to_chat_flow.py::TestPublicChatWithEmail (reproduced
   identically on pre-change code via git stash — unrelated to this task)
 - Validation still required: CI pytest + postgres-integration on the PR head
-- Deployment: code-first is a NO-OP in production behavior until the owner
-  applies migration 050 to Neon (preview-branch validation per
-  OPERATING_RULES, then production apply); after apply, the Postgres store
-  activates automatically. Worker/instance count is NOT changed by this task.
+- Deployment: RESOLVED 2026-07-21 — read-only Neon verification found
+  `chat_operations` PRESENT in production (13 columns / 2 indexes, matching
+  the migration exactly), so the Postgres store is ACTIVE in production.
+  Worker/instance count remains unchanged (slice-4 gate).
 - Known blockers: none
 - Risks: DB unavailability falls back to legacy semantics (documented;
   logged); heartbeat thread is daemon + self-terminating on terminal/supersede
 - Rollback plan: revert the PR (fallback path is the current production
-  behavior); migration 050 may stay applied (additive) or be dropped with
+  behavior); the migration may stay applied (additive) or be dropped with
   DROP TABLE IF EXISTS chat_operations
-- Next exact action (owner): apply migration 050 to Neon (preview branch →
-  production per OPERATING_RULES) to activate the Postgres store; until
-  then production runs the unchanged legacy fallback (one warning log line
-  per search). Workers/instances stay at 1 until slice-4 validation.
+- Next exact action: none — store verified active in production
+  (2026-07-21). Workers/instances stay at 1 until slice-4 validation.
 - Stop condition: met — merged and deployed; no further writes on this task
 
 
@@ -6389,7 +6390,9 @@ language follows the user's message language.
 
 Status: done — #1293 merged 2026-07-21 (squash 2ed5cee7); "Deploy Render
 Backend" for 2ed5cee7 = success (/version-gated). Operations section stays
-available=false honestly until the owner applies migration 050.
+available=false honestly while the store is unreachable. (Follow-up fact,
+2026-07-21: `chat_operations` verified PRESENT in production — the
+operations section is live.)
 Owner: Claude (agent), owner-directed ("تمام باشر" 2026-07-21 — slice 2 per
 DEC-20260721-001: monitoring for errors, costs, stuck operations)
 Branch: claude/ricco-research-improvements-dkmhin (restarted from main b8379d7)
@@ -6424,8 +6427,9 @@ Explicitly deferred (later increments): per-token AI spend counters
   tests/unit 3,434 passed after the app.py router registration
 - Validation still required: CI pytest + postgres-integration on PR head
 - Deployment: additive read-only endpoint; no schema change, no migration;
-  operations section reports available=false honestly until migration 050
-  is applied (store fallback), then lights up automatically
+  operations section reports available=false honestly whenever the store
+  is unreachable, and is live now that `chat_operations` is verified
+  present in production (2026-07-21)
 - Known blockers: none
 - Risks: none material — endpoint is read-only, admin-gated, value-free
   (booleans/counts/enum strings; no key values, user identifiers, or query
@@ -6530,3 +6534,57 @@ sign-off), not missing code.
 - Stop condition: any conflict between this report and live GitHub state →
   live state wins; report to owner
 - Rollback plan: revert the PR (single new doc + ledger entry)
+
+### TASK-20260721-012 — Resolve duplicate migration number 050 (chat_operations → 051)
+
+Status: in_review
+Owner: Claude (agent), owner-directed (explicit dedupe instruction 2026-07-21)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from main fdb4ff3)
+Issue/PR: (opens with this branch's new PR)
+
+#### Objective
+`main` carried TWO migrations numbered 050: `050_user_avatars.sql` (#1279)
+and `050_chat_operations.sql` (#1285) — the collision slipped in when the
+slice-1 branch was rebased over the freshly-merged avatar PR. Read-only Neon
+verification (2026-07-21, project robenjob / old-frog-88141983):
+- Production (br-restless-cherry-amq6wj7o): BOTH tables present;
+  user_avatars created earlier (pg_class oid 3235840 < 3276800);
+  chat_operations matches the migration exactly (13 columns / 2 indexes).
+- Newest preview branch (br-sparkling-bonus-amk5cbd9): both present.
+Decision per the owner's rule (keep 050 for the applied-or-earlier one):
+**user_avatars keeps 050** (earlier in git history AND in DB creation
+order); **chat_operations renumbered to 051** (first free number — full
+migrations/ scan confirmed 051 unused). Since both are already applied and
+the drift guard checks OBJECTS not filenames, the rename has zero database
+effect; no SQL was executed anywhere.
+
+#### Scope
+- migrations/050_chat_operations.sql → migrations/051_chat_operations.sql
+  (git mv + header renumbered)
+- scripts/check_migration_drift.py (chat_operations signature entries 050→051
+  + collision-history comment; user_avatars keeps its 050 entries)
+- src/services/operation_state.py, src/repositories/chat_operations_repo.py,
+  src/api/routers/admin_ops.py (docstring references 050→051)
+- tests/integration/test_operation_ownership_postgres.py (migration path +
+  docstring), tests/unit/test_admin_ops_overview.py,
+  tests/unit/test_operation_duplicate_guard.py (references 050→051)
+- tests/unit/test_migration_drift_checks.py (+ test_migration_numbers_are_unique
+  — permanent CI guard making this collision class unmergeable)
+- AI_WORKSPACE/TASKS.md (-008/-009 references renumbered + stale
+  "activation pending migration apply" claims corrected: store verified
+  ACTIVE in production), AI_WORKSPACE/LAUNCH_READINESS_2026-07-21.md
+  (anomaly §5.1 and decision-list item 4 marked resolved)
+
+#### Continuity Block
+- Current head SHA: (set at commit)
+- Status: in_review — Draft PR; NO merge, NO SQL apply, NO deploy, NO
+  slice-4 work (owner's explicit stop conditions)
+- Validation already run: (recorded at commit — drift checks, duplicate
+  guard, admin ops, ownership integration on local Postgres)
+- Validation still required: full CI on the PR head
+- Deployment: none — rename + docs; zero database effect (both tables
+  already applied; drift guard checks objects, not filenames)
+- Known blockers: none
+- Risks: none material; rollback = revert the PR (pure rename/docs)
+- Next exact action: owner reviews the Draft PR and its Neon-state matrix
+- Stop condition: STOP after PR is ready and CI is green (owner directive)

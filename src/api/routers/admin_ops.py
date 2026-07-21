@@ -41,7 +41,7 @@ def _operations_section() -> Dict[str, Any]:
             **data,
         }
     except RepoUnavailable as exc:
-        # Pre-migration-050 or DB trouble: the store (and therefore this
+        # Pre-migration-051 or DB trouble: the store (and therefore this
         # view) is on the legacy in-process fallback — say so honestly
         # instead of returning zeros that look like a healthy quiet system.
         return {

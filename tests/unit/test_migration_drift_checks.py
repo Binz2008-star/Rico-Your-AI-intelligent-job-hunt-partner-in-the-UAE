@@ -57,3 +57,23 @@ def test_every_migration_file_is_covered():
         "object to scripts/check_migration_drift.py (or, if comment-only, to "
         "_NO_OBJECT_MIGRATIONS here)."
     )
+
+
+def test_migration_numbers_are_unique():
+    """No two migration files may share a sequence number.
+
+    Regression for the 2026-07-21 duplicate: 050_user_avatars.sql (#1279) and
+    050_chat_operations.sql (#1285) landed in parallel with the same number
+    and CI stayed green — the apply order became ambiguous and every doc that
+    said "apply migration 050" pointed at two different files. Resolved by
+    renumbering chat_operations to 051; this test makes the collision class
+    impossible to merge again."""
+    from collections import Counter
+
+    numbers = Counter(p.name[:3] for p in _MIGRATIONS_DIR.glob("*.sql"))
+    duplicates = {n: c for n, c in numbers.items() if c > 1}
+    assert not duplicates, (
+        f"duplicate migration number(s) {duplicates}: every migrations/*.sql "
+        "must have a unique 3-digit prefix — renumber the newer file to the "
+        "first free number and update its references."
+    )

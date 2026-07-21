@@ -6,7 +6,7 @@ Pins the contract of GET /api/v1/admin/ops/overview:
   2. read-only snapshot with four sections (operations / job_providers /
      ai_provider / chat_api);
   3. the operations section is HONEST about store degradation: when the
-     shared store is unavailable (pre-migration-050 or DB outage) it reports
+     shared store is unavailable (pre-migration-051 or DB outage) it reports
      available=False + memory-fallback instead of healthy-looking zeros;
   4. the ai_provider section is an explicit allowlist of booleans + the
      provider name — future report fields can never leak through it.

@@ -106,11 +106,14 @@ CHECKS: list[tuple[str, str, object]] = [
     ("049", "index", "uq_whatsapp_sub_requests_user_pending"),
     ("048", "index", "idx_rico_chat_user_session_created"),
     # Atomic shared operation-ownership store (DEC-20260721-001 slice 1).
-    # Additive and deploy-order safe: until 050 is applied the code falls
-    # back to the legacy in-process ownership (single-worker invariant
-    # unchanged); the Postgres store activates once the table exists.
-    ("050", "table", "chat_operations"),
-    ("050", "index", "idx_chat_operations_user_latest"),
+    # Renumbered 050→051 (2026-07-21) to resolve the duplicate-050 collision
+    # with 050_user_avatars — user_avatars kept 050 (earlier in git history
+    # AND created earlier in production per pg_class oid order). Additive and
+    # deploy-order safe: until 051 is applied the code falls back to the
+    # legacy in-process ownership; the Postgres store activates once the
+    # table exists (verified present in production 2026-07-21, read-only).
+    ("051", "table", "chat_operations"),
+    ("051", "index", "idx_chat_operations_user_latest"),
 ]
 
 
