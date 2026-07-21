@@ -6230,3 +6230,31 @@ production default; both faces are artifact faces). The authenticated
 - Known pre-existing issue (NOT from this PR): dev-only hydration warning for the theme-toggle sun/moon icon when a guest has rico-theme=light stored (icon depends on client-only theme state; predates this change)
 - Next exact action: owner review of the Draft PR
 - Rollback plan: revert the PR — presentation-only diff
+
+### TASK-20260721-007 — Profile avatar + measured performance slice (post-design program)
+
+Status: done (both merged and live)
+Owner: Claude (agent) / owner approvals in-session
+
+#### Delivered
+1. Profile avatar (#1279, squash f6c0d84): /api/v1/user/avatar GET/POST/DELETE,
+   dedicated user_avatars table (migration 050 — APPLIED to production Neon and
+   verified via to_regclass BEFORE merge), ProfileAvatar hero UI with client-side
+   downscale; drift-check signature added. Render deploy for f6c0d84: success
+   (SHA-gated).
+2. Perf slice 1 (#1282, squash 902c820): Arabic font families preload:false;
+   dead global IBM Plex Sans moved route-scoped to the design gallery.
+   Lighthouse 12 mobile: landing 66→90 (LCP 5.1→3.6s); guest /command 72→80
+   (LCP 10.3→5.4s, font bytes 950→552 KB).
+3. Perf slice 2 (JS split of react-markdown) — implemented, MEASURED, REJECTED:
+   route JS 87.5→43 KB but LCP 5.4→~9s across three clean-server runs (the
+   welcome message is the LCP element; the lazy swap delays its final paint).
+   Fully reverted; no PR. Recorded so the next optimizer doesn't repeat it.
+4. Chat-quality branch #1278 closed as superseded by #1277 (deeper root-cause:
+   hardcoded Gulf-dialect runtime rule); its superior deterministic pieces were
+   harvested into main by the owner-side follow-up (0665312f).
+
+#### Production verification (this task's closure)
+- Render: deploy-render success on 0665312f (latest backend-relevant main).
+- SMOKE-1197 + Delivery-Smoke: dispatched on main — results recorded in the
+  session report.
