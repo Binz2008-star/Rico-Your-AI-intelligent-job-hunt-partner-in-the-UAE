@@ -420,6 +420,72 @@ class TestEndpoints:
         assert r.status_code == 404
 
 
+class TestShouldOfferScheduledSearch:
+    """The contextual offer is per-user and scenario-gated: only an
+    authenticated user WITHOUT an existing schedule ever sees it."""
+
+    def test_public_identity_never_offered(self):
+        assert sss.should_offer_scheduled_search("public-session-x") is False
+        assert sss.should_offer_scheduled_search("") is False
+        assert sss.should_offer_scheduled_search("e-" + "a" * 40) is False
+
+    def test_user_with_schedule_not_offered(self):
+        with patch.object(sss, "get_user_schedules",
+                          return_value=[{"id": "1", "query": "q", "schedule": {"enabled": True}}]):
+            assert sss.should_offer_scheduled_search("alice@rico.ai") is False
+
+    def test_user_without_schedule_is_offered(self):
+        with patch.object(sss, "get_user_schedules", return_value=[]):
+            assert sss.should_offer_scheduled_search("alice@rico.ai") is True
+
+    def test_lookup_failure_fails_quiet(self):
+        with patch.object(sss, "get_user_schedules", side_effect=RuntimeError("db down")):
+            assert sss.should_offer_scheduled_search("alice@rico.ai") is False
+
+
+class TestConversationalOffer:
+    """The daily-search offer is a SENTENCE in Rico's own words (adjacent-roles
+    idiom) — no buttons. Present only when the caller established eligibility;
+    the suggested reply phrase must parse via the deterministic
+    scheduled_search_create intent so acceptance can never become a one-shot
+    search."""
+
+    _EN_PHRASE = "search these jobs daily"
+    _AR_PHRASE = "ابحث يوميًا عن هذه الوظائف"
+
+    def _build(self, *, offer: bool, arabic: bool = False, matches=None):
+        from src.rico_chat_api import RicoChatAPI
+
+        if matches is None:
+            matches = [{"title": "A", "company": "B", "link": "https://j.example/1"}]
+        return RicoChatAPI._build_role_search_message(
+            None, "HSE Manager", "", "", matches, None,
+            arabic=arabic, offer_scheduled_search=offer,
+        )
+
+    def test_offer_appends_english_sentence(self):
+        msg = self._build(offer=True)
+        assert self._EN_PHRASE in msg
+
+    def test_offer_appends_arabic_sentence(self):
+        msg = self._build(offer=True, arabic=True)
+        assert self._AR_PHRASE in msg
+
+    def test_no_offer_message_unchanged(self):
+        assert self._EN_PHRASE not in self._build(offer=False)
+        assert self._AR_PHRASE not in self._build(offer=False, arabic=True)
+
+    def test_no_matches_never_offers(self):
+        assert self._EN_PHRASE not in self._build(offer=True, matches=[])
+
+    def test_suggested_phrases_parse_as_scheduled_search(self):
+        """Cross-pin: what Rico tells the user to say MUST create a schedule."""
+        en = sss.parse_scheduled_search_command(self._EN_PHRASE)
+        ar = sss.parse_scheduled_search_command(self._AR_PHRASE)
+        assert en is not None and en["cadence"] == "daily"
+        assert ar is not None and ar["cadence"] == "daily"
+
+
 class TestSetScheduleEnabledById:
     def test_toggles_only_the_matching_schedule(self):
         items = [
