@@ -43,7 +43,7 @@ report needed a refresh rather than a straight carry-over.
 | **MEDIUM-1** — urllib redirect/scheme handling (Bandit B310) | reproducible | `src/job_providers.py:234,341` · `src/jsearch_client.py:251` · `src/api/routers/paddle_billing.py:478` · `scripts/followup_smoke.py:51` (5 sites; same set and lines as prior) |
 | **MEDIUM-2** — CSP is Report-Only + `unsafe-inline` | reproducible | `apps/web/next.config.js:64` emits `Content-Security-Policy-Report-Only` (not enforcing); `unsafe-inline` at `:20` (`script-src`) and `:21` (`style-src`) |
 | **MEDIUM-3** — rate-limit coverage gaps | reproducible, **partially improved** | `src/api/rate_limit.py:85` `default_limits=[]` (undecorated route = unlimited). `onboarding.py` = **0** `@limiter.limit`; `user.py` (`/me`) = **0**. **Changed since prior report:** `subscription.py` now carries **1** `@limiter.limit` (was 0) — partial coverage, not full. |
-| **MEDIUM-4** — container runs as root + `--reload` | **accepted — defense-in-depth, non-production** (see Remediation status) | `Dockerfile.backend:22` `CMD [... uvicorn ... "--reload"]`; **0** `USER` directives → root. NOT the production runtime: Render runs `render.yaml` `runtime: python` (no `--reload`, non-root); the image feeds only `docker-compose` local dev, where `--reload` + the bind mount are intended. |
+| **MEDIUM-4** — container runs as root + `--reload` | **accepted — defense-in-depth, non-production** (see Remediation status) | `Dockerfile.backend:22` `CMD [... uvicorn ... "--reload"]`; **0** `USER` directives → root. NOT the production runtime: production uses Render's platform-managed native Python runtime (`render.yaml` `runtime: python`), not this image, and the configured start command has no `--reload`. (Process UID is Render-platform-managed and not asserted here — no repo evidence pins it.) The image feeds only `docker-compose` local dev, where `--reload` + the bind mount are intended. |
 
 ## LOW — all reproducible (two moved paths, one narrowed scope)
 
@@ -92,10 +92,12 @@ remediation since then:
   code change.
 - **MEDIUM-3** (rate-limit coverage) — **remediated.** `@limiter.limit(LIMIT_PROFILE)`
   added to `/me`, `/onboarding/submit`, `/onboarding/status` (PR #1283, merged).
-- **MEDIUM-2** (CSP Report-Only) — **remediated.** Flipped to enforcing
-  `Content-Security-Policy`, dropped the moot script hashes; dev-only `unsafe-eval`
-  + HMR ws gated on `NODE_ENV`. Dropping `unsafe-inline` via nonce-based CSP is a
-  tracked follow-up (PR #1292, merged).
+- **MEDIUM-2** (CSP Report-Only + `unsafe-inline`) — **partially remediated —
+  enforcement fixed; `unsafe-inline` deferred/tracked.** Flipped to enforcing
+  `Content-Security-Policy` and dropped the moot script hashes (dev-only
+  `unsafe-eval` + HMR ws gated on `NODE_ENV`). `script-src`/`style-src` still
+  carry `'unsafe-inline'`; removing it needs nonce-based CSP via Next.js
+  middleware — a tracked follow-up (PR #1292, merged).
 - **MEDIUM-4** (Docker root + `--reload`) — **accepted — defense-in-depth on a
   non-production surface.** The image is not the production runtime (Render runs
   native `runtime: python` from `render.yaml`; `Dockerfile.backend` feeds only
