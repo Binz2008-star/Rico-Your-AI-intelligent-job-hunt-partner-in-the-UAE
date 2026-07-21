@@ -1,4 +1,4 @@
--- Migration 050: chat_operations — atomic shared ownership store for chat
+-- Migration 051: chat_operations — atomic shared ownership store for chat
 -- job-search operations (DEC-20260721-001, stabilization slice 1).
 --
 -- Why: duplicate-execution ownership currently lives in process memory with a

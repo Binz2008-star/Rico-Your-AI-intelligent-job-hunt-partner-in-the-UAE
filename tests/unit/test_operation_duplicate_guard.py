@@ -429,7 +429,7 @@ def test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiwork
     """Documents WHY the MEMORY FALLBACK keeps multi-worker/multi-instance
     BLOCKED: a concurrently-ALIVE second process is indistinguishable from a
     dead one under nonce ownership, so it would release ownership and run a
-    duplicate cascade. The shared Postgres store (migration 050) closes
+    duplicate cascade. The shared Postgres store (migration 051) closes
     exactly this hole — proven by test_concurrent_worker_cannot_steal_live_operation
     in tests/integration/test_operation_ownership_postgres.py — but while the
     fallback can activate (DB outage / migration not applied), the

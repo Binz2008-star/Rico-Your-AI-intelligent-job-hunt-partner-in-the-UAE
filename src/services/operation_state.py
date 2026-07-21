@@ -2,7 +2,7 @@
 
 Two backends, selected per call (DEC-20260721-001 stabilization slice 1):
 
-* **postgres** — the atomic shared store (`chat_operations`, migration 050,
+* **postgres** — the atomic shared store (`chat_operations`, migration 051,
   src/repositories/chat_operations_repo.py). Claims are serialized by a row
   lock and liveness is a **heartbeat lease**: the claiming execution renews
   `heartbeat_at` from a dedicated daemon thread, so a lease that stops being
@@ -17,7 +17,7 @@ Two backends, selected per call (DEC-20260721-001 stabilization slice 1):
   and one uvicorn worker: a concurrently-alive second process is
   indistinguishable from a dead one, so it would release ownership and run
   a duplicate provider cascade. While this fallback can be active (DB outage
-  or migration 050 not applied), the single-worker production invariant in
+  or migration 051 not applied), the single-worker production invariant in
   AI_WORKSPACE/OPERATING_RULES.md still stands. Scaling remains BLOCKED
   until the multi-worker validation slice (DEC-20260721-001 slice 4) passes
   on the postgres backend.
