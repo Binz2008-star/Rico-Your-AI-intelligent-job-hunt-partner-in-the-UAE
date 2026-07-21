@@ -6387,7 +6387,9 @@ language follows the user's message language.
 
 ### TASK-20260721-009 — Admin operations observability endpoint (stabilization slice 2)
 
-Status: in_review
+Status: done — #1293 merged 2026-07-21 (squash 2ed5cee7); "Deploy Render
+Backend" for 2ed5cee7 = success (/version-gated). Operations section stays
+available=false honestly until the owner applies migration 050.
 Owner: Claude (agent), owner-directed ("تمام باشر" 2026-07-21 — slice 2 per
 DEC-20260721-001: monitoring for errors, costs, stuck operations)
 Branch: claude/ricco-research-improvements-dkmhin (restarted from main b8379d7)
@@ -6432,3 +6434,50 @@ Explicitly deferred (later increments): per-token AI spend counters
 - Next exact action: open draft PR, CI green, owner review/merge
 - Stop condition: any CI regression → fix before merge; no alerting/cron
   surface in this slice
+
+### TASK-20260721-010 — Core-path real-wrapper contract tests (stabilization slice 3)
+
+Status: in_review
+Owner: Claude (agent), owner-directed ("افعل ما تراه مناسباً" 2026-07-21 —
+slice 3 per DEC-20260721-001: pin chat/search/save/apply contracts with
+tests that run through the REAL paths)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from latest main)
+Issue/PR: (opens with this branch's new PR)
+
+#### Objective
+Generalize the #1166→#1169 lesson (endpoint tests that patch the router's
+own wrapper hide router↔wrapper kwarg drift — the class that shipped the
+production save outage) to the remaining core paths:
+- Chat: POST /api/v1/rico/chat runs the REAL chat_service.send_message with
+  a capturing spy only one layer down (_legacy_send_message) — proves
+  ctx/message/operation_id/language bind and SURVIVE router → service →
+  dispatch (the transport contract the duplicate-execution guard depends
+  on), plus JWT-only identity and 401 on the real path.
+- Save/apply actions: POST /api/v1/actions/run executes the REAL
+  agent_runtime.handle_action with ZERO runtime mocks, using the runtime's
+  own dry_run log-only mode — proves the router's handle_action(...) kwarg
+  contract, ActionResult→ActionResponse serialization, unknown-action
+  controlled refusal (200 ok=false, not 500), the _approved-sentinel strip,
+  and 401 unauthenticated.
+- Search: deep chain already runs real in test_operation_duplicate_guard +
+  the postgres ownership suite; this slice pins the transport contract that
+  feeds it (documented in the test module docstring).
+
+#### Scope
+- tests/test_core_path_real_wrappers.py (new — 9 tests; TEST-ONLY change,
+  no src/ modification)
+- AI_WORKSPACE/TASKS.md (this entry; -009 closure)
+
+#### Continuity Block
+- Current head SHA: (set at commit)
+- Status: in_review — PR opens as draft; merge is owner-gated
+- Validation already run: new file 9/9; adjacent regression
+  (test_rico_routes + test_agent_runtime + test_agent +
+  test_jwt_user_isolation) 331 passed
+- Validation still required: CI pytest on PR head
+- Deployment: none — test-only; no runtime, schema, or config change
+- Known blockers: none
+- Risks: none material (test-only)
+- Rollback plan: revert the PR
+- Next exact action: open draft PR, CI green, owner review/merge
+- Stop condition: any CI regression → fix before merge
