@@ -277,6 +277,54 @@ def update_status(
         conn.close()
 
 
+def stats(*, lease_seconds: int) -> dict[str, Any]:
+    """Aggregate operations-health counters for admin observability
+    (DEC-20260721-001 slice 2). Read-only; one indexed scan.
+
+    "stuck" = running/timed_out whose heartbeat lease already expired but
+    which no read path has visited yet to transition to `expired` — the
+    exact population an operator needs to see."""
+    conn = _connect()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT "
+                    "count(*) FILTER (WHERE status = 'running') AS running, "
+                    "count(*) FILTER (WHERE status = 'timed_out') AS timed_out, "
+                    "count(*) FILTER (WHERE status IN ('running','timed_out') "
+                    "  AND heartbeat_at < now() - make_interval(secs => %(lease)s)) AS stuck_lease_dead, "
+                    "count(*) FILTER (WHERE status = 'completed' "
+                    "  AND created_at > now() - interval '24 hours') AS completed_24h, "
+                    "count(*) FILTER (WHERE status = 'failed' "
+                    "  AND created_at > now() - interval '24 hours') AS failed_24h, "
+                    "count(*) FILTER (WHERE status = 'expired' "
+                    "  AND created_at > now() - interval '24 hours') AS expired_24h, "
+                    "count(*) FILTER (WHERE created_at > now() - interval '24 hours') AS started_24h, "
+                    "count(*) FILTER (WHERE created_at > now() - interval '7 days') AS started_7d, "
+                    "EXTRACT(EPOCH FROM (now() - min(created_at) "
+                    "  FILTER (WHERE status IN ('running','timed_out')))) AS oldest_active_age_seconds "
+                    "FROM chat_operations",
+                    {"lease": lease_seconds},
+                )
+                row = cur.fetchone()
+                keys = (
+                    "running", "timed_out", "stuck_lease_dead", "completed_24h",
+                    "failed_24h", "expired_24h", "started_24h", "started_7d",
+                    "oldest_active_age_seconds",
+                )
+                out = dict(zip(keys, row))
+                if out["oldest_active_age_seconds"] is not None:
+                    out["oldest_active_age_seconds"] = float(out["oldest_active_age_seconds"])
+                return out
+    except RepoUnavailable:
+        raise
+    except Exception as exc:
+        _reraise_infra(exc)
+    finally:
+        conn.close()
+
+
 def expire_if_lease_dead(
     *, user_id: str, operation_id: str, lease_seconds: int
 ) -> dict[str, Any] | None:

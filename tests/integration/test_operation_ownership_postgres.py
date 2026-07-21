@@ -234,6 +234,27 @@ def test_restart_after_terminal_bumps_attempt():
     assert _row(_OP)[1:3] == ("running", 2)
 
 
+def test_stats_reports_stuck_and_recent_operations():
+    """Slice-2 observability: stats() counts the lease-dead-but-unexpired
+    population (stuck) and recent volume/failure counters from real rows."""
+    ops.start_job_search_operation(
+        user_id=_USER, role_or_query="hse manager", operation_id=_OP
+    )
+    ops.start_job_search_operation(
+        user_id=_OTHER_USER, role_or_query="accountant", operation_id="op_ownership_it_0002"
+    )
+    ops.mark_failed(_OTHER_USER, "op_ownership_it_0002", error="provider down", attempt=1)
+    _set_heartbeat_age(_OP, ops.LEASE_SECONDS + 30)  # stuck: lease-dead, not yet expired
+
+    data = repo.stats(lease_seconds=ops.LEASE_SECONDS)
+    assert data["running"] == 1
+    assert data["stuck_lease_dead"] == 1
+    assert data["failed_24h"] == 1
+    assert data["started_24h"] == 2
+    assert data["started_7d"] == 2
+    assert data["oldest_active_age_seconds"] is not None
+
+
 def test_latest_lookup_reads_from_the_shared_store():
     ops.start_job_search_operation(
         user_id=_USER, role_or_query="hse manager", operation_id=_OP
