@@ -47,6 +47,25 @@ PASSWORD = "Smoke#Del-" + pysecrets.token_hex(8)
 jar = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
+# The production auth cookie is domain-scoped to .ricohunt.com (auth.py
+# _cookie_domain). This smoke talks to the backend host directly, so the
+# cookiejar cannot be trusted to round-trip it — same failure #1264 fixed in
+# session_smoke_1197.py. Capture the raw Set-Cookie at login and replay it as
+# an explicit Cookie header on every authenticated call (incl. the SSE step).
+_auth_cookie: str | None = None
+
+
+def _capture_auth_cookie(resp) -> None:
+    global _auth_cookie
+    try:
+        set_cookies = resp.headers.get_all("Set-Cookie") or []
+    except Exception:
+        return
+    for sc in set_cookies:
+        first = sc.split(";", 1)[0].strip()
+        if first.startswith("access_token=") and len(first) > len("access_token=") + 8:
+            _auth_cookie = first
+
 results: list[tuple[str, bool, str]] = []
 
 
@@ -58,12 +77,15 @@ def record(name: str, ok: bool, evidence: str) -> None:
 def call(method: str, url: str, body: dict | None = None, timeout: int = 90):
     req = urllib.request.Request(url, method=method)
     req.add_header("User-Agent", "rico-delivery-smoke/1.0")
+    if _auth_cookie:
+        req.add_header("Cookie", _auth_cookie)
     data = None
     if body is not None:
         data = json.dumps(body).encode()
         req.add_header("Content-Type", "application/json")
     try:
         with opener.open(req, data=data, timeout=timeout) as resp:
+            _capture_auth_cookie(resp)
             return resp.status, dict(resp.headers), resp.read()
     except urllib.error.HTTPError as e:
         return e.code, dict(e.headers), e.read()
@@ -120,7 +142,11 @@ def main() -> int:
         # the same connection succeed? Together these separate a smoke-side
         # cookie-transport fault from a stream-route-specific auth fault.
         has_token = any(c.name == "access_token" for c in jar)
-        record("jar holds access_token before stream", has_token, f"cookies={[c.name for c in jar]}")
+        record(
+            "auth cookie present before stream",
+            bool(_auth_cookie) or has_token,
+            f"explicit={'yes' if _auth_cookie else 'no'} jar_cookies={[c.name for c in jar]}",
+        )
         code, _, body = call(
             "POST",
             f"{BACKEND}/api/v1/rico/chat",
@@ -131,6 +157,9 @@ def main() -> int:
 
         # ── 4. authenticated SSE stream ───────────────────────────────────
         req = urllib.request.Request(f"{BACKEND}/api/v1/rico/chat/stream", method="POST")
+        req.add_header("User-Agent", "rico-delivery-smoke/1.0")
+        if _auth_cookie:
+            req.add_header("Cookie", _auth_cookie)
         req.add_header("Content-Type", "application/json")
         req.add_header("Accept", "text/event-stream")
         payload = json.dumps({"message": "SMOKE-DELIVERY ping"}).encode()
