@@ -870,8 +870,6 @@ export const translations = {
     cmdMatchGaps: "HONEST GAPS",
     cmdMatchPicks: "RICO PICKS",
     cmdMatchFit: "FIT",
-    cmdMatchSave: "Save",
-    cmdMatchSkip: "Skip",
     // Accessibility format strings — interpolated at render time so screen-reader
     // labels are localized (not hardcoded EN). `cmdJobAtCompany` is the shared
     // "{title} at {company}" join reused as {job} inside the aria templates.
@@ -2234,8 +2232,6 @@ export const translations = {
     cmdMatchGaps: "ثغرات بصراحة",
     cmdMatchPicks: "اختيار ريكو",
     cmdMatchFit: "ملاءمة",
-    cmdMatchSave: "احفظ",
-    cmdMatchSkip: "تخطَّ",
     // نصوص تنسيق لإمكانية الوصول — تُدرج وقت العرض كي تكون تسميات قارئ الشاشة
     // مترجمة (وليست إنجليزية ثابتة). ‏cmdJobAtCompany هو الوصلة المشتركة
     // "{title} لدى {company}" المُعاد استخدامها كـ {job} داخل قوالب aria.

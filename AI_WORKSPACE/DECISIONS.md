@@ -135,6 +135,44 @@ Execution rules attached to this decision: the research's chapters are NOT
 converted into tasks in bulk; work proceeds as one small PR at a time; the
 first execution track after work is allowed is **system stabilization** —
 not WhatsApp, not agents, not employers.
+### DEC-20260721-002 — #1262 phase 6 closed: the Refine drawer stays a structured UI action (no slot-filling dialogue)
+
+Status: accepted
+Date: 2026-07-21
+Owner: Roben (owner approval of Claude's recommendation, 2026-07-21)
+Related task: Issue #1262 (conversation-first migration), phases 1–5 merged
+
+#### Context
+
+Issue #1262 retired every card/button family for speech (phases 1–5:
+scheduled-search offer, navigation pointers, suggestion offers, strict spoken
+delete confirm, spoken job actions). Phase 6 proposed replacing the last
+structured artifact — the Refine drawer on job-match responses — with a
+slot-filling dialogue. The drawer exists for a P1 safety reason: it collects
+role+city as STRUCTURED input and only the final composed natural-language
+query ever reaches the intent router, so UI wording can never be parsed as a
+job role (the original P1 bug). It is also two clicks with no discoverability
+problem.
+
+#### Decision
+
+The Refine drawer stays structural. Phase 6 is closed by owner decision
+without code change; the conversation-first migration is complete with the
+drawer as the one deliberate structured exception (alongside real external
+affordances: apply/source links, fallback links, and runtime safety artifacts
+such as permission requests).
+
+#### Consequences
+
+- Positive: the P1 guarantee (no UI wording through the LLM/intent router)
+  stays enforced by construction; no regression risk in the refine flow.
+- Negative/trade-off: one non-conversational artifact remains on job-match
+  responses; revisit only if the owner asks for a conversational refine.
+
+#### Follow-up
+
+- [x] Phase 7 cleanup: dead `cmdMatchSave`/`cmdMatchSkip` translation keys
+      removed; closure handoff written; Issue #1262 closed.
 
 ### DEC-20260720-001 — Free plan AI messages become a daily allowance (10/day, UTC calendar day) with a reset countdown, replacing the 50-per-month cap
 
