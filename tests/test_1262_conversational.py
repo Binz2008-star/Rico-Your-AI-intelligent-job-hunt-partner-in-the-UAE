@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -387,3 +388,129 @@ class TestSpokenActionHowTo:
         assert _legacy(self._AR_SAVE) == "save_job"
         assert _SKIP_ORDINAL_RE.match(self._EN_SKIP)
         assert _SKIP_ORDINAL_AR_RE.match(self._AR_SKIP)
+
+
+# ---------------------------------------------------------------------------
+# 6. Steps-to-apply (owner directive 2026-07-21 «كي أضغط وأقدم»)
+# ---------------------------------------------------------------------------
+
+class TestSearchTopTrackWithAlternatives:
+    """A generic "find me jobs" with a multi-track profile searches the most
+    relevant track immediately and SPEAKS the alternatives — never blocks on
+    a which-track menu. Track choice is per-user data at request time."""
+
+    _CANDIDATES = ["Environmental Manager", "Compliance Manager", "ESG Manager"]
+
+    def _api(self, recent_context=None):
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api.memory = MagicMock()
+        api._append_chat = MagicMock()
+        api._get_recent_context = MagicMock(return_value=recent_context or {})
+        api._target_role_search_response = MagicMock(
+            return_value={"message": "RESULTS", "matches": [{"title": "x"}]}
+        )
+        return api
+
+    def test_searches_first_track_and_speaks_alternatives(self):
+        api = self._api()
+        resp = api._search_top_track_with_alternatives(
+            "u@test.com", list(self._CANDIDATES), SimpleNamespace(), "find me jobs"
+        )
+        chosen = api._target_role_search_response.call_args.args[1]
+        assert chosen == "Environmental Manager"
+        assert "Compliance Manager" in resp["message"]
+        assert "ESG Manager" in resp["message"]
+        assert resp["track_alternatives"] == ["Compliance Manager", "ESG Manager"]
+
+    def test_recent_track_preferred_case_insensitive(self):
+        api = self._api(recent_context={"recent_search_role": "esg manager"})
+        api._search_top_track_with_alternatives(
+            "u@test.com", list(self._CANDIDATES), SimpleNamespace(), "find me jobs"
+        )
+        assert api._target_role_search_response.call_args.args[1] == "ESG Manager"
+
+    def test_arabic_ask_gets_arabic_note(self):
+        api = self._api()
+        resp = api._search_top_track_with_alternatives(
+            "u@test.com", list(self._CANDIDATES), SimpleNamespace(), "ابحثلي عن وظائف"
+        )
+        assert "بدأت بمسارك" in resp["message"]
+
+    def test_single_candidate_adds_no_note(self):
+        api = self._api()
+        resp = api._search_top_track_with_alternatives(
+            "u@test.com", ["Environmental Manager"], SimpleNamespace(), "find me jobs"
+        )
+        assert resp["message"] == "RESULTS"
+        assert "track_alternatives" not in resp
+
+
+class TestAdjacentRoleAutoHop:
+    """When live results exist but the title floor drops them ALL, the search
+    takes exactly ONE hop to the closest adjacent role and returns its real
+    matches with an honest relabel — never a dead-end zero when the taxonomy
+    knows a near neighbour."""
+
+    def _profile(self):
+        return SimpleNamespace(
+            user_id="u@test.com", has_cv=True, name="Test",
+            target_roles=["ESG Manager"], skills=["iso 14001"],
+            certifications=[], years_experience=8, industries=[],
+            preferred_cities=["Dubai"], current_role="Manager",
+            nationality="", citizenship="", deal_breakers=[],
+        )
+
+    def _api(self, monkeypatch, fetch_side_effects):
+        from src.jsearch_client import FetchResult
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api.memory = MagicMock()
+        api._persist = False
+        api._append_chat = MagicMock()
+        api._get_recent_messages = MagicMock(return_value=[])
+        api._get_recent_context = MagicMock(return_value={})
+        api._store_recent_context = MagicMock()
+        api._current_operation_id = None
+
+        monkeypatch.setattr(
+            api, "_search_jsearch_meta",
+            MagicMock(side_effect=[FetchResult(items=it) for it in fetch_side_effects]),
+        )
+        monkeypatch.setattr(api, "_enrich_with_role_intelligence", lambda *a, **k: None)
+        monkeypatch.setattr(
+            api, "_begin_job_search_operation",
+            lambda _u, _r: {"operation_id": f"op-{_r}", "attempt": 1},
+        )
+        monkeypatch.setattr("src.rico_chat_api.mark_completed", lambda *a, **k: None)
+        monkeypatch.setattr("src.rico_chat_api.mark_failed", lambda *a, **k: None)
+        monkeypatch.setattr(api, "_closest_adjacent_role", lambda _u, _r, _p: "HSE Manager")
+        return api
+
+    # Passes the coarse integrity gate (weak single "environment") but fails
+    # the strict 3-layer title floor for "ESG Manager" — the exact production
+    # shape that used to end in an honest-but-dead-end zero.
+    _OFF_TITLE = [{"title": "Environment Officer", "company": "ACME", "location": "Dubai, AE",
+                   "link": "https://j.example/1", "job_apply_link": "https://j.example/1"}]
+    _HSE = [{"title": "HSE Manager", "company": "Gulf Co", "location": "Dubai, AE",
+             "link": "https://j.example/2", "job_apply_link": "https://j.example/2"}]
+
+    def test_floored_zero_hops_once_and_relabels_honestly(self, monkeypatch):
+        api = self._api(monkeypatch, [self._OFF_TITLE, self._HSE])
+        resp = api._target_role_search_response("u@test.com", "ESG Manager", self._profile())
+        assert resp.get("adjacent_hop_from") == "ESG Manager"
+        assert resp.get("matches"), "hop results must be presented"
+        assert "HSE Manager" in resp.get("message", "")
+        assert "closest role" in resp.get("message", "") or "الأقرب" in resp.get("message", "")
+        # Exactly two searches: the floored original + ONE hop.
+        assert api._search_jsearch_meta.call_count == 2
+
+    def test_hop_never_recurses(self, monkeypatch):
+        # Both searches floor out — the guard stops after one hop.
+        api = self._api(monkeypatch, [self._OFF_TITLE, self._OFF_TITLE])
+        resp = api._target_role_search_response("u@test.com", "ESG Manager", self._profile())
+        assert api._search_jsearch_meta.call_count == 2
+        assert not resp.get("matches")
+        assert "adjacent_hop_from" not in resp

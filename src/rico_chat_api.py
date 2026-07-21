@@ -3403,6 +3403,73 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", suggestion_resp.get("message", ""))
         return suggestion_resp
 
+    def _closest_adjacent_role(self, user_id: str, search_role: str, profile: Any) -> str:
+        """Top adjacent role for a title-floored search — the same local
+        role-intelligence engine as enrichment, scored against THIS user's
+        profile at request time. Returns "" when no recommendation exists."""
+        try:
+            from src.rico_agent import RicoProfile
+
+            rico_profile = RicoProfile(
+                user_id=user_id,
+                skills=self._as_list(self._profile_value(profile, "skills")) or [],
+                years_experience=self._profile_value(profile, "years_experience"),
+                preferred_cities=self._as_list(self._profile_value(profile, "preferred_cities")) or [],
+                industries=self._as_list(self._profile_value(profile, "industries")) or [],
+            )
+            adjacent = recommend_adjacent_roles(rico_profile, search_role, limit=1)
+            return adjacent[0].canonical_role if adjacent else ""
+        except Exception:
+            return ""
+
+    def _search_top_track_with_alternatives(
+        self,
+        user_id: str,
+        candidates: list[str],
+        profile: Any,
+        message: str,
+        *,
+        location: str = "",
+        employment_type_filter: str = "",
+    ) -> dict[str, Any]:
+        """Search-first for a multi-track profile (owner directive 2026-07-21):
+        instead of blocking on a which-track menu, search the most relevant
+        track NOW and speak the alternatives. Track choice is per-user data at
+        request time — the track the user searched last (when still saved),
+        else their first saved track. Works identically for every user; users
+        without candidates never reach here (callers gate on 'ambiguous')."""
+        arabic = self._is_arabic_text(message)
+        chosen = candidates[0]
+        try:
+            _ctx = self._get_recent_context(user_id) or {}
+            _recent = str(_ctx.get("recent_search_role") or "").strip().lower()
+            if _recent:
+                for c in candidates:
+                    if c.strip().lower() == _recent:
+                        chosen = c
+                        break
+        except Exception:
+            pass
+        others = [c for c in candidates if c != chosen][:3]
+
+        response = self._target_role_search_response(
+            user_id, chosen, profile,
+            location=location,
+            employment_type_filter=employment_type_filter,
+            from_saved_profile=True,
+        )
+        if others:
+            others_text = "، ".join(others) if arabic else ", ".join(others)
+            note = (
+                f"بدأت بمسارك **{chosen}** — ولأي مسار آخر قل مثلاً: «ابحث عن {others[0]}». مساراتك الأخرى: {others_text}."
+                if arabic else
+                f"Starting with your **{chosen}** track — for another track just say e.g. \"search {others[0]} jobs\". Your other tracks: {others_text}."
+            )
+            response["message"] = (response.get("message") or "") + "\n\n" + note
+            self._append_chat(user_id, "assistant", note)
+            response["track_alternatives"] = others
+        return response
+
     def _profile_role_choice_response(
         self, candidates: list[str], message: str = ""
     ) -> dict[str, Any]:
@@ -6462,6 +6529,7 @@ class RicoChatAPI:
         from_saved_profile: bool = False,
         location: str = "",
         employment_type_filter: str = "",
+        _adjacent_hop: bool = False,
     ) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
         # Detect user's language from the most recent user turn.  This lets all
@@ -6807,6 +6875,51 @@ class RicoChatAPI:
                 "relevance_floor: role=%r dropped all %d off-title results op=%s",
                 search_role, len(all_matches), operation_id,
             )
+
+        # Adjacent-role auto-hop (owner directive 2026-07-21 «كي أضغط وأقدم»):
+        # live results existed but the title floor dropped them ALL — instead
+        # of stopping at the honest zero, take exactly ONE hop to the closest
+        # adjacent role (role-intelligence taxonomy scored against THIS user's
+        # profile at request time — no hardcoded roles) and, when it yields
+        # real matches, return them with an honest relabel. The hop runs the
+        # full pipeline (integrity gate + floor included), never hops again
+        # (_adjacent_hop guard), and the outer operation is completed with its
+        # own truthful zero. Operation state is saved/cleared around the
+        # nested call so the atomic store mints a fresh operation for the hop
+        # instead of refusing a re-claim of the live outer one.
+        if _off_title_only and not _adjacent_hop:
+            _hop_role = self._closest_adjacent_role(user_id, search_role, profile)
+            if _hop_role and _hop_role.strip().lower() != (search_role or "").strip().lower():
+                _saved_op_id = self._current_operation_id
+                _saved_attempt = getattr(self, "_current_operation_attempt", None)
+                self._current_operation_id = None
+                try:
+                    _hop_resp = self._target_role_search_response(
+                        user_id, _hop_role, profile,
+                        location=location,
+                        employment_type_filter=employment_type_filter,
+                        _adjacent_hop=True,
+                    )
+                except Exception:
+                    logger.warning(
+                        "adjacent_hop_failed from=%r to=%r", search_role, _hop_role,
+                        exc_info=True,
+                    )
+                    _hop_resp = None
+                finally:
+                    self._current_operation_id = _saved_op_id
+                    self._current_operation_attempt = _saved_attempt
+                if _hop_resp and _hop_resp.get("matches"):
+                    _hop_note = (
+                        f"لم أجد نتائج قوية بمسمى **{search_role}** حرفياً، فبحثت في الدور الأقرب لملفك — **{_hop_role}**:"
+                        if arabic else
+                        f"No strong hits for **{search_role}** by exact title, so I searched the closest role to your profile — **{_hop_role}**:"
+                    )
+                    _hop_resp["message"] = _hop_note + "\n\n" + (_hop_resp.get("message") or "")
+                    _hop_resp["adjacent_hop_from"] = search_role
+                    self._append_chat(user_id, "assistant", _hop_resp["message"])
+                    mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
+                    return _hop_resp
 
         # Server-side city filter (multi-city). When the user named 2+ cities the
         # provider query was widened to UAE scope (one call), so restrict the
@@ -10169,9 +10282,15 @@ class RicoChatAPI:
                 profile, excluded_roles=_pm_excluded
             )
             if _pm_status == "ambiguous":
-                _pm_choice = self._profile_role_choice_response(_pm_candidates, message)
-                self._append_chat(user_id, "assistant", _pm_choice["message"])
-                return self._finalize(_pm_choice, self.SOURCE_KEYWORD, profile=profile)
+                # Search-first (owner directive 2026-07-21): search the user's
+                # most relevant track immediately and speak the alternatives —
+                # never block a generic "find me jobs" on a which-track menu.
+                _pm_response = self._search_top_track_with_alternatives(
+                    user_id, _pm_candidates, profile, message
+                )
+                if _pm_excluded:
+                    _pm_response["excluded_roles"] = _pm_excluded
+                return self._finalize(_pm_response, self.SOURCE_KEYWORD, profile=profile)
             if _pm_status in ("none", "stale"):
                 # Search-first: if the CV has a clear single-track suggestion list,
                 # search the top CV-evidenced role immediately with an explanatory
@@ -21300,9 +21419,12 @@ class RicoChatAPI:
             # blindly search saved target_roles[0].
             _lg_role, _lg_candidates, _lg_status = self._resolve_profile_search_role(profile)
             if _lg_status == "ambiguous":
-                _lg_choice = self._profile_role_choice_response(_lg_candidates, role_text)
-                self._append_chat(user_id, "assistant", _lg_choice["message"])
-                return _lg_choice
+                # Search-first (owner directive 2026-07-21): same idiom as the
+                # profile-match branch — search the top track, speak the rest.
+                return self._search_top_track_with_alternatives(
+                    user_id, _lg_candidates, profile, role_text,
+                    location=location, employment_type_filter=employment_type_filter,
+                )
             if _lg_status in ("none", "stale"):
                 # Search-first: if the CV has a clear single-track suggestion
                 # list, search immediately with an explanatory note — or, for
