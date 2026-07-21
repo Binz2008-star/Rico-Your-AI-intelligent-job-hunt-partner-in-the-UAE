@@ -193,6 +193,20 @@ class TestLanguageAndStylePolicy:
         assert "NEVER substitute a similar entity" in prompt
         assert "concise" in prompt
 
+    def test_dialect_never_guessed_from_identity(self):
+        # #1278 harvest: a dialect must never be inferred from the user's
+        # name, nationality, or location.
+        prompt = get_rico_system_prompt()
+        assert "nationality" in prompt
+        assert "يا فلان" in prompt  # no vocatives
+        assert "No emojis in professional content" in prompt
+
+    def test_confusable_entity_pair_anchored(self):
+        # The concrete production confusion: Dubai Islamic Bank vs ADIB.
+        prompt = get_rico_system_prompt()
+        assert "بنك دبي الإسلامي" in prompt
+        assert "ADIB" in prompt
+
     def test_runtime_no_longer_hardcodes_gulf_arabic(self):
         # The runtime must delegate to get_language_rule — grep-level pin on
         # the retired hardcoded directive.
