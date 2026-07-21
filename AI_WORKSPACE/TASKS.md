@@ -5636,3 +5636,83 @@ record, and verify production.
 - Base branch: main
 - Last safe commit SHA: 6c4879b2 (main tip at closure)
 - Status: done
+
+### TASK-20260721-001 — System audit: test-truth repair (thread-racing mock leak + stale pre-#354 apply tests) + dead-tool inventory
+
+Status: review
+Owner: Claude (agent), owner-requested ad-hoc audit
+Branch: claude/system-tools-analysis-wc4o4g
+Issue/PR: #1256 (draft)
+
+#### Objective
+Audit the system for errors, designed-but-never-executed tools, and anomalies;
+repair only what is test/docs-safe; record everything destructive as
+owner-gated recommendations.
+
+#### Context
+- Relevant files: tests/test_jotform_webhook.py, tests/test_agent.py,
+  src/agent/workflow/coordinator.py, src/agent/identity/resolver.py,
+  src/agent/coordinator.py, src/services/stateful_chat_adapter.py,
+  .github/workflows/qa-tests.yml
+- Relevant docs: AI_WORKSPACE/HANDOFFS/2026-07-21-system-audit-dead-tools-import-breakage.md
+  (full findings F1–F5), AI_WORKSPACE/RICO_CODEBASE_INVENTORY_2026_06_21.md
+- Existing behavior: production import path clean; stateful-agent stack fails
+  at import (5 never-implemented repo symbols + missing
+  WorkflowResult.confirmation_token); jotform concurrency test leaked a
+  session-wide MagicMock via thread-unsafe patch; 3 test_agent.py tests
+  asserted pre-#354 trust-gate behavior, invisible because qa-tests.yml does
+  not run that file.
+
+#### Constraints
+- Do not touch: any runtime/production code, env vars, migrations, workflows
+- No migrations unless explicitly required: none
+- Keep scope limited to: tests + AI_WORKSPACE docs
+
+#### Acceptance criteria
+- [x] Concurrency test patches applied once from the main thread (leak eliminated)
+- [x] 3 apply-link tests pin the current #354 trust-gate contract
+- [x] Focused 5-file set deterministic: 5 consecutive runs, 228/228
+- [x] Audit handoff records dead stack + broken scripts + CI coverage gap
+
+#### Required verification
+- [x] Unit tests: focused set 228/228 x5 local; PR CI pytest/postgres/playwright/frontend/guards all green on 730b154
+- [ ] Integration tests: covered by PR CI (postgres-integration green)
+- [ ] Frontend build: green in PR CI (no frontend files changed)
+- [ ] Local smoke: n/a — test-only + docs
+- [ ] Production/deploy smoke if applicable: n/a — nothing deployable changed
+
+#### Continuity Block
+- Task ID: TASK-20260721-001
+- GitHub issue/PR: #1256 (draft)
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: 48e932e8 (main tip at branch start)
+- Current head SHA: 730b154 (+ this TASKS.md registration commit)
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: src/agent/** (registry, runtime, orchestrator, workflow,
+  identity, coordinator), src/services/{apply_service,job_link_trust,
+  source_quality,stateful_chat_adapter}.py, src/repositories/{audit_repo,
+  learning_repo,onboarding_repo}.py, .github/workflows/qa-tests.yml,
+  tests/{test_agent,test_jotform_webhook,test_onboarding_state,
+  test_354_apply_link_verification}.py
+- Files changed: tests/test_jotform_webhook.py — main-thread patches;
+  tests/test_agent.py — re-pin 3 tests to #354 contract;
+  AI_WORKSPACE/HANDOFFS/2026-07-21-system-audit-dead-tools-import-breakage.md — audit record;
+  AI_WORKSPACE/TASKS.md — this entry
+- Files intentionally not touched: src/agent/identity/, src/agent/workflow/,
+  src/agent/coordinator.py, src/services/stateful_chat_adapter.py,
+  src/linkedin_demo.py, src/test_refactored_system.py — import-broken dead
+  code; removal is destructive and owner-gated (handoff F1/F2)
+- What is complete: audit (F1–F5), both test repairs, handoff, PR #1256 CI green
+- What is incomplete: owner decisions — (a) merge #1256, (b) dead-stack
+  removal PR, (c) add focused test set to qa-tests.yml
+- Known blockers: none
+- Validation already run: pytest focused set x5 → 228/228 each; PR CI on
+  730b154 → all 9 checks green
+- Validation still required: none for this scope
+- Deployment/CI/Neon/Vercel state to check next: none — no deploy involved
+- Next exact action: owner reviews and merges draft PR #1256
+- Stop condition: any request to delete the dead stack or change CI scope →
+  stop, that is a separate owner-approved PR
+- Rollback plan: revert PR #1256 (test + docs only; no deploy/migration/env)
