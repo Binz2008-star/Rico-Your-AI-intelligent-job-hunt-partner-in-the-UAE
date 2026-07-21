@@ -88,4 +88,23 @@ ledger:
       - "tests/test_development_supervisor_contract.py"
     tests: "python -m pytest tests/test_development_supervisor_contract.py -q -> 43 passed (incl. push-gate fail-before matrix in temp repos with fake gh, launcher fetch-fail exit 6 functional); bash -n both scripts OK; py_compile OK; --smoke PASSED exit 0 (CLI accepts --tools/--strict-mcp-config/--setting-sources); --smoke-perms PASSED exit 0 (safe token surfaced, denied token not leaked, denied checksum unchanged); live gate fail-closed demo (dirty tree -> exit 6, nothing pushed)"
     next_action: "Owner review / merge decision on PR #1305; full CI must be green on the final head; nothing further scheduled by the session."
+  - session: "claude/rico-development-supervisor-sfdh8w"
+    date: "2026-07-22"
+    role: "WRITER"
+    result: "COMPLETE"
+    task: "TASK-20260721-015 — round-3 hardening per owner review of 085ce9e: gh-pr-create push bypass closed (raw gh pr create denied; gate --create-pr proves origin/<branch> == local HEAD then creates with explicit --head, no push side effect); IDLE made behaviorally true (logs default outside the repo via XDG state dir; byte-for-byte untouched-tree functional test)"
+    branch: "claude/rico-development-supervisor-sfdh8w"
+    base_sha: "0e0497baff9d18e37d09c2410ceb7e372c011dce"
+    validated_head_sha: "00cc657dc60d041140661bffdf75452adc4ca547"
+    correction_cycles: 0
+    owner_gate: "none"
+    files_changed:
+      - ".claude/skills/rico-development-supervisor/SKILL.md"
+      - "AI_WORKSPACE/DEVELOPMENT_LOOP_STATE.md"
+      - "AI_WORKSPACE/TASKS.md"
+      - "scripts/rico-development-loop.sh"
+      - "scripts/supervisor_push_gate.py"
+      - "tests/test_development_supervisor_contract.py"
+    tests: "python -m pytest tests/test_development_supervisor_contract.py -q -> 48 passed (adds create-pr refusal matrix with gh-never-invoked + remote-untouched proofs, clean-create zero-push proof via ls-remote before/after, gh-pr-create denial guards, outside-repo log-default guard, behavioral IDLE untouched-tree test); bash -n + py_compile OK; --smoke PASSED exit 0; --smoke-perms PASSED exit 0; logs confirmed under XDG state dir outside the repo"
+    next_action: "Owner review / merge decision on PR #1305; full CI must be green on the final head; nothing further scheduled by the session."
 ```
