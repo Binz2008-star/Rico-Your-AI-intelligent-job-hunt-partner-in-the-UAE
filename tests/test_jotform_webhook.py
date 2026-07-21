@@ -451,19 +451,23 @@ class TestSubmissionIdempotency:
         db.register_webhook_event.side_effect = register_side_effect
 
         def _worker():
-            with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
-                 patch.dict(os.environ, self._env(), clear=True), \
-                 patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
-                results.append(
-                    handle_jotform_submission(
-                        {"submissionID": "sub-concurrent-1", "email": "u@x.com", "consent": True}
-                    )
+            results.append(
+                handle_jotform_submission(
+                    {"submissionID": "sub-concurrent-1", "email": "u@x.com", "consent": True}
                 )
+            )
 
-        t1 = threading.Thread(target=_worker)
-        t2 = threading.Thread(target=_worker)
-        t1.start(); t2.start()
-        t1.join(); t2.join()
+        # Patches MUST be applied once from the main thread. unittest.mock.patch
+        # is not thread-safe: two overlapping patches of the same attribute from
+        # two threads can save each other's MagicMock as the "original", leaking
+        # a mock into the module for the rest of the pytest session.
+        with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
+             patch.dict(os.environ, self._env(), clear=True), \
+             patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
+            t1 = threading.Thread(target=_worker)
+            t2 = threading.Thread(target=_worker)
+            t1.start(); t2.start()
+            t1.join(); t2.join()
 
         statuses = {r["status"] for r in results}
         assert "ok" in statuses

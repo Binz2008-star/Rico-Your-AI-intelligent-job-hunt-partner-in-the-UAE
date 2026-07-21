@@ -577,53 +577,59 @@ class TestOrchestratorNoArgTools:
 class TestApplyServiceIndeedMethod:
     """apply_service must call IndeedApplyEngine.apply_one(), not .apply()."""
 
-    def test_apply_to_job_uses_apply_link_when_link_missing(self, monkeypatch):
+    # Since the #354 Phase-0 trust gate, apply_to_job only accepts URLs that
+    # pass src/services/job_link_trust.resolve_trusted_apply_url: the URL must
+    # live in external_url/alt_url/source_url AND the record must carry a
+    # trusted provenance marker (persisted_job_id / source_job_id / provider +
+    # source_backed). Legacy keys (apply_link, nested job_data.job_apply_link,
+    # alt_link) without provenance are rejected before any engine runs.
+
+    def test_apply_to_job_trusted_indeed_url_reaches_engine(self, monkeypatch):
         monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
         from src.services import apply_service
 
+        url = "https://www.indeed.com/viewjob?jk=a1b2c3d4e5f60789"
         with patch.object(
             apply_service,
             "_apply_indeed",
-            return_value={"status": "success", "message": "ok", "job_id": "jk=abc"},
+            return_value={"status": "success", "message": "ok", "job_id": "jk=a1b2c3d4e5f60789"},
         ) as mock_apply:
             result = apply_service.apply_to_job({
-                "apply_link": "https://indeed.com/viewjob?jk=abc",
+                "external_url": url,
+                "source_job_id": "jsearch-123",
                 "title": "HSE Manager",
                 "company": "ACME",
             }, approved=True)
 
         assert result["status"] == "success"
         mock_apply.assert_called_once()
-        assert mock_apply.call_args.args[0]["link"] == "https://indeed.com/viewjob?jk=abc"
+        assert mock_apply.call_args.args[0]["link"] == url
 
-    def test_apply_to_job_uses_nested_job_apply_link(self, monkeypatch):
+    def test_apply_to_job_rejects_untrusted_nested_legacy_link(self, monkeypatch):
         monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
         from src.services import apply_service
 
-        with patch.object(
-            apply_service,
-            "_apply_indeed",
-            return_value={"status": "success", "message": "ok", "job_id": "jk=nested"},
-        ) as mock_apply:
+        with patch.object(apply_service, "_apply_indeed") as mock_apply:
             result = apply_service.apply_to_job({
                 "title": "HSE Manager",
                 "job_data": {"job_apply_link": "https://indeed.com/viewjob?jk=nested"},
             }, approved=True)
 
-        assert result["status"] == "success"
-        assert mock_apply.call_args.args[0]["link"] == "https://indeed.com/viewjob?jk=nested"
+        assert result["status"] == "error"
+        mock_apply.assert_not_called()
 
-    def test_apply_to_job_manual_message_uses_alt_link(self, monkeypatch):
+    def test_apply_to_job_manual_message_uses_trusted_alt_url(self, monkeypatch):
         monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
         from src.services import apply_service
 
         result = apply_service.apply_to_job({
             "title": "HSE Manager",
-            "alt_link": "https://jobs.example.com/posting/123",
+            "alt_url": "https://careers.acme-corp.com/posting/123",
+            "source_job_id": "jsearch-456",
         }, approved=True)
 
         assert result["status"] == "manual_required"
-        assert "https://jobs.example.com/posting/123" in result["message"]
+        assert "https://careers.acme-corp.com/posting/123" in result["message"]
 
     def test_indeed_apply_calls_apply_one(self):
         from src.services import apply_service
