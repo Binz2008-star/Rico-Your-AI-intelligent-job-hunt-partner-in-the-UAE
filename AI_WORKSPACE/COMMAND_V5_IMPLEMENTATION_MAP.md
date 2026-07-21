@@ -25,8 +25,8 @@ for small text (same policy the evidence package used).
 | Epic | Command Workspace v5 implementation (this document) |
 | Milestone | v5 visual system live on production workspace routes without behavior regressions |
 | Phases | PR 1 foundation → PR 2 shell → PR 3 live modes → PR 4 message/action styling → PR 5 motion + final QA |
-| PR (current) | PR 1 merged (#1242 `984edfa`) · PR 2 merged (#1243 `7b40b70`) · PR 3 = #1271 Draft, pivoted 2026-07-21 to apply the owner-supplied artifact design (shell + theme + live modes; supersedes the rebuild palette) · PRs 4–5 not started |
-| Task | `AI_WORKSPACE/TASKS.md` → TASK-20260720-004 (done) · TASK-20260720-005 (done) · TASK-20260721-005 (review) |
+| PR (current) | PR 1 merged (#1242 `984edfa`) · PR 2 merged (#1243 `7b40b70`) · PR 3 merged (#1271 `4b33709` — artifact design applied: theme + shell + live modes) · PR 4 in review (`claude/command-v5-pr4-chat-surface`: public /command artifact chrome via full channel remap) · PR 5 not started |
+| Task | `AI_WORKSPACE/TASKS.md` → TASK-20260720-004 (done) · TASK-20260720-005 (done) · TASK-20260721-005 (done, merged #1271) · TASK-20260721-006 (review) |
 
 ## Artifact → production map (exact)
 

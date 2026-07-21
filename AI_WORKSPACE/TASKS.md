@@ -6182,3 +6182,51 @@ Review the Arabic strings used by Atelier/command surfaces (`translations.ts` an
 - Next exact action: owner review and merge
 - Stop condition: owner request for copy revisions or CI failure
 - Rollback plan: revert PR #1276; pure copy changes, no state or API effects
+
+### TASK-20260721-006 — Command artifact design PR 4: public /command chat surface
+
+Status: review (Draft PR from branch claude/command-v5-pr4-chat-surface)
+Owner: Claude (agent) / owner review
+Branch: claude/command-v5-pr4-chat-surface
+Issue/PR: PR — public /command artifact chrome (opened from this task)
+
+#### Objective
+Extend the merged artifact design (#1271) to the PUBLIC /command guest
+surface. Technique: the repo's established channel-variable remap
+(AtelierCardScope precedent) applied at the guest chrome root —
+`publicCommandArtifactVars()` remaps every channel token (bg/surface/gold/
+text tiers/aura + the Atelier editorial layer) to the artifact workspace
+palettes, following the existing global light/dark toggle (dark stays the
+production default; both faces are artifact faces). The authenticated
+/command already repainted via #1271's WORKSPACE_THEME swap.
+
+#### Constraints
+- Do not touch: chat behavior, streaming, attachments, safety, session flow,
+  auth gating, translation keys, testids.
+- Keep scope limited to: presentation (channel remap + literal color-class
+  swaps: navy-on-gold labels → white-on-sun (AA 4.85), amber glow literals
+  removed, MobileCommandHeader drawer literals → channel tokens).
+
+#### Acceptance criteria
+- [x] Guest /command wears the artifact palette in BOTH themes with zero markup/behavior change
+- [x] Sun-button labels AA (white on sun ≥4.85; fixes the pre-existing dark-on-sun user bubble post-#1271)
+- [x] Mobile drawer follows the artifact palette (no hardcoded navy)
+- [x] All existing behavior contracts green without weakening
+
+#### Required verification
+- [x] Unit tests: vitest 854/854
+- [x] Frontend build: PASS; lint identical to main baseline (0 new findings)
+- [x] Local smoke: Playwright single-shell + mobile-usability 18/18; guest light/dark/mobile/drawer screenshots reviewed
+- [ ] Production/deploy smoke if applicable: after merge via Vercel auto-deploy
+
+#### Continuity Block
+- Task ID: TASK-20260721-006
+- GitHub issue/PR: PR — public /command artifact chrome
+- Branch: claude/command-v5-pr4-chat-surface
+- Base branch: main (4b33709)
+- Current head SHA: (set at PR open)
+- Status: review
+- Files changed: app/command/page.tsx (public chrome remap + label fixes), components/command/CommandStates.tsx (publicCommandArtifactVars), components/command/MobileCommandHeader.tsx (drawer literals → channel tokens), components/command/CommandComposer.tsx + CommandMessages.tsx (send button / user bubble labels white-on-sun), AI_WORKSPACE sync
+- Known pre-existing issue (NOT from this PR): dev-only hydration warning for the theme-toggle sun/moon icon when a guest has rico-theme=light stored (icon depends on client-only theme state; predates this change)
+- Next exact action: owner review of the Draft PR
+- Rollback plan: revert the PR — presentation-only diff

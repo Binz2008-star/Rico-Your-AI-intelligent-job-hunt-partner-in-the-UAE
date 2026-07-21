@@ -527,7 +527,7 @@ export function CommandComposer({
                         disabled={sendDisabled}
                         aria-label={t("send")}
                         title={t("send")}
-                        className="mb-[3px] flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-full bg-gold text-[#0a0a1a] shadow-[0_2px_8px_rgba(245,166,35,0.35)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+                        className="mb-[3px] flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-full bg-gold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
                         data-testid="send-button"
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
