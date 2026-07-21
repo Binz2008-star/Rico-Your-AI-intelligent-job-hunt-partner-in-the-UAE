@@ -32,6 +32,7 @@
 import { GmailConnectionCard } from "@/components/settings/GmailConnectionCard";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { WORKSPACE_THEME, useWorkspaceTheme, type WorkspacePalette } from "@/components/workspace/theme";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
     deleteUserFile,
@@ -1187,13 +1188,7 @@ export function ProfileEditorial({
                 className="mb-6 grid grid-cols-1 items-center gap-6 rounded-[20px] p-6 animate-fade-up motion-reduce:animate-none sm:grid-cols-[auto_1fr] lg:grid-cols-[auto_1fr_auto]"
                 style={{ border: `1px solid ${palette.hair}`, background: palette.panel, boxShadow: tone.shadow }}
             >
-                <div
-                    aria-hidden
-                    className="flex h-[104px] w-[104px] items-center justify-center rounded-full text-[34px] font-medium"
-                    style={{ fontFamily: SERIF, background: tone.sunTint, color: palette.red, border: `1px solid ${palette.hair}` }}
-                >
-                    {initialsOf(profile.name)}
-                </div>
+                <ProfileAvatar initials={initialsOf(profile.name)} />
                 <div className="min-w-0">
                     <div className="mb-1 flex flex-wrap items-center gap-2.5">
                         <h1
