@@ -52,7 +52,15 @@ _RESULT_CACHE_TTL_S = int(os.getenv("JOB_RESULT_CACHE_TTL_S", str(24 * 60 * 60))
 _DEGRADED_COOLDOWN_S = int(os.getenv("PROVIDER_DEGRADED_COOLDOWN_S", str(30 * 60)))
 # How long a provider stays "degraded" after a hard quota exhaustion (longer).
 _QUOTA_COOLDOWN_S = int(os.getenv("PROVIDER_QUOTA_COOLDOWN_S", str(6 * 60 * 60)))
-_HTTP_TIMEOUT_S = int(os.getenv("JOB_PROVIDER_TIMEOUT_S", "12"))
+# Per-provider HTTP budget. 6s (was 12s): a provider that cannot answer in
+# 6 seconds is not worth the first-search wall time — production showed the
+# old serial cascade stacking 12s timeouts into 30-60s first searches.
+_HTTP_TIMEOUT_S = int(os.getenv("JOB_PROVIDER_TIMEOUT_S", "6"))
+# Hedge stagger: provider N+1 launches this many seconds after provider N
+# (or immediately once every already-launched provider finished empty).
+# The stagger IS the cost preference — the cheaper provider gets a head
+# start instead of an exclusive serial slot.
+_HEDGE_STAGGER_S = float(os.getenv("JOB_PROVIDER_HEDGE_STAGGER_S", "2.5"))
 
 _DEFAULT_UAE_LOCATION = "United Arab Emirates"
 
@@ -421,27 +429,18 @@ def search_jobs(
     aggregate_quota = False
 
     # 3-5. External providers in cost order: Jooble → Adzuna → JSearch.
-    def _consider(name: str, configured: bool, runner: Callable[[], FetchResult]) -> Optional[FetchResult]:
-        nonlocal aggregate_rate_limited, aggregate_quota
-        if not configured:
-            logger.debug("provider_skip provider=%s reason=not_configured", name)
-            return None
-        if is_degraded(name):
-            logger.info("provider_skip provider=%s reason=degraded", name)
-            return None
-        result = runner()
-        if result.rate_limited:
-            aggregate_rate_limited = True
-            mark_degraded(name, "rate_limit")
-        if result.quota_exhausted:
-            aggregate_quota = True
-            mark_degraded(name, "quota")
-        if result.items:
-            _cache_put(key, result.items)
-            logger.info("provider_hit provider=%s role=%r results=%d", name, role, len(result.items))
-            return result
-        return None
-
+    #
+    # HEDGED, not serial (perf regression fix, 2026-07-21): the old loop gave
+    # each provider an exclusive serial slot, so one slow/timing-out provider
+    # stacked its full HTTP budget in front of the others — production first
+    # searches reached 30-60s on a warm instance. Now provider N+1 launches
+    # _HEDGE_STAGGER_S after provider N (or IMMEDIATELY once every launched
+    # provider has finished empty — fast failures keep the old fast
+    # fall-through), and the first non-empty result wins. The stagger is the
+    # cost preference: the cheaper provider keeps a head start, and a later
+    # provider fires only when the cheaper one is slow or empty — the same
+    # situations the serial cascade would have fired it anyway. Worst-case
+    # wall time drops from sum(timeouts) to ~timeout + last stagger.
     cascade = [
         ("jooble", _provider_configured("jooble"), lambda: _jooble_search(role, location)),
         ("adzuna", _adzuna_enabled() and _adzuna_serves_country(country), lambda: _adzuna_search(role, location)),
@@ -454,10 +453,79 @@ def search_jobs(
     # caller's existing empty/legacy handling so behaviour is unchanged.
     configured_any = any(configured for _, configured, _ in cascade)
 
+    eligible: List[tuple] = []
     for name, configured, runner in cascade:
-        hit = _consider(name, configured, runner)
-        if hit is not None:
-            return hit
+        if not configured:
+            logger.debug("provider_skip provider=%s reason=not_configured", name)
+            continue
+        if is_degraded(name):
+            logger.info("provider_skip provider=%s reason=degraded", name)
+            continue
+        eligible.append((name, runner))
+
+    def _run_provider(name: str, runner: Callable[[], FetchResult]) -> FetchResult:
+        # Degradation marking lives in the worker thread so a provider that
+        # finishes AFTER a winner was chosen still records its rate/quota
+        # state for the cooldown registry.
+        result = runner()
+        if result.rate_limited:
+            mark_degraded(name, "rate_limit")
+        if result.quota_exhausted:
+            mark_degraded(name, "quota")
+        return result
+
+    if eligible:
+        import concurrent.futures as _futures
+
+        pool = _futures.ThreadPoolExecutor(
+            max_workers=len(eligible), thread_name_prefix="jobprov"
+        )
+        pending: Dict[Any, str] = {}
+        winner: Optional[FetchResult] = None
+        started = 0
+        t0 = time.time()
+        try:
+            while True:
+                elapsed = time.time() - t0
+                # Launch the next provider when its stagger slot arrives, or
+                # immediately when everything launched so far finished empty.
+                while started < len(eligible) and (
+                    elapsed >= started * _HEDGE_STAGGER_S or not pending
+                ):
+                    nm, rn = eligible[started]
+                    pending[pool.submit(_run_provider, nm, rn)] = nm
+                    started += 1
+                if not pending:
+                    break  # everything launched and harvested, no winner
+                done, _ = _futures.wait(
+                    list(pending), timeout=0.2,
+                    return_when=_futures.FIRST_COMPLETED,
+                )
+                for fut in done:
+                    nm = pending.pop(fut)
+                    try:
+                        result = fut.result()
+                    except Exception as exc:  # defensive: providers never raise
+                        logger.warning("provider_worker_error provider=%s err=%s", nm, type(exc).__name__)
+                        continue
+                    if result.rate_limited:
+                        aggregate_rate_limited = True
+                    if result.quota_exhausted:
+                        aggregate_quota = True
+                    if result.items and winner is None:
+                        winner = result
+                if winner is not None:
+                    break
+        finally:
+            pool.shutdown(wait=False)
+
+        if winner is not None:
+            _cache_put(key, winner.items)
+            logger.info(
+                "provider_hit provider=%s role=%r results=%d",
+                winner.provider, role, len(winner.items),
+            )
+            return winner
 
     # 6. Degraded — every configured provider was skipped, degraded, or empty.
     error = "all_providers_unavailable" if configured_any else "no_providers_configured"
