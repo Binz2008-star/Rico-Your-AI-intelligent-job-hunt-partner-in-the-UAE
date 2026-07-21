@@ -245,6 +245,7 @@ displayed.
 - [ ] Owner review (merge gate). Keep Draft — no auto-merge.
 
 #### Continuity Block
+
 - Task ID: TASK-20260719-020
 - GitHub issue/PR: #1205
 - Branch: rico/canonical-career-context
@@ -315,6 +316,7 @@ all providers.
 - [ ] Post-deploy stream smoke rides the owner's next production pass.
 
 #### Continuity Block
+
 - Task ID: TASK-20260719-019
 - GitHub issue/PR: #1210 (merged)
 - Branch: fix/sse-done-tolerant-parse
@@ -324,11 +326,11 @@ all providers.
 - Uncommitted changes present: no
 - Status: verified
 - Files changed: apps/web/lib/api.ts (normalizeStreamDoneEvent + _readSSE
-  normalization); apps/web/__tests__/chat-stream-tolerance.test.ts (new)
+  normalization); apps/web/**tests**/chat-stream-tolerance.test.ts (new)
 - Files intentionally not touched: app/command/page.tsx (consumer already
   handles a done event without response; no UI change, freeze respected)
 - What is complete: implementation + 5 parity pins + full local suite/build
-  + CI 9/9 + merged as squash `b656c79c` (2026-07-19)
+  - CI 9/9 + merged as squash `b656c79c` (2026-07-19)
 - Validation still required: production stream smoke (owner's next pass)
 - Next exact action: none — done pending the production smoke note above
 - Stop condition: n/a (merged)
@@ -534,7 +536,8 @@ Issue/PR: #1194 (merged)
 
 #### Gate (owner ruling, 2026-07-19)
 
-#1194 must be rebased clean onto current main (its TASKS entry updates
+# 1194 must be rebased clean onto current main (its TASKS entry updates
+
 THIS entry — no duplicate), reviewed, and mergeable before merge.
 **Merge is owner-only.** The Paddle LIVE gates 1–10 (real browser
 checkout smoke after deployment, per the handoff) remain mandatory
@@ -732,7 +735,7 @@ one-PR-only lift for THIS PR alone; it expires on merge/close.
   `app/command/page.tsx` transcript-step block
 - Files changed: `lib/subscriptionCta.ts` (new — pure detection/linkify);
   `components/command/SubscriptionCta.tsx` (new); `RicoReplyMarkdown.tsx`
-  + `RicoMarkdownContent.tsx` (linkify input; internal-link allowance in
+  - `RicoMarkdownContent.tsx` (linkify input; internal-link allowance in
   the public renderer); `app/command/page.tsx` (CTA wiring, 2 lines +
   imports); `__tests__/command-subscription-cta.test.tsx` (new, 12 tests);
   this ledger entry
@@ -763,7 +766,8 @@ to /command with the established one-shot `?q=` prompt pattern
 (owner ruling): no panel, no second chat surface, no second chat runtime,
 no new API surface — a link that opens the existing conversation with a
 localized, single-topic, guidance-only prompt (no execution claim; the
-#1002 "Discuss with Rico" honesty precedent).
+
+# 1002 "Discuss with Rico" honesty precedent)
 
 #### Constraints
 
@@ -827,6 +831,7 @@ render nothing; shell byte-identical to before).
 
 `MissionState.applications_sent` already carries the applications count, so
 the nav chip rides the SAME single cached fetch as the goal-mini:
+
 - no duplicate fetching — module-level 60s cache + in-flight promise dedupe
   (pinned by test: consecutive shell mounts = 1 request);
 - no weak caching — TTL cache shared across all shell consumers;
@@ -904,6 +909,7 @@ Branch: rico/relevance-floor-cross-family
 Issue/PR: #1200
 
 #### Objective
+
 Stop cross-family single words from satisfying the explicit-title relevance
 floor. Production evidence (twice on 2026-07-19, 13:26Z and 16:22Z smokes):
 a search for "HSE Manager" surfaced "Head of Trading Risk" at Bybit as its
@@ -913,6 +919,7 @@ integrity gate honestly filtered 21 off-title results and the lone survivor
 was the irrelevant one.
 
 #### Scope delivered
+
 - Shared 3-layer evidence rule in `src/job_integrity.py`
   (`role_text_supported`): phrase substring (incl. taxonomy alias phrases
   — "safety manager" → HSE Manager) OR one STRONG token OR >= 2 distinct
@@ -939,6 +946,7 @@ was the irrelevant one.
   fails identically on pristine main in this container (env artifact).
 
 #### Verification
+
 - Full-tree failure set on this branch matches the pristine-main baseline
   (30 pre-existing container artifacts; zero new) — evidence in PR body.
 - Post-merge product gate: repeat an HSE Manager production search — the
@@ -956,6 +964,7 @@ Branch: fix/chat-verification-status-contract
 Issue/PR: #1191
 
 #### Objective
+
 Align `JobMatchSchema.verification_status` with the backend's CURRENT emit
 vocabulary so a valid REST-fallback chat response is never discarded
 wholesale. Root cause (2026-07-19 16:22Z production smoke): the stale
@@ -967,6 +976,7 @@ stored the full reply. Reproduced deterministically with the stored
 production payload.
 
 #### Scope delivered
+
 - `apps/web/lib/schemas/index.ts` only: `KNOWN_VERIFICATION_STATUSES`
   (owner-required five: live_verified / login_required / rate_limited /
   aggregator_untrusted / needs_source_verification, plus still-emitted
@@ -981,6 +991,7 @@ production payload.
   #1187 operation ownership, relevance-floor (separate track).
 
 #### Verification
+
 - Full frontend suite 777 passed; build green.
 - Post-deploy gate (owner): repeat the REST-fallback smoke — the reply
   must render instead of the generic error.
@@ -1180,6 +1191,7 @@ Branch: `fix/mobile-usability-command-profile` (merged, auto-deleted)
 Issue/PR: #1171 (squash `96464b8e101b5a034470b07f359aaebc079a7d6d`)
 
 #### Delivered
+
 - CTRL+K/CTRL+J hint lines hidden below `md` on both chat audiences (desktop
   keeps them + WCAG contrast check); composer proven in-viewport at
   320/360/390 with no fixed-nav overlap; `/profile` unsaved bar compacted
@@ -1196,12 +1208,14 @@ Branch: `fix/single-shell-authenticated-command` (merged, auto-deleted)
 Issue/PR: #1170 (squash `e2ba730b497ba07687c53dba5e044194b89e60fa`)
 
 #### Root cause (owner production screenshots)
+
 - Legacy dark MobileCommandHeader + MobileBottomNav still mounted for the
   authenticated audience on `/command` mobile — the #1145 compromise
   (`WorkspaceShell variant="app"` rendered no mobile chrome, so the page kept
   the legacy pair) layered old chrome over the Atelier workspace.
 
 #### Delivered
+
 - WorkspaceShell app variant: opt-in `mobileChrome` (shared mobile bar +
   drawer, single navigation owner) + `mobileExtras` slot; authenticated
   `/command` uses it — New chat / Clear chat / Log out live in the drawer;
@@ -1220,12 +1234,14 @@ Branch: `fix/profile-save-wrapper-clear-fields` (merged, auto-deleted)
 Issue/PR: #1169 (squash `1e8615ce1137e725485e2a41d1439bf133abd039`)
 
 #### Root cause (owner production screenshot: "Profile update could not be saved")
+
 - #1166 called the router's stable patch-point wrapper with `clear_fields=`;
   the wrapper's signature didn't accept it → TypeError on EVERY save,
   swallowed by the endpoint's broad except into the generic 503. CI green
   because endpoint tests mock the wrapper symbol itself (over-mocking).
 
 #### Delivered
+
 - Wrapper accepts + forwards `clear_fields` (superset-signature invariant
   pinned in a comment); 503/500 failure surfaces carry a correlation ref
   (`(ref XXXX)`) matching the backend log line — the frontend toast already
@@ -1241,6 +1257,7 @@ Branch: `feat/profile-route-exit-dirty-protection` (merged, auto-deleted)
 Issue/PR: #1167 (squash `ae6567871beffdab4ebff3b68bee8d5d75863908`)
 
 #### Delivered
+
 - Closes the #1161 residual P1: browser Back exiting `/profile` is made
   non-destructive — per-tab, account-keyed sessionStorage draft mirror,
   restored with the unsaved bar on return; removed on save/discard;
@@ -1257,6 +1274,7 @@ Branch: `fix/profile-nullable-numeric-clear` (merged, auto-deleted)
 Issue/PR: #1166 (squash `0da1c3e23647f6b5bc5529cab8e57214b860e21c`)
 
 #### Delivered
+
 - Defect confirmed real at three layers (Pydantic omitted≡null; repo
   None-strip; mirror None-skip). Contract: omitted=unchanged, explicit
   null=clear, 0=valid, invalid=422 — for `salary_expectation_aed`,
@@ -1275,6 +1293,7 @@ Branch: `feat/profile-actionable-warnings` (merged, auto-deleted)
 Issue/PR: #1165 (squash `ab7075940a309293e6f0738fc7a6553b30ce1577`)
 
 #### Delivered
+
 - Passive `/profile` warning banner → actionable workflow on the Phase 4A
   contract: live count summary (EN/AR singular/plural), blocking-first
   severity badges, direct actions on stable field identifiers
@@ -1293,6 +1312,7 @@ Branch: `fix/profile-warning-severity-contract` (merged, auto-deleted)
 Issue/PR: #1164 (squash `63e976d0a06144c28f447ace210ccc453dd5d72f`)
 
 #### Delivered
+
 - `WarningSeverity` enum (`blocking`/`important`/`recommendation`);
   explicit `WARNING_SEVERITY_BY_CODE` + `WARNING_FIELD_BY_CODE` for all 6
   emitted matching-guardrail codes (blocking:
@@ -1312,10 +1332,12 @@ Branch: `feat/profile-true-section-navigation` (merged, auto-deleted)
 Issue/PR: #1161 (squash `76e52984d0c052dfa9528844bcbb587c032ab021`)
 
 #### Objective
+
 Replace the /profile visual-only section rail (shipped by #1152) with true
 URL-backed section navigation. Completes **Profile Phase 3**.
 
 #### Delivered
+
 - `?section=` drives a render-only-selected switch (one section at a time; the old
   IntersectionObserver scroll-spy is removed). Deep links, in-`/profile`
   back/forward, and refresh resolve from the URL; missing→about (URL left clean),
@@ -1330,6 +1352,7 @@ URL-backed section navigation. Completes **Profile Phase 3**.
   no backend/schema/API/migration/Gmail/warning/billing change.
 
 #### Deferred / not in scope (still QUEUED)
+
 - **Browser Back that EXITS `/profile`** is not intercepted (refresh/close + internal
   `<Link>` nav ARE; in-profile section back/forward preserves the draft). Owner-accepted
   as a **separate P1**: *Profile cross-route dirty-state protection* at the shared
@@ -1338,6 +1361,7 @@ URL-backed section navigation. Completes **Profile Phase 3**.
   warning frontend) — NOT started.
 
 #### Verification
+
 - Rebased onto `main` `f10498cd` (head `b688cdc8`); focused `profile-editorial.test.tsx`
   **32/32**; `next build` clean; full CI green (frontend/pytest/playwright/
   postgres-integration/workflow-security-guards); 0 review threads; `mergeable_state`
@@ -1346,6 +1370,7 @@ URL-backed section navigation. Completes **Profile Phase 3**.
   still PENDING** (production host network-blocked from the executing session).
 
 #### Continuity Block
+
 - Task ID: TASK-20260718-015
 - GitHub issue/PR: #1161
 - Branch: `feat/profile-true-section-navigation` (merged, auto-deleted)
@@ -1362,6 +1387,7 @@ URL-backed section navigation. Completes **Profile Phase 3**.
 Status: review (draft PR open; owner approval is the stop condition)
 Owner: Claude (WRITER on `claude/database-audit-results-qcurpe`)
 Branch: `claude/database-audit-results-qcurpe`
+
 - Audit baseline (evidence gathered at): `main` @ `4ce678b6`
 - Current PR base after reconciliation with main: `main` @ `197d946`
 - PR head before this correction pass: `c3cdb95`
@@ -1375,25 +1401,30 @@ Traceability: Vision: Rico Career OS — trustworthy user data
 → Task: TASK-20260718-007
 
 #### Objective
+
 Produce the verified, read-only Neon production architecture audit and the
 proposed source-of-truth decision matrix; no production or runtime change.
 
 #### Scope / files
+
 - `AI_WORKSPACE/AUDITS/2026-07-18-neon-data-architecture-audit.md` (new)
 - `AI_WORKSPACE/DECISIONS.md` (DEC-20260718-001, proposed)
 - `AI_WORKSPACE/TASKS.md` (this ledger)
 
 #### Risks
+
 Docs-only; only risk is stale numbers — every figure is dated 2026-07-18 and
 sourced (repo `file:line` or aggregate live query).
 
 #### Acceptance criteria
+
 - [x] Every material claim carries repo or aggregate-DB evidence
 - [x] No PII/secrets in the diff (aggregate counts only)
 - [x] No runtime files changed; no SQL beyond SELECT/catalog reads
 - [ ] Owner approves DEC-20260718-001 rows (moves to Accepted)
 
 #### Rollback plan
+
 - Before merge: close PR #1160 without merge; production and runtime remain
   unchanged.
 - After squash merge: revert the resulting squash-merge commit.
@@ -1418,6 +1449,7 @@ A Phase is an umbrella milestone, not a PR. Each slice = one PR / one change
 window with exactly one objective. Slices are never combined.
 
 #### Slice 1A — enable production branch protection
+
 - **Objective (one):** turn on Neon branch protection for `production`
   (`br-restless-cherry-amq6wj7o`) and document the branch/backup model.
 - **Scope:** one Neon console setting + one AI_WORKSPACE doc section; no
@@ -1451,6 +1483,7 @@ RLS rollout are four separate change windows.
 Umbrella docs impact: access model documented in AI_WORKSPACE.
 
 #### Slice 2A — verify Data API and runtime access paths (read-only)
+
 - **Objective (one):** record Data API enabled/disabled state (console) and
   inventory every path that connects to `neondb` (Render, workflows, MCP,
   previews), including the role each uses.
@@ -1459,6 +1492,7 @@ Umbrella docs impact: access model documented in AI_WORKSPACE.
 - **Rollback:** n/a. **Depends on:** TASK-008. **Production impact:** none.
 
 #### Slice 2B — create and test a limited runtime role (non-production)
+
 - **Objective (one):** create the least-privilege FastAPI role and prove the
   full backend test suite + API smoke green under it on a Neon test branch.
 - **Scope:** role + grants on a test branch only; zero production change.
@@ -1468,6 +1502,7 @@ Umbrella docs impact: access model documented in AI_WORKSPACE.
 - **Production impact:** none.
 
 #### Slice 2C — cut Render to the limited role
+
 - **Objective (one):** switch Render's `DATABASE_URL` to the proven limited
   role in one change window.
 - **Scope:** one env-var change; no code. **Risk:** missed grant surfaces in
@@ -1478,6 +1513,7 @@ Umbrella docs impact: access model documented in AI_WORKSPACE.
   change window.
 
 #### Slice 2D — revoke unnecessary `authenticated` grants
+
 - **Objective (one):** revoke the blanket 44-table CRUD from `authenticated`
   (and review `anonymous`), keeping only what 2A's inventory proves needed.
 - **Scope:** REVOKE statements, staged on the test branch first. **Risk:**
@@ -1487,6 +1523,7 @@ Umbrella docs impact: access model documented in AI_WORKSPACE.
 - **Depends on:** 2C. **Production impact:** one change window.
 
 #### Slice 2E — introduce tested RLS policies incrementally
+
 - **Objective (one):** add user-scoping RLS policies table-group by
   table-group, each group with cross-user denial tests on the test branch
   before production.
@@ -1513,6 +1550,7 @@ implementation, and constraints are separate PRs.
 Umbrella docs impact: identity map updated in audit + ARCHITECTURE.
 
 #### Slice 3A — identity mapping report (read-only)
+
 - **Objective (one):** produce the full identifier-family mapping report
   (users ↔ rico_users ↔ text-keyed tables ↔ guests), aggregate-only.
 - **Scope:** read-only queries + one AI_WORKSPACE report. **Risk:** none.
@@ -1521,6 +1559,7 @@ Umbrella docs impact: identity map updated in audit + ARCHITECTURE.
 - **Production impact:** none.
 
 #### Slice 3B — duplicate-email resolution plan
+
 - **Objective (one):** dry-run resolution plan for the 3 duplicate-email
   groups in `rico_users` (which row survives, where children re-point).
 - **Scope:** plan + dry-run report; no writes until owner approves.
@@ -1530,6 +1569,7 @@ Umbrella docs impact: identity map updated in audit + ARCHITECTURE.
   the 3C window).
 
 #### Slice 3C — orphan/guest classification and reconciliation
+
 - **Objective (one):** classify and reconcile the 121 onboarding + 12
   job-context + 2 document-context unlinkable rows (link, mark
   guest-expired, or archive) with a reviewed idempotent script.
@@ -1542,6 +1582,7 @@ Umbrella docs impact: identity map updated in audit + ARCHITECTURE.
   window.
 
 #### Slice 3D — implement the real guest/auth identity merge
+
 - **Objective (one):** replace the no-op `_attempt_identity_merge`
   (`src/agent/identity/resolver.py:194–219`) with a real merge using the
   044 `guest_identity_claims` single-owner invariant.
@@ -1552,6 +1593,7 @@ Umbrella docs impact: identity map updated in audit + ARCHITECTURE.
   code PR. **Depends on:** 3C. **Production impact:** deploy only.
 
 #### Slice 3E — add identity constraints
+
 - **Objective (one):** enforce what 3A–3D made true:
   `rico_profiles.user_id`, `rico_job_recommendations.user_id`,
   `rico_chat_history.user_id` → `CHECK … NOT VALID → VALIDATE →
@@ -1576,6 +1618,7 @@ Never combined: dry-run, reconciliation writes, write-freeze, linkage, and
 constraints are separate PRs. Umbrella docs impact: lifecycle map updated.
 
 #### Slice 4A — lifecycle reconciliation dry-run
+
 - **Objective (one):** produce the row-by-row dry-run report for the 5
   context-`applied` + 2 legacy-`applied` + 1 `interview_scheduled` records
   (the ujc→rjr match is heuristic — no shared key — so every row is
@@ -1586,6 +1629,7 @@ constraints are separate PRs. Umbrella docs impact: lifecycle map updated.
   impact:** none.
 
 #### Slice 4B — reconcile approved records
+
 - **Objective (one):** write the 4A-approved records into
   `rico_job_recommendations` via a reviewed idempotent script.
 - **Scope:** one scripted data window, backup branch first. **Risk:**
@@ -1595,6 +1639,7 @@ constraints are separate PRs. Umbrella docs impact: lifecycle map updated.
   branch. **Depends on:** 4A. **Production impact:** one data change window.
 
 #### Slice 4C — freeze legacy `applications` writes
+
 - **Objective (one):** add a repo-layer guard so no code path writes new
   rows to legacy `applications`.
 - **Scope:** code + tests only. **Risk:** a legacy pipeline path still
@@ -1604,6 +1649,7 @@ constraints are separate PRs. Umbrella docs impact: lifecycle map updated.
 - **Depends on:** 4B. **Production impact:** deploy only.
 
 #### Slice 4D — shared job identity/linkage
+
 - **Objective (one):** give `user_job_context` a durable link to canonical
   job identity (job_key or FK) so context↔ledger matching is exact, ending
   the heuristic gap 4A worked around.
@@ -1615,6 +1661,7 @@ constraints are separate PRs. Umbrella docs impact: lifecycle map updated.
   change window.
 
 #### Slice 4E — status constraints and lifecycle smoke
+
 - **Objective (one):** add status CHECK constraints
   (`rico_job_recommendations`, `user_job_context`; `NOT VALID → VALIDATE`)
   and run the full lifecycle smoke
@@ -1640,6 +1687,7 @@ drift-detector code change are separate PRs.
 Umbrella docs impact: drift-detector README section.
 
 #### Slice 5A — Gmail migration 043 change window
+
 - **Objective (one):** apply 043 to production in an owner change window
   (additive DDL), before any `RICO_ENABLE_GMAIL_SYNC=true`.
 - **Scope:** one migration apply + drift verification; no code, no flag
@@ -1650,6 +1698,7 @@ Umbrella docs impact: drift-detector README section.
   feature stays disabled). **Production impact:** additive DDL.
 
 #### Slice 5B — finish migration 034
+
 - **Objective (one):** run the two remaining
   `DROP INDEX CONCURRENTLY IF EXISTS` statements
   (`idx_rico_job_recommendations_user_job_key`,
@@ -1662,6 +1711,7 @@ Umbrella docs impact: drift-detector README section.
   window. **Production impact:** two concurrent index drops.
 
 #### Slice 5C — DROP/absence drift detection
+
 - **Objective (one):** extend `scripts/check_migration_drift.py` with
   absence checks so DROP-only migrations (034 and future ones) can no
   longer stay silently unapplied.
@@ -1672,6 +1722,7 @@ Umbrella docs impact: drift-detector README section.
   report 034 drift until 5B runs). **Production impact:** none.
 
 #### Slice 5D — verify scheduled drift alerting
+
 - **Objective (one):** confirm the drift check runs on a schedule against
   production and its failure alert reaches the admin/dev channel
   (`admin_ci` routing), fixing the wiring if absent.
@@ -1694,6 +1745,7 @@ Never combined: index cleanup and retention automation are separate PRs.
 Umbrella docs impact: retention policy in AI_WORKSPACE.
 
 #### Slice 6A — index classification
+
 - **Objective (one):** complete the Class A–D inventory of audit §11 —
   including Class C overlap/partial cases not captured by the
   signature-identical query — with per-index EXPLAIN evidence, code-path
@@ -1706,6 +1758,7 @@ Umbrella docs impact: retention policy in AI_WORKSPACE.
   leftovers exit the list). **Production impact:** none.
 
 #### Slice 6B — small concurrent index-drop batches
+
 - **Objective (one):** drop only the indexes independently proven redundant
   in 6A, in small `DROP INDEX CONCURRENTLY` batches (never Class D
   constraint-owned indexes; never on `idx_scan=0` or signature-listing
@@ -1721,6 +1774,7 @@ Umbrella docs impact: retention policy in AI_WORKSPACE.
 - **Production impact:** concurrent drops only.
 
 #### Slice 6C — retention policy
+
 - **Objective (one):** document owner-approved retention windows for
   expired `password_reset_tokens` (16/16 expired live),
   `email_verification_tokens` (130/132), `cv_upload_artifacts` (2/2),
@@ -1731,6 +1785,7 @@ Umbrella docs impact: retention policy in AI_WORKSPACE.
 - **Production impact:** none.
 
 #### Slice 6D — cleanup worker/schedule
+
 - **Objective (one):** implement the 6C policy as a feature-flagged,
   batched, metric-emitting scheduled cleanup.
 - **Scope:** worker/cron code + tests; flag default OFF, enabled in its own
@@ -1756,6 +1811,7 @@ retirement, and `search_context` are independent decisions and PRs.
 Umbrella docs impact: final inventory update in the audit.
 
 #### Slice 7A — `leads` isolation
+
 - **Objective (one):** owner confirms data ownership (zero repo code paths;
   sibling `eco-technology-leads` Neon project exists), then export/move the
   table out of the Rico production DB.
@@ -1766,6 +1822,7 @@ Umbrella docs impact: final inventory update in the audit.
   owner confirmation. **Production impact:** one isolation window.
 
 #### Slice 7B — Stripe-era retirement
+
 - **Objective (one):** read-only freeze then retirement plan for
   `user_subscriptions` / `subscription_events` (aligns with #1066; already
   unused for entitlement per `src/subscription_plans.py:90–119`).
@@ -1777,6 +1834,7 @@ Umbrella docs impact: final inventory update in the audit.
   the signed drop window.
 
 #### Slice 7C — legacy `applications` pipeline retirement plan
+
 - **Objective (one):** retirement plan for the legacy pipeline trio
   (`applications`, `auto_apply_attempts`, `weekly_reports`) after the
   lifecycle ledger is reconciled.
@@ -1787,6 +1845,7 @@ Umbrella docs impact: final inventory update in the audit.
 - **Production impact:** none until execution.
 
 #### Slice 7D — `search_context` decision
+
 - **Objective (one):** delete-or-wire decision for dormant `search_context`
   (repo docstring declares it DORMANT; table live with 0 relevant rows).
 - **Scope:** decision + either a removal migration or an explicit wiring
@@ -1808,11 +1867,13 @@ Branch: `fix/ui-copy-plain-language` (merged, deleted)
 Issue/PR: #1157 (merged as squash commit `4ce678b6400889ebfb838e00079c7dfa86fcaf7c`)
 
 #### Objective
+
 Remove technical product jargon from **user-facing copy only** — no internal
 identifiers, translation KEY names, props, test IDs, routes, DB fields, API
 contracts, or analytics identifiers renamed.
 
 #### Delivered
+
 - EN+AR value changes across nav / headings / buttons / states / helper text:
   Pipeline→Applications; Job Pipeline / Application Flow→Application tracking;
   Career preferences→Career goals (تفضيلات المسار→أهدافك المهنية); In pipeline→In
@@ -1829,9 +1890,11 @@ contracts, or analytics identifiers renamed.
   copy NOT scanned).
 
 #### Deferred / not in scope
+
 - `Sessions → Conversations` (belongs to the Command Workspace program, not this task).
 
 #### Verification
+
 - Rebased onto post-#1151 main; head `e1e8337` → squash `4ce678b`.
 - Full frontend vitest 657 pass; `npm run build` clean (41/41); lint clean on changed files.
 - CI all green; 0 review threads; `mergeable_state: clean`.
@@ -1846,12 +1909,14 @@ Branch: `feat/command-reply-motion-arabic-type` (merged, deleted)
 Issue/PR: #1151 (merged as squash commit `965dd6404e6be2d0f2c3b3a06e1b1031ad3c2774`)
 
 #### Objective
+
 Render the **same** answer string the `/command` transcript already receives as
 safe, structured markdown, plus the reply-motion layer. No change to response
 content, prompts, backend routing, APIs, providers, or DB — frontend
 reply-presentation only.
 
 #### Delivered
+
 - `react-markdown` + `remark-gfm` + `skipHtml` renderer (`RicoReplyMarkdown.tsx`, new):
   headings, lists, emphasis, blockquotes, inline + fenced code, sanitized links
   (allowlist http/https/mailto/relative; `javascript:`/`data:`/`vbscript:`/`file:`/
@@ -1863,6 +1928,7 @@ reply-presentation only.
   files (`rico-reply-markdown.test.tsx`, `rico-reply-markdown-security.test.tsx`).
 
 #### Verification
+
 - Base `6b62a11` → approved head `a4e7b44` → squash `965dd64`.
 - Focused renderer+security+transcript 50 pass; full frontend vitest 657 pass;
   `npm run build` clean; lint clean on changed files; Playwright matrix (EN light/dark,
@@ -1879,11 +1945,13 @@ Branch: `fix/arabic-jobsearch-vs-cv-status` (merged, deleted)
 Issue/PR: #1155 (merged as squash commit `6b62a114771d4da5ed775632703f78da7f92dde6`)
 
 #### Objective
+
 Post-#1153 Arabic-only defect: the second CV-guidance gate in
 `_handle_active_user_inner` intercepted explicit Arabic job searches
 ("ابحث عن وظائف تناسب سيرتي الذاتية") as CV-status guidance.
 
 #### Delivered
+
 - Guard added: the gate now also requires `not is_explicit_job_listing_request(message)`
   — the same canonical public predicate the search router keys on (reused from #1153;
   no duplicated intent logic). Files: `src/rico_chat_api.py` (+21/−1), new
@@ -1891,9 +1959,11 @@ Post-#1153 Arabic-only defect: the second CV-guidance gate in
   production-path).
 
 #### Deferred / not in scope
+
 - Generic `_JOB_DOC_SCORE_RE` tightening (P1) — explicitly deferred by owner.
 
 #### Verification
+
 - Re-anchored; head `7a8f85d` → squash `6b62a11`.
 - 8 targeted tests + regression sweep pass (57 on merged commit); CI all green;
   0 review threads; `mergeable_state: clean`.
@@ -1909,19 +1979,23 @@ Branch: `fix/profile-warnings-contrast` (merged, deleted)
 Issue/PR: #1156 (merged as squash commit `25f19445343533c725916b96ab273fda598775c9`)
 
 #### Objective
+
 Fix the unreadable guardrail-warnings banner on the live editorial `/profile`
 (contrast/legibility only).
 
 #### Delivered
+
 - `warning`/`warningTint` tone + scoped CSS so `role="alert"` warnings are legible
   in light and dark. `ProfileEditorial.tsx` + translations only.
 
 #### Deferred / not in scope (still QUEUED — see TASK-20260718-... Phase 4)
+
 - Actionable warning workflow: compact summary, severity model, section/field
   navigation, field focus/highlight, refresh-after-save, resolved-warning removal,
   live count, hide-when-empty, unsaved-edit integration. **NOT delivered here.**
 
 #### Verification
+
 - Squash `25f1944`; CI green; frontend build clean; production "Deploy to Production"
   run #994 = success.
 
@@ -1933,16 +2007,19 @@ Branch: `feat/profile-editorial-rebuild` (merged, deleted)
 Issue/PR: #1152 (merged as squash commit `cee1d6304...`)
 
 #### Objective
+
 Replace `/profile` with the uploaded editorial design, wired to the real system,
 deleting the old profile code.
 
 #### Delivered
+
 - `ProfileEditorial.tsx` editorial rebuild: hero plate, profile-strength meter,
   **visual** sticky numbered section rail, 8 section cards, dirty-draft single-PATCH
   save bar; thin auth+data shell page; honest billing/Telegram states; "Verified email";
   numeric-clear validation. Real-data wired (`lib/api.ts`); auth-guard contract preserved.
 
 #### Deferred / not in scope (DELIVERED 2026-07-18 by #1161 — see TASK-20260718-015)
+
 - **True section navigation is NOT delivered *by this PR (#1152)*.** The rail here is
   visual only; true navigation shipped later in **#1161** (`76e52984`, Profile Phase 3).
   Was missing at #1152 time (all now delivered by #1161):
@@ -1951,6 +2028,7 @@ deleting the old profile code.
   unsaved-edit protection, section focus management.
 
 #### Verification
+
 - Squash `cee1d63`; CI green; frontend build clean; production "Deploy to Production" = success.
 
 ### TASK-20260718-001 — PR #1153: route "find jobs that match my CV" to job search, not job-doc scoring
@@ -1961,21 +2039,25 @@ Branch: `fix/find-jobs-cv-routing` (merged, deleted)
 Issue/PR: #1153 (merged as squash commit `14b2b2e63...`)
 
 #### Objective
+
 Fix the demonstrated English `/command` failure ("Find UAE jobs that match my CV"
 → "I don't have an uploaded job document yet") — smallest P0 fix.
 
 #### Delivered
+
 - Guard in `_handle_job_doc_action` so a score-intent that is an explicit job-listing
   request (`is_explicit_job_listing_request`) is not intercepted as job-doc scoring;
   production-path regression test; reused canonical public predicate (no broad except).
 
 #### Deferred / not in scope
+
 - **This was the English routing defect only — NOT a full authenticated
   route/API/database/storage/entitlement audit.** That full cross-route audit
   remains NOT STARTED. `_JOB_DOC_SCORE_RE` tightening (P1) deferred. (The Arabic
   equivalent was fixed separately in #1155.)
 
 #### Verification
+
 - Squash `14b2b2e`; CI green; production "Deploy to Production" (backend path) = success.
 
 ### TASK-20260717-008 — PR #1145: unify /command visuals with the shared WorkspaceShell
@@ -2610,6 +2692,7 @@ program — not a parallel design doc — with the end-state pinned by
 `DEC-20260708-003` and the preview-only stance of `DEC-20260709-006`).
 
 Migration order (foundation-first, `/command` last):
+
 1. Foundation — Atelier V3 semantic tokens + Atelier-at-Night dark set as the
    single source of truth.
 2. Shared shell & controls adopt V3 tokens.
@@ -4846,10 +4929,14 @@ Issue/PR: follow-up to #1085
 ### TASK-20260717-001 — Stabilize flaky chat-confirm-profile vitest file (CI tax)
 
 Status: review (re-executed 2026-07-19 under owner authorization "next after
-#1195"; test-only change)
+
+# 1195"; test-only change)
+
 Owner: Claude (Fable session)
 Branch: `claude/growth-lifecycle-automation-qiyzw6` (restarted from main after
-#1195 merged; the 2026-07-17 branch `claude/rico-film-rotation-fix-g7tua4` was
+
+# 1195 merged; the 2026-07-17 branch `claude/rico-film-rotation-fix-g7tua4` was
+
 NEVER pushed to origin — verified absent 2026-07-19 — and its validated fix was
 lost with its session)
 Issue/PR: follow-up; flaked 3x on 2026-07-16 (#1085 and #1116 CI, plus one
@@ -4859,6 +4946,7 @@ local run) and 2x on 2026-07-19 (#1195 CI, both heads) — always
 #### Objective
 
 Remove the two flake modes without weakening the guard:
+
 1. 5s default test timeout too tight for the full CommandPage render + CV
    upload flow on loaded CI runners → per-test 15s timeout on the three
    heavy tests.
@@ -4906,11 +4994,14 @@ Branch: fix/job-result-integrity-gate
 Issue/PR: incident #1121 → Draft PR #1123 (this branch) → TASK-20260717-002
 
 Traceability: Issue #1121 (the real Job Result Integrity incident) → Draft PR
-#1123 → TASK-20260717-002. The PR "Addresses #1121" (not "Closes") and must not
+
+# 1123 → TASK-20260717-002. The PR "Addresses #1121" (not "Closes") and must not
+
 auto-close #1121 while Draft. #1118 is a DIFFERENT issue (the CV-parse quality
 gate for #1119) and is not tracked here.
 
 #### Hierarchy
+
 - Vision → Career Operating System
 - Epic → Rico Command Runtime Restoration
 - Milestone → Trusted Job Search
@@ -4920,6 +5011,7 @@ gate for #1119) and is not tracked here.
 - Tests → provider-to-card integrity contract (`tests/test_job_result_integrity.py`)
 
 #### Incident
+
 Production surfaced a Totaljobs listing — title "Project Manager", body "Mental
 Health Practitioner / Recovery Service", location Manchester (UK), apply state
 Unavailable — in a UAE workflow. Withdraws the prior "job-search vertical is
@@ -4928,10 +5020,12 @@ role-family conflict; unavailable/dead apply link; no trust decision before
 scoring/shortlist admission.
 
 #### Objective
+
 Rico owns the final trust decision: a job may be CV-scored, carded, or shortlisted
 only after Market + Role + Listing + Freshness + Evidence integrity pass.
 
 #### Root cause
+
 `src/job_providers.py` forwards `country="ae"` only to JSearch; Adzuna is hard-
 scoped to its GB index (`ADZUNA_COUNTRY` default `gb`) and the cascade short-
 circuits on the first provider with items, with NO post-cascade market/role/
@@ -4939,6 +5033,7 @@ availability filter before scoring. First layer that should have rejected the
 record: market/country normalization.
 
 #### Fix
+
 - `src/job_integrity.py` (new): `RejectionReason` + `validate_listing` +
   `filter_listings` (market/role/title-body-conflict/availability/apply-url/
   source-page/freshness/evidence). Role step: the REQUESTED role's own
@@ -4957,6 +5052,7 @@ record: market/country normalization.
   ≠ the requested country (stops the GB short-circuit).
 
 #### Constraints
+
 - Do not touch PR #1119 files (`src/api/routers/rico_chat.py`, `src/cv_parser.py`,
   `src/cv_parse_quality.py`, and their tests).
 - No new providers; no broadened search; no UI redesign; no migrations.
@@ -4964,6 +5060,7 @@ record: market/country normalization.
   in this PR.
 
 #### Acceptance criteria
+
 - [x] UAE search rejects UK/non-UAE listings even at high provider rank.
 - [x] title/body role-family conflict (Project Manager + Mental Health) rejected.
 - [x] protected-domain request (Nurse / Mental Health Practitioner) NOT falsely
@@ -4978,6 +5075,7 @@ record: market/country normalization.
       runs main): five role searches, zero UK/mismatch/unavailable in top 10.
 
 #### Separate follow-up (do NOT implement here)
+
 - Search-context durability: `recent_search_role` non-durable under
   `RICO_MEMORY_BACKEND=postgres`; multi-role option click triggers page reload;
   refinement falls back to profile after reload. Tracked separately.
@@ -4992,12 +5090,14 @@ Branch: claude/release-captain-queue-76nrwz
 Issue/PR: #1173 (squash `4879c04d`)
 
 #### Objective
+
 Start the two time-sensitive data-integrity foundations of the Product Truth
 Sprint: (1) an append-only `job_observations` posting archive (longitudinal
 market data cannot be backfilled), and (2) stop + quarantine the daily
 pipeline's echo learning-signals (system output recorded as user behavior).
 
 #### Context
+
 - Strategy: owner-approved Product Truth Sprint; owner note "Data Integrity
   before Analytics".
 - Evidence: `run_daily._update_learning_repo` recorded pipeline matches as
@@ -5013,6 +5113,7 @@ pipeline's echo learning-signals (system output recorded as user behavior).
   DB load, decay aggregation, and write-time EMA).
 
 #### Constraints
+
 - Migration 046 is a FILE ONLY in this PR — applying it to Neon is an owner
   action; the archive code fail-safes to a disabled no-op (pgcode 42P01
   latches off per process) until the table exists.
@@ -5021,6 +5122,7 @@ pipeline's echo learning-signals (system output recorded as user behavior).
 - No analytics, no taste-loop UI, no ranking changes in this PR.
 
 #### Acceptance criteria
+
 - [x] Fresh provider fetches (jsearch/jooble/adzuna) record observations;
       cache hits never do.
 - [x] Fingerprint v1 is provider-format stable (EN + AR) and versioned.
@@ -5099,6 +5201,7 @@ Branch: claude/refine-search-structured-action
 Issue/PR: #1175 (squash `d5f96f1e`)
 
 #### Objective
+
 The "Refine search" card sent its LABEL as a chat message; the intent router
 parsed it as a job role ("I didn't catch 'Refine search' as a specific
 role"). Separate UI actions from natural language: the card becomes an
@@ -5106,12 +5209,14 @@ role"). Separate UI actions from natural language: the card becomes an
 sees the final composed search query.
 
 #### Root cause (two layers)
+
 - Contract mismatch: composer sent `payload.prompt`; the frontend reads
   `payload.message` — so the fallback `?? action.label` fired. Same silent
   break affected "Save search" and "Find new jobs".
 - The fallback itself: a UI label must never become chat input.
 
 #### Changes
+
 - `src/services/agentic_ui_composer.py`: refine → `open_drawer`
   (`drawer: "refine_search"`, carries `search_query`); all remaining
   `chat_continue` payloads renamed `prompt` → `message`; contract documented
@@ -5125,6 +5230,7 @@ sees the final composed search query.
 - Bilingual keys `cmdRefine*` in translations.
 
 #### Acceptance criteria
+
 - [x] Backend contract tests: no `prompt` key anywhere; every chat_continue
       carries non-empty `payload.message`; refine pinned as open_drawer
       (tests/test_agentic_ui_composer.py — 70 green).
@@ -5145,11 +5251,13 @@ Branch: claude/analytics-events-foundation
 Issue/PR: #1176 — merged as c09a929a
 
 #### Objective
+
 Product Truth Sprint track 1 ("eyes"): first-party behavioral event store —
 migration + storage foundation ONLY. No emitters wired, no Taste Loop, no
 structured-action changes.
 
 #### Scope delivered
+
 - `migrations/047_analytics_events.sql` — append-mostly store; unique
   `dedupe_key` (idempotency); `schema_version` on every row; indexes for
   funnels + retention sweeps. NOT applied anywhere — production application
@@ -5170,9 +5278,11 @@ structured-action changes.
 - Drift signatures for 047 (table + dedupe index).
 
 #### Rollback
+
 Revert the commit; drop the table if created — nothing references it.
 
 #### Acceptance criteria
+
 - [x] Privacy pins: unknown event rejected without DB touch; PII-shaped
       values cannot pass the validator; raw user id never in a row;
       fail-closed no-key path warns once without identifiers.
@@ -5185,6 +5295,7 @@ Revert the commit; drop the table if created — nothing references it.
       (tests/unit/test_analytics_events_repo.py — 22 tests.)
 
 ##### Housekeeping
+
 TASK-20260719-001 (Refine search structured action): merged as `d5f96f1e`
 on `main` (PR #1175, expected-head protection, CI green incl. the new
 real-browser smoke) → Status: done.
@@ -5285,12 +5396,14 @@ Branch: claude/analytics-emitters-v1
 Issue/PR: #1179
 
 #### Objective
+
 Wire the MINIMUM emitter set into the live product so the Product Truth
 Sprint's primary metric (return-with-action) becomes measurable. Two events
 only — `job_action` + `search_performed` — from two central call sites.
 `session_start` deliberately deferred (adds noise, not needed for the metric).
 
 #### Scope delivered
+
 - `src/services/analytics_emitters.py` (new): fail-soft emitters; free
   text is blocked at emitter level: search exposes no caller-supplied
   string payload, and job actions are restricted to the explicit
@@ -5303,11 +5416,13 @@ only — `job_action` + `search_performed` — from two central call sites.
   `job_matches` response — results_count only, NEVER query text.
 
 #### Constraints honored (owner list)
+
 - Minimal events; no scope expansion. No free text. Key used only via the
   foundation's keyed HMAC. Allowlist respected (properties are exact
   subsets). No purge/retention. #1177 untouched.
 
 #### Acceptance criteria
+
 - [x] Fail-soft pins: emitters never raise even when the foundation throws;
       runtime action result and chat response both unaffected when the
       emitter itself raises.
@@ -5322,6 +5437,7 @@ only — `job_action` + `search_performed` — from two central call sites.
 ##### Addendum — owner review round (2026-07-19)
 
 Owner's independent repo verification found two blockers; both fixed:
+
 - The "signature-level free-text prevention" claim was OVERSTATED
   (`action: Any` / `surface: str` could carry arbitrary text). Corrected to
   real emitter-level enforcement: `emit_search_performed` no longer exposes
@@ -5343,6 +5459,7 @@ Branch: claude/analytics-purge-retention-audit-43dbwn
 Decision: DEC-20260719-001
 
 #### Objective
+
 Wire the scheduled invocation of `purge_expired()` promised by migration
 047 ("executed by a scheduled job wired in a LATER change") — the last
 engineering increment of the analytics foundation before baseline
@@ -5351,6 +5468,7 @@ docs. No migration, no schema change, no guest analytics, no new events,
 no batching (deferred until a backlog scenario exists), #1177 untouched.
 
 #### Scope delivered
+
 - `src/api/routers/pipeline.py` — `POST /api/v1/pipeline/analytics-purge`:
   cron-secret guarded; gated by `RICO_ENABLE_ANALYTICS_PURGE` (default OFF,
   fail-closed; disabled = explicit 200 no-op that never touches the repo);
@@ -5369,6 +5487,7 @@ no batching (deferred until a backlog scenario exists), #1177 untouched.
   rollout gates, verification, emergency disable), DEC-20260719-001.
 
 #### Acceptance criteria
+
 - [x] Retention pin: handler signature exposes no retention parameter;
       retention-shaped query params ignored; repo invoked with no
       arguments; window stays the `RETENTION_DAYS=180` constant.
@@ -5382,6 +5501,7 @@ no batching (deferred until a backlog scenario exists), #1177 untouched.
       count_expired pins; emitters 11 green alongside.)
 
 #### Rollout (owner-sequenced, two independent gates)
+
 047 production apply → emitters live → baseline starts → this PR merges
 (inert: flag OFF + schedule commented) → owner sets flag on Render →
 dry-run dispatch verification → owner uncomments the schedule. Emergency
@@ -5397,6 +5517,7 @@ Branch: fix/1101-private-response-cache-boundary
 Issue/PR: #1101
 
 #### Objective
+
 No account-scoped API response (identity, profile, CV/files, applications,
 billing) can be stored or shared through browser, proxy, Vercel BFF/CDN, or
 application-managed caches. One logical change: a three-layer no-store
@@ -5404,6 +5525,7 @@ boundary. Explicitly out of scope: #1104, #1130, migration 045, billing/
 Gmail/analytics/design changes.
 
 #### Scope delivered
+
 - `src/api/cache_privacy.py` (new): pure-ASGI `PrivateCacheHeadersMiddleware`
   — every response without a route-set Cache-Control gets
   `private, no-store, max-age=0` + `Pragma: no-cache` + `Expires: 0`;
@@ -5420,6 +5542,7 @@ Gmail/analytics/design changes.
   only prior no-store was dashboard/page.tsx; no module-level caches).
 
 #### Acceptance evidence
+
 - Backend tests `tests/test_1101_private_response_cache.py` (9): default
   boundary on /me (200 auth + unauth), representative sensitive endpoints,
   health/version not public; SSE preservation; middleware never overrides
@@ -5437,6 +5560,7 @@ Gmail/analytics/design changes.
   `npm run build` clean.
 
 #### Remaining verification (preview/production — close gate items)
+
 - Vercel edge behavior for the `/proxy` headers block on an actual
   deployment (next dev does not apply custom headers to external-rewrite
   paths; Vercel's production edge does — the same layer that injected the
@@ -5458,6 +5582,7 @@ Branch: claude/growth-lifecycle-automation-qiyzw6
 Issue/PR: #1195 (squash `bd378c97`)
 
 #### Objective
+
 Close audit gates 1-2 from the #1176 post-merge audit (verdict B): the
 `record_event` "never raises" contract had three empirically confirmed
 breaches (non-dict `properties`, non-str `client_event_id`, non-datetime
@@ -5466,6 +5591,7 @@ ACTIVE once emitters were wired (#1179). Plus the bool-retention hazard
 (`purge_expired(True)` → 1-day window, near-total purge).
 
 #### Scope delivered
+
 - `src/repositories/analytics_events_repo.py` — malformed argument TYPES
   rejected fail-closed before any DB access (debug logs never include the
   offending values); row construction moved inside the `try` so residual
@@ -5478,14 +5604,17 @@ ACTIVE once emitters were wired (#1179). Plus the bool-retention hazard
   pin; bool purge/count rejection.
 
 #### Explicitly NOT in scope
+
 Allowlist growth policy (gate 3 — owner decision), Render HMAC key
 verification (gate 4 — owner-side), emitter changes, migrations, #1177.
 
 #### Rollback
+
 Revert the commit — behavior-narrowing only (inputs that previously
 raised now return False; no valid input's behavior changes).
 
 #### Acceptance criteria
+
 - [x] Never-raises pins: three malformed-type families return False with
       zero DB access and zero raised exceptions.
 - [x] Privacy pin: rejection logs contain no offending values.
@@ -5518,6 +5647,7 @@ Branch: claude/command-v5-pr1-visual-foundation
 Issue/PR: PR — Command v5 visual foundation (draft)
 
 #### Objective
+
 Ship the approved Command Workspace v5 visual foundation as a self-contained,
 unconsumed-by-production module set: AA-audited tokens, typography roles,
 surface + motion primitives, RicoPresence indicator, a CI contrast gate, and
@@ -5525,16 +5655,19 @@ an internal gallery specimen — with zero changes to chat logic, APIs,
 routing behavior, or backend.
 
 #### Context
-- Relevant files: apps/web/components/workspace/v5/{tokens.ts,fonts.ts,motion.css,RicoPresence.tsx}; apps/web/scripts/check-contrast-v5.mjs; apps/web/app/design-gallery/command-v5/{page.tsx,_specimen.tsx}; apps/web/__tests__/command-v5-foundation.test.tsx
+
+- Relevant files: apps/web/components/workspace/v5/{tokens.ts,fonts.ts,motion.css,RicoPresence.tsx}; apps/web/scripts/check-contrast-v5.mjs; apps/web/app/design-gallery/command-v5/{page.tsx,_specimen.tsx}; apps/web/**tests**/command-v5-foundation.test.tsx
 - Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md; design-handoffs/incoming/2026-07-20-command-workspace-v5-cinematic/EVIDENCE.md (visual acceptance reference, commit 69074a8)
 - Existing behavior: WORKSPACE_THEME + atelier-kit untouched; /design-gallery is production-blocked via assertInternalPreviewAccess.
 
 #### Constraints
+
 - Do not touch: chat logic, APIs, auth, sessions, billing, production routes' rendering, WORKSPACE_THEME, atelier-kit values.
 - No migrations unless explicitly required: none.
 - Keep scope limited to: foundation modules + internal specimen + gates + docs.
 
 #### Acceptance criteria
+
 - [x] Every v5 color token AA-gated (scripts/check-contrast-v5.mjs, 19 pairs PASS)
 - [x] motion.css ↔ tokens.ts drift guard in vitest
 - [x] RicoPresence: 5 states × 3 sizes, status semantics, decorative mode, reduced-motion collapse
@@ -5542,6 +5675,7 @@ routing behavior, or backend.
 - [x] No production route renders differently (no imports from production code)
 
 #### Required verification
+
 - [x] Unit tests: vitest run (full suite)
 - [ ] Integration tests: n/a (no behavior surface)
 - [x] Frontend build: npm run build
@@ -5549,6 +5683,7 @@ routing behavior, or backend.
 - [ ] Production/deploy smoke if applicable: n/a (gallery is production-blocked)
 
 #### Continuity Block
+
 - Task ID: TASK-20260720-004
 - GitHub issue/PR: PR — Command v5 visual foundation (draft, opened from this task)
 - Branch: claude/command-v5-pr1-visual-foundation
@@ -5558,7 +5693,7 @@ routing behavior, or backend.
 - Uncommitted changes present: no
 - Status: review
 - Files inspected: apps/web/components/workspace/{WorkspaceShell.tsx,theme.ts}, apps/web/components/atelier-kit/{tokens.ts,fonts.ts}, apps/web/app/design-gallery/*, apps/web/lib/internalPreview.ts, apps/web/scripts/check-contrast.mjs, apps/web/vitest.config.ts
-- Files changed: apps/web/components/workspace/v5/* — new foundation; apps/web/scripts/check-contrast-v5.mjs — AA gate; apps/web/app/design-gallery/command-v5/* — internal specimen; apps/web/__tests__/command-v5-foundation.test.tsx — guards; apps/web/package.json — check:contrast:v5 script; AI_WORKSPACE/{COMMAND_V5_IMPLEMENTATION_MAP.md,TASKS.md} — traceability
+- Files changed: apps/web/components/workspace/v5/*— new foundation; apps/web/scripts/check-contrast-v5.mjs — AA gate; apps/web/app/design-gallery/command-v5/* — internal specimen; apps/web/**tests**/command-v5-foundation.test.tsx — guards; apps/web/package.json — check:contrast:v5 script; AI_WORKSPACE/{COMMAND_V5_IMPLEMENTATION_MAP.md,TASKS.md} — traceability
 
 ### TASK-20260720-005 — Command v5 PR 2: workspace shell skin
 
@@ -5568,22 +5703,26 @@ Branch: claude/command-v5-pr2-workspace-shell
 Issue/PR: PR — Command v5 workspace shell (opened from this task)
 
 #### Objective
+
 Apply the approved v5 visual language to the shared WorkspaceShell chrome
 (light island only): per-route accents, rail energy marker, ember wordmark,
 route atmosphere, document entrance, Rico presence — preserving all shell
 behavior and the dark island untouched.
 
 #### Context
-- Relevant files: apps/web/components/workspace/{WorkspaceShell.tsx,RailGoalMini.tsx}; apps/web/app/design-gallery/command-v5-shell/*; apps/web/__tests__/command-v5-shell.test.tsx
+
+- Relevant files: apps/web/components/workspace/{WorkspaceShell.tsx,RailGoalMini.tsx}; apps/web/app/design-gallery/command-v5-shell/*; apps/web/**tests**/command-v5-shell.test.tsx
 - Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md (PR 2 row)
 - Existing behavior: single-shell ruling (2026-07-18); WORKSPACE_NAV as nav source of truth; fail-hidden mission summary.
 
 #### Constraints
+
 - Do not touch: chat behavior, APIs, auth, sessions, routing behavior, dark-island palette.
 - No migrations unless explicitly required: none.
 - Keep scope limited to: shell chrome skin + specimen + tests + docs.
 
 #### Acceptance criteria
+
 - [x] Active nav: aria-current preserved + v5 energy marker + AA accent text (light)
 - [x] Rico presence in shell controls with status semantics (localized label)
 - [x] Route atmosphere light-only; dark island byte-identical accents
@@ -5591,6 +5730,7 @@ behavior and the dark island untouched.
 - [x] All existing shell/nav/count contracts green without weakening
 
 #### Required verification
+
 - [x] Unit tests: vitest 845/845
 - [ ] Integration tests: n/a
 - [x] Frontend build: PASS
@@ -5598,6 +5738,7 @@ behavior and the dark island untouched.
 - [ ] Production/deploy smoke if applicable: post-merge production smoke recorded in the handover
 
 #### Continuity Block
+
 - Task ID: TASK-20260720-005
 - GitHub issue/PR: PR — Command v5 workspace shell
 - Branch: claude/command-v5-pr2-workspace-shell
@@ -5607,7 +5748,7 @@ behavior and the dark island untouched.
 - Uncommitted changes present: no
 - Status: review
 - Files inspected: WorkspaceShell.tsx, RailGoalMini.tsx, useMissionSummary.ts, command-workspace-shell.test.tsx, single-shell.spec.ts, playwright.config.ts
-- Files changed: WorkspaceShell.tsx — v5 skin (light island); RailGoalMini.tsx — accentFill prop; app/design-gallery/command-v5-shell/* — specimen; __tests__/command-v5-shell.test.tsx — contracts; __tests__/profile-actionable-warnings.test.tsx — disambiguated status query; AI_WORKSPACE — task/map/eval
+- Files changed: WorkspaceShell.tsx — v5 skin (light island); RailGoalMini.tsx — accentFill prop; app/design-gallery/command-v5-shell/* — specimen; **tests**/command-v5-shell.test.tsx — contracts; **tests**/profile-actionable-warnings.test.tsx — disambiguated status query; AI_WORKSPACE — task/map/eval
 
 ### TASK-20260720-006 — Audit/reliability delivery closure (merge, verify, hand over)
 
@@ -5617,12 +5758,14 @@ Branch: n/a (closure across existing PRs)
 Issue/PR: #1231 #1232 #1233 #1234 #1235 #1236 #1239 #1240 #1244 #1246 (all merged); #1237 reconciliation is this closure's own PR
 
 #### Objective
+
 Close the 2026-07-20 audit delivery: merge every approved fix one at a time
 with exact-head CI and verified rollback, finish the #1239 QA-stability
 dependency (test-side #1244 + product-side #1246), reconcile the audit
 record, and verify production.
 
 #### Acceptance criteria
+
 - [x] All approved audit fixes merged sequentially (squash SHAs in the audit closure table)
 - [x] QA blocker root-caused and fixed both sides, regression proven fail-pre/pass-post
 - [x] Audit record reconciled to actual merged state (AUDITS/2026-07-20-full-system-audit.md)
@@ -5630,6 +5773,7 @@ record, and verify production.
 - [ ] Production verification (deploy-production run + SMOKE-1197 dispatch) — recorded in the session handover
 
 #### Continuity Block
+
 - Task ID: TASK-20260720-006
 - GitHub issue/PR: #1237 (reconciliation), merged-fix set above
 - Branch: claude/rico-system-audit-324rkq (reconciliation commit)
@@ -5645,11 +5789,13 @@ Branch: claude/system-tools-analysis-wc4o4g
 Issue/PR: #1256 (merged 2026-07-21, squash 6111fa21)
 
 #### Objective
+
 Audit the system for errors, designed-but-never-executed tools, and anomalies;
 repair only what is test/docs-safe; record everything destructive as
 owner-gated recommendations.
 
 #### Context
+
 - Relevant files: tests/test_jotform_webhook.py, tests/test_agent.py,
   src/agent/workflow/coordinator.py, src/agent/identity/resolver.py,
   src/agent/coordinator.py, src/services/stateful_chat_adapter.py,
@@ -5664,17 +5810,20 @@ owner-gated recommendations.
   not run that file.
 
 #### Constraints
+
 - Do not touch: any runtime/production code, env vars, migrations, workflows
 - No migrations unless explicitly required: none
 - Keep scope limited to: tests + AI_WORKSPACE docs
 
 #### Acceptance criteria
+
 - [x] Concurrency test patches applied once from the main thread (leak eliminated)
 - [x] 3 apply-link tests pin the current #354 trust-gate contract
 - [x] Focused 5-file set deterministic: 5 consecutive runs, 228/228
 - [x] Audit handoff records dead stack + broken scripts + CI coverage gap
 
 #### Required verification
+
 - [x] Unit tests: focused set 228/228 x5 local; PR CI pytest/postgres/playwright/frontend/guards all green on 730b154
 - [ ] Integration tests: covered by PR CI (postgres-integration green)
 - [ ] Frontend build: green in PR CI (no frontend files changed)
@@ -5682,6 +5831,7 @@ owner-gated recommendations.
 - [ ] Production/deploy smoke if applicable: n/a — nothing deployable changed
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-001
 - GitHub issue/PR: #1256 (merged, squash 6111fa21)
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -5725,22 +5875,26 @@ Branch: claude/system-tools-analysis-wc4o4g (restarted from main 23a1138)
 Issue/PR: #1260 (merged 2026-07-21, squash 26b87a04)
 
 #### Objective
+
 Delete the dead, import-broken stateful-agent stack and two broken legacy
 scripts identified by the 2026-07-21 system audit (handoff F1/F2), with a
 retirement banner on the design doc.
 
 #### Context
+
 - Relevant docs: AI_WORKSPACE/HANDOFFS/2026-07-21-system-audit-dead-tools-import-breakage.md;
   AI_WORKSPACE/RICO_CODEBASE_INVENTORY_2026_06_21.md (recommended retirement)
 - Existing behavior: all six targets failed at import on main; nothing in
   production or tests imports them (verified by repo-wide grep + import-scan)
 
 #### Constraints
+
 - Do not touch: src/agent/{runtime,orchestrator,registry,tools,context,
   intelligence,responses,response_builder}, any live route or service
 - Keep scope limited to: deletion of the six dead targets + doc banner + ledger
 
 #### Acceptance criteria
+
 - [x] src/agent/identity/, src/agent/workflow/, src/agent/coordinator.py,
       src/services/stateful_chat_adapter.py, src/linkedin_demo.py,
       src/test_refactored_system.py removed
@@ -5750,6 +5904,7 @@ retirement banner on the design doc.
 - [x] PR CI green on exact head (9/9 on d06a3d9)
 
 #### Required verification
+
 - [x] Unit tests: focused 5-file set green post-deletion
 - [ ] Integration tests: PR CI (postgres-integration)
 - [ ] Frontend build: PR CI (no frontend change)
@@ -5758,6 +5913,7 @@ retirement banner on the design doc.
       the auto-deploy run after merge (runtime behavior unchanged; deletion only)
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-002
 - GitHub issue/PR: #1260 (merged, squash 26b87a04)
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -5766,7 +5922,7 @@ retirement banner on the design doc.
 - Current head SHA: 26b87a04 (main after squash merge)
 - Uncommitted changes present: no (after commit)
 - Status: done
-- Files inspected: removed modules + repo-wide reference grep + src/agent/__init__.py (empty)
+- Files inspected: removed modules + repo-wide reference grep + src/agent/**init**.py (empty)
 - Files changed: 6 deletions above; docs/STATEFUL_AGENT_ARCHITECTURE.md — retirement banner;
   AI_WORKSPACE/TASKS.md — this entry
 - Files intentionally not touched: src/agent/context/, src/agent/intelligence/,
@@ -5793,6 +5949,7 @@ Branch: claude/system-tools-analysis-wc4o4g (restarted from main 26b87a04)
 Issue/PR: #1261 (merged 2026-07-21, squash b9dc8ae2)
 
 #### Objective
+
 Close the CI coverage gap found by the 2026-07-21 audit (F4): tests/
 test_agent.py, test_agent_runtime.py, test_jotform_webhook.py,
 test_jwt_user_isolation.py, test_onboarding_state.py were never run in CI,
@@ -5800,16 +5957,19 @@ which is how the stale pre-#354 tests and the thread-racing mock leak stayed
 invisible. Add all five to the qa-tests.yml pytest job.
 
 #### Constraints
+
 - Keep scope limited to: .github/workflows/qa-tests.yml + ledger
 - Do not touch: runtime code, other workflows
 
 #### Acceptance criteria
+
 - [x] Five files added to the pytest job selection
 - [x] Full new CI selection verified locally under CI-identical env vars
       (REDIS_URL="", fake DATABASE_URL, test JWT): 4519 passed, 1 xfailed
 - [x] PR CI green on exact head (9/9 on fdb93ab, pytest ran the 5 new files)
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-003
 - GitHub issue/PR: #1261 (merged, squash b9dc8ae2)
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -5843,6 +6003,7 @@ Branch: claude/system-tools-analysis-wc4o4g (restarted from main ba52549)
 Issue/PR: #1266 (merged 2026-07-21, squash 91f27c5b)
 
 #### Objective
+
 Close a single-language-path defect in Rico's live logic: the deterministic
 intent detector behind POST /api/v1/agent/chat (src/agent/orchestrator/
 intent_detector.py) matched English keywords only, so every Arabic message
@@ -5850,15 +6011,18 @@ fell to the "help" fallback — prohibited by the Product Generalization Rule
 ("Do not special-case: one language path").
 
 #### Context
+
 - Live path: routers/agent.py → orchestrator.process → detect()
 - The canonical rico_chat path is already bilingual; only this NL surface was
   English-only.
 
 #### Constraints
+
 - Keep scope limited to: intent_detector.py + tests + ledger
 - Do not touch: ACTION_TO_TOOL, PRIVILEGED_TOOLS semantics, orchestrator flow
 
 #### Acceptance criteria
+
 - [x] Arabic keywords for all four NL intents, same first-match precedence
 - [x] Orthography normalization (tashkeel/tatweel stripped; أ/إ/آ/ٱ→ا, ة→ه,
       ى→ي, ؤ→و, ئ→ي) applied symmetrically to message AND table keywords
@@ -5869,6 +6033,7 @@ fell to the "help" fallback — prohibited by the Product Generalization Rule
 - [x] PR CI green on exact head (9/9 on 0d36e3c, incl. the 14 Arabic cases)
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-004
 - GitHub issue/PR: #1266 (merged, squash 91f27c5b)
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -5897,56 +6062,62 @@ fell to the "help" fallback — prohibited by the Product Generalization Rule
 
 ### TASK-20260722-001 — Atelier Arabic copy: rewrite translated-feeling strings to native Arabic
 
-Status: in_progress
+Status: review
 Owner: Claude (agent)
 Branch: fix/atelier-arabic-copy-native
-Issue/PR: (to be opened)
+Issue/PR: #1276
 
 #### Objective
+
 Review the Arabic strings used by Atelier/command surfaces (`translations.ts` and the Atelier console gallery content) and replace the most obviously translated/literal phrasing with natural, written-for-Arabic copy that matches Rico's UAE/GCC career-assistant tone (modern fus7a, warm, professional). No behavior or layout changes.
 
 #### Context
+
 - Relevant files: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`
 - Relevant docs: `AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md`; strategy PR #1269 chapter 9 (Arabic-written-first)
 - Existing behavior: Arabic strings exist and render correctly in RTL; some are literal translations of English labels (e.g., "ثغرات بصراحة", "تخطَّ", "تحديد كمتقدّم") rather than natural Arabic UI copy.
 
 #### Constraints
+
 - Do not touch: layout, CSS, tokens, routing, behavior, non-Arabic strings, backend/API code.
 - No migrations or env changes.
 - Keep scope limited to: Arabic copy refinement in the two translation/content files above.
 
 #### Acceptance criteria
-- [ ] Most visibly translated Atelier/command labels rephrased to native Arabic.
-- [ ] English meanings preserved (no semantic drift).
-- [ ] Gallery specimen content (`rico-content.ts`) aligned with production translation tone.
-- [ ] Frontend build passes.
-- [ ] Existing vitest/tests green (no hardcoded Arabic string assertions affected).
+
+- [x] Most visibly translated Atelier/command labels rephrased to native Arabic.
+- [x] English meanings preserved (no semantic drift).
+- [x] Gallery specimen content (`rico-content.ts`) aligned with production translation tone.
+- [x] Frontend build passes.
+- [x] Existing vitest/tests green (updated hardcoded Arabic save-label assertion).
 
 #### Required verification
-- [ ] Unit tests: focused vitest around affected components if any.
+
+- [x] Unit tests: `npm run test` from `apps/web` — 83/83 files, 854/854 tests passed
 - [ ] Integration tests: n/a
-- [ ] Frontend build: `npm run build` from `apps/web`
-- [ ] Local smoke: visual spot-check of /command and /applications in AR
+- [x] Frontend build: `npm run build` from `apps/web` — green
+- [ ] Local smoke: visual spot-check of /command and /applications in AR — owner PR review
 - [ ] Production/deploy smoke if applicable: n/a
 
 #### Continuity Block
+
 - Task ID: TASK-20260722-001
-- GitHub issue/PR: (to be opened)
+- GitHub issue/PR: #1276
 - Branch: fix/atelier-arabic-copy-native
 - Base branch: main @ 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
 - Last safe commit SHA: 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
-- Current head SHA: 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
-- Uncommitted changes present: yes — TASKS.md update pending; translation edits pending
-- Status: in_progress
-- Files inspected: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`; `AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md`
-- Files changed: (pending)
+- Current head SHA: 805f364aaabcbe7214571a6d55fe065e941f7b15
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`; `apps/web/__tests__/command-job-match-card-atelier.test.tsx`; `AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md`
+- Files changed: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`; `apps/web/__tests__/command-job-match-card-atelier.test.tsx`; `AI_WORKSPACE/TASKS.md`
 - Files intentionally not touched: all runtime/backend code; layout/components; tokens
-- What is complete: branch cut, scope agreed with owner, audit of awkward strings
-- What is incomplete: translation edits, build/test, PR
+- What is complete: translation edits, build/test, PR #1276 opened
+- What is incomplete: owner review and merge
 - Known blockers: none
-- Validation already run: none
-- Validation still required: `npm run build` from `apps/web`; vitest if relevant
+- Validation already run: `npm run build` green; `npm run test` 83/83 files, 854/854 tests passed
+- Validation still required: owner review; optional visual smoke in Arabic
 - Deployment/CI/Vercel state to check next: n/a
-- Next exact action: edit Arabic copy in `translations.ts` and `rico-content.ts`, then build
-- Stop condition: any build/test failure or owner request to narrow scope
-- Rollback plan: revert commit on branch; pure copy changes, no state or API effects
+- Next exact action: owner review and merge
+- Stop condition: owner request for copy revisions or CI failure
+- Rollback plan: revert PR #1276; pure copy changes, no state or API effects
