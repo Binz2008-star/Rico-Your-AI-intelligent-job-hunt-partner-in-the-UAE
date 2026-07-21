@@ -5956,3 +5956,58 @@ Interview/Learning/Activity stay hidden (no production capability).
 - Next exact action: owner review of the Draft PR
 - Stop condition: any behavior-contract regression → fix before merge
 - Rollback plan: revert the PR — presentation-only diff, no data/API/schema impact
+### TASK-20260722-001 — Atelier Arabic copy: rewrite translated-feeling strings to native Arabic
+
+Status: in_progress
+Owner: Claude (agent)
+Branch: fix/atelier-arabic-copy-native
+Issue/PR: (to be opened)
+
+#### Objective
+Review the Arabic strings used by Atelier/command surfaces (`translations.ts` and the Atelier console gallery content) and replace the most obviously translated/literal phrasing with natural, written-for-Arabic copy that matches Rico's UAE/GCC career-assistant tone (modern fus7a, warm, professional). No behavior or layout changes.
+
+#### Context
+- Relevant files: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`
+- Relevant docs: `AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md`; strategy PR #1269 chapter 9 (Arabic-written-first)
+- Existing behavior: Arabic strings exist and render correctly in RTL; some are literal translations of English labels (e.g., "ثغرات بصراحة", "تخطَّ", "تحديد كمتقدّم") rather than natural Arabic UI copy.
+
+#### Constraints
+- Do not touch: layout, CSS, tokens, routing, behavior, non-Arabic strings, backend/API code.
+- No migrations or env changes.
+- Keep scope limited to: Arabic copy refinement in the two translation/content files above.
+
+#### Acceptance criteria
+- [ ] Most visibly translated Atelier/command labels rephrased to native Arabic.
+- [ ] English meanings preserved (no semantic drift).
+- [ ] Gallery specimen content (`rico-content.ts`) aligned with production translation tone.
+- [ ] Frontend build passes.
+- [ ] Existing vitest/tests green (no hardcoded Arabic string assertions affected).
+
+#### Required verification
+- [ ] Unit tests: focused vitest around affected components if any.
+- [ ] Integration tests: n/a
+- [ ] Frontend build: `npm run build` from `apps/web`
+- [ ] Local smoke: visual spot-check of /command and /applications in AR
+- [ ] Production/deploy smoke if applicable: n/a
+
+#### Continuity Block
+- Task ID: TASK-20260722-001
+- GitHub issue/PR: (to be opened)
+- Branch: fix/atelier-arabic-copy-native
+- Base branch: main @ 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
+- Last safe commit SHA: 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
+- Current head SHA: 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
+- Uncommitted changes present: yes — TASKS.md update pending; translation edits pending
+- Status: in_progress
+- Files inspected: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`; `AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md`
+- Files changed: (pending)
+- Files intentionally not touched: all runtime/backend code; layout/components; tokens
+- What is complete: branch cut, scope agreed with owner, audit of awkward strings
+- What is incomplete: translation edits, build/test, PR
+- Known blockers: none
+- Validation already run: none
+- Validation still required: `npm run build` from `apps/web`; vitest if relevant
+- Deployment/CI/Vercel state to check next: n/a
+- Next exact action: edit Arabic copy in `translations.ts` and `rico-content.ts`, then build
+- Stop condition: any build/test failure or owner request to narrow scope
+- Rollback plan: revert commit on branch; pure copy changes, no state or API effects
