@@ -121,19 +121,40 @@ def claim(
                 )
                 row = cur.fetchone()
                 if row is None:
+                    # First claim of a brand-new id. A plain FOR UPDATE does
+                    # NOT lock a not-yet-existing key, so two workers can both
+                    # reach here and race the INSERT. ON CONFLICT DO NOTHING
+                    # makes the loser observable: if we inserted, we own it; if
+                    # the conflict fired, another worker won the insert between
+                    # our SELECT and here — fall through and re-read WITH the
+                    # row lock so the loser is refused (or takes over a dead
+                    # lease), never a UniqueViolation. (slice 4)
                     cur.execute(
                         "INSERT INTO chat_operations "
                         "(operation_id, user_id, op_type, role_query, status, "
                         " attempt, executor_nonce, heartbeat_at) "
                         "VALUES (%s, %s, 'job_search', %s, 'running', 1, %s, now()) "
+                        "ON CONFLICT (operation_id) DO NOTHING "
                         f"RETURNING {_COLS}",
                         (operation_id, user_id, role_query, executor_nonce),
                     )
-                    return {
-                        "claimed": True,
-                        "reason": "new",
-                        "operation": _to_operation(cur.fetchone()),
-                    }
+                    inserted = cur.fetchone()
+                    if inserted is not None:
+                        return {
+                            "claimed": True,
+                            "reason": "new",
+                            "operation": _to_operation(inserted),
+                        }
+                    # Lost the insert race — re-read the now-committed-in-this-txn
+                    # row under the lock and apply the existing-row logic below.
+                    cur.execute(
+                        f"SELECT {_COLS} FROM chat_operations "
+                        "WHERE operation_id = %s FOR UPDATE",
+                        (operation_id,),
+                    )
+                    row = cur.fetchone()
+                    if row is None:  # pragma: no cover - defensive
+                        return {"claimed": False, "reason": "refused_live", "operation": None}
 
                 existing = _to_operation(row)
                 terminal = existing["status"] in TERMINAL_STATUSES
