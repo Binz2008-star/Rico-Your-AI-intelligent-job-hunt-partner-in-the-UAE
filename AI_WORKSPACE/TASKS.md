@@ -6884,31 +6884,66 @@ Scope:
   the existing takeover (counter==2 is the peer's LEGITIMATE execution) and
   SQL write-fence assertions. Module docstring updated accordingly.
 
-#### Continuity Block (slice-4 closure)
-- Current head SHA: (set at commit)
-- Status: in_review — Draft PR; NO merge by agent, NO deploy, NO Render
-  worker/instance change, NO render.yaml/env change, NO LOW-1/LOW-2 (owner
-  stop conditions). #1305 untouched.
-- Validation already run: new unit suite 14/14 (twice — cross-run stable);
-  targeted regression 164/164 (job_providers, jsearch_client, operation
-  guard/status/store, provider-degraded UX, adapters); multiworker postgres
-  integration 8/8 incl. the extended partition probe + ownership integration
-  9/9 on real local Postgres 16; broad search-flow sweep 1212 passed with 6
-  failures REPRODUCED IDENTICALLY on pre-change source (pre-existing
-  test-order pollution in that ad-hoc batch, not a regression; each passes in
-  isolation); py_compile OK on all touched modules.
-- Fail-before PROVEN: pre-change source rejects the token outright
-  (search_jobs/search → TypeError: unexpected keyword 'should_cancel';
-  CANCELLED_ERROR absent), and the pre-extension integration test asserted
-  the second cascade with NO suppression of the fenced worker's next round.
-- Validation still required: full CI on the PR head.
+#### Owner-review corrections (2026-07-21, PR #1307 review — CHANGES REQUIRED, all addressed on this branch)
+Owner review of #1307 (head bc4c7c4) required six corrections; all landed:
+1. Side effects re-gated at the LAST instant: cancellation is re-checked
+   immediately before every cache write, observations write, provider-health
+   mutation (mark_degraded — including client HTTP-error paths and
+   _run_provider's post-runner marking), internal_lookup start, its cache
+   write, cache-hit returns, and the stale-cache fallback. Cancelled
+   exception paths return error="cancelled" WITHOUT degrading health.
+2. JSearch backoff is now a cancel-aware wait (_cancellable_wait, 50ms poll)
+   — proven by a REAL-clock test: with a 5s backoff pending, cancellation
+   latency < 1s and no retry request (no mocked sleep).
+3. Pending hedge futures are cancelled outright: future.cancel() on the
+   cancellation branch + pool.shutdown(cancel_futures=True); deterministic
+   queued-future test via a fake pool (future stays PENDING → .cancelled()).
+4. NEW real-process end-to-end in-flight scenario
+   (test_partition_while_provider_inflight_fenced_cascade_stops_and_discards):
+   A claims and starts the REAL orchestrator with a controllably BLOCKED
+   first provider; the partition begins while that provider is in flight;
+   the lease expires and B takes over attempt 2 and produces the ONLY
+   terminal result; A self-fences while its orchestrator is still running;
+   the running cascade stops (error=cancelled, 0 further hedges, 0
+   cache/observations writes); the response is released only AFTER B's
+   completion and goes nowhere (0 writes; B's row untouched).
+5. Safety/truthfulness: _is_cancelled now FAILS CLOSED when a supplied check
+   raises (test added); the superseded log uses a sha256[:12] op_ref instead
+   of the raw operation_id; the user message claims only what is certain
+   (old execution's result discarded; newer execution owns the operation —
+   no "didn't run a duplicate" claim, no promised results).
+6. This source-of-truth update.
+
+#### Continuity Block (slice-4 closure — corrected head)
+- Current head SHA: (this commit — corrected head addressing the #1307 review)
+- Issue/PR: #1307 (Draft)
+- Status: in_review — corrected head pushed for re-review. NO merge by agent,
+  NO deploy, NO Render worker/instance change, NO render.yaml/env change,
+  NO LOW-1/LOW-2 (owner stop conditions). #1305 untouched. Workers/instances
+  stay 1; expansion gate CLOSED pending owner re-review + merge.
+- Validation already run (corrected head, local): expanded unit suite 24/24;
+  multiworker postgres integration 9/9 (incl. the NEW full in-flight
+  scenario and the post-fence probe) + ownership integration 9/9 on real
+  local Postgres 16; targeted regression 164/164 (job_providers,
+  jsearch_client, operation guard/status/store, provider-degraded UX,
+  adapters); py_compile OK. Prior evidence on bc4c7c4: CI 9/9 green
+  (pytest, postgres-integration, frontend, playwright, guards, Neon,
+  Vercel); fail-before proven (pre-change source rejects the token:
+  TypeError on should_cancel; pre-extension test asserted the second
+  cascade with no suppression).
+- CI status: 9/9 green on bc4c7c4 (pre-correction head); the corrected head's
+  CI run starts on push — must be green before the owner's re-review
+  concludes.
 - Deployment: none in this task — owner-gated. Opening the multi-worker gate
   remains an OWNER decision even after merge.
 - Known blockers: none for this PR.
 - Risks: cooperative model only — an HTTP request already on the wire is not
-  aborted (its response is discarded); non-operation callers pass no token and
-  are behaviorally unchanged; a raising cancel check is treated as not-
-  cancelled (fail-open to liveness, logged).
+  aborted (its response is discarded at every subsequent checkpoint);
+  non-operation callers pass no token and are behaviorally unchanged; a
+  raising cancel check now cancels (fail-closed) — an operation-owned search
+  with a broken token backend yields a superseded reply rather than duplicate
+  provider work.
 - Rollback plan: revert the PR (restores signal-without-consumer state).
-- Next exact action: owner review of the Draft PR after full CI.
-- Stop condition: STOP after evidence report + green CI (owner directive).
+- Next exact action: owner re-review of the corrected head; agent stopped.
+- Stop condition: STOP after corrected head + evidence + green CI (owner
+  directive). No merge/deploy/scaling by agent.

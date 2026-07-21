@@ -110,6 +110,57 @@ def test_jsearch_inflight_response_discarded_no_cache_no_observations(monkeypatc
     are dropped, nothing is cached, nothing reaches the observations archive."""
     monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
     payload = {"data": [{"job_id": "j1", "job_title": "HSE Manager", "job_country": "AE"}]}
+    sent = {"n": 0}
+
+    def _urlopen(*a, **k):
+        sent["n"] += 1
+        return _http_response(payload)
+
+    monkeypatch.setattr(jsearch_client.urllib.request, "urlopen", _urlopen)
+    recorded = []
+    import src.repositories.job_observations_repo as obs_repo
+    monkeypatch.setattr(obs_repo, "record_observations", lambda *a, **k: recorded.append(a))
+
+    # Loss becomes observable only once the request is on the wire.
+    result = jsearch_client.search("hse manager UAE", should_cancel=lambda: sent["n"] >= 1)
+
+    assert sent["n"] == 1, "exactly one request went out"
+    assert result.error == CANCELLED_ERROR
+    assert result.items == [], "in-flight response must be discarded"
+    assert recorded == [], "observations archive must not be written"
+    assert jsearch_client._cache_get("hse manager UAE") is None, "cache must not be written"
+
+
+def test_jsearch_backoff_is_interruptible_with_bounded_latency(monkeypatch):
+    """Owner item 2: the retry backoff must be a cancel-aware wait — with a
+    5s backoff pending, a loss observed right after the first 429 must stop
+    the flow in well under a second (REAL clock, no mocked sleep)."""
+    import time as _time
+
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    monkeypatch.setattr(jsearch_client, "_BACKOFF_BASE_S", 5.0)
+    sent = {"n": 0}
+
+    def _urlopen(*a, **k):
+        sent["n"] += 1
+        raise urllib.error.HTTPError("u", 429, "too many", {}, io.BytesIO(b""))
+
+    monkeypatch.setattr(jsearch_client.urllib.request, "urlopen", _urlopen)
+
+    t0 = _time.monotonic()
+    result = jsearch_client.search("hse manager UAE", should_cancel=lambda: sent["n"] >= 1)
+    elapsed = _time.monotonic() - t0
+
+    assert sent["n"] == 1, "no retry request after the loss"
+    assert result.error == CANCELLED_ERROR
+    assert elapsed < 1.0, f"cancellation latency {elapsed:.2f}s — backoff wait not interruptible"
+
+
+def test_jsearch_no_cache_write_when_loss_flips_during_normalization(monkeypatch):
+    """Owner item 1: loss flipping AFTER the post-response check but before
+    the cache write must suppress both storage side effects."""
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    payload = {"data": [{"job_id": "j1", "job_title": "HSE Manager", "job_country": "AE"}]}
     monkeypatch.setattr(
         jsearch_client.urllib.request, "urlopen", lambda *a, **k: _http_response(payload)
     )
@@ -117,13 +168,65 @@ def test_jsearch_inflight_response_discarded_no_cache_no_observations(monkeypatc
     import src.repositories.job_observations_repo as obs_repo
     monkeypatch.setattr(obs_repo, "record_observations", lambda *a, **k: recorded.append(a))
 
-    cancel = _FlippingCancel(flip_after=1)  # entry passes; post-response sees loss
+    # Checkpoint order: entry(1), before_request(2), post-response(3),
+    # before_cache_write(4). flip_after=3 → the write-gate sees the loss.
+    cancel = _FlippingCancel(flip_after=3)
     result = jsearch_client.search("hse manager UAE", should_cancel=cancel)
 
+    assert result.error == CANCELLED_ERROR and result.items == []
+    assert jsearch_client._cache_get("hse manager UAE") is None, "cache write must be suppressed"
+    assert recorded == [], "observations write must be suppressed"
+
+
+def test_jsearch_stale_cache_not_served_to_fenced_caller(monkeypatch):
+    """Owner item 1: the terminal-error stale-cache fallback must re-check
+    cancellation — a fenced caller gets nothing, not even stale items."""
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    payload = {"data": [{"job_id": "j1", "job_title": "HSE Manager", "job_country": "AE"}]}
+    monkeypatch.setattr(
+        jsearch_client.urllib.request, "urlopen", lambda *a, **k: _http_response(payload)
+    )
+    assert len(jsearch_client.search("hse manager UAE").items) == 1  # primes the cache
+
+    sent = {"n": 0}
+
+    def _quota(*a, **k):
+        sent["n"] += 1
+        raise urllib.error.HTTPError("u", 403, "quota", {}, io.BytesIO(b""))
+
+    monkeypatch.setattr(jsearch_client.urllib.request, "urlopen", _quota)
+    result = jsearch_client.search("hse manager UAE", use_cache=False, should_cancel=lambda: sent["n"] >= 1)
     assert result.error == CANCELLED_ERROR
-    assert result.items == [], "in-flight response must be discarded"
-    assert recorded == [], "observations archive must not be written"
-    assert jsearch_client._cache_get("hse manager UAE") is None, "cache must not be written"
+    assert result.items == [], "stale cache must not be served after the fence"
+
+
+def test_jsearch_cache_hit_not_served_when_loss_flips_before_it(monkeypatch):
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    payload = {"data": [{"job_id": "j1", "job_title": "HSE Manager", "job_country": "AE"}]}
+    monkeypatch.setattr(
+        jsearch_client.urllib.request, "urlopen", lambda *a, **k: _http_response(payload)
+    )
+    assert len(jsearch_client.search("hse manager UAE").items) == 1  # primes the cache
+
+    cancel = _FlippingCancel(flip_after=1)  # entry passes; cache-hit gate sees loss
+    result = jsearch_client.search("hse manager UAE", should_cancel=cancel)
+    assert result.error == CANCELLED_ERROR and result.items == []
+
+
+def test_raising_cancel_check_fails_closed(monkeypatch):
+    """Owner item 5: a SUPPLIED but broken check cannot prove ownership —
+    the gate fails closed (no request), never open."""
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    monkeypatch.setattr(
+        jsearch_client.urllib.request, "urlopen",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no request may be issued")),
+    )
+
+    def _broken():
+        raise RuntimeError("token backend unreachable")
+
+    result = jsearch_client.search("hse manager UAE", should_cancel=_broken)
+    assert result.error == CANCELLED_ERROR and result.items == []
 
 
 def test_jsearch_without_cancel_check_behaves_as_before(monkeypatch):
@@ -174,6 +277,40 @@ def test_adzuna_cancelled_before_start_issues_no_request(monkeypatch):
     )
     result = job_providers._adzuna_search("hse", "", should_cancel=lambda: True)
     assert result.error == CANCELLED_ERROR and result.items == []
+
+
+def test_jooble_error_path_does_not_mark_degraded_when_fenced(monkeypatch):
+    """Owner item 1: a fenced worker performs NO provider-health mutation —
+    even when the in-flight request came back as a rate-limit error."""
+    monkeypatch.setenv("JOOBLE_API_KEY", "jk")
+    sent = {"n": 0}
+
+    def _urlopen(*a, **k):
+        sent["n"] += 1
+        raise urllib.error.HTTPError("u", 429, "too many", {}, io.BytesIO(b""))
+
+    monkeypatch.setattr(job_providers.urllib.request, "urlopen", _urlopen)
+    result = job_providers._jooble_search("hse", "", should_cancel=lambda: sent["n"] >= 1)
+    assert result.error == CANCELLED_ERROR
+    assert job_providers.is_degraded("jooble") is False, "no health mutation for a fenced worker"
+
+
+def test_jooble_observations_gated_immediately_before_write(monkeypatch):
+    """Owner item 1: loss flipping between the post-response check and the
+    observations write must suppress the write."""
+    monkeypatch.setenv("JOOBLE_API_KEY", "jk")
+    monkeypatch.setattr(
+        job_providers.urllib.request, "urlopen",
+        lambda *a, **k: _http_response({"jobs": [{"title": "HSE", "id": "1"}]}),
+    )
+    recorded = []
+    monkeypatch.setattr(
+        job_providers, "_record_observations_safe", lambda *a, **k: recorded.append(a)
+    )
+    # Checkpoint order: entry(1), post-response(2), before_observations(3).
+    cancel = _FlippingCancel(flip_after=2)
+    result = job_providers._jooble_search("hse", "", should_cancel=cancel)
+    assert result.error == CANCELLED_ERROR and recorded == []
 
 
 # ── job_providers.search_jobs orchestrator ────────────────────────────────────
@@ -233,6 +370,81 @@ def test_cascade_winner_discarded_when_loss_observed_same_pass(monkeypatch):
     assert result.error == CANCELLED_ERROR and result.items == []
     with job_providers._cache_lock:
         assert job_providers._result_cache == {}, "discarded winner must not be cached"
+
+
+def test_cascade_cancels_not_yet_started_futures(monkeypatch):
+    """Owner item 3: pending hedge futures that have NOT started must be
+    cancelled outright (future.cancel + shutdown(cancel_futures=True)), not
+    merely abandoned. Deterministic via a fake pool that never runs work."""
+    import concurrent.futures as real_futures
+
+    monkeypatch.setenv("JOOBLE_API_KEY", "jk")
+
+    class _FakePool:
+        instances = []
+
+        def __init__(self, *a, **k):
+            self.futures = []
+            self.shutdown_kwargs = None
+            _FakePool.instances.append(self)
+
+        def submit(self, fn, *a, **k):
+            fut = real_futures.Future()  # stays PENDING — worker never starts
+            self.futures.append(fut)
+            return fut
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            self.shutdown_kwargs = {"wait": wait, "cancel_futures": cancel_futures}
+            if cancel_futures:
+                for f in self.futures:
+                    f.cancel()
+
+    monkeypatch.setattr(real_futures, "ThreadPoolExecutor", _FakePool)
+
+    # Checkpoint order: entry(1), loop-top(2) → submit jooble, loop-top(3)
+    # sees the loss with the future still queued.
+    cancel = _FlippingCancel(flip_after=2)
+    result = job_providers.search_jobs("hse manager", should_cancel=cancel)
+
+    assert result.error == CANCELLED_ERROR
+    pool = _FakePool.instances[-1]
+    assert len(pool.futures) == 1, "one hedge future was queued before the loss"
+    assert pool.futures[0].cancelled() is True, "queued future must be cancelled"
+    assert pool.shutdown_kwargs == {"wait": False, "cancel_futures": True}
+
+
+def test_run_provider_skips_health_mutation_after_fenced_runner(monkeypatch):
+    """Owner item 1: degradation marking after runner() is a side effect —
+    it must be re-gated so a fenced worker never mutates provider health."""
+    monkeypatch.setenv("JOOBLE_API_KEY", "jk")
+    state = {"lost": False}
+
+    def _jooble(role, location, **kw):
+        state["lost"] = True  # loss flips while the runner is executing
+        return FetchResult(items=[], provider="jooble", rate_limited=True)
+
+    monkeypatch.setattr(job_providers, "_jooble_search", _jooble)
+    result = job_providers.search_jobs("hse manager", should_cancel=lambda: state["lost"])
+    assert result.error == CANCELLED_ERROR
+    assert job_providers.is_degraded("jooble") is False, "fenced worker must not mark health"
+
+
+def test_internal_lookup_not_started_after_loss(monkeypatch):
+    """Owner item 1: internal_lookup is caller-supplied work — a fenced
+    worker must not invoke it, and nothing may be cached."""
+    monkeypatch.setenv("JOOBLE_API_KEY", "jk")
+    called = []
+    # Checkpoint order: entry(1), before_internal_lookup(2).
+    cancel = _FlippingCancel(flip_after=1)
+    result = job_providers.search_jobs(
+        "hse manager",
+        internal_lookup=lambda: called.append(1) or [{"title": "x"}],
+        should_cancel=cancel,
+    )
+    assert called == [], "internal_lookup must not start after the loss"
+    assert result.error == CANCELLED_ERROR
+    with job_providers._cache_lock:
+        assert job_providers._result_cache == {}
 
 
 def test_cascade_without_cancel_check_unchanged(monkeypatch):

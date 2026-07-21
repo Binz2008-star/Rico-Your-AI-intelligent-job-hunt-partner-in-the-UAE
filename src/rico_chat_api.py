@@ -2275,11 +2275,18 @@ class RicoChatAPI:
         fence would refuse it anyway) — the takeover execution owns the
         user-visible outcome."""
         operation_id = str(getattr(self, "_current_operation_id", "") or "")
+        # Log a safe hash, never the raw operation_id (owner review 2026-07-21).
+        import hashlib as _hashlib
+        _op_ref = _hashlib.sha256(operation_id.encode()).hexdigest()[:12] if operation_id else "-"
         logger.warning(
-            "job_search_superseded: ownership lost mid-cascade op=%s attempt=%s — "
+            "job_search_superseded: ownership lost mid-cascade op_ref=%s attempt=%s — "
             "result discarded (no user/storage write)",
-            operation_id, self._operation_attempt(),
+            _op_ref, self._operation_attempt(),
         )
+        # Truthful wording (owner review 2026-07-21): a request may already
+        # have been on the wire before the fence, so we claim only what is
+        # certain — the old execution's result was discarded and a newer
+        # execution owns the operation. No promise about arriving results.
         return {
             "type": "search_superseded",
             "intent": "search_jobs",
@@ -2289,10 +2296,10 @@ class RicoChatAPI:
             "operation_type": "job_search",
             "response_source": "ownership_lost",
             "message": (
-                "تولّى تنفيذٌ أحدث هذا البحث — النتائج ستصل من هناك، ولم أكرر البحث."
+                "جرى تجاوز التنفيذ الأقدم لهذا البحث وأُهمِلت نتيجته؛ تنفيذٌ أحدث يمتلك هذه العملية الآن."
                 if arabic else
-                "A newer execution took over this search — its results will arrive from there; "
-                "I didn't run a duplicate."
+                "This search's earlier execution was superseded and its result was discarded; "
+                "a newer execution owns this operation now."
             ),
         }
 

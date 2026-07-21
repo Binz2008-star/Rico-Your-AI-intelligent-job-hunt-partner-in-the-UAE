@@ -472,6 +472,176 @@ def _partition_owner(user_id, op_id, dead_url, ready_q, lost_q, cascade_counter)
     lost_q.put(("A_post_fence_cascade", result.error, launches["n"], len(result.items)))
 
 
+def _inflight_partition_owner(user_id, op_id, ready_q, out_q, release_path):
+    """Worker A for the FULL in-flight scenario (owner review 2026-07-21 item 4):
+
+    claim on the real DB → start the REAL orchestrator with a controllably
+    BLOCKED first provider → partition begins while that provider is in
+    flight → the heartbeat self-fences → the orchestrator (already running)
+    stops cooperatively: no next hedge launches, no cache/observations/
+    provider-health writes, and the provider's late response (released by the
+    parent AFTER the takeover) is discarded — never used, never stored."""
+    _worker_env()
+    _fresh_nonce()
+    import threading
+    from src.services import operation_state as ops
+    from src import job_providers
+    from src.jsearch_client import FetchResult
+
+    op = ops.start_job_search_operation(
+        user_id=user_id, role_or_query="hse manager", operation_id=op_id
+    )
+    attempt = op["attempt"]
+    ready_q.put(("A_claimed", attempt))
+
+    launches = {"jooble": 0, "next": 0}
+    writes = {"obs": 0}
+    inflight = threading.Event()
+
+    def _blocked_jooble(role, location, **kw):
+        launches["jooble"] += 1
+        inflight.set()  # the request is now "on the wire"
+        while not os.path.exists(release_path):  # parent releases it later
+            time.sleep(0.05)
+        return FetchResult(
+            items=[{"title": "late-inflight", "job_id": "L1"}], provider="jooble"
+        )
+
+    def _counting_next(*a, **kw):
+        launches["next"] += 1
+        return FetchResult(items=[{"title": "x", "job_id": "N1"}], provider="jsearch")
+
+    job_providers._jooble_search = _blocked_jooble
+    job_providers._jsearch_search = _counting_next
+    job_providers._adzuna_search = _counting_next
+    job_providers._record_observations_safe = (
+        lambda *a, **k: writes.__setitem__("obs", writes["obs"] + 1)
+    )
+    os.environ["JOOBLE_API_KEY"] = "probe"
+    os.environ["RAPIDAPI_KEY"] = "probe"
+
+    result_box = {}
+
+    def _cascade():
+        result_box["result"] = job_providers.search_jobs(
+            "hse manager", use_cache=False,
+            should_cancel=lambda: ops.ownership_lost(op_id, attempt),
+        )
+
+    cascade_thread = threading.Thread(target=_cascade)
+    cascade_thread.start()
+
+    assert inflight.wait(timeout=30), "first provider never went in flight"
+    # Partition begins WHILE the provider request is in flight.
+    os.environ["DATABASE_URL"] = "postgresql://bad-host:1/nodb"
+    ready_q.put(("A_partitioned",))
+
+    deadline = time.monotonic() + _LEASE * 10
+    while time.monotonic() < deadline:
+        if ops.ownership_lost(op_id, attempt):
+            break
+        time.sleep(0.05)
+    else:
+        out_q.put(("A_never_fenced",))
+        return
+    ready_q.put(("A_self_fenced", attempt))
+
+    # The ALREADY-RUNNING orchestrator must now stop cooperatively — while
+    # the blocked provider is still in flight (not yet released).
+    cascade_thread.join(timeout=30)
+    result = result_box.get("result")
+    with job_providers._cache_lock:
+        cache_len = len(job_providers._result_cache)
+    out_q.put((
+        "A_cascade_stopped",
+        getattr(result, "error", None),
+        len(getattr(result, "items", []) or []),
+        launches["next"],          # hedges launched AFTER the first provider
+        writes["obs"],             # observations writes
+        cache_len,                 # result-cache writes
+    ))
+
+    # Parent releases the in-flight response only NOW (after B completed).
+    while not os.path.exists(release_path):
+        time.sleep(0.05)
+    # Give the pool thread time to return the late response into the void.
+    time.sleep(1.0)
+    with job_providers._cache_lock:
+        cache_after = len(job_providers._result_cache)
+    out_q.put(("A_late_response_unused", writes["obs"], cache_after))
+
+
+def _takeover_and_complete(user_id, op_id, q):
+    """Worker B: takes over the stale lease and produces the ONLY terminal,
+    user-visible result for the operation."""
+    _worker_env()
+    _fresh_nonce()
+    from src.services import operation_state as ops
+
+    op = ops.start_job_search_operation(
+        user_id=user_id, role_or_query="hse manager", operation_id=op_id
+    )
+    if not op.get("claimed"):
+        q.put(("B_refused",))
+        return
+    ops.mark_completed(user_id, op_id, 3, attempt=op["attempt"])
+    q.put(("B_completed", op["attempt"]))
+
+
+def test_partition_while_provider_inflight_fenced_cascade_stops_and_discards(tmp_path):
+    """FULL in-flight scenario (owner review 2026-07-21 item 4): the cascade
+    STARTS BEFORE the partition; the fence lands while its first provider is
+    in flight; the running orchestrator launches no further hedge, performs
+    no cache/observations write, and the released late response is discarded.
+    B alone produces the terminal user-visible result."""
+    release_path = str(tmp_path / "release-inflight")
+    ready = _CTX.Queue()
+    out = _CTX.Queue()
+    a = _CTX.Process(
+        target=_inflight_partition_owner,
+        args=(_USER, _OP, ready, out, release_path),
+    )
+    a.start()
+    assert ready.get(timeout=30) == ("A_claimed", 1)
+    assert ready.get(timeout=30) == ("A_partitioned",), "partition must begin in flight"
+
+    # The partition outlasts the lease; B legitimately takes over attempt 2
+    # and completes — the only terminal, user-visible outcome.
+    time.sleep(_LEASE + 0.8)
+    qb = _CTX.Queue()
+    b = _CTX.Process(target=_takeover_and_complete, args=(_USER, _OP, qb))
+    b.start()
+    b.join(timeout=30)
+    assert qb.get(timeout=5) == ("B_completed", 2), "B takes over and completes"
+    row = _row(_OP)
+    assert row[1:3] == ("completed", 2)
+
+    # A self-fences while its orchestrator is STILL RUNNING (provider blocked).
+    assert ready.get(timeout=60) == ("A_self_fenced", 1)
+
+    # The already-running cascade stops cooperatively BEFORE the response is
+    # released: cancelled result, zero further hedges, zero storage writes.
+    stopped = out.get(timeout=60)
+    assert stopped[0] == "A_cascade_stopped", f"unexpected: {stopped}"
+    assert stopped[1] == "cancelled", f"fenced cascade must be cancelled, got {stopped}"
+    assert stopped[2] == 0, "a fenced cascade must return no items"
+    assert stopped[3] == 0, f"fenced cascade launched {stopped[3]} further hedge(s) — must be 0"
+    assert stopped[4] == 0, "no observations write by the fenced worker"
+    assert stopped[5] == 0, "no result-cache write by the fenced worker"
+
+    # NOW release A's in-flight response — it must go nowhere.
+    Path(release_path).touch()
+    late = out.get(timeout=60)
+    assert late[0] == "A_late_response_unused"
+    assert late[1] == 0, "late response must not reach the observations archive"
+    assert late[2] == 0, "late response must not be cached"
+
+    a.join(timeout=60)
+    # B's terminal result stands untouched by A.
+    row = _row(_OP)
+    assert row[1:3] == ("completed", 2)
+
+
 def test_partition_after_claim_takeover_and_fenced_owner_stops():
     from src.repositories import chat_operations_repo as repo
 

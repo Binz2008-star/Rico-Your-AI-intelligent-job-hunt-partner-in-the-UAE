@@ -71,9 +71,32 @@ def _is_cancelled(should_cancel: CancelCheck) -> bool:
     try:
         return bool(should_cancel())
     except Exception:
-        # A broken check must never take down the fetch path; treat as live.
-        logger.warning("jsearch: cancel check raised — treating as not cancelled", exc_info=True)
+        # FAIL CLOSED (owner review 2026-07-21): a check was SUPPLIED, so this
+        # work is ownership-gated — if the check itself is broken we cannot
+        # prove we still own the operation, and continuing would risk exactly
+        # the duplicate provider work this gate exists to prevent.
+        logger.error("cancel check raised — failing closed (treated as cancelled)", exc_info=True)
+        return True
+
+
+def _cancellable_wait(seconds: float, should_cancel: CancelCheck) -> bool:
+    """Cancel-aware replacement for time.sleep in backoff paths.
+
+    Waits up to *seconds*, polling the cancel check every 50ms so a backoff
+    never delays the cooperative stop by more than one poll interval. Returns
+    True when cancellation was observed (the caller must not issue further
+    requests). With no check supplied it degrades to a plain sleep."""
+    if should_cancel is None:
+        time.sleep(seconds)
         return False
+    deadline = time.monotonic() + seconds
+    while True:
+        if _is_cancelled(should_cancel):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return _is_cancelled(should_cancel)
+        time.sleep(min(0.05, remaining))
 
 
 @dataclass
@@ -275,6 +298,11 @@ def search(
     if use_cache:
         cached = _cache_get(query)
         if cached is not None:
+            if _is_cancelled(should_cancel):
+                # Loss observed between the entry check and the cache read —
+                # even a cached result must not be returned to a fenced caller.
+                logger.info("jsearch_cancelled query=%r stage=cache_hit_discarded", query)
+                return FetchResult(error=CANCELLED_ERROR)
             logger.info("jsearch_cache hit query=%r results=%d", query, len(cached))
             return FetchResult(items=cached, cache_hit=True)
     logger.info("jsearch_cache miss query=%r", query)
@@ -322,14 +350,26 @@ def search(
                 if jid:
                     seen_ids.add(jid)
                 items.append(it)
+            # Re-check IMMEDIATELY before each side effect (owner review
+            # 2026-07-21): loss can flip during normalization, and a fenced
+            # worker must not perform storage writes after that point.
+            if _is_cancelled(should_cancel):
+                logger.info("jsearch_cancelled query=%r stage=before_cache_write", query)
+                return FetchResult(error=CANCELLED_ERROR, retries=retries)
             _cache_put(query, items)
             # Posting-history archive: fresh fetches only — a cache hit is the
             # same response re-served, not a new sighting. Never raises.
+            if _is_cancelled(should_cancel):
+                logger.info("jsearch_cancelled query=%r stage=before_observations", query)
+                return FetchResult(error=CANCELLED_ERROR, retries=retries)
             try:
                 from src.repositories.job_observations_repo import record_observations
                 record_observations(items, provider="jsearch", query_context=query, country=country)
             except Exception:
                 logger.debug("job_observations hook skipped", exc_info=True)
+            if _is_cancelled(should_cancel):
+                logger.info("jsearch_cancelled query=%r stage=before_return", query)
+                return FetchResult(error=CANCELLED_ERROR, retries=retries)
             logger.info("jsearch_fetch ok query=%r results=%d retries=%d", query, len(items), retries)
             return FetchResult(items=items, retries=retries)
         except urllib.error.HTTPError as exc:
@@ -350,7 +390,15 @@ def search(
                     "jsearch_retry query=%r status=%d retry=%d/%d backoff=%.1fs",
                     query, code, retries, _MAX_RETRIES, backoff,
                 )
-                time.sleep(backoff)
+                # Cancel-aware backoff: ownership loss during the wait stops
+                # the cooperative flow within one 50ms poll — the retry
+                # request is never issued and no stale cache is served.
+                if _cancellable_wait(backoff, should_cancel):
+                    logger.info(
+                        "jsearch_cancelled query=%r stage=during_backoff retries=%d",
+                        query, retries,
+                    )
+                    return FetchResult(error=CANCELLED_ERROR, retries=retries)
                 continue
             logger.warning("jsearch_http_error query=%r status=%d", query, code)
             last_error = f"http_{code}"
@@ -360,6 +408,11 @@ def search(
             last_error = type(exc).__name__
             break
 
+    # Final checkpoint before the stale-cache fallback: a fenced caller gets
+    # nothing usable, not even stale items (owner review 2026-07-21).
+    if _is_cancelled(should_cancel):
+        logger.info("jsearch_cancelled query=%r stage=before_stale_fallback", query)
+        return FetchResult(error=CANCELLED_ERROR, retries=retries)
     rate_limited = last_error == "http_429"
     quota_exhausted = last_error == "http_403"
     if rate_limited:

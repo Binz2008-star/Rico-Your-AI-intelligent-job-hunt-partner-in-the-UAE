@@ -250,6 +250,11 @@ def _jooble_search(
             data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
         code = getattr(exc, "code", 0)
+        if _is_cancelled(should_cancel):
+            # Fenced worker: no provider-health mutation either (owner review
+            # 2026-07-21) — the takeover execution owns all further state.
+            logger.info("jooble_cancelled role=%r stage=error_path", role)
+            return FetchResult(error=CANCELLED_ERROR, provider="jooble")
         rate_limited = code == 429
         # 401/403 from Jooble == bad/expired key or quota → degrade hard.
         quota = code in (401, 403)
@@ -261,6 +266,9 @@ def _jooble_search(
             rate_limited=rate_limited, quota_exhausted=quota,
         )
     except Exception as exc:  # network, JSON, timeout
+        if _is_cancelled(should_cancel):
+            logger.info("jooble_cancelled role=%r stage=error_path", role)
+            return FetchResult(error=CANCELLED_ERROR, provider="jooble")
         mark_degraded("jooble", "error")
         logger.warning("jooble_fetch_failed role=%r err=%s", role, type(exc).__name__)
         return FetchResult(error=type(exc).__name__, provider="jooble")
@@ -274,7 +282,15 @@ def _jooble_search(
     if not isinstance(raw_jobs, list):
         raw_jobs = []
     items = [_normalize_jooble(j) for j in raw_jobs if isinstance(j, dict)]
+    # Re-check IMMEDIATELY before the storage side effect: loss can flip
+    # during normalization (owner review 2026-07-21).
+    if _is_cancelled(should_cancel):
+        logger.info("jooble_cancelled role=%r stage=before_observations", role)
+        return FetchResult(error=CANCELLED_ERROR, provider="jooble")
     _record_observations_safe(items, provider="jooble", query_context=f"{role} {location}".strip())
+    if _is_cancelled(should_cancel):
+        logger.info("jooble_cancelled role=%r stage=before_return", role)
+        return FetchResult(error=CANCELLED_ERROR, provider="jooble")
     logger.info("jooble_fetch ok role=%r results=%d", role, len(items))
     return FetchResult(items=items, provider="jooble")
 
@@ -370,6 +386,9 @@ def _adzuna_search(
             data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
         code = getattr(exc, "code", 0)
+        if _is_cancelled(should_cancel):
+            logger.info("adzuna_cancelled role=%r stage=error_path", role)
+            return FetchResult(error=CANCELLED_ERROR, provider="adzuna")
         rate_limited = code == 429
         quota = code in (401, 403)
         reason = "quota" if quota else ("rate_limit" if rate_limited else "http_error")
@@ -380,6 +399,9 @@ def _adzuna_search(
             rate_limited=rate_limited, quota_exhausted=quota,
         )
     except Exception as exc:
+        if _is_cancelled(should_cancel):
+            logger.info("adzuna_cancelled role=%r stage=error_path", role)
+            return FetchResult(error=CANCELLED_ERROR, provider="adzuna")
         mark_degraded("adzuna", "error")
         logger.warning("adzuna_fetch_failed role=%r err=%s", role, type(exc).__name__)
         return FetchResult(error=type(exc).__name__, provider="adzuna")
@@ -393,10 +415,16 @@ def _adzuna_search(
     if not isinstance(raw, list):
         raw = []
     items = [_normalize_adzuna(j) for j in raw if isinstance(j, dict)]
+    if _is_cancelled(should_cancel):
+        logger.info("adzuna_cancelled role=%r stage=before_observations", role)
+        return FetchResult(error=CANCELLED_ERROR, provider="adzuna")
     _record_observations_safe(
         items, provider="adzuna",
         query_context=f"{role} {location}".strip(), country=country,
     )
+    if _is_cancelled(should_cancel):
+        logger.info("adzuna_cancelled role=%r stage=before_return", role)
+        return FetchResult(error=CANCELLED_ERROR, provider="adzuna")
     logger.info("adzuna_fetch ok role=%r results=%d", role, len(items))
     return FetchResult(items=items, provider="adzuna")
 
@@ -452,17 +480,28 @@ def search_jobs(
     if use_cache:
         cached = _cache_get(key)
         if cached is not None:
+            if _is_cancelled(should_cancel):
+                logger.info("provider_cascade_cancelled role=%r stage=cache_hit_discarded", role)
+                return FetchResult(items=[], provider="none", error=CANCELLED_ERROR)
             logger.info("provider_cache hit role=%r results=%d", role, len(cached))
             return FetchResult(items=cached, cache_hit=True, provider="cache")
 
     # 2. Internal recent/saved results (caller-supplied; e.g. recent matches).
     if internal_lookup is not None:
+        if _is_cancelled(should_cancel):
+            # The lookup is caller-supplied work with unknown side effects —
+            # a fenced worker must not start it (owner review 2026-07-21).
+            logger.info("provider_cascade_cancelled role=%r stage=before_internal_lookup", role)
+            return FetchResult(items=[], provider="none", error=CANCELLED_ERROR)
         try:
             internal_items = internal_lookup() or []
         except Exception as exc:
             internal_items = []
             logger.debug("internal_lookup failed err=%s", type(exc).__name__)
         if internal_items:
+            if _is_cancelled(should_cancel):
+                logger.info("provider_cascade_cancelled role=%r stage=internal_discarded", role)
+                return FetchResult(items=[], provider="none", error=CANCELLED_ERROR)
             logger.info("provider_internal hit role=%r results=%d", role, len(internal_items))
             _cache_put(key, internal_items)
             return FetchResult(items=internal_items, provider="internal")
@@ -519,8 +558,13 @@ def search_jobs(
             return FetchResult(error=CANCELLED_ERROR, provider=name)
         # Degradation marking lives in the worker thread so a provider that
         # finishes AFTER a winner was chosen still records its rate/quota
-        # state for the cooldown registry.
+        # state for the cooldown registry — but never on behalf of a FENCED
+        # worker: health mutations are side effects too (owner review
+        # 2026-07-21), so they are re-gated after the runner returns.
         result = runner()
+        if _is_cancelled(should_cancel):
+            logger.info("provider_worker_cancelled provider=%s stage=after_runner", name)
+            return FetchResult(error=CANCELLED_ERROR, provider=name)
         if result.rate_limited:
             mark_degraded(name, "rate_limit")
         if result.quota_exhausted:
@@ -542,10 +586,13 @@ def search_jobs(
             while True:
                 if _is_cancelled(should_cancel):
                     # Ownership lost mid-cascade: launch nothing further and
-                    # take no winner. Threads already on the wire are not
+                    # take no winner. Futures that have NOT started yet are
+                    # cancelled outright; threads already on the wire are not
                     # aborted — their in-flight responses are discarded inside
                     # the clients (same check) and never harvested here.
                     cancelled = True
+                    for fut in pending:
+                        fut.cancel()
                     logger.info(
                         "provider_cascade_cancelled role=%r stage=mid_cascade started=%d",
                         role, started,
@@ -582,7 +629,9 @@ def search_jobs(
                 if winner is not None:
                     break
         finally:
-            pool.shutdown(wait=False)
+            # cancel_futures reaps anything still queued (a cancelled RUNNING
+            # future is unaffected — its response is discarded in the client).
+            pool.shutdown(wait=False, cancel_futures=cancelled)
 
         if winner is not None and (cancelled or _is_cancelled(should_cancel)):
             # A winner surfaced in the same pass ownership was lost: the
