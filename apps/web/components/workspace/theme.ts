@@ -12,6 +12,9 @@
 import { createContext, useContext } from "react";
 
 export interface WorkspacePalette {
+    /** True on the dark island. v5 paper-plane treatments (Command v5 PR 3)
+     *  apply only when false — the dark island keeps its own language. */
+    dark: boolean;
     bg: string;
     panel: string;
     rail: string;
@@ -27,33 +30,38 @@ export interface WorkspacePalette {
 }
 
 export const WORKSPACE_THEME: { light: WorkspacePalette; dark: WorkspacePalette } = {
+    /* Values are the owner-supplied Command Workspace artifact palettes
+       (LIGHT/DARK), applied 2026-07-21 — they supersede the earlier v5
+       rebuild palette entirely. */
     light: {
-        bg: "#F1EADD",
-        panel: "#F7F1E6",
-        rail: "#EDE5D6",
-        inset: "#EAE1D0",
-        ink: "#1F1B15",
-        ink70: "rgba(31,27,21,0.70)",
-        ink55: "rgba(31,27,21,0.52)",
-        ink40: "rgba(31,27,21,0.38)",
-        hair: "rgba(31,27,21,0.16)",
-        activeBg: "rgba(31,27,21,0.06)",
-        track: "rgba(31,27,21,0.10)",
-        red: "#C6492E",
+        dark: false,
+        bg: "#F2ECE0" /* paper */,
+        panel: "#F6F0E5" /* paperCard */,
+        rail: "#EAE1CD" /* paper2 */,
+        inset: "#EAE1CD",
+        ink: "#14110D",
+        ink70: "#3A342C" /* inkSoft */,
+        ink55: "#6B6355" /* inkMute */,
+        ink40: "rgba(20,17,13,0.40)",
+        hair: "#D3C9B4" /* rule */,
+        activeBg: "rgba(20,17,13,0.05)",
+        track: "#E0D6BF" /* ruleSoft */,
+        red: "#CF3D17" /* sun */,
     },
     dark: {
-        bg: "#17140F",
-        panel: "#211C15",
-        rail: "#14110C",
-        inset: "#2A241B",
-        ink: "#EFE7D6",
-        ink70: "rgba(239,231,214,0.72)",
-        ink55: "rgba(239,231,214,0.54)",
-        ink40: "rgba(239,231,214,0.40)",
-        hair: "rgba(239,231,214,0.16)",
-        activeBg: "rgba(239,231,214,0.08)",
-        track: "rgba(239,231,214,0.12)",
-        red: "#E0895A",
+        dark: true,
+        bg: "#16130E" /* paper */,
+        panel: "#1A1710" /* paperCard */,
+        rail: "#1E1A12" /* paper2 */,
+        inset: "#1E1A12",
+        ink: "#F2ECE0",
+        ink70: "#D7CEBC" /* inkSoft */,
+        ink55: "#9A907D" /* inkMute */,
+        ink40: "rgba(242,236,224,0.40)",
+        hair: "#35302A" /* rule */,
+        activeBg: "rgba(242,236,224,0.07)",
+        track: "#2A2620" /* ruleSoft */,
+        red: "#EE6A3A" /* sun */,
     },
 };
 

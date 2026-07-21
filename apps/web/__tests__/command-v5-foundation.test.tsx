@@ -105,10 +105,12 @@ describe("v5 foundation tokens", () => {
         ];
         const textSafe = new Set<string>([
             V5.terraText,
+            V5.coralText,
             V5.amberText,
             V5.goldText,
+            V5.mossText,
+            V5.logText,
             V5.electricText,
-            V5.purpleText,
         ]);
         for (const m of modes) {
             const a = V5_MODE_ACCENTS[m];

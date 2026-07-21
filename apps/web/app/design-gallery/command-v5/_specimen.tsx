@@ -49,13 +49,15 @@ const SWATCH_GROUPS: { title: string; items: [name: string, value: string, note?
     {
         title: "AA text-safe accents",
         items: [
-            ["terraText", V5.terraText, "5.33:1"],
-            ["amberText", V5.amberText, "4.76:1"],
-            ["goldText", V5.goldText, "5.63:1"],
-            ["electricText", V5.electricText, "5.91:1"],
-            ["purpleText", V5.purpleText, "5.65:1"],
-            ["goldTextL", V5.goldTextL, "4.03:1 L"],
-            ["coralTextL", V5.coralTextL, "3.71:1 L"],
+            ["terraText", V5.terraText, "4.56:1"],
+            ["coralText", V5.coralText, "4.64:1"],
+            ["amberText", V5.amberText, "4.59:1"],
+            ["goldText", V5.goldText, "4.51:1"],
+            ["mossText", V5.mossText, "4.65:1"],
+            ["logText", V5.logText, "4.99:1"],
+            ["electricText", V5.electricText, "5.73:1"],
+            ["goldTextL", V5.goldTextL, "3.08:1 L"],
+            ["coralTextL", V5.coralTextL, "4.04:1 L"],
         ],
     },
 ];

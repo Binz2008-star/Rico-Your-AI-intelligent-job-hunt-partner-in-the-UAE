@@ -6,13 +6,14 @@
  * owner adopted the reference left-sidebar for the workspace).
  *
  * Single approved shell on the authenticated workspace routes (2026-07-18
- * single-shell ruling). Command v5 PR 2 (owner-approved v5 program,
- * AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md) applies the v5 visual skin
- * to the LIGHT island only: per-route accents, rail energy marker, ember
- * wordmark, route atmosphere, document-content entrance, and the Rico
- * presence indicator. Behavior (nav source of truth, language, drawer,
- * mission summary, app/document variants) is unchanged, and the dark island
- * keeps its existing accent language untouched.
+ * single-shell ruling). The visual language is the owner-supplied Command
+ * Workspace artifact (applied 2026-07-21, superseding the earlier v5
+ * rebuild): sun "R" badge brand, paper-lift active rail rows with a solid
+ * sun marker, sun-tint count pill, per-route mode accents fed to the
+ * `--wsx5-mode*` custom properties, drifting accent ambience in BOTH
+ * themes, document-content entrance, and the Rico presence indicator.
+ * Behavior (nav source of truth, language, drawer, mission summary,
+ * app/document variants) is unchanged.
  *
  * Self-contained light-first Atelier "island": everything is scoped under
  * `.wsx-root` (+ the `.wsx5` token island), uses the shared atelier-kit and
@@ -33,8 +34,8 @@ import { RailGoalMini } from "@/components/workspace/RailGoalMini";
 import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
 import { useMissionSummary } from "@/hooks/useMissionSummary";
 import "@/components/workspace/v5/motion.css";
-import { V5, V5_FONT, V5_GRADIENT, V5_MODE_ACCENTS, type V5ModeKey } from "@/components/workspace/v5/tokens";
-import { v5SpaceGrotesk } from "@/components/workspace/v5/fonts";
+import { V5_FONT, V5_MODE_ACCENTS, type V5ModeKey } from "@/components/workspace/v5/tokens";
+import { v5Amiri, v5Inter, v5PlexArabic, v5PlexMono } from "@/components/workspace/v5/fonts";
 import { RicoPresence } from "@/components/workspace/v5/RicoPresence";
 
 export type NavItem = { key: string; href: string; label: { en: string; ar: string }; icon: React.ReactNode };
@@ -121,52 +122,52 @@ export function WorkspaceShell({
 
     const routeAcc = V5_MODE_ACCENTS[v5ModeForPath(pathname)];
 
+    /* Artifact brand: sun "R" badge + plain display wordmark (both themes). */
     const Brand = (
-        <Link href="/dashboard" className="flex items-baseline gap-2" style={{ textDecoration: "none" }}>
+        <Link href="/dashboard" className="flex items-center gap-2" style={{ textDecoration: "none" }}>
             <span
+                aria-hidden="true"
                 style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 999,
+                    background: c.red,
+                    color: "#fff",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                     fontFamily: SERIF,
-                    fontSize: "1.35rem",
-                    lineHeight: 1,
-                    ...(dark
-                        ? { color: c.ink }
-                        : {
-                              fontStyle: "italic",
-                              background: V5_GRADIENT.emberDisplayText,
-                              WebkitBackgroundClip: "text",
-                              backgroundClip: "text",
-                              color: "transparent",
-                              paddingInlineEnd: "0.06em",
-                          }),
+                    fontSize: 12,
+                    fontWeight: 600,
+                    flexShrink: 0,
                 }}
             >
+                R
+            </span>
+            <span style={{ fontFamily: SERIF, fontSize: "1.05rem", fontWeight: 500, letterSpacing: "-0.01em", lineHeight: 1, color: c.ink }}>
                 Rico
             </span>
             <Mono style={{ color: c.ink40, letterSpacing: "0.18em" }}>{isAr ? "مساحة العمل" : "Workspace"}</Mono>
         </Link>
     );
 
+    /* Artifact rail rows: active row lifts to paper with a solid sun start
+       marker and sun icon; the count rides in a sun-tint pill (both themes —
+       the artifact uses the sun accent in the rail for every mode). */
     const NavList = (
         <nav className="flex flex-col gap-1">
             {WORKSPACE_NAV.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
-                const acc = V5_MODE_ACCENTS[v5ModeForPath(item.href)];
-                const activeInk = dark ? c.ink : acc.modeAText;
-                const activeIcon = dark ? c.red : acc.modeAText;
                 return (
                     <Link
                         key={item.key}
                         href={item.href}
                         onClick={() => setOpen(false)}
-                        className="wsx-nav flex items-center gap-3 rounded-[7px] px-3 py-2.5"
+                        className="wsx-nav flex items-center gap-3 rounded-[8px] px-3 py-2.5"
                         style={{
                             position: "relative",
-                            color: active ? activeInk : c.ink70,
-                            background: active
-                                ? dark
-                                    ? c.activeBg
-                                    : `linear-gradient(96deg, ${acc.modeA}24, transparent 70%)`
-                                : "transparent",
+                            color: active ? c.ink : c.ink70,
+                            background: active ? c.bg : "transparent",
                             textDecoration: "none",
                         }}
                         aria-current={active ? "page" : undefined}
@@ -177,26 +178,25 @@ export function WorkspaceShell({
                                 data-testid="wsx5-nav-marker"
                                 style={{
                                     position: "absolute",
-                                    insetInlineStart: -2,
+                                    insetInlineStart: -1,
                                     top: 8,
                                     bottom: 8,
-                                    width: 3.5,
-                                    borderRadius: 4,
-                                    background: dark ? c.red : V5_GRADIENT.ember,
-                                    boxShadow: dark ? "none" : `0 0 12px ${acc.modeA}8C`,
+                                    width: 2,
+                                    borderRadius: 2,
+                                    background: c.red,
                                 }}
                             />
                         )}
                         <span
                             style={{
-                                color: active ? activeIcon : c.ink40,
+                                color: active ? c.red : c.ink40,
                                 display: "inline-flex",
                                 animation: active ? "wsx5-pop-in 480ms var(--wsx5-spring)" : undefined,
                             }}
                         >
                             {item.icon}
                         </span>
-                        <span style={{ fontSize: 14, fontFamily: V5_FONT.sans, fontWeight: active ? 650 : 500 }}>
+                        <span style={{ fontSize: 13.5, fontFamily: V5_FONT.sans, fontWeight: active ? 600 : 450 }}>
                             {isAr ? item.label.ar : item.label.en}
                         </span>
                         {item.key === "applications" && applicationsCount > 0 && (
@@ -207,14 +207,14 @@ export function WorkspaceShell({
                                 style={{
                                     fontFamily: ATELIER_FONT.mono,
                                     fontSize: 10,
-                                    ...(active && !dark
+                                    ...(active
                                         ? {
-                                              background: acc.modeAText,
-                                              color: V5.onEmber,
-                                              padding: "1px 6px",
-                                              borderRadius: 6,
+                                              color: c.red,
+                                              background: `${c.red}1F`,
+                                              padding: "1px 7px",
+                                              borderRadius: 999,
                                           }
-                                        : { color: active ? c.red : c.ink40 }),
+                                        : { color: c.ink40 }),
                                 }}
                             >
                                 {applicationsCount}
@@ -253,10 +253,21 @@ export function WorkspaceShell({
 
     return (
         <div
-            className={`wsx-root wsx5 ${isAr ? "wsx-ar" : ""} ${isApp ? "h-[100dvh] overflow-hidden" : "min-h-screen"} ${atelierFraunces.variable} ${atelierNaskhArabic.variable} ${atelierSansArabic.variable} ${v5SpaceGrotesk.variable}`}
+            className={`wsx-root wsx5 ${isAr ? "wsx-ar" : ""} ${isApp ? "h-[100dvh] overflow-hidden" : "min-h-screen"} ${atelierFraunces.variable} ${atelierNaskhArabic.variable} ${atelierSansArabic.variable} ${v5Inter.variable} ${v5PlexMono.variable} ${v5Amiri.variable} ${v5PlexArabic.variable}`}
             dir={isAr ? "rtl" : "ltr"}
             lang={language}
-            style={{ background: c.bg, color: c.ink, fontFamily: ATELIER_FONT.body }}
+            style={
+                {
+                    background: c.bg,
+                    color: c.ink,
+                    fontFamily: ATELIER_FONT.body,
+                    /* per-route mode accents feed the artifact's animated
+                       display-word gradient and micro ticks */
+                    "--wsx5-modeA": routeAcc.modeA,
+                    "--wsx5-modeB": routeAcc.modeB,
+                    "--wsx5-modeAText": routeAcc.modeAText,
+                } as React.CSSProperties
+            }
         >
             <style dangerouslySetInnerHTML={{ __html: `
                 .wsx-root .wsx-nav { transition: background-color .15s ease, color .15s ease; }
@@ -266,20 +277,20 @@ export function WorkspaceShell({
                 .wsx-root a:focus-visible, .wsx-root button:focus-visible { outline: 2px solid ${c.red}; outline-offset: 2px; border-radius: 4px; }
                 .wsx-root.wsx-ar * { letter-spacing: 0 !important; }
             ` }} />
-            {/* v5 route atmosphere — light island only, decorative, zero pointer impact */}
-            {!dark && (
-                <div
-                    aria-hidden="true"
-                    data-testid="wsx5-atmosphere"
-                    style={{
-                        position: "fixed",
-                        inset: 0,
-                        pointerEvents: "none",
-                        zIndex: 0,
-                        background: `radial-gradient(52% 44% at 12% -4%, ${routeAcc.modeB}3D, transparent 66%), radial-gradient(44% 40% at 104% 88%, ${routeAcc.modeA}1F, transparent 62%)`,
-                    }}
-                />
-            )}
+            {/* Artifact route ambience — accent-tinted radials with a slow
+                drift, both themes; decorative, zero pointer impact. */}
+            <div
+                aria-hidden="true"
+                data-testid="wsx5-atmosphere"
+                style={{
+                    position: "fixed",
+                    inset: "-12%",
+                    pointerEvents: "none",
+                    zIndex: 0,
+                    background: `radial-gradient(42% 44% at 15% 18%, ${routeAcc.modeA}21, transparent 60%), radial-gradient(48% 50% at 86% 82%, ${routeAcc.modeB}24, transparent 62%), radial-gradient(40% 42% at 72% 10%, ${routeAcc.modeA}18, transparent 60%)`,
+                    animation: "wsx5-ambient 20s ease-in-out infinite",
+                }}
+            />
             <div
                 className={`lg:grid ${isApp ? "h-full flex flex-col" : ""}`}
                 style={{ gridTemplateColumns: "244px 1fr", position: "relative", zIndex: 1 }}
@@ -291,7 +302,7 @@ export function WorkspaceShell({
                 >
                     <div className="flex flex-col gap-8">
                         <div className="pb-5" style={{ borderBottom: `1px solid ${c.hair}` }}>{Brand}</div>
-                        <RailGoalMini mission={missionSummary} language={language} c={c} accentFill={dark ? undefined : V5_GRADIENT.ember} />
+                        <RailGoalMini mission={missionSummary} language={language} c={c} />
                         {NavList}
                     </div>
                     {Controls}
@@ -310,7 +321,7 @@ export function WorkspaceShell({
                 )}
                 {showMobileChrome && open && (
                     <div className="lg:hidden px-5 py-4 flex shrink-0 flex-col gap-4" style={{ background: c.rail, borderBottom: `1px solid ${c.hair}` }}>
-                        <RailGoalMini mission={missionSummary} language={language} c={c} accentFill={dark ? undefined : V5_GRADIENT.ember} onNavigate={() => setOpen(false)} />
+                        <RailGoalMini mission={missionSummary} language={language} c={c} onNavigate={() => setOpen(false)} />
                         {NavList}
                         {Controls}
                         {mobileExtras}

@@ -1,21 +1,41 @@
-import { Space_Grotesk } from "next/font/google";
+import { Amiri, IBM_Plex_Mono, IBM_Plex_Sans_Arabic, Inter } from "next/font/google";
 
 /**
- * Command Workspace v5 UI sans (PR 1, foundation). Space Grotesk carries the
- * v5 interface voice: nav labels, chips, buttons, micro-labels. Display serif
- * stays Fraunces via the shared atelier-kit loader (`atelierFraunces`) — do
- * not add a second Fraunces instance.
+ * Command Workspace UI fonts — the owner-supplied artifact's stack
+ * (FONT_EN: Fraunces display / Inter sans / IBM Plex Mono;
+ *  FONT_AR: Amiri display / IBM Plex Sans Arabic). Display serif stays
+ * Fraunces via the shared atelier-kit loader (`atelierFraunces`) — do not
+ * add a second Fraunces instance.
  *
  * Route-scoped by design: next/font only emits preload hints on routes that
- * actually render a component using this export (same pattern as the
- * design-gallery Atelier fonts), so importing it here changes nothing for
- * existing production routes.
+ * actually render a component using these exports, so importing them here
+ * changes nothing for routes outside the workspace island.
  *
- * The `variable` literal must stay in sync with V5_FONT.sans in ./tokens.ts.
+ * The `variable` literals must stay in sync with V5_FONT in ./tokens.ts.
  */
-export const v5SpaceGrotesk = Space_Grotesk({
+export const v5Inter = Inter({
     subsets: ["latin"],
-    weight: ["300", "400", "500", "600", "700"],
     display: "swap",
-    variable: "--font-space-grotesk",
+    variable: "--font-inter-v5",
+});
+
+export const v5PlexMono = IBM_Plex_Mono({
+    subsets: ["latin"],
+    weight: ["400", "500"],
+    display: "swap",
+    variable: "--font-plex-mono-v5",
+});
+
+export const v5Amiri = Amiri({
+    subsets: ["arabic", "latin"],
+    weight: ["400", "700"],
+    display: "swap",
+    variable: "--font-amiri-v5",
+});
+
+export const v5PlexArabic = IBM_Plex_Sans_Arabic({
+    subsets: ["arabic", "latin"],
+    weight: ["400", "500", "600", "700"],
+    display: "swap",
+    variable: "--font-plex-arabic-v5",
 });
