@@ -63,6 +63,7 @@ from src.services.profile_context_resolver import (
 )
 from src.services.operation_state import (
     OperationClaimRefused,
+    OperationStoreUnavailable,
     mark_completed,
     mark_failed,
     start_job_search_operation,
@@ -7399,9 +7400,40 @@ class RicoChatAPI:
                     "I didn't start a second search."
                 ),
             }
+        except OperationStoreUnavailable as exc:
+            # Mandatory Postgres ownership store is unreachable (fail-closed —
+            # DEC-20260721-001 slice 4). We could NOT atomically claim the
+            # operation, so NO provider cascade ran and we own nothing: never
+            # mark_failed (there is no owned record, and the store is down
+            # anyway). Surface an honest temporary-unavailable reply carrying
+            # service_unavailable=True so the transport can map it to 503 —
+            # NOT a raw 500, and NOT an unguarded cascade.
+            logger.error("rico_chat_api: operation store unavailable user=%s: %s", user_id, exc)
+            arabic = language == "ar" or self._is_arabic_text(message or "")
+            return {
+                "type": "service_unavailable",
+                "intent": "search_jobs",
+                "success": False,
+                "service_unavailable": True,
+                "response_source": "operation_store_unavailable",
+                "debug_id": debug_id,
+                "error": "operation_store_unavailable",
+                "message": (
+                    "الخدمة غير متاحة مؤقتاً — تعذّر بدء البحث الآن. أعد المحاولة بعد قليل."
+                    if arabic else
+                    "The service is temporarily unavailable — I couldn't start the search right now. "
+                    "Please try again shortly."
+                ),
+            }
         except Exception as exc:
             if self._current_operation_id:
-                mark_failed(user_id, self._current_operation_id, str(exc), attempt=self._operation_attempt())
+                try:
+                    mark_failed(user_id, self._current_operation_id, str(exc), attempt=self._operation_attempt())
+                except OperationStoreUnavailable:
+                    # Store went down mid-request; don't let the fail-closed
+                    # cleanup mask the original error — the lease will expire
+                    # and free the operation regardless.
+                    logger.error("rico_chat_api: could not mark_failed (store unavailable) op=%s", self._current_operation_id)
             return build_error_response(
                 "Something went wrong processing your message.",
                 debug_id=debug_id,

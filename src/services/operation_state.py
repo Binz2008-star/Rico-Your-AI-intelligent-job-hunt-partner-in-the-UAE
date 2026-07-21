@@ -9,18 +9,31 @@ Two backends, selected per call (DEC-20260721-001 stabilization slice 1):
   renewed is proof the executor process died — valid across ANY number of
   workers/instances, unlike the process-nonce model below. This backend is
   used when `DATABASE_URL` is set (override: RICO_OPERATION_STORE=
-  auto|postgres|memory) and the table exists; any infrastructure failure
-  falls back to the memory backend for that call.
+  auto|postgres|memory) and the table exists.
 
 * **memory** (legacy fallback) — in-process dict + RicoMemoryStore mirror
   with process-nonce liveness. SAFE ONLY with exactly one Render instance
   and one uvicorn worker: a concurrently-alive second process is
   indistinguishable from a dead one, so it would release ownership and run
-  a duplicate provider cascade. While this fallback can be active (DB outage
-  or migration 051 not applied), the single-worker production invariant in
-  AI_WORKSPACE/OPERATING_RULES.md still stands. Scaling remains BLOCKED
-  until the multi-worker validation slice (DEC-20260721-001 slice 4) passes
-  on the postgres backend.
+  a duplicate provider cascade.
+
+Fallback contract (DEC-20260721-001 slice 4):
+
+* **RICO_OPERATION_STORE=postgres (MANDATORY — the multi-worker-safe mode):**
+  a store failure (table missing, connection down) NEVER falls back to the
+  memory backend — it raises `OperationStoreUnavailable`, which callers
+  surface as an honest 503. A memory fallback under multiple live workers is
+  exactly the duplicate-cascade hazard slice 1 removed, so it is forbidden
+  here. **Any multi-worker / multi-instance deployment MUST set
+  RICO_OPERATION_STORE=postgres.**
+* **RICO_OPERATION_STORE=auto (default) / memory:** on a store failure the
+  call still falls back to the in-process memory backend — this preserves
+  single-worker behavior only, and the single-worker invariant in
+  AI_WORKSPACE/OPERATING_RULES.md continues to apply until the deployment is
+  switched to the mandatory mode above.
+
+Raising Render worker/instance count is a production decision that follows
+this slice's readiness proof; it is NOT changed by the code here.
 """
 from __future__ import annotations
 
@@ -81,8 +94,38 @@ STALE_AFTER_SECONDS = 120
 # Heartbeat lease (postgres backend). The renewal thread is independent of
 # the cascade's blocking I/O, so missed renewals mean the process died — not
 # that the cascade is merely slow. 60s ≈ 6 missed beats: conservative proof.
+#
+# These are the PRODUCTION defaults. Multiprocessing integration tests need a
+# much shorter lease so a "dead worker" is detectable in seconds, and env vars
+# are the only override that crosses a process boundary (monkeypatch does not).
+# The overrides are read at USE-TIME via _lease_seconds()/_heartbeat_interval()
+# so a child process that re-imports the module still picks them up. They are
+# TEST-ONLY and never set in production.
 HEARTBEAT_INTERVAL_SECONDS = 10
 LEASE_SECONDS = 60
+_LEASE_ENV = "RICO_OPERATION_LEASE_SECONDS"           # test-only override
+_HEARTBEAT_ENV = "RICO_OPERATION_HEARTBEAT_SECONDS"   # test-only override
+
+
+def _lease_seconds() -> int:
+    raw = os.getenv(_LEASE_ENV)
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    return LEASE_SECONDS
+
+
+def _heartbeat_interval() -> float:
+    raw = os.getenv(_HEARTBEAT_ENV)
+    if raw:
+        try:
+            return max(0.05, float(raw))
+        except ValueError:
+            pass
+    return HEARTBEAT_INTERVAL_SECONDS
+
 
 # Backend override: auto (default; postgres when DATABASE_URL is set),
 # postgres (force), memory (force legacy — used by unit tests).
@@ -112,13 +155,52 @@ class OperationClaimRefused(Exception):
         self.operation = operation
 
 
+class OperationStoreUnavailable(Exception):
+    """The mandatory Postgres ownership store is unreachable (fail-closed).
+
+    Raised ONLY under RICO_OPERATION_STORE=postgres (the multi-worker-safe
+    mode) when the shared store cannot be reached — table missing, connection
+    down. There is deliberately NO memory fallback in this mode: a
+    second live worker + an in-process store would run a duplicate provider
+    cascade (the exact hazard slice 1 removed). Callers must surface this as
+    an honest temporary-unavailable (503), NEVER as a 500 and NEVER by
+    executing the job-search cascade unguarded. (DEC-20260721-001 slice 4.)"""
+
+
 def _db_mode() -> bool:
+    """True when the Postgres store should be consulted for this call."""
     mode = (os.getenv(_STORE_ENV) or "auto").strip().lower()
     if mode == "memory":
         return False
     if mode == "postgres":
         return True
     return bool(os.getenv("DATABASE_URL"))
+
+
+def _mandatory_db() -> bool:
+    """True when Postgres is MANDATORY (RICO_OPERATION_STORE=postgres).
+
+    In this mode a RepoUnavailable must fail closed (raise
+    OperationStoreUnavailable) instead of falling back to the in-process
+    memory store. Multi-worker/multi-instance deployment REQUIRES this mode —
+    the `auto` default preserves single-worker memory-fallback compatibility
+    but is NOT safe beyond one process (see the module docstring)."""
+    return (os.getenv(_STORE_ENV) or "auto").strip().lower() == "postgres"
+
+
+def _on_repo_unavailable(exc: "RepoUnavailable", op: str) -> None:
+    """Mandatory mode: fail closed. Auto mode: log and let the caller fall
+    back to memory (single-worker only)."""
+    if _mandatory_db():
+        logger.error(
+            "operation_state: mandatory Postgres store unavailable during %s — "
+            "failing closed (no memory fallback): %s", op, exc,
+        )
+        raise OperationStoreUnavailable(str(exc)) from exc
+    logger.warning(
+        "operation_state: postgres store unavailable during %s, using memory "
+        "fallback (single-worker only): %s", op, exc,
+    )
 
 
 def new_operation_id() -> str:
@@ -142,7 +224,7 @@ def _start_heartbeat(operation_id: str, attempt: int, nonce: str) -> None:
 
     def _run() -> None:
         try:
-            while not stop.wait(HEARTBEAT_INTERVAL_SECONDS):
+            while not stop.wait(_heartbeat_interval()):
                 try:
                     renewed = _repo.heartbeat(
                         operation_id=operation_id, attempt=attempt, executor_nonce=nonce
@@ -268,7 +350,7 @@ def start_job_search_operation(
                 operation_id=op_id,
                 role_query=role_or_query,
                 executor_nonce=_PROCESS_NONCE,
-                lease_seconds=LEASE_SECONDS,
+                lease_seconds=_lease_seconds(),
             )
             if not outcome["claimed"] and outcome["reason"] == "refused_foreign":
                 # Never blocked by (or informed about) someone else's op.
@@ -277,7 +359,7 @@ def start_job_search_operation(
                     operation_id=new_operation_id(),
                     role_query=role_or_query,
                     executor_nonce=_PROCESS_NONCE,
-                    lease_seconds=LEASE_SECONDS,
+                    lease_seconds=_lease_seconds(),
                 )
             if outcome["claimed"]:
                 operation = dict(outcome["operation"])
@@ -290,7 +372,7 @@ def start_job_search_operation(
             refused["claimed"] = False
             return refused
         except RepoUnavailable as exc:
-            logger.warning("operation_state: postgres store unavailable, using memory fallback: %s", exc)
+            _on_repo_unavailable(exc, "start_job_search_operation")  # raises in mandatory mode
     return _memory_start(user_id, role_or_query, operation_id)
 
 
@@ -300,8 +382,12 @@ def get_operation(user_id: str, operation_id: str) -> dict[str, Any] | None:
             found = _repo.get(user_id, operation_id)
             if found is not None:
                 return found
-        except RepoUnavailable:
-            pass
+            # Row genuinely absent in the shared store — do NOT consult memory
+            # in mandatory mode (it would resurrect stale in-process state).
+            if _mandatory_db():
+                return None
+        except RepoUnavailable as exc:
+            _on_repo_unavailable(exc, "get_operation")  # raises in mandatory mode
     return _memory_get(user_id, operation_id)
 
 
@@ -311,8 +397,10 @@ def get_latest_job_search_operation(user_id: str) -> dict[str, Any] | None:
             found = _repo.get_latest(user_id)
             if found is not None:
                 return found
-        except RepoUnavailable:
-            pass
+            if _mandatory_db():
+                return None
+        except RepoUnavailable as exc:
+            _on_repo_unavailable(exc, "get_latest_job_search_operation")  # raises in mandatory mode
     op_id = _LATEST_BY_USER.get(user_id)
     if not op_id:
         try:
@@ -356,10 +444,14 @@ def update_operation(
                         operation_id, status, attempt,
                     )
                     return None
-            except RepoUnavailable:
-                pass
+            except RepoUnavailable as exc:
+                _on_repo_unavailable(exc, "update_operation.recheck")  # raises in mandatory mode
+            # Row absent in the shared store; in mandatory mode never fall
+            # through to the memory store.
+            if _mandatory_db():
+                return None
         except RepoUnavailable as exc:
-            logger.warning("operation_state: postgres store unavailable, using memory fallback: %s", exc)
+            _on_repo_unavailable(exc, "update_operation")  # raises in mandatory mode
 
     operation = _memory_get(user_id, operation_id)
     if not operation:
@@ -443,7 +535,7 @@ def is_actively_running(operation: dict[str, Any]) -> bool:
         return False
     if operation.get("ownership") == "db":
         age = operation.get("heartbeat_age_seconds")
-        return age is not None and float(age) < LEASE_SECONDS
+        return age is not None and float(age) < _lease_seconds()
     return operation.get("process_nonce") == _PROCESS_NONCE
 
 
@@ -478,7 +570,7 @@ def expire_if_orphaned(user_id: str, operation: dict[str, Any]) -> dict[str, Any
             expired = _repo.expire_if_lease_dead(
                 user_id=user_id,
                 operation_id=str(operation.get("operation_id")),
-                lease_seconds=LEASE_SECONDS,
+                lease_seconds=_lease_seconds(),
             )
             return expired or get_operation(user_id, str(operation.get("operation_id"))) or operation
         except RepoUnavailable:
@@ -529,7 +621,23 @@ def is_status_followup(message: str) -> bool:
 
 
 def build_status_response(user_id: str) -> dict[str, Any] | None:
-    operation = get_latest_job_search_operation(user_id)
+    try:
+        operation = get_latest_job_search_operation(user_id)
+    except OperationStoreUnavailable:
+        # Mandatory store down during a status check ("are you done?"). Answer
+        # honestly rather than 500 — we simply cannot read status right now.
+        return {
+            "type": "service_unavailable",
+            "intent": "operation_status",
+            "success": False,
+            "service_unavailable": True,
+            "response_source": "operation_store_unavailable",
+            "error": "operation_store_unavailable",
+            "message": (
+                "The service is temporarily unavailable — I can't check your "
+                "search status right now. Please try again shortly."
+            ),
+        }
     if not operation:
         return None
     operation = maybe_mark_timed_out(user_id, operation)

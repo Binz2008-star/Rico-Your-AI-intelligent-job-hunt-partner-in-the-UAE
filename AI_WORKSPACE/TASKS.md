@@ -6616,10 +6616,13 @@ verified no 051 reference existed anywhere).
 
 ### TASK-20260721-013 — SSRF DNS fail-open remediation in link_verifier (LOW-3)
 
-Status: in_review
+Status: done — #1302 merged 2026-07-21 (squash 7b8df097); "Deploy Render
+Backend" for 7b8df097 = success (/version-gated). Live in production: any
+URL with an unresolvable hostname is rejected on both the sync and async
+SSRF paths.
 Owner: Claude (agent), owner-directed (LOW-3 remediation 2026-07-21)
 Branch: claude/ricco-research-improvements-dkmhin (restarted from main 46bdd32)
-Issue/PR: (opens with this branch's new PR)
+Issue/PR: #1302 (merged, deploy verified 7b8df097)
 
 #### Objective
 Close the DNS fail-OPEN in src/services/link_verifier.py's SSRF guard. Both
@@ -6676,3 +6679,81 @@ the sync OR async path.
 - Rollback plan: revert the PR (restores prior fail-open behavior)
 - Next exact action: open Draft PR, targeted tests + full CI green, stop
 - Stop condition: STOP after evidence report and green CI (owner directive)
+
+### TASK-20260721-014 — Multi-worker readiness: mandatory-Postgres fail-closed + real-process concurrency proof (stabilization slice 4)
+
+Status: in_review
+Owner: Claude (agent), owner-directed (slice 4 per DEC-20260721-001 —
+"إثبات وتشديد أمان التشغيل متعدد العمال" 2026-07-21)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from main e3a5780)
+Issue/PR: (opens with this branch's new PR)
+
+#### Objective
+Prove the atomic ownership store (slices 1-2, live in production) is safe
+under genuinely concurrent workers, and remove the unsafe memory fallback in
+the mandatory Postgres mode. This PR proves READINESS only — it does NOT
+raise Render workers/instances (that is a separate production decision after
+merge + verification, and requires RICO_OPERATION_STORE=postgres).
+
+#### Scope
+- src/services/operation_state.py:
+  * NEW `OperationStoreUnavailable`; `_mandatory_db()` +
+    `_on_repo_unavailable()`. Under RICO_OPERATION_STORE=postgres every store
+    op (start/get/get_latest/update) FAILS CLOSED (raises) instead of falling
+    back to memory; `auto`/`memory` keep the single-worker memory fallback.
+  * Absent-row in mandatory mode returns None (never resurrects memory state).
+  * TEST-ONLY lease/heartbeat overrides via `_lease_seconds()` /
+    `_heartbeat_interval()` (env `RICO_OPERATION_LEASE_SECONDS` /
+    `RICO_OPERATION_HEARTBEAT_SECONDS`) so multiprocessing tests can shrink
+    the lease; production defaults (60s / 10s) unchanged.
+  * `build_status_response` returns an honest service_unavailable dict when
+    the mandatory store is down.
+- src/repositories/chat_operations_repo.py: `claim()` first-insert race fix —
+  `INSERT ... ON CONFLICT (operation_id) DO NOTHING RETURNING` + re-SELECT
+  FOR UPDATE on conflict. A plain FOR UPDATE does not lock a not-yet-existing
+  key, so two workers could both INSERT the same new id → UniqueViolation for
+  the loser (exposed by the multiprocessing race). Now the loser is refused
+  (or takes over a dead lease), never a 500.
+- src/rico_chat_api.py: `process_message` maps OperationStoreUnavailable to an
+  honest `service_unavailable` reply (no cascade, no 500); the cleanup
+  `mark_failed` is guarded so a store outage during error handling can't mask
+  the original error.
+- tests/unit/test_operation_store_mandatory_failclosed.py (NEW, 9): mandatory
+  mode raises + NEVER touches memory (fail-before via _memory_start assertion),
+  auto mode still falls back, mode helpers, honest process_message reply.
+- tests/integration/test_operation_multiworker_postgres.py (NEW, 7): REAL
+  Postgres + REAL independent processes racing on a Barrier — (1) simultaneous
+  race → one claim/one refuse, cascade runs ONCE via the real
+  _begin_job_search_operation decision path; (2) live heartbeating owner can't
+  be robbed past the lease; (3) dead owner → takeover after lease, attempt→2,
+  late attempt=1 write refused; (4) normal completion → heartbeat stops, no
+  stuck row, stats clean; (5) mandatory + dead DB → fail closed, no cascade,
+  nothing written; (6) two users same id → independent ownership, no
+  leak/clobber; (7) admin_ops overview reflects running/stuck/failed truthfully.
+- AI_WORKSPACE/TASKS.md (this entry; TASK-013 closure).
+
+#### Continuity Block
+- Current head SHA: (set at commit)
+- Status: in_review — Draft PR; NO merge, NO deploy, NO Render worker/instance
+  change, NO LOW-1/LOW-2, NO daily loop (owner stop conditions)
+- Validation already run: full tests/unit 3,445 passed; multiworker
+  integration 7/7 on real local Postgres 16 (fork processes, short lease);
+  ownership integration 9/9; duplicate-guard 22/22; mandatory-failclosed 9/9;
+  admin-ops 5/5; py_compile OK. Fail-before demonstrated: the mandatory→memory
+  path (unit assertion) and the claim insert-race (UniqueViolation observed on
+  pre-ON-CONFLICT code during development).
+- Validation still required: CI pytest + postgres-integration on PR head
+- Deployment: none in this PR. Gate criteria for raising workers/instances
+  (ALL now proven): concurrent execution → one cascade; dead worker →
+  safe takeover after lease; old worker cannot write a late result;
+  mandatory-mode Postgres outage fails closed (no memory); monitoring
+  reflects real state. Enabling multi-worker in production = set
+  RICO_OPERATION_STORE=postgres + raise render.yaml workers — owner decision,
+  separate PR.
+- Known blockers: none
+- Risks: in mandatory mode a store outage returns 503-style replies instead
+  of degrading to memory — intended (correctness over availability under
+  multi-worker). `auto` default is unchanged for single-worker today.
+- Rollback plan: revert the PR (restores prior fallback + pre-race claim).
+- Next exact action: open Draft PR, targeted tests + full CI green, stop.
+- Stop condition: STOP after evidence report + green CI (owner directive).
