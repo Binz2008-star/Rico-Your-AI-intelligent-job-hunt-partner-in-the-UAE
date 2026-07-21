@@ -109,6 +109,38 @@ class TestSlotExtraction:
             slots = RicoChatAPI._extract_explicit_draft_job_from_message(msg)
             assert slots.get("company") == company, msg
 
+    def test_trailing_backslash_stripped(self):
+        # Production shape: «اكتبلي ايميل لبنك دبي الاسلامي\» (stray key smash).
+        slots = RicoChatAPI._extract_explicit_draft_job_from_message(
+            "اكتبلي ايميل لبنك دبي الاسلامي\\"
+        )
+        assert slots.get("company") == "بنك دبي الاسلامي"
+
+
+# ---------------------------------------------------------------------------
+# 1c. Generic cover-letter request (production loop fix, 2026-07-21)
+# ---------------------------------------------------------------------------
+
+class TestGenericDraftDetection:
+    """«اكتب واحد عام غير محدد» after a clarification used to get the SAME
+    clarification verbatim — an infinite re-ask loop. The generic marker now
+    routes to a general-letter generation instead."""
+
+    def test_generic_phrases_detected(self):
+        from src.rico_chat_api import _GENERIC_DRAFT_RE
+        for m in ("اكتب واحد عام غير محدد", "لاشيء محدد بصوره عامه",
+                  "بدون شركة محددة", "write me a general cover letter",
+                  "a generic one please", "no specific company"):
+            assert _GENERIC_DRAFT_RE.search(m), m
+
+    def test_specific_role_phrases_not_detected(self):
+        # "General Manager" / «مدير عام» are ROLES, not genericness markers.
+        from src.rico_chat_api import _GENERIC_DRAFT_RE
+        for m in ("اكتب خطاب لوظيفة مدير عام في شركة إعمار",
+                  "cover letter for General Manager at Aldar",
+                  "اكتبلي كفر لترر"):
+            assert not _GENERIC_DRAFT_RE.search(m), m
+
 
 # ---------------------------------------------------------------------------
 # 1b. Vocative guard + clarification language (production regressions 2026-07-21)

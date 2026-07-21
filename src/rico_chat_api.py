@@ -581,6 +581,18 @@ _NON_ROLE_SCOPE_WORDS: frozenset[str] = frozenset({
 # Cover-letter command: "make me a cover [letter]", "write a cover letter",
 # "draft a cover letter" — route to the cover-letter clarification flow before
 # the intent classifier, which returns "unknown" for bare "cover" forms.
+# Generic (non-targeted) cover-letter request: "اكتب واحد عام غير محدد" /
+# "لا شيء محدد بصورة عامة" / "write me a general cover letter". Without this
+# the clarification loop re-asks for role+company VERBATIM on every generic
+# reply (seen in production 2026-07-21). Negative guards keep "مدير عام" /
+# "General Manager" (a ROLE, not a genericness marker) on the specific path.
+_GENERIC_DRAFT_RE = re.compile(
+    r"(?<!مدير )(?<!المدير )\bعام(?:ة|اً|ه)?\b|غير\s+محدد|بدون\s+(?:شرك[ةه]|تحديد|وظيف[ةه])"
+    r"|بصور[ةه]\s+عام[ةه]|لا\s*شيء\s+محدد"
+    r"|\bgeneral\b(?!\s+manager)|\bgeneric\b|no\s+specific|any\s+(?:company|role|job)",
+    re.IGNORECASE,
+)
+
 _COVER_LETTER_COMMAND_RE = re.compile(
     # "write/make/draft/create/generate/prepare [me/a/my] cover [letter] [for ...]"
     # No end-anchor so trailing context ("for ADNOC", "for the HSE role") still matches.
@@ -4958,7 +4970,7 @@ class RicoChatAPI:
     @staticmethod
     def _clean_explicit_job_value(value: Any) -> str:
         text = str(value or "")
-        text = re.sub(r"\s+", " ", text).strip(" \t\r\n\"'`.,!?;:")
+        text = re.sub(r"\s+", " ", text).strip(" \t\r\n\"'`.,!?;:\\/|")
         text = re.sub(
             r"\b(?:please|use what you know about me|using what you know about me)$",
             "",
@@ -5250,6 +5262,22 @@ class RicoChatAPI:
             f"especially around {strengths}. I believe my audit, compliance, and UAE-market experience can add value quickly.\n\n"
             f"I would be happy to share my CV and discuss how I can support your team.\n\n"
             f"Best regards"
+        )
+
+    def _handle_generic_cover_letter_request(
+        self, user_id: str, message: str, profile: Any
+    ) -> dict[str, Any]:
+        """Produce a GENERAL cover letter (no specific job/company) from the
+        user's real profile via the AI path — instead of re-asking for a role
+        and company the user explicitly said they don't want to name."""
+        _aug = (
+            f"{message}\n\n"
+            "[Instruction: The user wants a GENERAL cover letter, not tied to any "
+            "specific job or company. Write it from their real profile only — never "
+            "invent employers, achievements, or numbers. Reply in the user's language.]"
+        )
+        return self._answer_with_ai_fallback(
+            user_id=user_id, message=_aug, profile=profile, save_user_message=False,
         )
 
     def _handle_application_channel_followup(
@@ -8348,6 +8376,11 @@ class RicoChatAPI:
         # Exception: if the message already contains explicit job context (company/role),
         # skip and let the draft_message intent handler extract and use that context.
         if _COVER_LETTER_COMMAND_RE.search(message) and not self._extract_explicit_draft_job_from_message(message) and not _RESIGNATION_LETTER_RE.search(message):
+            # Generic ask ("write me a general cover letter") — must run BEFORE
+            # the cached-job shortcut below, or the last search's job would
+            # hijack a letter the user explicitly wants untargeted.
+            if _GENERIC_DRAFT_RE.search(message):
+                return self._handle_generic_cover_letter_request(user_id, message, profile)
             # If there's a cached job from a recent search, use it as context so the
             # cover letter is tailored to that specific role instead of asking the user.
             _cached_job: dict[str, Any] = {}
@@ -11344,6 +11377,11 @@ class RicoChatAPI:
                     }
                     self._append_chat(user_id, "assistant", result.message)
                     return self._finalize(response, routed.source, profile=profile, runtime_result=result)
+
+            # Generic ask ("اكتب واحد عام غير محدد" / "a general one") — never
+            # re-ask for a role+company the user refused to name (#loop fix).
+            if _GENERIC_DRAFT_RE.search(message):
+                return self._handle_generic_cover_letter_request(user_id, message, profile)
 
             self._log_document_draft_context_source("clarification_required", {})
             msg = self._cover_letter_clarification_message(
