@@ -5834,3 +5834,62 @@ invisible. Add all five to the qa-tests.yml pytest job.
 - Stop condition: any CI failure in the newly added files → fix in this PR
   or drop the offending file and report
 - Rollback plan: revert the PR (workflow + docs only)
+
+### TASK-20260721-004 — Bilingual (AR/EN) intent detection for the agent NL path
+
+Status: review
+Owner: Claude (agent), owner-directed ("حسّن منطق ريكو ارفع من كفاءته" 2026-07-21)
+Branch: claude/system-tools-analysis-wc4o4g (restarted from main ba52549)
+Issue/PR: set at PR open
+
+#### Objective
+Close a single-language-path defect in Rico's live logic: the deterministic
+intent detector behind POST /api/v1/agent/chat (src/agent/orchestrator/
+intent_detector.py) matched English keywords only, so every Arabic message
+fell to the "help" fallback — prohibited by the Product Generalization Rule
+("Do not special-case: one language path").
+
+#### Context
+- Live path: routers/agent.py → orchestrator.process → detect()
+- The canonical rico_chat path is already bilingual; only this NL surface was
+  English-only.
+
+#### Constraints
+- Keep scope limited to: intent_detector.py + tests + ledger
+- Do not touch: ACTION_TO_TOOL, PRIVILEGED_TOOLS semantics, orchestrator flow
+
+#### Acceptance criteria
+- [x] Arabic keywords for all four NL intents, same first-match precedence
+- [x] Orthography normalization (tashkeel/tatweel stripped; أ/إ/آ/ٱ→ا, ة→ه,
+      ى→ي, ؤ→و, ئ→ي) applied symmetrically to message AND table keywords
+      (keywords normalized at module load — no representation drift possible)
+- [x] English behavior byte-for-byte unchanged (existing tests untouched, green)
+- [x] Arabic tests: every intent, hamza/taa-marbuta variants, full tashkeel,
+      colloquial no-hamza spelling, unrelated→help, trigger-vs-status ordering
+- [ ] PR CI green on exact head
+
+#### Continuity Block
+- Task ID: TASK-20260721-004
+- GitHub issue/PR: set at PR open
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: ba52549 (main tip at branch restart)
+- Current head SHA: set at commit
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files changed: src/agent/orchestrator/intent_detector.py — normalization +
+  Arabic keywords; tests/test_agent.py — 14 new bilingual cases;
+  AI_WORKSPACE/TASKS.md — this entry
+- Files intentionally not touched: src/rico_chat_api.py (already bilingual),
+  orchestrator.py, runtime.py
+- What is complete: implementation + local verification (93/93 test_agent;
+  252/252 focused set incl. privileged-authz)
+- What is incomplete: PR CI + merge
+- Known blockers: none
+- Validation already run: focused set + privileged authz under CI env → 252 passed
+- Validation still required: PR CI on exact head
+- Deployment/CI/Neon/Vercel state to check next: after merge, deploy-render
+  auto-runs (src/** touched) — verify the run succeeds
+- Next exact action: open draft PR, verify CI, merge on green (owner-directed task)
+- Stop condition: any English-intent regression in CI → fix before merge
+- Rollback plan: revert the PR; detector returns to English-only matching

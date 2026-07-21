@@ -227,6 +227,44 @@ class TestIntentDetector:
         intent, _ = self._detect(msg)
         assert intent == expected_intent
 
+    # ── Arabic (bilingual) coverage — Product Generalization Rule: no
+    # single-language path. Each intent must be reachable from Arabic input,
+    # and orthographic variants (hamza forms, taa marbuta, tashkeel) must not
+    # break matching.
+    @pytest.mark.parametrize("msg,expected_intent", [
+        ("ورني افضل الوظائف اليوم",      "get_ranked_jobs"),
+        ("أعرض الوظائف الجديدة",          "get_ranked_jobs"),      # hamza + taa marbuta
+        ("في شواغر بدبي؟",               "get_ranked_jobs"),
+        ("ابحث عن فرص عمل",              "get_ranked_jobs"),
+        ("كم طلب قدمت؟",                 "get_application_stats"),
+        ("إحصائيات طلباتي",              "get_application_stats"),  # alef-hamza-below
+        ("ورني تقرير المقابلات",          "get_application_stats"),
+        ("حالة الخط",                    "get_pipeline_status"),    # taa marbuta → ه
+        ("متى اشتغل البايبلاين اخر مره",  "get_pipeline_status"),
+        ("شغل البايبلاين الان",           "trigger_pipeline"),
+        ("تشغيل البايبلاين",             "trigger_pipeline"),
+    ])
+    def test_arabic_intents(self, msg, expected_intent):
+        intent, _ = self._detect(msg)
+        assert intent == expected_intent
+
+    def test_arabic_diacritics_do_not_break_matching(self):
+        # "أَفْضَل الوَظائِف" with full tashkeel must still match get_ranked_jobs.
+        intent, _ = self._detect("أَفْضَل الوَظائِف")
+        assert intent == "get_ranked_jobs"
+
+    def test_arabic_unrelated_falls_back_to_help(self):
+        intent, tool = self._detect("كيف اطبخ المكرونة؟")
+        assert intent == "help"
+        assert tool is None
+
+    def test_arabic_trigger_beats_pipeline_status_ordering(self):
+        # "شغل البايبلاين" contains the status keyword "بايبلاين" too — the
+        # trigger row must win by table order, mirroring the English
+        # "run pipeline" vs "pipeline" precedence.
+        intent, _ = self._detect("شغل البايبلاين")
+        assert intent == "trigger_pipeline"
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 4. Response builder
