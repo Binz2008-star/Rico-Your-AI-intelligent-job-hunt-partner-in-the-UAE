@@ -7,24 +7,38 @@ const backendUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     process.env.NEXT_PUBLIC_RICO_API;
 
-// CSP in report-only mode. Our two inline init scripts are whitelisted by their
-// SHA-256 hashes (no 'unsafe-inline' needed for them). Next.js injects additional
-// inline scripts that vary per build; full enforcement requires nonce-based CSP
-// via Next.js middleware — flip to Content-Security-Policy once that is wired up.
-// To update hashes: python3 -c "import hashlib,base64; print('sha256-' + base64.b64encode(hashlib.sha256('<script content>'.encode()).digest()).decode())"
+// CSP is ENFORCED (Content-Security-Policy header, below — no longer report-only).
+// script-src / style-src keep 'unsafe-inline': Next.js injects per-build inline
+// scripts (hydration/runtime) that vary and can't be hash-pinned, and our
+// theme-init / lang-init / JSON-LD inline blocks rely on it too. IMPORTANT: a
+// hash or nonce in script-src makes browsers IGNORE 'unsafe-inline' and would
+// then block Next's per-build inline scripts — so the older per-script SHA-256
+// hashes are intentionally NOT listed here. Dropping 'unsafe-inline' entirely
+// needs nonce-based CSP via Next.js middleware (follow-up); until then the
+// non-script directives below (object-src, base-uri, frame-ancestors,
+// connect-src, frame-src, …) are the real enforcement this buys.
+//
+// DEV ONLY: `next dev` (webpack HMR + React Refresh) evaluates client modules
+// via eval() and opens an HMR WebSocket. Those need 'unsafe-eval' in script-src
+// and the ws origin in connect-src — added ONLY when NODE_ENV !== 'production'
+// so `next dev` and the Playwright e2e suite (which runs `npm run dev`) work,
+// while the deployed production build stays strict (no 'unsafe-eval').
+const isDev = process.env.NODE_ENV !== "production";
 const csp = [
     "default-src 'self'",
-    // theme-init hash: sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=
-    // lang-init hash:  sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=
+    // https://va.vercel-scripts.com — @vercel/analytics beacon script
     // https://cdn.paddle.com — Paddle.js v2 client SDK (loaded lazily by lib/paddle.ts)
-    "script-src 'self' 'unsafe-inline' 'sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=' 'sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=' https://va.vercel-scripts.com https://cdn.paddle.com",
+    // Inline scripts (theme-init, lang-init, JSON-LD) are permitted via 'unsafe-inline'.
+    // 'unsafe-eval' is dev-only (Next HMR/React Refresh) — never in production.
+    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://va.vercel-scripts.com https://cdn.paddle.com`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
     // https://rico-job-automation-api.onrender.com — backend proxy (existing)
     // https://sandbox-api.paddle.com — Paddle.js SDK calls during sandbox checkout
     // https://api.paddle.com          — Paddle.js SDK calls during production checkout
-    "connect-src 'self' https://rico-job-automation-api.onrender.com https://vitals.vercel-insights.com https://sandbox-api.paddle.com https://api.paddle.com",
+    // ws://localhost:3000 — dev-only Next.js HMR WebSocket
+    `connect-src 'self' https://rico-job-automation-api.onrender.com https://vitals.vercel-insights.com https://sandbox-api.paddle.com https://api.paddle.com${isDev ? " ws://localhost:3000 http://localhost:3000" : ""}`,
     // https://checkout.paddle.com — Paddle overlay checkout iframe (sandbox and production share this host)
     "frame-src 'self' https://checkout.paddle.com",
     "frame-ancestors 'none'",
@@ -61,7 +75,7 @@ const nextConfig = {
                     // Explicit scoped ACAO overrides any platform-level wildcard; same-origin BFF calls don't need CORS.
                     { key: "Access-Control-Allow-Origin", value: "https://ricohunt.com" },
                     { key: "Vary", value: "Origin" },
-                    { key: "Content-Security-Policy-Report-Only", value: csp },
+                    { key: "Content-Security-Policy", value: csp },
                 ],
             },
             {
