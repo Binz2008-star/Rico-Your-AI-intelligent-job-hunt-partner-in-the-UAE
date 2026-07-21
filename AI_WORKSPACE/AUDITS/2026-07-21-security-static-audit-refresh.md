@@ -43,7 +43,7 @@ report needed a refresh rather than a straight carry-over.
 | **MEDIUM-1** — urllib redirect/scheme handling (Bandit B310) | reproducible | `src/job_providers.py:234,341` · `src/jsearch_client.py:251` · `src/api/routers/paddle_billing.py:478` · `scripts/followup_smoke.py:51` (5 sites; same set and lines as prior) |
 | **MEDIUM-2** — CSP is Report-Only + `unsafe-inline` | reproducible | `apps/web/next.config.js:64` emits `Content-Security-Policy-Report-Only` (not enforcing); `unsafe-inline` at `:20` (`script-src`) and `:21` (`style-src`) |
 | **MEDIUM-3** — rate-limit coverage gaps | reproducible, **partially improved** | `src/api/rate_limit.py:85` `default_limits=[]` (undecorated route = unlimited). `onboarding.py` = **0** `@limiter.limit`; `user.py` (`/me`) = **0**. **Changed since prior report:** `subscription.py` now carries **1** `@limiter.limit` (was 0) — partial coverage, not full. |
-| **MEDIUM-4** — container runs as root + `--reload` | reproducible | `Dockerfile.backend:22` `CMD [... uvicorn ... "--reload"]`; **0** `USER` directives in the file → process runs as root |
+| **MEDIUM-4** — container runs as root + `--reload` | **accepted — defense-in-depth, non-production** (see Remediation status) | `Dockerfile.backend:22` `CMD [... uvicorn ... "--reload"]`; **0** `USER` directives → root. NOT the production runtime: production uses Render's platform-managed native Python runtime (`render.yaml` `runtime: python`), not this image, and the configured start command has no `--reload`. (Process UID is Render-platform-managed and not asserted here — no repo evidence pins it.) The image feeds only `docker-compose` local dev, where `--reload` + the bind mount are intended. |
 
 ## LOW — all reproducible (two moved paths, one narrowed scope)
 
@@ -81,9 +81,32 @@ webhook-signature gaps were found in this pass.
 
 ---
 
-## Status
+## Remediation status (updated 2026-07-21)
 
-Read-only refresh — **no code changed, no remediation started.** Each item above
-is verified reproducible (or cleared) at `9fbd32c0`. Remediation is owner-gated
-per the cost directive; on approval each fix would be an isolated branch with a
-regression test proven to fail pre-fix, opened as a small Draft PR.
+The findings above are the point-in-time snapshot at `9fbd32c0`. Owner-directed
+remediation since then:
+
+- **MEDIUM-1** (urllib/B310) — **accepted / false-positive.** All 5 sites use a
+  hardcoded `https://` base with trusted/encoded params; none is a real external
+  input point, and stdlib `urllib` blocks non-http(s)/ftp redirect schemes. No
+  code change.
+- **MEDIUM-3** (rate-limit coverage) — **remediated.** `@limiter.limit(LIMIT_PROFILE)`
+  added to `/me`, `/onboarding/submit`, `/onboarding/status` (PR #1283, merged).
+- **MEDIUM-2** (CSP Report-Only + `unsafe-inline`) — **partially remediated —
+  enforcement fixed; `unsafe-inline` deferred/tracked.** Flipped to enforcing
+  `Content-Security-Policy` and dropped the moot script hashes (dev-only
+  `unsafe-eval` + HMR ws gated on `NODE_ENV`). `script-src`/`style-src` still
+  carry `'unsafe-inline'`; removing it needs nonce-based CSP via Next.js
+  middleware — a tracked follow-up (PR #1292, merged).
+- **MEDIUM-4** (Docker root + `--reload`) — **accepted — defense-in-depth on a
+  non-production surface.** The image is not the production runtime (Render runs
+  native `runtime: python` from `render.yaml`; `Dockerfile.backend` feeds only
+  `docker-compose` local dev, where `--reload` + the bind mount are intended). A
+  hardening (non-root default + no `--reload`, with compose overriding to
+  `root + --reload` for dev) was prepared but **not merged**: it could not be
+  exercised here (sandbox blocks container-registry egress → `docker build` can't
+  pull `python:3.11-slim`), and merging an unverified change to a non-production
+  image is the wrong trade (PR #1295, closed unmerged). Reopen + verify in an
+  environment with a Docker daemon + registry egress if the image ever becomes a
+  real deploy target.
+- **LOW-3 / LOW-1 / LOW-2** — open (queued, owner-gated).
