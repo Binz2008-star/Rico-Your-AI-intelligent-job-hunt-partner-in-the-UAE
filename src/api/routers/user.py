@@ -8,6 +8,8 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Request
 
+from src.api.rate_limit import LIMIT_PROFILE, limiter
+
 router = APIRouter(prefix="/api/v1", tags=["user"])
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,7 @@ def _fetch_display_name(email: str) -> str | None:
 
 
 @router.get("/me")
+@limiter.limit(LIMIT_PROFILE)
 def me(request: Request) -> Dict[str, Any]:
     user = getattr(request.state, "current_user", None)
     if not isinstance(user, dict) or not user.get("email"):

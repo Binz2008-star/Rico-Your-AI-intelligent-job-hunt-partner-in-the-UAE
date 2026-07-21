@@ -22,7 +22,14 @@ from src.api.app import app
 def _reset_rate_limiter():
     from src.api.rate_limit import limiter
     limiter.reset()
-    yield
+    # Some cases invoke the rate-limited handlers directly with a mock Request;
+    # @limiter.limit rejects a non-Request object, so disable enforcement here.
+    prev = limiter.enabled
+    limiter.enabled = False
+    try:
+        yield
+    finally:
+        limiter.enabled = prev
 
 
 def _auth(monkeypatch, user_id: str):
