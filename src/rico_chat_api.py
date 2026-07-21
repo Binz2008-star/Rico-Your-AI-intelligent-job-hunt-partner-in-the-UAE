@@ -590,6 +590,27 @@ _COVER_LETTER_COMMAND_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Generic (untargeted) cover letter: the user explicitly asks for a GENERAL
+# letter with no specific role/company ("اكتب واحد عام غير محدد", "لا شيء محدد
+# بصورة عامة", "a general one", "generic cover letter", "not for a specific
+# company"). Owner transcript 2026-07-21: without this, the clarification flow
+# re-asks for role+company in a loop instead of producing a general letter.
+_GENERIC_COVER_LETTER_RE = re.compile(
+    # Arabic — "عام" only as a descriptor of the letter itself (never "مدير عام"):
+    # واحد عام / خطاب|رسالة|كفر عام / عام غير محدد / بشكل عام / بصورة عامة /
+    # غير محدد / بدون شركة / لأي شركة / لا شيء محدد
+    r"(?:(?:واحد|خطاب|رسالة|كفر|لتر)\s+عام(?:ة|اً|ا)?\b|عام\s+غير\s+محدد"
+    r"|بشكل\s+عام|بصور[ةه]\s+عام[ةه]|غير\s+محدد|بدون\s+شركة"
+    r"|لأي\s+شركة|لاي\s+شركة|لا\s*شيء\s+محدد|لاشيء\s+محدد)"
+    # English — "general" only as a descriptor of the letter (never "general
+    # manager"): a general one / general (cover) letter / generic / unspecified /
+    # any company / not (for) a specific ...
+    r"|\bgeneral\s+(?:one|letter|cover\s+letter|version|template)\b"
+    r"|\bgeneric\b|\bunspecified\b|\bany\s+company\b|\bin\s+general\b"
+    r"|\bnot?\s+(?:for\s+)?a?\s*specific\b",
+    re.IGNORECASE,
+)
+
 # "Retry / again / show more" — user wants to replay or extend the last job search.
 # Bare retry phrases and "show more jobs" / "any new jobs?" are intercepted before
 # classify_intent; longer messages with these words still pass through normally.
@@ -5162,6 +5183,60 @@ class RicoChatAPI:
             return ""
         return name
 
+    def _wants_generic_cover_letter(self, message: str) -> bool:
+        """True when the user explicitly asks for a GENERAL (untargeted) cover
+        letter — the clarification flow must produce one instead of re-asking
+        for a role/company (owner transcript 2026-07-21)."""
+        return bool(_GENERIC_COVER_LETTER_RE.search(message or ""))
+
+    def _generic_cover_letter(self, profile: Any, *, arabic: bool) -> str:
+        """Deterministic general-purpose cover letter built ONLY from real
+        profile fields (no fabricated employers, roles, or achievements).
+        Arabic output is Modern Standard Arabic, no dialect, no vocatives."""
+        name = str(self._profile_value(profile, "name") or "").strip()
+        years = self._profile_value(profile, "years_experience")
+        current_role = str(self._profile_value(profile, "current_role") or "").strip()
+        skills = [str(s) for s in self._as_list(self._profile_value(profile, "skills"))[:5]]
+        certs = [str(c) for c in self._as_list(self._profile_value(profile, "certifications"))[:3]]
+        strengths = skills + [c for c in certs if c not in skills]
+        if arabic:
+            years_part = f"أمتلك خبرة تُقارب {years} سنوات" if years else "أمتلك خبرة عملية متراكمة"
+            role_part = f"، وأعمل حالياً في دور {current_role}" if current_role else ""
+            strengths_part = (
+                "تشمل نقاط قوتي العملية: " + "، ".join(strengths) + ".\n\n" if strengths else ""
+            )
+            sig = f"\n{name}" if name else ""
+            return (
+                "خطاب تقديم عام — عدّل عليه بما يناسب كل جهة قبل الإرسال:\n\n"
+                "---\n\n"
+                "تحية طيبة وبعد،\n\n"
+                f"{years_part}{role_part}. "
+                "أتقدم بهذا الخطاب للتعبير عن اهتمامي بالفرص المتاحة لديكم بما يتوافق مع خلفيتي المهنية.\n\n"
+                f"{strengths_part}"
+                "يسعدني تزويدكم بسيرتي الذاتية ومناقشة ما يمكنني إضافته لفريقكم في مقابلة قادمة.\n\n"
+                "مع خالص التقدير،"
+                f"{sig}\n\n"
+                "---\n\n"
+                "عند استهداف جهة محددة، أرسل اسمها والمسمى الوظيفي لأخصص الخطاب بالكامل."
+            )
+        years_part = f"I bring approximately {years} years of experience" if years else "I bring hands-on professional experience"
+        role_part = f", currently working as {current_role}" if current_role else ""
+        strengths_part = ("Key strengths: " + ", ".join(strengths) + ".\n\n") if strengths else ""
+        sig = f"\n{name}" if name else ""
+        return (
+            "General cover letter — tailor it per employer before sending:\n\n"
+            "---\n\n"
+            "Dear Hiring Team,\n\n"
+            f"{years_part}{role_part}. "
+            "I am writing to express my interest in opportunities that align with my professional background.\n\n"
+            f"{strengths_part}"
+            "I would welcome the chance to share my CV and discuss how I can contribute to your team.\n\n"
+            "Kind regards,"
+            f"{sig}\n\n"
+            "---\n\n"
+            "When you have a specific company and role, send them over and I will tailor this fully."
+        )
+
     def _cover_letter_clarification_message(
         self,
         profile: Any,
@@ -5272,6 +5347,14 @@ class RicoChatAPI:
         no_favorite = self._wants_no_favorite(message)
         recruiter_email = EMAIL_RE.search(message or "")
         if wants_draft:
+            if self._wants_generic_cover_letter(message):
+                self._log_document_draft_context_source("generic_cover_letter", {})
+                cover = self._generic_cover_letter(profile, arabic=self._is_arabic_text(message))
+                return {
+                    "type": "draft_message",
+                    "intent": "draft_message",
+                    "message": cover,
+                }
             self._log_document_draft_context_source("clarification_required", {})
             msg = self._cover_letter_clarification_message(
                 profile, arabic=self._is_arabic_text(message)
@@ -8348,6 +8431,17 @@ class RicoChatAPI:
         # Exception: if the message already contains explicit job context (company/role),
         # skip and let the draft_message intent handler extract and use that context.
         if _COVER_LETTER_COMMAND_RE.search(message) and not self._extract_explicit_draft_job_from_message(message) and not _RESIGNATION_LETTER_RE.search(message):
+            # Explicit "general / untargeted" request → the general letter now;
+            # never re-ask for a role/company (owner transcript 2026-07-21).
+            if self._wants_generic_cover_letter(message):
+                self._log_document_draft_context_source("generic_cover_letter", {})
+                _generic = self._generic_cover_letter(profile, arabic=self._is_arabic_text(message))
+                self._append_chat(user_id, "assistant", _generic)
+                return self._finalize(
+                    {"type": "draft_message", "intent": "draft_message", "message": _generic},
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
             # If there's a cached job from a recent search, use it as context so the
             # cover letter is tailored to that specific role instead of asking the user.
             _cached_job: dict[str, Any] = {}
@@ -11303,6 +11397,18 @@ class RicoChatAPI:
 
         # Draft message / cover letter
         if legacy_intent == "draft_message":
+            # Explicit "general / untargeted" request → produce the general
+            # letter immediately instead of re-asking for a role/company
+            # (owner transcript 2026-07-21: the clarification looped).
+            if self._wants_generic_cover_letter(message) and not self._extract_explicit_draft_job_from_message(message):
+                self._log_document_draft_context_source("generic_cover_letter", {})
+                cover = self._generic_cover_letter(profile, arabic=self._is_arabic_text(message))
+                self._append_chat(user_id, "assistant", cover)
+                return self._finalize(
+                    {"type": "draft_message", "intent": "draft_message", "message": cover},
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
             explicit_draft_job = explicit_draft_job or self._extract_explicit_draft_job_from_message(message)
             if explicit_draft_job:
                 from src.message_generator import generate_message as _gen_msg

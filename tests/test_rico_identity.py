@@ -71,3 +71,42 @@ class TestRicoIdentity:
         assert "rico_identity.py" not in RICO_IDENTITY.lower()
         assert "internal" not in RICO_IDENTITY.lower()
         assert "system file" not in RICO_IDENTITY.lower()
+
+
+class TestLanguageRegisterAndTone:
+    """Owner ruling 2026-07-21 (production transcript): Arabic replies are Modern
+    Standard Arabic only — never a guessed regional dialect; replies are concise
+    without flattery/preambles/emoji spam; drafts use exactly the entity the
+    user named (ADIB is not Dubai Islamic Bank). These rules are global and
+    user-agnostic; they must reach every provider via RICO_IDENTITY."""
+
+    def test_msa_only_rule_present(self):
+        assert "Modern Standard Arabic" in RICO_IDENTITY
+        assert "فصحى" in RICO_IDENTITY
+        # The banned-dialect examples anchor the rule concretely.
+        assert "شنو" in RICO_IDENTITY
+        assert "وش" in RICO_IDENTITY
+        assert "دلوقتي" in RICO_IDENTITY
+
+    def test_never_guess_dialect_from_identity(self):
+        assert "never" in RICO_IDENTITY.lower()
+        assert "nationality" in RICO_IDENTITY
+
+    def test_brevity_rules_present(self):
+        assert "Brevity and focus" in RICO_IDENTITY
+        assert "No preambles" in RICO_IDENTITY
+        assert "ONE follow-up question" in RICO_IDENTITY
+        assert "No emojis in professional content" in RICO_IDENTITY
+
+    def test_entity_accuracy_rule_present(self):
+        assert "Entity accuracy in drafts" in RICO_IDENTITY
+        assert "EXACTLY the entity named" in RICO_IDENTITY
+        # The concrete confusable pair from the production transcript.
+        assert "بنك دبي الإسلامي" in RICO_IDENTITY
+        assert "ADIB" in RICO_IDENTITY
+
+    def test_rules_reach_the_system_prompt(self):
+        prompt = get_rico_system_prompt()
+        assert "Modern Standard Arabic" in prompt
+        assert "Brevity and focus" in prompt
+        assert "Entity accuracy in drafts" in prompt
