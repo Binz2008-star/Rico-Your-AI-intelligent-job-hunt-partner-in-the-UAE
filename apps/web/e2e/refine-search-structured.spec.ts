@@ -16,17 +16,10 @@ import { expect, test, type Page } from "@playwright/test";
 const PROXY_API = "/proxy/api/v1";
 
 // Real composer output for {type: job_matches, matches:[…], search_query: "Senior HSE Manager"}
+// Phase 2 of #1262: the view-jobs navigation card is retired — the jobs-board
+// pointer is spoken inside the message text instead.
 const AGENTIC_UI = {
     actions: [
-        {
-            id: "view-jobs",
-            label: "View all jobs",
-            kind: "navigate",
-            impact: "low",
-            requires_confirmation: false,
-            href: "/flow",
-            payload: {},
-        },
         {
             id: "save-search",
             label: "Save search",
@@ -132,7 +125,6 @@ async function mockCommand(page: Page): Promise<Array<Record<string, unknown>>> 
 // (element was detached from the DOM → 30s timeout). These helpers gate every
 // interaction on the settled, final card state instead.
 const JOB_MATCH_CARD_IDS = [
-    "action-card-navigate",
     "action-card-chat-continue",
     "action-card-open-drawer",
 ] as const;
@@ -207,8 +199,9 @@ test.describe("Refine search — structured action (P1)", () => {
         await searchAndOpenCards(page, "Find me Senior HSE Manager jobs in Dubai", chatBodies);
         expect(chatBodies).toHaveLength(1);
 
-        // The three cards render; refine is the structured open_drawer one.
-        await expect(page.getByTestId("action-card-navigate")).toHaveText("View all jobs");
+        // The cards render; refine is the structured open_drawer one.
+        // (Phase 2 of #1262: no navigation card — the jobs-board pointer is
+        // spoken in the message text.)
         await expect(page.getByTestId("action-card-chat-continue")).toHaveText("Save search");
         const refine = page.getByTestId("action-card-open-drawer");
         await expect(refine).toHaveText("Refine search");

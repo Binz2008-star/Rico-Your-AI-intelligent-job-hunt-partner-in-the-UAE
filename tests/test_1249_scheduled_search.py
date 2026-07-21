@@ -485,6 +485,14 @@ class TestConversationalOffer:
         assert en is not None and en["cadence"] == "daily"
         assert ar is not None and ar["cadence"] == "daily"
 
+    def test_spoken_jobs_board_pointer_replaces_navigation_card(self):
+        """Phase 2 of #1262: results messages carry a markdown pointer to the
+        jobs board in the user's language — the View-all-jobs card is gone."""
+        assert "[your jobs board](/flow)" in self._build(offer=False)
+        assert "[لوحة الوظائف](/flow)" in self._build(offer=False, arabic=True)
+        # No matches → no pointer (nothing to browse).
+        assert "(/flow)" not in self._build(offer=False, matches=[])
+
 
 class TestSetScheduleEnabledById:
     def test_toggles_only_the_matching_schedule(self):
