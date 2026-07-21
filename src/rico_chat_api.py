@@ -584,12 +584,17 @@ _NON_ROLE_SCOPE_WORDS: frozenset[str] = frozenset({
 # Generic (non-targeted) cover-letter request: "اكتب واحد عام غير محدد" /
 # "لا شيء محدد بصورة عامة" / "write me a general cover letter". Without this
 # the clarification loop re-asks for role+company VERBATIM on every generic
-# reply (seen in production 2026-07-21). Negative guards keep "مدير عام" /
-# "General Manager" (a ROLE, not a genericness marker) on the specific path.
+# reply (seen in production 2026-07-21). Pattern harvested from #1278
+# (parallel session, tighter than the first cut): "عام"/"general" count only
+# as descriptors of the LETTER itself, so "مدير عام" / "General Manager" /
+# "general accountant" (ROLES) never trigger the generic path.
 _GENERIC_DRAFT_RE = re.compile(
-    r"(?<!مدير )(?<!المدير )\bعام(?:ة|اً|ه)?\b|غير\s+محدد|بدون\s+(?:شرك[ةه]|تحديد|وظيف[ةه])"
-    r"|بصور[ةه]\s+عام[ةه]|لا\s*شيء\s+محدد"
-    r"|\bgeneral\b(?!\s+manager)|\bgeneric\b|no\s+specific|any\s+(?:company|role|job)",
+    r"(?:(?:واحد|خطاب|رسالة|كفر|لتر)\s+عام(?:ة|اً|ا)?\b|عام\s+غير\s+محدد"
+    r"|بشكل\s+عام|بصور[ةه]\s+عام[ةه]|غير\s+محدد|بدون\s+شركة"
+    r"|لأي\s+شركة|لاي\s+شركة|لا\s*شيء\s+محدد|لاشيء\s+محدد)"
+    r"|\bgeneral\s+(?:one|letter|cover\s+letter|version|template)\b"
+    r"|\bgeneric\b|\bunspecified\b|\bany\s+company\b|\bin\s+general\b"
+    r"|\bnot?\s+(?:for\s+)?a?\s*specific\b",
     re.IGNORECASE,
 )
 
@@ -5264,20 +5269,69 @@ class RicoChatAPI:
             f"Best regards"
         )
 
+    def _generic_cover_letter(self, profile: Any, *, arabic: bool) -> str:
+        """Deterministic general-purpose cover letter built ONLY from real
+        profile fields (no AI call, no fabricated employers, roles, or
+        achievements). Arabic output is Modern Standard Arabic, no dialect,
+        no vocatives. Harvested from #1278 (parallel session) — cheaper and
+        fabrication-proof by construction versus the AI-path first cut."""
+        name = str(self._profile_value(profile, "name") or "").strip()
+        years = self._profile_value(profile, "years_experience")
+        current_role = str(self._profile_value(profile, "current_role") or "").strip()
+        skills = [str(s) for s in self._as_list(self._profile_value(profile, "skills"))[:5]]
+        certs = [str(c) for c in self._as_list(self._profile_value(profile, "certifications"))[:3]]
+        strengths = skills + [c for c in certs if c not in skills]
+        if arabic:
+            years_part = f"أمتلك خبرة تُقارب {years} سنوات" if years else "أمتلك خبرة عملية متراكمة"
+            role_part = f"، وأعمل حالياً في دور {current_role}" if current_role else ""
+            strengths_part = (
+                "تشمل نقاط قوتي العملية: " + "، ".join(strengths) + ".\n\n" if strengths else ""
+            )
+            sig = f"\n{name}" if name else ""
+            return (
+                "خطاب تقديم عام — عدّل عليه بما يناسب كل جهة قبل الإرسال:\n\n"
+                "---\n\n"
+                "تحية طيبة وبعد،\n\n"
+                f"{years_part}{role_part}. "
+                "أتقدم بهذا الخطاب للتعبير عن اهتمامي بالفرص المتاحة لديكم بما يتوافق مع خلفيتي المهنية.\n\n"
+                f"{strengths_part}"
+                "يسعدني تزويدكم بسيرتي الذاتية ومناقشة ما يمكنني إضافته لفريقكم في مقابلة قادمة.\n\n"
+                "مع خالص التقدير،"
+                f"{sig}\n\n"
+                "---\n\n"
+                "عند استهداف جهة محددة، أرسل اسمها والمسمى الوظيفي لأخصص الخطاب بالكامل."
+            )
+        years_part = f"I bring approximately {years} years of experience" if years else "I bring hands-on professional experience"
+        role_part = f", currently working as {current_role}" if current_role else ""
+        strengths_part = ("Key strengths: " + ", ".join(strengths) + ".\n\n") if strengths else ""
+        sig = f"\n{name}" if name else ""
+        return (
+            "General cover letter — tailor it per employer before sending:\n\n"
+            "---\n\n"
+            "Dear Hiring Team,\n\n"
+            f"{years_part}{role_part}. "
+            "I am writing to express my interest in opportunities that align with my professional background.\n\n"
+            f"{strengths_part}"
+            "I would welcome the chance to share my CV and discuss how I can contribute to your team.\n\n"
+            "Kind regards,"
+            f"{sig}\n\n"
+            "---\n\n"
+            "When you have a specific company and role, send them over and I will tailor this fully."
+        )
+
     def _handle_generic_cover_letter_request(
         self, user_id: str, message: str, profile: Any
     ) -> dict[str, Any]:
         """Produce a GENERAL cover letter (no specific job/company) from the
-        user's real profile via the AI path — instead of re-asking for a role
-        and company the user explicitly said they don't want to name."""
-        _aug = (
-            f"{message}\n\n"
-            "[Instruction: The user wants a GENERAL cover letter, not tied to any "
-            "specific job or company. Write it from their real profile only — never "
-            "invent employers, achievements, or numbers. Reply in the user's language.]"
-        )
-        return self._answer_with_ai_fallback(
-            user_id=user_id, message=_aug, profile=profile, save_user_message=False,
+        user's real profile — instead of re-asking for a role and company the
+        user explicitly said they don't want to name."""
+        self._log_document_draft_context_source("generic_cover_letter", {})
+        cover = self._generic_cover_letter(profile, arabic=self._is_arabic_text(message))
+        self._append_chat(user_id, "assistant", cover)
+        return self._finalize(
+            {"type": "draft_message", "intent": "draft_message", "message": cover},
+            self.SOURCE_KEYWORD,
+            profile=profile,
         )
 
     def _handle_application_channel_followup(
@@ -5300,6 +5354,17 @@ class RicoChatAPI:
         no_favorite = self._wants_no_favorite(message)
         recruiter_email = EMAIL_RE.search(message or "")
         if wants_draft:
+            # Generic ask — produce the general letter (plain dict per this
+            # method's convention; harvested wiring point from #1278).
+            if _GENERIC_DRAFT_RE.search(message):
+                self._log_document_draft_context_source("generic_cover_letter", {})
+                return {
+                    "type": "draft_message",
+                    "intent": "draft_message",
+                    "message": self._generic_cover_letter(
+                        profile, arabic=self._is_arabic_text(message)
+                    ),
+                }
             self._log_document_draft_context_source("clarification_required", {})
             msg = self._cover_letter_clarification_message(
                 profile, arabic=self._is_arabic_text(message)

@@ -129,17 +129,62 @@ class TestGenericDraftDetection:
     def test_generic_phrases_detected(self):
         from src.rico_chat_api import _GENERIC_DRAFT_RE
         for m in ("اكتب واحد عام غير محدد", "لاشيء محدد بصوره عامه",
-                  "بدون شركة محددة", "write me a general cover letter",
-                  "a generic one please", "no specific company"):
+                  "لا شيء محدد بصورة عامة", "اكتب خطاب عام",
+                  "رسالة عامة بدون شركة", "بدون شركة محددة",
+                  "write me a general cover letter", "a general letter please",
+                  "make me a generic one", "not for a specific company",
+                  "cover letter for any company", "no specific company"):
             assert _GENERIC_DRAFT_RE.search(m), m
 
     def test_specific_role_phrases_not_detected(self):
-        # "General Manager" / «مدير عام» are ROLES, not genericness markers.
+        # "عام"/"general" as part of a ROLE title must never count as a
+        # genericness marker (pattern tightened via the #1278 harvest — the
+        # first cut fired on "general accountant").
         from src.rico_chat_api import _GENERIC_DRAFT_RE
         for m in ("اكتب خطاب لوظيفة مدير عام في شركة إعمار",
                   "cover letter for General Manager at Aldar",
+                  "cover letter for the general accountant position",
+                  "write a cover letter for ADNOC",
+                  "اكتب خطاب تقديم لشركة الإمارات",
                   "اكتبلي كفر لترر"):
             assert not _GENERIC_DRAFT_RE.search(m), m
+
+
+class TestGenericLetterOutput:
+    """The general letter is DETERMINISTIC — built only from real profile
+    fields, MSA register, no dialect, no vocatives, no fabrication."""
+
+    def _profile(self, **over):
+        base = dict(
+            name="Roben Edwan", years_experience=8, current_role="General Manager",
+            skills=["iso 14001", "compliance"], certifications=["ISO 14001 Lead Auditor"],
+        )
+        base.update(over)
+        return SimpleNamespace(**base)
+
+    def _api(self):
+        return RicoChatAPI.__new__(RicoChatAPI)
+
+    def test_arabic_letter_is_msa_no_dialect_no_vocative(self):
+        letter = self._api()._generic_cover_letter(self._profile(), arabic=True)
+        assert "8" in letter and "iso 14001" in letter and "Roben Edwan" in letter
+        for banned in ("شنو", "وش ", "تبي", "دلوقتي", "يا Roben", "😊", "🚀"):
+            assert banned not in letter, banned
+
+    def test_english_letter_uses_real_profile_only(self):
+        letter = self._api()._generic_cover_letter(self._profile(), arabic=False)
+        assert "8 years" in letter and "General Manager" in letter
+        assert "Roben Edwan" in letter
+
+    def test_empty_profile_never_fabricates(self):
+        empty = SimpleNamespace(
+            name=None, years_experience=None, current_role=None,
+            skills=[], certifications=[],
+        )
+        for arabic in (True, False):
+            letter = self._api()._generic_cover_letter(empty, arabic=arabic)
+            assert "None" not in letter
+            assert "8" not in letter
 
 
 # ---------------------------------------------------------------------------
