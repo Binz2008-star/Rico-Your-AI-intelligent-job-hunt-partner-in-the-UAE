@@ -1,5 +1,20 @@
 # Stateful Agent Architecture
 
+> **RETIRED — 2026-07-21.** The code this document describes was removed from
+> the repository (`src/agent/identity/`, `src/agent/workflow/`,
+> `src/agent/coordinator.py`, `src/services/stateful_chat_adapter.py`). It was
+> never wired into production and could not even import: it referenced five
+> repository functions that were never implemented, and its confirmation flow
+> read a `WorkflowResult.confirmation_token` field that did not exist. The
+> canonical execution path is `agent_runtime` (`src/agent/runtime.py`) behind
+> `/api/v1/rico/chat` and `/api/v1/actions/run`. Evidence and removal
+> rationale: `AI_WORKSPACE/HANDOFFS/2026-07-21-system-audit-dead-tools-import-breakage.md`
+> (findings F1/F2) and `AI_WORKSPACE/RICO_CODEBASE_INVENTORY_2026_06_21.md`.
+> This file is kept as historical design reference only — do not implement
+> against it. Still-live components it mentions (`src/agent/context/`,
+> `src/agent/intelligence/`, `src/repositories/learning_repo.py`) are
+> documented by their own modules.
+
 ## Overview
 
 Rico has been migrated from a stateless chat flow to a stateful agent architecture. The key principle is:

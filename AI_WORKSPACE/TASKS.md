@@ -5716,3 +5716,71 @@ owner-gated recommendations.
 - Stop condition: any request to delete the dead stack or change CI scope →
   stop, that is a separate owner-approved PR
 - Rollback plan: revert PR #1256 (test + docs only; no deploy/migration/env)
+
+### TASK-20260721-002 — Remove the import-broken stateful-agent stack + broken legacy scripts (audit F1/F2)
+
+Status: review
+Owner: Claude (agent), owner-approved removal ("احذف" 2026-07-21)
+Branch: claude/system-tools-analysis-wc4o4g (restarted from main 23a1138)
+Issue/PR: set at PR open
+
+#### Objective
+Delete the dead, import-broken stateful-agent stack and two broken legacy
+scripts identified by the 2026-07-21 system audit (handoff F1/F2), with a
+retirement banner on the design doc.
+
+#### Context
+- Relevant docs: AI_WORKSPACE/HANDOFFS/2026-07-21-system-audit-dead-tools-import-breakage.md;
+  AI_WORKSPACE/RICO_CODEBASE_INVENTORY_2026_06_21.md (recommended retirement)
+- Existing behavior: all six targets failed at import on main; nothing in
+  production or tests imports them (verified by repo-wide grep + import-scan)
+
+#### Constraints
+- Do not touch: src/agent/{runtime,orchestrator,registry,tools,context,
+  intelligence,responses,response_builder}, any live route or service
+- Keep scope limited to: deletion of the six dead targets + doc banner + ledger
+
+#### Acceptance criteria
+- [x] src/agent/identity/, src/agent/workflow/, src/agent/coordinator.py,
+      src/services/stateful_chat_adapter.py, src/linkedin_demo.py,
+      src/test_refactored_system.py removed
+- [x] Repo-wide grep: no remaining code references to the removed modules
+- [x] Import-scan of src/: 0 failures (was 8 on main)
+- [x] Focused test set still green
+- [ ] PR CI green on exact head
+
+#### Required verification
+- [x] Unit tests: focused 5-file set green post-deletion
+- [ ] Integration tests: PR CI (postgres-integration)
+- [ ] Frontend build: PR CI (no frontend change)
+- [ ] Local smoke: n/a — deleted code was unreachable and un-importable
+- [ ] Production/deploy smoke if applicable: deploy triggers on src/** — verify
+      the auto-deploy run after merge (runtime behavior unchanged; deletion only)
+
+#### Continuity Block
+- Task ID: TASK-20260721-002
+- GitHub issue/PR: set at PR open
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: 23a1138 (main tip at branch restart)
+- Current head SHA: set at commit
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files inspected: removed modules + repo-wide reference grep + src/agent/__init__.py (empty)
+- Files changed: 6 deletions above; docs/STATEFUL_AGENT_ARCHITECTURE.md — retirement banner;
+  AI_WORKSPACE/TASKS.md — this entry
+- Files intentionally not touched: src/agent/context/, src/agent/intelligence/,
+  src/repositories/learning_repo.py, src/feedback_loop.py — still-importable
+  shared components outside the approved deletion scope
+- What is complete: deletion, banner, local verification (import-scan 0 fails, focused set green)
+- What is incomplete: PR CI + merge; post-merge deploy-run check (src/** paths trigger deploy)
+- Known blockers: none
+- Validation already run: import-scan src/ → 0 fails; focused pytest set green
+- Validation still required: PR CI on exact head
+- Deployment/CI/Neon/Vercel state to check next: after merge, confirm the
+  deploy-render/deploy-production runs for the merge SHA succeed (identical
+  runtime; deletion cannot change served behavior)
+- Next exact action: open draft PR, verify CI, merge on green (owner pre-approved)
+- Stop condition: any CI failure implicating a live import of the removed
+  modules → stop, restore, report
+- Rollback plan: revert the PR (pure re-addition of deleted files)
