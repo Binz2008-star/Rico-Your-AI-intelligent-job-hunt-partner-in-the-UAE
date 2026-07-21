@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { POSTS } from "@/lib/blog/posts";
 
 const SITE_URL = "https://ricohunt.com";
 
@@ -43,6 +44,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
             changeFrequency: "yearly",
             priority: 0.6,
         },
+        // ── Tier 2b: Career-guide content (organic acquisition) ───────────
+        {
+            url: `${SITE_URL}/blog`,
+            lastModified: LAST_UPDATED,
+            changeFrequency: "weekly",
+            priority: 0.8,
+        },
+        ...POSTS.map((post) => ({
+            url: `${SITE_URL}/blog/${post.slug}`,
+            lastModified: new Date(post.dateModified),
+            changeFrequency: "monthly" as const,
+            priority: 0.7,
+        })),
         // ── Tier 3: Legal / compliance pages ──────────────────────────────
         {
             url: `${SITE_URL}/privacy`,
