@@ -6317,3 +6317,62 @@ still stands; scaling stays blocked until slice-4 validation).
   migration 050 (preview branch → production) when approving activation
 - Stop condition: any CI regression in the duplicate-guard suite → fix
   before merge; never raise workers/instances in this task
+
+
+### TASK-20260721-005 — Bilingual (AR/EN) agent replies — response builder localization
+
+Status: review
+Owner: Claude (agent), owner-directed ("استمر بما يعود بالفائدة الأكبر على المنتج" 2026-07-21)
+Branch: claude/system-tools-analysis-wc4o4g (restarted from main 247e83a)
+Issue/PR: set at PR open
+
+#### Objective
+Complete the bilingual agent path opened by TASK-20260721-004: after #1266 an
+Arabic user's intent executes, but every reply, action label, and UI title
+came back in English (src/agent/response_builder/response_builder.py is the
+sole AgentUIResponse producer). Localize all reply templates so the reply
+language follows the user's message language.
+
+#### Constraints
+- Keep scope limited to: response_builder.py + tests + ledger
+- Do not touch: action `type` values, tool names, data payloads, UI type enums
+- English output must remain byte-for-byte identical for non-Arabic messages
+
+#### Acceptance criteria
+- [x] Language detection from the user's message (Arabic block regex); empty/
+      button-driven requests default to English (existing behavior)
+- [x] Arabic templates for every builder: job list, apply/skip/save/block,
+      stats, pipeline status/trigger, market, strategy, learning profile,
+      help, error — messages, action labels, and UI titles
+- [x] English strings byte-identical (existing tests untouched and green)
+- [x] 7 new tests incl. end-to-end: Arabic NL message → intent → tool →
+      Arabic reply through orchestrator.process
+- [ ] PR CI green on exact head
+
+#### Continuity Block
+- Task ID: TASK-20260721-005
+- GitHub issue/PR: set at PR open
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: 247e83a (main tip at branch restart)
+- Current head SHA: set at commit
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files changed: src/agent/response_builder/response_builder.py — bilingual
+  templates + _lang_of; tests/test_agent.py — 7 bilingual response tests;
+  AI_WORKSPACE/TASKS.md — this entry
+- Files intentionally not touched: schemas/agent.py (no schema change),
+  orchestrator.py (already passes original_message), frontend (labels arrive
+  via existing action payloads)
+- What is complete: implementation + local verification (test_agent 100/100;
+  agent+UI-contract suites 281/281 under CI env)
+- What is incomplete: PR CI + merge; post-merge deploy check (src/** touched)
+- Known blockers: none
+- Validation already run: test_agent.py 100/100; agent_runtime + agentic_ui
+  composer/contracts/schema suites 281/281 under CI env
+- Validation still required: PR CI on exact head
+- Deployment/CI/Neon/Vercel state to check next: after merge, verify
+  deploy-render run for the merge SHA
+- Next exact action: open draft PR, verify CI, merge on green (owner-directed)
+- Stop condition: any English-output regression or UI-contract failure in CI
+- Rollback plan: revert the PR; replies return to English-only
