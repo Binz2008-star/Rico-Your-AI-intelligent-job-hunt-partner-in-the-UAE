@@ -6682,11 +6682,12 @@ the sync OR async path.
 
 ### TASK-20260721-014 — Multi-worker readiness: mandatory-Postgres fail-closed + real-process concurrency proof (stabilization slice 4)
 
-Status: in_review — **NOT done; expansion gate REMAINS CLOSED.** Owner review
-(2026-07-21) identified an un-eliminated post-claim-partition duplicate-cascade
-window (see "Owner-review follow-up" below). Slice 4 is NOT complete and
-Render workers/instances MUST stay at 1 until end-to-end cooperative cascade
-cancellation lands (a separate follow-up PR).
+Status: in_review — **expansion gate REMAINS CLOSED (owner decision).** Owner
+review (2026-07-21) identified a post-claim-partition duplicate-cascade window
+(see "Owner-review follow-up" below); the owner-directed **slice-4 closure PR**
+(end-to-end cooperative cascade cancellation — see "Slice-4 closure" section
+below) is now in review on its own branch. Render workers/instances stay at 1;
+opening the gate is an explicit owner decision after that PR merges.
 Owner: Claude (agent), owner-directed (slice 4 per DEC-20260721-001 —
 "إثبات وتشديد أمان التشغيل متعدد العمال" 2026-07-21)
 Branch: claude/ricco-research-improvements-dkmhin (restarted from main e3a5780)
@@ -6818,3 +6819,96 @@ Owner review of #1304 (head ee37126e) found two issues; both handled here:
 Revised head after follow-up: (set at commit). CI: full unit + postgres
 integration green on the new head. **No merge, no deploy, no worker/instance
 change** (owner stop conditions).
+
+#### Slice-4 closure — end-to-end cooperative cascade cancellation (2026-07-21, SAME task ID per owner directive)
+
+Owner decision (2026-07-21): "ابدأ إغلاق الشريحة 4" — a full cooperative-
+cancellation PR from latest main (0e0497b), independent branch/PR; #1305
+frozen and untouched; workers/instances stay 1; no render.yaml / prod env /
+deploy / SQL / migration changes.
+
+Branch: claude/reko-facebook-campaign-ob9s75 (restarted from main 0e0497b)
+Issue/PR: (draft PR opened from this branch; see Continuity Block)
+
+Accepted criterion (verbatim scope): after ownership loss becomes OBSERVABLE,
+the old worker starts NO new provider request, retry, or side effect; any
+in-flight response is DISCARDED and never reaches the user or storage. No
+claim is made about aborting an HTTP request already sent — this is
+cooperative cancellation through the hedged-thread orchestrator and the
+sync-request/backoff JSearch client, with the token passed EXPLICITLY through
+those layers.
+
+Scope:
+- src/jsearch_client.py: NEW `CancelCheck`/`CANCELLED_ERROR`/`_is_cancelled`;
+  `search(..., should_cancel=None)` — checkpoint before the first request and
+  before EVERY retry (backoff included), in-flight response discarded (no
+  cache write, no observations write), cancelled outcome never served from
+  stale cache; FetchResult docstring documents error="cancelled".
+- src/job_providers.py: `search_jobs(..., should_cancel=None)` — entry
+  checkpoint, per-iteration checkpoint in the hedged launch/harvest loop (no
+  NEW provider launched after loss), `_run_provider` refuses to start a
+  late-scheduled hedge thread, a winner surfacing in the same pass as the
+  loss is DISCARDED (never cached, never returned);
+  `_jooble_search`/`_adzuna_search`/`_jsearch_search` accept the token
+  (entry + response-discard checkpoints; observations hook skipped when
+  cancelled). Token forwarded to clients only when non-None so legacy
+  token-less monkeypatched stand-ins stay byte-compatible.
+- src/rico_chat_api.py: EXECUTOR CONSUMER of operation_state.ownership_lost —
+  `_ACTIVE_CANCEL_CHECK` ContextVar bound per (operation_id, attempt) by
+  `_begin_job_search_operation` (the `_search_jsearch_meta` seam is a
+  staticmethod with a test-pinned signature, hence the ContextVar; it passes
+  the check EXPLICITLY into job_providers). NEW `_operation_ownership_lost()`
+  + `_search_superseded_response()` (type="search_superseded"; NO chat
+  append, NO analytics, NO operation write). Checkpoints: after the provider
+  fetch (also gates the legacy run_for_profile fallback), the exception path,
+  the degraded-provider endpoint, the adjacent-hop outer completion (with
+  outer-generation re-bind in the hop finally), the final happy-path
+  append+complete, and the role-list run_for_profile flow. ContextVar cleared
+  in process_message's finally so later non-operation fetches can never see a
+  stale generation.
+- src/services/operation_state.py: docs updated — ownership_lost now HAS its
+  executor consumer; module KNOWN-LIMITATION block rewritten to the
+  cooperative post-claim-partition model (gate opening stays owner-only).
+- tests/unit/test_cascade_cooperative_cancellation.py (NEW, 14): per-layer
+  no-new-request / retry-stop / in-flight-discard / no-cache / no-observations
+  proofs; orchestrator entry/mid-cascade/winner-discard; token-less behavior
+  unchanged; chat-flow superseded reply with NOTHING appended to history and
+  no terminal write by the fenced worker; seam passes the check explicitly
+  (flips with _mark_ownership_lost for the REAL claimed generation).
+- tests/integration/test_operation_multiworker_postgres.py: partition test
+  RENAMED test_partition_after_claim_starts_second_cascade_window_documented
+  → test_partition_after_claim_takeover_and_fenced_owner_stops and EXTENDED:
+  after the real self-fence, worker A drives the REAL orchestrator with the
+  REAL cancel check and provider clients replaced by launch counters —
+  asserts error="cancelled", ZERO provider launches, zero items, on top of
+  the existing takeover (counter==2 is the peer's LEGITIMATE execution) and
+  SQL write-fence assertions. Module docstring updated accordingly.
+
+#### Continuity Block (slice-4 closure)
+- Current head SHA: (set at commit)
+- Status: in_review — Draft PR; NO merge by agent, NO deploy, NO Render
+  worker/instance change, NO render.yaml/env change, NO LOW-1/LOW-2 (owner
+  stop conditions). #1305 untouched.
+- Validation already run: new unit suite 14/14 (twice — cross-run stable);
+  targeted regression 164/164 (job_providers, jsearch_client, operation
+  guard/status/store, provider-degraded UX, adapters); multiworker postgres
+  integration 8/8 incl. the extended partition probe + ownership integration
+  9/9 on real local Postgres 16; broad search-flow sweep 1212 passed with 6
+  failures REPRODUCED IDENTICALLY on pre-change source (pre-existing
+  test-order pollution in that ad-hoc batch, not a regression; each passes in
+  isolation); py_compile OK on all touched modules.
+- Fail-before PROVEN: pre-change source rejects the token outright
+  (search_jobs/search → TypeError: unexpected keyword 'should_cancel';
+  CANCELLED_ERROR absent), and the pre-extension integration test asserted
+  the second cascade with NO suppression of the fenced worker's next round.
+- Validation still required: full CI on the PR head.
+- Deployment: none in this task — owner-gated. Opening the multi-worker gate
+  remains an OWNER decision even after merge.
+- Known blockers: none for this PR.
+- Risks: cooperative model only — an HTTP request already on the wire is not
+  aborted (its response is discarded); non-operation callers pass no token and
+  are behaviorally unchanged; a raising cancel check is treated as not-
+  cancelled (fail-open to liveness, logged).
+- Rollback plan: revert the PR (restores signal-without-consumer state).
+- Next exact action: owner review of the Draft PR after full CI.
+- Stop condition: STOP after evidence report + green CI (owner directive).

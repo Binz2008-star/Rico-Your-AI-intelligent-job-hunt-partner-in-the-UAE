@@ -7,6 +7,7 @@ triggers workflows, and responds with autonomous actions.
 
 from __future__ import annotations
 
+import contextvars
 from dataclasses import asdict, is_dataclass, replace as _dc_replace
 import json
 import logging
@@ -16,7 +17,7 @@ import os
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, NamedTuple
+from typing import Any, Callable, NamedTuple
 
 # Standard library imports first
 # Third-party imports (none currently)
@@ -66,11 +67,32 @@ from src.services.operation_state import (
     OperationStoreUnavailable,
     mark_completed,
     mark_failed,
+    ownership_lost,
     start_job_search_operation,
 )
 from src.mutation_guard import MutationConfirmationGuard, MutationResult
 
 _MUTATION_CONFIRMATION_GUARD = MutationConfirmationGuard()
+
+# ── Cooperative cascade cancellation (DEC-20260721-001 slice-4 closure) ──────
+# The EXECUTOR CONSUMER of operation_state's ownership-loss signal. When
+# _begin_job_search_operation claims an operation it binds a cancel check —
+# `ownership_lost(operation_id, attempt)` — into this context variable; the
+# provider seam (_search_jsearch_meta, a staticmethod whose signature is
+# pinned by existing tests/monkeypatches) reads it and passes it EXPLICITLY
+# down through job_providers.search_jobs → _jooble_search/_adzuna_search/
+# _jsearch_search → jsearch_client.search. Once the worker's heartbeat
+# self-fences (post-claim DB partition outlasting the lease, or a takeover),
+# the check flips True and: no new provider request/retry is issued, hedged
+# threads refuse to start, in-flight responses are discarded (no cache /
+# observations writes), and the chat flow returns a superseded reply without
+# touching chat history or the operation record. A ContextVar (not an
+# instance attribute) because the seam is a staticmethod and the value must
+# be scoped to the executing request context, including the adjacent-hop
+# save/restore nesting.
+_ACTIVE_CANCEL_CHECK: contextvars.ContextVar[Callable[[], bool] | None] = (
+    contextvars.ContextVar("rico_active_op_cancel", default=None)
+)
 
 
 def _profile_updates_visible(user_id: str, updates: dict[str, Any]) -> bool:
@@ -2222,10 +2244,57 @@ class RicoChatAPI:
         # if the operation is later expired + legitimately re-started, the
         # bumped attempt makes this execution's late writes refusable.
         self._current_operation_attempt = int(operation.get("attempt") or 1)
+        # Bind the cooperative cancel check for THIS (operation, attempt)
+        # generation. The provider seam reads it and threads it explicitly
+        # through job_providers/jsearch_client; the flow's own checkpoints use
+        # _operation_ownership_lost() directly.
+        _op_id, _op_attempt = self._current_operation_id, self._current_operation_attempt
+        _ACTIVE_CANCEL_CHECK.set(lambda: ownership_lost(_op_id, _op_attempt))
         return operation
 
     def _operation_attempt(self) -> int | None:
         return getattr(self, "_current_operation_attempt", None)
+
+    def _operation_ownership_lost(self) -> bool:
+        """True when THIS execution's heartbeat self-fenced (lease unrenewable
+        past its window during a DB partition, or the row was taken over). The
+        executor-side consumer of operation_state.ownership_lost — from the
+        moment it reports True this flow must start NO new provider work and
+        must not let any pending result reach the user or storage."""
+        op_id = getattr(self, "_current_operation_id", None)
+        attempt = self._operation_attempt()
+        if not op_id or attempt is None:
+            return False
+        return ownership_lost(str(op_id), int(attempt))
+
+    def _search_superseded_response(self, arabic: bool) -> dict[str, Any]:
+        """Reply for a cascade whose ownership was lost mid-flight (a peer
+        legitimately took the operation over after this worker's lease became
+        unprovable). The pending result is DISCARDED: nothing is appended to
+        chat history, no analytics, no operation-record write (the attempt
+        fence would refuse it anyway) — the takeover execution owns the
+        user-visible outcome."""
+        operation_id = str(getattr(self, "_current_operation_id", "") or "")
+        logger.warning(
+            "job_search_superseded: ownership lost mid-cascade op=%s attempt=%s — "
+            "result discarded (no user/storage write)",
+            operation_id, self._operation_attempt(),
+        )
+        return {
+            "type": "search_superseded",
+            "intent": "search_jobs",
+            "success": False,
+            "superseded": True,
+            "operation_id": operation_id,
+            "operation_type": "job_search",
+            "response_source": "ownership_lost",
+            "message": (
+                "تولّى تنفيذٌ أحدث هذا البحث — النتائج ستصل من هناك، ولم أكرر البحث."
+                if arabic else
+                "A newer execution took over this search — its results will arrive from there; "
+                "I didn't run a duplicate."
+            ),
+        }
 
     def _duplicate_operation_guard(
         self, user_id: str, operation_id: str, message: str, language: str | None
@@ -6310,10 +6379,19 @@ class RicoChatAPI:
         empty result apart from a rate-limited / quota-exhausted source. Never raises.
         The method name is retained for backward compatibility with existing callers
         and tests; it now routes through ``src.job_providers``.
+
+        Cooperative cancellation: the active operation's cancel check (bound by
+        _begin_job_search_operation into _ACTIVE_CANCEL_CHECK — this seam is a
+        staticmethod with a signature pinned by existing tests, hence the
+        context variable) is passed EXPLICITLY down the provider layers here.
+        Callers outside an operation context (saved searches, followups) see
+        None and behave exactly as before.
         """
         from src import job_providers
 
-        result = job_providers.search_jobs(role, location)
+        result = job_providers.search_jobs(
+            role, location, should_cancel=_ACTIVE_CANCEL_CHECK.get()
+        )
         logger.info(
             "provider_search role=%r location=%r provider=%s results=%d cache_hit=%s rate_limited=%s quota=%s",
             role, location or "UAE", result.provider, len(result.items),
@@ -6613,6 +6691,11 @@ class RicoChatAPI:
                 search_role, len(all_matches), fetch_provider, rate_limited,
                 quota_exhausted, _search_elapsed, operation_id,
             )
+            # Cooperative checkpoint: ownership lost during (or before) the
+            # provider fetch — discard whatever came back and start NOTHING
+            # new (the legacy fallback pipeline below is new provider work).
+            if fetch_error == "cancelled" or self._operation_ownership_lost():
+                return self._search_superseded_response(arabic)
             if not all_matches:
                 search_profile = (
                     _dc_replace(profile, target_roles=[search_role])
@@ -6627,6 +6710,10 @@ class RicoChatAPI:
                 "job_search_failed: role=%r elapsed=%.2fs op=%s err=%s",
                 search_role, _search_elapsed, operation_id, type(exc).__name__,
             )
+            if self._operation_ownership_lost():
+                # Ownership already belongs to a takeover execution: record
+                # nothing (the fence would refuse it) and write nothing to chat.
+                return self._search_superseded_response(arabic)
             mark_failed(user_id, operation_id, str(exc), attempt=self._operation_attempt())
             _graceful_msg = (
                 "عذراً، لم أتمكن من إتمام البحث الآن. "
@@ -6650,6 +6737,8 @@ class RicoChatAPI:
             or fetch_error == "all_providers_unavailable"
         )
         if not all_matches and _provider_failed:
+            if self._operation_ownership_lost():
+                return self._search_superseded_response(arabic)
             try:
                 mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
             except Exception:
@@ -6910,7 +6999,17 @@ class RicoChatAPI:
                 finally:
                     self._current_operation_id = _saved_op_id
                     self._current_operation_attempt = _saved_attempt
+                    # Re-bind the OUTER operation's cancel check (the nested
+                    # hop's _begin overwrote it with the hop's generation).
+                    if _saved_op_id and _saved_attempt is not None:
+                        _ACTIVE_CANCEL_CHECK.set(
+                            lambda: ownership_lost(str(_saved_op_id), int(_saved_attempt))
+                        )
+                    else:
+                        _ACTIVE_CANCEL_CHECK.set(None)
                 if _hop_resp and _hop_resp.get("matches"):
+                    if self._operation_ownership_lost():
+                        return self._search_superseded_response(arabic)
                     _hop_note = (
                         f"لم أجد نتائج قوية بمسمى **{search_role}** حرفياً، فبحثت في الدور الأقرب لملفك — **{_hop_role}**:"
                         if arabic else
@@ -7067,6 +7166,12 @@ class RicoChatAPI:
 
         if role_intelligence_data:
             response["role_intelligence"] = role_intelligence_data
+
+        # Final cooperative checkpoint before the ONLY user/storage writes of
+        # the happy path: ownership lost during scoring/formatting means the
+        # pending response is discarded — no chat append, no completion write.
+        if self._operation_ownership_lost():
+            return self._search_superseded_response(arabic)
 
         self._append_chat(user_id, "assistant", response)
         mark_completed(user_id, operation_id, len(formatted), attempt=self._operation_attempt())
@@ -7442,6 +7547,10 @@ class RicoChatAPI:
             )
         finally:
             self._current_operation_id = None
+            # Drop this request's cancel check so a later non-operation fetch
+            # in the same context can never observe a stale generation's
+            # ownership-loss signal.
+            _ACTIVE_CANCEL_CHECK.set(None)
             self._current_operation_attempt = None
 
     def _answer_with_ai_fallback(
@@ -10644,8 +10753,21 @@ class RicoChatAPI:
             try:
                 workflow_result = self.system.run_for_profile(profile)
             except Exception as exc:
+                if self._operation_ownership_lost():
+                    return self._finalize(
+                        self._search_superseded_response(self._is_arabic_text(message or "")),
+                        routed.source, profile=profile,
+                    )
                 mark_failed(user_id, operation_id, str(exc), attempt=self._operation_attempt())
                 raise
+
+            # Cooperative checkpoint: ownership lost while the legacy pipeline
+            # ran — discard its result before ANY user/storage write below.
+            if self._operation_ownership_lost():
+                return self._finalize(
+                    self._search_superseded_response(self._is_arabic_text(message or "")),
+                    routed.source, profile=profile,
+                )
 
             # Handle blocked status from job search
             if workflow_result.get("status") == "blocked":

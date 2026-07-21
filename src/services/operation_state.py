@@ -32,18 +32,21 @@ Fallback contract (DEC-20260721-001 slice 4):
   AI_WORKSPACE/OPERATING_RULES.md continues to apply until the deployment is
   switched to the mandatory mode above.
 
-KNOWN LIMITATION — expansion gate stays CLOSED (DEC-20260721-001 slice 4):
-the simultaneous-claim race and the mandatory-mode pre-claim outage are safe,
-but a Postgres partition that begins AFTER a worker has claimed and started
-its provider cascade is NOT yet fully safe. The heartbeat cannot renew during
-the partition; if it outlasts the lease, a peer may take over and start a
-SECOND cascade while the first is still executing. The attempt fence stops the
-first worker's late result WRITE, and the heartbeat now SELF-FENCES (marks
-ownership lost — see ownership_lost()), but neither cancels the first worker's
-in-flight provider requests. Eliminating that duplicate-cascade window needs
-end-to-end cooperative cascade cancellation (a separate, larger PR). Until then
-Render worker/instance count MUST stay at 1 — raising it is NOT authorized by
-this slice.
+POST-CLAIM PARTITION model (DEC-20260721-001 slice-4 closure): the
+simultaneous-claim race and the mandatory-mode pre-claim outage fail safe, and
+a Postgres partition that begins AFTER a worker has claimed is now handled
+COOPERATIVELY end-to-end: the heartbeat SELF-FENCES (marks ownership lost —
+see ownership_lost()) when the lease is unrenewable past its window or the row
+is taken over, and the executor CONSUMES that signal — rico_chat_api binds it
+as a cancel check that is passed explicitly through job_providers.search_jobs
+and jsearch_client.search, so the fenced worker starts no new provider
+request/retry, hedged threads refuse to start, in-flight responses are
+discarded (no cache/observations writes), and the pending reply never reaches
+chat history or the operation record (the attempt fence additionally refuses
+late writes). An HTTP request already on the wire is NOT aborted — cooperative
+cancellation refuses to use its response, it does not claim to cancel it.
+Raising Render workers/instances remains an OWNER decision — this module does
+not authorize it.
 """
 from __future__ import annotations
 
@@ -167,15 +170,15 @@ _memory = RicoMemoryStore()
 _HEARTBEAT_STOPS: dict[tuple[str, int], threading.Event] = {}
 _HEARTBEAT_LOCK = threading.Lock()
 
-# PREPARATORY ownership-loss signal (DEC-20260721-001 slice 4). An
-# (operation_id, attempt) lands here when THIS worker can no longer prove it
-# holds the lease — its heartbeat could not renew for longer than the lease
-# (DB partition) or the row was taken over/expired. It is a cooperative
-# checkpoint: `ownership_lost()` lets a future executor stop recording / stop
-# issuing provider calls. THERE IS NO EXECUTOR CONSUMER IN THIS PR — the actual
-# in-flight provider cascade is not yet cancelled, so the post-claim-partition
-# duplicate-cascade WINDOW is NOT eliminated and the expansion gate stays
-# CLOSED. This state has an explicit lifecycle so it cannot leak:
+# Ownership-loss signal (DEC-20260721-001 slice 4; consumed since the slice-4
+# closure PR). An (operation_id, attempt) lands here when THIS worker can no
+# longer prove it holds the lease — its heartbeat could not renew for longer
+# than the lease (DB partition) or the row was taken over/expired. It is a
+# cooperative checkpoint: the EXECUTOR CONSUMER (rico_chat_api's
+# _operation_ownership_lost + the cancel check threaded through
+# job_providers/jsearch_client) stops issuing provider calls, discards
+# in-flight responses, and stops recording once it reports True.
+# This state has an explicit lifecycle so it cannot leak:
 #   * cleared for (op, attempt) when that generation reaches a terminal status
 #     or is restarted/taken over (see _discard_ownership_loss / _stop_heartbeats);
 #   * hard-capped at _MAX_LOST_OWNERSHIP with FIFO eviction as a safety valve.

@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from threading import RLock
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote_plus
 
 from src.services.source_quality import pick_best_alternate_apply_link
@@ -46,6 +46,35 @@ _TIMEOUT_S = int(os.getenv("JSEARCH_TIMEOUT_S", "12"))
 _cache: Dict[str, "tuple[float, List[Dict[str, Any]]]"] = {}
 _cache_lock = RLock()
 
+# ── Cooperative cancellation (DEC-20260721-001 slice-4 closure) ───────────────
+# A cancel check is a zero-argument callable returning True once the caller's
+# right to do this work has been revoked — in production it is bound to
+# operation_state.ownership_lost(operation_id, attempt), i.e. this worker's
+# heartbeat self-fenced after a post-claim DB partition or a takeover. The
+# contract at this layer:
+#   * NO new network request (first call or retry) is issued once the check
+#     reports True — checked before every request attempt;
+#   * a response already in flight when ownership is lost is DISCARDED: its
+#     items are dropped, nothing is cached, and nothing is written to the
+#     job_observations archive;
+#   * an HTTP request that is already on the wire is NOT aborted (cooperative
+#     model — we never claim to cancel a sent request, we refuse to use it).
+# A cancelled outcome is reported as FetchResult(error="cancelled") with no
+# items, never served from stale cache.
+CancelCheck = Optional[Callable[[], bool]]
+CANCELLED_ERROR = "cancelled"
+
+
+def _is_cancelled(should_cancel: CancelCheck) -> bool:
+    if should_cancel is None:
+        return False
+    try:
+        return bool(should_cancel())
+    except Exception:
+        # A broken check must never take down the fetch path; treat as live.
+        logger.warning("jsearch: cancel check raised — treating as not cancelled", exc_info=True)
+        return False
+
 
 @dataclass
 class FetchResult:
@@ -59,6 +88,9 @@ class FetchResult:
       (e.g. RapidAPI BASIC at 100%) — a longer, non-retryable degraded state.
     - ``provider`` names the source that produced ``items`` ("jsearch", "jooble",
       "adzuna", "cache", "internal", or "none" when every provider was skipped).
+    - ``error == "cancelled"`` means the caller's cancel check reported the work
+      was revoked (ownership lost): no further requests were issued and any
+      in-flight response was discarded — ``items`` is always empty then.
     """
     items: List[Dict[str, Any]] = field(default_factory=list)
     cache_hit: bool = False
@@ -215,12 +247,26 @@ def build_queries_for_profile(
     return queries[:max_queries]
 
 
-def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchResult:
+def search(
+    query: str,
+    *,
+    use_cache: bool = True,
+    country: str = "ae",
+    should_cancel: CancelCheck = None,
+) -> FetchResult:
     """Fetch + normalize JSearch results for *query* with cache, retry, backoff.
 
     Never raises. On a rate-limited source it returns whatever was cached (if
     anything) plus `rate_limited=True`.
+
+    *should_cancel* is the cooperative cancellation check (see CancelCheck):
+    once it reports True no new request or retry is issued and an in-flight
+    response is discarded (no cache write, no observations archive write).
     """
+    if _is_cancelled(should_cancel):
+        logger.info("jsearch_cancelled query=%r stage=before_start", query)
+        return FetchResult(error=CANCELLED_ERROR)
+
     api_key = os.getenv("RAPIDAPI_KEY", "").strip()
     if not api_key:
         logger.debug("jsearch: RAPIDAPI_KEY not set — skipping query")
@@ -246,10 +292,24 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
     retries = 0
     last_error: Optional[str] = None
     while retries <= _MAX_RETRIES:
+        # Cooperative checkpoint: guards the FIRST request and every retry
+        # (including one whose backoff sleep just elapsed) — once ownership is
+        # lost, no new request goes on the wire.
+        if _is_cancelled(should_cancel):
+            logger.info(
+                "jsearch_cancelled query=%r stage=before_request retries=%d",
+                query, retries,
+            )
+            return FetchResult(error=CANCELLED_ERROR, retries=retries)
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
                 data = json.loads(resp.read().decode())
+            if _is_cancelled(should_cancel):
+                # Ownership was lost while this response was in flight:
+                # DISCARD it — no items, no cache write, no observations write.
+                logger.info("jsearch_cancelled query=%r stage=response_discarded", query)
+                return FetchResult(error=CANCELLED_ERROR, retries=retries)
             raw_items = [
                 normalize_item(it) for it in _raw_items(data) if _is_uae_job(it)
             ]

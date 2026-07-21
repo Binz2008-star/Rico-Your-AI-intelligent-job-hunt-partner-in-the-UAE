@@ -22,23 +22,25 @@ What is PROVEN safe under real concurrent processes:
   6. two different users on the same operation_id keep independent ownership —
      no leak, no cross-block.
 
-What is STILL OPEN (owner review 2026-07-21) — the expansion gate stays CLOSED:
-  * a Postgres partition that begins AFTER a worker claims and starts its
-    cascade can still let a peer take over and start a SECOND cascade once the
-    outage outlasts the lease. The heartbeat now SELF-FENCES (ownership_lost)
-    and the attempt fence stops the stale write, but neither cancels the first
-    worker's in-flight provider calls. This is proven — NOT eliminated — by
-    test_partition_after_claim_starts_second_cascade_window_documented.
-    Eliminating it needs end-to-end cooperative cascade cancellation
-    (a separate, larger PR). Until then Render workers/instances MUST stay 1.
+Post-claim partition (slice-4 closure, follow-up to the 2026-07-21 owner
+review): once the outage outlasts the lease a peer legitimately takes over and
+runs the second execution. The fenced owner now cooperates end-to-end — the
+heartbeat SELF-FENCES (ownership_lost), the attempt fence stops the stale
+write, AND the cancel check threaded through job_providers/jsearch_client
+stops the fenced worker from issuing any new provider request while its late
+results are discarded. Proven by
+test_partition_after_claim_takeover_and_fenced_owner_stops (real processes,
+real partition, real orchestrator). Requests already on the wire are not
+aborted — cooperative cancellation refuses to use them, it does not claim to
+cancel them. Raising Render workers/instances remains an OWNER decision.
 
 Lease/heartbeat are shortened via TEST-ONLY env vars that are honored ONLY
 under an active pytest run (operation_state._test_timings_allowed gates them on
 PYTEST_CURRENT_TEST); production values (60s/10s) are never overridden. Requires
 a real Postgres via RICO_TEST_DATABASE_URL; skips cleanly when unset.
 
-NOTE: this suite does NOT authorize raising Render workers/instances. Slice 4 is
-NOT complete while the post-claim-partition window above remains open.
+NOTE: this suite does NOT authorize raising Render workers/instances — that
+remains an explicit owner decision (DEC-20260721-001).
 """
 from __future__ import annotations
 
@@ -406,16 +408,18 @@ def test_admin_ops_overview_reflects_real_state():
     assert section["oldest_active_age_seconds"] is not None
 
 
-# ── KNOWN WINDOW: DB partition AFTER claim can start a second cascade ─────────
+# ── POST-CLAIM PARTITION: takeover is legitimate; the fenced owner stops ─────
 #
-# This is the case the owner review flagged: the simultaneous-claim race and the
-# pre-claim outage are safe, but a partition that begins AFTER a worker owns the
-# operation and started its cascade is NOT yet fully safe. The heartbeat cannot
-# renew; if the outage outlasts the lease a peer takes over and starts a SECOND
-# cascade. The attempt fence stops the first worker's late WRITE and the
-# heartbeat SELF-FENCES (ownership_lost), but neither cancels the first worker's
-# in-flight provider calls. This test PROVES the window still exists — it is the
-# reason the expansion gate stays CLOSED, not evidence that slice 4 is complete.
+# This is the case the owner review flagged: a partition that begins AFTER a
+# worker owns the operation lets a peer take over once the lease goes stale —
+# the peer's cascade is the LEGITIMATE second execution (counter == 2 below is
+# the takeover working as designed, not a defect). The slice-4 closure adds the
+# cooperative half: the fenced owner (A) consumes ownership_lost as a cancel
+# check threaded through job_providers/jsearch_client, so after self-fencing it
+# starts NO new provider request/retry, and a would-be result is discarded —
+# proven by the A_post_fence_cascade probe (zero provider launches, error
+# "cancelled") on top of the existing SQL write-fence assertion. Raising Render
+# workers/instances remains an OWNER decision; this test does not authorize it.
 
 def _partition_owner(user_id, op_id, dead_url, ready_q, lost_q, cascade_counter):
     """Claim on the real DB, then simulate a DB partition for THIS worker
@@ -434,15 +438,41 @@ def _partition_owner(user_id, op_id, dead_url, ready_q, lost_q, cascade_counter)
     # Partition begins: subsequent heartbeats can't reach the DB.
     os.environ["DATABASE_URL"] = dead_url
     deadline = time.monotonic() + _LEASE * 5
+    fenced = False
     while time.monotonic() < deadline:
         if ops.ownership_lost(op_id, attempt):
+            fenced = True
             lost_q.put(("A_self_fenced", attempt))
-            return
+            break
         time.sleep(0.1)
-    lost_q.put(("A_never_fenced", attempt))
+    if not fenced:
+        lost_q.put(("A_never_fenced", attempt))
+        return
+
+    # Slice-4 closure probe: A is fenced but its cascade thread is still alive
+    # (this loop stands in for it). Its NEXT provider round goes through the
+    # REAL orchestrator with the REAL cancel check — every provider client is
+    # replaced by a launch counter, so any launch after the fence is caught.
+    from src import job_providers
+    launches = {"n": 0}
+
+    def _would_launch(*a, **k):
+        launches["n"] += 1
+        from src.jsearch_client import FetchResult
+        return FetchResult(items=[{"title": "late", "job_id": "x"}])
+
+    job_providers._jooble_search = _would_launch
+    job_providers._adzuna_search = _would_launch
+    job_providers._jsearch_search = _would_launch
+    os.environ.setdefault("RAPIDAPI_KEY", "probe")
+    result = job_providers.search_jobs(
+        "hse manager", use_cache=False,
+        should_cancel=lambda: ops.ownership_lost(op_id, attempt),
+    )
+    lost_q.put(("A_post_fence_cascade", result.error, launches["n"], len(result.items)))
 
 
-def test_partition_after_claim_starts_second_cascade_window_documented():
+def test_partition_after_claim_takeover_and_fenced_owner_stops():
     from src.repositories import chat_operations_repo as repo
 
     ready = _CTX.Queue()
@@ -466,9 +496,8 @@ def test_partition_after_claim_starts_second_cascade_window_documented():
     b.join(timeout=30)
     assert q2.get(timeout=5)[0] == "claimed", "peer takes over the stale lease (the window)"
     assert cascade.value == 2, (
-        "TWO cascades ran under a post-claim partition — this window is why the "
-        "multi-worker expansion gate stays CLOSED until cooperative cascade "
-        "cancellation lands"
+        "the takeover peer legitimately runs the second cascade (counter==2); "
+        "the closure being tested is that the FENCED owner adds no third"
     )
     row = _row(_OP)
     assert row[2] == 2, "takeover bumped attempt to 2"
@@ -476,6 +505,15 @@ def test_partition_after_claim_starts_second_cascade_window_documented():
     # A self-fences (heartbeat unrenewable past the lease → ownership_lost).
     a.join(timeout=30)
     assert lost.get(timeout=5) == ("A_self_fenced", 1), "the stale owner must self-fence"
+
+    # Slice-4 closure: after the fence, A's next provider round through the
+    # REAL orchestrator + REAL cancel check launches NOTHING and yields no
+    # usable items — the duplicate work (and any late response) is refused.
+    probe = lost.get(timeout=5)
+    assert probe[0] == "A_post_fence_cascade"
+    assert probe[1] == "cancelled", f"fenced cascade must report cancelled, got {probe}"
+    assert probe[2] == 0, f"fenced worker launched {probe[2]} provider call(s) — must be 0"
+    assert probe[3] == 0, "a fenced cascade must never return items"
 
     # A's late result (attempt=1) is still refused by the SQL fence.
     late = repo.update_status(user_id=_USER, operation_id=_OP, status="completed", result_count=7, attempt=1)
