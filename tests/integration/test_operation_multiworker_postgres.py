@@ -7,7 +7,7 @@ Python processes that race on a multiprocessing.Barrier, so concurrency is
 genuine. Each worker resets its own _PROCESS_NONCE at startup — exactly what a
 real uvicorn process does — and runs under RICO_OPERATION_STORE=postgres.
 
-Proves the gate criteria for raising worker/instance count:
+What is PROVEN safe under real concurrent processes:
   1. two workers racing the SAME user+operation_id → exactly one claims, the
      other is honestly refused, and the provider cascade runs ONCE;
   2. a live owner that keeps renewing its heartbeat past the lease CANNOT be
@@ -22,13 +22,23 @@ Proves the gate criteria for raising worker/instance count:
   6. two different users on the same operation_id keep independent ownership —
      no leak, no cross-block.
 
-Lease/heartbeat are shortened via TEST-ONLY env vars (production values are
-unchanged); no long sleeps beyond one lease window. Requires a real Postgres
-via RICO_TEST_DATABASE_URL; skips cleanly when unset.
+What is STILL OPEN (owner review 2026-07-21) — the expansion gate stays CLOSED:
+  * a Postgres partition that begins AFTER a worker claims and starts its
+    cascade can still let a peer take over and start a SECOND cascade once the
+    outage outlasts the lease. The heartbeat now SELF-FENCES (ownership_lost)
+    and the attempt fence stops the stale write, but neither cancels the first
+    worker's in-flight provider calls. This is proven — NOT eliminated — by
+    test_partition_after_claim_starts_second_cascade_window_documented.
+    Eliminating it needs end-to-end cooperative cascade cancellation
+    (a separate, larger PR). Until then Render workers/instances MUST stay 1.
 
-NOTE: passing this suite is the READINESS proof only. Actually raising Render
-workers/instances is a separate production decision AFTER merge + verification,
-and REQUIRES RICO_OPERATION_STORE=postgres in the environment.
+Lease/heartbeat are shortened via TEST-ONLY env vars that are honored ONLY
+under an active pytest run (operation_state._test_timings_allowed gates them on
+PYTEST_CURRENT_TEST); production values (60s/10s) are never overridden. Requires
+a real Postgres via RICO_TEST_DATABASE_URL; skips cleanly when unset.
+
+NOTE: this suite does NOT authorize raising Render workers/instances. Slice 4 is
+NOT complete while the post-claim-partition window above remains open.
 """
 from __future__ import annotations
 
@@ -394,3 +404,80 @@ def test_admin_ops_overview_reflects_real_state():
     assert section["stuck_lease_dead"] == 1   # only the lease-dead one
     assert section["failed_24h"] == 1
     assert section["oldest_active_age_seconds"] is not None
+
+
+# ── KNOWN WINDOW: DB partition AFTER claim can start a second cascade ─────────
+#
+# This is the case the owner review flagged: the simultaneous-claim race and the
+# pre-claim outage are safe, but a partition that begins AFTER a worker owns the
+# operation and started its cascade is NOT yet fully safe. The heartbeat cannot
+# renew; if the outage outlasts the lease a peer takes over and starts a SECOND
+# cascade. The attempt fence stops the first worker's late WRITE and the
+# heartbeat SELF-FENCES (ownership_lost), but neither cancels the first worker's
+# in-flight provider calls. This test PROVES the window still exists — it is the
+# reason the expansion gate stays CLOSED, not evidence that slice 4 is complete.
+
+def _partition_owner(user_id, op_id, dead_url, ready_q, lost_q, cascade_counter):
+    """Claim on the real DB, then simulate a DB partition for THIS worker
+    (point its DATABASE_URL at a dead host) while staying alive as if the
+    cascade were still running. Report when it self-fences."""
+    _worker_env()
+    _fresh_nonce()
+    from src.services import operation_state as ops
+
+    op = ops.start_job_search_operation(user_id=user_id, role_or_query="hse manager", operation_id=op_id)
+    attempt = op["attempt"]
+    with cascade_counter.get_lock():
+        cascade_counter.value += 1                      # cascade #1 is running
+    ready_q.put(("A_claimed", attempt))
+
+    # Partition begins: subsequent heartbeats can't reach the DB.
+    os.environ["DATABASE_URL"] = dead_url
+    deadline = time.monotonic() + _LEASE * 5
+    while time.monotonic() < deadline:
+        if ops.ownership_lost(op_id, attempt):
+            lost_q.put(("A_self_fenced", attempt))
+            return
+        time.sleep(0.1)
+    lost_q.put(("A_never_fenced", attempt))
+
+
+def test_partition_after_claim_starts_second_cascade_window_documented():
+    from src.repositories import chat_operations_repo as repo
+
+    ready = _CTX.Queue()
+    lost = _CTX.Queue()
+    cascade = _CTX.Value("i", 0)
+    a = _CTX.Process(
+        target=_partition_owner,
+        args=(_USER, _OP, "postgresql://bad-host:1/nodb", ready, lost, cascade),
+    )
+    a.start()
+    assert ready.get(timeout=30) == ("A_claimed", 1)
+
+    # Let the partition outlast the lease (A can't renew; its row goes stale).
+    time.sleep(_LEASE + 0.8)
+
+    # A second worker B claims the same op on the REAL DB → it TAKES OVER and
+    # starts a second cascade. This is the un-eliminated window.
+    q2 = _CTX.Queue()
+    b = _CTX.Process(target=_race_via_real_wrapper, args=(_USER, _OP, _CTX.Barrier(1), cascade, q2))
+    b.start()
+    b.join(timeout=30)
+    assert q2.get(timeout=5)[0] == "claimed", "peer takes over the stale lease (the window)"
+    assert cascade.value == 2, (
+        "TWO cascades ran under a post-claim partition — this window is why the "
+        "multi-worker expansion gate stays CLOSED until cooperative cascade "
+        "cancellation lands"
+    )
+    row = _row(_OP)
+    assert row[2] == 2, "takeover bumped attempt to 2"
+
+    # A self-fences (heartbeat unrenewable past the lease → ownership_lost).
+    a.join(timeout=30)
+    assert lost.get(timeout=5) == ("A_self_fenced", 1), "the stale owner must self-fence"
+
+    # A's late result (attempt=1) is still refused by the SQL fence.
+    late = repo.update_status(user_id=_USER, operation_id=_OP, status="completed", result_count=7, attempt=1)
+    assert late is None
+    assert _row(_OP)[1:3] == ("running", 2)

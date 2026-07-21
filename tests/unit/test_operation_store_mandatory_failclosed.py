@@ -105,6 +105,34 @@ def test_auto_mode_still_falls_back_to_memory(auto_mode):
     assert op.get("ownership") != "db"
 
 
+def test_timing_overrides_are_ignored_without_pytest_marker(monkeypatch):
+    """The lease/heartbeat env overrides are honored ONLY under an active
+    pytest run (PYTEST_CURRENT_TEST present). Without it — i.e. in production —
+    a stray RICO_OPERATION_LEASE_SECONDS is IGNORED and the production defaults
+    stand, so it can never shrink the lease to a takeover-racy value."""
+    monkeypatch.setenv("RICO_OPERATION_LEASE_SECONDS", "1")
+    monkeypatch.setenv("RICO_OPERATION_HEARTBEAT_SECONDS", "0.1")
+
+    # With the pytest marker present, the override is honored (test path).
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "dummy::test")
+    assert ops._lease_seconds() == 1
+    assert ops._heartbeat_interval() == 0.1
+
+    # Simulate production: no pytest marker → overrides ignored, defaults win.
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    assert ops._lease_seconds() == ops.LEASE_SECONDS      # 60, not 1
+    assert ops._heartbeat_interval() == ops.HEARTBEAT_INTERVAL_SECONDS  # 10, not 0.1
+
+
+def test_ownership_lost_self_fence_flag(monkeypatch):
+    """The self-fence flag is set/read/cleared as a cooperative checkpoint."""
+    ops._mark_ownership_lost("op_fence", 1)
+    assert ops.ownership_lost("op_fence", 1) is True
+    assert ops.ownership_lost("op_fence", 2) is False
+    ops.reset_for_tests()
+    assert ops.ownership_lost("op_fence", 1) is False
+
+
 def test_mode_helpers():
     with patch.dict(os.environ, {"RICO_OPERATION_STORE": "postgres"}):
         assert ops._mandatory_db() is True

@@ -32,14 +32,25 @@ Fallback contract (DEC-20260721-001 slice 4):
   AI_WORKSPACE/OPERATING_RULES.md continues to apply until the deployment is
   switched to the mandatory mode above.
 
-Raising Render worker/instance count is a production decision that follows
-this slice's readiness proof; it is NOT changed by the code here.
+KNOWN LIMITATION — expansion gate stays CLOSED (DEC-20260721-001 slice 4):
+the simultaneous-claim race and the mandatory-mode pre-claim outage are safe,
+but a Postgres partition that begins AFTER a worker has claimed and started
+its provider cascade is NOT yet fully safe. The heartbeat cannot renew during
+the partition; if it outlasts the lease, a peer may take over and start a
+SECOND cascade while the first is still executing. The attempt fence stops the
+first worker's late result WRITE, and the heartbeat now SELF-FENCES (marks
+ownership lost — see ownership_lost()), but neither cancels the first worker's
+in-flight provider requests. Eliminating that duplicate-cascade window needs
+end-to-end cooperative cascade cancellation (a separate, larger PR). Until then
+Render worker/instance count MUST stay at 1 — raising it is NOT authorized by
+this slice.
 """
 from __future__ import annotations
 
 import logging
 import os
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Any, Literal
 import uuid
@@ -107,23 +118,36 @@ _LEASE_ENV = "RICO_OPERATION_LEASE_SECONDS"           # test-only override
 _HEARTBEAT_ENV = "RICO_OPERATION_HEARTBEAT_SECONDS"   # test-only override
 
 
+def _test_timings_allowed() -> bool:
+    """The short-lease overrides are honored ONLY inside an active pytest run.
+
+    pytest sets PYTEST_CURRENT_TEST for the duration of every test (and forked
+    child processes inherit it), while production NEVER has it. This guard
+    makes the overrides genuinely test-only: a stray/misconfigured
+    RICO_OPERATION_LEASE_SECONDS in a production environment is IGNORED and can
+    never shrink the lease to a takeover-racy value."""
+    return bool(os.getenv("PYTEST_CURRENT_TEST"))
+
+
 def _lease_seconds() -> int:
-    raw = os.getenv(_LEASE_ENV)
-    if raw:
-        try:
-            return max(1, int(raw))
-        except ValueError:
-            pass
+    if _test_timings_allowed():
+        raw = os.getenv(_LEASE_ENV)
+        if raw:
+            try:
+                return max(1, int(raw))
+            except ValueError:
+                pass
     return LEASE_SECONDS
 
 
 def _heartbeat_interval() -> float:
-    raw = os.getenv(_HEARTBEAT_ENV)
-    if raw:
-        try:
-            return max(0.05, float(raw))
-        except ValueError:
-            pass
+    if _test_timings_allowed():
+        raw = os.getenv(_HEARTBEAT_ENV)
+        if raw:
+            try:
+                return max(0.05, float(raw))
+            except ValueError:
+                pass
     return HEARTBEAT_INTERVAL_SECONDS
 
 
@@ -141,6 +165,30 @@ _memory = RicoMemoryStore()
 # Live heartbeat threads keyed by (operation_id, attempt) → stop event.
 _HEARTBEAT_STOPS: dict[tuple[str, int], threading.Event] = {}
 _HEARTBEAT_LOCK = threading.Lock()
+
+# Self-fence bookkeeping (DEC-20260721-001 slice 4, bounded). An (operation_id,
+# attempt) lands here when THIS worker can no longer prove it holds the lease —
+# either its heartbeat could not renew for longer than the lease (DB partition)
+# or the row was taken over/expired. It is a COOPERATIVE signal: an executor
+# that checks ownership_lost() can stop recording (and, in a future PR, stop
+# issuing provider calls). It does NOT by itself cancel an in-flight provider
+# cascade — full end-to-end cancellation is a separate, larger change — so the
+# post-claim-partition duplicate-cascade WINDOW is not yet eliminated and the
+# multi-worker expansion gate stays CLOSED.
+_LOST_OWNERSHIP: set[tuple[str, int]] = set()
+
+
+def _mark_ownership_lost(operation_id: str, attempt: int) -> None:
+    with _HEARTBEAT_LOCK:
+        _LOST_OWNERSHIP.add((operation_id, int(attempt)))
+
+
+def ownership_lost(operation_id: str, attempt: int) -> bool:
+    """True when this worker's heartbeat self-fenced (lease unrenewable past
+    the lease window, or the row was taken over). Cooperative checkpoint for
+    executors; see the _LOST_OWNERSHIP note above."""
+    with _HEARTBEAT_LOCK:
+        return (operation_id, int(attempt)) in _LOST_OWNERSHIP
 
 
 class OperationClaimRefused(Exception):
@@ -223,6 +271,7 @@ def _start_heartbeat(operation_id: str, attempt: int, nonce: str) -> None:
         _HEARTBEAT_STOPS[(operation_id, attempt)] = stop
 
     def _run() -> None:
+        first_failure_at: float | None = None
         try:
             while not stop.wait(_heartbeat_interval()):
                 try:
@@ -230,10 +279,29 @@ def _start_heartbeat(operation_id: str, attempt: int, nonce: str) -> None:
                         operation_id=operation_id, attempt=attempt, executor_nonce=nonce
                     )
                 except RepoUnavailable:
-                    # Transient DB trouble: keep trying until terminal/stopped —
-                    # an unrenewed lease self-resolves via takeover anyway.
+                    # DB partition: we cannot renew, so we cannot prove we still
+                    # hold the lease. If the outage outlasts the lease, a peer
+                    # may legitimately take over — SELF-FENCE (mark ownership
+                    # lost) so a cooperating executor stops recording. This
+                    # bounds, but does not yet eliminate, the duplicate-cascade
+                    # window (full cascade cancellation is a follow-up PR).
+                    now = time.monotonic()
+                    if first_failure_at is None:
+                        first_failure_at = now
+                    elif now - first_failure_at >= _lease_seconds():
+                        _mark_ownership_lost(operation_id, attempt)
+                        logger.error(
+                            "operation_state: heartbeat unrenewable for op=%s attempt=%s "
+                            "beyond lease — self-fencing (ownership presumed lost to a peer)",
+                            operation_id, attempt,
+                        )
+                        break
                     continue
-                if not renewed:  # superseded or terminal — stop renewing
+                first_failure_at = None  # a successful renew clears the streak
+                if not renewed:
+                    # The UPDATE matched 0 rows: the row was taken over, expired,
+                    # or reached a terminal status — we no longer own it.
+                    _mark_ownership_lost(operation_id, attempt)
                     break
         finally:
             with _HEARTBEAT_LOCK:
@@ -675,3 +743,4 @@ def reset_for_tests() -> None:
         for stop in _HEARTBEAT_STOPS.values():
             stop.set()
         _HEARTBEAT_STOPS.clear()
+        _LOST_OWNERSHIP.clear()

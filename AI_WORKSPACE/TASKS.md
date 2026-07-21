@@ -6682,7 +6682,11 @@ the sync OR async path.
 
 ### TASK-20260721-014 — Multi-worker readiness: mandatory-Postgres fail-closed + real-process concurrency proof (stabilization slice 4)
 
-Status: in_review
+Status: in_review — **NOT done; expansion gate REMAINS CLOSED.** Owner review
+(2026-07-21) identified an un-eliminated post-claim-partition duplicate-cascade
+window (see "Owner-review follow-up" below). Slice 4 is NOT complete and
+Render workers/instances MUST stay at 1 until end-to-end cooperative cascade
+cancellation lands (a separate follow-up PR).
 Owner: Claude (agent), owner-directed (slice 4 per DEC-20260721-001 —
 "إثبات وتشديد أمان التشغيل متعدد العمال" 2026-07-21)
 Branch: claude/ricco-research-improvements-dkmhin (restarted from main e3a5780)
@@ -6757,3 +6761,39 @@ merge + verification, and requires RICO_OPERATION_STORE=postgres).
 - Rollback plan: revert the PR (restores prior fallback + pre-race claim).
 - Next exact action: open Draft PR, targeted tests + full CI green, stop.
 - Stop condition: STOP after evidence report + green CI (owner directive).
+
+#### Owner-review follow-up (2026-07-21) — addressed on this branch, gate stays CLOSED
+Owner review of #1304 (head ee37126e) found two issues; both handled here:
+
+1. **Post-claim DB partition can still start a SECOND cascade (NOT eliminated).**
+   In `_start_heartbeat`, a `RepoUnavailable` during a partition can't renew the
+   lease; if the outage outlasts the lease a peer takes over and starts a second
+   cascade while worker A is still executing. The attempt fence stops A's late
+   WRITE but not A's in-flight provider calls. Actions taken:
+   - Added a bounded **self-fence**: when the heartbeat is unrenewable for longer
+     than the lease (or the row is taken over), the worker marks
+     `ownership_lost(op, attempt)` and stops renewing — a cooperative checkpoint
+     an executor can honor.
+   - Added a REAL-process **fail-before/window test**
+     `test_partition_after_claim_starts_second_cascade_window_documented`:
+     A claims + partitions + stays alive; after the lease B takes over and a
+     SECOND cascade runs (cascade counter == 2); A self-fences; A's attempt=1
+     write is refused. The test PROVES the window still exists.
+   - **Corrected the claims** everywhere: no "exactly one cascade" in general and
+     no "gate criteria all proven". The "one cascade" guarantee is now scoped to
+     the simultaneous-claim race and the pre-claim outage only.
+   - **Full elimination is deferred to a separate PR**: end-to-end cooperative
+     cascade cancellation (checkpoints threaded through job_providers/
+     jsearch_client so A stops issuing provider calls the moment it loses the
+     lease). Until it lands, workers/instances stay at 1.
+
+2. **Lease/heartbeat overrides were readable in production.** Now gated by
+   `_test_timings_allowed()` (honored ONLY when `PYTEST_CURRENT_TEST` is set —
+   an active pytest run; forked children inherit it). A stray
+   `RICO_OPERATION_LEASE_SECONDS` in production is IGNORED, so it can never
+   shrink the lease to a takeover-racy value. Pinned by
+   test_timing_overrides_are_ignored_without_pytest_marker.
+
+Revised head after follow-up: (set at commit). CI: full unit + postgres
+integration green on the new head. **No merge, no deploy, no worker/instance
+change** (owner stop conditions).
