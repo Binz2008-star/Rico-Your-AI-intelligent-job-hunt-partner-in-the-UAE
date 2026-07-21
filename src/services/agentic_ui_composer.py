@@ -31,11 +31,7 @@ logger = logging.getLogger(__name__)
 
 # ── Response-type action card factories ───────────────────────────────────────
 
-def _job_matches_actions(
-    response_dict: dict[str, Any],
-    *,
-    offer_scheduled_search: bool = False,
-) -> list[dict[str, Any]]:
+def _job_matches_actions(response_dict: dict[str, Any]) -> list[dict[str, Any]]:
     """Action cards attached to every job-match response."""
     search_role = (
         response_dict.get("search_query")
@@ -59,21 +55,6 @@ def _job_matches_actions(
             "impact": "medium",
             "payload": {"message": f"save this search for {search_role}"},
         })
-        # Contextual scheduled-search offer (#1249): shown only when the
-        # CALLER established it's appropriate for this user's scenario — an
-        # authenticated, non-public user who has search intent (results in
-        # hand) and no daily schedule yet. Users with a schedule, guests, and
-        # every other response type never see it. The payload is a natural
-        # command the deterministic scheduled_search_create intent parses
-        # (verb + daily cadence + jobs word), never UI wording.
-        if offer_scheduled_search:
-            actions.append({
-                "id": "schedule-daily-search",
-                "label": "Get these daily",
-                "kind": "chat_continue",
-                "impact": "low",
-                "payload": {"message": f"search daily for {search_role} jobs"},
-            })
     # Refine is a STRUCTURED UI action, never natural language: the frontend
     # opens a refinement panel and the LLM only ever sees the final composed
     # search query the user submits. A chat_continue here would put UI wording
@@ -214,8 +195,6 @@ _RESPONSE_TYPE_ACTIONS: dict[str, Any] = {
 def compose(
     result: Any,
     response_dict: dict[str, Any] | None = None,
-    *,
-    offer_scheduled_search: bool = False,
 ) -> dict[str, Any] | None:
     """Return a serialized agentic UI dict or None.
 
@@ -244,9 +223,7 @@ def compose(
     rtype = (response_dict or {}).get("type", "")
 
     if rtype == "job_matches" and "actions" not in components:
-        actions = _job_matches_actions(
-            response_dict or {}, offer_scheduled_search=offer_scheduled_search
-        )
+        actions = _job_matches_actions(response_dict or {})
         if actions:
             components["actions"] = actions
     elif rtype in _RESPONSE_TYPE_ACTIONS and "actions" not in components:

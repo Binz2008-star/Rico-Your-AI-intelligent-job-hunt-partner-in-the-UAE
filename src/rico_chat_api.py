@@ -4429,27 +4429,7 @@ class RicoChatAPI:
     ) -> dict[str, Any]:
         """Finalize response with metadata."""
         from src.services.agentic_ui_composer import compose
-
-        # Contextual scheduled-search offer (#1249): only on a job-match
-        # response WITH results, for an authenticated user who has no daily
-        # schedule yet. Fail-soft — an eligibility error must never block or
-        # alter the chat response, it just withholds the suggestion.
-        offer_scheduled = False
-        if response.get("type") == "job_matches" and response.get("matches"):
-            try:
-                from src.services.scheduled_search_service import (
-                    should_offer_scheduled_search,
-                )
-
-                offer_scheduled = should_offer_scheduled_search(
-                    getattr(profile, "user_id", None) or ""
-                )
-            except Exception:
-                offer_scheduled = False
-
-        agentic_ui = compose(
-            runtime_result, response, offer_scheduled_search=offer_scheduled
-        )
+        agentic_ui = compose(runtime_result, response)
         agent = self._get_openai_agent()
 
         # First-party analytics (v1): one search_performed per finalized
@@ -6713,11 +6693,26 @@ class RicoChatAPI:
             user_id, normalized_role, profile, skills, years, cities
         )
 
+        # Conversational scheduled-search offer eligibility (#1249): fail-soft —
+        # an eligibility error must never block or alter the search response,
+        # it just withholds the suggestion sentence.
+        _offer_daily = False
+        if top_matches:
+            try:
+                from src.services.scheduled_search_service import (
+                    should_offer_scheduled_search,
+                )
+
+                _offer_daily = should_offer_scheduled_search(user_id)
+            except Exception:
+                _offer_daily = False
+
         message = self._build_role_search_message(
             normalized_role, city_text, basis_text, top_matches, role_intelligence_data,
             from_saved_profile=from_saved_profile,
             arabic=arabic,
             filtered_off_title=_off_title_only,
+            offer_scheduled_search=_offer_daily,
         )
 
         response = {
@@ -6837,6 +6832,7 @@ class RicoChatAPI:
         from_saved_profile: bool = False,
         arabic: bool = False,
         filtered_off_title: bool = False,
+        offer_scheduled_search: bool = False,
     ) -> str:
         """Build message for role search response."""
         if from_saved_profile:
@@ -6950,6 +6946,22 @@ class RicoChatAPI:
                     f" These are **{normalized_role}** roles. If you'd like, I can also look at "
                     f"{', '.join(_adjacent_names)} — just say the word."
                 )
+
+        # Conversational scheduled-search offer (#1249): same OPT-IN idiom as
+        # adjacent roles above — Rico proposes in his own words, no buttons,
+        # and the user accepts by simply saying so. The suggested phrase is a
+        # real command the deterministic scheduled_search_create intent parses,
+        # so acceptance can never fall into a one-shot search. The CALLER
+        # establishes eligibility (authenticated user with results and no
+        # daily schedule yet); everyone else reads an unchanged message.
+        if top_matches and offer_scheduled_search:
+            base_message += (
+                " وإن أردت، أستطيع تكرار هذا البحث يوميًا وإحضار الجديد إليك هنا مباشرة — "
+                "فقط قل: «ابحث يوميًا عن هذه الوظائف»."
+                if arabic else
+                " If you'd like, I can rerun this search every day and bring you what's new "
+                "right here — just say: \"search these jobs daily\"."
+            )
 
         return prefix + base_message
 
