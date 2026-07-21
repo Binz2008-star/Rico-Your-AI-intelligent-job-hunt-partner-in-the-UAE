@@ -230,8 +230,8 @@ describe("JobMatchCardAtelier — Arabic / RTL accessibility (GAP 2)", () => {
 
     it("localizes the card + apply-link aria-labels and sets dir=rtl", async () => {
         renderCardTheme(STRONG_MATCH);
-        // Wait for the Arabic switch (SAVE control label = احفظ), then RTL.
-        await screen.findByText("احفظ");
+        // Wait for the Arabic switch (SAVE control label = احفظها), then RTL.
+        await screen.findByText("احفظها");
         await waitFor(() => expect(document.documentElement.dir).toBe("rtl"));
 
         const cardAria = screen.getByTestId("opportunity-card").getAttribute("aria-label") ?? "";
@@ -247,7 +247,7 @@ describe("JobMatchCardAtelier — Arabic / RTL accessibility (GAP 2)", () => {
 
     it("localizes the fallback link aria-labels (no hardcoded 'at' construction)", async () => {
         renderCardTheme(NO_LINK_MATCH);
-        await screen.findByText("احفظ");
+        await screen.findByText("احفظها");
 
         const googleAria = screen.getByTestId("job-fallback-google").getAttribute("aria-label") ?? "";
         expect(googleAria).toContain("ابحث في Google"); // Arabic label
