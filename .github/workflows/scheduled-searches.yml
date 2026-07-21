@@ -1,14 +1,17 @@
 name: "Scheduled Search Sweep (manual)"
 
-# #1249 step 4: production dry-run of the scheduled saved-search sweep.
-# Dispatch-only — the daily schedule is enabled in a later PR (rollout step 5)
-# after the dry run validates matching with the exact saved criteria and the
-# owner flips RICO_ENABLE_SCHEDULED_SEARCHES on the backend.
+# #1249 step 5: daily scheduled saved-search sweep (in-app delivery only).
+# Step-4 dry run validated the full chain in production (schedule discovered
+# and evaluated: HTTP 200 {"status":"ok","searches":1,"users":1,...}), and the
+# owner enabled RICO_ENABLE_SCHEDULED_SEARCHES on the backend — the env kill
+# switch remains the instant off-lever without touching this file.
 #
-# Real execution also requires RICO_ENABLE_SCHEDULED_SEARCHES to be truthy on
-# the backend (kill switch, default false). Run with dry_run=true (default) to
-# evaluate matching WITHOUT persisting results or dedup keys.
+# Event semantics: scheduled runs carry no inputs, so DRY_RUN is empty and the
+# job runs REAL execution (persists results + dedup keys). Manual dispatches
+# keep dry_run=true as their default for safe smoke checks.
 on:
+  schedule:
+    - cron: '0 5 * * *'  # 05:00 UTC = 09:00 UAE, daily
   workflow_dispatch:
     inputs:
       dry_run:
@@ -19,8 +22,6 @@ on:
         options:
           - "true"
           - "false"
-  # schedule:              # enabled in a later PR (rollout step 5)
-  #   - cron: '0 5 * * *'  # 05:00 UTC daily
 
 permissions:
   contents: read
@@ -47,7 +48,9 @@ jobs:
             exit 1
           fi
           BASE="${API_URL%/}"
-          DRY="${DRY_RUN:-true}"
+          # Scheduled runs have no inputs (DRY_RUN empty) → real execution.
+          # Manual dispatches always carry the input (default "true").
+          DRY="${DRY_RUN:-false}"
           echo "Triggering scheduled-searches sweep (dry_run=${DRY})"
           HTTP=$(curl -sS -o /tmp/resp.json -w "%{http_code}" -X POST \
             -H "X-Cron-Secret: ${CRON_SECRET}" \
