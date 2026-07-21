@@ -32,6 +32,11 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     container_name: rico-backend
+    # Local dev only: run as root and re-add --reload so the bind-mounted /app
+    # (volumes below) stays writable and hot-reload works. The image itself
+    # defaults to a non-root user and no --reload for any production-style use.
+    user: root
+    command: ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
       - "8000:8000"
     environment:

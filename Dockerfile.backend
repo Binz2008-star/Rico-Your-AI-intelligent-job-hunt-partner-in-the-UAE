@@ -15,8 +15,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Defense-in-depth: run as a non-root user by default. docker-compose overrides
+# this back to root for local dev so the bind-mounted /app stays writable
+# (see docker-compose.yml). Render production does NOT use this image — it runs
+# the native python runtime from render.yaml — so this is hardening for any
+# container-based use of the image.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Expose port 8000
 EXPOSE 8000
 
-# Run FastAPI with uvicorn
-CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Production default: NO --reload (a dev-only file watcher). docker-compose
+# overrides this command to add --reload for local hot-reload.
+CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
