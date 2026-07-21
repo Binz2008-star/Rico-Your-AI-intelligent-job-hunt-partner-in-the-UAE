@@ -39,6 +39,18 @@ from src.repositories.onboarding_repo import OnboardingStateUnavailable
 from src.rico_agent import RicoProfile
 
 
+@pytest.fixture(autouse=True)
+def _disable_rate_limiter():
+    """This suite invokes the rate-limited handlers directly with a mock
+    Request; @limiter.limit rejects a non-Request object. Disable enforcement
+    here — rate limiting is covered by the HTTP-level suites."""
+    from src.api.rate_limit import limiter
+    prev = limiter.enabled
+    limiter.enabled = False
+    yield
+    limiter.enabled = prev
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _full_profile(user_id: str = "u@test.com") -> RicoProfile:
@@ -296,7 +308,8 @@ class TestOnboardingSubmitPersistsGateAwareStatus:
             _full_profile(),
         )
         assert result["status"] == ONBOARDING_COMPLETED
-        mock_status.assert_called_once_with("u@test.com", ONBOARDING_COMPLETED)
+        # #764: the write is mandatory-durable — require_db=True is passed.
+        mock_status.assert_called_once_with("u@test.com", ONBOARDING_COMPLETED, require_db=True)
 
     def test_submit_persists_in_progress_when_gate_fails(self):
         result, mock_status = self._invoke(
@@ -304,4 +317,5 @@ class TestOnboardingSubmitPersistsGateAwareStatus:
             _partial_profile(),
         )
         assert result["status"] == ONBOARDING_IN_PROGRESS
-        mock_status.assert_called_once_with("u@test.com", ONBOARDING_IN_PROGRESS)
+        # #764: the write is mandatory-durable — require_db=True is passed.
+        mock_status.assert_called_once_with("u@test.com", ONBOARDING_IN_PROGRESS, require_db=True)
