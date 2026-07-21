@@ -1,108 +1,122 @@
 "use client";
 
-import { useLanguage } from "@/contexts/LanguageContext";
 import Link from "next/link";
-import { GlassPanel } from "@/components/ui/GlassPanel";
-import { AuraGlow } from "@/components/ui/AuraGlow";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { atelierFraunces, atelierNaskhArabic, atelierSansArabic } from "@/components/atelier-kit/fonts";
+import { ATELIER as C, ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { Mono, Plate } from "@/components/atelier-kit/primitives";
 import { getPostBySlug } from "@/lib/blog/posts";
+import { BlogMasthead, BLOG_SCOPED_CSS } from "../BlogMasthead";
+
+const SERIF = ATELIER_FONT.serif;
 
 export function BlogPostContent({ slug }: { slug: string }) {
-  const { language, setLanguage } = useLanguage();
+  const { language } = useLanguage();
   const isAr = language === "ar";
   const post = getPostBySlug(slug);
 
   if (!post) return null;
 
   const lang = isAr ? "ar" : "en";
+  const arrow = isAr ? "←" : "→";
 
   return (
-    <div dir={isAr ? "rtl" : "ltr"} className="relative min-h-screen overflow-x-hidden bg-[#0a0a1a]">
-      <AuraGlow aria-hidden="true" variant="magenta" position="top-left" />
-      <AuraGlow aria-hidden="true" variant="cyan" position="bottom-right" />
+    <div
+      className={`rblog-root ${isAr ? "rblog-ar" : ""} min-h-screen overflow-x-hidden ${atelierFraunces.variable} ${atelierNaskhArabic.variable} ${atelierSansArabic.variable}`}
+      dir={isAr ? "rtl" : "ltr"}
+      lang={language}
+      style={{ background: C.bg, color: C.ink, fontFamily: ATELIER_FONT.body }}
+    >
+      <style dangerouslySetInnerHTML={{ __html: BLOG_SCOPED_CSS }} />
+      <BlogMasthead />
 
-      <header className="relative z-10 flex items-center justify-between border-b border-border-subtle bg-black/50 px-5 py-4 backdrop-blur-xl md:px-10">
-        <Link href="/" className="flex items-center gap-2 text-lg font-black tracking-tight text-white">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f5a623] text-[#0a0a1a] text-sm font-black shadow-[0_0_28px_rgba(245,166,35,0.28)]">
-            R
-          </span>
-          <span>Rico<span className="text-[#f5a623]"> Hunt</span></span>
-        </Link>
-        <nav className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setLanguage(isAr ? "en" : "ar")}
-            aria-label={isAr ? "Switch to English" : "Switch to Arabic"}
-            className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-border-subtle text-text-secondary hover:text-white hover:border-[#f5a623]/50 transition-colors"
+      <main className="max-w-6xl mx-auto px-5 sm:px-8 pt-14 sm:pt-20 pb-24">
+        <article className="max-w-3xl">
+          <p className="flex items-center gap-2.5 mb-8">
+            <span className="rblog-pulse w-2 h-2 rounded-full flex-shrink-0" style={{ background: C.red }} aria-hidden="true" />
+            <Mono style={{ color: C.ink70, letterSpacing: "0.2em" }}>
+              {isAr ? "دليلٌ مهنيّ" : "Career Guide"}
+            </Mono>
+          </p>
+
+          <h1
+            className="font-normal tracking-[-0.02em] text-[2.1rem] leading-[1.08] sm:text-[3rem] sm:leading-[1.04]"
+            style={{ fontFamily: SERIF, color: C.ink }}
           >
-            {isAr ? "EN" : "عربي"}
-          </button>
-          <Link href="/blog" className="text-sm text-text-secondary transition-colors hover:text-white">
-            {isAr ? "كل الأدلة" : "All guides"}
-          </Link>
-          <Link href="/signup" className="text-sm font-semibold text-[#f5a623] transition-colors hover:text-white">
-            {isAr ? "ابدأ مجاناً" : "Start free"}
-          </Link>
-        </nav>
-      </header>
+            {post.title[lang]}
+          </h1>
 
-      <main className="relative z-10 mx-auto max-w-4xl px-5 py-16 md:px-10">
-        <GlassPanel className="rounded-2xl border border-white/10 p-8 md:p-12">
-          <article>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#f5a623]">
-              {isAr ? "دليل مهني" : "Career Guide"}
-            </p>
-            <h1 className="mb-3 text-3xl font-semibold leading-tight text-white md:text-4xl">
-              {post.title[lang]}
-            </h1>
-            <p className="mb-8 text-xs font-semibold uppercase tracking-widest text-text-tertiary">
-              {isAr
-                ? `${post.readingMinutes} دقائق قراءة`
-                : `${post.readingMinutes} min read`}
-            </p>
+          <div className="mt-5 flex items-center gap-4">
+            <Mono style={{ color: C.ink55, letterSpacing: "0.18em" }}>
+              {isAr ? `${post.readingMinutes} دقائق قراءة` : `${post.readingMinutes} min read`}
+            </Mono>
+            <span className="h-px flex-1" style={{ background: C.hair }} aria-hidden="true" />
+          </div>
 
-            <div className="mb-10 space-y-3 text-base leading-7 text-text-secondary">
-              {post.intro[lang].map((paragraph, idx) => (
-                <p key={`intro-${idx}`}>{paragraph}</p>
-              ))}
-            </div>
+          <div className="mt-9 space-y-4 text-[1.02rem] leading-relaxed" style={{ color: C.ink70 }}>
+            {post.intro[lang].map((paragraph, idx) => (
+              <p key={`intro-${idx}`}>{paragraph}</p>
+            ))}
+          </div>
 
-            <div className="space-y-10 text-sm leading-7 text-text-secondary">
-              {post.sections.map((section, sIdx) => (
-                <section key={`section-${sIdx}`}>
-                  <h2 className="mb-3 text-lg font-semibold text-white">
-                    {section.heading[lang]}
-                  </h2>
+          <div className="mt-12 space-y-12">
+            {post.sections.map((section, sIdx) => (
+              <section key={`section-${sIdx}`}>
+                <h2
+                  className="mb-4 text-[1.35rem] sm:text-[1.6rem] leading-snug font-medium"
+                  style={{ fontFamily: SERIF, color: C.ink }}
+                >
+                  {section.heading[lang]}
+                </h2>
+                <div className="space-y-3 text-[0.98rem] leading-relaxed" style={{ color: C.ink70 }}>
                   {section.paragraphs?.[lang]?.map((paragraph, pIdx) => (
-                    <p key={`p-${sIdx}-${pIdx}`} className={pIdx > 0 ? "mt-3" : undefined}>
-                      {paragraph}
-                    </p>
+                    <p key={`p-${sIdx}-${pIdx}`}>{paragraph}</p>
                   ))}
                   {section.bullets && (
-                    <ul className="ms-4 mt-3 list-disc space-y-2">
+                    <ul className="ms-5 list-disc space-y-2.5" style={{ color: C.ink70 }}>
                       {section.bullets[lang].map((bullet, bIdx) => (
                         <li key={`b-${sIdx}-${bIdx}`}>{bullet}</li>
                       ))}
                     </ul>
                   )}
-                </section>
-              ))}
-            </div>
+                </div>
+              </section>
+            ))}
+          </div>
 
-            <div className="mt-12 rounded-2xl border border-[#f5a623]/25 bg-[#f5a623]/[0.06] p-6 text-center">
-              <p className="mb-4 text-base font-semibold text-white">
-                {isAr
-                  ? "دع ريكو يتولى البحث والمطابقة والمتابعة عنك"
-                  : "Let Rico handle the searching, matching, and tracking for you"}
-              </p>
-              <Link
-                href="/signup"
-                className="inline-block rounded-xl bg-[#f5a623] px-6 py-3 text-sm font-bold text-[#0a0a1a] transition-transform hover:scale-105"
+          <div className="mt-16">
+            <Plate className="p-7 sm:p-9">
+              <Mono style={{ color: C.ink55, letterSpacing: "0.18em" }}>
+                {isAr ? "الخطوة التالية" : "Next step"}
+              </Mono>
+              <p
+                className="mt-3 text-[1.25rem] sm:text-[1.45rem] leading-snug font-medium"
+                style={{ fontFamily: SERIF, color: C.ink }}
               >
-                {isAr ? "أنشئ حسابك المجاني" : "Create your free account"}
-              </Link>
-            </div>
-          </article>
-        </GlassPanel>
+                {isAr
+                  ? "دَع ريكو يتولّى البحث والمطابقة والمتابعة نيابةً عنك."
+                  : "Let Rico handle the searching, matching, and tracking for you."}
+              </p>
+              <div className="mt-6">
+                <Link
+                  href="/signup"
+                  className="rblog-cta inline-flex items-center gap-2.5 px-6 py-3.5 rounded-full text-sm font-semibold"
+                  style={{ background: C.ink, color: C.panel }}
+                >
+                  {isAr ? `أنشئ حسابك المجانيّ ${arrow}` : `Create your free account ${arrow}`}
+                </Link>
+              </div>
+            </Plate>
+          </div>
+
+          <p className="mt-10">
+            <Link href="/blog" className="rblog-nav">
+              <Mono style={{ color: C.ink70, letterSpacing: "0.16em" }}>
+                {isAr ? "→ كل الأدلّة" : "← All guides"}
+              </Mono>
+            </Link>
+          </p>
+        </article>
       </main>
     </div>
   );
