@@ -42,7 +42,7 @@ export function BlogIndexContent() {
 
         <p className="mt-6 max-w-xl text-[1.02rem] leading-relaxed" style={{ color: C.ink70 }}>
           {isAr
-            ? "كتابة السيرة الذاتيّة، والبحث عن وظيفة، والاستعداد للمقابلات — نصائح محدّثة ومخصّصة لدبي وأبوظبي وسائر الإمارات، بالعربيّة والإنجليزيّة."
+            ? "أدلة في كتابة السيرة الذاتية، والبحث عن وظيفة، والاستعداد للمقابلات — محدّثة ومكتوبة خصيصاً لسوق دبي وأبوظبي وسائر الإمارات، بالعربية والإنجليزية."
             : "CV writing, job searching, and interview preparation — up-to-date advice specific to Dubai, Abu Dhabi, and the wider Emirates, in English and Arabic."}
         </p>
 

@@ -2641,7 +2641,7 @@ export const translations = {
     jobCardSearchThisJob: "ابحث عن هذه الوظيفة",
     jobCardSave: "حفظ",
     jobCardShare: "مشاركة عبر واتساب",
-    jobCardShareText: "وجدتها عبر ريكو هانت — شريكك الذكي للبحث عن عمل في الإمارات:",
+    jobCardShareText: "وصلتني هذه الوظيفة عبر ريكو هانت — مساعدك الذكي للبحث عن عمل في الإمارات:",
     jobCardIgnore: "تجاهل",
     jobCardDone: "تم تنفيذ الإجراء",
 
