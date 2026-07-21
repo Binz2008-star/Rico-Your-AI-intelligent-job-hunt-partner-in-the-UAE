@@ -5837,10 +5837,10 @@ invisible. Add all five to the qa-tests.yml pytest job.
 
 ### TASK-20260721-004 — Bilingual (AR/EN) intent detection for the agent NL path
 
-Status: review
+Status: done
 Owner: Claude (agent), owner-directed ("حسّن منطق ريكو ارفع من كفاءته" 2026-07-21)
 Branch: claude/system-tools-analysis-wc4o4g (restarted from main ba52549)
-Issue/PR: set at PR open
+Issue/PR: #1266 (merged 2026-07-21, squash 91f27c5b)
 
 #### Objective
 Close a single-language-path defect in Rico's live logic: the deterministic
@@ -5866,17 +5866,17 @@ fell to the "help" fallback — prohibited by the Product Generalization Rule
 - [x] English behavior byte-for-byte unchanged (existing tests untouched, green)
 - [x] Arabic tests: every intent, hamza/taa-marbuta variants, full tashkeel,
       colloquial no-hamza spelling, unrelated→help, trigger-vs-status ordering
-- [ ] PR CI green on exact head
+- [x] PR CI green on exact head (9/9 on 0d36e3c, incl. the 14 Arabic cases)
 
 #### Continuity Block
 - Task ID: TASK-20260721-004
-- GitHub issue/PR: set at PR open
+- GitHub issue/PR: #1266 (merged, squash 91f27c5b)
 - Branch: claude/system-tools-analysis-wc4o4g
 - Base branch: main
 - Last safe commit SHA: ba52549 (main tip at branch restart)
-- Current head SHA: set at commit
+- Current head SHA: 91f27c5b (main after squash merge)
 - Uncommitted changes present: no (after commit)
-- Status: review
+- Status: done
 - Files changed: src/agent/orchestrator/intent_detector.py — normalization +
   Arabic keywords; tests/test_agent.py — 14 new bilingual cases;
   AI_WORKSPACE/TASKS.md — this entry
@@ -5884,12 +5884,13 @@ fell to the "help" fallback — prohibited by the Product Generalization Rule
   orchestrator.py, runtime.py
 - What is complete: implementation + local verification (93/93 test_agent;
   252/252 focused set incl. privileged-authz)
-- What is incomplete: PR CI + merge
+- What is incomplete: nothing
 - Known blockers: none
 - Validation already run: focused set + privileged authz under CI env → 252 passed
-- Validation still required: PR CI on exact head
-- Deployment/CI/Neon/Vercel state to check next: after merge, deploy-render
-  auto-runs (src/** touched) — verify the run succeeds
-- Next exact action: open draft PR, verify CI, merge on green (owner-directed task)
+- Validation still required: none
+- Deployment/CI/Neon/Vercel state to check next: none — Deploy Render Backend
+  for 91f27c5b verified success (/version-gated); production live on the
+  bilingual detector
+- Next exact action: none — task fully closed
 - Stop condition: any English-intent regression in CI → fix before merge
 - Rollback plan: revert the PR; detector returns to English-only matching
