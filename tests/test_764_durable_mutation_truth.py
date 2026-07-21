@@ -26,8 +26,10 @@ def _reset_rate_limiter():
     # @limiter.limit rejects a non-Request object, so disable enforcement here.
     prev = limiter.enabled
     limiter.enabled = False
-    yield
-    limiter.enabled = prev
+    try:
+        yield
+    finally:
+        limiter.enabled = prev
 
 
 def _auth(monkeypatch, user_id: str):

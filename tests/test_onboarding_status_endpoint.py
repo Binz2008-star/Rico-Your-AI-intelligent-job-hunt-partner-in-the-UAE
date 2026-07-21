@@ -47,8 +47,10 @@ def _disable_rate_limiter():
     from src.api.rate_limit import limiter
     prev = limiter.enabled
     limiter.enabled = False
-    yield
-    limiter.enabled = prev
+    try:
+        yield
+    finally:
+        limiter.enabled = prev
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
