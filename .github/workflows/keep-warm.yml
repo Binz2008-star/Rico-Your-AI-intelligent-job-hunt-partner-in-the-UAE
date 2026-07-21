@@ -13,9 +13,15 @@ name: Keep Warm
 # - Render budget: one always-warm instance stays within the plan's monthly
 #   instance-hours for a single service.
 
+# Cadence note (2026-07-21): tightened to */5 after a real cold start — the
+# GitHub cron scheduler registered this workflow ~2.5h late and routinely
+# delays/skips fires under load; */5 doubles the chances a fire lands inside
+# every 15-minute idle window. GitHub cron remains BEST-EFFORT: the durable
+# fix is a paid always-on Render instance (owner action); this stays as a
+# harmless second layer either way.
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 permissions: {}
