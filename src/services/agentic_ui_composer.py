@@ -44,15 +44,10 @@ def _job_matches_actions(response_dict: dict[str, Any]) -> list[dict[str, Any]]:
         or "these roles"
     )
     actions: list[dict[str, Any]] = []
-    # Only offer save-search when there were actual results
-    if response_dict.get("matches"):
-        actions.append({
-            "id": "save-search",
-            "label": "Save search",
-            "kind": "chat_continue",
-            "impact": "medium",
-            "payload": {"message": f"save this search for {search_role}"},
-        })
+    # Phase 3 of #1262: the save-search card is retired — Rico offers it in
+    # words ("just say: 'save this search'") and the phrase routes through the
+    # deterministic save_search_create intent. (The card's payload phrase was
+    # also being swallowed by the save_job regex — fixed with the same intent.)
     # Refine is a STRUCTURED UI action, never natural language: the frontend
     # opens a refinement panel and the LLM only ever sees the final composed
     # search query the user submits. A chat_continue here would put UI wording
@@ -86,68 +81,21 @@ def _delete_saved_jobs_confirm_actions() -> list[dict[str, Any]]:
     ]
 
 
-def _new_search_actions() -> list[dict[str, Any]]:
-    """Post-delete helper to start a fresh search."""
-    return [
-        {
-            "id": "new-search",
-            "label": "Find new jobs",
-            "kind": "chat_continue",
-            "payload": {"message": "find me jobs"},
-        },
-    ]
-
-
-def _application_status_actions() -> list[dict[str, Any]]:
-    """Action cards shown after Rico displays the application status summary.
-
-    Phase 2 of #1262: the "View Application Flow" navigation card is retired —
-    the message text carries the pointer. add-application stays until its
-    conversational replacement lands (phase 3).
-    """
-    return [
-        {
-            "id": "add-application",
-            "label": "Add application",
-            "kind": "chat_continue",
-            "payload": {"message": "Add a new job application manually"},
-        },
-    ]
-
-
-def _prepare_application_actions() -> list[dict[str, Any]]:
-    """Action cards shown after Rico prepares/tailors a job application.
-
-    Phase 2 of #1262: the navigation card is retired; find-similar stays
-    until phase 3.
-    """
-    return [
-        {
-            "id": "find-similar",
-            "label": "Find similar jobs",
-            "kind": "chat_continue",
-            "payload": {"message": "find me more jobs like this"},
-        },
-    ]
+# Phase 3 of #1262: the remaining chat_continue suggestion cards
+# (add-application, find-similar, new-search) are retired — those asks are
+# ordinary sentences the user can type ("find me more jobs like this",
+# "find me jobs"), and Rico's messages point the way in words.
 
 
 # ── Injection map ─────────────────────────────────────────────────────────────
 
-# Phase 2 of #1262: navigation-only families (profile flows,
-# application_status_update, save_job) are retired entirely — Rico points to
-# those pages in his own words inside the persisted message. Remaining entries
-# carry chat_continue/confirmation cards awaiting phases 3–4.
+# Phases 2–3 of #1262: navigation and suggestion card families are retired —
+# Rico speaks pointers and offers inside the persisted message. The one
+# remaining family is the destructive-delete confirmation, which stays until
+# its strict conversational confirm ships (phase 4 — safety).
 _RESPONSE_TYPE_ACTIONS: dict[str, Any] = {
-    # application flows — application_list is the conversational query response
-    # ("what are my applications?"), application_status is the tracker card response
-    "application_list":          _application_status_actions,
-    "application_status":        _application_status_actions,
-    # prepare/tailor application
-    "prepare_application": _prepare_application_actions,
     # saved-jobs deletion confirmation
     "delete_saved_jobs_confirm": _delete_saved_jobs_confirm_actions,
-    # post-deletion (empty list, offer a fresh start)
-    "delete_saved_jobs_done": _new_search_actions,
 }
 
 

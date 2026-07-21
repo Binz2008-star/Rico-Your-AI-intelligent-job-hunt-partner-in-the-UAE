@@ -476,6 +476,17 @@ _SALARY_ENQUIRY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Save-search (#1262 phase 3): saving the SEARCH, never a job. Matched before
+# the job-action regexes in classify_intent (the old save_job pattern used to
+# swallow "save this search for X" and try to save a job instead).
+_SAVE_SEARCH_RE = re.compile(
+    r"\bsave\s+(?:this|that|the|my)\s+search\b"
+    r"|\bsave\s+search\b"
+    r"|احفظ\s+(?:هذا\s+)?البحث"
+    r"|حفظ\s+البحث",
+    re.IGNORECASE,
+)
+
 _CV_ANALYSIS_RE = re.compile(
     r"\b(weak|weakness|weaker|gap|gaps|lacking|missing|improve|improvement|deficiency)\b"
     r".{0,30}\b(cv|resume|profile|application)\b"
@@ -1694,6 +1705,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult(f"scheduled_search_{_ss_action}", 0.97, "regex")
     if parse_scheduled_search_command(text) is not None:
         return IntentResult("scheduled_search_create", 0.97, "regex")
+
+    # ── 1d. Save-search (#1262 phase 3) — deterministic routing ──────────
+    # "save this search( for X)" / «احفظ هذا البحث» must reach the
+    # saved-search flow. Previously the generic save_job regex swallowed the
+    # phrase (the retired card's payload included) and tried to save a JOB —
+    # this check runs before every job-action regex so it can't be hijacked.
+    if _SAVE_SEARCH_RE.search(text):
+        return IntentResult("save_search_create", 0.97, "regex")
 
     # ── 2. Exact-phrase fast paths (continued) ───────────────────────────
     if lower in _PROFILE_MATCH_PHRASES:

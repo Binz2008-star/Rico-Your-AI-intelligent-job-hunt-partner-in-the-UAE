@@ -181,53 +181,40 @@ class TestAgenticUiComposer:
 
 class TestJobMatchesActions:
 
-    def test_with_matches_includes_save_refine_no_navigate(self):
-        """Phase 2 of #1262: the View-all-jobs navigation card is retired —
-        the pointer is spoken in the message text instead."""
+    def test_refine_is_the_only_card(self):
+        """Phases 2–3 of #1262: View-all-jobs (navigation) and Save-search
+        (suggestion) cards are retired — Rico speaks the pointer and the
+        save offer inside the message, and "save this search" routes through
+        the deterministic save_search_create intent."""
         from src.services.agentic_ui_composer import compose
         r = compose(None, {
             "type": "job_matches",
             "matches": [{"title": "HSE Manager"}],
             "search_query": "HSE Manager",
         })
-        ids = _action_ids(r)
-        assert "view-jobs" not in ids
-        assert "save-search" in ids
-        assert "refine-search" in ids
+        assert _action_ids(r) == ["refine-search"]
 
-    def test_without_matches_omits_save_search(self):
+    def test_without_matches_still_only_refine(self):
         from src.services.agentic_ui_composer import compose
         r = compose(None, {"type": "job_matches", "matches": [], "search_query": "PM"})
-        ids = _action_ids(r)
-        assert "view-jobs" not in ids
-        assert "save-search" not in ids
-        assert "refine-search" in ids
+        assert _action_ids(r) == ["refine-search"]
 
     def test_no_navigate_kind_cards_on_job_matches(self):
         from src.services.agentic_ui_composer import compose
         r = compose(None, {"type": "job_matches", "matches": [{}]})
         assert all(a["kind"] != "navigate" for a in r["actions"])
 
-    def test_save_search_uses_search_query_in_message(self):
+    def test_save_search_card_retired(self):
+        """Phase 3 of #1262: the save-search card's payload phrase was also
+        being swallowed by the save_job regex — the spoken offer routes
+        through save_search_create instead."""
         from src.services.agentic_ui_composer import compose
         r = compose(None, {
             "type": "job_matches",
             "matches": [{"title": "x"}],
             "search_query": "QHSE Engineer",
         })
-        save = next(a for a in r["actions"] if a["id"] == "save-search")
-        assert "QHSE Engineer" in save["payload"]["message"]
-        assert save["kind"] == "chat_continue"
-
-    def test_save_search_falls_back_to_entities_job_title(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {
-            "type": "job_matches",
-            "matches": [{}],
-            "entities": {"job_title": "Safety Officer"},
-        })
-        save = next(a for a in r["actions"] if a["id"] == "save-search")
-        assert "Safety Officer" in save["payload"]["message"]
+        assert "save-search" not in _action_ids(r)
 
     def test_refine_is_structured_open_drawer_never_chat(self):
         """P1: refine must NEVER route UI wording through the chat/LLM —
@@ -287,16 +274,11 @@ class TestDeleteConfirmActions:
 
 class TestDeleteDoneActions:
 
-    def test_offers_new_search(self):
+    def test_family_retired(self):
+        """Phase 3 of #1262: the new-search suggestion card is retired — the
+        done message itself offers "say 'find me jobs'" in words."""
         from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "delete_saved_jobs_done"})
-        assert "new-search" in _action_ids(r)
-
-    def test_new_search_is_chat_continue(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "delete_saved_jobs_done"})
-        act = next(a for a in r["actions"] if a["id"] == "new-search")
-        assert act["kind"] == "chat_continue"
+        assert compose(None, {"type": "delete_saved_jobs_done"}) is None
 
 
 # ── PR-C: profile responses ───────────────────────────────────────────────────
@@ -323,62 +305,18 @@ class TestApplicationActions:
         assert compose(None, {"type": "application_status_update"}) is None
 
 
-# ── PR-C: application_list ────────────────────────────────────────────────────
+# ── PR-C: application families ────────────────────────────────────────────────
 
-class TestApplicationListActions:
-    """application_list is the conversational query response type
-    ("what are my applications?"), distinct from the tracker-card application_status."""
+class TestApplicationFamiliesRetired:
+    """Phase 3 of #1262: the add-application / find-similar suggestion cards
+    are retired — those asks are ordinary sentences the user can type."""
 
-    def test_navigation_card_retired(self):
-        """Phase 2 of #1262: view-flow is spoken in the message instead."""
+    @pytest.mark.parametrize("rtype", [
+        "application_list", "application_status", "prepare_application",
+    ])
+    def test_family_has_no_cards(self, rtype):
         from src.services.agentic_ui_composer import compose
-        assert "view-flow" not in _action_ids(compose(None, {"type": "application_list"}))
-
-    def test_add_application_is_chat_continue(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "application_list"})
-        assert "add-application" in _action_ids(r)
-        act = next(a for a in r["actions"] if a["id"] == "add-application")
-        assert act["kind"] == "chat_continue"
-        assert act["payload"].get("message")
-
-
-# ── PR-C: application_status ─────────────────────────────────────────────────
-
-class TestApplicationStatusActions:
-
-    def test_navigation_card_retired(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "application_status"})
-        assert "view-flow" not in _action_ids(r)
-        assert all(a["kind"] != "navigate" for a in r["actions"])
-
-    def test_add_application_is_chat_continue(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "application_status"})
-        assert "add-application" in _action_ids(r)
-        act = next(a for a in r["actions"] if a["id"] == "add-application")
-        assert act["kind"] == "chat_continue"
-        assert act["payload"].get("message")  # frontend reads payload.message
-
-
-# ── PR-C: prepare_application ─────────────────────────────────────────────────
-
-class TestPrepareApplicationActions:
-
-    def test_navigation_card_retired(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "prepare_application"})
-        assert "view-flow" not in _action_ids(r)
-        assert all(a["kind"] != "navigate" for a in r["actions"])
-
-    def test_find_similar_is_chat_continue(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "prepare_application"})
-        assert "find-similar" in _action_ids(r)
-        act = next(a for a in r["actions"] if a["id"] == "find-similar")
-        assert act["kind"] == "chat_continue"
-        assert act["payload"].get("message")  # frontend reads payload.message
+        assert compose(None, {"type": rtype}) is None
 
 
 # ── PR-C: save_job ────────────────────────────────────────────────────────────
@@ -485,8 +423,8 @@ class TestRuntimePriority:
     def test_runtime_without_data_falls_through_to_type_based(self):
         from src.services.agentic_ui_composer import compose
         rt = _make_result()  # data = {} — no actions
-        r = compose(rt, {"type": "application_status"})
-        assert "add-application" in _action_ids(r)
+        r = compose(rt, {"type": "delete_saved_jobs_confirm"})
+        assert "confirm-delete-jobs" in _action_ids(r)
 
     def test_runtime_none_data_falls_through_to_type_based(self):
         from src.services.agentic_ui_composer import compose
@@ -494,5 +432,5 @@ class TestRuntimePriority:
         class _NoneData:
             data = None
 
-        r = compose(_NoneData(), {"type": "application_status"})
-        assert "add-application" in _action_ids(r)
+        r = compose(_NoneData(), {"type": "delete_saved_jobs_confirm"})
+        assert "confirm-delete-jobs" in _action_ids(r)
