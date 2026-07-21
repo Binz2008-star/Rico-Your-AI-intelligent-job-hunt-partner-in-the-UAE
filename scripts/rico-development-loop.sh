@@ -103,8 +103,11 @@ Bash(git add:*),Bash(git commit:*),\
 Bash(scripts/rico-supervisor-push.sh:*),Bash(bash scripts/rico-supervisor-push.sh:*),\
 Bash(python -m pytest:*),Bash(python -m py_compile:*),Bash(bash -n:*),\
 Bash(npm run lint:*),Bash(npm run build:*),\
-Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr checks:*),Bash(gh pr diff:*),\
-Bash(gh pr create --draft:*)"
+Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr checks:*),Bash(gh pr diff:*)"
+# gh pr create is deliberately NOT granted: when the branch is not fully
+# pushed, gh pr create can push it implicitly — an alternate push path that
+# would bypass the gate. PR creation goes through the gate's --create-pr
+# mode, which first proves origin/<branch> exists and equals local HEAD.
 
 # Explicit denylist. Deny rules take precedence over allow rules: local
 # secret files stay unreadable/unwritable even though they sit inside the
@@ -115,7 +118,7 @@ Read(**/*.env),Edit(**/*.env),\
 Read(**/*credentials*),Edit(**/*credentials*),\
 Read(**/*token*.json),Read(**/*.pem),Read(**/*.key),Read(**/secrets/**),\
 Read(~/**),Read(//etc/**),\
-Bash(git push:*),\
+Bash(git push:*),Bash(gh pr create:*),\
 Bash(git merge:*),Bash(git rebase:*),Bash(git reset:*),\
 Bash(git clean:*),Bash(git push --force:*),Bash(git push -f:*),\
 Bash(git branch -D:*),Bash(git filter-branch:*),\
@@ -141,7 +144,10 @@ run_claude() {
   return "${PIPESTATUS[0]}"
 }
 
-LOG_DIR="${RICO_SUPERVISOR_LOG_DIR:-.rico-supervisor-logs}"
+# Logs live OUTSIDE the repository by default so an IDLE / BLOCKED_CONFLICT
+# run truly modifies nothing under the working tree ("IDLE creates no branch
+# and modifies no files" is behavioral, not just gitignored).
+LOG_DIR="${RICO_SUPERVISOR_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/rico-supervisor/logs}"
 mkdir -p "$LOG_DIR"
 
 if [[ "${1:-}" == "--smoke" ]]; then

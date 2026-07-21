@@ -6870,13 +6870,17 @@ next free ID.
   --dangerously-skip-permissions; git-fetch failure exits documented code 6.
 - scripts/rico-supervisor-push.sh + scripts/supervisor_push_gate.py — NEW
   deterministic push gate (owner review round 2): the ONLY sanctioned push
-  path for supervised sessions. Immediately before pushing it re-fetches
+  path for supervised sessions. Round 3: raw gh pr create is denied (it can
+  implicitly push an unpushed branch — an alternate push path); the gate's
+  --create-pr mode first proves origin/<branch> exists AND equals local
+  HEAD, then runs gh pr create --draft --head <branch> --base main (no push
+  side effect; refusals create nothing and push nothing). Immediately before pushing it re-fetches
   origin/main and mechanically checks merge-base freshness, changed-file
   overlap vs main and every open PR, and Task-ID uniqueness (frozen
   TASK-20260721-005 exception pinned to its two EXACT historical headings,
   not a count); refuses with nothing pushed (exit 2) on conflict; exit 6 on
   preconditions (non-claude/ branch, dirty tree, missing gh, fetch failure).
-- tests/test_development_supervisor_contract.py — 43 static + functional
+- tests/test_development_supervisor_contract.py — 48 static + functional
   guards: Task-ID uniqueness incl. exact-heading pin and swapped-duplicate
   rejection, strict-parser subprocess matrix, scoping/denial checks
   (Read(//etc/**) double-slash absolute form), --tools availability
@@ -6885,7 +6889,15 @@ next free ID.
   launcher fetch-failure exit 6 (functional), and fail-before push-gate
   matrix in temp repos with a fake gh (non-claude branch / main advanced
   with overlapping file / newly opened overlapping PR / duplicate Task ID —
-  each refuses without pushing; clean case pushes; --check-only never pushes).
+  each refuses without pushing; clean case pushes; --check-only never
+  pushes). Round 3 adds: create-pr refusal matrix (unpushed branch and
+  head-mismatch refuse with gh never invoked and remote untouched; clean
+  case creates the PR with explicit --head and zero push side effect,
+  proven by ls-remote before/after), gh-pr-create denial guards, and a
+  behavioral IDLE test (fake Claude returns IDLE; every file, ref, and
+  status byte under the working tree identical before/after; run log lands
+  outside the repository — XDG state dir default, project-local default
+  forbidden by guard).
 - AI_WORKSPACE/TASKS.md (this entry).
 
 #### Explicitly out of scope (owner directive)
@@ -6901,7 +6913,7 @@ next free ID.
   the work commit the full evidence ran against; exact SHAs in the ledger
   and PR #1305)
 - Status: in_review — Draft PR #1305; merge is owner-gated
-- Validation already run: focused contract suite 43/43 at the work commit;
+- Validation already run: focused contract suite 48/48 at the work commit;
   bash -n + py_compile OK; --classify and --parse-result subprocess
   matrices; push-gate fail-before matrix; --smoke PASSED (CLI accepts
   --tools/--strict-mcp-config/--setting-sources); --smoke-perms PASSED

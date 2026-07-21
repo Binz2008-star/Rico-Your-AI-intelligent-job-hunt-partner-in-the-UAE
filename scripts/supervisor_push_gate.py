@@ -16,8 +16,16 @@ push anyway:
      added by open PR patches -> REFUSE;
   6. only then: git push -u origin <current branch>.
 
-Exit codes: 0 pushed (or --check-only passed); 2 refused (conflict/overlap/
-duplicate — nothing pushed); 6 precondition failed (nothing pushed).
+A second mode, --create-pr, is the ONLY sanctioned way to open the Draft PR:
+`gh pr create` is denied to supervised sessions because it can implicitly
+push an unpushed branch (an alternate push path around this gate). The mode
+first proves refs/heads/<branch> exists on origin AND equals local HEAD,
+then invokes `gh pr create --draft --head <branch> --base main ...`
+(explicit --head; no push side effect). Extra arguments are passed through.
+
+Exit codes: 0 pushed / PR created (or --check-only passed); 2 refused
+(conflict/overlap/duplicate/unpushed — nothing pushed, no PR created);
+6 precondition failed (nothing pushed, no PR created).
 """
 
 from __future__ import annotations
@@ -102,7 +110,43 @@ def precondition(reason: str) -> int:
     return EXIT_PRECONDITION
 
 
+def create_pr(argv: list[str]) -> int:
+    """Open the Draft PR for an already-pushed, up-to-date branch. Never pushes."""
+    branch = run("git", "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    if not branch.startswith("claude/"):
+        return precondition(f"only claude/* branches may open a PR (on '{branch}')")
+    if shutil.which("gh") is None:
+        return precondition("gh CLI required (fail closed)")
+
+    ls_remote = run("git", "ls-remote", "origin", f"refs/heads/{branch}")
+    if ls_remote.returncode != 0:
+        return precondition(f"git ls-remote failed: {ls_remote.stderr.strip()}")
+    remote_fields = ls_remote.stdout.split()
+    if not remote_fields:
+        return refuse(
+            f"refs/heads/{branch} does not exist on origin — push through this "
+            "gate first; gh pr create must never push implicitly."
+        )
+    local_head = run("git", "rev-parse", "HEAD").stdout.strip()
+    if remote_fields[0] != local_head:
+        return refuse(
+            f"origin/{branch} ({remote_fields[0][:8]}) != local HEAD "
+            f"({local_head[:8]}) — push through this gate first."
+        )
+
+    passthrough = [a for a in argv if a != "--create-pr"]
+    proc = subprocess.run(
+        ["gh", "pr", "create", "--draft", "--head", branch, "--base", "main",
+         *passthrough]
+    )
+    if proc.returncode != 0:
+        return precondition(f"gh pr create exited {proc.returncode}")
+    return EXIT_OK
+
+
 def main(argv: list[str]) -> int:
+    if "--create-pr" in argv:
+        return create_pr(argv)
     check_only = "--check-only" in argv
 
     branch = run("git", "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()

@@ -405,6 +405,25 @@ def test_launcher_pushes_only_via_gate():
     assert "scripts/rico-supervisor-push.sh" in allowed, (
         "the validated push gate must be the sanctioned push path"
     )
+    # gh pr create can implicitly PUSH an unpushed branch — it is an
+    # alternate push path and must be denied; PR creation goes through the
+    # gate's --create-pr mode (which uses explicit --head, never pushing).
+    assert "gh pr create" not in allowed, (
+        "raw gh pr create must not be granted — it can push implicitly"
+    )
+    assert "Bash(gh pr create:*)" in denied, "raw gh pr create must be denied"
+
+
+def test_launcher_logs_default_outside_repo():
+    text = launcher_text()
+    assert "XDG_STATE_HOME" in text, (
+        "launcher logs must default OUTSIDE the repository so IDLE runs "
+        "modify nothing under the working tree"
+    )
+    assert ":-.rico-supervisor-logs" not in text, (
+        "project-local log default is forbidden — .gitignore only hides the "
+        "mutation, it does not make it absent"
+    )
 
 
 def test_launcher_has_permission_smoke_mode():
@@ -585,14 +604,21 @@ def _fake_gh(tmp_path, pr_list_json="[]", pr_diffs=None):
     gh = bindir / "gh"
     gh.write_text(
         "#!/usr/bin/env bash\n"
+        f'echo "$@" >> "{tmp_path}/gh-calls.log"\n'
         f'if [[ "$1 $2" == "pr list" ]]; then cat "{tmp_path}/prlist.json"; exit 0; fi\n'
         f'if [[ "$1 $2" == "pr diff" ]]; then f="{diffdir}/$3.diff"; '
         '[[ -f "$f" ]] && cat "$f"; exit 0; fi\n'
+        'if [[ "$1 $2" == "pr create" ]]; then exit 0; fi\n'
         "exit 1\n",
         encoding="utf-8",
     )
     gh.chmod(0o755)
     return bindir
+
+
+def _gh_calls(tmp_path):
+    log = tmp_path / "gh-calls.log"
+    return log.read_text(encoding="utf-8") if log.exists() else ""
 
 
 def _run_gate(work, bindir, *args):
@@ -731,8 +757,114 @@ def test_push_gate_check_only_does_not_push(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# PR creation gate — gh pr create must not be able to push around the gate
+# ---------------------------------------------------------------------------
+
+
+def test_create_pr_refuses_unpushed_branch(tmp_path):
+    """An unpushed branch must refuse PR creation — gh is never invoked, so
+    gh pr create's implicit-push behavior cannot fire."""
+    _, work = _setup_remote_and_clone(tmp_path)
+    _git(work, "checkout", "-b", "claude/gate-test")
+    (work / "README.md").write_text("change\n", encoding="utf-8")
+    _git(work, "commit", "-am", "change")
+    result = _run_gate(work, _fake_gh(tmp_path), "--create-pr", "--title", "t")
+    assert result.returncode == 2, result.stderr
+    assert "push through this" in result.stderr
+    assert "pr create" not in _gh_calls(tmp_path), "gh pr create must not run"
+    assert not _remote_has_branch(work, "claude/gate-test"), "nothing may be pushed"
+
+
+def test_create_pr_refuses_head_mismatch(tmp_path):
+    """A pushed branch with unpushed local commits must refuse PR creation."""
+    _, work = _setup_remote_and_clone(tmp_path)
+    _git(work, "checkout", "-b", "claude/gate-test")
+    (work / "README.md").write_text("change\n", encoding="utf-8")
+    _git(work, "commit", "-am", "change")
+    _git(work, "push", "-u", "origin", "claude/gate-test")
+    pushed_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=work, capture_output=True, text=True
+    ).stdout.strip()
+    (work / "README.md").write_text("newer local change\n", encoding="utf-8")
+    _git(work, "commit", "-am", "unpushed")
+    result = _run_gate(work, _fake_gh(tmp_path), "--create-pr", "--title", "t")
+    assert result.returncode == 2, result.stderr
+    assert "pr create" not in _gh_calls(tmp_path)
+    remote_sha = subprocess.run(
+        ["git", "ls-remote", "origin", "refs/heads/claude/gate-test"],
+        cwd=work, capture_output=True, text=True,
+    ).stdout.split()[0]
+    assert remote_sha == pushed_sha, "remote must be untouched by the refusal"
+
+
+def test_create_pr_clean_creates_without_push(tmp_path):
+    """Fully pushed branch: PR created via explicit --head, no push side effect."""
+    _, work = _setup_remote_and_clone(tmp_path)
+    _git(work, "checkout", "-b", "claude/gate-test")
+    (work / "README.md").write_text("change\n", encoding="utf-8")
+    _git(work, "commit", "-am", "change")
+    _git(work, "push", "-u", "origin", "claude/gate-test")
+    before = subprocess.run(
+        ["git", "ls-remote", "origin"], cwd=work, capture_output=True, text=True
+    ).stdout
+    result = _run_gate(work, _fake_gh(tmp_path), "--create-pr", "--title", "supervisor PR")
+    assert result.returncode == 0, result.stderr
+    calls = _gh_calls(tmp_path)
+    assert "pr create --draft --head claude/gate-test --base main" in calls
+    assert "--title supervisor PR" in calls
+    after = subprocess.run(
+        ["git", "ls-remote", "origin"], cwd=work, capture_output=True, text=True
+    ).stdout
+    assert before == after, "PR creation must have no push side effect"
+
+
+# ---------------------------------------------------------------------------
 # Launcher precondition — functional
 # ---------------------------------------------------------------------------
+
+
+def test_idle_run_leaves_repo_byte_for_byte_untouched(tmp_path):
+    """A full launcher cycle ending in IDLE (fake Claude) must change no file,
+    no ref, and no status under the working tree; the log lands outside."""
+    _, work = _setup_remote_and_clone(tmp_path)  # on main, synced with origin
+    bindir = tmp_path / "claude-bin"
+    bindir.mkdir()
+    fake_claude = bindir / "claude"
+    fake_claude.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf 'no safe unowned task exists\\nRICO_SUPERVISOR_RESULT: IDLE\\n'\n",
+        encoding="utf-8",
+    )
+    fake_claude.chmod(0o755)
+    state_home = tmp_path / "state"
+    env = dict(os.environ)
+    env["PATH"] = f"{bindir}:{env['PATH']}"
+    env["XDG_STATE_HOME"] = str(state_home)
+    env.pop("RICO_SUPERVISOR_LOG_DIR", None)
+
+    def snapshot():
+        files = sorted(
+            str(p.relative_to(work))
+            for p in work.rglob("*")
+            if p.is_file() and ".git" not in p.relative_to(work).parts
+        )
+        refs = subprocess.run(
+            ["git", "for-each-ref"], cwd=work, capture_output=True, text=True
+        ).stdout
+        status = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=work, capture_output=True, text=True
+        ).stdout
+        return files, refs, status
+
+    before = snapshot()
+    result = subprocess.run(
+        ["bash", str(LAUNCHER)], cwd=work, env=env, capture_output=True, text=True
+    )
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert "RICO_SUPERVISOR_RESULT: IDLE" in result.stdout
+    assert snapshot() == before, "IDLE must leave the repository untouched"
+    logs = list((state_home / "rico-supervisor" / "logs").glob("run-*.log"))
+    assert logs, "the run log must exist OUTSIDE the repository"
 
 
 def test_launcher_fetch_failure_exits_6(tmp_path):

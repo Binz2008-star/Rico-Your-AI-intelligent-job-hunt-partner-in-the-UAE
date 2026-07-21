@@ -143,8 +143,12 @@ where they are stricter, they win.
    PR, Task-ID uniqueness including open PR patches) immediately before the
    push and refuses with nothing pushed on any conflict. Direct `git push`
    is denied to supervised sessions; the prose revalidation above is the
-   contract, the gate is its enforcement. Then open (or update) a **Draft**
-   PR — the PR body carries the evidence report.
+   contract, the gate is its enforcement. Then open the **Draft** PR ONLY
+   through the gate's `--create-pr` mode — raw `gh pr create` is denied
+   because it can implicitly push an unpushed branch (an alternate push
+   path); the gate first proves `origin/<branch>` exists and equals local
+   HEAD, then calls `gh pr create --draft --head <branch> --base main`.
+   The PR body carries the evidence report.
 
 ## Stage: STOP OR LOOP
 
@@ -226,8 +230,12 @@ are reported in chat/launcher output only.
   secret paths (`.env*`, `*.env`, credential/token/key files) carry explicit
   deny rules on top of the scoping (Edit rules govern all file-editing
   tools, Write included).
-- Direct `git push` is denied; pushing happens only through the
-  `scripts/rico-supervisor-push.sh` gate described in RECORD.
+- Direct `git push` AND raw `gh pr create` are denied; pushing and PR
+  creation happen only through the `scripts/rico-supervisor-push.sh` gate
+  described in RECORD.
+- Launcher run logs live OUTSIDE the repository (XDG state dir by default),
+  so an `IDLE` or `BLOCKED_CONFLICT` run leaves the working tree
+  byte-for-byte untouched — behaviorally, not merely gitignored.
 - These permission lists are **defense in depth, not a sandbox**. The static
   guard proves the configuration and the contract text, not the
   impossibility of bypass; search tools (Grep/Glob) accept absolute paths
