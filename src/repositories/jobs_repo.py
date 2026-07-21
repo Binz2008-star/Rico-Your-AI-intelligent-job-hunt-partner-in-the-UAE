@@ -139,6 +139,9 @@ def get_pipeline_stats() -> Dict[str, Any]:
 def _row_to_job(row: tuple) -> Dict[str, Any]:
     return {
         "id": str(row[0]),
+        # Trusted provenance marker for the job_link_trust gate: this row
+        # exists because the DB write path persisted it after source ingest.
+        "persisted_job_id": str(row[0]),
         "title": row[1] or "",
         "company": row[2] or "",
         "location": row[3] or "",
