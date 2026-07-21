@@ -8,7 +8,9 @@ T1: "Find UAE jobs that match my strongest CV profile."
       on an environmental CV);
     - a coherent single-track profile (Environmental / Sustainability / ESG / HSE)
       still searches its primary role — multiple roles in ONE family is not ambiguous;
-    - genuinely different tracks (software AND environmental) ask the user to choose.
+    - genuinely different tracks (software AND environmental): since #1294
+      (steps-to-apply) the which-track menu is retired — search the first saved
+      track immediately and SPEAK the other tracks so switching is one message.
 
 T7: "Search UAE jobs for Environmental Manager."
     - keep the exact requested role; never silently substitute "Environmental Officer";
@@ -53,7 +55,8 @@ def _stale_single_profile() -> dict:
 
 
 def _ambiguous_profile() -> dict:
-    """Two genuinely different tracks (software + environmental) → ask."""
+    """Two genuinely different tracks (software + environmental) → search-first
+    (#1294): search the first saved track, speak the other."""
     return {
         "target_roles": ["Software Engineer", "Environmental Manager"],
         "cv_status": "parsed", "cv_filename": "cv.pdf",
@@ -165,12 +168,21 @@ _PHRASES = ["what jobs match my profile", "Find UAE jobs that match my strongest
 
 
 @pytest.mark.parametrize("phrase", _PHRASES)
-def test_t1_distinct_tracks_ask_and_do_not_search(phrase):
+def test_t1_distinct_tracks_search_first_and_speak_alternatives(phrase):
+    """#1294 steps-to-apply: distinct tracks no longer produce a which-track
+    menu. The first saved track is searched immediately (exactly one search,
+    never the pipeline workflow) and the other tracks are spoken in the message
+    and carried in track_alternatives so switching is a single chat message."""
     result, search_mock, workflow_mock = _run_chat(phrase, _ambiguous_profile())
-    assert result.get("type") == "clarification"
-    assert search_mock.call_count == 0 and workflow_mock.call_count == 0
-    labels = " ".join(o.get("label", "") for o in result.get("options", []))
-    assert "Software Engineer" in labels and "Environmental Manager" in labels
+    assert result.get("type") == "job_matches"
+    assert workflow_mock.call_count == 0
+    assert search_mock.call_count == 1
+    assert search_mock.call_args.args[1] == "Software Engineer"  # first saved track
+    assert search_mock.call_args.kwargs.get("from_saved_profile") is True
+    assert result.get("track_alternatives") == ["Environmental Manager"]
+    msg = result.get("message", "")
+    assert "Starting with your **Software Engineer** track" in msg
+    assert "Environmental Manager" in msg
 
 
 @pytest.mark.parametrize("phrase", _PHRASES)
