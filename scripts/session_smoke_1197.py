@@ -68,6 +68,30 @@ THREAD_B = str(uuid.uuid4())
 jar = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
+# The production auth cookie is domain-scoped to .ricohunt.com — real browsers
+# reach the backend through the same-origin ricohunt.com/proxy rewrite, so the
+# cookie applies. This smoke talks to the backend host (onrender) DIRECTLY, so
+# http.cookiejar drops that cookie on the domain mismatch and every
+# authenticated call would 401 despite a 200 login. Capture the token from the
+# login response and replay it as an explicit Cookie header — domain-agnostic,
+# which is exactly what a direct backend client must do.
+_auth_cookie: str | None = None
+
+
+def _capture_auth_cookie(resp) -> None:
+    global _auth_cookie
+    try:
+        set_cookies = resp.headers.get_all("Set-Cookie") or []
+    except Exception:
+        return
+    for sc in set_cookies:
+        first = sc.split(";", 1)[0].strip()
+        # Store only a real token; ignore the delete_cookie sentinel (register
+        # clears any stale cookie, emitting an empty-value access_token).
+        if first.startswith("access_token=") and len(first) > len("access_token=") + 8:
+            _auth_cookie = first
+
+
 results: list[tuple[str, bool, str]] = []
 
 
@@ -78,14 +102,18 @@ def record(name: str, ok: bool, evidence: str) -> None:
 
 def call(method: str, path: str, body: dict | None = None, timeout: int = 90) -> tuple[int, str]:
     req = urllib.request.Request(f"{BASE}{path}", method=method)
+    if _auth_cookie:
+        req.add_header("Cookie", _auth_cookie)
     data = None
     if body is not None:
         data = json.dumps(body).encode()
         req.add_header("Content-Type", "application/json")
     try:
         with opener.open(req, data=data, timeout=timeout) as resp:
+            _capture_auth_cookie(resp)
             return resp.status, resp.read().decode(errors="replace")
     except urllib.error.HTTPError as e:
+        _capture_auth_cookie(e)
         return e.code, e.read().decode(errors="replace")
 
 
