@@ -30,6 +30,8 @@ export const v5Amiri = Amiri({
     subsets: ["arabic", "latin"],
     weight: ["400", "700"],
     display: "swap",
+    // No preload: Arabic display glyphs load on demand (perf slice 2026-07-21).
+    preload: false,
     variable: "--font-amiri-v5",
 });
 
@@ -37,5 +39,6 @@ export const v5PlexArabic = IBM_Plex_Sans_Arabic({
     subsets: ["arabic", "latin"],
     weight: ["400", "500", "600", "700"],
     display: "swap",
+    preload: false,
     variable: "--font-plex-arabic-v5",
 });

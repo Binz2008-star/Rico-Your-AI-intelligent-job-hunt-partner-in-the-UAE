@@ -33,6 +33,10 @@ export const atelierNaskhArabic = Noto_Naskh_Arabic({
     subsets: ["arabic"],
     weight: ["400", "500", "600", "700"],
     display: "swap",
+    // No preload: Arabic glyphs load on demand via font-display swap, so
+    // non-Arabic visitors stop paying the preload cost on every page
+    // (perf slice 2026-07-21: the top transfers on /command were fonts).
+    preload: false,
     variable: "--font-naskh-arabic",
 });
 
@@ -40,5 +44,6 @@ export const atelierSansArabic = Noto_Sans_Arabic({
     subsets: ["arabic"],
     weight: ["400", "500", "600", "700"],
     display: "swap",
+    preload: false,
     variable: "--font-sans-arabic",
 });
