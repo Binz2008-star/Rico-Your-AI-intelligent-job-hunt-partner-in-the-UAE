@@ -48,16 +48,19 @@ const SERIF = ATELIER_FONT.serif;
 // Reference-specific editorial strings (eyebrow / headline / intro) follow the
 // DashboardAtelier inline-T precedent; every functional string reuses the
 // existing flow* keys so wording stays identical to the legacy page.
-const T: Record<"en" | "ar", { eyebrow: string; title: string; intro: string }> = {
+/* Artifact applications hero (MODE_THEME.applications) */
+const T: Record<"en" | "ar", { eyebrow: string; lead: string; word: string; sub: string }> = {
     en: {
-        eyebrow: "Applications",
-        title: "Your applications.",
-        intro: "Every application Rico is tracking for you, across all stages.",
+        eyebrow: "Live pipeline",
+        lead: "Your career pipeline",
+        word: "is moving",
+        sub: "Every stage, every signal — Rico pushes applications forward and flags whatever has gone quiet.",
     },
     ar: {
-        eyebrow: "الطلبات",
-        title: "طلباتك.",
-        intro: "كل طلبٍ يتابعه ريكو من أجلك، عبر جميع المراحل.",
+        eyebrow: "مسار حي",
+        lead: "مسار مسيرتك",
+        word: "يتحرّك",
+        sub: "كل مرحلة وكل إشارة — يدفع ريكو الطلبات ويشير إلى ما توقّف.",
     },
 };
 
@@ -319,20 +322,14 @@ export function ApplicationsAtelier() {
             {/* Header */}
             <div>
                 <span className="flex items-center gap-2.5">
-                    {v5 && <span className="wsx5-breathe-dot" style={{ background: acc.modeA }} aria-hidden="true" />}
-                    <Mono style={{ color: v5 ? acc.modeAText : c.ink55 }}>{tt.eyebrow}</Mono>
+                    <span className="wsx5-breathe-dot" style={{ background: v5 ? acc.modeA : c.red }} aria-hidden="true" />
+                    <Mono style={{ color: v5 ? acc.modeAText : c.red }}>{tt.eyebrow}</Mono>
                 </span>
-                <h1 className="wsx5-display mt-2 text-[2.4rem] sm:text-[3rem]" style={{ fontFamily: SERIF, color: c.ink }}>{tt.title}</h1>
+                <h1 className="wsx5-display mt-3 text-[2.2rem] sm:text-[2.9rem]" style={{ fontFamily: SERIF, color: c.ink }}>
+                    {tt.lead} <em style={v5 ? undefined : { background: "none", color: c.red }}>{tt.word}</em>
+                </h1>
             </div>
-            {v5 ? (
-                <div className="my-6 flex items-center" aria-hidden="true">
-                    <span style={{ width: 64, height: 2, borderRadius: 2, background: V5_GRADIENT.ember }} />
-                    <span className="h-px flex-1" style={{ background: c.hair }} />
-                </div>
-            ) : (
-                <div className="my-6 h-px" style={{ background: c.hair }} aria-hidden="true" />
-            )}
-            <p className="max-w-2xl text-[1.02rem] leading-relaxed" style={{ color: c.ink70 }}>{tt.intro}</p>
+            <p className="mt-4 max-w-2xl text-[1.02rem] leading-[1.62]" style={{ color: c.ink70 }}>{tt.sub}</p>
 
             {loading && (
                 <div className="mt-10" aria-busy="true">

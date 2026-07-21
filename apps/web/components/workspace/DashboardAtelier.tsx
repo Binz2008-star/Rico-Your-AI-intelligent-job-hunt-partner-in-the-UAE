@@ -100,7 +100,7 @@ export function deriveNextActions(mission: MissionState | null): NextActionKey[]
 /* ── Bilingual copy (static UI copy only — never fabricated data) ─────────── */
 
 const T: Record<Lang, {
-    eyebrow: string; title: string; intro: string;
+    eyebrow: string; lead: string; word: string; sub: string;
     goalEyebrow: string; goalSubtitle: string; goalEdit: string;
     askRico: string; askRicoPrompt: string; progressAria: string;
     milestones: Record<FactorToken, string>;
@@ -116,8 +116,9 @@ const T: Record<Lang, {
     goalCityOnly: (city: string) => string;
 }> = {
     en: {
-        eyebrow: "Overview", title: "Good to see you.",
-        intro: "A quiet overview of your workspace — Rico keeps it current as you go.",
+        /* Artifact overview hero (MODE_THEME.overview) */
+        eyebrow: "Career command", lead: "Your next move,", word: "in focus",
+        sub: "Rico is reading every signal across your search and surfacing what deserves your attention right now.",
         goalEyebrow: "Current goal",
         goalSubtitle: "Everything Rico surfaces should serve this.",
         goalEdit: "Edit goal",
@@ -154,8 +155,8 @@ const T: Record<Lang, {
         goalCityOnly: (city) => `Find a job in ${city}`,
     },
     ar: {
-        eyebrow: "نظرة عامة", title: "سعيدٌ برؤيتك.",
-        intro: "نظرةٌ هادئة على مساحة عملك — يبقيها ريكو محدّثةً أولًا بأول.",
+        eyebrow: "قيادة المسار", lead: "خطوتك القادمة،", word: "بوضوح",
+        sub: "يقرأ ريكو كل إشارة في بحثك ويبرز ما يستحق انتباهك الآن.",
         goalEyebrow: "الهدف الحالي",
         goalSubtitle: "كل ما يعرضه ريكو يجب أن يخدم هذا الهدف.",
         goalEdit: "تعديل الهدف",
@@ -285,21 +286,15 @@ export function DashboardAtelier() {
             <div className="flex items-start justify-between gap-4">
                 <div>
                     <span className="flex items-center gap-2.5">
-                        {v5 && <span className="wsx5-breathe-dot" style={{ background: acc.modeA }} aria-hidden="true" />}
-                        <Mono style={{ color: v5 ? acc.modeAText : c.ink55 }}>{t.eyebrow}</Mono>
+                        <span className="wsx5-breathe-dot" style={{ background: v5 ? acc.modeA : c.red }} aria-hidden="true" />
+                        <Mono style={{ color: v5 ? acc.modeAText : c.red }}>{t.eyebrow}</Mono>
                     </span>
-                    <h1 className="wsx5-display mt-2 text-[2.4rem] sm:text-[3rem]" style={{ fontFamily: SERIF, color: c.ink }}>{t.title}</h1>
+                    <h1 className="wsx5-display mt-3 text-[2.2rem] sm:text-[2.9rem]" style={{ fontFamily: SERIF, color: c.ink }}>
+                        {t.lead} <em style={v5 ? undefined : { background: "none", color: c.red }}>{t.word}</em>
+                    </h1>
                 </div>
             </div>
-            {v5 ? (
-                <div className="my-6 flex items-center" aria-hidden="true">
-                    <span style={{ width: 64, height: 2, borderRadius: 2, background: V5_GRADIENT.ember }} />
-                    <span className="h-px flex-1" style={{ background: c.hair }} />
-                </div>
-            ) : (
-                <div className="my-6 h-px" style={{ background: c.hair }} aria-hidden="true" />
-            )}
-            <p className="max-w-2xl text-[1.02rem] leading-relaxed" style={{ color: c.ink70 }}>{t.intro}</p>
+            <p className="mt-4 max-w-2xl text-[1.02rem] leading-[1.62]" style={{ color: c.ink70 }}>{t.sub}</p>
 
             {state === "loading" && (
                 <div className="mt-10" aria-busy="true">
@@ -346,7 +341,7 @@ export function DashboardAtelier() {
                         <section
                             aria-labelledby="dashboard-goal-title"
                             className={`${v5 ? "wsx5-card" : "rounded-[4px]"} p-6 sm:p-7`}
-                            style={{ background: c.panel, border: `1px solid ${c.hair}`, ...(v5 ? { borderRadius: 26, overflow: "hidden" } : {}) }}
+                            style={{ background: c.panel, border: `1px solid ${c.hair}`, ...(v5 ? { overflow: "hidden" } : {}) }}
                         >
                             {/* decorative ember crest — light island only */}
                             {v5 && <span aria-hidden="true" className="absolute top-0 start-6 end-6 h-[3px]" style={{ background: V5_GRADIENT.ember, borderRadius: "0 0 4px 4px" }} />}

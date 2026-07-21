@@ -46,6 +46,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const SERIF = ATELIER_FONT.serif;
 
+/* Artifact documents hero (MODE_THEME.documents) */
+const HERO: Record<"en" | "ar", { eyebrow: string; lead: string; word: string; sub: string }> = {
+    en: {
+        eyebrow: "Identity vault",
+        lead: "Your professional identity,",
+        word: "organized",
+        sub: "Live CVs, tailored letters and verified records — powered on and ready to deploy.",
+    },
+    ar: {
+        eyebrow: "خزنة الهوية",
+        lead: "هويتك المهنية،",
+        word: "منظّمة",
+        sub: "سير ذاتية حيّة وخطابات مخصّصة وسجلات موثّقة — جاهزة للإرسال.",
+    },
+};
+
 type DocTypeOption = "cv" | "cover_letter" | "other";
 
 function formatDate(iso?: string | null): string {
@@ -419,13 +435,13 @@ export function UploadAtelier() {
             <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
                     <span className="flex items-center gap-2.5">
-                        {v5 && <span className="wsx5-breathe-dot" style={{ background: acc.modeA }} aria-hidden="true" />}
-                        <Mono style={{ color: v5 ? acc.modeAText : palette.ink55 }}>{t("filesPageTitle")}</Mono>
+                        <span className="wsx5-breathe-dot" style={{ background: v5 ? acc.modeA : palette.red }} aria-hidden="true" />
+                        <Mono style={{ color: v5 ? acc.modeAText : palette.red }}>{HERO[language].eyebrow}</Mono>
                     </span>
-                    <h1 className="wsx5-display mt-2 text-[2rem]" style={{ fontFamily: SERIF, color: palette.ink }}>
-                        {t("filesPageTitle")}
+                    <h1 className="wsx5-display mt-3 text-[1.9rem]" style={{ fontFamily: SERIF, color: palette.ink }}>
+                        {HERO[language].lead} <em style={v5 ? undefined : { background: "none", color: palette.red }}>{HERO[language].word}</em>
                     </h1>
-                    <p className="mt-1 text-sm" style={{ color: palette.ink70 }}>{t("filesPageSubtitle")}</p>
+                    <p className="mt-2 text-sm leading-[1.62]" style={{ color: palette.ink70 }}>{HERO[language].sub}</p>
                 </div>
                 <button
                     onClick={() => setUploadOpen(p => !p)}

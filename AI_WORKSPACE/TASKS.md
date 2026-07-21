@@ -5903,11 +5903,15 @@ Branch: claude/command-v5-pr3-live-modes
 Issue/PR: PR — Command v5 PR 3 live modes (opened from this task)
 
 #### Objective
-Apply the approved v5 mode treatments to the three live document-route modes
-— Overview `/dashboard` (terra/amber), Applications `/applications`
-(coral/amber), Documents `/upload` (gold) — real data and contracts only,
-LIGHT island only. `/command` framing shipped in PR 2; its messages/cards are
-PR 4. Interview/Learning/Activity stay hidden (no production capability).
+PIVOTED 2026-07-21 (owner instruction: "cancel the repo design entirely and
+apply the attachment"): PR #1271 now applies the owner-supplied Command
+Workspace artifact design — full palette swap (LIGHT + DARK), artifact fonts
+(Inter / IBM Plex Mono / Amiri / IBM Plex Sans Arabic; Fraunces stays),
+artifact MODE_THEME accents + bilingual hero language on the three live
+modes, artifact rail/brand/ambience on WorkspaceShell — replacing the
+earlier v5-rebuild palette everywhere it lived. Real data and contracts
+only. `/command` chat surface styling remains the next step (PR 4 slot).
+Interview/Learning/Activity stay hidden (no production capability).
 
 #### Context
 - Relevant files: apps/web/components/workspace/DashboardAtelier.tsx; apps/web/components/applications/ApplicationsAtelier.tsx; apps/web/components/upload/UploadAtelier.tsx; apps/web/components/workspace/theme.ts

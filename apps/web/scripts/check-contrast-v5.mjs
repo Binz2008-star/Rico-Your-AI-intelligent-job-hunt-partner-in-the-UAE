@@ -70,7 +70,7 @@ function ratio(fgName, bgName) {
     return (hi + 0.05) / (lo + 0.05);
 }
 
-/** [fg, bg, min, label] — the audited v5 pairs (EVIDENCE.md §6). */
+/** [fg, bg, min, label] — the audited pairs for the applied artifact palette. */
 const pairs = [
     ["ink", "paper", AA_NORMAL, "primary ink on paper"],
     ["ink70", "paper", AA_NORMAL, "body secondary on paper"],
@@ -81,16 +81,18 @@ const pairs = [
     ["lightInk70", "deepPanel", AA_NORMAL, "secondary light ink on deep panel"],
     ["lightInk58", "deepPanel2", AA_NORMAL, "smallest light text on lightest deep bg"],
     ["lightInk50", "deepPanel", AA_NORMAL, "micro caps on deep panel"],
-    ["terraText", "paper", AA_NORMAL, "terra accent text on paper"],
-    ["amberText", "paper", AA_NORMAL, "amber accent text on paper"],
-    ["goldText", "paper", AA_NORMAL, "gold accent text on paper"],
-    ["electricText", "paper", AA_NORMAL, "electric accent text on paper"],
-    ["purpleText", "paper", AA_NORMAL, "purple accent text on paper"],
+    ["terraText", "paper", AA_NORMAL, "sun accent text on paper"],
+    ["coralText", "paper", AA_NORMAL, "applications accent text on paper"],
+    ["amberText", "paper", AA_NORMAL, "documents accent text on paper"],
+    ["goldText", "paper", AA_NORMAL, "search accent text on paper"],
+    ["mossText", "paper", AA_NORMAL, "learning accent text on paper"],
+    ["logText", "paper", AA_NORMAL, "activity accent text on paper"],
+    ["electricText", "paper", AA_NORMAL, "interview accent text on paper"],
     ["goldTextL", "paper", AA_LARGE, "gold large numerals on paper"],
     ["coralTextL", "paper", AA_LARGE, "coral large numerals on paper"],
-    ["terra", "paper", AA_LARGE, "terra decorative/large on paper"],
-    ["electric", "paper", AA_LARGE, "electric UI accent on paper"],
-    ["onEmber", "emberBtnEnd", AA_NORMAL, "button label on ember gradient (worst stop)"],
+    ["terra", "paper", AA_LARGE, "sun decorative/large on paper"],
+    ["electric", "paper", AA_LARGE, "info UI accent on paper"],
+    ["onEmber", "emberBtnEnd", AA_NORMAL, "button label on sun-button gradient (worst stop)"],
 ];
 
 let failures = 0;

@@ -178,8 +178,9 @@ describe("JobMatchCardAtelier MATCH structure", () => {
  * exact sun-red hex, and the badge/Save assertions pin the sun-red RGB channel.
  */
 describe.each([
-    ["workspace light", WORKSPACE_THEME.light, "rgb(198, 73, 46)", "#C6492E"],
-    ["workspace dark", WORKSPACE_THEME.dark, "rgb(224, 137, 90)", "#E0895A"],
+    /* Artifact palette (applied 2026-07-21): sun #CF3D17 light / #EE6A3A dark. */
+    ["workspace light", WORKSPACE_THEME.light, "rgb(207, 61, 23)", "#CF3D17"],
+    ["workspace dark", WORKSPACE_THEME.dark, "rgb(238, 106, 58)", "#EE6A3A"],
 ] as const)("JobMatchCardAtelier accent = Atelier sun-red — %s", (_label, palette, rgb, hex) => {
     // "rgb(207, 61, 23)" → "rgba(207, 61, 23," — the alpha-agnostic channel prefix.
     const channel = rgb.replace("rgb(", "rgba(").replace(")", ",");

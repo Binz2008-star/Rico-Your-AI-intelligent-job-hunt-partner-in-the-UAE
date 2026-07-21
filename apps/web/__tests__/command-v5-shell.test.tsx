@@ -69,12 +69,12 @@ describe("WorkspaceShell — v5 skin (PR 2)", () => {
         expect(screen.getByTestId("sample-child")).toBeInTheDocument();
     });
 
-    it("route atmosphere renders in the light island and disappears in dark", async () => {
+    it("route atmosphere renders in both islands (artifact ambience is theme-independent)", async () => {
         const user = userEvent.setup();
         renderShell();
         expect(screen.getAllByTestId("wsx5-atmosphere").length).toBe(1);
         await user.click(screen.getAllByRole("button", { name: /dark mode/i })[0]);
-        expect(screen.queryByTestId("wsx5-atmosphere")).toBeNull();
+        expect(screen.getAllByTestId("wsx5-atmosphere").length).toBe(1);
         // marker survives the dark island (accent handled by the dark palette)
         const active = screen
             .getAllByRole("link", { name: /applications/i })
