@@ -94,7 +94,7 @@ export function CommandMessageRow({
                     ><span>R</span></div>
                 )}
                 <div dir="auto" className={`${role === "user"
-                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-gold px-3.5 py-2.5 text-start text-[14px] font-medium leading-relaxed text-[#0a0a1a] sm:max-w-[72%]"
+                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-gold px-3.5 py-2.5 text-start text-[14px] font-medium leading-relaxed text-white sm:max-w-[72%]"
                     : isStructured
                         ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
                         : "flex-1 min-w-0 break-words text-start text-[14px] leading-relaxed text-rico-text"

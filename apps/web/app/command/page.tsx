@@ -7,7 +7,9 @@ import { AtelierMarkdownScope, CommandEmptyState } from "@/components/command/Co
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
 import { RefineSearchPanel } from "@/components/command/RefineSearchPanel";
-import { AtelierCardScope } from "@/components/command/CommandStates";
+import { AtelierCardScope, publicCommandArtifactVars } from "@/components/command/CommandStates";
+import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
+import { useTheme } from "@/contexts/ThemeContext";
 import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
 import { SubscriptionCta } from "@/components/command/SubscriptionCta";
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
@@ -370,17 +372,17 @@ function CvReadyOnboardingPanel({
                 {/* Status insight cards — individual dark mini-rows */}
                 <div className="relative mt-4 space-y-1.5">
                     <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2 transition-all duration-300 hover:bg-surface-elevated/70">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold shadow-[0_0_6px_rgba(245,166,35,0.6)] animate-pulse" aria-hidden="true" />
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold animate-pulse" aria-hidden="true" />
                         <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard1Label")}</span>
                         <span className="text-[10px] font-medium text-gold">{t("cmdCvReadyCard1Badge")}</span>
                     </div>
                     <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2 transition-all duration-300 hover:bg-surface-elevated/70">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold shadow-[0_0_6px_rgba(245,166,35,0.6)] animate-pulse" aria-hidden="true" />
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold animate-pulse" aria-hidden="true" />
                         <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard2Label")}</span>
                         <span className="text-[10px] font-medium text-gold">{t("cmdCvReadyCard2Badge")}</span>
                     </div>
                     <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2 transition-all duration-300 hover:bg-surface-elevated/70">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold/60 shadow-[0_0_6px_rgba(245,166,35,0.4)] animate-pulse" aria-hidden="true" />
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold/60 animate-pulse" aria-hidden="true" />
                         <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard3Label")}</span>
                         <span className="text-[10px] font-medium text-gold/80">{t("cmdCvReadyCard3Badge")}</span>
                     </div>
@@ -2080,7 +2082,7 @@ export default function CommandPage() {
                 <div className="flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-border-subtle bg-surface/80 p-8 text-center backdrop-blur-md">
                     <p className="text-sm font-medium text-rico-text">{t("cmdSessionExpired")}</p>
                     <p className="text-sm text-text-muted">{t("cmdSessionExpiredMsg")}</p>
-                    <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-gold px-6 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover cursor-pointer">
+                    <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-gold px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gold-hover cursor-pointer">
                         {t("signIn")}
                     </Link>
                 </div>
@@ -2477,7 +2479,7 @@ export default function CommandPage() {
                                                     type="button"
                                                     onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id, m.docType, m.uploadId)}
                                                     disabled={thinking}
-                                                    className="text-[12px] px-4 py-2 rounded-lg bg-gold text-[#0a0a1a] font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
+                                                    className="text-[12px] px-4 py-2 rounded-lg bg-gold text-white font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
                                                 >
                                                     {t("cmdProfileUseThis")}
                                                 </button>
@@ -2540,7 +2542,7 @@ export default function CommandPage() {
                                                             setDraftProfile(null);
                                                         }}
                                                         disabled={thinking}
-                                                        className="text-[12px] px-4 py-2 rounded-lg bg-gold text-[#0a0a1a] font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
+                                                        className="text-[12px] px-4 py-2 rounded-lg bg-gold text-white font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
                                                     >
                                                         {t("cmdProfileSave")}
                                                     </button>
@@ -2810,10 +2812,22 @@ function CommandChrome({
     mobileActions?: React.ReactNode;
     children: React.ReactNode;
 }) {
+    const { resolvedTheme } = useTheme();
     if (audience === "public") {
+        /* Artifact guest chrome (owner instruction 2026-07-21): remap every
+           channel token to the artifact workspace palette so the whole guest
+           surface — top bar, suggestions, transcript, composer — repaints
+           with zero markup changes. Follows the existing global theme toggle:
+           dark stays the production default; both faces are artifact faces. */
+        const pal = resolvedTheme === "light" ? WORKSPACE_THEME.light : WORKSPACE_THEME.dark;
         return (
-            <div className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-background">
-                {children}
+            <div
+                data-testid="command-public-artifact"
+                data-artifact-mode={resolvedTheme}
+                className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-background"
+                style={{ ...publicCommandArtifactVars(pal), colorScheme: resolvedTheme } as React.CSSProperties}
+            >
+                <WorkspaceThemeContext.Provider value={pal}>{children}</WorkspaceThemeContext.Provider>
             </div>
         );
     }

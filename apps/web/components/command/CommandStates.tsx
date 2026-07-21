@@ -89,6 +89,34 @@ export function atelierCardVars(c: WorkspacePalette): React.CSSProperties {
     } as React.CSSProperties;
 }
 
+/**
+ * Full-surface channel remap for the PUBLIC /command chrome (artifact design,
+ * owner instruction 2026-07-21). Extends the card remap with every remaining
+ * channel token the guest surface consumes — text tiers, aura glow, and the
+ * Atelier editorial layer (--ink/--paper/--rule/--sun) that the reply CSS
+ * reads — so the entire guest page repaints into the artifact palette with
+ * zero markup changes. Semantic hues (success/cyan/magenta, emerald status
+ * dots, rose logout) intentionally keep their global values.
+ */
+export function publicCommandArtifactVars(c: WorkspacePalette): React.CSSProperties {
+    return {
+        ...atelierCardVars(c),
+        "--text-tertiary": compositeChannels(c.ink, c.bg, 0.55),
+        "--text-disabled": compositeChannels(c.ink, c.bg, 0.35),
+        "--aura": hexChannels(c.red),
+        "--aura-dim": hexChannels(c.red),
+        /* Atelier editorial channels — same derivation CommandObsidianShell
+           emits for the authenticated console (palette values are hex). */
+        "--ink": hexChannels(c.ink),
+        "--ink-soft": hexChannels(c.ink70),
+        "--ink-mute": hexChannels(c.ink55),
+        "--paper": hexChannels(c.bg),
+        "--paper-2": hexChannels(c.panel),
+        "--rule": hexChannels(c.hair),
+        "--sun": hexChannels(c.red),
+    } as React.CSSProperties;
+}
+
 /* ── Card scope ──────────────────────────────────────────────────────────────
  * Layout-transparent wrapper (`display:contents`) that repaints the unchanged
  * card children in Atelier colours on the authenticated surface. */
