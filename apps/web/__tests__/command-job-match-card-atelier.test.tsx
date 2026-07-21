@@ -22,7 +22,7 @@
  * distinct name.)
  */
 
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders as render } from "./test-utils";
@@ -113,18 +113,12 @@ describe("JobMatchCardAtelier MATCH structure", () => {
         expect(apply.getAttribute("href")).toBe("https://careers.adnoc.ae/jobs/hse-manager");
     });
 
-    it("routes SAVE and SKIP through onAction with the exact prompts", () => {
-        const onAction = renderCard(STRONG_MATCH);
-
-        fireEvent.click(screen.getByTestId("job-action-save"));
-        expect(onAction).toHaveBeenCalledWith(
-            "Save HSE Manager — Upstream Operations at ADNOC Onshore to my pipeline",
-        );
-
-        fireEvent.click(screen.getByTestId("job-action-skip"));
-        expect(onAction).toHaveBeenCalledWith(
-            "Skip HSE Manager — Upstream Operations at ADNOC Onshore",
-        );
+    it("renders NO save/skip buttons (phase 5 of #1262 — spoken instead)", () => {
+        // The results message speaks the equivalent ("save the first job" /
+        // "skip the second one"); the backend routes those deterministically.
+        renderCard(STRONG_MATCH);
+        expect(screen.queryByTestId("job-action-save")).toBeNull();
+        expect(screen.queryByTestId("job-action-skip")).toBeNull();
     });
 
     it("mid-tier score (0.6–0.79) renders a ScorePip but NO RICO PICKS pill", () => {
@@ -230,8 +224,13 @@ describe("JobMatchCardAtelier — Arabic / RTL accessibility (GAP 2)", () => {
 
     it("localizes the card + apply-link aria-labels and sets dir=rtl", async () => {
         renderCardTheme(STRONG_MATCH);
-        // Wait for the Arabic switch (SAVE control label = احفظ), then RTL.
-        await screen.findByText("احفظ");
+        // Wait for the Arabic switch (the card aria-label re-renders localized;
+        // the old SAVE-label marker is gone — phase 5 of #1262), then RTL.
+        await waitFor(() =>
+            expect(
+                screen.getByTestId("opportunity-card").getAttribute("aria-label") ?? "",
+            ).toContain("وظيفة مطابقة:"),
+        );
         await waitFor(() => expect(document.documentElement.dir).toBe("rtl"));
 
         const cardAria = screen.getByTestId("opportunity-card").getAttribute("aria-label") ?? "";
@@ -247,7 +246,8 @@ describe("JobMatchCardAtelier — Arabic / RTL accessibility (GAP 2)", () => {
 
     it("localizes the fallback link aria-labels (no hardcoded 'at' construction)", async () => {
         renderCardTheme(NO_LINK_MATCH);
-        await screen.findByText("احفظ");
+        // Arabic-switch gate: the fallback Google chip's localized label.
+        await screen.findByText("ابحث في Google");
 
         const googleAria = screen.getByTestId("job-fallback-google").getAttribute("aria-label") ?? "";
         expect(googleAria).toContain("ابحث في Google"); // Arabic label

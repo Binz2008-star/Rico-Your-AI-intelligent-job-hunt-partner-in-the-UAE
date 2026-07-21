@@ -249,3 +249,141 @@ class TestStrictDeleteConfirmPhrases:
         ar = api._intercept_unsupported_delete_mutation("u1", "احذف جميع الوظائف المحفوظة")
         assert ar["type"] == "delete_saved_jobs_confirm"
         assert "نعم احذف" in ar["message"] and self._gate("نعم احذف")
+
+
+# ---------------------------------------------------------------------------
+# 5. Phase 5 — Save/Skip buttons retired; ordinal skip + spoken how-to
+# ---------------------------------------------------------------------------
+
+class TestOrdinalSkipRegex:
+    """Position-based skip ("skip the first one") previously fell into the
+    AI fallback — now it has the same deterministic route as ordinal save."""
+
+    def _en(self, text: str):
+        from src.rico_chat_api import _SKIP_ORDINAL_RE
+        return _SKIP_ORDINAL_RE.match(text)
+
+    def _ar(self, text: str):
+        from src.rico_chat_api import _SKIP_ORDINAL_AR_RE
+        return _SKIP_ORDINAL_AR_RE.match(text)
+
+    def test_english_variants_match(self):
+        for text in ("skip the first one", "skip the second job", "Skip job 2",
+                     "skip 3", "skip the 2nd", "please skip the last one"):
+            assert self._en(text), f"{text!r} must match the ordinal-skip route"
+
+    def test_arabic_variants_match(self):
+        for text in ("تجاهل الوظيفة الأولى", "تجاهل الأولى", "تخطى الثانية",
+                     "تجاهل ثاني وظيفة", "تجاهل الوظيفة الأخيرة"):
+            assert self._ar(text), f"{text!r} must match the ordinal-skip route"
+
+    def test_non_ordinal_skip_phrases_do_not_match(self):
+        # Onboarding "skip", question skip, search-filter phrasing, and the
+        # named title-at-company form all keep their existing routes.
+        for text in ("skip", "skip this question", "skip coding jobs",
+                     "Skip HSE Manager at ACME Gulf"):
+            assert not self._en(text), f"{text!r} must NOT match ordinal skip"
+
+    def test_named_skip_still_routes_to_card_action(self):
+        from src.rico_chat_api import _SKIP_CARD_ACTION_RE
+        assert _SKIP_CARD_ACTION_RE.match("Skip HSE Manager at ACME Gulf")
+
+
+class TestOrdinalSkipDispatch:
+    """End-to-end: the ordinal resolves against the recent results list and the
+    suppression goes through agent_runtime.handle_action(action='skip')."""
+
+    def _call(self, message: str, *, matches, ok: bool = True):
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api.memory = MagicMock()
+        mock_profile = MagicMock()
+        mock_profile.has_cv = True
+        rt_result = MagicMock()
+        rt_result.ok = ok
+        rt_result.error = None if ok else "db down"
+
+        with (
+            patch.object(api, "_resolve_profile", return_value=mock_profile),
+            patch.object(api, "_get_recent_messages", return_value=[]),
+            patch.object(api, "_get_recent_context", return_value={}),
+            patch.object(api, "_append_chat"),
+            patch.object(api, "_finalize", side_effect=lambda r, *a, **kw: r),
+            patch.object(api, "_recent_search_matches", return_value=matches),
+            patch.object(api, "_resolve_card_job", return_value=None),
+            patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
+            patch("src.rico_chat_api.agent_runtime") as rt,
+        ):
+            rt.handle_action.return_value = rt_result
+            result = api._handle_active_user_inner("user@test.com", message)
+        return result, rt
+
+    _TWO = [{"title": "A", "company": "X"}, {"title": "B", "company": "Y"}]
+
+    def test_skip_second_targets_the_second_match(self):
+        result, rt = self._call("skip the second one", matches=self._TWO)
+        assert result["type"] == "skip_job"
+        kwargs = rt.handle_action.call_args.kwargs
+        assert kwargs["action"] == "skip"
+        assert kwargs["job"]["title"] == "B" and kwargs["job"]["company"] == "Y"
+
+    def test_arabic_last_targets_the_last_match(self):
+        result, rt = self._call("تجاهل الوظيفة الأخيرة", matches=self._TWO)
+        assert result["type"] == "skip_job"
+        assert rt.handle_action.call_args.kwargs["job"]["title"] == "B"
+
+    def test_no_recent_list_gets_honest_reply_without_action(self):
+        result, rt = self._call("skip the first one", matches=[])
+        assert result["type"] == "clarification"
+        rt.handle_action.assert_not_called()
+
+    def test_out_of_range_asks_which_without_action(self):
+        result, rt = self._call("skip job 5", matches=[{"title": "A", "company": "X"}])
+        assert result["type"] == "clarification"
+        rt.handle_action.assert_not_called()
+
+    def test_runtime_failure_never_claims_success(self):
+        result, _ = self._call("skip the first one", matches=self._TWO, ok=False)
+        assert result["type"] == "skip_job"
+        assert "couldn't skip" in result["message"]
+
+
+class TestSpokenActionHowTo:
+    """The retired Save/Skip buttons, spoken: the results message says how to
+    act, and each suggested phrase routes deterministically (cross-pins)."""
+
+    _EN_SAVE = "save the first job"
+    _EN_SKIP = "skip the second one"
+    _AR_SAVE = "احفظ أول وظيفة"
+    _AR_SKIP = "تجاهل الوظيفة الثانية"
+
+    def _build(self, *, arabic: bool = False, matches=None):
+        from src.rico_chat_api import RicoChatAPI
+
+        if matches is None:
+            matches = [{"title": "A", "company": "B", "link": "https://j.example/1"}]
+        return RicoChatAPI._build_role_search_message(
+            None, "HSE Manager", "", "", matches, None, arabic=arabic,
+        )
+
+    def test_howto_present_with_matches(self):
+        msg = self._build()
+        assert f'"{self._EN_SAVE}"' in msg
+        assert f'"{self._EN_SKIP}"' in msg
+
+    def test_arabic_howto_present(self):
+        msg = self._build(arabic=True)
+        assert f"«{self._AR_SAVE}»" in msg
+        assert f"«{self._AR_SKIP}»" in msg
+
+    def test_absent_without_matches(self):
+        assert self._EN_SAVE not in self._build(matches=[])
+
+    def test_suggested_phrases_route_deterministically(self):
+        from src.rico_chat_api import _SKIP_ORDINAL_AR_RE, _SKIP_ORDINAL_RE
+
+        assert _legacy(self._EN_SAVE) == "save_job"
+        assert _legacy(self._AR_SAVE) == "save_job"
+        assert _SKIP_ORDINAL_RE.match(self._EN_SKIP)
+        assert _SKIP_ORDINAL_AR_RE.match(self._AR_SKIP)

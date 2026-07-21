@@ -29,6 +29,7 @@ from src.agent.intelligence.intent_classifier import (
     _OPEN_APPLY_LINK_ORDINAL_RE,
     _SAVE_JOB_ORDINAL_RE,
     _SAVE_JOB_ORDINAL_AR_RE,
+    _ARABIC_ORDINAL_TO_INT,
     _CV_PROFILE_REF_RE,
     _clean_role_token,
 )
@@ -200,6 +201,33 @@ _SKIP_CARD_ACTION_RE = re.compile(
 # Arabic skip verbs (تجاهل / تخطَّ / لا تعرض) with "في/لدى <company>" attachment.
 _SKIP_CARD_ACTION_AR_RE = re.compile(
     r"^\s*(?:تجاهل|تخط[ىَّ]?|تخطي|لا\s+تعرض)\s+(?:وظيفة\s+)?(?P<title>.+?)\s+(?:في|لدى)\s+(?P<company>.+?)\s*[.!؟]?\s*$"
+)
+
+# Ordinal skip (#1262 phase 5): "skip the first one" / "skip job 2" /
+# "skip the 2nd" — the Save/Skip buttons are retired, so position-based skip
+# gets the same deterministic route the ordinal save/apply-link already have.
+# Anchored full-match so onboarding "skip" / "skip this question" and search
+# phrasing like "skip coding jobs" can never fall in here.
+_SKIP_ORDINAL_RE = re.compile(
+    r"^\s*(?:please\s+)?skip\s+(?:the\s+)?"
+    r"(?:(?P<word>first|second|third|fourth|fifth|last)(?:\s+(?:one|job))?"
+    r"|job\s+(?P<num>\d{1,2})"
+    r"|(?P<num2>\d{1,2})(?:st|nd|rd|th)?(?:\s+(?:one|job))?)"
+    r"\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+_SKIP_WORD_ORDINAL_TO_INT = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "last": -1,
+}
+# Arabic ordinal skip: «تجاهل الوظيفة الأولى» / «تخطَّ الثانية» — same verbs as
+# the named-skip pattern above, same ordinal tokens as the ordinal-save map
+# (_ARABIC_ORDINAL_TO_INT resolves the position).
+_SKIP_ORDINAL_AR_RE = re.compile(
+    r"^\s*(?:تجاهل|تخط[ىَّ]?|تخطي|لا\s+تعرض)\s+(?:ال)?(?:وظيفة\s+)?"
+    r"(?P<aord>اول|أول|الاولى|الأولى|الاولي|ثاني|ثانيه|ثانية|الثاني|الثانيه|الثانية|"
+    r"ثالث|ثالثه|ثالثة|الثالثة|رابع|رابعة|الرابعة|خامس|خامسة|الخامسة|"
+    r"اخر|آخر|الاخير|الأخير|الاخيره|الأخيرة)"
+    r"\s*(?:وظيفة)?\s*[.!؟]?\s*$"
 )
 
 # CV improvement follow-up phrases — used ONLY when last_flow_state == "cv_builder".
@@ -6988,6 +7016,17 @@ class RicoChatAPI:
                 " Everything lives on [your jobs board](/flow) anytime."
             )
 
+        # Spoken job-action how-to (#1262 phase 5): the Save/Skip buttons are
+        # retired — Rico says how to act on the list in words. Each suggested
+        # phrase is cross-pinned in tests to its deterministic route (ordinal
+        # save intent / ordinal skip fast-path) so speech can never misroute.
+        if top_matches:
+            base_message += (
+                " قل لي ماذا أفعل بأي منها — مثلاً «احفظ أول وظيفة» أو «تجاهل الوظيفة الثانية»."
+                if arabic else
+                " Tell me what to do with any of these — say \"save the first job\" or \"skip the second one\"."
+            )
+
         # Save-search offer (#1262 phase 3): the retired "Save search" card,
         # spoken. The suggested phrase routes via the deterministic
         # save_search_create intent (pinned in tests), never save_job.
@@ -7545,6 +7584,52 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", msg)
         return self._finalize(response, self.SOURCE_KEYWORD, profile=profile, runtime_result=result)
 
+    def _skip_job_by_ordinal(
+        self, user_id: str, ordinal: int, profile: Any, arabic: bool = False,
+    ) -> dict[str, Any]:
+        """Skip the first/second/Nth/last job from recent search results.
+
+        Mirrors _save_job_by_ordinal's resolution (the same ordered list the
+        cards were rendered from), then delegates to the named-skip handler so
+        the suppression semantics stay in one place (#1262 phase 5).
+        """
+        matches = self._recent_search_matches(user_id)
+        if not matches:
+            msg = (
+                "لا توجد قائمة وظائف حديثة لأتجاهل منها — ابحث عن دور أولاً ثم قل «تجاهل الوظيفة الأولى»."
+                if arabic else
+                "I don't have a recent job list to skip from yet. Search for a role first, "
+                "then say 'skip the first one'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "skip_job", "message": msg}
+
+        idx = len(matches) - 1 if ordinal == -1 else ordinal - 1
+        if idx < 0 or idx >= len(matches):
+            n = len(matches)
+            msg = (
+                f"لديك {n} وظيفة في قائمتك الأخيرة — أي واحدة أتجاهل؟ اختر رقماً من 1 إلى {n}."
+                if arabic else
+                f"You have {n} job{'s' if n != 1 else ''} in your recent list. "
+                f"Which one should I skip? Pick a number between 1 and {n}."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "skip_job", "message": msg}
+
+        job = matches[idx]
+        title = str(job.get("title") or "").strip()
+        company = str(job.get("company") or "").strip()
+        if not title:
+            msg = (
+                "لم أستطع قراءة تفاصيل تلك الوظيفة لأتجاهلها — جرّب «تجاهل <العنوان> لدى <الشركة>»."
+                if arabic else
+                "I couldn't read that job's details to skip it. Try 'skip <title> at <company>'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "skip_job", "message": msg}
+
+        return self._handle_skip_card_action(user_id, title, company, profile, arabic=arabic)
+
     def _resolve_profile(self, user_id: str):
         """Load and normalise profile into a ProfileContext.
 
@@ -7786,6 +7871,29 @@ class RicoChatAPI:
                 _skip_m.group("company"),
                 profile,
                 arabic=self._is_arabic_text(message),
+            )
+
+        # ── Ordinal Skip (#1262 phase 5) — "skip the first one" / «تجاهل الأولى»
+        # The Save/Skip buttons are retired; position-based skip gets the same
+        # deterministic route the named form above already has.
+        _skip_ord_m = (
+            _SKIP_ORDINAL_AR_RE.match(message)
+            if self._is_arabic_text(message)
+            else _SKIP_ORDINAL_RE.match(message)
+        )
+        if _skip_ord_m:
+            _sk_gd = _skip_ord_m.groupdict()
+            if _sk_gd.get("aord"):
+                _sk_tok = _sk_gd["aord"]
+                _sk_n = _ARABIC_ORDINAL_TO_INT.get(
+                    _sk_tok, _ARABIC_ORDINAL_TO_INT.get(_sk_tok.removeprefix("ال"), 0)
+                )
+            elif _sk_gd.get("word"):
+                _sk_n = _SKIP_WORD_ORDINAL_TO_INT[_sk_gd["word"].lower()]
+            else:
+                _sk_n = int(_sk_gd.get("num") or _sk_gd.get("num2") or 0)
+            return self._skip_job_by_ordinal(
+                user_id, _sk_n, profile, arabic=self._is_arabic_text(message),
             )
 
         # ── Manual Application Status: English (before Arabic block for priority) ─
