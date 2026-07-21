@@ -6258,3 +6258,62 @@ Owner: Claude (agent) / owner approvals in-session
 - Render: deploy-render success on 0665312f (latest backend-relevant main).
 - SMOKE-1197 + Delivery-Smoke: dispatched on main — results recorded in the
   session report.
+### TASK-20260721-007 — Atomic Postgres operation-ownership store (stabilization slice 1)
+
+Status: in_review
+Owner: Claude (agent), owner-directed ("اعمل اللازم" 2026-07-21 — first
+stabilization slice per DEC-20260721-001)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from main 963ba2e)
+Issue/PR: (opens with this branch's new PR)
+
+#### Objective
+Move chat job-search operation ownership from the in-process
+process-nonce model (safe ONLY single-instance/single-worker — pinned by
+test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker)
+to an atomic shared Postgres store: table `chat_operations` (migration 050),
+row-lock-serialized claims, heartbeat-lease liveness (renewal thread; missed
+lease = proof of executor death), SQL-enforced attempt fence, and an
+atomic-claim refusal path so a losing racer never runs a duplicate provider
+cascade. Deploy-order safe: until migration 050 is applied the code falls
+back to the legacy in-process behavior unchanged (single-worker invariant
+still stands; scaling stays blocked until slice-4 validation).
+
+#### Scope
+- migrations/050_chat_operations.sql (new, idempotent, additive)
+- src/repositories/chat_operations_repo.py (new)
+- src/services/operation_state.py (dual backend: postgres + memory fallback;
+  RICO_OPERATION_STORE=auto|postgres|memory, default auto)
+- src/rico_chat_api.py (claim-refusal → honest in-progress reply; no
+  history/analytics; never mark_failed on an unowned operation)
+- scripts/check_migration_drift.py (050 signature objects)
+- tests/conftest.py (suite-wide memory-backend default)
+- tests/unit/test_operation_duplicate_guard.py (docstrings rescoped to the
+  memory fallback)
+- tests/integration/test_operation_ownership_postgres.py (new — proves the
+  multi-worker-safety property on real Postgres)
+
+#### Continuity Block
+- Current head SHA: (set at commit)
+- Status: in_review — PR opens as draft; merge is owner-gated
+- Validation already run: py_compile; tests/unit 3,433 passed (incl. 37
+  operation-focused + drift checks after fix); focused canonical set 245
+  passed; operation-adjacent root tests 47 passed; NEW postgres integration
+  8/8 passed against a real local Postgres 16; full tests/integration run:
+  117 passed + 4 PRE-EXISTING failures in
+  test_jotform_webhook_to_chat_flow.py::TestPublicChatWithEmail (reproduced
+  identically on pre-change code via git stash — unrelated to this task)
+- Validation still required: CI pytest + postgres-integration on the PR head
+- Deployment: code-first is a NO-OP in production behavior until the owner
+  applies migration 050 to Neon (preview-branch validation per
+  OPERATING_RULES, then production apply); after apply, the Postgres store
+  activates automatically. Worker/instance count is NOT changed by this task.
+- Known blockers: none
+- Risks: DB unavailability falls back to legacy semantics (documented;
+  logged); heartbeat thread is daemon + self-terminating on terminal/supersede
+- Rollback plan: revert the PR (fallback path is the current production
+  behavior); migration 050 may stay applied (additive) or be dropped with
+  DROP TABLE IF EXISTS chat_operations
+- Next exact action: open draft PR, CI green, owner review; owner applies
+  migration 050 (preview branch → production) when approving activation
+- Stop condition: any CI regression in the duplicate-guard suite → fix
+  before merge; never raise workers/instances in this task

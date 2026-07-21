@@ -105,6 +105,12 @@ CHECKS: list[tuple[str, str, object]] = [
     ("049", "table", "whatsapp_subscription_requests"),
     ("049", "index", "uq_whatsapp_sub_requests_user_pending"),
     ("048", "index", "idx_rico_chat_user_session_created"),
+    # Atomic shared operation-ownership store (DEC-20260721-001 slice 1).
+    # Additive and deploy-order safe: until 050 is applied the code falls
+    # back to the legacy in-process ownership (single-worker invariant
+    # unchanged); the Postgres store activates once the table exists.
+    ("050", "table", "chat_operations"),
+    ("050", "index", "idx_chat_operations_user_latest"),
 ]
 
 

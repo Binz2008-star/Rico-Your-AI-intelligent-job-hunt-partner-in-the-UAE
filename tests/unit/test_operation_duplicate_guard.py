@@ -19,9 +19,13 @@ user intent):
 4. Guard replies are not job_matches: they emit NO analytics and append
    nothing to chat history.
 
-Production invariant (owner-accepted): safe only with exactly one Render
-instance and one uvicorn worker; scaling is blocked until ownership uses an
-atomic shared store.
+Backend note (DEC-20260721-001 slice 1): these tests pin the MEMORY backend
+(tests/conftest.py forces RICO_OPERATION_STORE=memory), which remains the
+DB-outage/pre-migration fallback and is safe only with exactly one Render
+instance and one uvicorn worker. The atomic shared Postgres store that lifts
+that invariant is proven separately in
+tests/integration/test_operation_ownership_postgres.py; scaling stays blocked
+until the multi-worker validation slice passes on that store.
 """
 from __future__ import annotations
 
@@ -422,11 +426,14 @@ def test_restart_preserves_completed_result_retrievability(monkeypatch):
 
 
 def test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker(monkeypatch):
-    """Documents WHY multi-worker/multi-instance is BLOCKED (production
-    invariant): a concurrently-ALIVE second process is indistinguishable
-    from a dead one under nonce ownership, so it would release ownership and
-    run a duplicate cascade. Scaling beyond one process requires moving
-    ownership to an atomic shared store first."""
+    """Documents WHY the MEMORY FALLBACK keeps multi-worker/multi-instance
+    BLOCKED: a concurrently-ALIVE second process is indistinguishable from a
+    dead one under nonce ownership, so it would release ownership and run a
+    duplicate cascade. The shared Postgres store (migration 050) closes
+    exactly this hole — proven by test_concurrent_worker_cannot_steal_live_operation
+    in tests/integration/test_operation_ownership_postgres.py — but while the
+    fallback can activate (DB outage / migration not applied), the
+    single-worker invariant stands until slice-4 validation."""
     mirror = _SharedMirror()
     worker_a = _ProcessSim(monkeypatch, mirror, nonce="proc-a")
     worker_b = _ProcessSim(monkeypatch, mirror, nonce="proc-b")
