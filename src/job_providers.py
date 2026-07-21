@@ -41,8 +41,16 @@ from threading import RLock
 from typing import Any, Callable, Dict, List, Optional
 
 from src.jsearch_client import FetchResult
+from src.services.cancellation import CancellationToken, is_cancelled as _is_cancelled
 
 logger = logging.getLogger(__name__)
+
+
+def _cancelled_result() -> FetchResult:
+    """The single, distinct cancellation outcome (never no-results/degradation/
+    quota/HTTP). Empty, flagged ``cancelled`` with ``error='ownership_lost'``;
+    callers discard it without side effects."""
+    return FetchResult(items=[], provider="none", cancelled=True, error="ownership_lost")
 
 # ── Tunables (env-overridable, no code change needed) ─────────────────────────
 # 24h shared result cache: identical (role, location) searches reuse results and
@@ -396,15 +404,28 @@ def search_jobs(
     use_cache: bool = True,
     internal_lookup: Optional[Callable[[], List[Dict[str, Any]]]] = None,
     cache_context: str = "",
+    cancel: Optional[CancellationToken] = None,
 ) -> FetchResult:
     """Run the provider cascade for *role* / *location* and return a FetchResult.
 
     The cascade short-circuits at the first provider that yields results, caches
     the normalized output for 24h, and degrades gracefully (never raises) when
     every provider is unavailable.
+
+    Cooperative cancellation (``cancel``, DEC-20260721-001 slice 4): if the
+    operation loses ownership at any observable checkpoint, the cascade stops
+    launching NEW providers, discards any in-flight/harvested result WITHOUT
+    side effects (no cache write, no winner), and returns the distinct
+    cancelled FetchResult. An absent token means 'never cancelled'.
     """
     role = (role or "").strip()
     key = _cache_key(role, location, country, cache_context)
+
+    # Cancelled before we start any work: no provider request, no cache read to
+    # deliver — return the distinct cancelled outcome immediately.
+    if _is_cancelled(cancel):
+        logger.info("provider_cascade_cancelled role=%r stage=entry", role)
+        return _cancelled_result()
 
     # 1. Cache first — identical searches never touch the network within the TTL.
     if use_cache:
@@ -464,10 +485,18 @@ def search_jobs(
         eligible.append((name, runner))
 
     def _run_provider(name: str, runner: Callable[[], FetchResult]) -> FetchResult:
+        # NEW-work guard: if ownership was already lost when this worker starts,
+        # do NOT issue the provider request at all — this is the core "no new
+        # provider work after cancellation" guarantee.
+        if _is_cancelled(cancel):
+            return _cancelled_result()
         # Degradation marking lives in the worker thread so a provider that
         # finishes AFTER a winner was chosen still records its rate/quota
-        # state for the cooldown registry.
+        # state for the cooldown registry — UNLESS we've been cancelled, in
+        # which case the in-flight response is discarded without side effects.
         result = runner()
+        if _is_cancelled(cancel):
+            return _cancelled_result()
         if result.rate_limited:
             mark_degraded(name, "rate_limit")
         if result.quota_exhausted:
@@ -484,8 +513,15 @@ def search_jobs(
         winner: Optional[FetchResult] = None
         started = 0
         t0 = time.time()
+        cancelled = False
         try:
             while True:
+                # Cancellation observed mid-cascade: stop launching NEW
+                # providers and discard whatever is pending — no winner, no
+                # cache write, no side effects.
+                if _is_cancelled(cancel):
+                    cancelled = True
+                    break
                 elapsed = time.time() - t0
                 # Launch the next provider when its stagger slot arrives, or
                 # immediately when everything launched so far finished empty.
@@ -508,6 +544,8 @@ def search_jobs(
                     except Exception as exc:  # defensive: providers never raise
                         logger.warning("provider_worker_error provider=%s err=%s", nm, type(exc).__name__)
                         continue
+                    if result.cancelled:
+                        continue  # a de-owned in-flight result — discard it
                     if result.rate_limited:
                         aggregate_rate_limited = True
                     if result.quota_exhausted:
@@ -518,6 +556,12 @@ def search_jobs(
                     break
         finally:
             pool.shutdown(wait=False)
+
+        # Final ownership re-check before delivering a winner: if ownership was
+        # lost after the winner was picked, discard it (no cache, not delivered).
+        if cancelled or _is_cancelled(cancel):
+            logger.info("provider_cascade_cancelled role=%r stage=harvest", role)
+            return _cancelled_result()
 
         if winner is not None:
             _cache_put(key, winner.items)

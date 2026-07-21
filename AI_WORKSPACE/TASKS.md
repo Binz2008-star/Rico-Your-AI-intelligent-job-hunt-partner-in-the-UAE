@@ -6818,3 +6818,41 @@ Owner review of #1304 (head ee37126e) found two issues; both handled here:
 Revised head after follow-up: (set at commit). CI: full unit + postgres
 integration green on the new head. **No merge, no deploy, no worker/instance
 change** (owner stop conditions).
+
+#### Follow-up (2026-07-21, owner-directed) — end-to-end cooperative cancellation LANDED (own PR; #1305 frozen, no new TASK ID)
+The BLOCKER named above (post-claim-partition duplicate-cascade cancellation)
+is now implemented — the ownership-loss signal finally has a real executor
+consumer, so a de-owned worker stops NEW provider work and discards in-flight
+results without side effects.
+
+Guarantee delivered (NOT a claim to abort an already-sent urllib request):
+"No new provider work after cancellation becomes observable; any already
+in-flight response is discarded without side effects."
+
+- NEW `src/services/cancellation.py` — dependency-free `CancellationToken`
+  (operation_id, attempt, `is_cancelled` callable). job_providers/jsearch_client
+  do NOT import operation_state; the token is passed EXPLICITLY down the cascade.
+  rico_chat_api binds it to `operation_state.ownership_lost(op, attempt)`.
+- `FetchResult.cancelled: bool` — a DISTINCT outcome (`error="ownership_lost"`),
+  never conflated with no-results / degradation / quota / HTTP error.
+- `job_providers.search_jobs(..., cancel=token)` checkpoints: entry (no provider
+  call, no cache read delivered), per-worker before the HTTP runner (no NEW
+  request), post-worker (in-flight result discarded, NOT marked degraded),
+  harvest loop (stop launching, discard), and a final pre-deliver re-check
+  (no cache write, not delivered). attempt fence stays the final write guard.
+- rico_chat_api: `_current_cancellation_token()` + `_fetch_jobs_with_cancel()`
+  (signature-safe for monkeypatched stand-ins). On a cancelled fetch the search
+  path returns an honest `search_superseded` reply and records NOTHING — no
+  mark_completed, no observations, no results delivered.
+- Tests: tests/test_provider_cascade_cancellation.py (7 — entry/worker/in-flight
+  discard/distinct-outcome/absent-token/raising-check/end-to-end real token→real
+  cascade); tests/unit/test_job_search_operation_state.py +2 (superseded-no-record;
+  token↔ownership_lost binding). Full tests/unit 3,451 passed; multiworker 8/8 +
+  ownership 9/9 on real Postgres.
+
+STILL owner-gated (NOT changed here): raising Render workers/instances and
+setting RICO_OPERATION_STORE=postgres in production remain a SEPARATE owner
+decision after this lands + is verified. This PR does NOT raise workers, does
+NOT deploy, and does NOT merge itself. TASK-014 stays in_review pending owner
+review of the cancellation consumer and the gate decision.
+Revised head: (set at commit).

@@ -188,3 +188,63 @@ def test_mark_failed_does_not_overwrite_completed_operation():
     assert latest is not None
     assert latest["status"] == "completed"
     assert latest["result_count"] == 2
+
+
+def test_ownership_lost_midcascade_yields_superseded_no_record(monkeypatch):
+    """Executor consumer (DEC-20260721-001 slice 4): when the provider cascade
+    returns a cancelled FetchResult (ownership lost mid-flight), the search
+    path returns an honest 'superseded' reply and records NOTHING — no
+    mark_completed, no results delivered, no observations."""
+    reset_for_tests()
+    import src.services.operation_state as ops
+    import src.rico_chat_api as rca
+
+    api = RicoChatAPI(persist=False)
+    api._current_operation_id = "op_lost"
+    api._current_operation_attempt = 1
+    monkeypatch.setattr(api, "_append_chat", lambda *a, **k: None)
+
+    # The cascade observes ownership loss and returns the distinct cancelled result.
+    monkeypatch.setattr(
+        api, "_search_jsearch_meta",
+        lambda role, location="", *, cancel=None: FetchResult(
+            items=[], provider="none", cancelled=True, error="ownership_lost"
+        ),
+    )
+    # The legacy fallback must NOT run for a cancelled search.
+    monkeypatch.setattr(
+        api.system, "run_for_profile",
+        lambda profile: (_ for _ in ()).throw(AssertionError("fallback must not run when cancelled")),
+    )
+    # mark_completed must NOT be called for a de-owned worker.
+    monkeypatch.setattr(
+        rca, "mark_completed",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("mark_completed must not run when cancelled")),
+    )
+
+    response = api._classified_role_search("user-lost", "HSE Manager", _profile())
+
+    assert response["type"] == "search_superseded"
+    assert response["operation_status"] == "superseded"
+    assert response["response_source"] == "operation_ownership_lost"
+    assert "result_count" not in response or not response.get("result_count")
+
+
+def test_token_wires_ownership_lost_check(monkeypatch):
+    """_current_cancellation_token binds to operation_state.ownership_lost for
+    the exact (operation_id, attempt)."""
+    reset_for_tests()
+    import src.services.operation_state as ops
+
+    api = RicoChatAPI(persist=False)
+    api._current_operation_id = "op_tok"
+    api._current_operation_attempt = 3
+    tok = api._current_cancellation_token()
+    assert tok is not None and tok.operation_id == "op_tok" and tok.attempt == 3
+    assert tok.cancelled is False
+    ops._mark_ownership_lost("op_tok", 3)
+    assert tok.cancelled is True
+    # a different generation is unaffected
+    api._current_operation_attempt = 4
+    assert api._current_cancellation_token().cancelled is False
+    reset_for_tests()

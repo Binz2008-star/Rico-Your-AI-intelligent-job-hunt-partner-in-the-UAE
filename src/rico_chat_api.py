@@ -2227,6 +2227,45 @@ class RicoChatAPI:
     def _operation_attempt(self) -> int | None:
         return getattr(self, "_current_operation_attempt", None)
 
+    def _current_cancellation_token(self):
+        """Build a CancellationToken bound to the current operation's ownership.
+
+        When the operation loses ownership mid-cascade (a peer took over after a
+        partition), `operation_state.ownership_lost` flips True and the provider
+        cascade stops new work + discards in-flight results (slice 4). Returns
+        None when there is no active operation, so callers pass 'never
+        cancelled'. The token wraps the ownership check as a plain callable so
+        the provider layer never imports operation_state."""
+        op_id = getattr(self, "_current_operation_id", None)
+        attempt = getattr(self, "_current_operation_attempt", None)
+        if not op_id or attempt is None:
+            return None
+        from src.services.cancellation import CancellationToken
+        from src.services import operation_state
+        _op, _at = str(op_id), int(attempt)
+        return CancellationToken(
+            operation_id=_op,
+            attempt=_at,
+            is_cancelled=lambda: operation_state.ownership_lost(_op, _at),
+        )
+
+    def _fetch_jobs_with_cancel(self, role: str, location: str, cancel: Any):
+        """Call _search_jsearch_meta with the cancel token when the (possibly
+        monkeypatched) callable accepts it; otherwise fall back to the legacy
+        signature so test stand-ins keep working unchanged."""
+        import inspect
+        fn = self._search_jsearch_meta
+        try:
+            params = inspect.signature(fn).parameters
+            accepts_cancel = "cancel" in params or any(
+                p.kind == p.VAR_KEYWORD for p in params.values()
+            )
+        except (TypeError, ValueError):
+            accepts_cancel = False
+        if location:
+            return fn(role, location, cancel=cancel) if accepts_cancel else fn(role, location)
+        return fn(role, cancel=cancel) if accepts_cancel else fn(role)
+
     def _duplicate_operation_guard(
         self, user_id: str, operation_id: str, message: str, language: str | None
     ) -> dict[str, Any] | None:
@@ -6299,12 +6338,16 @@ class RicoChatAPI:
     }
 
     @staticmethod
-    def _search_jsearch_meta(role: str, location: str = "") -> Any:
+    def _search_jsearch_meta(role: str, location: str = "", *, cancel: Any = None) -> Any:
         """Query live UAE jobs for *role* via the provider cascade (cache → Jooble
         → Adzuna → JSearch → degraded), with cache + retry + quota protection.
 
         When *location* is given the query targets that specific UAE city instead of
         the generic "UAE" suffix, producing sharper results for city-constrained searches.
+
+        ``cancel`` (optional CancellationToken): when the operation loses
+        ownership mid-flight, the cascade stops new provider work and returns a
+        distinct cancelled FetchResult — see src/services/cancellation.py.
 
         Returns a ``jsearch_client.FetchResult`` so the caller can tell a genuine
         empty result apart from a rate-limited / quota-exhausted source. Never raises.
@@ -6313,7 +6356,7 @@ class RicoChatAPI:
         """
         from src import job_providers
 
-        result = job_providers.search_jobs(role, location)
+        result = job_providers.search_jobs(role, location, cancel=cancel)
         logger.info(
             "provider_search role=%r location=%r provider=%s results=%d cache_hit=%s rate_limited=%s quota=%s",
             role, location or "UAE", result.provider, len(result.items),
@@ -6596,12 +6639,37 @@ class RicoChatAPI:
         _search_start = _time.monotonic()
         try:
             # Pass location only when set — keeps single-arg monkeypatched
-            # stand-ins (tests) and any legacy overrides working unchanged.
-            fetch = (
-                self._search_jsearch_meta(search_role, _provider_location)
-                if _provider_location
-                else self._search_jsearch_meta(search_role)
-            )
+            # stand-ins (tests) and any legacy overrides working unchanged. The
+            # cancel token lets the cascade stop new provider work and discard
+            # in-flight results if this operation loses ownership (slice 4).
+            _cancel = self._current_cancellation_token()
+            fetch = self._fetch_jobs_with_cancel(search_role, _provider_location, _cancel)
+
+            # Cooperative cancellation: a de-owned worker must NOT record or
+            # deliver anything. No cache write (the cascade already skipped it),
+            # no job_observations, no mark_completed, no results to the user —
+            # return an honest superseded reply. The attempt fence remains the
+            # final write-time guard for anything downstream.
+            if getattr(fetch, "cancelled", False):
+                logger.info(
+                    "job_search_cancelled_ownership_lost role=%r op=%s attempt=%s",
+                    search_role, operation_id, self._operation_attempt(),
+                )
+                return {
+                    "type": "search_superseded",
+                    "intent": "search_jobs",
+                    "success": True,
+                    "operation_id": operation_id,
+                    "operation_type": "job_search",
+                    "operation_status": "superseded",
+                    "response_source": "operation_ownership_lost",
+                    "message": (
+                        "تم استئناف هذا البحث في جلسة أحدث — لم أكمل النتيجة القديمة."
+                        if arabic else
+                        "This search was resumed in a newer session — I didn't finish the old one."
+                    ),
+                }
+
             all_matches = fetch.items
             rate_limited = fetch.rate_limited
             quota_exhausted = getattr(fetch, "quota_exhausted", False)

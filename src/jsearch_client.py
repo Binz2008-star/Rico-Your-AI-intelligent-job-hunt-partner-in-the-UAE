@@ -67,6 +67,14 @@ class FetchResult:
     error: Optional[str] = None
     quota_exhausted: bool = False
     provider: str = "jsearch"
+    # ``cancelled`` is True ONLY when the search operation lost ownership
+    # mid-flight (cooperative cancellation, DEC-20260721-001 slice 4). It is a
+    # DISTINCT outcome — never conflated with no-results, provider degradation,
+    # quota exhaustion, or an HTTP error. When cancelled, ``error`` is
+    # "ownership_lost" and callers MUST discard the result: no cache write, no
+    # job_observations, no provider-winner, no terminal response, not delivered
+    # to the user. The attempt fence stays the final write-time guard.
+    cancelled: bool = False
 
 
 def clear_cache() -> None:
