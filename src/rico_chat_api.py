@@ -6697,15 +6697,19 @@ class RicoChatAPI:
         # an eligibility error must never block or alter the search response,
         # it just withholds the suggestion sentence.
         _offer_daily = False
+        _offer_save = False
         if top_matches:
             try:
                 from src.services.scheduled_search_service import (
+                    _is_public_identity,
                     should_offer_scheduled_search,
                 )
 
                 _offer_daily = should_offer_scheduled_search(user_id)
+                _offer_save = not _is_public_identity(user_id)
             except Exception:
                 _offer_daily = False
+                _offer_save = False
 
         message = self._build_role_search_message(
             normalized_role, city_text, basis_text, top_matches, role_intelligence_data,
@@ -6713,6 +6717,7 @@ class RicoChatAPI:
             arabic=arabic,
             filtered_off_title=_off_title_only,
             offer_scheduled_search=_offer_daily,
+            offer_save_search=_offer_save,
         )
 
         response = {
@@ -6833,6 +6838,7 @@ class RicoChatAPI:
         arabic: bool = False,
         filtered_off_title: bool = False,
         offer_scheduled_search: bool = False,
+        offer_save_search: bool = False,
     ) -> str:
         """Build message for role search response."""
         if from_saved_profile:
@@ -6955,6 +6961,16 @@ class RicoChatAPI:
                 " تجد كل وظائفك في [لوحة الوظائف](/flow) في أي وقت."
                 if arabic else
                 " Everything lives on [your jobs board](/flow) anytime."
+            )
+
+        # Save-search offer (#1262 phase 3): the retired "Save search" card,
+        # spoken. The suggested phrase routes via the deterministic
+        # save_search_create intent (pinned in tests), never save_job.
+        if top_matches and offer_save_search:
+            base_message += (
+                " لحفظ هذا البحث قل: «احفظ هذا البحث»."
+                if arabic else
+                " To keep this search, just say: \"save this search\"."
             )
 
         # Conversational scheduled-search offer (#1249): same OPT-IN idiom as
@@ -9195,6 +9211,78 @@ class RicoChatAPI:
             )
             self._append_chat(user_id, "assistant", _ss_resp.get("message", ""))
             return self._finalize(_ss_resp, self.SOURCE_KEYWORD, profile=profile)
+
+        # Save-search (#1262 phase 3) — the conversational replacement for the
+        # retired "Save search" card, and the routing fix for its old payload
+        # phrase (previously swallowed by the save_job regex, which then tried
+        # to save a JOB). Saves the named role, else the most recent search.
+        if legacy_intent == "save_search_create":
+            _sv_arabic = self._is_arabic_text(message)
+            from src.services.scheduled_search_service import _is_public_identity
+
+            if _is_public_identity(user_id):
+                _sv_msg = (
+                    "حفظ البحث ميزة للحسابات المسجلة — سجّل دخولك أولاً."
+                    if _sv_arabic else
+                    "Saving searches is an account feature — please sign in first."
+                )
+                _sv_resp = {"type": "save_search", "action": "signin_required", "message": _sv_msg}
+                self._append_chat(user_id, "assistant", _sv_msg)
+                return self._finalize(_sv_resp, self.SOURCE_KEYWORD, profile=profile)
+
+            _sv_match = re.search(
+                r"save\s+(?:this|that|the|my)?\s*search\s+for\s+(.+)", message, re.IGNORECASE
+            )
+            _sv_role = (_sv_match.group(1).strip().rstrip(".?!") if _sv_match else "")
+            _sv_location = ""
+            if not _sv_role:
+                try:
+                    _sv_ctx = self._get_recent_context(user_id) or {}
+                    _sv_role = (_sv_ctx.get("recent_search_role") or "").strip()
+                    _sv_location = (_sv_ctx.get("recent_search_location") or "").strip()
+                except Exception:
+                    _sv_role = ""
+            if not _sv_role:
+                _sv_msg = (
+                    "لم أجد بحثاً حديثاً لأحفظه — ابحث أولاً ثم قل: «احفظ هذا البحث»."
+                    if _sv_arabic else
+                    "I don't have a recent search to save — run a search first, then say: \"save this search\"."
+                )
+                _sv_resp = {"type": "save_search", "action": "no_recent_search", "message": _sv_msg}
+                self._append_chat(user_id, "assistant", _sv_msg)
+                return self._finalize(_sv_resp, self.SOURCE_KEYWORD, profile=profile)
+
+            _sv_query = _sv_role + (f" in {_sv_location}" if _sv_location else "")
+            try:
+                from src.repositories.profile_repo import save_search as _repo_save_search
+
+                _sv_id = _repo_save_search(user_id, _sv_query, {"source": "chat"})
+            except Exception:
+                logger.exception("save_search_create failed user=%s", user_ref(user_id))
+                _sv_id = None
+            if _sv_id:
+                _sv_msg = (
+                    f"تم! حفظت البحث «{_sv_query}» — تجده في [بحوثك المحفوظة](/saved-searches)."
+                    if _sv_arabic else
+                    f"Saved! \"{_sv_query}\" is now in [your saved searches](/saved-searches)."
+                )
+                _sv_action = "created"
+            else:
+                # Honest failure — never claim a save that didn't persist.
+                _sv_msg = (
+                    "لم أستطع حفظ البحث الآن — حاول مرة أخرى بعد قليل."
+                    if _sv_arabic else
+                    "I couldn't save that search right now — please try again shortly."
+                )
+                _sv_action = "failed"
+            _sv_resp = {
+                "type": "save_search",
+                "action": _sv_action,
+                "message": _sv_msg,
+                "query": _sv_query,
+            }
+            self._append_chat(user_id, "assistant", _sv_msg)
+            return self._finalize(_sv_resp, self.SOURCE_KEYWORD, profile=profile)
 
         # Emotional support / frustration (BUG #9) — empathetic reply before any action.
         # Never jump straight to a job search when the user is expressing frustration.
@@ -14079,6 +14167,12 @@ class RicoChatAPI:
                         msg = "لا توجد وظائف محفوظة لحذفها."
                     else:
                         msg = "No saved jobs found to delete."
+                # Phase 3 of #1262: spoken fresh-start offer replaces the card.
+                msg += (
+                    " قل «ابحث لي عن وظائف» متى أردت البدء من جديد."
+                    if arabic else
+                    " Say \"find me jobs\" whenever you want a fresh start."
+                )
                 self._append_chat(user_id, "assistant", msg)
                 return {
                     "type": "delete_saved_jobs_done",

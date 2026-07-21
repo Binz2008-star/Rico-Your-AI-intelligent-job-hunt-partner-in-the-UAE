@@ -6,7 +6,9 @@ import { expect, test, type Page } from "@playwright/test";
  * The "Refine search" card is a STRUCTURED open_drawer action: clicking it
  * must never send any chat message; the refinement panel collects role+city
  * and only the final composed natural-language query reaches the chat
- * endpoint. Also pins the prompt→message contract repair for "Save search".
+ * endpoint. Saving the search is CONVERSATIONAL (#1262 phase 3): the user
+ * types the phrase Rico offers in the message, and it goes over the wire
+ * verbatim — there is no save-search card anymore.
  *
  * The job_matches agentic_ui fixture below is the REAL output of
  * src/services/agentic_ui_composer.compose() for this response type — keep
@@ -16,18 +18,11 @@ import { expect, test, type Page } from "@playwright/test";
 const PROXY_API = "/proxy/api/v1";
 
 // Real composer output for {type: job_matches, matches:[…], search_query: "Senior HSE Manager"}
-// Phase 2 of #1262: the view-jobs navigation card is retired — the jobs-board
-// pointer is spoken inside the message text instead.
+// Phases 2–3 of #1262: the view-jobs navigation card and the save-search
+// suggestion card are retired — Rico speaks the pointer and the save offer
+// inside the message text; refine stays as the one structured UI action.
 const AGENTIC_UI = {
     actions: [
-        {
-            id: "save-search",
-            label: "Save search",
-            kind: "chat_continue",
-            impact: "medium",
-            requires_confirmation: false,
-            payload: { message: "save this search for Senior HSE Manager" },
-        },
         {
             id: "refine-search",
             label: "Refine search",
@@ -43,7 +38,8 @@ const AGENTIC_UI = {
 };
 
 const JOB_MATCHES_RESPONSE = {
-    response: "Found 2 Senior HSE Manager roles in Dubai:",
+    response:
+        'Found 2 Senior HSE Manager roles in Dubai: To keep this search, just say: "save this search".',
     type: "job_matches",
     search_query: "Senior HSE Manager",
     matches: [
@@ -125,7 +121,6 @@ async function mockCommand(page: Page): Promise<Array<Record<string, unknown>>> 
 // (element was detached from the DOM → 30s timeout). These helpers gate every
 // interaction on the settled, final card state instead.
 const JOB_MATCH_CARD_IDS = [
-    "action-card-chat-continue",
     "action-card-open-drawer",
 ] as const;
 
@@ -199,10 +194,9 @@ test.describe("Refine search — structured action (P1)", () => {
         await searchAndOpenCards(page, "Find me Senior HSE Manager jobs in Dubai", chatBodies);
         expect(chatBodies).toHaveLength(1);
 
-        // The cards render; refine is the structured open_drawer one.
-        // (Phase 2 of #1262: no navigation card — the jobs-board pointer is
-        // spoken in the message text.)
-        await expect(page.getByTestId("action-card-chat-continue")).toHaveText("Save search");
+        // Refine is the ONLY card (phases 2–3 of #1262: no navigation card,
+        // no save-search card — those are spoken in the message text).
+        await expect(page.getByTestId("action-card-chat-continue")).toHaveCount(0);
         const refine = page.getByTestId("action-card-open-drawer");
         await expect(refine).toHaveText("Refine search");
         await shot(page, "1-en-cards");
@@ -240,16 +234,24 @@ test.describe("Refine search — structured action (P1)", () => {
         }
     });
 
-    test("EN: Save search sends its payload message, never the label", async ({ page }) => {
+    test("EN: the spoken save offer renders and the typed phrase goes over the wire verbatim", async ({ page }) => {
         const chatBodies = await mockCommand(page);
         await page.goto("/command");
         await searchAndOpenCards(page, "Find me Senior HSE Manager jobs in Dubai", chatBodies);
 
-        await clickSettledCard(page, "action-card-chat-continue");
+        // Phase 3 of #1262: no save-search card — Rico offers the phrase in
+        // his message and the user simply types it.
+        await expect(page.getByTestId("action-card-chat-continue")).toHaveCount(0);
+        await expect(
+            page.getByText('just say: "save this search"'),
+        ).toBeVisible();
+
+        const input = page.getByTestId("atelier-composer").locator("textarea");
+        await input.fill("save this search");
+        await page.getByTestId("send-button").click();
         await expect.poll(() => chatBodies.length).toBe(2);
-        expect(chatBodies[1].message).toBe("save this search for Senior HSE Manager");
-        expect(chatBodies[1].message).not.toBe("Save search");
-        await shot(page, "4-en-save-search-payload");
+        expect(chatBodies[1].message).toBe("save this search");
+        await shot(page, "4-en-save-search-spoken");
     });
 
     test("AR: panel is bilingual and composes an Arabic query", async ({ page }) => {
