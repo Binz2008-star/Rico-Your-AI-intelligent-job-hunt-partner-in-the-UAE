@@ -89,6 +89,73 @@ class TestSlotExtraction:
             "find me ESG jobs in Abu Dhabi"
         ) == {}
 
+    def test_arabic_bank_inquiry_mid_sentence(self):
+        """Production regression (2026-07-21): «لبنك …» with the sentence
+        continuing past the company. The connectors (في شركة/لدى/لشركة) missed
+        the bare institution form, and the end-anchored patterns failed on the
+        continuation — the user got a generic which-company question after
+        naming the company."""
+        slots = RicoChatAPI._extract_explicit_draft_job_from_message(
+            "اكتبلي ايميل لبنك دبي الاسلامي استعلم به عن وظائف واعرض مهاراتي وخبراتي"
+        )
+        assert slots.get("company") == "بنك دبي الاسلامي"
+        assert slots.get("language") == "ar"
+
+    def test_arabic_institution_variants(self):
+        for msg, company in [
+            ("اكتب لي خطاب لمصرف الإمارات المركزي.", "مصرف الإمارات المركزي"),
+            ("اكتب لي رسالة إلى هيئة الطرق والمواصلات عن وظائف", "هيئة الطرق والمواصلات"),
+        ]:
+            slots = RicoChatAPI._extract_explicit_draft_job_from_message(msg)
+            assert slots.get("company") == company, msg
+
+
+# ---------------------------------------------------------------------------
+# 1b. Vocative guard + clarification language (production regressions 2026-07-21)
+# ---------------------------------------------------------------------------
+
+class TestVocativeGuardAndClarificationLanguage:
+    """The live defect: a user whose profile.name was polluted by CV parsing
+    (a CV headline — "Vip Relationship Manager") was greeted BY that title, in
+    English, in reply to an Arabic request. The guard and the arabic param are
+    global — any user, any language."""
+
+    def _profile(self, name):
+        return SimpleNamespace(
+            name=name, target_roles=["Environmental Manager"], skills=[],
+        )
+
+    def test_role_like_name_never_used_as_vocative(self):
+        assert RicoChatAPI._vocative_name(self._profile("Vip Relationship Manager")) == ""
+        assert RicoChatAPI._vocative_name(self._profile("مدير علاقات كبار العملاء")) == ""
+
+    def test_real_names_pass_the_guard(self):
+        assert RicoChatAPI._vocative_name(self._profile("Roben Edwan")) == "Roben Edwan"
+        assert RicoChatAPI._vocative_name(self._profile("روبن")) == "روبن"
+
+    def test_clarification_omits_role_like_name(self):
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        msg = api._cover_letter_clarification_message(
+            self._profile("Vip Relationship Manager"), arabic=False
+        )
+        assert "Vip Relationship Manager" not in msg
+        assert "I can write a cover letter for you." in msg
+
+    def test_arabic_request_gets_arabic_clarification(self):
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        msg = api._cover_letter_clarification_message(self._profile("روبن"), arabic=True)
+        assert "يمكنني كتابة خطاب تقديم" in msg
+        assert "I can write" not in msg
+
+    def test_company_prefilled_arabic_clarification_asks_only_for_role(self):
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        msg = api._cover_letter_clarification_message(
+            self._profile("روبن"),
+            {"company": "بنك دبي الاسلامي", "language": "ar"},
+        )
+        assert "بنك دبي الاسلامي" in msg
+        assert "المسمى الوظيفي" in msg
+
 
 # ---------------------------------------------------------------------------
 # 2. End-to-end chat flow harness (mirrors test_cover_letter_context_isolation)
