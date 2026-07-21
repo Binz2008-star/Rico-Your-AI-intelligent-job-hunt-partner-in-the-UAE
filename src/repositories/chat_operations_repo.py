@@ -3,7 +3,7 @@
 DEC-20260721-001 stabilization slice 1: claims are serialized with a row lock
 (SELECT ... FOR UPDATE) and liveness is a heartbeat lease, so ownership is
 correct across any number of workers/instances — unlike the in-process nonce
-model this replaces (see migration 050 header for the full rationale).
+model this replaces (see migration 051 header for the full rationale).
 
 Contract with src/services/operation_state.py (the only intended caller):
 every function raises RepoUnavailable on infrastructure problems (no

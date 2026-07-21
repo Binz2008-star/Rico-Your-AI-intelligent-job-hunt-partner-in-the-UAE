@@ -6273,22 +6273,26 @@ ID collision with the profile-avatar task entry above.
 Move chat job-search operation ownership from the in-process
 process-nonce model (safe ONLY single-instance/single-worker — pinned by
 test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker)
-to an atomic shared Postgres store: table `chat_operations` (migration 050),
+to an atomic shared Postgres store: table `chat_operations` (migration 051 —
+renumbered from 050 on 2026-07-21; 050 stays with user_avatars, the older reference),
 row-lock-serialized claims, heartbeat-lease liveness (renewal thread; missed
 lease = proof of executor death), SQL-enforced attempt fence, and an
 atomic-claim refusal path so a losing racer never runs a duplicate provider
-cascade. Deploy-order safe: until migration 050 is applied the code falls
-back to the legacy in-process behavior unchanged (single-worker invariant
-still stands; scaling stays blocked until slice-4 validation).
+cascade. Migration 051 (chat_operations + idx_chat_operations_user_latest)
+is APPLIED — verified read-only on production Neon 2026-07-21 (#1299
+evidence: to_regclass PRESENT for both) — so the Postgres store is ACTIVE
+in production. Scaling workers/instances stays BLOCKED until slice-4
+validation passes.
 
 #### Scope
-- migrations/050_chat_operations.sql (new, idempotent, additive)
+- migrations/050_chat_operations.sql (new, idempotent, additive; renamed
+  to 051_chat_operations.sql on 2026-07-21 — identity is now 051)
 - src/repositories/chat_operations_repo.py (new)
 - src/services/operation_state.py (dual backend: postgres + memory fallback;
   RICO_OPERATION_STORE=auto|postgres|memory, default auto)
 - src/rico_chat_api.py (claim-refusal → honest in-progress reply; no
   history/analytics; never mark_failed on an unowned operation)
-- scripts/check_migration_drift.py (050 signature objects)
+- scripts/check_migration_drift.py (chat_operations signature objects — now under id 051)
 - tests/conftest.py (suite-wide memory-backend default)
 - tests/unit/test_operation_duplicate_guard.py (docstrings rescoped to the
   memory fallback)
@@ -6308,20 +6312,21 @@ still stands; scaling stays blocked until slice-4 validation).
   test_jotform_webhook_to_chat_flow.py::TestPublicChatWithEmail (reproduced
   identically on pre-change code via git stash — unrelated to this task)
 - Validation still required: CI pytest + postgres-integration on the PR head
-- Deployment: code-first is a NO-OP in production behavior until the owner
-  applies migration 050 to Neon (preview-branch validation per
-  OPERATING_RULES, then production apply); after apply, the Postgres store
-  activates automatically. Worker/instance count is NOT changed by this task.
+- Deployment: migration (applied while numbered 050; reference identity now
+  051) is PRESENT in production Neon — verified read-only 2026-07-21
+  (to_regclass: chat_operations + idx_chat_operations_user_latest both
+  PRESENT). The Postgres store is therefore ACTIVE. Renaming the file does
+  not and cannot un-apply the object; the drift guard checks object
+  presence, not filenames. Worker/instance count is NOT changed by this task.
 - Known blockers: none
 - Risks: DB unavailability falls back to legacy semantics (documented;
   logged); heartbeat thread is daemon + self-terminating on terminal/supersede
 - Rollback plan: revert the PR (fallback path is the current production
-  behavior); migration 050 may stay applied (additive) or be dropped with
+  behavior); migration 051 may stay applied (additive) or be dropped with
   DROP TABLE IF EXISTS chat_operations
-- Next exact action (owner): apply migration 050 to Neon (preview branch →
-  production per OPERATING_RULES) to activate the Postgres store; until
-  then production runs the unchanged legacy fallback (one warning log line
-  per search). Workers/instances stay at 1 until slice-4 validation.
+- Next exact action: none — migration applied and Postgres store active
+  (verified 2026-07-21). Workers/instances stay at 1 (BLOCKED) until
+  slice-4 multi-worker validation passes.
 - Stop condition: met — merged and deployed; no further writes on this task
 
 
@@ -6388,8 +6393,10 @@ language follows the user's message language.
 ### TASK-20260721-009 — Admin operations observability endpoint (stabilization slice 2)
 
 Status: done — #1293 merged 2026-07-21 (squash 2ed5cee7); "Deploy Render
-Backend" for 2ed5cee7 = success (/version-gated). Operations section stays
-available=false honestly until the owner applies migration 050.
+Backend" for 2ed5cee7 = success (/version-gated). chat_operations (id 051,
+applied while numbered 050) is PRESENT in production — verified read-only
+2026-07-21 — so the operations section reports available=true (store
+active); confirm visually at the next owner admin smoke.
 Owner: Claude (agent), owner-directed ("تمام باشر" 2026-07-21 — slice 2 per
 DEC-20260721-001: monitoring for errors, costs, stuck operations)
 Branch: claude/ricco-research-improvements-dkmhin (restarted from main b8379d7)
@@ -6424,8 +6431,8 @@ Explicitly deferred (later increments): per-token AI spend counters
   tests/unit 3,434 passed after the app.py router registration
 - Validation still required: CI pytest + postgres-integration on PR head
 - Deployment: additive read-only endpoint; no schema change, no migration;
-  operations section reports available=false honestly until migration 050
-  is applied (store fallback), then lights up automatically
+  chat_operations (id 051) verified PRESENT in production 2026-07-21, so
+  the operations section is live (available=true, store active)
 - Known blockers: none
 - Risks: none material — endpoint is read-only, admin-gated, value-free
   (booleans/counts/enum strings; no key values, user identifiers, or query
@@ -6530,3 +6537,79 @@ sign-off), not missing code.
 - Stop condition: any conflict between this report and live GitHub state →
   live state wins; report to owner
 - Rollback plan: revert the PR (single new doc + ledger entry)
+
+### TASK-20260721-012 — Renumber duplicate migration 050: chat_operations → 051
+
+Status: review
+Owner: Claude (agent), owner-directed single-item execution (2026-07-21)
+Branch: claude/system-tools-analysis-wc4o4g (restarted from main fdb4ff3c, contains #1297)
+Issue/PR: set at PR open (DRAFT — owner merges; agent stops at evidence report)
+
+#### Objective
+Remove the duplicate migration number 050 (readiness report §5.1):
+050_user_avatars (#1279, 11:45) and 050_chat_operations (#1285, 13:40)
+collided. Decision per owner rule (applied-first / older-reference):
+user_avatars keeps 050; chat_operations renumbered to 051 (next free —
+verified no 051 reference existed anywhere).
+
+#### Evidence gathered before changing anything
+- Read-only Neon production check (project robenjob): user_avatars PRESENT,
+  chat_operations PRESENT, idx_chat_operations_user_latest PRESENT — BOTH
+  are applied, so the older-reference criterion decided the keeper. No SQL
+  was executed beyond SELECT to_regclass.
+- Drift guard checks OBJECT PRESENCE, not filenames, and there is no
+  filename-based migration ledger — the rename is DB-neutral by design.
+- scripts/apply_migration_drift.py: no 050/chat_operations references.
+
+#### Atomic change set
+- migrations/050_chat_operations.sql → 051_chat_operations.sql (git rename,
+  97% similarity; only the header number line changed — SQL body untouched)
+- scripts/check_migration_drift.py: both chat_operations entries 050 → 051
+  + renumber note in the comment
+- src/services/operation_state.py, src/repositories/chat_operations_repo.py,
+  tests/unit/test_operation_duplicate_guard.py: comment references 050 → 051
+- tests/integration/test_operation_ownership_postgres.py: _MIGRATION file
+  path updated (functional reference)
+- NEW tests/unit/test_migration_numbering.py: (1) unique numeric prefixes,
+  (2) every drift-guard CHECKS id maps to an existing migration file
+- AI_WORKSPACE: TASKS prose for TASK-008/-009 updated to 051;
+  LAUNCH_READINESS §5.1 marked RESOLVED
+
+#### Proofs (rule 6)
+- [x] Fail-before: test_migration_numbers_are_unique FAILED on pre-fix tree
+      with {'050': ['050_chat_operations.sql', '050_user_avatars.sql']}
+- [x] Pass-after: 2/2 numbering tests; drift-guard ids unique
+      (005…050,051); chat_operations → 051 entries, user_avatars → 050
+- [x] No runtime/schema change: rename similarity 97% (header line only);
+      all other code edits are comments + one test path constant
+- [x] Broad run: tests/unit/ + test_agent + test_agent_runtime +
+      test_avatar_endpoints — 3605 passed
+- [ ] Full PR CI on exact head
+
+#### Continuity Block
+- Task ID: TASK-20260721-012
+- GitHub issue/PR: set at PR open
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: fdb4ff3c
+- Current head SHA: set at commit
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files changed: as in the atomic change set above
+- Files intentionally not touched: migrations/050_user_avatars.sql (keeper);
+  PRs #1295/#1206/#1138/#1129 (not merged this cycle per owner); #1177
+  (stays ON HOLD); #1136 (not closed here — board disposition comes after
+  this fix merges)
+- What is complete: renumber + all references + proofs, local
+- What is incomplete: full CI on the PR head; owner merge
+- Known blockers: none
+- Validation already run: see Proofs
+- Validation still required: full PR CI (qa-tests dispatch fallback if the
+  pull_request webhook drops again)
+- Deployment/CI/Neon/Vercel state to check next: none — no deploy is
+  triggered by a correct merge (migrations/** touches deploy-render paths?
+  YES migrations/** is in deploy-render path filter — note: merge will
+  trigger a redeploy of identical runtime; expected and harmless)
+- Next exact action: owner reviews evidence and merges the draft PR
+- Stop condition: agent STOPS after CI evidence report (owner instruction)
+- Rollback plan: revert the PR (pure rename + comments + docs + one test)

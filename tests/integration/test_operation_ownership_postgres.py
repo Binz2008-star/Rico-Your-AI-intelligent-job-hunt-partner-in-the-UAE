@@ -3,7 +3,7 @@
 Proves the property the in-process nonce model could not provide (pinned as
 unsafe by tests/unit/test_operation_duplicate_guard.py's
 test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker):
-with ownership in `chat_operations` (migration 050),
+with ownership in `chat_operations` (migration 051),
 
   * a concurrently-ALIVE second worker CANNOT steal or release a live
     operation — its claim is atomically refused and no duplicate provider
@@ -49,7 +49,7 @@ pytestmark = pytest.mark.skipif(
 _USER = "owner-a@test.com"
 _OTHER_USER = "owner-b@test.com"
 _OP = "op_ownership_it_0001"
-_MIGRATION = Path(__file__).resolve().parents[2] / "migrations" / "050_chat_operations.sql"
+_MIGRATION = Path(__file__).resolve().parents[2] / "migrations" / "051_chat_operations.sql"
 
 
 def _raw():

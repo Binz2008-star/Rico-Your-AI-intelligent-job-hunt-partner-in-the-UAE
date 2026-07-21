@@ -101,7 +101,10 @@ Classification per plan Phase 0: ACTIVE / REVIEW / HOLD / STALE-CLOSE / REFERENC
 1. **Duplicate migration number 050** in `main`: `050_chat_operations.sql` AND
    `050_user_avatars.sql`. Alphabetical application order keeps them working
    today, but the numbering invariant is broken — renumber one (e.g. 051) in a
-   small PR before any further migration lands.
+   small PR before any further migration lands. **RESOLVED same day:**
+   `chat_operations` renumbered to 051 (user_avatars, the older reference,
+   keeps 050); read-only Neon check confirmed both objects present in
+   production, and a new unit test now pins numbering uniqueness.
 2. **#1177 migration collision** (047) — recorded in triage above.
 3. `PROJECT_STATUS.md` "Verified control snapshot" still dated 2026-07-18 —
    this report supplies the current reconciliation; a PROJECT_STATUS refresh
