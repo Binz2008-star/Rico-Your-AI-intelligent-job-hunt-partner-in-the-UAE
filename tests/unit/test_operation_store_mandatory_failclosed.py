@@ -124,13 +124,48 @@ def test_timing_overrides_are_ignored_without_pytest_marker(monkeypatch):
     assert ops._heartbeat_interval() == ops.HEARTBEAT_INTERVAL_SECONDS  # 10, not 0.1
 
 
-def test_ownership_lost_self_fence_flag(monkeypatch):
-    """The self-fence flag is set/read/cleared as a cooperative checkpoint."""
+def test_ownership_lost_signal_set_read_and_reset(monkeypatch):
+    """The preparatory ownership-loss signal is set/read, and reset clears it."""
     ops._mark_ownership_lost("op_fence", 1)
     assert ops.ownership_lost("op_fence", 1) is True
     assert ops.ownership_lost("op_fence", 2) is False
     ops.reset_for_tests()
     assert ops.ownership_lost("op_fence", 1) is False
+
+
+def test_ownership_loss_discarded_on_terminal_and_by_op(monkeypatch):
+    """Explicit lifecycle: an entry is removed for a specific generation, and
+    all generations of an op are purged when its heartbeats are stopped
+    (which _stop_heartbeats does on a terminal write) — so the state cannot
+    accumulate."""
+    ops.reset_for_tests()
+    ops._mark_ownership_lost("op_a", 1)
+    ops._mark_ownership_lost("op_a", 2)
+    ops._mark_ownership_lost("op_b", 1)
+    # discard one generation
+    ops._discard_ownership_loss("op_a", 1)
+    assert ops.ownership_lost("op_a", 1) is False
+    assert ops.ownership_lost("op_a", 2) is True
+    # _stop_heartbeats purges every generation of the op (terminal cleanup)
+    ops._stop_heartbeats("op_a")
+    assert ops.ownership_lost("op_a", 2) is False
+    assert ops.ownership_lost("op_b", 1) is True
+    ops.reset_for_tests()
+
+
+def test_ownership_loss_state_is_capped(monkeypatch):
+    """FIFO safety valve: the signal set can never grow past _MAX_LOST_OWNERSHIP,
+    and eviction drops the oldest entries first."""
+    ops.reset_for_tests()
+    monkeypatch.setattr(ops, "_MAX_LOST_OWNERSHIP", 5)
+    for i in range(20):
+        ops._mark_ownership_lost("op_cap", i)
+    with ops._HEARTBEAT_LOCK:
+        assert len(ops._LOST_OWNERSHIP) == 5
+    # the 5 most-recent survive; the oldest were evicted
+    assert ops.ownership_lost("op_cap", 0) is False
+    assert ops.ownership_lost("op_cap", 19) is True
+    ops.reset_for_tests()
 
 
 def test_mode_helpers():

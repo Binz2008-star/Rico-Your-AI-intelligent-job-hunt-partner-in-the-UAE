@@ -6693,11 +6693,17 @@ Branch: claude/ricco-research-improvements-dkmhin (restarted from main e3a5780)
 Issue/PR: (opens with this branch's new PR)
 
 #### Objective
-Prove the atomic ownership store (slices 1-2, live in production) is safe
-under genuinely concurrent workers, and remove the unsafe memory fallback in
-the mandatory Postgres mode. This PR proves READINESS only — it does NOT
-raise Render workers/instances (that is a separate production decision after
-merge + verification, and requires RICO_OPERATION_STORE=postgres).
+**PARTIAL HARDENING ONLY — slice 4 is NOT complete and the multi-worker
+expansion gate stays CLOSED.** Harden the atomic ownership store (slices 1-2,
+live in production) and remove the unsafe memory fallback in the mandatory
+Postgres mode, backed by real-process evidence. This PR does NOT prove full
+multi-worker safety and does NOT raise Render workers/instances: the owner
+review exposed an un-eliminated **post-claim-partition duplicate-cascade
+window** (a peer can start a SECOND cascade if a DB partition outlasts the
+lease while a worker is still executing). **BLOCKER for closing slice 4 /
+opening the gate = post-claim partition cascade cancellation** (end-to-end
+cooperative cancellation through job_providers/jsearch_client — a separate,
+larger follow-up PR). Workers/instances MUST stay at 1 until then.
 
 #### Scope
 - src/services/operation_state.py:
@@ -6707,11 +6713,18 @@ merge + verification, and requires RICO_OPERATION_STORE=postgres).
     back to memory; `auto`/`memory` keep the single-worker memory fallback.
   * Absent-row in mandatory mode returns None (never resurrects memory state).
   * TEST-ONLY lease/heartbeat overrides via `_lease_seconds()` /
-    `_heartbeat_interval()` (env `RICO_OPERATION_LEASE_SECONDS` /
-    `RICO_OPERATION_HEARTBEAT_SECONDS`) so multiprocessing tests can shrink
-    the lease; production defaults (60s / 10s) unchanged.
+    `_heartbeat_interval()`, GATED by `_test_timings_allowed()` (honored only
+    when `PYTEST_CURRENT_TEST` is set; ignored in production). Production
+    defaults (60s / 10s) can never be overridden by a stray env var.
   * `build_status_response` returns an honest service_unavailable dict when
     the mandatory store is down.
+  * PREPARATORY ownership-loss signal (`ownership_lost()` +
+    `_mark_ownership_lost`/`_discard_ownership_loss`): heartbeat self-fences
+    when the lease is unrenewable past its window or the row is taken over.
+    NO executor consumer yet — it does NOT stop provider calls, so it does
+    not reduce the duplicate-cascade window; explicit lifecycle (cleared on
+    terminal/restart, FIFO-capped at 2048) prevents unbounded growth. Full
+    consumer lands with the cancellation PR.
 - src/repositories/chat_operations_repo.py: `claim()` first-insert race fix —
   `INSERT ... ON CONFLICT (operation_id) DO NOTHING RETURNING` + re-SELECT
   FOR UPDATE on conflict. A plain FOR UPDATE does not lock a not-yet-existing
@@ -6725,41 +6738,48 @@ merge + verification, and requires RICO_OPERATION_STORE=postgres).
 - tests/unit/test_operation_store_mandatory_failclosed.py (NEW, 9): mandatory
   mode raises + NEVER touches memory (fail-before via _memory_start assertion),
   auto mode still falls back, mode helpers, honest process_message reply.
-- tests/integration/test_operation_multiworker_postgres.py (NEW, 7): REAL
+- tests/integration/test_operation_multiworker_postgres.py (NEW, 8): REAL
   Postgres + REAL independent processes racing on a Barrier — (1) simultaneous
-  race → one claim/one refuse, cascade runs ONCE via the real
+  race → one claim/one refuse, cascade runs once via the real
   _begin_job_search_operation decision path; (2) live heartbeating owner can't
   be robbed past the lease; (3) dead owner → takeover after lease, attempt→2,
   late attempt=1 write refused; (4) normal completion → heartbeat stops, no
-  stuck row, stats clean; (5) mandatory + dead DB → fail closed, no cascade,
-  nothing written; (6) two users same id → independent ownership, no
-  leak/clobber; (7) admin_ops overview reflects running/stuck/failed truthfully.
+  stuck row, stats clean; (5) mandatory + dead DB before claim → fail closed,
+  no cascade, nothing written; (6) two users same id → independent ownership,
+  no leak/clobber; (7) admin_ops overview reflects running/stuck/failed;
+  (8) **post-claim partition → SECOND cascade runs (counter==2): the OPEN
+  window, proven not eliminated.**
 - AI_WORKSPACE/TASKS.md (this entry; TASK-013 closure).
 
 #### Continuity Block
-- Current head SHA: (set at commit)
-- Status: in_review — Draft PR; NO merge, NO deploy, NO Render worker/instance
-  change, NO LOW-1/LOW-2, NO daily loop (owner stop conditions)
-- Validation already run: full tests/unit 3,445 passed; multiworker
-  integration 7/7 on real local Postgres 16 (fork processes, short lease);
-  ownership integration 9/9; duplicate-guard 22/22; mandatory-failclosed 9/9;
-  admin-ops 5/5; py_compile OK. Fail-before demonstrated: the mandatory→memory
-  path (unit assertion) and the claim insert-race (UniqueViolation observed on
-  pre-ON-CONFLICT code during development).
-- Validation still required: CI pytest + postgres-integration on PR head
-- Deployment: none in this PR. Gate criteria for raising workers/instances
-  (ALL now proven): concurrent execution → one cascade; dead worker →
-  safe takeover after lease; old worker cannot write a late result;
-  mandatory-mode Postgres outage fails closed (no memory); monitoring
-  reflects real state. Enabling multi-worker in production = set
-  RICO_OPERATION_STORE=postgres + raise render.yaml workers — owner decision,
-  separate PR.
-- Known blockers: none
+- Current head SHA: 756694e (+ follow-up commit correcting this block and the
+  self-fence lifecycle)
+- Status: in_review — Draft PR; slice 4 NOT complete, gate CLOSED. NO merge by
+  agent, NO deploy, NO Render worker/instance change, NO LOW-1/LOW-2, NO daily
+  loop (owner stop conditions). Owner may merge as PARTIAL hardening.
+- Validation already run: full tests/unit 3,447 passed; multiworker
+  integration 8/8 on real local Postgres 16 (fork processes, short lease);
+  ownership integration 9/9; mandatory-failclosed 11/11; py_compile OK; full
+  CI (pytest + postgres-integration + frontend + playwright + guards) green on
+  head 756694e. Fail-before demonstrated for THREE paths: mandatory→memory
+  (unit assertion), the claim insert-race (UniqueViolation on pre-ON-CONFLICT
+  code), and the post-claim partition duplicate-cascade window (the new test
+  asserts a second cascade runs).
+- Validation still required: re-run full CI on the follow-up head.
+- Deployment: none. What IS proven safe: simultaneous claim race → one
+  cascade; first-insert race fixed; dead worker → safe takeover after lease;
+  late stale write refused; mandatory-mode outage BEFORE claim fails closed;
+  monitoring truthful. What is NOT: a partition AFTER claim can still start a
+  second cascade (open window). Raising workers/instances stays BLOCKED.
+- Known blockers: **post-claim-partition duplicate-cascade cancellation** —
+  needs end-to-end cooperative cancellation through the provider cascade
+  (separate follow-up PR); until it lands the gate stays closed.
 - Risks: in mandatory mode a store outage returns 503-style replies instead
   of degrading to memory — intended (correctness over availability under
   multi-worker). `auto` default is unchanged for single-worker today.
 - Rollback plan: revert the PR (restores prior fallback + pre-race claim).
-- Next exact action: open Draft PR, targeted tests + full CI green, stop.
+- Next exact action: owner review of the corrected PR; decide whether to
+  merge as partial hardening. Agent does not merge, does not raise workers.
 - Stop condition: STOP after evidence report + green CI (owner directive).
 
 #### Owner-review follow-up (2026-07-21) — addressed on this branch, gate stays CLOSED
@@ -6770,10 +6790,12 @@ Owner review of #1304 (head ee37126e) found two issues; both handled here:
    lease; if the outage outlasts the lease a peer takes over and starts a second
    cascade while worker A is still executing. The attempt fence stops A's late
    WRITE but not A's in-flight provider calls. Actions taken:
-   - Added a bounded **self-fence**: when the heartbeat is unrenewable for longer
-     than the lease (or the row is taken over), the worker marks
-     `ownership_lost(op, attempt)` and stops renewing — a cooperative checkpoint
-     an executor can honor.
+   - Added a **preparatory self-fence signal** (NOT a duplicate-cascade
+     reduction — no executor consumer yet): when the heartbeat is unrenewable
+     past the lease (or the row is taken over), the worker marks
+     `ownership_lost(op, attempt)` and stops renewing. Explicit lifecycle —
+     cleared on terminal/restart via `_discard_ownership_loss`/`_stop_heartbeats`
+     and FIFO-capped at `_MAX_LOST_OWNERSHIP` (2048) — so the state cannot leak.
    - Added a REAL-process **fail-before/window test**
      `test_partition_after_claim_starts_second_cascade_window_documented`:
      A claims + partitions + stays alive; after the lease B takes over and a

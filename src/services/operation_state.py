@@ -51,6 +51,7 @@ import logging
 import os
 import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Literal
 import uuid
@@ -166,27 +167,47 @@ _memory = RicoMemoryStore()
 _HEARTBEAT_STOPS: dict[tuple[str, int], threading.Event] = {}
 _HEARTBEAT_LOCK = threading.Lock()
 
-# Self-fence bookkeeping (DEC-20260721-001 slice 4, bounded). An (operation_id,
-# attempt) lands here when THIS worker can no longer prove it holds the lease —
-# either its heartbeat could not renew for longer than the lease (DB partition)
-# or the row was taken over/expired. It is a COOPERATIVE signal: an executor
-# that checks ownership_lost() can stop recording (and, in a future PR, stop
-# issuing provider calls). It does NOT by itself cancel an in-flight provider
-# cascade — full end-to-end cancellation is a separate, larger change — so the
-# post-claim-partition duplicate-cascade WINDOW is not yet eliminated and the
-# multi-worker expansion gate stays CLOSED.
-_LOST_OWNERSHIP: set[tuple[str, int]] = set()
+# PREPARATORY ownership-loss signal (DEC-20260721-001 slice 4). An
+# (operation_id, attempt) lands here when THIS worker can no longer prove it
+# holds the lease — its heartbeat could not renew for longer than the lease
+# (DB partition) or the row was taken over/expired. It is a cooperative
+# checkpoint: `ownership_lost()` lets a future executor stop recording / stop
+# issuing provider calls. THERE IS NO EXECUTOR CONSUMER IN THIS PR — the actual
+# in-flight provider cascade is not yet cancelled, so the post-claim-partition
+# duplicate-cascade WINDOW is NOT eliminated and the expansion gate stays
+# CLOSED. This state has an explicit lifecycle so it cannot leak:
+#   * cleared for (op, attempt) when that generation reaches a terminal status
+#     or is restarted/taken over (see _discard_ownership_loss / _stop_heartbeats);
+#   * hard-capped at _MAX_LOST_OWNERSHIP with FIFO eviction as a safety valve.
+_LOST_OWNERSHIP: "OrderedDict[tuple[str, int], None]" = OrderedDict()
+_MAX_LOST_OWNERSHIP = 2048
 
 
 def _mark_ownership_lost(operation_id: str, attempt: int) -> None:
+    key = (operation_id, int(attempt))
     with _HEARTBEAT_LOCK:
-        _LOST_OWNERSHIP.add((operation_id, int(attempt)))
+        _LOST_OWNERSHIP[key] = None
+        _LOST_OWNERSHIP.move_to_end(key)
+        while len(_LOST_OWNERSHIP) > _MAX_LOST_OWNERSHIP:
+            _LOST_OWNERSHIP.popitem(last=False)  # evict oldest (FIFO safety valve)
+
+
+def _discard_ownership_loss(operation_id: str, attempt: int | None = None) -> None:
+    """Remove ownership-loss entries once they can no longer be needed: a
+    specific generation on terminal write, or every generation of an op when
+    its heartbeats are stopped."""
+    with _HEARTBEAT_LOCK:
+        if attempt is not None:
+            _LOST_OWNERSHIP.pop((operation_id, int(attempt)), None)
+        else:
+            for key in [k for k in _LOST_OWNERSHIP if k[0] == operation_id]:
+                _LOST_OWNERSHIP.pop(key, None)
 
 
 def ownership_lost(operation_id: str, attempt: int) -> bool:
     """True when this worker's heartbeat self-fenced (lease unrenewable past
-    the lease window, or the row was taken over). Cooperative checkpoint for
-    executors; see the _LOST_OWNERSHIP note above."""
+    the lease window, or the row was taken over). Cooperative checkpoint for a
+    future executor consumer; see the _LOST_OWNERSHIP note above."""
     with _HEARTBEAT_LOCK:
         return (operation_id, int(attempt)) in _LOST_OWNERSHIP
 
@@ -317,6 +338,9 @@ def _stop_heartbeats(operation_id: str) -> None:
         keys = [k for k in _HEARTBEAT_STOPS if k[0] == operation_id]
         for key in keys:
             _HEARTBEAT_STOPS.pop(key).set()
+    # The op just reached a terminal status — no generation of it can still
+    # need its ownership-loss signal; drop them all so the state cannot grow.
+    _discard_ownership_loss(operation_id)
 
 
 # ── Memory backend internals (legacy fallback) ───────────────────────────────
