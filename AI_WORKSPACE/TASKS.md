@@ -5894,3 +5894,61 @@ fell to the "help" fallback — prohibited by the Product Generalization Rule
 - Next exact action: none — task fully closed
 - Stop condition: any English-intent regression in CI → fix before merge
 - Rollback plan: revert the PR; detector returns to English-only matching
+
+### TASK-20260721-005 — Command v5 PR 3: live modes (Overview / Applications / Documents)
+
+Status: review (Draft PR opened from branch claude/command-v5-pr3-live-modes)
+Owner: Claude (agent) / owner review
+Branch: claude/command-v5-pr3-live-modes
+Issue/PR: PR — Command v5 PR 3 live modes (opened from this task)
+
+#### Objective
+Apply the approved v5 mode treatments to the three live document-route modes
+— Overview `/dashboard` (terra/amber), Applications `/applications`
+(coral/amber), Documents `/upload` (gold) — real data and contracts only,
+LIGHT island only. `/command` framing shipped in PR 2; its messages/cards are
+PR 4. Interview/Learning/Activity stay hidden (no production capability).
+
+#### Context
+- Relevant files: apps/web/components/workspace/DashboardAtelier.tsx; apps/web/components/applications/ApplicationsAtelier.tsx; apps/web/components/upload/UploadAtelier.tsx; apps/web/components/workspace/theme.ts
+- Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md (PR 3 row)
+- Existing behavior: all data derivations, API calls, status taxonomy, translation keys, testids, aria contracts pinned by dashboard-atelier / flow-manual-application / upload-shell-composition tests.
+
+#### Constraints
+- Do not touch: data logic, APIs, auth, routing, translation keys, dark-island palette, /command chat surface.
+- No migrations unless explicitly required: none.
+- Keep scope limited to: presentation of the three mode components + additive `dark` flag on WorkspacePalette.
+
+#### Acceptance criteria
+- [x] v5 mode accents/typography/surfaces on the three modes (light island only); dark island keeps its existing language
+- [x] All loading/error/empty states restyled without weakening (skeletons + presence orb are additive; roles/testids unchanged)
+- [x] Accent-colored text uses AA text-safe tokens only (modeAText / onEmber)
+- [x] EN + AR RTL verified with screenshots; mobile no-overflow proven by e2e
+- [x] All existing behavior contracts green without weakening
+
+#### Required verification
+- [x] Unit tests: vitest 854/854
+- [ ] Integration tests: n/a
+- [x] Frontend build: PASS; lint identical to main baseline (0 new findings); check:contrast:v5 PASS
+- [x] Local smoke: Playwright single-shell + mobile-usability 18/18 on chromium; screenshots desktop/mobile/AR captured from mocked synthetic data
+- [ ] Production/deploy smoke if applicable: after merge via Vercel auto-deploy
+
+#### Continuity Block
+- Task ID: TASK-20260721-005
+- GitHub issue/PR: PR — Command v5 PR 3 live modes
+- Branch: claude/command-v5-pr3-live-modes
+- Base branch: main
+- Last safe commit SHA: 9fbd32c (main tip at branch start)
+- Current head SHA: (set at PR open)
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files changed: DashboardAtelier.tsx, ApplicationsAtelier.tsx, UploadAtelier.tsx — v5 mode skins; theme.ts — additive `dark` flag; AI_WORKSPACE — task + map sync
+- Files intentionally not touched: app/command/page.tsx (PR 4), WorkspaceShell.tsx (PR 2 done), GuestUploadAtelier.tsx (public flow, not a workspace mode)
+- What is complete: implementation + local verification (build, unit, e2e, contrast, screenshots EN/AR/desktop/mobile)
+- What is incomplete: owner review + merge decision
+- Known blockers: none
+- Validation already run: vitest 854/854; build PASS; lint = main baseline; check:contrast:v5 PASS; Playwright 18/18
+- Validation still required: PR CI on exact head; owner visual acceptance vs the v5 evidence package
+- Next exact action: owner review of the Draft PR
+- Stop condition: any behavior-contract regression → fix before merge
+- Rollback plan: revert the PR — presentation-only diff, no data/API/schema impact

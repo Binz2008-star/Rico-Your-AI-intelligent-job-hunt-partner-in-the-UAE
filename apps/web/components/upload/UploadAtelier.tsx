@@ -14,6 +14,11 @@
  *  - setPrimary / delete / rename, quota (422) messaging, error/loading/empty
  *  - backend-authoritative: no success shown before the backend confirms.
  * Only the presentation moves to the workspace palette.
+ *
+ * Command v5 PR 3 applies the v5 Documents mode treatment (gold accent
+ * triple, card surfaces, ember CTAs, skeleton loading) to the LIGHT island
+ * only — the dark island keeps its existing language; every upload/parse/
+ * confirm flow, translation key and aria contract is unchanged.
  */
 
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
@@ -21,6 +26,8 @@ import { ProcessingOverlay } from "@/components/ui/ProcessingOverlay";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { Mono } from "@/components/atelier-kit/primitives";
 import { useWorkspaceTheme, type WorkspacePalette } from "@/components/workspace/theme";
+import { V5, V5_GRADIENT, V5_MODE_ACCENTS } from "@/components/workspace/v5/tokens";
+import { RicoPresence } from "@/components/workspace/v5/RicoPresence";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
     ApiError,
@@ -69,6 +76,7 @@ interface FileCardProps {
 }
 
 function FileCard({ doc, t, palette, onSetPrimary, onDelete, onRename }: FileCardProps) {
+    const v5 = !palette.dark;
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(doc.label ?? doc.filename);
     const [confirmDelete, setConfirmDelete] = useState(false);
@@ -96,11 +104,15 @@ function FileCard({ doc, t, palette, onSetPrimary, onDelete, onRename }: FileCar
     const actionBtn = "flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-colors";
 
     return (
-        <div className="relative rounded-xl p-4" style={{ border: `1px solid ${palette.hair}`, background: palette.panel }}>
+        <div className={`relative p-4 ${v5 ? "wsx5-card" : "rounded-xl"}`} style={{ border: `1px solid ${palette.hair}`, background: palette.panel }}>
             {doc.is_primary && (
                 <span
                     className="absolute top-3 end-3 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                    style={{ background: `color-mix(in srgb, ${palette.red} 14%, transparent)`, color: palette.red }}
+                    style={
+                        v5
+                            ? { background: `color-mix(in srgb, ${V5.gold} 16%, transparent)`, color: V5.goldText }
+                            : { background: `color-mix(in srgb, ${palette.red} 14%, transparent)`, color: palette.red }
+                    }
                 >
                     <MaterialIcon icon="star" className="text-[11px]" />
                     {t("filesPrimary")}
@@ -108,7 +120,14 @@ function FileCard({ doc, t, palette, onSetPrimary, onDelete, onRename }: FileCar
             )}
 
             <div className="flex items-start gap-3 pe-16">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: palette.inset, color: palette.ink70 }}>
+                <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                    style={
+                        v5
+                            ? { background: `color-mix(in srgb, ${V5.goldSoft} 38%, ${palette.inset})`, color: V5.goldText }
+                            : { background: palette.inset, color: palette.ink70 }
+                    }
+                >
                     <MaterialIcon icon={docIcon} className="text-xl" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -199,6 +218,8 @@ interface UploadZoneProps {
 }
 
 function UploadZone({ docType, onDocTypeChange, onFileSelected, isUploading, t, palette }: UploadZoneProps) {
+    const v5 = !palette.dark;
+    const dragAccent = v5 ? V5.gold : palette.red;
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDrop = useCallback((e: React.DragEvent) => {
@@ -215,7 +236,7 @@ function UploadZone({ docType, onDocTypeChange, onFileSelected, isUploading, t, 
     ];
 
     return (
-        <div className="rounded-xl p-5" style={{ border: `1px solid ${palette.hair}`, background: palette.panel }}>
+        <div className={`p-5 ${v5 ? "wsx5-card" : "rounded-xl"}`} style={{ border: `1px solid ${palette.hair}`, background: palette.panel }}>
             <div className="mb-4 flex gap-1.5">
                 {tabs.map(tab => {
                     const active = docType === tab.key;
@@ -238,8 +259,8 @@ function UploadZone({ docType, onDocTypeChange, onFileSelected, isUploading, t, 
                 onDrop={handleDrop}
                 className="flex min-h-[160px] flex-col items-center justify-center rounded-xl px-4 py-6 text-center transition-colors"
                 style={{
-                    border: `1px dashed ${isDragging ? palette.red : palette.hair}`,
-                    background: isDragging ? `color-mix(in srgb, ${palette.red} 5%, ${palette.inset})` : palette.inset,
+                    border: `1px dashed ${isDragging ? dragAccent : palette.hair}`,
+                    background: isDragging ? `color-mix(in srgb, ${dragAccent} 6%, ${palette.inset})` : palette.inset,
                 }}
             >
                 <MaterialIcon icon="upload_file" className="mb-3 text-3xl" style={{ color: palette.ink40 }} />
@@ -255,7 +276,10 @@ function UploadZone({ docType, onDocTypeChange, onFileSelected, isUploading, t, 
                         className="sr-only"
                         disabled={isUploading}
                     />
-                    <span className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold transition-opacity hover:opacity-90 aria-disabled:opacity-60" style={{ background: palette.red, color: palette.bg }}>
+                    <span
+                        className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold transition-opacity hover:opacity-90 aria-disabled:opacity-60"
+                        style={v5 ? { background: V5_GRADIENT.emberButton, color: V5.onEmber, borderRadius: 999 } : { background: palette.red, color: palette.bg }}
+                    >
                         {isUploading ? (
                             <><MaterialIcon icon="hourglass_empty" className="animate-spin" />{t("uploadProcessing")}</>
                         ) : (
@@ -280,6 +304,10 @@ export function UploadAtelier() {
     const t = useTranslation(language);
     const isAr = language === "ar";
     const palette = useWorkspaceTheme();
+
+    // v5 Documents mode (light island only) — gold accent triple.
+    const v5 = !palette.dark;
+    const acc = V5_MODE_ACCENTS.documents;
 
     const [files, setFiles] = useState<UserDocument[]>([]);
     const [loading, setLoading] = useState(true);
@@ -390,8 +418,11 @@ export function UploadAtelier() {
 
             <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                    <Mono style={{ color: palette.ink55 }}>{t("filesPageTitle")}</Mono>
-                    <h1 className="mt-2 text-[2rem] font-normal leading-[1.05]" style={{ fontFamily: SERIF, color: palette.ink }}>
+                    <span className="flex items-center gap-2.5">
+                        {v5 && <span className="wsx5-breathe-dot" style={{ background: acc.modeA }} aria-hidden="true" />}
+                        <Mono style={{ color: v5 ? acc.modeAText : palette.ink55 }}>{t("filesPageTitle")}</Mono>
+                    </span>
+                    <h1 className="wsx5-display mt-2 text-[2rem]" style={{ fontFamily: SERIF, color: palette.ink }}>
                         {t("filesPageTitle")}
                     </h1>
                     <p className="mt-1 text-sm" style={{ color: palette.ink70 }}>{t("filesPageSubtitle")}</p>
@@ -399,7 +430,7 @@ export function UploadAtelier() {
                 <button
                     onClick={() => setUploadOpen(p => !p)}
                     className="flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
-                    style={{ background: palette.red, color: palette.bg }}
+                    style={v5 ? { background: V5_GRADIENT.emberButton, color: V5.onEmber } : { background: palette.red, color: palette.bg }}
                 >
                     <MaterialIcon icon={uploadOpen ? "close" : "add"} className="text-base" />
                     {t("filesUploadNew")}
@@ -423,12 +454,19 @@ export function UploadAtelier() {
 
             {cvPendingConfirm && !error && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm" role="status" style={{ border: `1px solid color-mix(in srgb, ${palette.red} 30%, transparent)`, background: `color-mix(in srgb, ${palette.red} 7%, transparent)`, color: palette.ink }}>
-                    <span>
-                        <span className="font-semibold">{t("uploadCvPreviewReady")}</span>
-                        {" — "}
-                        {t("uploadCvConfirmHint")}
+                    <span className="flex items-center gap-2.5">
+                        {v5 && <RicoPresence state="warning" size="sm" decorative />}
+                        <span>
+                            <span className="font-semibold">{t("uploadCvPreviewReady")}</span>
+                            {" — "}
+                            {t("uploadCvConfirmHint")}
+                        </span>
                     </span>
-                    <Link href="/command" className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-opacity hover:opacity-90" style={{ background: palette.red, color: palette.bg }}>
+                    <Link
+                        href="/command"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-opacity hover:opacity-90"
+                        style={v5 ? { background: V5_GRADIENT.emberButton, color: V5.onEmber, borderRadius: 999 } : { background: palette.red, color: palette.bg }}
+                    >
                         <MaterialIcon icon="chat" className="text-sm" />
                         {t("navAskRico")}
                     </Link>
@@ -447,15 +485,33 @@ export function UploadAtelier() {
             )}
 
             {loading ? (
-                <div className="py-12 text-center">
-                    <MaterialIcon icon="hourglass_empty" className="animate-spin text-2xl" style={{ color: palette.ink40 }} />
-                </div>
+                v5 ? (
+                    <div aria-busy="true">
+                        <span className="sr-only">{t("loading")}</span>
+                        <div className="grid gap-3 sm:grid-cols-2" aria-hidden="true">
+                            <div className="wsx5-skel" style={{ height: 130 }} />
+                            <div className="wsx5-skel" style={{ height: 130 }} />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="py-12 text-center">
+                        <MaterialIcon icon="hourglass_empty" className="animate-spin text-2xl" style={{ color: palette.ink40 }} />
+                    </div>
+                )
             ) : files.length === 0 ? (
-                <div className="flex flex-col items-center gap-3 rounded-xl py-14 text-center" style={{ border: `1px solid ${palette.hair}`, background: palette.panel }}>
-                    <MaterialIcon icon="folder_open" className="text-4xl" style={{ color: palette.ink40 }} />
+                <div className={`flex flex-col items-center gap-3 py-14 text-center ${v5 ? "wsx5-card" : "rounded-xl"}`} style={{ border: `1px solid ${palette.hair}`, background: palette.panel }}>
+                    {v5 ? (
+                        <RicoPresence state="ready" size="lg" decorative />
+                    ) : (
+                        <MaterialIcon icon="folder_open" className="text-4xl" style={{ color: palette.ink40 }} />
+                    )}
                     <p className="font-semibold" style={{ color: palette.ink }}>{t("filesEmpty")}</p>
                     <p className="text-sm" style={{ color: palette.ink70 }}>{t("filesEmptyHint")}</p>
-                    <button onClick={() => setUploadOpen(true)} className="mt-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90" style={{ background: palette.red, color: palette.bg }}>
+                    <button
+                        onClick={() => setUploadOpen(true)}
+                        className="mt-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                        style={v5 ? { background: V5_GRADIENT.emberButton, color: V5.onEmber } : { background: palette.red, color: palette.bg }}
+                    >
                         {t("uploadYourCV")}
                     </button>
                 </div>

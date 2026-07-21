@@ -19,7 +19,11 @@
  *
  * Visual system: shared atelier-kit tokens + Mono primitive; theme colors
  * come from WorkspaceShell via useWorkspaceTheme() so light/dark stays
- * consistent with the shell.
+ * consistent with the shell. Command v5 PR 3 applies the v5 Overview mode
+ * treatment (terra/amber accents, display typography, card surfaces,
+ * skeleton loading, presence-aware error) to the LIGHT island only — the
+ * dark island keeps its existing language, and every state, testid, aria
+ * contract and data derivation is unchanged.
  */
 
 import Link from "next/link";
@@ -28,6 +32,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { Mono } from "@/components/atelier-kit/primitives";
 import { useWorkspaceTheme } from "@/components/workspace/theme";
+import { V5, V5_GRADIENT, V5_MODE_ACCENTS } from "@/components/workspace/v5/tokens";
+import { RicoPresence } from "@/components/workspace/v5/RicoPresence";
 import { getMission, type MissionState } from "@/lib/api";
 
 const SERIF = ATELIER_FONT.serif;
@@ -200,8 +206,12 @@ export function deriveGoalTitle(mission: MissionState | null, lang: Lang): strin
 type Palette = ReturnType<typeof useWorkspaceTheme>;
 
 function StatPlate({ c, label, sub, value }: { c: Palette; label: string; sub: string; value: string | number }) {
+    const v5 = !c.dark;
     return (
-        <div className="rounded-[4px] p-5 flex items-start justify-between" style={{ background: c.panel, border: `1px solid ${c.hair}` }}>
+        <div
+            className={`${v5 ? "wsx5-card" : "rounded-[4px]"} p-5 flex items-start justify-between`}
+            style={{ background: c.panel, border: `1px solid ${c.hair}` }}
+        >
             <div>
                 <Mono style={{ color: c.ink55 }}>{label}</Mono>
                 <p className="mt-1 text-[0.9rem]" style={{ color: c.ink40 }}>{sub}</p>
@@ -212,6 +222,9 @@ function StatPlate({ c, label, sub, value }: { c: Palette; label: string; sub: s
 }
 
 function MilestonePill({ c, done, label }: { c: Palette; done: boolean; label: string }) {
+    // v5 completed vocabulary: done milestones read moss on the light island
+    // (matching the presence orb's completed state); dark keeps its red.
+    const doneFill = c.dark ? c.red : V5.moss;
     return (
         <li
             data-testid="dashboard-milestone"
@@ -220,7 +233,7 @@ function MilestonePill({ c, done, label }: { c: Palette; done: boolean; label: s
             style={{ background: c.inset, border: `1px solid ${c.hair}` }}
         >
             {done ? (
-                <span aria-hidden="true" className="inline-flex items-center justify-center shrink-0" style={{ width: 16, height: 16, borderRadius: 999, background: c.red }}>
+                <span aria-hidden="true" className="inline-flex items-center justify-center shrink-0" style={{ width: 16, height: 16, borderRadius: 999, background: doneFill }}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={c.panel} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
                 </span>
             ) : (
@@ -262,25 +275,57 @@ export function DashboardAtelier() {
         ...(mission?.target_locations ?? []),
     ].join(" · ");
 
+    // v5 Overview mode (light island only) — terra/amber accent triple.
+    const v5 = !c.dark;
+    const acc = V5_MODE_ACCENTS.overview;
+
     return (
         <div>
             {/* Header */}
             <div className="flex items-start justify-between gap-4">
                 <div>
-                    <Mono style={{ color: c.ink55 }}>{t.eyebrow}</Mono>
-                    <h1 className="mt-2 text-[2.4rem] sm:text-[3rem] leading-[0.98] font-normal" style={{ fontFamily: SERIF, color: c.ink }}>{t.title}</h1>
+                    <span className="flex items-center gap-2.5">
+                        {v5 && <span className="wsx5-breathe-dot" style={{ background: acc.modeA }} aria-hidden="true" />}
+                        <Mono style={{ color: v5 ? acc.modeAText : c.ink55 }}>{t.eyebrow}</Mono>
+                    </span>
+                    <h1 className="wsx5-display mt-2 text-[2.4rem] sm:text-[3rem]" style={{ fontFamily: SERIF, color: c.ink }}>{t.title}</h1>
                 </div>
             </div>
-            <div className="my-6 h-px" style={{ background: c.hair }} aria-hidden="true" />
+            {v5 ? (
+                <div className="my-6 flex items-center" aria-hidden="true">
+                    <span style={{ width: 64, height: 2, borderRadius: 2, background: V5_GRADIENT.ember }} />
+                    <span className="h-px flex-1" style={{ background: c.hair }} />
+                </div>
+            ) : (
+                <div className="my-6 h-px" style={{ background: c.hair }} aria-hidden="true" />
+            )}
             <p className="max-w-2xl text-[1.02rem] leading-relaxed" style={{ color: c.ink70 }}>{t.intro}</p>
 
             {state === "loading" && (
-                <p className="mt-10" style={{ color: c.ink40 }} aria-busy="true">{t.loading}</p>
+                <div className="mt-10" aria-busy="true">
+                    <p style={{ color: c.ink40 }}>{t.loading}</p>
+                    {v5 && (
+                        <div className="mt-6 grid lg:grid-cols-[1.6fr_1fr] gap-4" aria-hidden="true">
+                            <div className="wsx5-skel" style={{ height: 300 }} />
+                            <div className="flex flex-col gap-4">
+                                <div className="wsx5-skel" style={{ height: 90 }} />
+                                <div className="wsx5-skel" style={{ height: 90 }} />
+                                <div className="wsx5-skel" style={{ height: 90 }} />
+                            </div>
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* Explicit failure state — never zeroed panels pretending to be data. */}
             {state === "error" && (
-                <div role="alert" data-testid="dashboard-error" className="mt-10 flex items-center gap-4">
+                <div
+                    role="alert"
+                    data-testid="dashboard-error"
+                    className={`mt-10 flex items-center gap-4 ${v5 ? "wsx5-card p-6" : ""}`}
+                    style={v5 ? { background: c.panel, border: `1px solid ${c.hair}` } : undefined}
+                >
+                    {v5 && <RicoPresence state="warning" size="sm" decorative />}
                     <p style={{ color: c.ink70 }}>{t.loadError}</p>
                     <button
                         type="button"
@@ -297,8 +342,14 @@ export function DashboardAtelier() {
             {state === "ready" && (
                 <>
                     {/* Goal panel + stat plates */}
-                    <div className="mt-10 grid lg:grid-cols-[1.6fr_1fr] gap-4">
-                        <section aria-labelledby="dashboard-goal-title" className="rounded-[4px] p-6 sm:p-7" style={{ background: c.panel, border: `1px solid ${c.hair}` }}>
+                    <div className="mt-10 grid lg:grid-cols-[1.6fr_1fr] gap-4" data-wsx5-anim="unfold" style={{ "--i": 1 } as React.CSSProperties}>
+                        <section
+                            aria-labelledby="dashboard-goal-title"
+                            className={`${v5 ? "wsx5-card" : "rounded-[4px]"} p-6 sm:p-7`}
+                            style={{ background: c.panel, border: `1px solid ${c.hair}`, ...(v5 ? { borderRadius: 26, overflow: "hidden" } : {}) }}
+                        >
+                            {/* decorative ember crest — light island only */}
+                            {v5 && <span aria-hidden="true" className="absolute top-0 start-6 end-6 h-[3px]" style={{ background: V5_GRADIENT.ember, borderRadius: "0 0 4px 4px" }} />}
                             <Mono style={{ color: c.ink55 }}>{t.goalEyebrow}</Mono>
                             <h2 id="dashboard-goal-title" data-testid="dashboard-goal-title" className="mt-2 text-[1.7rem] sm:text-[2rem] leading-[1.1] font-normal" style={{ fontFamily: SERIF, color: c.ink }}>
                                 {goalTitle}
@@ -318,9 +369,37 @@ export function DashboardAtelier() {
                                     className="h-1.5 flex-1 rounded-full overflow-hidden"
                                     style={{ background: c.track }}
                                 >
-                                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.red }} />
+                                    <div
+                                        className="h-full rounded-full"
+                                        style={{
+                                            width: `${pct}%`,
+                                            background: v5 ? V5_GRADIENT.ember : c.red,
+                                            ...(v5
+                                                ? {
+                                                      animation: "wsx5-bar-grow 900ms var(--wsx5-out-expo) both",
+                                                      transformOrigin: language === "ar" ? "right" : "left",
+                                                  }
+                                                : {}),
+                                        }}
+                                    />
                                 </div>
-                                <span style={{ fontFamily: SERIF, fontSize: "1.9rem", lineHeight: 1, color: c.ink }}>{pct}%</span>
+                                <span
+                                    style={{
+                                        fontFamily: SERIF,
+                                        fontSize: "1.9rem",
+                                        lineHeight: 1,
+                                        ...(v5
+                                            ? {
+                                                  background: V5_GRADIENT.emberDisplayText,
+                                                  WebkitBackgroundClip: "text",
+                                                  backgroundClip: "text",
+                                                  color: "transparent",
+                                              }
+                                            : { color: c.ink }),
+                                    }}
+                                >
+                                    {pct}%
+                                </span>
                             </div>
 
                             <ul className="mt-5 grid sm:grid-cols-2 gap-2.5 list-none p-0 m-0">
@@ -345,7 +424,17 @@ export function DashboardAtelier() {
                                     href={`/command?q=${encodeURIComponent(t.askRicoPrompt)}`}
                                     data-testid="dashboard-ask-rico"
                                     className="inline-flex items-center gap-1.5 text-sm font-semibold"
-                                    style={{ color: c.red, borderBottom: `1px solid ${c.red}`, textDecoration: "none", paddingBottom: 1 }}
+                                    style={
+                                        v5
+                                            ? {
+                                                  background: V5_GRADIENT.emberButton,
+                                                  color: V5.onEmber,
+                                                  borderRadius: 999,
+                                                  padding: "7px 16px",
+                                                  textDecoration: "none",
+                                              }
+                                            : { color: c.red, borderBottom: `1px solid ${c.red}`, textDecoration: "none", paddingBottom: 1 }
+                                    }
                                 >
                                     {t.askRico} <span aria-hidden="true">{language === "ar" ? "←" : "→"}</span>
                                 </Link>
@@ -361,8 +450,8 @@ export function DashboardAtelier() {
                     </div>
 
                     {/* Suggested next — derived from real mission state, max 3 */}
-                    <section aria-labelledby="dashboard-next-title" className="mt-12">
-                        <Mono style={{ color: c.ink55 }}>{t.suggestedEyebrow}</Mono>
+                    <section aria-labelledby="dashboard-next-title" className="mt-12" data-wsx5-anim="rise" style={{ "--i": 3 } as React.CSSProperties}>
+                        <Mono style={{ color: v5 ? acc.modeAText : c.ink55 }}>{t.suggestedEyebrow}</Mono>
                         <h2 id="dashboard-next-title" className="mt-2 text-[1.15rem] font-normal" style={{ fontFamily: SERIF, color: c.ink }}>{t.suggestedTitle}</h2>
                         <ul className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3 list-none p-0 m-0">
                             {nextActions.map((key) => {
@@ -373,12 +462,12 @@ export function DashboardAtelier() {
                                             href={NEXT_ACTION_HREF[key]}
                                             data-testid="dashboard-next-action"
                                             data-action={key}
-                                            className="wsx-action rounded-[4px] p-5 block h-full"
+                                            className={`wsx-action ${v5 ? "wsx5-card" : "rounded-[4px]"} p-5 block h-full`}
                                             style={{ background: c.panel, border: `1px solid ${c.hair}`, textDecoration: "none" }}
                                         >
                                             <h3 className="text-[1.15rem] font-normal" style={{ fontFamily: SERIF, color: c.ink }}>{a.title}</h3>
                                             <p className="mt-1.5 text-[0.9rem] leading-snug" style={{ color: c.ink55 }}>{a.body}</p>
-                                            <span className="mt-3 inline-flex items-center gap-1.5 text-[0.8rem] font-semibold" style={{ color: c.red }}>
+                                            <span className="mt-3 inline-flex items-center gap-1.5 text-[0.8rem] font-semibold" style={{ color: v5 ? acc.modeAText : c.red }}>
                                                 {a.cta} <span aria-hidden="true">{language === "ar" ? "←" : "→"}</span>
                                             </span>
                                         </Link>

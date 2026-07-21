@@ -12,6 +12,9 @@
 import { createContext, useContext } from "react";
 
 export interface WorkspacePalette {
+    /** True on the dark island. v5 paper-plane treatments (Command v5 PR 3)
+     *  apply only when false — the dark island keeps its own language. */
+    dark: boolean;
     bg: string;
     panel: string;
     rail: string;
@@ -28,6 +31,7 @@ export interface WorkspacePalette {
 
 export const WORKSPACE_THEME: { light: WorkspacePalette; dark: WorkspacePalette } = {
     light: {
+        dark: false,
         bg: "#F1EADD",
         panel: "#F7F1E6",
         rail: "#EDE5D6",
@@ -42,6 +46,7 @@ export const WORKSPACE_THEME: { light: WorkspacePalette; dark: WorkspacePalette 
         red: "#C6492E",
     },
     dark: {
+        dark: true,
         bg: "#17140F",
         panel: "#211C15",
         rail: "#14110C",
