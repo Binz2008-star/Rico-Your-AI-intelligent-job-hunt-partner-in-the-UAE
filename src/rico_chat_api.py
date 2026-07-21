@@ -62,6 +62,7 @@ from src.services.profile_context_resolver import (
     resolve_profile_context,
 )
 from src.services.operation_state import (
+    OperationClaimRefused,
     mark_completed,
     mark_failed,
     start_job_search_operation,
@@ -2209,6 +2210,12 @@ class RicoChatAPI:
             role_or_query=role_or_query,
             operation_id=self._current_operation_id,
         )
+        if operation.get("claimed") is False:
+            # Atomic-claim refusal (shared store): another live execution —
+            # e.g. a concurrent worker that won the race after the read-path
+            # guard passed — owns this operation_id. Do NOT run a second
+            # cascade and do NOT touch executor state (we own nothing).
+            raise OperationClaimRefused(operation)
         self._current_operation_id = str(operation["operation_id"])
         # Attempt fence: outcome writes from THIS execution carry this token;
         # if the operation is later expired + legitimately re-started, the
@@ -7253,6 +7260,32 @@ class RicoChatAPI:
                 # ("make sure", "list them", "that one") can resolve reliably.
                 self._record_last_turn(user_id, message, result)
             return result
+        except OperationClaimRefused as exc:
+            # A concurrent live execution owns this operation_id (atomic-claim
+            # refusal — the shared-store closing of the guard→start race).
+            # Mirror the duplicate-operation guard's honest in-progress reply:
+            # no cascade ran, we own nothing (never mark_failed here — that
+            # would stomp the live owner's record), no history/analytics
+            # (a duplicate is not a new turn; this returns before
+            # _record_last_turn).
+            live = exc.operation
+            arabic = language == "ar" or self._is_arabic_text(message or "")
+            return {
+                "type": "search_in_progress",
+                "intent": "search_jobs",
+                "success": True,
+                "operation_id": str(live.get("operation_id") or ""),
+                "operation_type": "job_search",
+                "operation_status": "running",
+                "response_source": "operation_guard",
+                "debug_id": debug_id,
+                "message": (
+                    "ما زلت أعمل على بحثك الحالي — النتائج ستظهر هنا خلال لحظات، ولم أبدأ بحثاً ثانياً."
+                    if arabic else
+                    "I'm still working on your current job search — results will appear here shortly. "
+                    "I didn't start a second search."
+                ),
+            }
         except Exception as exc:
             if self._current_operation_id:
                 mark_failed(user_id, self._current_operation_id, str(exc), attempt=self._operation_attempt())
