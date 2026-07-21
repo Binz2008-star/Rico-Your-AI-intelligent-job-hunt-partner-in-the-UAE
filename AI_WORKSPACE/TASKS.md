@@ -6258,13 +6258,16 @@ Owner: Claude (agent) / owner approvals in-session
 - Render: deploy-render success on 0665312f (latest backend-relevant main).
 - SMOKE-1197 + Delivery-Smoke: dispatched on main — results recorded in the
   session report.
-### TASK-20260721-007 — Atomic Postgres operation-ownership store (stabilization slice 1)
+### TASK-20260721-008 — Atomic Postgres operation-ownership store (stabilization slice 1)
 
-Status: in_review
+Status: done
 Owner: Claude (agent), owner-directed ("اعمل اللازم" 2026-07-21 — first
 stabilization slice per DEC-20260721-001)
 Branch: claude/ricco-research-improvements-dkmhin (restarted from main 963ba2e)
-Issue/PR: (opens with this branch's new PR)
+Issue/PR: #1285 (merged 2026-07-21, squash 7497c2a3; "Deploy Render Backend"
+for 7497c2a3 = success, /version-gated). NOTE: originally ledgered as
+TASK-20260721-007 inside #1285; renumbered to -008 here to resolve a same-day
+ID collision with the profile-avatar task entry above.
 
 #### Objective
 Move chat job-search operation ownership from the in-process
@@ -6293,8 +6296,10 @@ still stands; scaling stays blocked until slice-4 validation).
   multi-worker-safety property on real Postgres)
 
 #### Continuity Block
-- Current head SHA: (set at commit)
-- Status: in_review — PR opens as draft; merge is owner-gated
+- Current head SHA: 7497c2a3 (main after squash merge of #1285)
+- Status: done — merged + deployed (Deploy Render Backend success for
+  7497c2a3, /version-gated); CI on final PR head 5ae19599 was 9/9 green
+  (pytest, postgres-integration, frontend, playwright, guards, Neon)
 - Validation already run: py_compile; tests/unit 3,433 passed (incl. 37
   operation-focused + drift checks after fix); focused canonical set 245
   passed; operation-adjacent root tests 47 passed; NEW postgres integration
@@ -6313,10 +6318,11 @@ still stands; scaling stays blocked until slice-4 validation).
 - Rollback plan: revert the PR (fallback path is the current production
   behavior); migration 050 may stay applied (additive) or be dropped with
   DROP TABLE IF EXISTS chat_operations
-- Next exact action: open draft PR, CI green, owner review; owner applies
-  migration 050 (preview branch → production) when approving activation
-- Stop condition: any CI regression in the duplicate-guard suite → fix
-  before merge; never raise workers/instances in this task
+- Next exact action (owner): apply migration 050 to Neon (preview branch →
+  production per OPERATING_RULES) to activate the Postgres store; until
+  then production runs the unchanged legacy fallback (one warning log line
+  per search). Workers/instances stay at 1 until slice-4 validation.
+- Stop condition: met — merged and deployed; no further writes on this task
 
 
 ### TASK-20260721-005 — Bilingual (AR/EN) agent replies — response builder localization
@@ -6378,3 +6384,51 @@ language follows the user's message language.
 - Next exact action: none — task fully closed
 - Stop condition: any English-output regression or UI-contract failure in CI
 - Rollback plan: revert the PR; replies return to English-only
+
+### TASK-20260721-009 — Admin operations observability endpoint (stabilization slice 2)
+
+Status: in_review
+Owner: Claude (agent), owner-directed ("تمام باشر" 2026-07-21 — slice 2 per
+DEC-20260721-001: monitoring for errors, costs, stuck operations)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from main b8379d7)
+Issue/PR: (opens with this branch's new PR)
+
+#### Objective
+Give the owner one read-only, admin-gated snapshot of operational health:
+GET /api/v1/admin/ops/overview — stuck/pending chat operations (heartbeat-
+lease view over the slice-1 shared store: running, timed_out,
+stuck_lease_dead, oldest active age), 24h/7d search volume + failure counts
+(the honest error/cost proxies available today), job-provider degradation
+state (existing provider_health()), AI-provider readiness (strict boolean
+allowlist over RicoEnvReport), and process-local chat-API counters.
+Explicitly deferred (later increments): per-token AI spend counters
+(needs provider instrumentation) and any alerting/cron trigger.
+
+#### Scope
+- src/api/routers/admin_ops.py (new; require_admin-gated; read-only)
+- src/api/app.py (router registration — 2 lines)
+- src/repositories/chat_operations_repo.py (stats() aggregate, read-only)
+- tests/unit/test_admin_ops_overview.py (new — 5 tests: authz wiring,
+  unauthenticated rejection, snapshot shape, honest store-degradation
+  reporting, ai_provider strict allowlist)
+- tests/integration/test_operation_ownership_postgres.py (+ stats test)
+- AI_WORKSPACE/TASKS.md (this entry; -008 closure; ID-collision renumber)
+
+#### Continuity Block
+- Current head SHA: (set at commit)
+- Status: in_review — PR opens as draft; merge is owner-gated
+- Validation already run: py_compile; new unit file 5/5; postgres
+  integration 9/9 (incl. new stats test) on local Postgres 16; full
+  tests/unit 3,434 passed after the app.py router registration
+- Validation still required: CI pytest + postgres-integration on PR head
+- Deployment: additive read-only endpoint; no schema change, no migration;
+  operations section reports available=false honestly until migration 050
+  is applied (store fallback), then lights up automatically
+- Known blockers: none
+- Risks: none material — endpoint is read-only, admin-gated, value-free
+  (booleans/counts/enum strings; no key values, user identifiers, or query
+  text)
+- Rollback plan: revert the PR — no schema or behavior dependency
+- Next exact action: open draft PR, CI green, owner review/merge
+- Stop condition: any CI regression → fix before merge; no alerting/cron
+  surface in this slice
