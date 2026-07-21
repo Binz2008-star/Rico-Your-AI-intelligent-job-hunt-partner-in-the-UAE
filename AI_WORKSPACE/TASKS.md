@@ -5787,10 +5787,10 @@ retirement banner on the design doc.
 
 ### TASK-20260721-003 — Add the focused backend test set to qa-tests.yml (audit F4 follow-up)
 
-Status: review
+Status: done
 Owner: Claude (agent), owner-approved ("ضم" 2026-07-21)
 Branch: claude/system-tools-analysis-wc4o4g (restarted from main 26b87a04)
-Issue/PR: set at PR open
+Issue/PR: #1261 (merged 2026-07-21, squash b9dc8ae2)
 
 #### Objective
 Close the CI coverage gap found by the 2026-07-21 audit (F4): tests/
@@ -5807,30 +5807,30 @@ invisible. Add all five to the qa-tests.yml pytest job.
 - [x] Five files added to the pytest job selection
 - [x] Full new CI selection verified locally under CI-identical env vars
       (REDIS_URL="", fake DATABASE_URL, test JWT): 4519 passed, 1 xfailed
-- [ ] PR CI green on exact head
+- [x] PR CI green on exact head (9/9 on fdb93ab, pytest ran the 5 new files)
 
 #### Continuity Block
 - Task ID: TASK-20260721-003
-- GitHub issue/PR: set at PR open
+- GitHub issue/PR: #1261 (merged, squash b9dc8ae2)
 - Branch: claude/system-tools-analysis-wc4o4g
 - Base branch: main
 - Last safe commit SHA: 26b87a04 (main tip at branch restart)
-- Current head SHA: set at commit
+- Current head SHA: b9dc8ae2 (main after squash merge)
 - Uncommitted changes present: no (after commit)
-- Status: review
+- Status: done
 - Files changed: .github/workflows/qa-tests.yml — add 5 test files to pytest
   job; AI_WORKSPACE/TASKS.md — this entry + close TASK-20260721-002
 - Files intentionally not touched: workflow jobs postgres-integration/
   playwright/frontend — unchanged
 - What is complete: workflow edit, local full-selection verification
-- What is incomplete: PR CI + merge; ALSO pending from TASK-20260721-002:
-  confirm the deploy-render / deploy-production runs for merge SHA 26b87a04
-  succeeded (deletion touched src/**)
+- What is incomplete: nothing — Deploy Render Backend for 26b87a04 verified
+  success (workflow gates on /version.commit match), so the TASK-20260721-002
+  deploy check is also closed
 - Known blockers: none
 - Validation already run: full new CI pytest selection locally under CI env →
   4519 passed, 1 xfailed, 0 failed (2m48s)
-- Validation still required: PR CI on exact head; post-merge deploy check for 26b87a04
-- Next exact action: open draft PR, verify CI, merge on green (owner pre-approved)
+- Validation still required: none
+- Next exact action: none — audit follow-ups fully closed
 - Stop condition: any CI failure in the newly added files → fix in this PR
   or drop the offending file and report
 - Rollback plan: revert the PR (workflow + docs only)
