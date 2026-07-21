@@ -134,22 +134,34 @@ def main() -> int:
                     if not chunk:
                         break
                     raw += chunk
+                frame_types: list[str] = []
+                last_error = ""
                 for line in raw.decode(errors="replace").splitlines():
                     if line.startswith("data:"):
                         frames += 1
                         try:
                             evt = json.loads(line[5:].strip())
-                            if evt.get("type") == "done":
+                            ftype = str(evt.get("type"))
+                            frame_types.append(ftype)
+                            if ftype == "done":
                                 done_ok = True
+                            elif ftype == "error":
+                                # Diagnostic evidence only — the server's generic
+                                # error string, never user content.
+                                last_error = str(evt.get("message", ""))[:120]
                         except Exception:
-                            pass
+                            frame_types.append("unparseable")
         except Exception as exc:
             record("authenticated SSE stream", False, f"{type(exc).__name__}: {exc}")
         else:
+            # Evidence-grade summary: the exact frame-type sequence tells apart a
+            # provider-side error frame from a transport cut before the done event.
+            seq = ",".join(frame_types[:12]) or "none"
+            extra = f" first_error={last_error!r}" if last_error else ""
             record(
                 "authenticated SSE stream",
                 status == 200 and "text/event-stream" in ctype and frames >= 1 and done_ok,
-                f"HTTP {status} content-type={ctype.split(';')[0]} data_frames={frames} done_json={done_ok}",
+                f"HTTP {status} content-type={ctype.split(';')[0]} data_frames={frames} done_json={done_ok} frame_types={seq}{extra}",
             )
 
     finally:
