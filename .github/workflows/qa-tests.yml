@@ -39,6 +39,11 @@ jobs:
         run: |
           PYTHONPATH=$GITHUB_WORKSPACE pytest \
             tests/unit/ \
+            tests/test_agent.py \
+            tests/test_agent_runtime.py \
+            tests/test_jotform_webhook.py \
+            tests/test_jwt_user_isolation.py \
+            tests/test_onboarding_state.py \
             tests/test_link_verifier.py \
             tests/test_rico_product_behavior.py \
             tests/test_cv_profile_extraction.py \

@@ -5719,10 +5719,10 @@ owner-gated recommendations.
 
 ### TASK-20260721-002 — Remove the import-broken stateful-agent stack + broken legacy scripts (audit F1/F2)
 
-Status: review
+Status: done
 Owner: Claude (agent), owner-approved removal ("احذف" 2026-07-21)
 Branch: claude/system-tools-analysis-wc4o4g (restarted from main 23a1138)
-Issue/PR: set at PR open
+Issue/PR: #1260 (merged 2026-07-21, squash 26b87a04)
 
 #### Objective
 Delete the dead, import-broken stateful-agent stack and two broken legacy
@@ -5747,7 +5747,7 @@ retirement banner on the design doc.
 - [x] Repo-wide grep: no remaining code references to the removed modules
 - [x] Import-scan of src/: 0 failures (was 8 on main)
 - [x] Focused test set still green
-- [ ] PR CI green on exact head
+- [x] PR CI green on exact head (9/9 on d06a3d9)
 
 #### Required verification
 - [x] Unit tests: focused 5-file set green post-deletion
@@ -5759,13 +5759,13 @@ retirement banner on the design doc.
 
 #### Continuity Block
 - Task ID: TASK-20260721-002
-- GitHub issue/PR: set at PR open
+- GitHub issue/PR: #1260 (merged, squash 26b87a04)
 - Branch: claude/system-tools-analysis-wc4o4g
 - Base branch: main
 - Last safe commit SHA: 23a1138 (main tip at branch restart)
-- Current head SHA: set at commit
+- Current head SHA: 26b87a04 (main after squash merge)
 - Uncommitted changes present: no (after commit)
-- Status: review
+- Status: done
 - Files inspected: removed modules + repo-wide reference grep + src/agent/__init__.py (empty)
 - Files changed: 6 deletions above; docs/STATEFUL_AGENT_ARCHITECTURE.md — retirement banner;
   AI_WORKSPACE/TASKS.md — this entry
@@ -5780,7 +5780,57 @@ retirement banner on the design doc.
 - Deployment/CI/Neon/Vercel state to check next: after merge, confirm the
   deploy-render/deploy-production runs for the merge SHA succeed (identical
   runtime; deletion cannot change served behavior)
-- Next exact action: open draft PR, verify CI, merge on green (owner pre-approved)
+- Next exact action: none; deploy-run verification recorded under TASK-20260721-003
 - Stop condition: any CI failure implicating a live import of the removed
   modules → stop, restore, report
 - Rollback plan: revert the PR (pure re-addition of deleted files)
+
+### TASK-20260721-003 — Add the focused backend test set to qa-tests.yml (audit F4 follow-up)
+
+Status: review
+Owner: Claude (agent), owner-approved ("ضم" 2026-07-21)
+Branch: claude/system-tools-analysis-wc4o4g (restarted from main 26b87a04)
+Issue/PR: set at PR open
+
+#### Objective
+Close the CI coverage gap found by the 2026-07-21 audit (F4): tests/
+test_agent.py, test_agent_runtime.py, test_jotform_webhook.py,
+test_jwt_user_isolation.py, test_onboarding_state.py were never run in CI,
+which is how the stale pre-#354 tests and the thread-racing mock leak stayed
+invisible. Add all five to the qa-tests.yml pytest job.
+
+#### Constraints
+- Keep scope limited to: .github/workflows/qa-tests.yml + ledger
+- Do not touch: runtime code, other workflows
+
+#### Acceptance criteria
+- [x] Five files added to the pytest job selection
+- [x] Full new CI selection verified locally under CI-identical env vars
+      (REDIS_URL="", fake DATABASE_URL, test JWT): 4519 passed, 1 xfailed
+- [ ] PR CI green on exact head
+
+#### Continuity Block
+- Task ID: TASK-20260721-003
+- GitHub issue/PR: set at PR open
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: 26b87a04 (main tip at branch restart)
+- Current head SHA: set at commit
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files changed: .github/workflows/qa-tests.yml — add 5 test files to pytest
+  job; AI_WORKSPACE/TASKS.md — this entry + close TASK-20260721-002
+- Files intentionally not touched: workflow jobs postgres-integration/
+  playwright/frontend — unchanged
+- What is complete: workflow edit, local full-selection verification
+- What is incomplete: PR CI + merge; ALSO pending from TASK-20260721-002:
+  confirm the deploy-render / deploy-production runs for merge SHA 26b87a04
+  succeeded (deletion touched src/**)
+- Known blockers: none
+- Validation already run: full new CI pytest selection locally under CI env →
+  4519 passed, 1 xfailed, 0 failed (2m48s)
+- Validation still required: PR CI on exact head; post-merge deploy check for 26b87a04
+- Next exact action: open draft PR, verify CI, merge on green (owner pre-approved)
+- Stop condition: any CI failure in the newly added files → fix in this PR
+  or drop the offending file and report
+- Rollback plan: revert the PR (workflow + docs only)
