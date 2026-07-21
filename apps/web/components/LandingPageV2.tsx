@@ -122,6 +122,7 @@ const COPY: Record<Lang, {
             ],
             elsewhereLabel: "Elsewhere",
             elsewhere: [
+                { label: "Career Guides", href: "/blog" },
                 { label: "Support", href: "/contact" },
                 { label: "Terms", href: "/terms" },
                 { label: "Privacy", href: "/privacy" },
@@ -205,6 +206,7 @@ const COPY: Record<Lang, {
             ],
             elsewhereLabel: "روابط",
             elsewhere: [
+                { label: "الأدلّة المهنيّة", href: "/blog" },
                 { label: "الدعم", href: "/contact" },
                 { label: "الشروط", href: "/terms" },
                 { label: "الخصوصيّة", href: "/privacy" },

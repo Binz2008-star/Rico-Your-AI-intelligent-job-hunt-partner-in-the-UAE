@@ -1276,6 +1276,8 @@ export const translations = {
     jobCardApplyNow: "Apply now",
     jobCardSearchThisJob: "Search this job",
     jobCardSave: "Save",
+    jobCardShare: "Share on WhatsApp",
+    jobCardShareText: "Found via Rico Hunt — your AI job-hunt partner in the UAE:",
     jobCardIgnore: "Ignore",
     jobCardDone: "Action completed",
 
@@ -2638,6 +2640,8 @@ export const translations = {
     jobCardApplyNow: "تقدّم الآن",
     jobCardSearchThisJob: "ابحث عن هذه الوظيفة",
     jobCardSave: "حفظ",
+    jobCardShare: "مشاركة عبر واتساب",
+    jobCardShareText: "وجدتها عبر ريكو هانت — شريكك الذكي للبحث عن عمل في الإمارات:",
     jobCardIgnore: "تجاهل",
     jobCardDone: "تم تنفيذ الإجراء",
 
