@@ -154,3 +154,6 @@ data/*.lock
 
 # rico-development-supervisor launcher run logs
 .rico-supervisor-logs/
+
+# rico-development-supervisor permission-smoke sentinels
+.rico-smoke/

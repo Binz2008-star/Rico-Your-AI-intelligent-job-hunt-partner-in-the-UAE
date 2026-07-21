@@ -137,8 +137,14 @@ where they are stricter, they win.
    earlier one. `files_changed` must equal the FULL diff of the task's
    commits against base — including `AI_WORKSPACE/TASKS.md` and the ledger
    file itself when touched.
-4. Push the branch and open (or update) a **Draft** PR. The PR body carries
-   the evidence report.
+4. Push ONLY through `scripts/rico-supervisor-push.sh` — the deterministic
+   push gate that mechanically performs step 1 (re-fetch `origin/main`,
+   merge-base freshness, changed-file overlap against main and every open
+   PR, Task-ID uniqueness including open PR patches) immediately before the
+   push and refuses with nothing pushed on any conflict. Direct `git push`
+   is denied to supervised sessions; the prose revalidation above is the
+   contract, the gate is its enforcement. Then open (or update) a **Draft**
+   PR — the PR body carries the evidence report.
 
 ## Stage: STOP OR LOOP
 
@@ -210,9 +216,18 @@ are reported in chat/launcher output only.
   freshly fetched `origin/main`. Running from any other branch — however
   clean — exits non-zero before Claude is invoked. The supervisor itself
   creates the task branch during ACT.
-- Read/Edit/Write are path-scoped to the project directory, and known local
+- Tool AVAILABILITY is restricted with `--tools` to the built-in minimum
+  (Read, Edit, Write, Grep, Glob, Bash) — allow/deny lists then govern
+  permission for only those tools. MCP servers and connectors are excluded
+  twice over: `--strict-mcp-config` with no MCP config loads none, and
+  `mcp__*` is denied besides. `--setting-sources project` keeps user/local
+  permission grants and plugins from silently widening the session.
+- Read/Edit are path-scoped to the project directory, and known local
   secret paths (`.env*`, `*.env`, credential/token/key files) carry explicit
-  deny rules on top of the scoping.
+  deny rules on top of the scoping (Edit rules govern all file-editing
+  tools, Write included).
+- Direct `git push` is denied; pushing happens only through the
+  `scripts/rico-supervisor-push.sh` gate described in RECORD.
 - These permission lists are **defense in depth, not a sandbox**. The static
   guard proves the configuration and the contract text, not the
   impossibility of bypass; search tools (Grep/Glob) accept absolute paths

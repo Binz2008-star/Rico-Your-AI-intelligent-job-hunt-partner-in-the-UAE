@@ -6859,15 +6859,33 @@ next free ID.
   unless on clean main == fresh origin/main; strict result parser (single
   exact-format result line that must be the last non-empty line; rejects
   early/duplicate/trailing/unknown); --parse-result and --classify test
-  modes; --smoke isolated one-turn no-op CLI check; Read/Edit/Write
-  path-scoped to project; explicit secret-path denials (.env*, *.env,
-  credentials, *.pem, *.key, ~/) plus merge/deploy/destructive/DB/network
-  denials; --permission-mode default; NEVER --dangerously-skip-permissions.
-- tests/test_development_supervisor_contract.py — 24 static guards including
-  Task-ID uniqueness across TASKS.md (TASK-20260721-005 frozen as known
-  historical duplicate ×2 — renumbering merged history is an owner
-  decision), strict-parser subprocess cases, scoping/denial checks,
-  main-only precondition, smoke-mode presence.
+  modes; --smoke isolated one-turn no-op CLI check; --smoke-perms isolated
+  sentinel-file permission smoke (mechanical: token surfacing + checksum,
+  not self-report); --tools restricted to Read,Edit,Write,Grep,Glob,Bash;
+  --strict-mcp-config with mcp__* denied and --setting-sources project (no
+  MCP/connector, no user/local widening); Read/Edit path-scoped to project;
+  explicit secret-path denials (.env*, *.env, credentials, *.pem, *.key,
+  ~/ , //etc) plus merge/deploy/destructive/DB/network denials and direct
+  git-push denial; --permission-mode default; NEVER
+  --dangerously-skip-permissions; git-fetch failure exits documented code 6.
+- scripts/rico-supervisor-push.sh + scripts/supervisor_push_gate.py — NEW
+  deterministic push gate (owner review round 2): the ONLY sanctioned push
+  path for supervised sessions. Immediately before pushing it re-fetches
+  origin/main and mechanically checks merge-base freshness, changed-file
+  overlap vs main and every open PR, and Task-ID uniqueness (frozen
+  TASK-20260721-005 exception pinned to its two EXACT historical headings,
+  not a count); refuses with nothing pushed (exit 2) on conflict; exit 6 on
+  preconditions (non-claude/ branch, dirty tree, missing gh, fetch failure).
+- tests/test_development_supervisor_contract.py — 43 static + functional
+  guards: Task-ID uniqueness incl. exact-heading pin and swapped-duplicate
+  rejection, strict-parser subprocess matrix, scoping/denial checks
+  (Read(//etc/**) double-slash absolute form), --tools availability
+  restriction, MCP isolation (--strict-mcp-config + mcp__* deny +
+  --setting-sources project), push-only-via-gate, permission-smoke presence,
+  launcher fetch-failure exit 6 (functional), and fail-before push-gate
+  matrix in temp repos with a fake gh (non-claude branch / main advanced
+  with overlapping file / newly opened overlapping PR / duplicate Task ID —
+  each refuses without pushing; clean case pushes; --check-only never pushes).
 - AI_WORKSPACE/TASKS.md (this entry).
 
 #### Explicitly out of scope (owner directive)
@@ -6878,13 +6896,19 @@ next free ID.
 
 #### Continuity Block
 - Base SHA: 0e0497baff9d18e37d09c2410ceb7e372c011dce (main, includes #1304)
-- Current head SHA: (two-commit pattern: work commit W, then ledger commit —
-  recorded in DEVELOPMENT_LOOP_STATE.md entry 2 and the PR)
+- Current head SHA: final head = the ledger-finalization commit recorded in
+  DEVELOPMENT_LOOP_STATE.md (two-commit pattern; its validated_head_sha is
+  the work commit the full evidence ran against; exact SHAs in the ledger
+  and PR #1305)
 - Status: in_review — Draft PR #1305; merge is owner-gated
-- Validation already run: focused contract suite (all passing at W);
-  bash -n OK; --classify and --parse-result subprocess matrices exercised;
-  one isolated --smoke CLI run (command/result/cost recorded in PR)
-- Validation still required: full CI on the new PR head
+- Validation already run: focused contract suite 43/43 at the work commit;
+  bash -n + py_compile OK; --classify and --parse-result subprocess
+  matrices; push-gate fail-before matrix; --smoke PASSED (CLI accepts
+  --tools/--strict-mcp-config/--setting-sources); --smoke-perms PASSED
+  (safe read surfaced token, denied .env-style read leaked nothing, denied
+  edit left checksum unchanged)
+- Validation still required: none beyond the automatic full CI on the final
+  head (must be green before the merge decision; verified in PR #1305 checks)
 - Deployment: none — docs/skill/script/test only; no runtime path imports
   any of these files
 - Known blockers: none
@@ -6892,7 +6916,7 @@ next free ID.
   remain an absolute-path read surface — documented); prose-rule compliance
   is pinned statically, not proven at runtime
 - Rollback plan: revert the PR (pure additive files; nothing references them)
-- Next exact action: push rebuilt branch (owner-directed force-with-lease),
-  confirm CI on new head, stop
+- Next exact action: owner review / merge decision on PR #1305 (all review
+  rounds remediated; nothing further scheduled by the session)
 - Stop condition: STOP at Draft PR + evidence report; owner reviews before
   merge; no second objective in this session
