@@ -132,9 +132,24 @@ def _resolve_apply_link(job: Dict[str, Any]) -> str:
     # --- trust gate (Phase-0) -------------------------------------------
     try:
         from src.services.job_link_trust import resolve_trusted_apply_url
+    except ImportError:
+        # job_link_trust not yet available (test isolation) — fall back to
+        # legacy key-walk so existing non-Phase-0 tests keep passing.
+        pass
+    else:
         trusted = resolve_trusted_apply_url(job, origin=job.get("origin"))
         if trusted:
             return trusted
+        # Provider payloads (e.g. JSearch) nest the record under job/job_data;
+        # each nested dict must clear the same trust gate on its own fields.
+        for nested_key in ("job", "job_data"):
+            nested = job.get(nested_key)
+            if isinstance(nested, dict):
+                trusted = resolve_trusted_apply_url(
+                    nested, origin=nested.get("origin") or job.get("origin")
+                )
+                if trusted:
+                    return trusted
         # Trust gate rejected — fall through to return ""
         # (do not return a raw untrusted URL)
         raw_url = (
@@ -151,10 +166,6 @@ def _resolve_apply_link(job: Dict[str, Any]) -> str:
                 job.get("job_id"),
             )
         return ""
-    except ImportError:
-        # job_link_trust not yet available (test isolation) — fall back to
-        # legacy key-walk so existing non-Phase-0 tests keep passing.
-        pass
 
     # --- legacy fallback (used only when job_link_trust is unavailable) ---
     for key in (

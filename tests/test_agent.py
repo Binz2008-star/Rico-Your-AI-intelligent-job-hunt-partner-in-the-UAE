@@ -577,12 +577,14 @@ class TestOrchestratorNoArgTools:
 class TestApplyServiceIndeedMethod:
     """apply_service must call IndeedApplyEngine.apply_one(), not .apply()."""
 
-    # Since the #354 Phase-0 trust gate, apply_to_job only accepts URLs that
-    # pass src/services/job_link_trust.resolve_trusted_apply_url: the URL must
-    # live in external_url/alt_url/source_url AND the record must carry a
-    # trusted provenance marker (persisted_job_id / source_job_id / provider +
-    # source_backed). Legacy keys (apply_link, nested job_data.job_apply_link,
-    # alt_link) without provenance are rejected before any engine runs.
+    # Trust-gate contract: apply_to_job only accepts URLs that pass
+    # src/services/job_link_trust.resolve_trusted_apply_url. The URL may live
+    # in any canonical field (external_url/alt_url/source_url plus the DB and
+    # provider fields: link, apply_link, job_apply_link, apply_url, url,
+    # job_url, alt_link — top-level or nested under job/job_data), but the
+    # record MUST carry a trusted provenance marker (persisted_job_id /
+    # source_job_id / provider + source_backed). Records without provenance
+    # are rejected before any engine runs, whatever field holds the URL.
 
     def test_apply_to_job_trusted_indeed_url_reaches_engine(self, monkeypatch):
         monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
@@ -605,14 +607,39 @@ class TestApplyServiceIndeedMethod:
         mock_apply.assert_called_once()
         assert mock_apply.call_args.args[0]["link"] == url
 
-    def test_apply_to_job_rejects_untrusted_nested_legacy_link(self, monkeypatch):
+    def test_apply_to_job_uses_nested_job_apply_link(self, monkeypatch):
+        """Provider payloads nest the record under job_data; with provenance
+        the nested job_apply_link resolves through the same trust gate."""
+        monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
+        from src.services import apply_service
+
+        with patch.object(
+            apply_service,
+            "_apply_indeed",
+            return_value={"status": "success", "message": "ok", "job_id": "jk=nested"},
+        ) as mock_apply:
+            result = apply_service.apply_to_job({
+                "title": "HSE Manager",
+                "job_data": {
+                    "job_apply_link": "https://indeed.com/viewjob?jk=nested",
+                    "source_job_id": "jsearch_nested",
+                },
+            }, approved=True)
+
+        assert result["status"] == "success"
+        assert mock_apply.call_args.args[0]["link"] == "https://indeed.com/viewjob?jk=nested"
+
+    def test_apply_to_job_rejects_nested_link_without_provenance(self, monkeypatch):
+        """A nested link with no provenance marker anywhere stays rejected."""
         monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
         from src.services import apply_service
 
         with patch.object(apply_service, "_apply_indeed") as mock_apply:
             result = apply_service.apply_to_job({
                 "title": "HSE Manager",
-                "job_data": {"job_apply_link": "https://indeed.com/viewjob?jk=nested"},
+                "job_data": {
+                    "job_apply_link": "https://indeed.com/viewjob?jk=nested",
+                },
             }, approved=True)
 
         assert result["status"] == "error"
@@ -630,6 +657,44 @@ class TestApplyServiceIndeedMethod:
 
         assert result["status"] == "manual_required"
         assert "https://careers.acme-corp.com/posting/123" in result["message"]
+
+    def test_apply_to_job_resolves_db_link_field(self, monkeypatch):
+        """DB rows (jobs_repo) carry the URL in `link` + persisted_job_id."""
+        monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
+        from src.services import apply_service
+
+        with patch.object(
+            apply_service,
+            "_apply_indeed",
+            return_value={"status": "success", "message": "ok", "job_id": "42"},
+        ) as mock_apply:
+            result = apply_service.apply_to_job({
+                "id": "42",
+                "persisted_job_id": "42",
+                "link": "https://ae.indeed.com/viewjob?jk=7f3a9c2d1b8e4a50",
+                "title": "HSE Manager",
+                "company": "ACME",
+            }, approved=True)
+
+        assert result["status"] == "success"
+        assert (
+            mock_apply.call_args.args[0]["link"]
+            == "https://ae.indeed.com/viewjob?jk=7f3a9c2d1b8e4a50"
+        )
+
+    def test_apply_to_job_fails_closed_without_provenance(self, monkeypatch):
+        """A URL with no trusted provenance must never reach an apply engine."""
+        monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
+        from src.services import apply_service
+
+        with patch.object(apply_service, "_apply_indeed") as mock_apply:
+            result = apply_service.apply_to_job({
+                "apply_link": "https://indeed.com/viewjob?jk=noprov",
+                "title": "HSE Manager",
+            }, approved=True)
+
+        assert result["status"] == "error"
+        mock_apply.assert_not_called()
 
     def test_indeed_apply_calls_apply_one(self):
         from src.services import apply_service

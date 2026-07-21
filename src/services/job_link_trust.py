@@ -12,6 +12,12 @@ Gate 0  The record's *origin* must NOT be an untrusted source
         regardless of what fields it claims to contain.
 
 Gate 1  URL must be non-empty with an ``http``/``https`` scheme.
+        The URL is read from the canonical field set used across the
+        codebase (``external_url``, ``alt_url``, ``source_url``, plus the
+        DB/ingestion fields ``link``, ``apply_link``, ``job_apply_link``,
+        ``apply_url``, ``url``, ``job_url``, ``alt_link``).  Field presence
+        alone NEVER grants trust — Gates 0 and 2-4 still apply to whatever
+        URL is found.
 
 Gate 2  URL must NOT match known placeholder patterns
         (jk=abc123, template tokens, localhost, etc.).
@@ -63,6 +69,22 @@ UNTRUSTED_ORIGINS: frozenset[str] = frozenset({
     "search_match",       # raw recent_search_matches without DB lookup
 })
 
+# URL fields checked by Gate 1, in priority order, after the caller's
+# url_field. Covers the DB row shape (jobs_repo stores the URL in `link`)
+# and provider/scraper payload shapes (JSearch uses `job_apply_link`).
+# A URL found in any of these fields still has to clear Gates 0 and 2-4.
+_FALLBACK_URL_FIELDS: tuple[str, ...] = (
+    "alt_url",
+    "source_url",
+    "link",
+    "apply_link",
+    "job_apply_link",
+    "apply_url",
+    "url",
+    "job_url",
+    "alt_link",
+)
+
 # Regex: sequential / obviously-generated LinkedIn job IDs
 _SEQUENTIAL_LINKEDIN_JOB_ID_RE = re.compile(
     r"linkedin\.com/jobs/view/(?P<id>\d{1,6})(?:/|$|\?)",
@@ -89,8 +111,10 @@ def resolve_trusted_apply_url(
         The job dict from the DB or ingestion layer.  Must never be raw
         LLM output or a recent_context payload.
     url_field:
-        Key that holds the apply URL inside *job*.  Defaults to
-        ``external_url``.  ``alt_url`` and ``source_url`` are also accepted.
+        Key checked first for the apply URL inside *job*.  Defaults to
+        ``external_url``.  The fields in ``_FALLBACK_URL_FIELDS`` (DB
+        ``link``, provider ``job_apply_link``/``apply_link``, etc.) are
+        checked next, in order.
     origin:
         Delivery-channel hint.  Pass ``'llm'``, ``'recent_context'``,
         ``'chat'``, or any value in ``UNTRUSTED_ORIGINS`` when the record
@@ -128,7 +152,16 @@ def resolve_trusted_apply_url(
     # ------------------------------------------------------------------
     # Gate 1 — URL presence and scheme.
     # ------------------------------------------------------------------
-    raw_url: Any = job.get(url_field) or job.get("alt_url") or job.get("source_url")
+    raw_url: Any = job.get(url_field)
+    if not raw_url or not isinstance(raw_url, str):
+        raw_url = next(
+            (
+                value
+                for field in _FALLBACK_URL_FIELDS
+                if isinstance(value := job.get(field), str) and value.strip()
+            ),
+            None,
+        )
     if not raw_url or not isinstance(raw_url, str):
         return None
     url = raw_url.strip()
