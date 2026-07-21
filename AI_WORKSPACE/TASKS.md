@@ -6818,3 +6818,81 @@ Owner review of #1304 (head ee37126e) found two issues; both handled here:
 Revised head after follow-up: (set at commit). CI: full unit + postgres
 integration green on the new head. **No merge, no deploy, no worker/instance
 change** (owner stop conditions).
+
+### TASK-20260721-015 — Development-control layer: rico-development-supervisor skill + ledger + bounded launcher (rebuilt per owner review of #1305)
+
+Status: in_review
+Owner: Claude (session claude/rico-development-supervisor-sfdh8w), owner-directed 2026-07-21
+Branch: claude/rico-development-supervisor-sfdh8w (rebuilt from main 0e0497ba after owner review)
+Issue/PR: #1305 (Draft)
+
+#### Objective
+Add the controlled "Rico Development Supervisor" loop as a development-control
+layer ONLY — no Rico runtime behavior change. One invocation = at most ONE
+implementation task, max THREE observe/verify correction cycles, hard owner
+gates before merge/deploy/DB/secrets/billing/production mutation/destructive
+commands/scope expansion, IDLE modifies nothing, conflicting workspace vs
+live state stops execution, failed acceptance criteria cannot be reported
+complete.
+
+#### History (honesty note)
+Attempt 1 (base e3a5780, head 3c8f9f6) failed its own OBSERVE contract: open
+PR #1304 was concurrently editing AI_WORKSPACE/TASKS.md and using
+TASK-20260721-014, yet the session claimed no overlap and reused that ID; the
+ledger contradicted append-only; result parsing was lax; Read/Edit/Write were
+unscoped; no real CLI smoke ran. Recorded as INCOMPLETE_EVIDENCE in
+DEVELOPMENT_LOOP_STATE.md. This entry is the corrective rebuild under the
+next free ID.
+
+#### Scope (control-plane only; no src/, no apps/web runtime code)
+- .claude/skills/rico-development-supervisor/SKILL.md — loop contract
+  (OBSERVE/DECIDE/ACT/VERIFY/RECORD/STOP-OR-LOOP, 12 hard owner gates,
+  strict final-line RICO_SUPERVISOR_RESULT contract) + remediations:
+  changed-FILE-LIST overlap inspection, Task-ID uniqueness rule, mandatory
+  pre-push revalidation (re-fetch main, re-check overlap/uniqueness, stop
+  BLOCKED_CONFLICT without pushing), two-commit append-only ledger pattern,
+  launcher main-only precondition, defense-in-depth (not sandbox) wording.
+- AI_WORKSPACE/DEVELOPMENT_LOOP_STATE.md — append-only YAML ledger schema v2:
+  validated_head_sha (real SHA only, sentinels forbidden), full-diff
+  files_changed; attempt 1 recorded as INCOMPLETE_EVIDENCE.
+- scripts/rico-development-loop.sh — bounded launcher: refuses to start
+  unless on clean main == fresh origin/main; strict result parser (single
+  exact-format result line that must be the last non-empty line; rejects
+  early/duplicate/trailing/unknown); --parse-result and --classify test
+  modes; --smoke isolated one-turn no-op CLI check; Read/Edit/Write
+  path-scoped to project; explicit secret-path denials (.env*, *.env,
+  credentials, *.pem, *.key, ~/) plus merge/deploy/destructive/DB/network
+  denials; --permission-mode default; NEVER --dangerously-skip-permissions.
+- tests/test_development_supervisor_contract.py — 24 static guards including
+  Task-ID uniqueness across TASKS.md (TASK-20260721-005 frozen as known
+  historical duplicate ×2 — renumbering merged history is an owner
+  decision), strict-parser subprocess cases, scoping/denial checks,
+  main-only precondition, smoke-mode presence.
+- AI_WORKSPACE/TASKS.md (this entry).
+
+#### Explicitly out of scope (owner directive)
+- PR #1304 content and its follow-up cancellation implementation — untouched
+  (its merge into base 0e0497ba is inherited, not modified).
+- LOW-1, LOW-2, Constitutional AI, any product feature — not started.
+- No second supervised development task run in this session.
+
+#### Continuity Block
+- Base SHA: 0e0497baff9d18e37d09c2410ceb7e372c011dce (main, includes #1304)
+- Current head SHA: (two-commit pattern: work commit W, then ledger commit —
+  recorded in DEVELOPMENT_LOOP_STATE.md entry 2 and the PR)
+- Status: in_review — Draft PR #1305; merge is owner-gated
+- Validation already run: focused contract suite (all passing at W);
+  bash -n OK; --classify and --parse-result subprocess matrices exercised;
+  one isolated --smoke CLI run (command/result/cost recorded in PR)
+- Validation still required: full CI on the new PR head
+- Deployment: none — docs/skill/script/test only; no runtime path imports
+  any of these files
+- Known blockers: none
+- Risks: permission lists are defense in depth, not a sandbox (Grep/Glob
+  remain an absolute-path read surface — documented); prose-rule compliance
+  is pinned statically, not proven at runtime
+- Rollback plan: revert the PR (pure additive files; nothing references them)
+- Next exact action: push rebuilt branch (owner-directed force-with-lease),
+  confirm CI on new head, stop
+- Stop condition: STOP at Draft PR + evidence report; owner reviews before
+  merge; no second objective in this session
