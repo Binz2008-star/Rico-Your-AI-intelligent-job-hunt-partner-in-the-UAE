@@ -244,30 +244,12 @@ class TestJobMatchesActions:
 
 class TestDeleteConfirmActions:
 
-    def test_has_yes_and_no_actions(self):
+    def test_family_retired(self):
+        """Phase 4 of #1262: the Yes/No buttons are retired — confirmation is
+        a STRICT spoken phrase gated by _is_delete_confirmation (pinned in
+        tests/test_delete_saved_jobs_chat.py and test_1262_conversational.py)."""
         from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "delete_saved_jobs_confirm"})
-        ids = _action_ids(r)
-        assert "confirm-delete-jobs" in ids
-        assert "cancel-delete-jobs" in ids
-
-    def test_both_are_chat_continue(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "delete_saved_jobs_confirm"})
-        assert all(a["kind"] == "chat_continue" for a in r["actions"])
-
-    def test_confirm_is_high_impact_requires_confirmation(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "delete_saved_jobs_confirm"})
-        yes = next(a for a in r["actions"] if a["id"] == "confirm-delete-jobs")
-        assert yes["impact"] == "high"
-        assert yes["requires_confirmation"] is True
-
-    def test_cancel_sends_no_type_message(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "delete_saved_jobs_confirm"})
-        no = next(a for a in r["actions"] if a["id"] == "cancel-delete-jobs")
-        assert "no" in no["payload"]["message"].lower()
+        assert compose(None, {"type": "delete_saved_jobs_confirm"}) is None
 
 
 # ── PR-C: delete_saved_jobs_done ──────────────────────────────────────────────
@@ -423,8 +405,8 @@ class TestRuntimePriority:
     def test_runtime_without_data_falls_through_to_type_based(self):
         from src.services.agentic_ui_composer import compose
         rt = _make_result()  # data = {} — no actions
-        r = compose(rt, {"type": "delete_saved_jobs_confirm"})
-        assert "confirm-delete-jobs" in _action_ids(r)
+        r = compose(rt, {"type": "job_matches", "matches": [{}]})
+        assert "refine-search" in _action_ids(r)
 
     def test_runtime_none_data_falls_through_to_type_based(self):
         from src.services.agentic_ui_composer import compose
@@ -432,5 +414,5 @@ class TestRuntimePriority:
         class _NoneData:
             data = None
 
-        r = compose(_NoneData(), {"type": "delete_saved_jobs_confirm"})
-        assert "confirm-delete-jobs" in _action_ids(r)
+        r = compose(_NoneData(), {"type": "job_matches", "matches": [{}]})
+        assert "refine-search" in _action_ids(r)

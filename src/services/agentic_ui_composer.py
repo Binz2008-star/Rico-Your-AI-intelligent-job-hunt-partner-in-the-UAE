@@ -61,42 +61,13 @@ def _job_matches_actions(response_dict: dict[str, Any]) -> list[dict[str, Any]]:
     return actions
 
 
-def _delete_saved_jobs_confirm_actions() -> list[dict[str, Any]]:
-    """Yes / No confirmation buttons for the delete-saved-jobs 2-turn flow."""
-    return [
-        {
-            "id": "confirm-delete-jobs",
-            "label": "Yes, delete all",
-            "kind": "chat_continue",
-            "impact": "high",
-            "requires_confirmation": True,
-            "payload": {"message": "yes delete all my saved jobs"},
-        },
-        {
-            "id": "cancel-delete-jobs",
-            "label": "No, keep them",
-            "kind": "chat_continue",
-            "payload": {"message": "no cancel"},
-        },
-    ]
-
-
-# Phase 3 of #1262: the remaining chat_continue suggestion cards
-# (add-application, find-similar, new-search) are retired — those asks are
-# ordinary sentences the user can type ("find me more jobs like this",
-# "find me jobs"), and Rico's messages point the way in words.
-
-
-# ── Injection map ─────────────────────────────────────────────────────────────
-
-# Phases 2–3 of #1262: navigation and suggestion card families are retired —
-# Rico speaks pointers and offers inside the persisted message. The one
-# remaining family is the destructive-delete confirmation, which stays until
-# its strict conversational confirm ships (phase 4 — safety).
-_RESPONSE_TYPE_ACTIONS: dict[str, Any] = {
-    # saved-jobs deletion confirmation
-    "delete_saved_jobs_confirm": _delete_saved_jobs_confirm_actions,
-}
+# Phases 2–4 of #1262: every response-type card family is retired — Rico
+# speaks pointers, offers, and confirmations inside the persisted message.
+# The destructive-delete Yes/No buttons (phase 4) are replaced by a STRICT
+# spoken confirm: _handle_pending_delete_saved_jobs only fires on the literal
+# delete-verb phrase its prompt instructs (never a loose "ok"/"sure").
+# job_matches keeps its structured refine drawer above — that one is UI by
+# design, not a suggestion.
 
 
 # ── Public compose ────────────────────────────────────────────────────────────
@@ -133,11 +104,6 @@ def compose(
 
     if rtype == "job_matches" and "actions" not in components:
         actions = _job_matches_actions(response_dict or {})
-        if actions:
-            components["actions"] = actions
-    elif rtype in _RESPONSE_TYPE_ACTIONS and "actions" not in components:
-        factory = _RESPONSE_TYPE_ACTIONS[rtype]
-        actions = factory()
         if actions:
             components["actions"] = actions
 

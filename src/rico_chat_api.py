@@ -4733,6 +4733,18 @@ class RicoChatAPI:
         "لا", "لأ", "مو الحين", "مو ذا", "بعدين", "ما ابي", "ما أبغى",
     })
 
+    # Strict spoken confirmation for DESTRUCTIVE actions (#1262 phase 4).
+    # Deliberately narrower than _AFFIRMATIVE_PHRASES: an irreversible bulk
+    # delete must never fire on a loose "ok"/"sure"/«يلا» — only on a literal
+    # phrase that carries the delete verb, exactly as Rico's prompt instructs.
+    # Cancelling stays loose (_is_negative) — that direction is fail-safe.
+    _DELETE_CONFIRM_PHRASES = frozenset({
+        "yes delete", "yes delete all", "yes delete everything",
+        "yes delete all my saved jobs", "delete all my saved jobs",
+        "نعم احذف", "نعم أحذف", "نعم احذف الكل", "نعم أحذف الكل",
+        "احذف الكل", "أحذف الكل",
+    })
+
     _ARABIC_WHAT_NOW_TERMS = frozenset({
         "مالحل", "ما الحل", "ماالحل",
         "مالحل الان", "مالحل الآن",
@@ -4783,6 +4795,19 @@ class RicoChatAPI:
         """True for no/لا single-word negatives."""
         text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
         return text in RicoChatAPI._NEGATIVE_PHRASES
+
+    @staticmethod
+    def _is_delete_confirmation(message: str) -> bool:
+        """True ONLY for the literal delete-confirm phrases (#1262 phase 4).
+
+        Exact-set membership after punctuation/whitespace normalization —
+        no regex, no fuzzy matching, no AI interpretation. What Rico's
+        prompt instructs is exactly what this accepts (cross-pinned in
+        tests), so a "yes" meant for some other question can never trigger
+        an irreversible deletion.
+        """
+        text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
+        return text in RicoChatAPI._DELETE_CONFIRM_PHRASES
 
     @staticmethod
     def _is_arabic_text(message: str) -> bool:
@@ -14071,15 +14096,17 @@ class RicoChatAPI:
                 })
             except Exception:
                 pass
+            # #1262 phase 4: the prompt instructs the EXACT strict phrase the
+            # gate accepts (_is_delete_confirmation) — transcript parity.
             if arabic:
                 msg = (
                     "هل أنت متأكد أنك تريد حذف **جميع** وظائفك المحفوظة؟\n\n"
-                    "هذا الإجراء لا يمكن التراجع عنه. اكتب **نعم** للمتابعة أو **لا** للإلغاء."
+                    "هذا الإجراء لا يمكن التراجع عنه. للتأكيد اكتب **نعم احذف**، وللإلغاء اكتب **لا**."
                 )
             else:
                 msg = (
                     "Are you sure you want to delete **all** your saved jobs?\n\n"
-                    "This cannot be undone. Type **yes** to confirm or **no** to cancel."
+                    "This cannot be undone. To confirm, type **yes, delete** — to cancel, type **no**."
                 )
             self._append_chat(user_id, "assistant", msg)
             return {
@@ -14142,7 +14169,9 @@ class RicoChatAPI:
 
         arabic = self._is_arabic_text(message)
 
-        if RicoChatAPI._is_affirmative(message):
+        # #1262 phase 4: destructive execution requires the STRICT literal
+        # phrase — a loose "ok"/"sure"/«يلا» falls through to the re-prompt.
+        if RicoChatAPI._is_delete_confirmation(message):
             _clear()
             try:
                 from src.rico_db import RicoDB as _RicoDB
@@ -14203,11 +14232,12 @@ class RicoChatAPI:
                 "message": msg,
             }
 
-        # Ambiguous reply — re-prompt
+        # Ambiguous reply — re-prompt with the exact strict phrase. Loose
+        # affirmatives ("ok", "sure", bare "yes") land here BY DESIGN.
         if arabic:
-            msg = "اكتب **نعم** لتأكيد الحذف أو **لا** للإلغاء."
+            msg = "للتأكيد اكتب **نعم احذف**، وللإلغاء اكتب **لا**."
         else:
-            msg = "Please type **yes** to confirm deletion or **no** to cancel."
+            msg = "To confirm, type **yes, delete** — to cancel, type **no**."
         self._append_chat(user_id, "assistant", msg)
         return {
             "type": "delete_saved_jobs_confirm",
