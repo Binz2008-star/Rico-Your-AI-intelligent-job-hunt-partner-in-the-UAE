@@ -6613,3 +6613,66 @@ verified no 051 reference existed anywhere).
 - Next exact action: owner reviews evidence and merges the draft PR
 - Stop condition: agent STOPS after CI evidence report (owner instruction)
 - Rollback plan: revert the PR (pure rename + comments + docs + one test)
+
+### TASK-20260721-013 — SSRF DNS fail-open remediation in link_verifier (LOW-3)
+
+Status: in_review
+Owner: Claude (agent), owner-directed (LOW-3 remediation 2026-07-21)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from main 46bdd32)
+Issue/PR: (opens with this branch's new PR)
+
+#### Objective
+Close the DNS fail-OPEN in src/services/link_verifier.py's SSRF guard. Both
+_is_safe_url_async and _is_safe_url_sync caught EVERY DNS-resolution error
+and returned True ("allow URL but note limitation") — so any URL whose
+hostname failed to resolve (NXDOMAIN, resolver error, timeout, or a
+rebinding attempt racing the check) bypassed the private-range/metadata
+guard entirely. Fix: on getaddrinfo failure, return False (fail closed),
+identically on both paths.
+
+Acceptance: no URL with an unresolvable hostname can pass the SSRF check on
+the sync OR async path.
+
+#### Scope (narrow — LOW-3 only)
+- src/services/link_verifier.py: the two DNS-failure `except Exception`
+  blocks change `pass` (→ fall through to `return True`) into `return False`.
+  NOTHING ELSE changed — protocol allow-list, private/metadata ranges,
+  redirect logic, and HTTP fetch are all untouched. No DNS pinning, no
+  redesign (explicitly out of scope).
+- tests/test_link_verifier_dns_fail_closed.py: NEW regression suite
+  (16 tests, deterministic getaddrinfo mocks, no network) — NXDOMAIN,
+  generic resolver exception, public→public (allowed), public→private
+  (rejected), public→metadata (rejected), sync/async parity across all DNS
+  outcomes, and the verify_link caller contract (unresolvable host →
+  BLOCKED, no HTTP fetch, no 500).
+- AI_WORKSPACE/TASKS.md (this entry).
+
+#### Caller audit
+- src/api/routers/link_verification.py (Pydantic `validate_url` /
+  `validate_urls`): call `_is_safe_url` → `_is_safe_url_sync`; a False now
+  raises the existing ValueError("URL is not allowed (SSRF protection)") —
+  a clean 422, not a 500. Correct.
+- src/services/link_verifier.LinkVerifier.verify_link (async, self-protects
+  via `_is_safe_url_async` for the initial URL and every redirect target):
+  a False now returns LinkStatus.BLOCKED with no HTTP fetch — honest,
+  no 500. Pinned by test_verify_link_blocks_unresolvable_host_without_fetch.
+- src/rico_chat_api._verify_link_sync → verify_link: inherits the BLOCKED
+  result; no bypass path.
+
+#### Continuity Block
+- Current head SHA: (set at commit)
+- Status: in_review — Draft PR; NO merge, NO deploy, NO LOW-1/LOW-2, NO
+  slice-4 (owner stop conditions)
+- Validation already run: new suite 16/16 post-fix; PROVEN 7/16 FAIL on
+  pre-fix code (git stash of link_verifier.py) — the 7 DNS-failure cases;
+  existing tests/test_link_verifier.py + tests/test_354_apply_link_verification.py
+  34 passed; py_compile OK
+- Validation still required: full CI on the PR head
+- Deployment: none in this task — owner-gated
+- Known blockers: none
+- Risks: a hostname that is genuinely unresolvable at check time is now
+  BLOCKED instead of allowed — this is the intended security posture, and a
+  fetch of such a host could not have succeeded anyway
+- Rollback plan: revert the PR (restores prior fail-open behavior)
+- Next exact action: open Draft PR, targeted tests + full CI green, stop
+- Stop condition: STOP after evidence report and green CI (owner directive)
