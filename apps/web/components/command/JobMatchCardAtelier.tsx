@@ -266,9 +266,11 @@ function ScorePip({ score, scorePct, accent, contrastInk, fitLabel }: {
  * PRESERVES EVERY REAL AFFORDANCE of the production card verbatim — the exact
  * same apply/source/alt link decision tree (BUG-03 safe), JobFallbackActions
  * for dead-end-free cards, the "mark as applied" follow-up, and the
- * verification SourceQualityBadge row. SAVE / SKIP route through the existing
- * `onAction` → `sendMessage` → agent_runtime pipeline (SAVE reuses the exact
- * pipeline-save prompt JobFallbackActions already sends).
+ * verification SourceQualityBadge row. Phase 5 of #1262: the SAVE / SKIP
+ * buttons are retired — Rico's results message speaks the equivalent ("save
+ * the first job" / "skip the second one"), which routes through the same
+ * agent_runtime pipeline the buttons used. The apply/source links stay: they
+ * are real external affordances, not suggestions.
  *
  * Accent: uses the workspace palette (`c.red` = Atelier sun-red here) directly,
  * so the card carries the single route signal with no hard-coded gold/lime hex.
@@ -405,7 +407,9 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                 </div>
             )}
 
-            {/* Action row — primary apply link (real, verified affordance) + SAVE + SKIP */}
+            {/* Action row — primary apply link (real, verified affordance).
+                Phase 5 of #1262: SAVE/SKIP buttons retired — spoken in the
+                results message instead. */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
                 {linkHref ? (
                     <a
@@ -438,24 +442,6 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                         {t("cmdViewSource")}
                     </a>
                 )}
-                <button
-                    type="button"
-                    data-testid="job-action-save"
-                    onClick={() => onAction(`Save ${match.title} at ${match.company} to my pipeline`)}
-                    className="rounded-md px-3 py-1.5 text-[11px] transition-[opacity,transform] duration-150 hover:opacity-80 active:scale-[0.98]"
-                    style={{ border: `1px solid ${c.hair}`, color: c.ink70 }}
-                >
-                    {t("cmdMatchSave")}
-                </button>
-                <button
-                    type="button"
-                    data-testid="job-action-skip"
-                    onClick={() => onAction(`Skip ${match.title} at ${match.company}`)}
-                    className="rounded-md px-3 py-1.5 text-[11px] transition-[opacity,transform] duration-150 hover:opacity-80 active:scale-[0.98]"
-                    style={{ color: c.ink55, background: "transparent", border: "1px solid transparent" }}
-                >
-                    {t("cmdMatchSkip")}
-                </button>
             </div>
 
             {/* Safe fallback CTAs — the card is never a dead-end (BUG-03 preserved) */}
