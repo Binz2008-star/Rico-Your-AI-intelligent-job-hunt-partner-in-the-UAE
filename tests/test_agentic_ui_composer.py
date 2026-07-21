@@ -181,7 +181,9 @@ class TestAgenticUiComposer:
 
 class TestJobMatchesActions:
 
-    def test_with_matches_includes_view_save_refine(self):
+    def test_with_matches_includes_save_refine_no_navigate(self):
+        """Phase 2 of #1262: the View-all-jobs navigation card is retired —
+        the pointer is spoken in the message text instead."""
         from src.services.agentic_ui_composer import compose
         r = compose(None, {
             "type": "job_matches",
@@ -189,7 +191,7 @@ class TestJobMatchesActions:
             "search_query": "HSE Manager",
         })
         ids = _action_ids(r)
-        assert "view-jobs" in ids
+        assert "view-jobs" not in ids
         assert "save-search" in ids
         assert "refine-search" in ids
 
@@ -197,16 +199,14 @@ class TestJobMatchesActions:
         from src.services.agentic_ui_composer import compose
         r = compose(None, {"type": "job_matches", "matches": [], "search_query": "PM"})
         ids = _action_ids(r)
-        assert "view-jobs" in ids
+        assert "view-jobs" not in ids
         assert "save-search" not in ids
         assert "refine-search" in ids
 
-    def test_view_jobs_navigates_to_flow(self):
+    def test_no_navigate_kind_cards_on_job_matches(self):
         from src.services.agentic_ui_composer import compose
         r = compose(None, {"type": "job_matches", "matches": [{}]})
-        view = next(a for a in r["actions"] if a["id"] == "view-jobs")
-        assert view["kind"] == "navigate"
-        assert view["href"] == "/flow"
+        assert all(a["kind"] != "navigate" for a in r["actions"])
 
     def test_save_search_uses_search_query_in_message(self):
         from src.services.agentic_ui_composer import compose
@@ -306,30 +306,21 @@ class TestProfileActions:
     @pytest.mark.parametrize("rtype", [
         "profile_update", "profile_summary", "cv_first_profile",
     ])
-    def test_profile_type_has_view_profile(self, rtype):
+    def test_profile_types_have_no_cards(self, rtype):
+        """Phase 2 of #1262: navigation-only profile families are retired —
+        Rico points to /profile in the message text instead."""
         from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": rtype})
-        assert "view-profile" in _action_ids(r)
-
-    def test_view_profile_navigates(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "profile_update"})
-        act = next(a for a in r["actions"] if a["id"] == "view-profile")
-        assert act["kind"] == "navigate"
-        assert act["href"] == "/profile"
+        assert compose(None, {"type": rtype}) is None
 
 
 # ── PR-C: application_status_update ──────────────────────────────────────────
 
 class TestApplicationActions:
 
-    def test_track_applications_action(self):
+    def test_status_update_has_no_cards(self):
+        """Phase 2 of #1262: the navigation-only card family is retired."""
         from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "application_status_update"})
-        assert "view-applications" in _action_ids(r)
-        act = next(a for a in r["actions"] if a["id"] == "view-applications")
-        assert act["kind"] == "navigate"
-        assert act["href"] == "/applications"
+        assert compose(None, {"type": "application_status_update"}) is None
 
 
 # ── PR-C: application_list ────────────────────────────────────────────────────
@@ -338,10 +329,10 @@ class TestApplicationListActions:
     """application_list is the conversational query response type
     ("what are my applications?"), distinct from the tracker-card application_status."""
 
-    def test_view_flow_action_present(self):
+    def test_navigation_card_retired(self):
+        """Phase 2 of #1262: view-flow is spoken in the message instead."""
         from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "application_list"})
-        assert "view-flow" in _action_ids(r)
+        assert "view-flow" not in _action_ids(compose(None, {"type": "application_list"}))
 
     def test_add_application_is_chat_continue(self):
         from src.services.agentic_ui_composer import compose
@@ -356,17 +347,11 @@ class TestApplicationListActions:
 
 class TestApplicationStatusActions:
 
-    def test_view_flow_action_present(self):
+    def test_navigation_card_retired(self):
         from src.services.agentic_ui_composer import compose
         r = compose(None, {"type": "application_status"})
-        assert "view-flow" in _action_ids(r)
-
-    def test_view_flow_navigates_to_flow(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "application_status"})
-        act = next(a for a in r["actions"] if a["id"] == "view-flow")
-        assert act["kind"] == "navigate"
-        assert act["href"] == "/flow"
+        assert "view-flow" not in _action_ids(r)
+        assert all(a["kind"] != "navigate" for a in r["actions"])
 
     def test_add_application_is_chat_continue(self):
         from src.services.agentic_ui_composer import compose
@@ -381,17 +366,11 @@ class TestApplicationStatusActions:
 
 class TestPrepareApplicationActions:
 
-    def test_view_flow_action_present(self):
+    def test_navigation_card_retired(self):
         from src.services.agentic_ui_composer import compose
         r = compose(None, {"type": "prepare_application"})
-        assert "view-flow" in _action_ids(r)
-
-    def test_view_flow_navigates_to_flow(self):
-        from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "prepare_application"})
-        act = next(a for a in r["actions"] if a["id"] == "view-flow")
-        assert act["kind"] == "navigate"
-        assert act["href"] == "/flow"
+        assert "view-flow" not in _action_ids(r)
+        assert all(a["kind"] != "navigate" for a in r["actions"])
 
     def test_find_similar_is_chat_continue(self):
         from src.services.agentic_ui_composer import compose
@@ -406,12 +385,11 @@ class TestPrepareApplicationActions:
 
 class TestSaveJobActions:
 
-    def test_view_saved_jobs_navigate_to_flow(self):
+    def test_navigation_family_retired(self):
+        """Phase 2 of #1262: the saved-list pointer is spoken in the save
+        confirmation message ([tracked jobs](/flow)) — no card."""
         from src.services.agentic_ui_composer import compose
-        r = compose(None, {"type": "save_job"})
-        assert "view-saved-jobs" in _action_ids(r)
-        act = next(a for a in r["actions"] if a["id"] == "view-saved-jobs")
-        assert act["href"] == "/flow"
+        assert compose(None, {"type": "save_job"}) is None
 
 
 # ── PR-C: unknown / no-op types ───────────────────────────────────────────────
@@ -499,7 +477,7 @@ class TestRuntimePriority:
         ])
         r = compose(rt, {"type": "job_matches", "matches": [{}]})
         # Actions come from type-based (runtime has no actions)
-        assert "view-jobs" in _action_ids(r)
+        assert "refine-search" in _action_ids(r)
         # proposed_changes come from runtime
         assert "proposed_changes" in r
         assert r["proposed_changes"][0]["field"] == "target_role"
@@ -507,8 +485,8 @@ class TestRuntimePriority:
     def test_runtime_without_data_falls_through_to_type_based(self):
         from src.services.agentic_ui_composer import compose
         rt = _make_result()  # data = {} — no actions
-        r = compose(rt, {"type": "profile_update"})
-        assert "view-profile" in _action_ids(r)
+        r = compose(rt, {"type": "application_status"})
+        assert "add-application" in _action_ids(r)
 
     def test_runtime_none_data_falls_through_to_type_based(self):
         from src.services.agentic_ui_composer import compose
@@ -516,5 +494,5 @@ class TestRuntimePriority:
         class _NoneData:
             data = None
 
-        r = compose(_NoneData(), {"type": "profile_update"})
-        assert "view-profile" in _action_ids(r)
+        r = compose(_NoneData(), {"type": "application_status"})
+        assert "add-application" in _action_ids(r)

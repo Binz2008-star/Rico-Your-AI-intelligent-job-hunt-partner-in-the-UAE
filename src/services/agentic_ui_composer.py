@@ -32,20 +32,18 @@ logger = logging.getLogger(__name__)
 # ── Response-type action card factories ───────────────────────────────────────
 
 def _job_matches_actions(response_dict: dict[str, Any]) -> list[dict[str, Any]]:
-    """Action cards attached to every job-match response."""
+    """Action cards attached to every job-match response.
+
+    Phase 2 of #1262: navigation buttons are retired — Rico now says where
+    things live inside the message itself (a markdown link in
+    _build_role_search_message), so the old "View all jobs" card is gone.
+    """
     search_role = (
         response_dict.get("search_query")
         or (response_dict.get("entities") or {}).get("job_title")
         or "these roles"
     )
-    actions: list[dict[str, Any]] = [
-        {
-            "id": "view-jobs",
-            "label": "View all jobs",
-            "kind": "navigate",
-            "href": "/flow",
-        },
-    ]
+    actions: list[dict[str, Any]] = []
     # Only offer save-search when there were actual results
     if response_dict.get("matches"):
         actions.append({
@@ -88,30 +86,6 @@ def _delete_saved_jobs_confirm_actions() -> list[dict[str, Any]]:
     ]
 
 
-def _profile_actions() -> list[dict[str, Any]]:
-    """Quick-link to the profile page after profile-related responses."""
-    return [
-        {
-            "id": "view-profile",
-            "label": "View my profile",
-            "kind": "navigate",
-            "href": "/profile",
-        },
-    ]
-
-
-def _applications_actions() -> list[dict[str, Any]]:
-    """Quick-link to applications tracker."""
-    return [
-        {
-            "id": "view-applications",
-            "label": "Track applications",
-            "kind": "navigate",
-            "href": "/applications",
-        },
-    ]
-
-
 def _new_search_actions() -> list[dict[str, Any]]:
     """Post-delete helper to start a fresh search."""
     return [
@@ -125,14 +99,13 @@ def _new_search_actions() -> list[dict[str, Any]]:
 
 
 def _application_status_actions() -> list[dict[str, Any]]:
-    """Action cards shown after Rico displays the application status summary."""
+    """Action cards shown after Rico displays the application status summary.
+
+    Phase 2 of #1262: the "View Application Flow" navigation card is retired —
+    the message text carries the pointer. add-application stays until its
+    conversational replacement lands (phase 3).
+    """
     return [
-        {
-            "id": "view-flow",
-            "label": "View Application Flow",
-            "kind": "navigate",
-            "href": "/flow",
-        },
         {
             "id": "add-application",
             "label": "Add application",
@@ -143,14 +116,12 @@ def _application_status_actions() -> list[dict[str, Any]]:
 
 
 def _prepare_application_actions() -> list[dict[str, Any]]:
-    """Action cards shown after Rico prepares/tailors a job application."""
+    """Action cards shown after Rico prepares/tailors a job application.
+
+    Phase 2 of #1262: the navigation card is retired; find-similar stays
+    until phase 3.
+    """
     return [
-        {
-            "id": "view-flow",
-            "label": "View Application Flow",
-            "kind": "navigate",
-            "href": "/flow",
-        },
         {
             "id": "find-similar",
             "label": "Find similar jobs",
@@ -162,31 +133,21 @@ def _prepare_application_actions() -> list[dict[str, Any]]:
 
 # ── Injection map ─────────────────────────────────────────────────────────────
 
+# Phase 2 of #1262: navigation-only families (profile flows,
+# application_status_update, save_job) are retired entirely — Rico points to
+# those pages in his own words inside the persisted message. Remaining entries
+# carry chat_continue/confirmation cards awaiting phases 3–4.
 _RESPONSE_TYPE_ACTIONS: dict[str, Any] = {
-    # profile flows
-    "profile_update":   _profile_actions,
-    "profile_summary":  _profile_actions,
-    "cv_first_profile": _profile_actions,
     # application flows — application_list is the conversational query response
     # ("what are my applications?"), application_status is the tracker card response
     "application_list":          _application_status_actions,
     "application_status":        _application_status_actions,
-    "application_status_update": _applications_actions,
     # prepare/tailor application
     "prepare_application": _prepare_application_actions,
     # saved-jobs deletion confirmation
     "delete_saved_jobs_confirm": _delete_saved_jobs_confirm_actions,
     # post-deletion (empty list, offer a fresh start)
     "delete_saved_jobs_done": _new_search_actions,
-    # save-job confirmation → quick link to saved list
-    "save_job": lambda: [
-        {
-            "id": "view-saved-jobs",
-            "label": "View saved jobs",
-            "kind": "navigate",
-            "href": "/flow",
-        },
-    ],
 }
 
 

@@ -6947,6 +6947,16 @@ class RicoChatAPI:
                     f"{', '.join(_adjacent_names)} — just say the word."
                 )
 
+        # Phase 2 of #1262: the old "View all jobs" navigation card became a
+        # spoken pointer — Rico says where everything lives, in words, with a
+        # markdown link inside the same persisted message.
+        if top_matches:
+            base_message += (
+                " تجد كل وظائفك في [لوحة الوظائف](/flow) في أي وقت."
+                if arabic else
+                " Everything lives on [your jobs board](/flow) anytime."
+            )
+
         # Conversational scheduled-search offer (#1249): same OPT-IN idiom as
         # adjacent roles above — Rico proposes in his own words, no buttons,
         # and the user accepts by simply saying so. The suggested phrase is a
@@ -10920,7 +10930,7 @@ class RicoChatAPI:
                     user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
                 )
                 if result.ok:
-                    success_msg = f"Saved — {title} at {company}. I'll keep it in your tracked jobs."
+                    success_msg = f"Saved — {title} at {company}. I'll keep it in your [tracked jobs](/flow)."
                 else:
                     logger.warning(
                         "rico_chat: save action not ok user=%s title=%s err=%s",
@@ -10975,7 +10985,7 @@ class RicoChatAPI:
                         user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
                     )
                     success_msg = (
-                        f"Saved — {title} at {company}. I'll keep it in your tracked jobs."
+                        f"Saved — {title} at {company}. I'll keep it in your [tracked jobs](/flow)."
                         if result.ok else
                         f"I couldn't save {title} at {company} just now — please try again."
                     )
@@ -14982,6 +14992,9 @@ class RicoChatAPI:
         if summary_parts:
             lines.append("\n" + " · ".join(summary_parts))
 
+        # Phase 2 of #1262: spoken pointer replaces the navigation card.
+        lines.append("\nThe full picture is in [your application flow](/flow).")
+
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
         return {"type": "application_list", "message": msg, "applications": apps[:10], "total": total}
@@ -15242,6 +15255,13 @@ class RicoChatAPI:
                 msg = f"تم حذف **{raw_value.strip()}** من {label}."
             else:
                 msg = f"تم تحديث {label} إلى **{raw_value.strip()}**."
+
+        # Phase 2 of #1262: spoken pointer replaces the "View my profile" card.
+        msg += (
+            " تجده كاملاً في [ملفك الشخصي](/profile)."
+            if arabic else
+            " It's all on [your profile](/profile)."
+        )
 
         self._append_chat(user_id, "assistant", msg)
         return {
