@@ -11,7 +11,7 @@ from dataclasses import asdict, is_dataclass, replace as _dc_replace
 import json
 import logging
 
-from src.log_privacy import safe_exc, user_ref
+from src.log_privacy import operation_ref, safe_exc, user_ref
 import os
 import re
 import uuid
@@ -6653,7 +6653,7 @@ class RicoChatAPI:
             if getattr(fetch, "cancelled", False):
                 logger.info(
                     "job_search_cancelled_ownership_lost role=%r op=%s attempt=%s",
-                    search_role, operation_id, self._operation_attempt(),
+                    search_role, operation_ref(operation_id), self._operation_attempt(),
                 )
                 return {
                     "type": "search_superseded",

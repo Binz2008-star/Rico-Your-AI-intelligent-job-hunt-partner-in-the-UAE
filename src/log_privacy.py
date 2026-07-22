@@ -90,6 +90,17 @@ def token_ref(token: Any) -> str:
     return _hmac_ref(str(token), "t")
 
 
+def operation_ref(operation_id: Any) -> str:
+    """Non-reversible correlation ref for a search operation id.
+
+    A search ``operation_id`` embeds the server-minted guest/session id (e.g.
+    ``op_public:<sid>_...``), so logging it raw would re-emit a public-session
+    bearer id. This yields a stable, server-keyed fingerprint instead."""
+    if not operation_id:
+        return "op:none"
+    return _hmac_ref(str(operation_id), "op")
+
+
 def safe_fields(mapping: Mapping[str, Any] | None) -> str:
     """Field NAMES + count — never values."""
     if not mapping:

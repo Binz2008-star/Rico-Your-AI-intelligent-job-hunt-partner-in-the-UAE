@@ -37,12 +37,18 @@ class CancellationToken:
 
     @property
     def cancelled(self) -> bool:
-        """True once cancellation is observable. Never raises — a broken check
-        must not crash the cascade, so it is treated as 'not cancelled'."""
+        """True once cancellation is observable. Never raises.
+
+        FAIL-CLOSED: this token exists only because the caller wanted the
+        cascade cancellable for a specific (operation_id, attempt). If the
+        ownership check itself breaks, we CANNOT prove we still own the
+        operation, so a broken check must be treated as cancelled — never as a
+        licence to start more provider work. (Token absence stays fail-open and
+        is handled by `is_cancelled(None)` below: no token → never cancelled.)"""
         try:
             return bool(self.is_cancelled())
         except Exception:
-            return False
+            return True
 
 
 def is_cancelled(token: Optional["CancellationToken"]) -> bool:

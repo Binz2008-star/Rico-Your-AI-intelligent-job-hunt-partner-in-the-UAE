@@ -6819,40 +6819,92 @@ Revised head after follow-up: (set at commit). CI: full unit + postgres
 integration green on the new head. **No merge, no deploy, no worker/instance
 change** (owner stop conditions).
 
-#### Follow-up (2026-07-21, owner-directed) — end-to-end cooperative cancellation LANDED (own PR; #1305 frozen, no new TASK ID)
+#### Follow-up (2026-07-22, owner-directed) — end-to-end cooperative cancellation (PR #1306, in_review, NOT merged; #1305 frozen, no new TASK ID)
 The BLOCKER named above (post-claim-partition duplicate-cascade cancellation)
-is now implemented — the ownership-loss signal finally has a real executor
-consumer, so a de-owned worker stops NEW provider work and discards in-flight
-results without side effects.
+now has a real executor consumer: the ownership-loss signal is threaded all the
+way into the provider HTTP layer, so a de-owned worker stops NEW provider work
+and discards any in-flight response without side effects. **This is NOT merged
+and NOT deployed — PR #1306 stays a Draft under owner review.**
 
 Guarantee delivered (NOT a claim to abort an already-sent urllib request):
 "No new provider work after cancellation becomes observable; any already
 in-flight response is discarded without side effects."
 
+Owner review on the first (shallow) implementation raised 8 blocking findings —
+the token stopped at `search_jobs` and never reached the provider clients, side
+effects (mark_degraded / observations / cache) could fire before the
+orchestrator noticed, JSearch backoff was a non-interruptible `time.sleep`,
+queued futures were not cancelled, a raising check failed OPEN, and the
+acceptance test took ownership_lost as given instead of starting a real cascade
+before the partition. All 8 are addressed:
+
 - NEW `src/services/cancellation.py` — dependency-free `CancellationToken`
   (operation_id, attempt, `is_cancelled` callable). job_providers/jsearch_client
   do NOT import operation_state; the token is passed EXPLICITLY down the cascade.
   rico_chat_api binds it to `operation_state.ownership_lost(op, attempt)`.
-- `FetchResult.cancelled: bool` — a DISTINCT outcome (`error="ownership_lost"`),
-  never conflated with no-results / degradation / quota / HTTP error.
-- `job_providers.search_jobs(..., cancel=token)` checkpoints: entry (no provider
-  call, no cache read delivered), per-worker before the HTTP runner (no NEW
-  request), post-worker (in-flight result discarded, NOT marked degraded),
-  harvest loop (stop launching, discard), and a final pre-deliver re-check
-  (no cache write, not delivered). attempt fence stays the final write guard.
+  **FAIL-CLOSED (finding #6):** a *present* token whose check raises is treated
+  as CANCELLED (a broken ownership check cannot license more provider work);
+  an ABSENT token stays fail-open (`is_cancelled(None)` is False — unchanged
+  compat for every non-cancellable caller).
+- `FetchResult.cancelled: bool` — a DISTINCT outcome (`error="ownership_lost"`,
+  `provider="none"`), never conflated with no-results / degradation / quota /
+  HTTP error.
+- **Token threaded into every provider client (findings #1/#2):**
+  `_jooble_search`, `_adzuna_search`, `_jsearch_search`, and
+  `jsearch_client.search` all accept `cancel=` and check it BEFORE issuing any
+  HTTP request and immediately AFTER the response — so `mark_degraded`,
+  `_record_observations_safe`, `record_observations`, and cache writes are all
+  guarded and never fire for a de-owned in-flight response.
+- **Interruptible JSearch backoff (finding #3):** the retry `time.sleep(backoff)`
+  is replaced with `_wait_or_cancelled()`, which polls the token every 0.1s and
+  starts no new retry once ownership is lost. Stale cache is not served after a
+  lost lease.
+- **Cache / internal races (finding #5):** `search_jobs` re-checks ownership
+  after the cache lookup (before delivering a hit), before and after
+  `internal_lookup`, and before `_cache_put`.
+- **Mechanical future cancellation (finding #4):** the harvest `finally` now
+  calls `fut.cancel()` on every pending future and
+  `pool.shutdown(wait=False, cancel_futures=True)`, so queued-but-unstarted
+  providers never run.
 - rico_chat_api: `_current_cancellation_token()` + `_fetch_jobs_with_cancel()`
   (signature-safe for monkeypatched stand-ins). On a cancelled fetch the search
   path returns an honest `search_superseded` reply and records NOTHING — no
   mark_completed, no observations, no results delivered.
-- Tests: tests/test_provider_cascade_cancellation.py (7 — entry/worker/in-flight
-  discard/distinct-outcome/absent-token/raising-check/end-to-end real token→real
-  cascade); tests/unit/test_job_search_operation_state.py +2 (superseded-no-record;
-  token↔ownership_lost binding). Full tests/unit 3,451 passed; multiworker 8/8 +
-  ownership 9/9 on real Postgres.
+- **Privacy (finding #8):** the cancellation log no longer emits the raw
+  `operation_id` (which embeds the server-minted guest/session id); it uses the
+  new `log_privacy.operation_ref()` HMAC fingerprint.
+
+Evidence (fail-before / pass-after where the finding named a specific gap):
+- tests/test_provider_cascade_cancellation.py (10) — entry / before-worker /
+  in-flight-discard / distinct-outcome / absent-token / **raising-check
+  fail-closed** + cascade-stops / **jooble in-flight records no observations &
+  no degradation** / end-to-end real token→real cascade.
+- tests/test_jsearch_client.py TestJsearchCancellation (5) — no request at
+  entry, no cache delivered when de-owned, **no new retry after ownership lost**,
+  **interruptible backoff cut short**, in-flight success writes no cache / no
+  observations.
+- tests/test_job_providers.py (25) — provider stand-ins updated to the
+  `cancel=`-aware signature; hedge/stagger/cache paths unchanged.
+- tests/unit/test_job_search_operation_state.py +2 — superseded-no-record;
+  token↔ownership_lost binding.
+- tests/integration/test_operation_multiworker_postgres.py (9) — the documented
+  post-claim-partition WINDOW test is retained, PLUS a new ACCEPTANCE test
+  `test_self_fenced_owner_inflight_cascade_cancelled_without_side_effects`:
+  under a REAL post-claim Postgres partition, worker A self-fences and its REAL
+  in-flight cascade returns cancelled with NO new provider work, NO observations,
+  NO degradation, NO cache write, NO winner, NO terminal write.
 
 STILL owner-gated (NOT changed here): raising Render workers/instances and
 setting RICO_OPERATION_STORE=postgres in production remain a SEPARATE owner
-decision after this lands + is verified. This PR does NOT raise workers, does
-NOT deploy, and does NOT merge itself. TASK-014 stays in_review pending owner
-review of the cancellation consumer and the gate decision.
-Revised head: (set at commit).
+decision after this lands + is verified. Workers/instances stay 1, the expansion
+gate stays CLOSED, #1305 is frozen, and there is NO deploy / env / Render change.
+This PR does NOT raise workers, does NOT deploy, and does NOT merge itself.
+TASK-014 stays in_review pending owner review of the cancellation consumer and
+the gate decision.
+PR: #1306 (Draft). Local evidence before push: tests/unit 3451 passed;
+tests/test_provider_cascade_cancellation.py 10 passed;
+tests/test_jsearch_client.py 31 passed; tests/test_job_providers.py 25 passed;
+tests/integration/test_operation_multiworker_postgres.py 9 passed on real
+Postgres (includes the new in-flight-cancellation acceptance test). Head SHA and
+GitHub CI conclusion are pinned in the commit that immediately follows this one
+on the branch.

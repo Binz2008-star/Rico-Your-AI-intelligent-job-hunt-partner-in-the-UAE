@@ -44,7 +44,7 @@ def test_cancel_at_entry_calls_no_provider(monkeypatch):
     monkeypatch.setenv("JOOBLE_API_KEY", "k")
     called = {"jooble": 0}
 
-    def _boom(*a, **k):
+    def _boom(role, location, *, cancel=None):
         called["jooble"] += 1
         return FetchResult(items=[{"title": "x"}], provider="jooble")
 
@@ -72,7 +72,7 @@ def test_cancel_before_worker_skips_http_runner(monkeypatch):
         flips["n"] += 1
         return flips["n"] > 1
 
-    def _runner(role, location):
+    def _runner(role, location, *, cancel=None):
         calls["jooble"] += 1
         return FetchResult(items=[{"title": "x"}], provider="jooble")
 
@@ -89,7 +89,7 @@ def test_inflight_result_after_cancel_is_discarded_no_side_effects(monkeypatch):
     monkeypatch.setenv("JOOBLE_API_KEY", "k")
     state = {"cancelled": False}
 
-    def _runner(role, location):
+    def _runner(role, location, *, cancel=None):
         # simulate the response arriving; by now ownership was lost
         state["cancelled"] = True
         return FetchResult(items=[], provider="jooble", rate_limited=True)
@@ -108,7 +108,8 @@ def test_inflight_result_after_cancel_is_discarded_no_side_effects(monkeypatch):
 def test_cancelled_is_distinct_from_empty_and_degraded(monkeypatch):
     """cancelled must never be confused with a normal empty/degraded outcome."""
     monkeypatch.setenv("JOOBLE_API_KEY", "k")
-    monkeypatch.setattr(jp, "_jooble_search", lambda r, l: FetchResult(items=[], provider="jooble"))
+    monkeypatch.setattr(jp, "_jooble_search",
+                        lambda r, l, *, cancel=None: FetchResult(items=[], provider="jooble"))
 
     # No cancellation → normal degraded/empty outcome, cancelled stays False.
     normal = jp.search_jobs("hse manager", cancel=_token(lambda: False))
@@ -125,16 +126,80 @@ def test_absent_token_is_never_cancelled(monkeypatch):
     monkeypatch.setenv("JOOBLE_API_KEY", "k")
     monkeypatch.setattr(
         jp, "_jooble_search",
-        lambda r, l: FetchResult(items=[{"title": "x"}], provider="jooble"),
+        lambda r, l, *, cancel=None: FetchResult(items=[{"title": "x"}], provider="jooble"),
     )
     res = jp.search_jobs("hse manager")  # no cancel arg
     assert res.cancelled is False
     assert res.items and res.provider == "jooble"
 
 
-def test_token_check_that_raises_is_treated_as_not_cancelled():
+def test_token_check_that_raises_fails_closed_to_cancelled():
+    """FAIL-CLOSED: a token exists only because the caller wanted this operation
+    cancellable. If the ownership check itself breaks, we cannot prove we still
+    own the operation, so a broken check must be treated as CANCELLED — never as
+    a licence to start more provider work."""
     tok = _token(lambda: (_ for _ in ()).throw(RuntimeError("boom")))
-    assert tok.cancelled is False
+    assert tok.cancelled is True
+
+
+def test_raising_check_stops_the_cascade(monkeypatch):
+    """The fail-closed token, threaded through the real cascade, calls NO
+    provider when the ownership check raises."""
+    monkeypatch.setenv("JOOBLE_API_KEY", "k")
+    called = {"jooble": 0}
+
+    def _boom_provider(role, location, *, cancel=None):
+        called["jooble"] += 1
+        return FetchResult(items=[{"title": "x"}], provider="jooble")
+
+    monkeypatch.setattr(jp, "_jooble_search", _boom_provider)
+    res = jp.search_jobs(
+        "hse manager",
+        cancel=_token(lambda: (_ for _ in ()).throw(RuntimeError("db gone"))),
+    )
+    assert res.cancelled is True
+    assert res.error == "ownership_lost"
+    assert called["jooble"] == 0
+
+
+def test_absent_token_with_no_check_stays_fail_open():
+    """No token → never cancelled (compat): `is_cancelled(None)` is False even
+    though a *present* token fails closed."""
+    from src.services.cancellation import is_cancelled
+    assert is_cancelled(None) is False
+
+
+def test_jooble_inflight_cancel_records_no_observations_no_degradation(monkeypatch):
+    """Finding #2: side effects must not fire for a de-owned in-flight response.
+    Jooble's HTTP error path (mark_degraded) and success path
+    (_record_observations_safe) are both inside the client — with ownership lost
+    after the response, NEITHER runs."""
+    monkeypatch.setenv("JOOBLE_API_KEY", "k")
+    observed = {"records": 0, "degrades": 0}
+    monkeypatch.setattr(jp, "_record_observations_safe",
+                        lambda *a, **k: observed.__setitem__("records", observed["records"] + 1))
+    monkeypatch.setattr(jp, "mark_degraded",
+                        lambda *a, **k: observed.__setitem__("degrades", observed["degrades"] + 1))
+
+    # Real _jooble_search, but the network boundary returns AFTER ownership loss.
+    state = {"lost": False}
+
+    class _Resp:
+        def __enter__(self):
+            state["lost"] = True  # by the time the body is read, ownership is gone
+            return self
+        def __exit__(self, *a):
+            return False
+        def read(self):
+            return b'{"jobs": [{"title": "HSE", "link": "https://x.test"}]}'
+
+    monkeypatch.setattr(jp.urllib.request, "urlopen", lambda *a, **k: _Resp())
+
+    res = jp.search_jobs("hse manager", cancel=_token(lambda: state["lost"]))
+    assert res.cancelled is True
+    assert observed["records"] == 0        # no job_observations write
+    assert observed["degrades"] == 0       # provider not marked degraded
+    assert jp._cache_get(jp._cache_key("hse manager", "", "ae", "")) is None
 
 
 def test_end_to_end_real_ownership_lost_stops_real_cascade(monkeypatch):
@@ -154,7 +219,7 @@ def test_end_to_end_real_ownership_lost_stops_real_cascade(monkeypatch):
     calls = {"n": 0}
     monkeypatch.setattr(
         jp, "_jooble_search",
-        lambda r, l: (calls.__setitem__("n", calls["n"] + 1)
+        lambda r, l, *, cancel=None: (calls.__setitem__("n", calls["n"] + 1)
                       or FetchResult(items=[{"title": "x"}], provider="jooble")),
     )
 

@@ -272,3 +272,105 @@ class TestRetryBackoff:
         r = jsearch_client.search("q UAE")
         assert r.items == []
         assert r.error == "no_api_key"
+
+
+# ── Cooperative cancellation (TASK-20260721-014) ──────────────────────────────
+
+from src.services.cancellation import CancellationToken
+
+
+def _tok(is_cancelled):
+    return CancellationToken(operation_id="op_j", attempt=1, is_cancelled=is_cancelled)
+
+
+class TestJsearchCancellation:
+    def test_cancel_at_entry_issues_no_request(self):
+        with patch.object(jsearch_client.urllib.request, "urlopen") as uo:
+            r = jsearch_client.search("q UAE", cancel=_tok(lambda: True))
+        assert r.cancelled is True
+        assert r.error == "ownership_lost"
+        assert r.provider == "none"
+        assert uo.call_count == 0            # NO HTTP request
+
+    def test_cancel_skips_cache_delivery(self):
+        # Prime the cache with a good response (no cancellation).
+        with patch.object(jsearch_client.urllib.request, "urlopen", return_value=_resp(_PAYLOAD)):
+            jsearch_client.search("q UAE")
+        # Now a de-owned worker must NOT be served the cache hit.
+        with patch.object(jsearch_client.urllib.request, "urlopen") as uo:
+            r = jsearch_client.search("q UAE", cancel=_tok(lambda: True))
+        assert r.cancelled is True
+        assert r.cache_hit is False
+        assert uo.call_count == 0
+
+    def test_no_new_retry_after_ownership_lost(self):
+        """Finding #1/#3: a 429 that would normally retry must NOT start a new
+        attempt once ownership is lost during the backoff wait."""
+        state = {"n": 0}
+
+        def _side_effect(*a, **k):
+            state["n"] += 1
+            raise _http_error(429)  # every attempt 429s
+
+        # ownership is lost right after the first attempt fails → no 2nd request.
+        cancel = _tok(lambda: state["n"] >= 1)
+        with patch.object(jsearch_client.urllib.request, "urlopen", side_effect=_side_effect) as uo:
+            r = jsearch_client.search("q UAE", cancel=cancel)
+        assert r.cancelled is True
+        assert r.error == "ownership_lost"
+        assert uo.call_count == 1            # first attempt only, no retry
+
+    def test_interruptible_backoff_returns_promptly(self, monkeypatch):
+        """Finding #3: the backoff wait is interruptible — a lost lease stops the
+        wait via the cancel poll, it is NOT a fixed time.sleep(backoff)."""
+        # Make the real wait observable: count sleep calls, keep them tiny.
+        sleeps = {"n": 0}
+        monkeypatch.setattr(
+            jsearch_client.time, "sleep",
+            lambda s: sleeps.__setitem__("n", sleeps["n"] + 1),
+        )
+        # Big backoff base so a non-interruptible sleep would loop many times;
+        # cancellation observed during the wait ends it immediately.
+        monkeypatch.setattr(jsearch_client, "_BACKOFF_BASE_S", 100.0)
+        state = {"attempts": 0}
+
+        def _side_effect(*a, **k):
+            state["attempts"] += 1
+            raise _http_error(429)
+
+        # Not cancelled at the attempt guard; cancelled once we're in the wait.
+        flip = {"n": 0}
+
+        def _is_cancelled():
+            flip["n"] += 1
+            # checks 1-3 are False (entry, attempt guard, HTTP-error guard); the
+            # 4th check — the first poll inside the backoff wait — flips True, so
+            # cancellation is observed DURING the wait, exercising its
+            # interruptibility rather than the error-handler short-circuit.
+            return flip["n"] > 3
+
+        with patch.object(jsearch_client.urllib.request, "urlopen", side_effect=_side_effect):
+            r = jsearch_client.search("q UAE", cancel=_tok(_is_cancelled))
+        assert r.cancelled is True
+        assert state["attempts"] == 1        # only one HTTP attempt was made
+        assert sleeps["n"] <= 1              # the wait was cut short, not 100s of polls
+
+    def test_inflight_success_after_cancel_writes_no_cache_no_observations(self, monkeypatch):
+        """Finding #2/#5: a successful response that lands after ownership loss
+        is discarded — no cache write, no job_observations, distinct cancelled."""
+        recorded = {"n": 0}
+        import src.repositories.job_observations_repo as obs
+        monkeypatch.setattr(obs, "record_observations",
+                            lambda *a, **k: recorded.__setitem__("n", recorded["n"] + 1))
+        state = {"served": False}
+
+        def _urlopen(*a, **k):
+            state["served"] = True  # response is now in flight / arriving
+            return _resp(_PAYLOAD)
+
+        # Not cancelled at entry/attempt guard; cancelled once the body arrived.
+        with patch.object(jsearch_client.urllib.request, "urlopen", side_effect=_urlopen):
+            r = jsearch_client.search("q UAE", cancel=_tok(lambda: state["served"]))
+        assert r.cancelled is True
+        assert recorded["n"] == 0                     # no observations
+        assert jsearch_client._cache_get("q UAE") is None  # no cache write
