@@ -118,7 +118,7 @@ class TestConfirmationContinuesPendingJobSearch:
         }
         api = _make_api_with_profile(pending_job_search=pending)
 
-        with patch.object(api, "_classified_role_search", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search, \
+        with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search, \
              patch.object(api, "_clear_pending_job_search") as mock_clear:
             result = api._resolve_pending_intent(
                 user_id="u1",
@@ -139,7 +139,7 @@ class TestConfirmationContinuesPendingJobSearch:
             "expires_at": int(time.time()) + 900,
         }
         api = _make_api_with_profile(pending_job_search=pending)
-        with patch.object(api, "_classified_role_search", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}):
+        with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}):
             result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
         # Must not contain good-luck or conversation-close phrases
         msg = result.get("message", "").lower()
@@ -155,7 +155,7 @@ class TestConfirmationContinuesPendingJobSearch:
             "expires_at": int(time.time()) + 900,
         }
         api = _make_api_with_profile(pending_job_search=pending)
-        with patch.object(api, "_classified_role_search", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search:
+        with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search:
             api._resolve_pending_intent("u1", "ok", _PROFILE)
         mock_search.assert_called_once()
 
@@ -177,7 +177,7 @@ class TestNoPromiseOnlyReplies:
             "expires_at": int(time.time()) + 900,
         }
         api = _make_api_with_profile(pending_job_search=pending)
-        with patch.object(api, "_classified_role_search", return_value={"type": "job_results", "jobs": [], "message": "لم أجد وظائف متاحة الآن"}):
+        with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "jobs": [], "message": "لم أجد وظائف متاحة الآن"}):
             result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
         msg = result.get("message", "")
         assert not RicoChatAPI._is_promise_only_reply(msg), f"Promise-only reply detected: {msg!r}"
@@ -216,7 +216,7 @@ class TestProviderFailureContract:
             "message": "بحثت لكن مزود الوظائف لم يرجع نتائج صالحة الآن.",
             "jobs": [],
         }
-        with patch.object(api, "_classified_role_search", return_value=error_resp):
+        with patch.object(api, "_target_role_search_response", return_value=error_resp):
             result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
 
         assert result is not None, "Expected a response when pending job search is set"
@@ -317,7 +317,7 @@ class TestFullTurnPendingSearch:
             api._classified_role_search("u1", "Data Scientist", profile_no_role)
 
         # Turn 2: user replies تمام — pending state must now trigger the search
-        with patch.object(api, "_classified_role_search", return_value={"type": "job_results", "message": "Found jobs", "jobs": _JOBS}) as mock_search:
+        with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "message": "Found jobs", "jobs": _JOBS}) as mock_search:
             result = api._resolve_pending_intent("u1", "تمام", profile_no_role)
 
         mock_search.assert_called_once()
@@ -491,7 +491,7 @@ class TestFullTurnPendingArmedByHandler:
         }
 
         with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
-             patch.object(api, "_classified_role_search",
+             patch.object(api, "_target_role_search_response",
                           return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search:
 
             api._maybe_store_pending_job_search("u1", offer_response)
