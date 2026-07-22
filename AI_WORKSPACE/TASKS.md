@@ -7251,10 +7251,10 @@ the implementation criteria below; nothing in the RFC gate starts it.
 
 ### TASK-20260723-001 — Clarification / Needs-Input transcript treatment (Command chat)
 
-Status: proposed
+Status: implemented / verification in progress
 Owner: Claude (agent) / owner review
-Branch: none yet (proposed: fix/command-clarification-needs-input)
-Issue/PR: none yet — Draft PR only after scope approval
+Branch: fix/command-clarification-needs-input
+Issue/PR: #1326 (Draft)
 
 #### Objective
 Give `type: "clarification"` responses (Rico needs one detail or decision
@@ -7287,6 +7287,28 @@ was written for it; nothing to preserve or roll back.
   the generic `"rico"` row kind today — rendered as ordinary prose,
   indistinguishable from a normal reply.
 
+**History-restore defect found by the required browser smoke (2026-07-23),
+fixed in this task:** the live-send path worked correctly (confirmed by
+browser smoke against PR #1326's preview), but `apps/web/app/command/page.tsx`'s
+`parseHistoryContent()` generic structured-response fallback (the branch
+reached by any `type` not explicitly special-cased as `job_matches`/
+`options`/`help`/`application_status`) returned `{ id, role: "rico", text,
+options }` with no `type` field at all. A `type: "clarification"` message
+therefore classified correctly when freshly streamed, but silently
+downgraded to plain `"rico"` prose the moment it was reloaded from history
+or reached via a Sessions-rail switch — losing the exact "paused, not
+failed" signal this task exists to preserve, on the one path (history
+restore) every real user hits on every page load. Fix: the fallback now
+also returns `type: parsed.type as string | undefined`. `next_action` was
+NOT added — verified first (per owner instruction) that no current
+component reads the singular `next_action` field anywhere, and no sibling
+branch in `parseHistoryContent` sets it either, so adding it would be a
+speculative, currently-unused field. As a byproduct, `profile_preview`/
+`profile_gap`/`role_confirmation` (also in `CARD_TYPES` but not explicitly
+branched in `parseHistoryContent`) now also correctly restore as `"card"`
+from history instead of the same latent bug — not a new contract, the same
+one-line fix applied generically as specified.
+
 #### Constraints
 - Do not touch: backend/API code; the `type` value itself; add no new
   backend fields; `JobMatchCardAtelier`, `PermissionRequestCard`,
@@ -7298,66 +7320,105 @@ was written for it; nothing to preserve or roll back.
 - No migrations.
 - Keep scope limited to: one new `TranscriptRowKind` (`"needs_input"`), its
   presentation in `CommandTranscriptStep`, new translation keys, and tests.
+- Scope expanded by owner (2026-07-23) by exactly one runtime file:
+  `apps/web/app/command/page.tsx` — limited to preserving `type` (and
+  verifying, not adding, `next_action`) in `parseHistoryContent()`'s generic
+  fallback. No other change to `page.tsx`.
 
 #### Acceptance criteria
-- [ ] `classifyMessage()` returns `"needs_input"` if and only if
+- [x] `classifyMessage()` returns `"needs_input"` if and only if
       `message.type === "clarification"` — never inferred from reply text
-- [ ] New row: distinct gutter/label, calm/editorial Atelier styling,
-      visually distinct from `"rico"` (normal) and `"fail"` rows; no
-      warning-red treatment; sun-red used only as a sparing accent
-- [ ] `role="status" aria-live="polite"` on the new row (never assertive)
-- [ ] Full Rico reply text preserved verbatim; existing options/next_action
-      chips render unchanged (children pass-through untouched)
-- [ ] No duplicated question text (the label is a state indicator, not a
+- [x] New row: distinct gutter/label (`ask`/`سؤال`), calm/editorial Atelier
+      styling, visually distinct from `"rico"` (normal) and `"fail"` rows;
+      no warning-red treatment; sun-red used only as a sparing accent (small
+      dot + label color)
+- [x] `role="status" aria-live="polite"` on the new row (never assertive)
+- [x] Full Rico reply text preserved verbatim; existing options/next_action
+      chips render unchanged (children pass-through untouched) — verified
+      both via unit test and live/history browser smoke
+- [x] No duplicated question text (the label is a state indicator, not a
       paraphrase of the message)
-- [ ] Reduced-motion respected, mobile-safe, no layout jump
-- [ ] Hydrated history rows (`skipEntranceAnimation`) do not re-animate or
-      re-announce
-- [ ] Composer keyboard focus behavior unchanged (already unconditional via
+- [x] Reduced-motion respected, mobile-safe (verified via browser smoke at
+      390×844), no layout jump
+- [x] Hydrated history rows (`skipEntranceAnimation`) do not re-animate or
+      re-announce — verified via the real `parseHistoryContent` pipeline
+      (initial load AND Sessions-rail switch), not just the isolated
+      component
+- [x] Composer keyboard focus behavior unchanged (already unconditional via
       the existing `textareaRef.current?.focus()` in `sendMessage`'s
       `finally` block — no new code needed for this)
-- [ ] EN/AR labels natural, correct RTL
-- [ ] Full suite green; tsc/eslint/build clean
+- [x] EN/AR labels natural, correct RTL — verified via browser smoke,
+      `document.documentElement.dir="rtl"`/`lang="ar"`, labels render in
+      natural logical order (not manually reversed)
+- [x] Full suite green; tsc/eslint/build clean
+- [x] History-restore fix: a `type: "clarification"` message reloaded from
+      history, or reached via a Sessions-rail session switch, classifies as
+      `"needs_input"` exactly like a live message — not just on first send
 
 #### Required verification
-- [ ] Unit tests: new cases in `command-transcript-step.test.tsx`
-      (classification, presentation, aria, children/options preserved,
-      history-replay)
-- [ ] Integration tests: n/a — no backend contract change
-- [ ] Frontend build: `npm run build`
-- [ ] Local smoke: n/a for this PR (Draft only, no deploy)
+- [x] Unit tests: `command-transcript-step.test.tsx` (19 cases: classification,
+      presentation, aria, children/options preserved, history-replay) +
+      `command-clarification-history-restore.test.tsx` (6 new cases: real
+      history-parsing pipeline classification, normal/job_matches/options/
+      application_status branches unaffected, Sessions-rail switch restore
+      with entrance-animation suppression)
+- [x] Integration tests: n/a — no backend contract change
+- [x] Frontend build: `npm run build` — clean
+- [x] Local smoke (first pass, live path only): browser smoke against PR
+      #1326's initial preview — EN, AR RTL, mobile width, live send, no fail
+      styling, all confirmed
+- [ ] Local smoke (second pass, history-restore fix): re-run against the
+      updated preview once deployed — reload + Sessions-rail switch restore,
+      EN/AR/mobile, no replayed entrance animation. NOT YET RUN as of this
+      commit — pending, to be done before marking Ready for Review
 - [ ] Production/deploy smoke if applicable: n/a — no merge/deploy this PR
 
 #### Continuity Block
 - Task ID: TASK-20260723-001
-- GitHub issue/PR: none yet — Draft PR only after scope approval
-- Branch: none yet (proposed: fix/command-clarification-needs-input)
+- GitHub issue/PR: #1326 (Draft)
+- Branch: fix/command-clarification-needs-input
 - Base branch: main @ 9132da74963327b8b856f58baa4e92d9c07e54f2 (current
   origin/main head, includes merged PR #1325)
 - Last safe commit SHA: 9132da74963327b8b856f58baa4e92d9c07e54f2
-- Current head SHA: n/a — no commits yet
-- Uncommitted changes present: no
-- Status: proposed — awaiting owner scope approval per this entry
+- Current head SHA: second commit on this branch, on top of the first PR
+  commit 302eedb701218a450fe4c902fc76b04ba4f1d215 — see PR #1326 for the
+  exact SHA (not fabricated here; verify via `git rev-parse HEAD` /
+  `gh pr view 1326 --json headRefOid`)
+- Uncommitted changes present: no (after this commit)
+- Status: implemented / verification in progress — awaiting owner review of
+  the re-run browser smoke before marking Ready for Review
 - Files inspected: `apps/web/components/command/CommandEventAdapter.ts`;
   `apps/web/components/command/CommandTranscriptStep.tsx`;
   `apps/web/app/command/page.tsx`; `apps/web/lib/translations.ts`;
   `apps/web/__tests__/command-transcript-step.test.tsx`;
+  `apps/web/__tests__/command-clarification-history-restore.test.tsx`;
   `src/rico_chat_api.py` (clarification response sites)
-- Files changed: `AI_WORKSPACE/TASKS.md` (this entry only, so far)
+- Files changed: `AI_WORKSPACE/TASKS.md`;
+  `apps/web/components/command/CommandEventAdapter.ts`;
+  `apps/web/components/command/CommandTranscriptStep.tsx`;
+  `apps/web/lib/translations.ts`;
+  `apps/web/__tests__/command-transcript-step.test.tsx`;
+  `apps/web/app/command/page.tsx` (owner-approved scope expansion,
+  2026-07-23, `parseHistoryContent()` fallback only);
+  `apps/web/__tests__/command-clarification-history-restore.test.tsx` (new)
 - Files intentionally not touched: `src/**`; `JobMatchCardAtelier.tsx`;
   `PermissionRequestCard.tsx`; `ProposedChangeCard.tsx`;
-  `ChatActionCard.tsx`; `operationState.ts` (proposal only)
-- What is complete: read-only audit (owner-accepted); this
-  pre-implementation proposal
-- What is incomplete: everything else — no code written
-- Known blockers: owner scope approval (this entry) + EN/AR label choice
-- Risks: presentational-only change; low regression risk to existing
-  `"rico"`/`"card"` rows since classification only adds one narrowly-gated
-  branch; risk is mainly visual-consistency if gutter/label copy isn't
-  finalized before implementation starts
-- Rollback plan: revert the single implementation commit/PR; no data or
-  backend contract changes to unwind
-- Next exact action: owner approval of scope + EN/AR label choice (see
-  report)
-- Stop condition: do not create a branch or commits until this entry's
-  scope is approved
+  `ChatActionCard.tsx`; `operationState.ts`
+- What is complete: implementation, history-restore fix, all required
+  tests, full suite/typecheck/lint/build green, first browser smoke
+  (live path)
+- What is incomplete: second browser smoke (reload + session-switch
+  restore, post-fix) — not yet run; marking Ready for Review; merge/deploy
+  (all explicitly deferred)
+- Known blockers: none — second smoke pending, then owner sign-off
+- Risks: presentational-only change; the `parseHistoryContent` fix is a
+  type-agnostic preservation (not clarification-specific), so
+  `profile_preview`/`profile_gap`/`role_confirmation` history rows also now
+  correctly restore as `"card"` instead of the same latent bug — a
+  side-effect improvement, not a new regression, but worth the owner's
+  awareness since it wasn't explicitly requested
+- Rollback plan: revert the two commits on this branch; no data or backend
+  contract changes to unwind
+- Next exact action: owner review of the second browser smoke; if it
+  passes, mark PR #1326 Ready for Review (still no merge/deploy)
+- Stop condition: do not merge or deploy; do not open a second PR
