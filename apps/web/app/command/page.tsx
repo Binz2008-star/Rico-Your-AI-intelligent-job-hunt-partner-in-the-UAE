@@ -257,12 +257,21 @@ function parseHistoryContent(content: string, id: number): Partial<Message> {
                     follow_up_needed: parsed.follow_up_needed as ApplicationEntry[] | undefined,
                 };
             }
-            // Generic structured response: extract message text and any options
+            // Generic structured response: extract message text, type, and any
+            // options. `type` is preserved (TASK-20260723-001 history-restore
+            // fix) so a real, explicit backend type — e.g. "clarification" —
+            // survives a page reload / session switch instead of silently
+            // downgrading to a plain reply; classifyMessage reads it the same
+            // way it reads a live message's type. `next_action` is NOT added
+            // here: verified it is never read/rendered by any current
+            // component, and no sibling branch above sets it either — adding
+            // it would be a speculative, currently-unused field.
             const text = (parsed.message ?? parsed.reply ?? parsed.response ?? "") as string;
             if (text) {
                 return {
                     id,
                     role: "rico",
+                    type: parsed.type as string | undefined,
                     text,
                     options: parsed.options as RicoOption[] | undefined,
                 };

@@ -106,6 +106,48 @@ describe("CommandTranscriptStep (authenticated)", () => {
     });
 });
 
+/**
+ * TASK-20260723-001 — clarification / needs-input transcript treatment.
+ * Classified ONLY from the real, explicit `type: "clarification"` field —
+ * never from reply text — and must preserve the full reply + any options/
+ * next_action chips (children) completely unchanged.
+ */
+describe("CommandTranscriptStep — clarification (needs-input)", () => {
+    it("clarification turn → distinct Needs-Input row, not the plain rico row", () => {
+        step(
+            { role: "rico", type: "clarification", text: "Which manager role should I search?" },
+            <div data-testid="options-probe">chips here</div> as never,
+        );
+        const row = screen.getByTestId("transcript-needs-input-row");
+        expect(row).toHaveTextContent("Needs your input");
+        expect(row).toHaveTextContent("ask");
+        expect(row).toContainElement(screen.getByTestId("options-probe"));
+        expect(screen.queryByTestId("transcript-rico-row")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("transcript-fail-row")).not.toBeInTheDocument();
+    });
+
+    it("uses role=status and aria-live=polite, never assertive", () => {
+        step({ role: "rico", type: "clarification", text: "Sign in first." });
+        const row = screen.getByTestId("transcript-needs-input-row");
+        expect(row).toHaveAttribute("role", "status");
+        expect(row).toHaveAttribute("aria-live", "polite");
+    });
+
+    it("classification is gated strictly on type — never inferred from reply text, and wins over the generic card heuristics", () => {
+        // Same message ALSO carries a non-empty matches array (which would
+        // otherwise classify as "card") — type: "clarification" must still win.
+        step({ role: "rico", type: "clarification", text: "Manager is too broad.", matches: [{}] });
+        expect(screen.getByTestId("transcript-needs-input-row")).toBeInTheDocument();
+        expect(screen.queryByTestId("transcript-card-row")).not.toBeInTheDocument();
+    });
+
+    it("a plain reply mentioning a question is NOT classified as needs-input (no text-based inference)", () => {
+        step({ role: "rico", text: "Which manager role should I search?" });
+        expect(screen.getByTestId("transcript-rico-row")).toBeInTheDocument();
+        expect(screen.queryByTestId("transcript-needs-input-row")).not.toBeInTheDocument();
+    });
+});
+
 describe("CommandTranscriptStep (public pass-through)", () => {
     it("public user turn keeps the pre-C2 gold pill presentation", () => {
         const { container } = step({ role: "user", text: "hello" }, "hello", false);
@@ -159,6 +201,22 @@ describe("CommandTranscriptStep — skipEntranceAnimation (history replay)", () 
             </CommandTranscriptStep>,
         );
         expect(screen.getByTestId("transcript-rico-row").className).not.toMatch(/animate-in/);
+    });
+
+    it("needs-input row: omits the entrance class when hydrated from history", () => {
+        render(
+            <CommandTranscriptStep
+                authenticated
+                message={{ role: "rico", type: "clarification", text: "Which role?" } as never}
+                isFirstInGroup
+                isStructured={false}
+                skipEntranceAnimation
+            >
+                Which role?
+            </CommandTranscriptStep>,
+        );
+        const row = screen.getByTestId("transcript-needs-input-row");
+        expect(row.parentElement?.className).not.toMatch(/animate-in/);
     });
 
     it("card row: omits the entrance class when hydrated from history", () => {
