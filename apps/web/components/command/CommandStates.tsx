@@ -114,6 +114,16 @@ export function publicCommandArtifactVars(c: WorkspacePalette): React.CSSPropert
         "--paper-2": hexChannels(c.panel),
         "--rule": hexChannels(c.hair),
         "--sun": hexChannels(c.red),
+        /* Reply/markdown foreground tiers. Global `:root` substitutes
+           `--rico-fg-*: rgb(var(--text-*))` ONCE against the dark root and the
+           result inherits down as a computed color — so overriding
+           `--text-*` here does NOT recolor them. Re-declare the four tiers as
+           concrete Atelier-ink colors on the guest wrapper so Rico's prose
+           reads as dark ink on paper, not the dark theme's cool grey. */
+        "--rico-fg-1": `rgb(${hexChannels(c.ink)})`,
+        "--rico-fg-2": `rgb(${compositeChannels(c.ink, c.panel, 0.72)})`,
+        "--rico-fg-3": `rgb(${compositeChannels(c.ink, c.bg, 0.55)})`,
+        "--rico-fg-4": `rgb(${compositeChannels(c.ink, c.panel, 0.45)})`,
     } as React.CSSProperties;
 }
 
