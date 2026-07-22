@@ -2821,20 +2821,23 @@ function CommandChrome({
     mobileActions?: React.ReactNode;
     children: React.ReactNode;
 }) {
-    const { resolvedTheme } = useTheme();
+    useTheme();
     if (audience === "public") {
-        /* Artifact guest chrome (owner instruction 2026-07-21): remap every
-           channel token to the artifact workspace palette so the whole guest
-           surface — top bar, suggestions, transcript, composer — repaints
-           with zero markup changes. Follows the existing global theme toggle:
-           dark stays the production default; both faces are artifact faces. */
-        const pal = resolvedTheme === "light" ? WORKSPACE_THEME.light : WORKSPACE_THEME.dark;
+        /* Guest chrome — the editorial Atelier LIGHT face, always (owner
+           directive 2026-07-22: the dark guest console is retired). The public
+           /command now lives in the same paper/ink/sun world as the landing,
+           the notebook, and /vision, so a first-time visitor meets one
+           coherent Rico identity instead of a separate dark app. The authored
+           light palette (WORKSPACE_THEME.light) is the exact artifact palette;
+           the global dark app default is untouched for the authenticated
+           workspace, which keeps its own shell. */
+        const pal = WORKSPACE_THEME.light;
         return (
             <div
                 data-testid="command-public-artifact"
-                data-artifact-mode={resolvedTheme}
+                data-artifact-mode="light"
                 className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-background"
-                style={{ ...publicCommandArtifactVars(pal), colorScheme: resolvedTheme } as React.CSSProperties}
+                style={{ ...publicCommandArtifactVars(pal), colorScheme: "light" } as React.CSSProperties}
             >
                 <WorkspaceThemeContext.Provider value={pal}>{children}</WorkspaceThemeContext.Provider>
             </div>
