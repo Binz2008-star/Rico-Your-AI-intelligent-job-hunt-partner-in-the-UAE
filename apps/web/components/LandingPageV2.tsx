@@ -254,6 +254,10 @@ const LANDING_MOTION_CSS = `
    - uppercase labels render in the system Arabic sans (IBM Plex Mono has no Arabic);
    - synthesised italic looks broken — render upright. */
 .lpv2-root.lpv2-ar, .lpv2-root.lpv2-ar * { letter-spacing: 0 !important; }
+/* Arabic glyphs fill the em box with deep descenders, so the Latin-tuned pen
+   stroke (bottom:0.06em) lands on the letters and reads as a strikethrough —
+   drop it clear below the script. */
+.lpv2-root.lpv2-ar .lpv2-underline-svg { bottom: -0.18em !important; }
 .lpv2-root.lpv2-ar .uppercase { font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif !important; }
 .lpv2-root.lpv2-ar .italic { font-style: normal; }
 
@@ -355,7 +359,7 @@ function Hero() {
                 {t.titleA}{" "}
                 <span className="relative inline-block italic font-medium">
                     {t.titleB}
-                    <svg className="absolute left-0 w-full" style={{ bottom: "0.06em", height: "0.16em" }} viewBox="0 0 300 8" preserveAspectRatio="none" aria-hidden="true">
+                    <svg className="lpv2-underline-svg absolute left-0 w-full" style={{ bottom: "0.06em", height: "0.16em" }} viewBox="0 0 300 8" preserveAspectRatio="none" aria-hidden="true">
                         <path className="lpv2-underline" d="M2 6 C 60 3, 120 5, 180 4 S 260 3, 298 5" fill="none" stroke={C.red} strokeWidth={4} strokeLinecap="round" />
                     </svg>
                 </span>
@@ -389,12 +393,14 @@ function SystemSection() {
                         <span className="h-px w-10" style={{ background: C.hair }} aria-hidden="true" />
                         <Mono style={{ color: C.ink55 }}>{t.transcribed}</Mono>
                     </div>
-                    <div className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-8">
+                    {/* Stacks label-over-quote below sm so quotes keep full width;
+                        the two-column transcript grid returns at sm+. */}
+                    <div className="grid grid-cols-1 gap-y-2.5 sm:grid-cols-[auto_1fr] sm:gap-x-5 sm:gap-y-8">
                         <Mono className="lpv2-fade-up" style={{ color: C.ink40 }}>{t.you}</Mono>
                         <p className="lpv2-fade-up text-[1.25rem] leading-snug" style={{ fontFamily: SERIF, color: C.ink }}>
                             {t.youQuote}
                         </p>
-                        <div className="lpv2-fade-up" style={{ animationDelay: "120ms" }}>
+                        <div className="lpv2-fade-up mt-6 sm:mt-0" style={{ animationDelay: "120ms" }}>
                             <Mono style={{ color: C.red }}>{t.rico}</Mono>
                             <p className="mt-2 leading-relaxed" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", color: C.ink40, textTransform: "uppercase" }}>
                                 {t.ricoAside}
