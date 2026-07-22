@@ -6905,6 +6905,6 @@ PR: #1306 (Draft). Local evidence before push: tests/unit 3451 passed;
 tests/test_provider_cascade_cancellation.py 10 passed;
 tests/test_jsearch_client.py 31 passed; tests/test_job_providers.py 25 passed;
 tests/integration/test_operation_multiworker_postgres.py 9 passed on real
-Postgres (includes the new in-flight-cancellation acceptance test). Head SHA and
-GitHub CI conclusion are pinned in the commit that immediately follows this one
-on the branch.
+Postgres (includes the new in-flight-cancellation acceptance test). Substantive
+commit: bf87f03 (this doc commit pins it). GitHub CI conclusion is recorded on
+PR #1306 after push.
