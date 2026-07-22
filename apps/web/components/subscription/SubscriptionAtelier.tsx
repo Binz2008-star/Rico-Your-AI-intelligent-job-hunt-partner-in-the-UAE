@@ -46,9 +46,18 @@ import type { StoredUser } from "@/lib/auth";
 import { resolveBillingUiMode, type BillingUiMode } from "@/lib/billing";
 import { getPaddlePriceId, openPaddleCheckout } from "@/lib/paddle";
 import type { TranslationKey } from "@/lib/translations";
+import { safeExternalUrl } from "@/lib/safe-external-url";
 import { useTranslation } from "@/lib/translations";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+// LOW-1 (security audit refresh 2026-07-21): the WhatsApp + Paddle "manage"
+// flows navigate to URLs the backend hands back (req.whatsapp_url, portal_url).
+// safeExternalUrl (@/lib/safe-external-url) validates them against an https +
+// host allowlist before we navigate, so a compromised or unexpected upstream
+// value cannot turn these into an open redirect.
+const WHATSAPP_ALLOWED_HOSTS = ["wa.me", "whatsapp.com"];
+const PADDLE_ALLOWED_HOSTS = ["paddle.com"];
 
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 
@@ -590,7 +599,9 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
             // server-built URL is the only thing we ever open, and opening
             // WhatsApp never means payment or activation succeeded.
             const req = await createWhatsAppSubscriptionRequest(language as "en" | "ar");
-            window.open(req.whatsapp_url, "_blank", "noopener,noreferrer");
+            const waUrl = safeExternalUrl(req.whatsapp_url, WHATSAPP_ALLOWED_HOSTS);
+            if (!waUrl) { toast(whatsappRequestFailedMessage, "error"); return; }
+            window.open(waUrl, "_blank", "noopener,noreferrer");
             toast(whatsappActivationNoteMessage, "info");
         } catch (err) {
             const msg =
@@ -613,7 +624,9 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
         }
         try {
             const { portal_url } = await createPaddleCustomerPortalSession();
-            window.location.href = portal_url;
+            const managed = safeExternalUrl(portal_url, PADDLE_ALLOWED_HOSTS);
+            if (!managed) { toast(subscriptionPortalFailedMessage, "error"); return; }
+            window.location.href = managed;
         } catch (err) {
             const msg =
                 err instanceof ApiError

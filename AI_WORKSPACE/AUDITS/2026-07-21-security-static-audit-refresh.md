@@ -109,4 +109,14 @@ remediation since then:
   image is the wrong trade (PR #1295, closed unmerged). Reopen + verify in an
   environment with a Docker daemon + registry egress if the image ever becomes a
   real deploy target.
-- **LOW-3 / LOW-1 / LOW-2** — open (queued, owner-gated).
+- **LOW-3** (DNS resolution fall-open) — **remediated.** Both DNS-resolution
+  `except` blocks in `link_verifier.py` now fail closed (`return False`) instead
+  of `pass` (PR #1302, merged).
+- **LOW-1** (open-redirect via backend-supplied nav sinks) — **remediated.** The
+  WhatsApp + Paddle-portal navigation targets are validated against an https +
+  host allowlist (`safeExternalUrl`, `apps/web/lib/safe-external-url.ts`) before
+  navigating; a disallowed or non-https value is refused with an error toast
+  (this PR).
+- **LOW-2** (client-side `sessionStorage` draft) — **accepted / informational.**
+  Not a vulnerability on its own; the backend ignores the client `rico_sid` and
+  validates the HMAC capability cookie. No code change.
