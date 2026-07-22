@@ -6945,3 +6945,82 @@ next free ID.
   rounds remediated; nothing further scheduled by the session)
 - Stop condition: STOP at Draft PR + evidence report; owner reviews before
   merge; no second objective in this session
+
+### TASK-20260721-016 — Historical production baseline record: Delivery-Smoke 15/15 at 247e83a (scope-corrected)
+
+Status: done (record entry — no code change)
+Owner: Claude (agent), owner-directed 2026-07-21 ("مكانه خط أساس إنتاجي تاريخي وليس إغلاق الحالة الحالية")
+Branch: claude/workspace-delivery-baseline-record
+Issue/PR: —
+
+#### Objective
+Record the successful production Delivery-Smoke as a **historical baseline**,
+with its evidentiary scope stated precisely, per owner review. The earlier
+report's phrase "الخضرة الإنتاجية الكاملة الآن" overclaimed: the run proves
+the deployed baseline at its commit, not later backend commits.
+
+#### Baseline record (owner-specified format)
+
+```text
+Historical production baseline:
+Delivery-Smoke run 29818358371
+Commit: 247e83a
+Result: 15/15 PASS
+Scope: authentication, JSON chat, SSE delivery, synthetic-user cleanup
+Status: valid evidence for that deployed baseline; not evidence for later backend commits
+```
+
+Evidence detail (job 88594896615, workflow "Delivery Smoke (manual)",
+2026-07-21T09:27Z): 7 frontend routes HTTP 200; public chat 200; register 201;
+DB row verified; login sets session; /me 200; `auth cookie present before
+stream :: explicit=yes`; `authenticated JSON chat (control) :: HTTP 200`;
+`authenticated SSE stream :: HTTP 200 content-type=text/event-stream
+data_frames=1 done_json=True frame_types=done`; synthetic user and all rows
+removed. RESULT: 15 passed, 0 failed — SMOKE: ALL GREEN.
+
+Root cause of the prior SSE "Unauthorized": smoke-tool cookie transport
+(production sets `Domain=.ricohunt.com`; direct onrender client did not replay
+it) — fixed in #1287 via explicit Set-Cookie capture/replay (the #1264
+pattern). Product SSE path confirmed healthy at this baseline.
+
+#### Scope correction (what this run does NOT prove)
+- `main` moved after the run: #1304 (operation ownership / partial multi-worker
+  hardening — touches operation_state, chat_operations claim,
+  rico_chat_api) and #1305 (development-supervisor control layer) merged;
+  head at record time 0939e28. The 15/15 result is NOT evidence for these
+  later commits.
+- It does NOT close TASK-20260721-014 / stabilization slice 4: #1306
+  (end-to-end cooperative cancellation, Draft, head 39a8fd82) is outside
+  `main`; the post-claim-partition duplicate-cascade window remains open.
+- It does NOT authorize raising Render workers/instances (gate stays CLOSED,
+  workers/instances = 1).
+- The smoke TOOL itself needs no rebuild — it is now evidence-grade
+  (frame-type dump + isolation probes + explicit cookie replay).
+
+#### Re-verification conditions (owner-specified; run after #1306 merges AND deploys)
+```text
+1. /version يطابق آخر backend deploy commit
+2. workers/instances تبقى 1
+3. RICO_OPERATION_STORE verified as intended
+4. Delivery-Smoke 15/15
+5. عملية بحث حقيقية تنتهي وتصل للمستخدم
+6. لا duplicate cascade
+7. لا stale-owner terminal write
+8. synthetic data cleanup complete
+```
+
+#### Continuity Block
+- Current head SHA: (this docs commit)
+- Status: done — record only; AI_WORKSPACE/TASKS.md is the sole file changed
+- Validation already run: run 29818358371 log quoted from GitHub Actions;
+  main head, #1304/#1305 merge state, and #1306 Draft head verified live
+- Validation still required: the 8-condition re-verification above, only
+  after #1306 is merged and deployed
+- Deployment: none
+- Known blockers: none for the record; slice-4 blocker unchanged
+  (post-claim-partition cascade cancellation = #1306)
+- Risks: none (docs)
+- Rollback plan: revert the docs commit
+- Next exact action: owner decision on #1306; after its merge + deploy,
+  re-run Delivery-Smoke under the 8 conditions with workers = 1
+- Stop condition: STOP after this record merges; no re-run scheduled by agent
