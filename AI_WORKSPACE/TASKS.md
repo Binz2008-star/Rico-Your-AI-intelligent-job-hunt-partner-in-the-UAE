@@ -7119,16 +7119,37 @@ pattern). Product SSE path confirmed healthy at this baseline.
 
 ### TASK-20260722-001 — P1 CV-generation integrity: trace + bounded vertical slice plan
 
-Status: scoped
+Status: review (RFC gate — owner review of 2026-07-22 applied in rev 2; merge
+and implementation NOT yet authorized)
 Owner: Claude (session claude/cv-generation-integrity-cgggby)
 Branch: claude/cv-generation-integrity-cgggby
-Issue/PR: (draft PR for this evidence + plan)
+Issue/PR: #1312 (docs-only RFC — stays docs-only; implementation will be a
+FRESH Draft PR from then-current main under this same TASK ID after the RFC
+merges)
 
 #### Objective
 Record the read-only repository trace of the P1 tailored-CV incident and the
-approved-scope implementation plan for ONE vertical slice:
-selected stored CV → verified fact reconciliation → Operations/Dubai tailored
-CV → DOCX artifact → authenticated download.
+owner-approved implementation boundary for ONE deterministic vertical slice:
+selected readable CV → provenance-bearing fact sheet → deterministic
+Operations/Dubai CV → verified DOCX persisted with retention controls →
+JWT-scoped download → Arabic redacted-transcript regression.
+
+#### Owner decisions (2026-07-22, PR #1312 review — recorded)
+- DOCX v1: persist bytes; unbounded storage NOT approved (cap, SHA-256,
+  retention/lazy purge, account-deletion cleanup, source-deletion policy,
+  no raw content in logs are mandatory).
+- My Files parsing: in-slice, doc_type=cv only; parse-or-honest-failure —
+  never a new metadata-only CV row; explicit extraction_status
+  (ready/legacy_missing/failed) + parser version.
+- Transcript: never commit verbatim (public repo, real personal data); use a
+  redacted production-structure regression fixture with synthetic tokens.
+- First slice is deterministic — no free-form AI rewrite; AI rephrasing is a
+  later, separately gated enhancement.
+- career_context reuse limited to identity/name/years trust; document fact
+  extraction is a new bounded component with offset-based provenance
+  {document_id, start_offset, end_offset, source_hash}.
+- Process: #1312 stays docs-only; no scheduled polling (webhook-only PR
+  monitoring; the armed 1-hour check-in was cancelled).
 
 #### Context
 - Evidence + full plan: AI_WORKSPACE/proposals/2026-07-22-cv-generation-integrity-slice.md
@@ -7174,22 +7195,27 @@ CV → DOCX artifact → authenticated download.
 
 #### Continuity Block
 - Task ID: TASK-20260722-001
-- GitHub issue/PR: draft PR from claude/cv-generation-integrity-cgggby
+- GitHub issue/PR: #1312 (draft, docs-only RFC)
 - Branch: claude/cv-generation-integrity-cgggby
-- Base branch: main
-- Last safe commit SHA: b3e0377
-- Current head SHA: (this docs commit)
+- Base branch: main (rebased onto 2fcaee8 after #1306 merged as 60d37c2 —
+  owner correction 6)
+- Last safe commit SHA: 2fcaee8 (current main base)
+- Current head SHA: rev-2 docs commit on top of 2fcaee8 (exact SHA recorded in
+  the ledger-reconciliation commit that follows it; PR #1312 head)
 - Uncommitted changes present: no (after this commit)
-- Status: scoped
+- Status: review (RFC gate)
 - Files inspected: see Context above (read-only trace)
-- Files changed: AI_WORKSPACE/proposals/2026-07-22-cv-generation-integrity-slice.md (new — evidence + plan);
-  AI_WORKSPACE/TASKS.md (this entry)
+- Files changed: AI_WORKSPACE/proposals/2026-07-22-cv-generation-integrity-slice.md
+  (rev 2 — owner review applied: deterministic-first, storage/lifecycle
+  contracts, extraction states, redacted fixture, career_context scope
+  correction, two-gate process); AI_WORKSPACE/TASKS.md (this entry)
 - Deployment: none
-- Known blockers: verbatim production transcript not yet in repo (fixture
-  requirement — see proposal E7)
+- Known blockers: owner approval required for (a) the corrected RFC, (b) the
+  redacted fixture content (turn sequence + token mapping), (c) proposed
+  numeric bounds (512 KB extracted-text cap; 2 MB DOCX cap; 90-day retention)
 - Risks: none (docs only)
-- Rollback plan: revert the docs commit
-- Next exact action: owner review of the proposal; on approval, implement the
-  slice on this branch per proposal Steps 1–6
-- Stop condition: STOP after evidence + plan PR is opened; no implementation
-  before owner sign-off
+- Rollback plan: revert the docs commits on this branch
+- Next exact action: owner re-review of rev 2 on #1312; after RFC merge, open
+  ONE fresh Draft implementation PR from then-current main (same TASK ID)
+- Stop condition: STOP after rev 2 is pushed and #1312 is mergeable at its new
+  head; no implementation before RFC merge + explicit authorization

@@ -1,15 +1,48 @@
-# P1 — CV Generation Integrity: Repository Trace + Bounded Vertical Slice
+# P1 — CV Generation Integrity: Repository Trace + Bounded Vertical Slice (RFC)
 
-Date: 2026-07-22
-Status: evidence + plan (no production code changed in this document's PR)
-Branch: `claude/cv-generation-integrity-cgggby`
-Incident class: core-product integrity — Rico failed an Arabic tailored-CV request,
-asked for data it already held, produced placeholders/unsupported claims, and
-revealed that non-active CV documents retain only metadata.
+Date: 2026-07-22 (rev 2 — owner review of PR #1312 applied)
+Status: RFC under owner review — docs only; implementation gated on this RFC merging
+Task: TASK-20260722-001 (canonical — one task, two sequential review gates)
+RFC PR: #1312 (docs-only; stays docs-only per owner ruling)
+Implementation PR: opened FRESH from then-current `main` only after this RFC
+merges, same TASK ID. #1312 is never morphed into the implementation PR.
+Incident class: core-product integrity — Rico failed an Arabic tailored-CV
+request, asked for already-available data, produced placeholders/unsupported
+claims, and revealed that non-active CV documents retain only metadata.
 
-Product rule applied: the smoke/production transcript exposed the bug, but the fix
-is global — every finding below is a system behavior affecting all users, not one
+Product rule applied: the production transcript exposed the bug, but the fix is
+global — every finding below is a system behavior affecting all users, not one
 account.
+
+## Owner decisions (2026-07-22, recorded from PR #1312 review)
+
+1. **DOCX v1 = persisted bytes**, not render-on-demand — proving the file the
+   user was told is ready was actually generated, saved, survives server
+   restart, and is byte-identical across downloads. **Unbounded storage is NOT
+   approved**: hard byte-size cap, SHA-256, bounded retention/lazy purge,
+   account-deletion cleanup, defined source-deletion behavior, and no raw CV
+   content/bytes/personal excerpts in operational logs are mandatory parts of
+   the design.
+2. **My Files parsing is in-slice for `doc_type=cv` only.** New CV uploads are
+   parsed through the existing bounded/safe parser path before being accepted
+   as reusable; no new metadata-only CV rows. Explicit extraction state
+   (`ready` / `legacy_missing` / `failed`) + parser version; `NULL
+   extracted_text` never ambiguously encodes state. Cover letters/other types
+   are exempt.
+3. **No verbatim production transcript in the repo** (public repository, real
+   personal data — committing it to git history would be a permanent leak even
+   if later deleted). The regression fixture is an owner-approved **redacted
+   production-structure regression fixture** that preserves: the core Arabic
+   command wording; the role ordering; the conversation transitions; the
+   Operations/Dubai request; the user's objection to being re-asked for
+   already-provided data; and the incorrect "cannot create the file" reply.
+   It replaces: real name → synthetic test user; phone/email → synthetic
+   values; filenames → `CV_Operations.pdf` and similar; company/account data →
+   test data. It is labelled `redacted`, never `verbatim`. Evidentiary
+   linkage, if needed, is a hash/reference to the private source held outside
+   the repo.
+4. **Deterministic-first implementation.** No free-form AI rewrite in the
+   first slice; AI rephrasing is a later, separately gated enhancement.
 
 ---
 
@@ -112,186 +145,232 @@ account.
   chat text or the /applications text draft — the product cannot currently hand
   the user a file.
 
-### E6. Verified-fact reconciliation layer already exists (reuse, don't rebuild)
+### E6. Existing components and their honest reuse boundary
 
 - `src/services/career_context.py` — the M1 read-path resolver from the
-  2026-07-19 incident: provenance-carrying years/name resolution, conflict ⇒
-  omit absolutes, degraded ⇒ withhold, name-as-job-title guard. This is the
-  designated reconciliation surface; the slice must consume it, not duplicate it
-  (owner ruling recorded in the module docstring and
-  `AI_WORKSPACE/CAREER_CONTEXT_PROGRAM.md`).
+  2026-07-19 incident. **Scope correction (owner review):** it resolves
+  active-document provenance plus trusted name/years/conflict state. It is
+  **not** an employer/date/duty/achievement reconciliation layer. The slice
+  reuses it for **identity/name/years only**; document-level fact extraction is
+  a new bounded component (Part 2, Step 2).
 - `src/services/document_resolver.py` — canonical active-CV resolution
   (primary → latest → legacy profile fallback), including strict variants that
-  distinguish "store down" from "no documents".
+  distinguish "store down" from "no documents". Reused as-is.
 - `src/rico_safety.py` blocks forged-document requests ("forge" trigger, `:38`,
   `:101`) — the slice's reconciliation guard extends the same principle to
   *generated* output.
+- `src/cv_parser.py` + `src/services/docx_safety.py` — the existing bounded/safe
+  parse path (decompression-bomb guard, sync parser behind `run_in_executor`).
+  The My Files CV parse (Step 1) goes through this path, not a new parser.
 
 ### E7. Transcript status
 
-The verbatim Arabic production transcript was referenced by the incident report
-but is not present in the repository and was not embedded in the task text
-available to this session. The regression test (Part 2, step 6) is structured
-turn-by-turn against the incident's described shape; the fixture file
-`tests/fixtures/arabic_cv_tailoring_transcript.json` must be populated with the
-exact supplied transcript by the owner (or pasted into the implementation task)
-before the slice merges. No synthetic text may be labeled as the production
-transcript.
+The verbatim Arabic production transcript exists only outside the repository
+(it contains real personal data; the repo is public). Per owner ruling it is
+**never committed**. The regression fixture is a redacted structural fixture
+(exact turn/intent sequence, synthetic tokens for all personal/account values),
+labelled `redacted`. If evidentiary linkage is required, the fixture records a
+SHA-256 of the private source transcript — nothing more.
 
 ---
 
-## Part 2 — One bounded vertical slice (single task, single PR)
+## Part 2 — One bounded vertical slice (single task, two review gates)
 
-**Slice:** selected stored CV → verified fact reconciliation → Operations/Dubai
-tailored CV → DOCX artifact → authenticated download.
+**Approved boundary (owner review):**
 
-Explicitly out of scope: Cognitive Control Plane, career-context M2 identity
-dedupe, cover-letter overhaul, quota/plan changes, any deploy, any second PR.
+> selected readable CV → provenance-bearing fact sheet → deterministic
+> Operations/Dubai CV → verified DOCX persisted with retention controls →
+> JWT-scoped download → Arabic redacted transcript regression
 
-### Step 1 — Every stored CV retains retrievable extracted content
+Explicitly out of scope for the first implementation: free-form AI rewriting
+(later, separately gated enhancement), cover-letter overhaul, PDF rendering,
+Cognitive Control Plane, multi-agent/fleet writers, deployment, any second
+product objective, career-context M2 identity dedupe.
 
-- Add `extracted_text TEXT` (+ `extracted_at TIMESTAMPTZ`) to `user_documents`
-  via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `_USER_DOCUMENTS_DDL`
-  (exact precedent: migration 026 `skills_json`, `src/rico_db.py:220`) plus a
-  numbered migration file (`migrations/052_user_documents_extracted_text.sql`)
-  kept in sync for `scripts/check_migration_drift.py`. Additive, idempotent,
-  no backfill, no unique index — the 038-style runtime-auto-apply justification
-  holds.
-- Confirm path: pass the artifact's `cv_text` into
-  `get_or_create_user_document` so every confirmed CV row keeps its full text.
-- My Files direct upload (`files.py`): parse uploaded PDF bytes with the
-  existing `CVParser` **via `run_in_executor`** (async-boundary rule in
-  CLAUDE.md) and store `extracted_text` on the row. No profile mutation from
-  this path.
-- `set-primary` re-sync: when the newly activated document has
-  `extracted_text`, also restore `rico_profiles.cv_text` from it — making the
-  existing "I'll re-sync your profile from it" promise true.
-- Honesty for legacy rows: bytes of previously uploaded non-active CVs were
-  discarded and are unrecoverable. Rows without `extracted_text` surface
-  "content not stored — re-upload to enable tailoring" in the existing
-  stored-CV analysis reply instead of the current impossible promise
-  (`src/rico_chat_api.py:2795-2801`). The invariant "all stored CVs retain
-  retrievable extracted content" is enforced for every write from this slice
-  forward; it cannot be retroactively conjured for discarded bytes.
+Process: after this RFC merges, ONE fresh Draft implementation PR is opened
+from the then-current `main` under TASK-20260722-001. No competing PRs.
 
-### Step 2 — Fact sheet + reconciliation service (the integrity core)
+### Step 1 — Every stored CV retains retrievable extracted content, with explicit state
 
-New `src/services/cv_tailor.py`:
+- Schema (additive, 026/038 precedent, drift-checked numbered migration file
+  `migrations/052_user_documents_extracted_text.sql` mirrored into
+  `_USER_DOCUMENTS_DDL` via `ADD COLUMN IF NOT EXISTS`):
+  - `extracted_text TEXT` — bounded: hard cap (proposed 512 KB) enforced at
+    write time; oversized extractions are truncated-with-marker never silently.
+  - `extraction_status TEXT NOT NULL DEFAULT 'legacy_missing'`
+    (`ready` | `legacy_missing` | `failed`) — `NULL extracted_text` never
+    encodes state by itself; every reader branches on `extraction_status`.
+  - `extraction_parser_version TEXT`, `extracted_at TIMESTAMPTZ`.
+- Confirm path (`/api/v1/rico/confirm-cv-profile`): pass the artifact's
+  `cv_text` into `get_or_create_user_document` → row lands `ready`.
+- My Files direct upload (`files.py`), **`doc_type=cv` only**: parse the PDF
+  bytes through the existing bounded/safe parser (`CVParser` behind
+  `run_in_executor`, docx_safety guard untouched). Commit semantics are
+  all-or-honest-failure: either extraction succeeds and the reusable `ready`
+  row is committed, or the API returns an explicit parse-failure response and
+  **no new CV row is created**. No new metadata-only CV rows, ever. Cover
+  letters/other doc types keep current behavior (exempt).
+- `set-primary` re-sync: when the newly activated document is `ready`, also
+  restore `rico_profiles.cv_text` from its `extracted_text` — making the
+  existing "I'll re-sync your profile from it" promise true. For
+  `legacy_missing` rows the promise copy is corrected instead (below).
+- Honesty for legacy rows: previously uploaded non-active CVs' bytes were
+  discarded and are unrecoverable — rows stay explicitly `legacy_missing` and
+  chat/analysis surfaces say "content not stored — re-upload to enable
+  tailoring" (replacing the impossible re-sync promise at
+  `src/rico_chat_api.py:2795-2801`). The stored-content invariant is enforced
+  for every write from this slice forward; discarded bytes are not conjured.
 
-- `build_fact_sheet(user_id, document_id=None)` — resolves the source CV
-  (`document_resolver`; explicit `document_id` when the user picked one),
-  loads its `extracted_text` (fallback: `rico_profiles.cv_text` only when the
-  resolved document is the active CV), and consults
-  `career_context.resolve_career_context` for name/years trust. Output: typed
-  fact sheet (contact, roles, employers, date ranges, duties, achievements,
-  certifications, skills, education) where **every entry carries its source
-  span** from the extracted text. Salary, visa status, location, and language
-  proficiency are included only if literally present in the source.
-- `reconcile(rendered_cv, fact_sheet)` — verification pass over the candidate
-  output: every employer, role title, date token, certification, numeric claim,
-  salary/visa/proficiency statement must map to a fact-sheet entry
-  (normalized match); `_CV_PLACEHOLDER_PATTERNS` moves here, is extended
-  (e.g. `[Your Name]`, «أدخل», «اسمك هنا»), and is finally enforced. Result:
-  `(ok, violations, claim_source_map)`.
-- `tailor(fact_sheet, target_role, target_city, language)` — AI pass
-  (existing provider chain) restricted to reorder/rephrase/select; on any
-  reconciliation violation → deterministic render **from the fact sheet only**
-  (never placeholders, never a hollow apology). The deterministic render is the
-  guaranteed floor and is what the no-AI fallback uses — the `[Your Name]`
-  fallback in `rico_apply_ai.py` is corrected in passing (it violates the
-  invariant in live code).
+### Step 2 — Provenance-bearing fact sheet (new bounded component; deterministic)
 
-### Step 3 — DOCX artifact, persisted before any success claim
+New `src/services/cv_fact_sheet.py` (name final at implementation):
 
-- New table `generated_documents` (same migration file): id UUID, user_id,
-  doc_kind (`tailored_cv`), source_document_id, target_role, target_city,
-  language, content_text, claim_source_map JSONB, docx_bytes BYTEA,
-  created_at. Bytes are small (tens of KB) and persisting them makes the
-  download byte-stable and restart-proof.
-- Render with the already-present `python-docx` (write side). No new
-  dependency.
-- Chat/service flow: insert row (commit) → verify readable-back → only then
-  emit the success message containing the download link. Failure at any point
-  returns an honest "couldn't save it" reply (pattern already used at
-  `src/rico_chat_api.py:10880-10890`).
+- `build_fact_sheet(user_id, document_id=None)`:
+  - Source resolution via `document_resolver` (explicit `document_id` when the
+    user picked one; else primary → latest). Only `ready` documents are
+    tailorable; `legacy_missing`/`failed` → honest re-upload reply.
+  - Content: the resolved document's `extracted_text`
+    (fallback to `rico_profiles.cv_text` only when the resolved document is
+    the active CV and predates the column).
+  - Identity fields (name/years) come from `career_context` **only** — trusted
+    name gate, display_years conflict handling. Nothing else is claimed from
+    career_context (owner correction: it is not a duty/achievement layer).
+  - Output: typed entries (contact, roles, employers, date ranges, duties,
+    achievements, certifications, skills, education, and — only if literally
+    present in source — salary, visa status, location, language proficiency).
+    Every entry carries provenance as
+    `{document_id, start_offset, end_offset, source_hash}` — offsets into the
+    stored extracted text; **no raw source spans duplicated** into the
+    provenance records, and none in logs.
+- `verify_render(rendered_text, fact_sheet)`: every employer, role title, date
+  token, certification, and numeric/salary/visa/proficiency claim in the
+  rendered output must resolve to a fact-sheet entry; `_CV_PLACEHOLDER_PATTERNS`
+  moves here, is extended (`[Your Name]`, «أدخل», «اسمك هنا», …) and is finally
+  enforced. Because Step 3 renders deterministically *from the fact sheet*,
+  this check is a hard invariant gate (belt-and-braces), not a best-effort
+  post-hoc matcher over free AI text.
+- Deliberately **no AI generation in this slice**. The known limitation is
+  accepted: duties/achievements are selected and ordered for the target role
+  (keyword relevance against role/city), never rephrased. AI rephrasing, if
+  ever added, is a separately gated enhancement with its own review — the
+  owner's point that normalized post-hoc matching cannot prove paraphrase
+  grounding is recorded here as the reason.
+
+### Step 3 — Deterministic DOCX artifact, persisted with lifecycle controls
+
+- New table `generated_documents` (same migration file): `id UUID`, `user_id`,
+  `doc_kind` (`tailored_cv`), `source_document_id`, `target_role`,
+  `target_city`, `language`, `content_text`, `provenance_json JSONB`
+  (offset-based, per Step 2), `docx_bytes BYTEA`, `docx_sha256 TEXT`,
+  `byte_size INTEGER`, `created_at`, `last_accessed_at`.
+- Storage/lifecycle contract (owner-required):
+  - hard DOCX size cap (proposed 2 MB; deterministic render stays ~tens of KB);
+  - SHA-256 recorded at write; download re-verifies bytes against it;
+  - bounded retention with **lazy purge** (038 precedent — each create deletes
+    a bounded batch of rows older than the retention window, proposed 90 days;
+    no background worker exists on Render);
+  - account deletion purges all `generated_documents` rows for the user
+    (wired into the existing deletion path alongside `clear_cv_grounding`);
+  - source-CV deletion: generated artifacts SURVIVE (they are the user's own
+    derived documents) but `source_document_id` dangles to NULL via
+    `ON DELETE SET NULL`, and re-tailoring from the deleted source is
+    naturally impossible;
+  - no raw CV text, extracted text, or source excerpts in logs or audit
+    metadata — log ids, sizes, hashes, and statuses only.
+- Render with the already-present `python-docx` (write side; no new
+  dependency). Deterministic template: header → summary → experience →
+  education → certifications → skills, from fact-sheet entries only.
+- Ordering invariant: insert + commit → read-back verify (hash) → only then
+  the success reply containing the download link. Any failure → honest
+  "couldn't save it" reply (pattern at `src/rico_chat_api.py:10880-10890`).
 
 ### Step 4 — Authenticated download
 
-- `GET /api/v1/user/generated/{id}/download` in a new
-  `src/api/routers/generated_documents.py`: JWT via `get_current_user`,
-  strictly user-scoped lookup (404 on other users' ids — same shape as
-  files.py), returns the stored bytes with
-  `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
-  and a content-disposition filename. Rate-limited with the existing limiter.
-- `apps/web/lib/api.ts`: one helper for the download URL through the `/proxy`
-  path (cookie carries auth). Chat renders the link markdown it already
-  supports; no new UI surface in this slice.
+- `GET /api/v1/user/generated/{id}/download` in new
+  `src/api/routers/generated_documents.py`: JWT via `get_current_user`;
+  strictly user-scoped lookup — cross-user ids return **404** (never 403,
+  matching files.py information-hiding); rate-limited with the existing
+  limiter; response is the stored bytes with the DOCX MIME type and a
+  **sanitized `Content-Disposition`** filename (`_safe_filename`-equivalent:
+  ASCII-safe, no CR/LF/control chars, fixed `.docx` suffix).
+- `apps/web/lib/api.ts`: one helper producing the `/proxy` download URL
+  (cookie carries auth). Chat renders the markdown link it already supports;
+  no new UI surface in this slice.
 
 ### Step 5 — Chat continuation: the CV flow never falls to generic fallback
 
 - Add `_CV_TAILOR_FOLLOWUP_RE` (Arabic + English): role/city-targeted forms —
   «خصصها لوظيفة … في …», «اجعلها ل…», «عدلها لوظيفة…», "tailor it for … in …",
-  "make it for the … role" — routed to the tailor service with extracted
-  role/city.
-- Direct intent: extend `_CV_GENERATE_RE`-adjacent routing so "سيرة ذاتية
-  لوظيفة عمليات في دبي" with a stored CV goes to tailor, not the skeleton
-  builder.
+  "make it for the … role" — routed deterministically to the fact-sheet →
+  render path with the extracted role/city.
+- Direct intent: extend `cv_generate`-adjacent routing so "سيرة ذاتية لوظيفة
+  عمليات في دبي" with a `ready` stored CV goes to the tailor path, not the
+  skeleton builder.
 - Flow guard: while `last_flow_state == "cv_builder"`, an unmatched follow-up
   gets a deterministic clarification listing the concrete supported actions
-  (tailor for role/city, add section, download) — `_answer_with_ai_fallback`
-  is unreachable from this state. This enforces the invariant *within the CV
-  flow* (global fallback behavior elsewhere is untouched — that would be
-  Cognitive-Control-Plane scope).
+  (tailor for role/city, add a section from source, download) —
+  `_answer_with_ai_fallback` is unreachable from this state. The invariant is
+  enforced *within the CV flow*; global fallback behavior elsewhere is
+  untouched (that would be Cognitive-Control-Plane scope).
 - `_handle_cv_generate_from_profile` gains the fact-sheet source: when the
-  active CV has retrievable text, real Experience/Education sections are
-  rendered from it instead of being reported "unavailable", and the handler
-  stops asking for fields the fact sheet already contains.
+  active CV is `ready`, real Experience/Education sections render from source
+  content instead of being reported "unavailable", and the handler stops
+  asking for fields the fact sheet already contains.
 
-### Step 6 — The supplied Arabic transcript as an end-to-end regression test
+### Step 6 — Arabic redacted-transcript regression (end-to-end)
 
-- `tests/test_cv_tailoring_arabic_transcript.py` replays
-  `tests/fixtures/arabic_cv_tailoring_transcript.json` (verbatim production
-  turns — owner-supplied, see E7) against `RicoChatAPI` with a synthetic user
-  + synthetic stored-CV fixture. Assertions per invariant:
+- Fixture: `tests/fixtures/arabic_cv_tailoring_transcript.redacted.json` —
+  the owner-approved **redacted production-structure regression fixture**
+  (see Owner decision 3 and E7): preserved elements are the core Arabic
+  command wording, role ordering, conversation transitions, the
+  Operations/Dubai request, the user's objection to re-asked data, and the
+  incorrect "cannot create the file" reply; all personal/account values are
+  synthetic (`CV_Operations.pdf`-style filenames). Header fields
+  `"fidelity": "redacted-production-structure"` and
+  `"source_sha256": "<hash of private verbatim transcript>"`.
+- `tests/test_cv_tailoring_arabic_transcript.py` replays the fixture
+  turn-by-turn against `RicoChatAPI` with a synthetic user + synthetic stored
+  CV. Assertions per invariant:
   1. no turn's `response_source` is the generic AI fallback;
   2. no placeholder pattern in any reply or artifact;
   3. every employer/date/duty/achievement/certification/salary/visa/location/
-     proficiency string in the rendered CV maps into the fixture source text
-     (reconciliation report empty);
-  4. no reply claims readiness before the `generated_documents` row exists;
-  5. the download route returns 200 + DOCX (ZIP `PK` magic) for the owner and
-     404 for another user.
-- Generalization coverage (Product Generalization Rule): the same suite runs
-  an English variant, a no-CV user (deterministic "upload first" — never
-  fabrication), a user with a second unrelated target role, and a
-  legacy-document user without `extracted_text` (honest limitation reply).
+     proficiency string in the rendered CV resolves to a fact-sheet entry with
+     valid offsets into the fixture source text;
+  4. no reply claims readiness before the `generated_documents` row exists
+     and hash-verifies;
+  5. the download route returns 200 + DOCX (ZIP `PK` magic) for the owner-user
+     and 404 for another user.
+- Generalization coverage (Product Generalization Rule): English variant;
+  no-CV user (honest "upload first", never fabrication); user with a second
+  unrelated target role; `legacy_missing` document user (honest limitation
+  reply); `failed` extraction path (upload rejected honestly, no row).
 - Existing suites `tests/test_cv_generation_continuity.py`,
-  `tests/test_cv_generate_from_profile.py` must stay green; frontend
-  `npm run build` for the api.ts change.
+  `tests/test_cv_generate_from_profile.py` stay green; `npm run build` for the
+  api.ts change; `python -m pytest tests/ -v --tb=short` scope per CLAUDE.md.
 
 ### Invariant → enforcement map
 
 | Invariant | Enforced by |
 |---|---|
-| No placeholders | reconcile() placeholder patterns (finally wired) + deterministic floor render |
-| No invented dates/employers/duties/achievements/certs/salary/visa/location/proficiency | fact-sheet-only sourcing + reconcile() claim mapping; violations ⇒ deterministic render |
-| Every rendered claim maps to source evidence | claim_source_map persisted with the artifact |
-| All stored CVs retain retrievable extracted content | Step 1 write paths (confirm, My Files upload); honest surfacing for legacy rows |
-| Chat continuation never falls to generic fallback | Step 5 flow guard inside cv_builder state |
-| No success claim before artifact persisted + downloadable | Step 3 ordering (insert → verify → claim) |
-| Exact Arabic transcript is an E2E regression test | Step 6 fixture + suite |
+| No placeholders | deterministic render from typed fact sheet + `verify_render` placeholder gate (guard finally wired) |
+| No invented dates/employers/duties/achievements/certs/salary/visa/location/proficiency | deterministic selection-only render — no free-form generation exists in the path; `verify_render` as hard gate |
+| Every rendered claim maps to source evidence | offset-based provenance `{document_id, start_offset, end_offset, source_hash}` persisted with the artifact |
+| All stored CVs retain retrievable extracted content | Step 1 write paths (confirm; My Files cv parse-or-reject); explicit `extraction_status`; honest `legacy_missing` surfacing |
+| Chat continuation never falls to generic fallback | Step 5 flow guard inside `cv_builder` state |
+| No success claim before artifact persisted + downloadable | Step 3 ordering (insert+commit → hash read-back → claim) |
+| Arabic transcript is an E2E regression test | Step 6 redacted structural fixture + suite (verbatim stays private, hash-linked) |
 
 ### Sequencing, size, and rollout
 
-- Implementation order: Step 1 → 2 → 3 → 4 → 5 → 6 (each step lands with its
-  tests; one PR, reviewable commit-by-commit).
-- Migration rollout: additive `ADD COLUMN IF NOT EXISTS` + new table only —
+- Implementation order: Step 1 → 2 → 3 → 4 → 5 → 6, one fresh Draft PR from
+  then-current `main` after this RFC merges; reviewable commit-by-commit.
+- Migration rollout: additive `ADD COLUMN IF NOT EXISTS` + one new table —
   runtime-auto-apply per 026/038 precedent, drift-checked file included;
-  rollback = drop column/table, no data dependency.
+  rollback = drop columns/table, no data dependency.
 - No env vars added. No provider changes. `agent_runtime`/safety layers
-  untouched except consuming, not bypassing, them.
-- Open decisions for owner sign-off before implementation starts:
-  1. persist DOCX bytes (proposed) vs render-on-demand;
-  2. My Files upload parsing in-slice (proposed: yes — required by the
-     stored-content invariant) vs deferred;
-  3. supply the verbatim transcript for the fixture (required to merge).
+  consumed, never bypassed. No deploys from either PR; Render/Vercel
+  verification follows OPERATING_RULES after owner merge.
+- Remaining owner input needed before implementation starts: approval of the
+  redacted fixture content (turn sequence + token mapping) and of the two
+  proposed numeric bounds (512 KB extracted-text cap; 2 MB DOCX cap / 90-day
+  retention).
