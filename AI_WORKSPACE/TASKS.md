@@ -7114,3 +7114,137 @@ pattern). Product SSE path confirmed healthy at this baseline.
 - Next exact action: owner decision on #1306; after its merge + deploy,
   re-run Delivery-Smoke under the 8 conditions with workers = 1
 - Stop condition: STOP after this record merges; no re-run scheduled by agent
+
+---
+
+### TASK-20260722-001 — P1 CV-generation integrity: trace + bounded vertical slice plan
+
+Status: review (RFC gate — owner review of 2026-07-22 applied in rev 2; merge
+and implementation NOT yet authorized)
+Owner: Claude (session claude/cv-generation-integrity-cgggby)
+Branch: claude/cv-generation-integrity-cgggby
+Issue/PR: #1312 (docs-only RFC — stays docs-only; implementation will be a
+FRESH Draft PR from then-current main under this same TASK ID after the RFC
+merges)
+
+#### Objective
+Record the read-only repository trace of the P1 tailored-CV incident and the
+owner-approved implementation boundary for ONE deterministic vertical slice:
+selected readable CV → provenance-bearing fact sheet → deterministic
+Operations/Dubai CV → verified DOCX persisted with retention controls →
+JWT-scoped download → Arabic redacted-transcript regression.
+
+#### Owner decisions (2026-07-22, PR #1312 review + re-review — ALL ANSWERED)
+- DOCX v1: persist bytes; unbounded storage NOT approved. Approved bounds:
+  2 MiB hard DOCX cap, SHA-256 write/read-back, account-deletion cleanup,
+  strict user scope, sanitized download filename; creation consumes the
+  existing profile_optimization_limit allowance; absolute 60 retained
+  artifacts per user (creation purges oldest beyond cap).
+- Retention: 90 days from creation as logical expiry + lazy physical purge
+  (persisted expires_at; expired rows 404 on read; bounded-batch deletes on
+  create/download; account deletion immediate). No scheduler in v1.
+- Extracted text: 512 KiB hard cap; truncation REJECTED — over-cap = honest
+  4xx, no row, no mutation. `failed` status reserved for existing rows that
+  later fail re-validation/reparse; failed NEW uploads create no row.
+- My Files parsing: in-slice, doc_type=cv only; parse-or-honest-failure —
+  never a new metadata-only CV row; explicit extraction_status
+  (ready/legacy_missing/failed) + parser version.
+- Transcript: never commit verbatim (public repo, real personal data). The
+  redaction CONTRACT is approved; the actual synthetic fixture (exact token
+  mapping) is reviewed in the implementation PR — not a blocker on the RFC.
+- First slice is deterministic — no free-form AI rewrite; AI rephrasing is a
+  later, separately gated enhancement.
+- career_context reuse limited to identity/name/years trust; document fact
+  extraction is a new bounded component with offset-based provenance
+  {document_id, start_offset, end_offset, source_hash}.
+- No migration number reserved by the RFC — implementation uses the next
+  available number at its then-current main.
+- Process: #1312 stays docs-only; no scheduled polling (webhook-only PR
+  monitoring; the armed 1-hour check-in was cancelled).
+
+#### Context
+- Evidence + full plan: AI_WORKSPACE/proposals/2026-07-22-cv-generation-integrity-slice.md
+- Relevant files (traced, unmodified):
+  src/rico_chat_api.py (:452 dead placeholder guard, :6121 pending-city resume,
+  :8045 cv_builder follow-up gate, :9954 cv_generate routing, :11779 generic AI
+  fallback, :15113 _handle_cv_generate_from_profile, :2795 active-CV-only copy),
+  src/agent/intelligence/intent_classifier.py (:644 _CV_GENERATE_RE),
+  src/rico_apply_ai.py (:66 "[Your Name]" placeholder, :71 tailor_application),
+  src/api/routers/apply_queue.py, src/api/routers/files.py (metadata-only
+  upload :174, set-primary partial resync :355),
+  src/rico_db.py (:201 user_documents DDL — no text column),
+  src/api/routers/rico_chat.py (:2500 confirm persists no doc text, :2540
+  profile cv_text single slot), migrations/032, migrations/038,
+  src/services/career_context.py, src/services/document_resolver.py,
+  apps/web/lib/translations.ts (:604 My Files promise).
+- Existing behavior: non-active CV documents retain only metadata; CV draft
+  handler renders profile-scalar skeleton and never reads cv_text; Arabic
+  role/city tailoring follow-ups fall to generic AI fallback; tailoring engine
+  is prompt-only ("never invent") with no reconciliation; no generated-document
+  artifact or download endpoint exists.
+
+#### Constraints
+- Do not touch: production deploys, provider routing, agent_runtime action
+  scheme, safety-layer bypasses, Cognitive Control Plane scope, career-context
+  M2 identity dedupe.
+- Migrations: additive only (user_documents.extracted_text + generated_documents
+  table), 026/038 precedent, drift-checked.
+- Keep scope limited to: the single slice in the proposal; one PR.
+
+#### Acceptance criteria — RFC gate (#1312; can close before implementation)
+- [x] Design reviewed (read-only trace with file:line evidence +
+      deterministic-first slice per the approved boundary)
+- [x] Owner decisions recorded as answered (bounds approved with fail-closed
+      semantics: 512 KiB extracted-text/no truncation; 2 MiB DOCX; 90-day
+      logical expiry + lazy purge on create AND download; 60-artifact cap;
+      allowance consumption)
+- [x] Exact-head CI green (verified by owner at 6e1da2b; re-run on each
+      corrective head)
+- [ ] Owner RFC merge decision on #1312
+
+Implementation is a SEPARATE second gate (fresh Draft PR, same TASK ID) — see
+the implementation criteria below; nothing in the RFC gate starts it.
+
+#### Acceptance criteria — implementation gate (fresh Draft PR, same TASK ID)
+- [ ] Steps 1–6 implemented per merged RFC
+- [ ] Redacted production-structure fixture reviewed and approved in the
+      implementation PR (token mapping; private transcript stays out of git)
+- [ ] All invariants green in the regression suite; existing CV suites green;
+      frontend build green
+- [ ] No deploy / no production migration without separate owner authorization
+
+#### Required verification
+- [ ] Unit tests: n/a for this docs-only PR
+- [ ] Integration tests: n/a
+- [ ] Frontend build: n/a
+- [ ] Local smoke: n/a
+- [ ] Production/deploy smoke if applicable: none — no production change
+
+#### Continuity Block
+- Task ID: TASK-20260722-001
+- GitHub issue/PR: #1312 (draft, docs-only RFC)
+- Branch: claude/cv-generation-integrity-cgggby
+- Base branch: main (rebased onto 2fcaee8 after #1306 merged as 60d37c2 —
+  owner correction 6)
+- Last safe commit SHA: 2fcaee8 (current main base)
+- Current head SHA: final corrective commit
+  a18eec6153da526ab3c548dfb8e7d592ec237fb1 (rev 3.1) + this anchor commit
+  directly on top of it (= PR #1312 head; base 2fcaee8; prior owner-verified
+  head was 6e1da2b218d992950da13111e277b6250c21fec7)
+- Uncommitted changes present: no (after this commit)
+- Status: review (RFC gate — ready for owner merge decision after rev 3)
+- Files inspected: see Context above (read-only trace)
+- Files changed: AI_WORKSPACE/proposals/2026-07-22-cv-generation-integrity-slice.md
+  (rev 2 — owner review applied: deterministic-first, storage/lifecycle
+  contracts, extraction states, redacted fixture, career_context scope
+  correction, two-gate process); AI_WORKSPACE/TASKS.md (this entry)
+- Deployment: none
+- Known blockers: owner RFC merge decision on #1312 only (all decisions
+  answered; bounds approved; fixture reviewed later in the implementation PR)
+- Risks: none (docs only)
+- Rollback plan: revert the docs commits on this branch
+- Next exact action: owner merge decision on #1312 (marked ready per owner
+  re-review); after RFC merge, open ONE fresh Draft implementation PR from
+  then-current main (same TASK ID)
+- Stop condition: STOP after rev 3 is pushed and #1312 is marked ready at a
+  green head; no implementation before RFC merge + explicit authorization
