@@ -36,8 +36,12 @@ export function RicoReply({ text, streaming = false, canRegenerate = false, onRe
   const [copied, setCopied] = useState(false);
   const copy = useCallback(() => { void navigator.clipboard?.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); }, [text]);
   if (!text) return null; // empty pending → nothing (RicoThinking handles the shimmer)
+  // No entrance animation of its own: CommandTranscriptStep's row wrapper
+  // (`animate-in fade-in`) already handles entrance. A second, independent
+  // `animate-fade-up` here used to compound with it (message settle ~400ms
+  // vs. the ~150-220ms this is meant to feel like) — one animation, not two.
   return (
-    <div className="relative ps-3 animate-fade-up motion-reduce:animate-none" aria-live="polite" aria-busy={streaming || undefined}>
+    <div className="relative ps-3" aria-live="polite" aria-busy={streaming || undefined}>
       <span aria-hidden className="absolute inset-y-1 start-0 w-px animate-rail-draw motion-reduce:animate-none bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
       {/* Structured answer: the same reply string rendered as safe markdown —
           headings, lists, links, code, blockquotes, hierarchy — at a controlled
@@ -65,8 +69,10 @@ export function RicoReply({ text, streaming = false, canRegenerate = false, onRe
 }
 
 export function RicoUserBubble({ text }: { text: string }) {
+  // Same reasoning as RicoReply above: the transcript row wrapper already
+  // provides entrance — no second animation on this component's own root.
   return (
-    <div className="flex justify-end animate-fade-up motion-reduce:animate-none">
+    <div className="flex justify-end">
       <div dir="auto" className="max-w-[78%] rounded-sm border border-ink bg-ink px-3 py-2 text-[14.5px] text-paper">{text}</div>
     </div>
   );

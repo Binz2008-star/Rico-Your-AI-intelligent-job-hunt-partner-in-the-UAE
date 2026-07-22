@@ -22,7 +22,7 @@
  * distinct name.)
  */
 
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders as render } from "./test-utils";
@@ -30,6 +30,14 @@ import { renderWithProviders as render } from "./test-utils";
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
 import { WORKSPACE_THEME, WorkspaceThemeContext, type WorkspacePalette } from "@/components/workspace/theme";
 import type { JobMatch } from "@/lib/api";
+
+/** A promise the test controls the resolution of, to assert the card never
+ *  shows success before the caller actually settles it. */
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => { resolve = r; });
+    return { promise, resolve };
+}
 
 function renderCard(match: JobMatch, onAction = vi.fn()) {
     return renderCardTheme(match, WORKSPACE_THEME.dark, onAction);
@@ -254,5 +262,104 @@ describe("JobMatchCardAtelier — Arabic / RTL accessibility (GAP 2)", () => {
         expect(googleAria).toContain("ابحث في Google"); // Arabic label
         expect(googleAria).toContain("لدى"); // Arabic "at" join
         expect(googleAria).not.toContain(" at ");
+    });
+});
+
+/**
+ * Mark-as-Applied integrity — the applied-state must never claim success
+ * before the caller (the real chat send) actually confirms it. Regression
+ * coverage for the defect found in the interaction audit: the card used to
+ * call setMarkedApplied(true) synchronously on click, before the background
+ * chat message even started, let alone succeeded.
+ */
+describe("JobMatchCardAtelier — Mark as Applied integrity", () => {
+    function renderOpened(onMarkApplied?: (prompt: string) => Promise<boolean>) {
+        render(
+            <WorkspaceThemeContext.Provider value={WORKSPACE_THEME.dark}>
+                <JobMatchCardAtelier match={STRONG_MATCH} onAction={vi.fn()} onMarkApplied={onMarkApplied} />
+            </WorkspaceThemeContext.Provider>,
+        );
+        // Reveal the Mark-as-Applied button (only shown after the apply link opens).
+        fireEvent.click(screen.getByTestId("job-link-apply"));
+        return screen.getByTestId("job-mark-applied");
+    }
+
+    it("never shows success synchronously — stays pending until onMarkApplied resolves", async () => {
+        const { promise, resolve } = deferred<boolean>();
+        const onMarkApplied = vi.fn(() => promise);
+        const button = renderOpened(onMarkApplied);
+
+        fireEvent.click(button);
+        // Immediately after the click (before the promise resolves): pending,
+        // not success. This is the exact assertion the old code would fail —
+        // it flipped to "Marked Applied" on the same tick as the click.
+        expect(screen.queryByTestId("job-mark-applied-success")).toBeNull();
+        expect(screen.getByTestId("job-mark-applied").textContent).not.toContain("✓");
+
+        resolve(true);
+        await waitFor(() => expect(screen.getByTestId("job-mark-applied-success")).toBeTruthy());
+        expect(onMarkApplied).toHaveBeenCalledTimes(1);
+        expect(onMarkApplied).toHaveBeenCalledWith(
+            expect.stringContaining(`I've applied to ${STRONG_MATCH.title} at ${STRONG_MATCH.company}`),
+        );
+    });
+
+    it("shows an inline error (not success) when onMarkApplied resolves false", async () => {
+        const onMarkApplied = vi.fn(async () => false);
+        const button = renderOpened(onMarkApplied);
+
+        fireEvent.click(button);
+        await waitFor(() => expect(screen.getByTestId("job-mark-applied-error")).toBeTruthy());
+        expect(screen.queryByTestId("job-mark-applied-success")).toBeNull();
+        // The button remains — a safe retry, not a dead end.
+        expect(screen.getByTestId("job-mark-applied")).toBeTruthy();
+    });
+
+    it("allows retry after an error, and a second success clears the error", async () => {
+        const onMarkApplied = vi.fn()
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(true);
+        const button = renderOpened(onMarkApplied);
+
+        fireEvent.click(button);
+        await waitFor(() => expect(screen.getByTestId("job-mark-applied-error")).toBeTruthy());
+
+        fireEvent.click(screen.getByTestId("job-mark-applied"));
+        await waitFor(() => expect(screen.getByTestId("job-mark-applied-success")).toBeTruthy());
+        expect(screen.queryByTestId("job-mark-applied-error")).toBeNull();
+        expect(onMarkApplied).toHaveBeenCalledTimes(2);
+    });
+
+    it("prevents duplicate submission — a second click while pending is a no-op", async () => {
+        const { promise, resolve } = deferred<boolean>();
+        const onMarkApplied = vi.fn(() => promise);
+        const button = renderOpened(onMarkApplied);
+
+        fireEvent.click(button);
+        fireEvent.click(screen.getByTestId("job-mark-applied")); // rapid second click while pending
+        fireEvent.click(screen.getByTestId("job-mark-applied"));
+
+        resolve(true);
+        await waitFor(() => expect(screen.getByTestId("job-mark-applied-success")).toBeTruthy());
+        expect(onMarkApplied).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables the button while pending", async () => {
+        const { promise, resolve } = deferred<boolean>();
+        const onMarkApplied = vi.fn(() => promise);
+        const button = renderOpened(onMarkApplied);
+
+        fireEvent.click(button);
+        expect(screen.getByTestId("job-mark-applied")).toBeDisabled();
+
+        resolve(true);
+        await waitFor(() => expect(screen.getByTestId("job-mark-applied-success")).toBeTruthy());
+    });
+
+    it("without onMarkApplied wired, clicking never fabricates a success state", () => {
+        const button = renderOpened(undefined);
+        fireEvent.click(button);
+        expect(screen.queryByTestId("job-mark-applied-success")).toBeNull();
+        expect(screen.getByTestId("job-mark-applied")).toBeDisabled();
     });
 });
