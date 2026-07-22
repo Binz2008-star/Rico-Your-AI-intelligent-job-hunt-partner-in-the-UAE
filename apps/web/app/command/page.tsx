@@ -24,6 +24,7 @@ import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
+import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
 import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, DEFAULT_CHAT_SESSION_ID, executePermissionAction, fetchChatHistory, fetchChatSessions, fetchMe, getCvQuotaError, logout, mintChatSessionId, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
@@ -145,15 +146,6 @@ function savePublicHistory(sessionIdRef: React.MutableRefObject<string | null>, 
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
-
-// Module-level counter replaced by component-local ref (see _idRef below).
-// Kept for import compatibility only; do not use outside CommandPage.
-let _id = 0;
-function nextId() { return ++_id; }
-// Welcome turns get a reserved negative id so they can never collide with
-// nextId()-generated ids (streamId in particular — see the fresh-page-load
-// token-append bug this guards against).
-const WELCOME_MESSAGE_ID = -1;
 
 const QUICK_ACTION_DEFS = [
     { key: "cmdQaFindJobs", prompt: "Find UAE jobs that match my CV and experience." },
@@ -294,15 +286,14 @@ function mapHistoryToMessages(rows: Array<{ role: string; content: string }>): M
         if (seen.has(key)) return;
         seen.add(key);
         if (msg.role === "user") {
-            mapped.push({ id: -(idx + 2), role: "user", text: msg.content });
+            mapped.push({ id: historyRowId(idx), role: "user", text: msg.content });
         } else {
             // Parse JSON assistant payloads (job_matches, etc.) into rich messages
-            mapped.push(parseHistoryContent(msg.content, -(idx + 2)) as Message);
+            mapped.push(parseHistoryContent(msg.content, historyRowId(idx)) as Message);
         }
     });
     return mapped;
 }
-
 
 function WorkingIndicator({ operationMessage, fallback, isAr }: { operationMessage?: string | null; fallback: string; isAr: boolean }) {
     /* With a real operation label the row shows it verbatim; plain thinking
@@ -1190,7 +1181,7 @@ export default function CommandPage() {
         const stored = loadPublicHistory(sessionIdRef);
         if (stored.length > 0) {
             // Same reserved negative namespace as the authenticated loader.
-            const restored = stored.map((m, idx) => ({ id: -(idx + 2), role: m.role, text: m.text }));
+            const restored = stored.map((m, idx) => ({ id: historyRowId(idx), role: m.role, text: m.text }));
             markHydrated(restored);
             setMessages(restored);
             promptSentRef.current = true;
@@ -1245,12 +1236,15 @@ export default function CommandPage() {
 
     // `onSettled` is an optional, purely-additive hook: most callers (job
     // search, refine, option chips) don't pass it and behavior is unchanged.
-    // It exists so a specific UI affordance (e.g. JobMatchCardAtelier's
-    // "Mark as Applied") can know whether THIS particular turn actually
-    // produced a confirmed, non-error reply — never inferred, never assumed.
-    // Default is false-by-omission: any path that doesn't explicitly call
-    // onSettled(true) is treated as not-confirmed, which is the safe default
-    // for "do not show success before the backend confirms success".
+    // Its one real consumer today is JobMatchCardAtelier's "Mark as Applied",
+    // which needs to know that the application was actually PERSISTED — not
+    // merely that the turn got a normal, non-error reply back. onSettled(true)
+    // is therefore gated on the backend's explicit structured confirmation
+    // (see the `application_status_update` branch below), never on message
+    // text, HTTP status, or the absence of an exception. Default is
+    // false-by-omission: any path that doesn't explicitly call onSettled(true)
+    // is treated as not-confirmed, which is the safe default for "do not show
+    // success before the backend confirms success".
     const sendMessage = useCallback(async (text: string, displayText?: string, onSettled?: (ok: boolean) => void) => {
         if (chatAudience === "checking") { onSettled?.(false); return; }
         if (text === "__cv_upload__") {
@@ -1311,7 +1305,10 @@ export default function CommandPage() {
                     setOperationState(null);
                     scrollBottom();
                     textareaRef.current?.focus();
-                    onSettled?.(true);
+                    // A trajectory forecast is never an applied-status persistence
+                    // confirmation — onSettled's one real consumer (Mark as Applied)
+                    // must never read this as "application persisted".
+                    onSettled?.(false);
                     return;
                 }
                 // No trajectory nodes yet (e.g. profile pending) — fall through to chat.
@@ -1367,7 +1364,16 @@ export default function CommandPage() {
                         return [...filtered, { id: streamId, role: "rico", text: t("cmdErrEmptyResponse") }];
                     });
                 } else {
-                    settledOk = true;
+                    // Do NOT infer settledOk from "a normal, non-error reply landed"
+                    // (message text, HTTP status, and absence-of-exception are all
+                    // explicitly disallowed signals here). The backend's
+                    // `_handle_application_status_update` (src/rico_chat_api.py)
+                    // returns a conversational, non-error reply even when the DB
+                    // write failed (`type: "application_status_update_failed"`,
+                    // `job_status: null`) — so the only honest bar for "confirmed"
+                    // is the explicit structured field it sets after a real,
+                    // successful persistence.
+                    settledOk = res.type === "application_status_update" && res.job_status === "applied";
                     const hasEmptyMatches = res.type === "job_matches" && Array.isArray(res.matches) && res.matches.length === 0;
                     const displayText = hasEmptyMatches && !reply ? t("cmdErrNoMatches") : reply;
                     const displayOptions: RicoOption[] = hasEmptyMatches && !res.options ? [
@@ -2479,7 +2485,7 @@ export default function CommandPage() {
                                                 <div className="mt-2 space-y-2">
                                                     {m.matches.map((match, i) =>
                                                         atelierCards ? (
-                                                            <JobMatchCardAtelier key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                            <JobMatchCardAtelier key={i} match={match} onAction={(prompt) => sendMessage(prompt)} onMarkApplied={(prompt) => new Promise<boolean>((resolve) => { void sendMessage(prompt, undefined, resolve); })} />
                                                         ) : (
                                                             <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
                                                         ),
