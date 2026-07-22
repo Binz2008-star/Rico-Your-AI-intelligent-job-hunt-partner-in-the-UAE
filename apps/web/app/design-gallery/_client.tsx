@@ -47,6 +47,11 @@ const AtelierConsole = dynamic(
   { ssr: false, loading: () => <LoadingShell /> }
 );
 
+const RicoAscent = dynamic(
+  () => import("@/components/design-gallery/rico-ascent"),
+  { ssr: false, loading: () => <LoadingShell /> }
+);
+
 function LoadingShell() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0b0d1c]">
@@ -55,7 +60,7 @@ function LoadingShell() {
   );
 }
 
-type VariantKey = "v2" | "classic" | "nocturne" | "rico-alive" | "atelier-console";
+type VariantKey = "v2" | "classic" | "nocturne" | "rico-alive" | "atelier-console" | "rico-ascent";
 
 interface Variant {
   key: VariantKey;
@@ -107,6 +112,16 @@ const VARIANTS: Variant[] = [
     riskLevel: "prototype-only",
     productionSafeNotes: "Zero production routes, backend, auth, or billing touched. Ported from the Lovable Atelier prototype into an isolated, self-contained gallery component (scoped theme/fonts, no <html> mutation).",
     prototypeOnlyNotes: "Reference only. Scripted demo — no live chat/job/apply/save/CV action; every action button surfaces a reference-only notice. Adds Fraunces/Amiri/IBM Plex Sans Arabic (next/font) + lucide-react.",
+  },
+  {
+    key: "rico-ascent",
+    label: "Rico Ascent ✦ Phase 1",
+    description: "RicoAscent — bolder Nocturne evolution: editorial hero with real generated visual, interactive 7-stop 'what happens when you ask Rico something' sequence ending in an honest completion/uncertainty/recovery branch. Bilingual EN/AR RTL, reduced-motion aware.",
+    status: "prototype",
+    category: "command-concept",
+    riskLevel: "prototype-only",
+    productionSafeNotes: "Zero production routes, backend, auth, or billing touched. Isolated standalone component; keeps the ratified Nocturne palette (navy/gold/indigo/teal), evolves layout/motion/interaction.",
+    prototypeOnlyNotes: "Step sequence is a sample — illustrates real Rico working order, not a live AI call. Adds Space Grotesk/Inter/IBM Plex Sans Arabic/IBM Plex Mono (next/font) + one generated hero image; framer-motion + lucide-react already project deps.",
   },
 ];
 
@@ -278,6 +293,8 @@ export default function DesignGalleryClient() {
         {active === "rico-alive" && <RicoAlivePrototype />}
 
         {active === "atelier-console" && <AtelierConsole />}
+
+        {active === "rico-ascent" && <RicoAscent />}
       </div>
     </div>
   );
