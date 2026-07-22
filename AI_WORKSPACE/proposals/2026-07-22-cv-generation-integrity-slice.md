@@ -226,10 +226,11 @@ from the then-current `main` under TASK-20260722-001. No competing PRs.
   **next available migration number at implementation time**, not reserved
   here — mirrored into `_USER_DOCUMENTS_DDL` via `ADD COLUMN IF NOT EXISTS`):
   - `extracted_text TEXT` — hard cap **512 KiB** (owner-approved) enforced at
-    write time. **No truncation**: an over-cap extraction is an honest 4xx
-    failure with no new row and no profile/document mutation — a silently
-    shortened CV could omit work history yet still yield a "verified"
-    artifact, so it is rejected outright.
+    write time. **No truncation** (fail-closed semantics):
+    `<= 512 KiB → ready`; `> 512 KiB → honest 4xx failure → no document row →
+    no profile update → no success claim`. A silently shortened CV could omit
+    work history yet still yield a "verified" artifact, so it is rejected
+    outright.
   - `extraction_status TEXT NOT NULL DEFAULT 'legacy_missing'`
     (`ready` | `legacy_missing` | `failed`) — `NULL extracted_text` never
     encodes state by itself; every reader branches on `extraction_status`.

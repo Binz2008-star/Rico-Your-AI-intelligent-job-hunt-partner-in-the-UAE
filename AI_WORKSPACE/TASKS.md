@@ -7192,12 +7192,18 @@ JWT-scoped download → Arabic redacted-transcript regression.
 - Keep scope limited to: the single slice in the proposal; one PR.
 
 #### Acceptance criteria — RFC gate (#1312; can close before implementation)
-- [x] Read-only trace recorded with file:line evidence
-- [x] Owner decisions answered and recorded (bounds approved: 512 KiB
-      extracted-text/no truncation; 2 MiB DOCX; 90-day logical expiry + lazy
-      purge; 60-artifact cap; allowance consumption)
-- [x] Deterministic-first slice design per approved boundary
+- [x] Design reviewed (read-only trace with file:line evidence +
+      deterministic-first slice per the approved boundary)
+- [x] Owner decisions recorded as answered (bounds approved with fail-closed
+      semantics: 512 KiB extracted-text/no truncation; 2 MiB DOCX; 90-day
+      logical expiry + lazy purge on create AND download; 60-artifact cap;
+      allowance consumption)
+- [x] Exact-head CI green (verified by owner at 6e1da2b; re-run on each
+      corrective head)
 - [ ] Owner RFC merge decision on #1312
+
+Implementation is a SEPARATE second gate (fresh Draft PR, same TASK ID) — see
+the implementation criteria below; nothing in the RFC gate starts it.
 
 #### Acceptance criteria — implementation gate (fresh Draft PR, same TASK ID)
 - [ ] Steps 1–6 implemented per merged RFC
