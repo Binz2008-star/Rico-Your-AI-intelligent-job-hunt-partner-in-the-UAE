@@ -6068,6 +6068,7 @@ Branch: claude/command-v5-pr3-live-modes
 Issue/PR: PR — Command v5 PR 3 live modes (opened from this task)
 
 #### Objective
+
 PIVOTED 2026-07-21 (owner instruction: "cancel the repo design entirely and
 apply the attachment"): PR #1271 now applies the owner-supplied Command
 Workspace artifact design — full palette swap (LIGHT + DARK), artifact fonts
@@ -6079,16 +6080,19 @@ only. `/command` chat surface styling remains the next step (PR 4 slot).
 Interview/Learning/Activity stay hidden (no production capability).
 
 #### Context
+
 - Relevant files: apps/web/components/workspace/DashboardAtelier.tsx; apps/web/components/applications/ApplicationsAtelier.tsx; apps/web/components/upload/UploadAtelier.tsx; apps/web/components/workspace/theme.ts
 - Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md (PR 3 row)
 - Existing behavior: all data derivations, API calls, status taxonomy, translation keys, testids, aria contracts pinned by dashboard-atelier / flow-manual-application / upload-shell-composition tests.
 
 #### Constraints
+
 - Do not touch: data logic, APIs, auth, routing, translation keys, dark-island palette, /command chat surface.
 - No migrations unless explicitly required: none.
 - Keep scope limited to: presentation of the three mode components + additive `dark` flag on WorkspacePalette.
 
 #### Acceptance criteria
+
 - [x] v5 mode accents/typography/surfaces on the three modes (light island only); dark island keeps its existing language
 - [x] All loading/error/empty states restyled without weakening (skeletons + presence orb are additive; roles/testids unchanged)
 - [x] Accent-colored text uses AA text-safe tokens only (modeAText / onEmber)
@@ -6096,6 +6100,7 @@ Interview/Learning/Activity stay hidden (no production capability).
 - [x] All existing behavior contracts green without weakening
 
 #### Required verification
+
 - [x] Unit tests: vitest 854/854
 - [ ] Integration tests: n/a
 - [x] Frontend build: PASS; lint identical to main baseline (0 new findings); check:contrast:v5 PASS
@@ -6103,6 +6108,7 @@ Interview/Learning/Activity stay hidden (no production capability).
 - [ ] Production/deploy smoke if applicable: after merge via Vercel auto-deploy
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-005
 - GitHub issue/PR: PR — Command v5 PR 3 live modes
 - Branch: claude/command-v5-pr3-live-modes
@@ -6121,6 +6127,7 @@ Interview/Learning/Activity stay hidden (no production capability).
 - Next exact action: owner review of the Draft PR
 - Stop condition: any behavior-contract regression → fix before merge
 - Rollback plan: revert the PR — presentation-only diff, no data/API/schema impact
+
 ### TASK-20260722-001 — Atelier Arabic copy: rewrite translated-feeling strings to native Arabic
 
 Status: review
@@ -6191,6 +6198,7 @@ Branch: claude/command-v5-pr4-chat-surface
 Issue/PR: PR — public /command artifact chrome (opened from this task)
 
 #### Objective
+
 Extend the merged artifact design (#1271) to the PUBLIC /command guest
 surface. Technique: the repo's established channel-variable remap
 (AtelierCardScope precedent) applied at the guest chrome root —
@@ -6201,6 +6209,7 @@ production default; both faces are artifact faces). The authenticated
 /command already repainted via #1271's WORKSPACE_THEME swap.
 
 #### Constraints
+
 - Do not touch: chat behavior, streaming, attachments, safety, session flow,
   auth gating, translation keys, testids.
 - Keep scope limited to: presentation (channel remap + literal color-class
@@ -6208,18 +6217,21 @@ production default; both faces are artifact faces). The authenticated
   removed, MobileCommandHeader drawer literals → channel tokens).
 
 #### Acceptance criteria
+
 - [x] Guest /command wears the artifact palette in BOTH themes with zero markup/behavior change
 - [x] Sun-button labels AA (white on sun ≥4.85; fixes the pre-existing dark-on-sun user bubble post-#1271)
 - [x] Mobile drawer follows the artifact palette (no hardcoded navy)
 - [x] All existing behavior contracts green without weakening
 
 #### Required verification
+
 - [x] Unit tests: vitest 854/854
 - [x] Frontend build: PASS; lint identical to main baseline (0 new findings)
 - [x] Local smoke: Playwright single-shell + mobile-usability 18/18; guest light/dark/mobile/drawer screenshots reviewed
 - [ ] Production/deploy smoke if applicable: after merge via Vercel auto-deploy
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-006
 - GitHub issue/PR: PR — public /command artifact chrome
 - Branch: claude/command-v5-pr4-chat-surface
@@ -6237,6 +6249,7 @@ Status: done (both merged and live)
 Owner: Claude (agent) / owner approvals in-session
 
 #### Delivered
+
 1. Profile avatar (#1279, squash f6c0d84): /api/v1/user/avatar GET/POST/DELETE,
    dedicated user_avatars table (migration 050 — APPLIED to production Neon and
    verified via to_regclass BEFORE merge), ProfileAvatar hero UI with client-side
@@ -6255,9 +6268,11 @@ Owner: Claude (agent) / owner approvals in-session
    harvested into main by the owner-side follow-up (0665312f).
 
 #### Production verification (this task's closure)
+
 - Render: deploy-render success on 0665312f (latest backend-relevant main).
 - SMOKE-1197 + Delivery-Smoke: dispatched on main — results recorded in the
   session report.
+
 ### TASK-20260721-008 — Atomic Postgres operation-ownership store (stabilization slice 1)
 
 Status: done
@@ -6270,6 +6285,7 @@ TASK-20260721-007 inside #1285; renumbered to -008 here to resolve a same-day
 ID collision with the profile-avatar task entry above.
 
 #### Objective
+
 Move chat job-search operation ownership from the in-process
 process-nonce model (safe ONLY single-instance/single-worker — pinned by
 test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker)
@@ -6285,6 +6301,7 @@ in production. Scaling workers/instances stays BLOCKED until slice-4
 validation passes.
 
 #### Scope
+
 - migrations/050_chat_operations.sql (new, idempotent, additive; renamed
   to 051_chat_operations.sql on 2026-07-21 — identity is now 051)
 - src/repositories/chat_operations_repo.py (new)
@@ -6300,6 +6317,7 @@ validation passes.
   multi-worker-safety property on real Postgres)
 
 #### Continuity Block
+
 - Current head SHA: 7497c2a3 (main after squash merge of #1285)
 - Status: done — merged + deployed (Deploy Render Backend success for
   7497c2a3, /version-gated); CI on final PR head 5ae19599 was 9/9 green
@@ -6329,7 +6347,6 @@ validation passes.
   slice-4 multi-worker validation passes.
 - Stop condition: met — merged and deployed; no further writes on this task
 
-
 ### TASK-20260721-005 — Bilingual (AR/EN) agent replies — response builder localization
 
 Status: done
@@ -6338,6 +6355,7 @@ Branch: claude/system-tools-analysis-wc4o4g (restarted from main 247e83a)
 Issue/PR: #1288 (merged 2026-07-21, squash c626521f)
 
 #### Objective
+
 Complete the bilingual agent path opened by TASK-20260721-004: after #1266 an
 Arabic user's intent executes, but every reply, action label, and UI title
 came back in English (src/agent/response_builder/response_builder.py is the
@@ -6345,11 +6363,13 @@ sole AgentUIResponse producer). Localize all reply templates so the reply
 language follows the user's message language.
 
 #### Constraints
+
 - Keep scope limited to: response_builder.py + tests + ledger
 - Do not touch: action `type` values, tool names, data payloads, UI type enums
 - English output must remain byte-for-byte identical for non-Arabic messages
 
 #### Acceptance criteria
+
 - [x] Language detection from the user's message (Arabic block regex); empty/
       button-driven requests default to English (existing behavior)
 - [x] Arabic templates for every builder: job list, apply/skip/save/block,
@@ -6363,6 +6383,7 @@ language follows the user's message language.
       failed that hour — dispatched runs are the evidence)
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-005
 - GitHub issue/PR: #1288 (merged, squash c626521f)
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -6403,6 +6424,7 @@ Branch: claude/ricco-research-improvements-dkmhin (restarted from main b8379d7)
 Issue/PR: (opens with this branch's new PR)
 
 #### Objective
+
 Give the owner one read-only, admin-gated snapshot of operational health:
 GET /api/v1/admin/ops/overview — stuck/pending chat operations (heartbeat-
 lease view over the slice-1 shared store: running, timed_out,
@@ -6414,6 +6436,7 @@ Explicitly deferred (later increments): per-token AI spend counters
 (needs provider instrumentation) and any alerting/cron trigger.
 
 #### Scope
+
 - src/api/routers/admin_ops.py (new; require_admin-gated; read-only)
 - src/api/app.py (router registration — 2 lines)
 - src/repositories/chat_operations_repo.py (stats() aggregate, read-only)
@@ -6424,6 +6447,7 @@ Explicitly deferred (later increments): per-token AI spend counters
 - AI_WORKSPACE/TASKS.md (this entry; -008 closure; ID-collision renumber)
 
 #### Continuity Block
+
 - Current head SHA: (set at commit)
 - Status: in_review — PR opens as draft; merge is owner-gated
 - Validation already run: py_compile; new unit file 5/5; postgres
@@ -6452,9 +6476,11 @@ Branch: claude/ricco-research-improvements-dkmhin (restarted from latest main)
 Issue/PR: (opens with this branch's new PR)
 
 #### Objective
+
 Generalize the #1166→#1169 lesson (endpoint tests that patch the router's
 own wrapper hide router↔wrapper kwarg drift — the class that shipped the
 production save outage) to the remaining core paths:
+
 - Chat: POST /api/v1/rico/chat runs the REAL chat_service.send_message with
   a capturing spy only one layer down (_legacy_send_message) — proves
   ctx/message/operation_id/language bind and SURVIVE router → service →
@@ -6471,11 +6497,13 @@ production save outage) to the remaining core paths:
   feeds it (documented in the test module docstring).
 
 #### Scope
+
 - tests/test_core_path_real_wrappers.py (new — 9 tests; TEST-ONLY change,
   no src/ modification)
 - AI_WORKSPACE/TASKS.md (this entry; -009 closure)
 
 #### Continuity Block
+
 - Current head SHA: (set at commit)
 - Status: in_review — PR opens as draft; merge is owner-gated
 - Validation already run: new file 9/9; adjacent regression
@@ -6497,23 +6525,27 @@ Branch: claude/system-tools-analysis-wc4o4g (restarted from main 0b94c55)
 Issue/PR: set at PR open
 
 #### Objective
+
 Answer the owner's launch-readiness question with a fact-based control-plane
 reconciliation: live snapshot, LAUNCH_EXECUTION_PLAN gate status, full open-PR
 triage (15), route matrix, new anomalies, and a numbered owner decision list.
 
 #### Deliverable
+
 AI_WORKSPACE/LAUNCH_READINESS_2026-07-21.md — verdict: LIVE STABLE OPEN BETA,
 not commercially launch-ready; blockers are owner decisions (billing activation,
 rotation confirmation, PR dispositions, invitations, owner smoke, legal
 sign-off), not missing code.
 
 #### Notable findings recorded
+
 - Duplicate migration number 050 in main (chat_operations + user_avatars)
 - #1177 would collide on migration 047 (analytics_events already in main)
 - PROJECT_STATUS snapshot still 2026-07-18 — superseded for readiness purposes
   by this report; refresh to ride the next control-plane docs PR
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-011
 - GitHub issue/PR: set at PR open
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -6546,6 +6578,7 @@ Branch: claude/system-tools-analysis-wc4o4g (restarted from main fdb4ff3c, conta
 Issue/PR: set at PR open (DRAFT — owner merges; agent stops at evidence report)
 
 #### Objective
+
 Remove the duplicate migration number 050 (readiness report §5.1):
 050_user_avatars (#1279, 11:45) and 050_chat_operations (#1285, 13:40)
 collided. Decision per owner rule (applied-first / older-reference):
@@ -6553,6 +6586,7 @@ user_avatars keeps 050; chat_operations renumbered to 051 (next free —
 verified no 051 reference existed anywhere).
 
 #### Evidence gathered before changing anything
+
 - Read-only Neon production check (project robenjob): user_avatars PRESENT,
   chat_operations PRESENT, idx_chat_operations_user_latest PRESENT — BOTH
   are applied, so the older-reference criterion decided the keeper. No SQL
@@ -6562,13 +6596,14 @@ verified no 051 reference existed anywhere).
 - scripts/apply_migration_drift.py: no 050/chat_operations references.
 
 #### Atomic change set
+
 - migrations/050_chat_operations.sql → 051_chat_operations.sql (git rename,
   97% similarity; only the header number line changed — SQL body untouched)
 - scripts/check_migration_drift.py: both chat_operations entries 050 → 051
-  + renumber note in the comment
+  - renumber note in the comment
 - src/services/operation_state.py, src/repositories/chat_operations_repo.py,
   tests/unit/test_operation_duplicate_guard.py: comment references 050 → 051
-- tests/integration/test_operation_ownership_postgres.py: _MIGRATION file
+- tests/integration/test_operation_ownership_postgres.py:_MIGRATION file
   path updated (functional reference)
 - NEW tests/unit/test_migration_numbering.py: (1) unique numeric prefixes,
   (2) every drift-guard CHECKS id maps to an existing migration file
@@ -6576,6 +6611,7 @@ verified no 051 reference existed anywhere).
   LAUNCH_READINESS §5.1 marked RESOLVED
 
 #### Proofs (rule 6)
+
 - [x] Fail-before: test_migration_numbers_are_unique FAILED on pre-fix tree
       with {'050': ['050_chat_operations.sql', '050_user_avatars.sql']}
 - [x] Pass-after: 2/2 numbering tests; drift-guard ids unique
@@ -6587,6 +6623,7 @@ verified no 051 reference existed anywhere).
 - [ ] Full PR CI on exact head
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-012
 - GitHub issue/PR: set at PR open
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -6607,7 +6644,7 @@ verified no 051 reference existed anywhere).
 - Validation still required: full PR CI (qa-tests dispatch fallback if the
   pull_request webhook drops again)
 - Deployment/CI/Neon/Vercel state to check next: none — no deploy is
-  triggered by a correct merge (migrations/** touches deploy-render paths?
+  triggered by a correct merge (migrations/**touches deploy-render paths?
   YES migrations/** is in deploy-render path filter — note: merge will
   trigger a redeploy of identical runtime; expected and harmless)
 - Next exact action: owner reviews evidence and merges the draft PR
@@ -6625,8 +6662,9 @@ Branch: claude/ricco-research-improvements-dkmhin (restarted from main 46bdd32)
 Issue/PR: #1302 (merged, deploy verified 7b8df097)
 
 #### Objective
+
 Close the DNS fail-OPEN in src/services/link_verifier.py's SSRF guard. Both
-_is_safe_url_async and _is_safe_url_sync caught EVERY DNS-resolution error
+_is_safe_url_async and_is_safe_url_sync caught EVERY DNS-resolution error
 and returned True ("allow URL but note limitation") — so any URL whose
 hostname failed to resolve (NXDOMAIN, resolver error, timeout, or a
 rebinding attempt racing the check) bypassed the private-range/metadata
@@ -6637,6 +6675,7 @@ Acceptance: no URL with an unresolvable hostname can pass the SSRF check on
 the sync OR async path.
 
 #### Scope (narrow — LOW-3 only)
+
 - src/services/link_verifier.py: the two DNS-failure `except Exception`
   blocks change `pass` (→ fall through to `return True`) into `return False`.
   NOTHING ELSE changed — protocol allow-list, private/metadata ranges,
@@ -6651,6 +6690,7 @@ the sync OR async path.
 - AI_WORKSPACE/TASKS.md (this entry).
 
 #### Caller audit
+
 - src/api/routers/link_verification.py (Pydantic `validate_url` /
   `validate_urls`): call `_is_safe_url` → `_is_safe_url_sync`; a False now
   raises the existing ValueError("URL is not allowed (SSRF protection)") —
@@ -6663,6 +6703,7 @@ the sync OR async path.
   result; no bypass path.
 
 #### Continuity Block
+
 - Current head SHA: (set at commit)
 - Status: in_review — Draft PR; NO merge, NO deploy, NO LOW-1/LOW-2, NO
   slice-4 (owner stop conditions)
@@ -6693,6 +6734,7 @@ Branch: claude/ricco-research-improvements-dkmhin (restarted from main e3a5780)
 Issue/PR: #1304 (Draft; head 09b6ab6)
 
 #### Objective
+
 **PARTIAL HARDENING ONLY — slice 4 is NOT complete and the multi-worker
 expansion gate stays CLOSED.** Harden the atomic ownership store (slices 1-2,
 live in production) and remove the unsafe memory fallback in the mandatory
@@ -6706,19 +6748,20 @@ cooperative cancellation through job_providers/jsearch_client — a separate,
 larger follow-up PR). Workers/instances MUST stay at 1 until then.
 
 #### Scope
+
 - src/services/operation_state.py:
-  * NEW `OperationStoreUnavailable`; `_mandatory_db()` +
+  - NEW `OperationStoreUnavailable`; `_mandatory_db()` +
     `_on_repo_unavailable()`. Under RICO_OPERATION_STORE=postgres every store
     op (start/get/get_latest/update) FAILS CLOSED (raises) instead of falling
     back to memory; `auto`/`memory` keep the single-worker memory fallback.
-  * Absent-row in mandatory mode returns None (never resurrects memory state).
-  * TEST-ONLY lease/heartbeat overrides via `_lease_seconds()` /
+  - Absent-row in mandatory mode returns None (never resurrects memory state).
+  - TEST-ONLY lease/heartbeat overrides via `_lease_seconds()` /
     `_heartbeat_interval()`, GATED by `_test_timings_allowed()` (honored only
     when `PYTEST_CURRENT_TEST` is set; ignored in production). Production
     defaults (60s / 10s) can never be overridden by a stray env var.
-  * `build_status_response` returns an honest service_unavailable dict when
+  - `build_status_response` returns an honest service_unavailable dict when
     the mandatory store is down.
-  * PREPARATORY ownership-loss signal (`ownership_lost()` +
+  - PREPARATORY ownership-loss signal (`ownership_lost()` +
     `_mark_ownership_lost`/`_discard_ownership_loss`): heartbeat self-fences
     when the lease is unrenewable past its window or the row is taken over.
     NO executor consumer yet — it does NOT stop provider calls, so it does
@@ -6752,6 +6795,7 @@ larger follow-up PR). Workers/instances MUST stay at 1 until then.
 - AI_WORKSPACE/TASKS.md (this entry; TASK-013 closure).
 
 #### Continuity Block
+
 - Current head SHA: 09b6ab6
 - Status: in_review — Draft PR; slice 4 NOT complete, gate CLOSED. NO merge by
   agent, NO deploy, NO Render worker/instance change, NO LOW-1/LOW-2, NO daily
@@ -6782,6 +6826,7 @@ larger follow-up PR). Workers/instances MUST stay at 1 until then.
 - Stop condition: STOP after evidence report + green CI (owner directive).
 
 #### Owner-review follow-up (2026-07-21) — addressed on this branch, gate stays CLOSED
+
 Owner review of #1304 (head ee37126e) found two issues; both handled here:
 
 1. **Post-claim DB partition can still start a SECOND cascade (NOT eliminated).**
@@ -6827,6 +6872,7 @@ Branch: claude/rico-development-supervisor-sfdh8w (rebuilt from main 0e0497ba af
 Issue/PR: #1305 (Draft)
 
 #### Objective
+
 Add the controlled "Rico Development Supervisor" loop as a development-control
 layer ONLY — no Rico runtime behavior change. One invocation = at most ONE
 implementation task, max THREE observe/verify correction cycles, hard owner
@@ -6836,6 +6882,7 @@ live state stops execution, failed acceptance criteria cannot be reported
 complete.
 
 #### History (honesty note)
+
 Attempt 1 (base e3a5780, head 3c8f9f6) failed its own OBSERVE contract: open
 PR #1304 was concurrently editing AI_WORKSPACE/TASKS.md and using
 TASK-20260721-014, yet the session claimed no overlap and reused that ID; the
@@ -6845,6 +6892,7 @@ DEVELOPMENT_LOOP_STATE.md. This entry is the corrective rebuild under the
 next free ID.
 
 #### Scope (control-plane only; no src/, no apps/web runtime code)
+
 - .claude/skills/rico-development-supervisor/SKILL.md — loop contract
   (OBSERVE/DECIDE/ACT/VERIFY/RECORD/STOP-OR-LOOP, 12 hard owner gates,
   strict final-line RICO_SUPERVISOR_RESULT contract) + remediations:
@@ -6862,9 +6910,9 @@ next free ID.
   modes; --smoke isolated one-turn no-op CLI check; --smoke-perms isolated
   sentinel-file permission smoke (mechanical: token surfacing + checksum,
   not self-report); --tools restricted to Read,Edit,Write,Grep,Glob,Bash;
-  --strict-mcp-config with mcp__* denied and --setting-sources project (no
+  --strict-mcp-config with mcp__*denied and --setting-sources project (no
   MCP/connector, no user/local widening); Read/Edit path-scoped to project;
-  explicit secret-path denials (.env*, *.env, credentials, *.pem, *.key,
+  explicit secret-path denials (.env*, *.env, credentials,*.pem, *.key,
   ~/ , //etc) plus merge/deploy/destructive/DB/network denials and direct
   git-push denial; --permission-mode default; NEVER
   --dangerously-skip-permissions; git-fetch failure exits documented code 6.
@@ -6910,12 +6958,14 @@ next free ID.
 - AI_WORKSPACE/TASKS.md (this entry).
 
 #### Explicitly out of scope (owner directive)
+
 - PR #1304 content and its follow-up cancellation implementation — untouched
   (its merge into base 0e0497ba is inherited, not modified).
 - LOW-1, LOW-2, Constitutional AI, any product feature — not started.
 - No second supervised development task run in this session.
 
 #### Continuity Block
+
 - Base SHA: 0e0497baff9d18e37d09c2410ceb7e372c011dce (main, includes #1304)
 - Current head SHA: final head = the ledger-finalization commit recorded in
   DEVELOPMENT_LOOP_STATE.md (two-commit pattern; its validated_head_sha is
@@ -6941,7 +6991,7 @@ next free ID.
   rounds remediated; nothing further scheduled by the session)
 - Stop condition: STOP at Draft PR + evidence report; owner reviews before
   merge; no second objective in this session
-
+
 ### TASK-20260722-001 — Atelier Arabic copy: rewrite translated-feeling strings to native Arabic
 
 Status: review
@@ -6950,19 +7000,23 @@ Branch: fix/atelier-arabic-copy-native
 Issue/PR: #1276
 
 #### Objective
+
 Review the Arabic strings used by Atelier/command surfaces (`translations.ts` and the Atelier console gallery content) and replace the most obviously translated/literal phrasing with natural, written-for-Arabic copy that matches Rico's UAE/GCC career-assistant tone (modern fus7a, warm, professional). No behavior or layout changes.
 
 #### Context
+
 - Relevant files: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`
 - Relevant docs: `AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md`; strategy PR #1269 chapter 9 (Arabic-written-first)
 - Existing behavior: Arabic strings exist and render correctly in RTL; some are literal translations of English labels (e.g., "ثغرات بصراحة", "تخطَّ", "تحديد كمتقدّم") rather than natural Arabic UI copy.
 
 #### Constraints
+
 - Do not touch: layout, CSS, tokens, routing, behavior, non-Arabic strings, backend/API code.
 - No migrations or env changes.
 - Keep scope limited to: Arabic copy refinement in the two translation/content files above.
 
 #### Acceptance criteria
+
 - [x] Most visibly translated Atelier/command labels rephrased to native Arabic.
 - [x] English meanings preserved (no semantic drift).
 - [x] Gallery specimen content (`rico-content.ts`) aligned with production translation tone.
@@ -6970,6 +7024,7 @@ Review the Arabic strings used by Atelier/command surfaces (`translations.ts` an
 - [x] Existing vitest/tests green (updated assertions; main now uses non-label Arabic gates).
 
 #### Required verification
+
 - [x] Unit tests: `npm run test` from `apps/web` — 83/83 files, 854/854 tests passed
 - [ ] Integration tests: n/a
 - [x] Frontend build: `npm run build` from `apps/web` — green
@@ -6977,12 +7032,13 @@ Review the Arabic strings used by Atelier/command surfaces (`translations.ts` an
 - [ ] Production/deploy smoke if applicable: n/a
 
 #### Continuity Block
+
 - Task ID: TASK-20260722-001
 - GitHub issue/PR: #1276
 - Branch: fix/atelier-arabic-copy-native
 - Base branch: main @ 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
 - Last safe commit SHA: 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
-- Current head SHA: (set after merge)
+- Current head SHA: 08f6e291bacd4f53a2927595f86bf547a4313925
 - Uncommitted changes present: no
 - Status: review
 - Files inspected: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`; `apps/web/__tests__/command-job-match-card-atelier.test.tsx`; `AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md`
