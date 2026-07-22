@@ -225,48 +225,62 @@ def main() -> int:
             {"message": "Find accountant jobs in Dubai"},
             timeout=180,
         )
-        jobs_count = -1
-        resp_shape = "unparseable"
-        try:
-            def _find_jobs(node):
-                if isinstance(node, dict):
-                    j = node.get("jobs")
-                    if isinstance(j, list):
-                        return j
-                    for v in node.values():
-                        found = _find_jobs(v)
-                        if found is not None:
-                            return found
-                elif isinstance(node, list):
-                    for v in node:
-                        found = _find_jobs(v)
-                        if found is not None:
-                            return found
-                return None
+        def _find_jobs(node):
+            if isinstance(node, dict):
+                j = node.get("jobs")
+                if isinstance(j, list):
+                    return j
+                for v in node.values():
+                    found = _find_jobs(v)
+                    if found is not None:
+                        return found
+            elif isinstance(node, list):
+                for v in node:
+                    found = _find_jobs(v)
+                    if found is not None:
+                        return found
+            return None
 
-            parsed = json.loads(body.decode(errors="replace"))
+        def _reply_evidence(raw: bytes):
+            """(jobs_count, top_type, shape) for a chat reply body."""
+            try:
+                parsed = json.loads(raw.decode(errors="replace"))
+            except Exception:
+                return -1, "", "unparseable"
             jobs = _find_jobs(parsed)
-            jobs_count = len(jobs) if jobs is not None else -1
-            # Diagnostic shape evidence (synthetic-user content only): the
-            # top-level keys, any type markers, and a short reply snippet tell
-            # apart "search ran, shape unexpected" from "search never ran".
+            count = len(jobs) if jobs is not None else -1
+            top_type = ""
+            shape = ""
             if isinstance(parsed, dict):
-                _types = [
-                    str(v) for k, v in parsed.items() if k in ("type", "response_type", "intent")
-                ]
-                _snip = ""
+                top_type = str(parsed.get("type") or "")
+                snip = ""
                 for key in ("message", "reply", "response", "text"):
                     val = parsed.get(key)
                     if isinstance(val, str) and val.strip():
-                        _snip = " ".join(val.split())[:200]
+                        snip = " ".join(val.split())[:180]
                         break
-                resp_shape = f"keys={sorted(parsed.keys())} types={_types} snippet={_snip!r}"
-        except Exception:
-            pass
+                shape = f"type={top_type} snippet={snip!r}"
+            return count, top_type, shape
+
+        jobs_count, top_type, resp_shape = _reply_evidence(body)
+        # The role-fit guard may ask ONE clarification before spending a real
+        # provider search on a role that does not match the CV profile (the
+        # synthetic user has none) — intended product behavior. Follow the
+        # conversational contract like a real user: confirm, then re-evaluate.
+        clarified = False
+        if code == 200 and top_type == "clarification":
+            clarified = True
+            code, _, body = call(
+                "POST",
+                f"{BACKEND}/api/v1/rico/chat",
+                {"message": "YES"},
+                timeout=180,
+            )
+            jobs_count, top_type, resp_shape = _reply_evidence(body)
         record(
             "real search completes and reaches the user",
             code == 200 and jobs_count >= 1,
-            f"HTTP {code} jobs_in_reply={jobs_count} {resp_shape}",
+            f"HTTP {code} jobs_in_reply={jobs_count} clarification_confirmed={clarified} {resp_shape}",
         )
 
         auth_uid = None
