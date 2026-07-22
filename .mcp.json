@@ -10,6 +10,13 @@
       "headers": {
         "Authorization": "Bearer ${RENDER_API_KEY}"
       }
+    },
+    "magic": {
+      "command": "npx",
+      "args": ["-y", "@21st-dev/magic@latest"],
+      "env": {
+        "API_KEY": "${MAGIC_API_KEY}"
+      }
     }
   }
 }
