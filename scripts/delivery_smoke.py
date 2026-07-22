@@ -143,6 +143,26 @@ def main() -> int:
             row = cur.fetchone()
             rico_uid = str(row[0]) if row else None
 
+        # ── 3b. complete the minimum profile through the REAL onboarding funnel ──
+        # The chat deliberately gates job-search requests on a minimum profile
+        # (evaluate_minimum_profile downgrade → type=onboarding) and gates
+        # off-profile roles behind the role-fit clarification. The probe follows
+        # the product funnel exactly like a real user: complete onboarding
+        # first, then search a role that IS the profile's target role — so the
+        # search must run the real provider cascade with no gate in the way.
+        code, _, _ = call(
+            "POST",
+            f"{BACKEND}/api/v1/onboarding/submit",
+            {
+                "target_roles": ["Accountant"],
+                "preferred_cities": ["Dubai"],
+                "years_experience": 5,
+                "skills": ["Accounting", "Financial Reporting", "Excel"],
+            },
+            timeout=60,
+        )
+        record("onboarding submit completes profile", code == 200, f"HTTP {code}")
+
         # ── 4a. control probes: isolate cookie transport vs the stream route ──
         # Evidence for the 2026-07-21 SSE 'Unauthorized' frame: (1) does the jar
         # still hold access_token? (2) does a NON-stream authenticated POST on
