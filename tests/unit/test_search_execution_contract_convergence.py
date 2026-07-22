@@ -64,7 +64,7 @@ def _pending(role: str = "Environmental Manager", location: str = "Dubai") -> di
 class TestConversationalPendingRedemption:
     def test_affirmative_redeems_pending_search(self):
         api = _make_api(pending_job_search=_pending())
-        with patch.object(api, "_classified_role_search", return_value=dict(_SEARCH_RESULT)) as search, \
+        with patch.object(api, "_target_role_search_response", return_value=dict(_SEARCH_RESULT)) as search, \
              patch.object(api, "_append_chat"), \
              patch.object(api, "_answer_with_ai_fallback") as ai:
             result = api.answer_conversationally("u1", "ok", _PROFILE)
@@ -83,7 +83,7 @@ class TestConversationalPendingRedemption:
 
     def test_continuation_phrase_redeems_pending_search(self):
         api = _make_api(pending_job_search=_pending(role="HSE Manager", location=""))
-        with patch.object(api, "_classified_role_search", return_value=dict(_SEARCH_RESULT)) as search, \
+        with patch.object(api, "_target_role_search_response", return_value=dict(_SEARCH_RESULT)) as search, \
              patch.object(api, "_append_chat"), \
              patch.object(api, "_answer_with_ai_fallback") as ai:
             api.answer_conversationally("u1", "keep going", _PROFILE)
@@ -94,7 +94,7 @@ class TestConversationalPendingRedemption:
     def test_unrelated_message_does_not_hijack_pending(self):
         api = _make_api(pending_job_search=_pending())
         ai_reply = {"message": "Here is your profile summary.", "success": True}
-        with patch.object(api, "_classified_role_search") as search, \
+        with patch.object(api, "_target_role_search_response") as search, \
              patch.object(api, "_append_chat"), \
              patch.object(api, "_answer_with_ai_fallback", return_value=dict(ai_reply)):
             result = api.answer_conversationally("u1", "tell me about my profile", _PROFILE)
@@ -105,7 +105,7 @@ class TestConversationalPendingRedemption:
     def test_no_pending_no_redemption(self):
         api = _make_api(pending_job_search=None)
         ai_reply = {"message": "Sure — what would you like?", "success": True}
-        with patch.object(api, "_classified_role_search") as search, \
+        with patch.object(api, "_target_role_search_response") as search, \
              patch.object(api, "_append_chat"), \
              patch.object(api, "_answer_with_ai_fallback", return_value=dict(ai_reply)):
             api.answer_conversationally("u1", "ok", _PROFILE)
@@ -115,7 +115,7 @@ class TestConversationalPendingRedemption:
     def test_public_session_without_profile_never_searches(self):
         api = _make_api(pending_job_search=_pending())
         ai_reply = {"message": "Please sign up first.", "success": True}
-        with patch.object(api, "_classified_role_search") as search, \
+        with patch.object(api, "_target_role_search_response") as search, \
              patch.object(api, "_append_chat"), \
              patch.object(api, "_answer_with_ai_fallback", return_value=dict(ai_reply)):
             api.answer_conversationally("u1", "ok", None)

@@ -5853,6 +5853,15 @@ class RicoChatAPI:
         except Exception:
             pass
 
+    def _discard_pending_role_confirmation(self, user_id: str) -> None:
+        """Drop the armed role-confirmation marker once its search executes."""
+        try:
+            ctx = self._get_recent_context(user_id)
+            if ctx.pop("_pending_role_confirmation", None) is not None:
+                self._store_recent_context(user_id, ctx)
+        except Exception:
+            pass
+
     # Outgoing-message signals meaning Rico offered/announced a job search this
     # turn without executing it. Mirror of the read-side job_search_signals so a
     # follow-up confirmation ("تمام"/"yes") runs the real search. Kept focused on
@@ -5929,7 +5938,15 @@ class RicoChatAPI:
             self._clear_pending_job_search(user_id)
             pending_role = pending_js["role"]
             pending_loc = pending_js.get("location", "")
-            return self._classified_role_search(
+            self._discard_pending_role_confirmation(user_id)
+            # Execute DIRECTLY: the pending slot only ever holds a role that
+            # was validated at arm time (profile target role, canonical role
+            # from the off-profile gate, or a promised role). Re-entering
+            # _classified_role_search here re-fires the role-fit gate for an
+            # off-profile role and re-emits the SAME clarification the user
+            # just confirmed — the typed-YES infinite loop (BUG-05's button
+            # interceptor already bypasses the gate for the quick-reply path).
+            return self._target_role_search_response(
                 user_id, pending_role, profile, location=pending_loc
             )
 
@@ -7651,7 +7668,11 @@ class RicoChatAPI:
                 ):
                     self._append_chat(user_id, "user", message)
                     self._clear_pending_job_search(user_id)
-                    _redeemed = self._classified_role_search(
+                    self._discard_pending_role_confirmation(user_id)
+                    # Direct execution — same rationale as _resolve_pending_intent
+                    # Priority-0: the armed role is pre-validated; re-classifying
+                    # re-fires the off-profile gate into a confirmation loop.
+                    _redeemed = self._target_role_search_response(
                         user_id,
                         str(_pending_js["role"]),
                         profile,
