@@ -304,6 +304,16 @@ describe("JobMatchCardAtelier — Mark as Applied integrity", () => {
         );
     });
 
+    it("announces the success confirmation to screen readers (role=status, aria-live=polite)", async () => {
+        const onMarkApplied = vi.fn(async () => true);
+        const button = renderOpened(onMarkApplied);
+
+        fireEvent.click(button);
+        const success = await screen.findByTestId("job-mark-applied-success");
+        expect(success).toHaveAttribute("role", "status");
+        expect(success).toHaveAttribute("aria-live", "polite");
+    });
+
     it("shows an inline error (not success) when onMarkApplied resolves false", async () => {
         const onMarkApplied = vi.fn(async () => false);
         const button = renderOpened(onMarkApplied);
