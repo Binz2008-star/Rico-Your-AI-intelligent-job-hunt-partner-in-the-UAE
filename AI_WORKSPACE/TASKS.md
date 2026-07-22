@@ -7134,20 +7134,31 @@ selected readable CV → provenance-bearing fact sheet → deterministic
 Operations/Dubai CV → verified DOCX persisted with retention controls →
 JWT-scoped download → Arabic redacted-transcript regression.
 
-#### Owner decisions (2026-07-22, PR #1312 review — recorded)
-- DOCX v1: persist bytes; unbounded storage NOT approved (cap, SHA-256,
-  retention/lazy purge, account-deletion cleanup, source-deletion policy,
-  no raw content in logs are mandatory).
+#### Owner decisions (2026-07-22, PR #1312 review + re-review — ALL ANSWERED)
+- DOCX v1: persist bytes; unbounded storage NOT approved. Approved bounds:
+  2 MiB hard DOCX cap, SHA-256 write/read-back, account-deletion cleanup,
+  strict user scope, sanitized download filename; creation consumes the
+  existing profile_optimization_limit allowance; absolute 60 retained
+  artifacts per user (creation purges oldest beyond cap).
+- Retention: 90 days from creation as logical expiry + lazy physical purge
+  (persisted expires_at; expired rows 404 on read; bounded-batch deletes on
+  create/download; account deletion immediate). No scheduler in v1.
+- Extracted text: 512 KiB hard cap; truncation REJECTED — over-cap = honest
+  4xx, no row, no mutation. `failed` status reserved for existing rows that
+  later fail re-validation/reparse; failed NEW uploads create no row.
 - My Files parsing: in-slice, doc_type=cv only; parse-or-honest-failure —
   never a new metadata-only CV row; explicit extraction_status
   (ready/legacy_missing/failed) + parser version.
-- Transcript: never commit verbatim (public repo, real personal data); use a
-  redacted production-structure regression fixture with synthetic tokens.
+- Transcript: never commit verbatim (public repo, real personal data). The
+  redaction CONTRACT is approved; the actual synthetic fixture (exact token
+  mapping) is reviewed in the implementation PR — not a blocker on the RFC.
 - First slice is deterministic — no free-form AI rewrite; AI rephrasing is a
   later, separately gated enhancement.
 - career_context reuse limited to identity/name/years trust; document fact
   extraction is a new bounded component with offset-based provenance
   {document_id, start_offset, end_offset, source_hash}.
+- No migration number reserved by the RFC — implementation uses the next
+  available number at its then-current main.
 - Process: #1312 stays docs-only; no scheduled polling (webhook-only PR
   monitoring; the armed 1-hour check-in was cancelled).
 
@@ -7180,11 +7191,21 @@ JWT-scoped download → Arabic redacted-transcript regression.
   table), 026/038 precedent, drift-checked.
 - Keep scope limited to: the single slice in the proposal; one PR.
 
-#### Acceptance criteria
-- [ ] Evidence + plan document reviewed by owner
-- [ ] Open decisions answered (DOCX bytes persistence; My Files parse in-slice;
-      verbatim Arabic transcript supplied for the regression fixture)
-- [ ] Implementation task started only after owner sign-off
+#### Acceptance criteria — RFC gate (#1312; can close before implementation)
+- [x] Read-only trace recorded with file:line evidence
+- [x] Owner decisions answered and recorded (bounds approved: 512 KiB
+      extracted-text/no truncation; 2 MiB DOCX; 90-day logical expiry + lazy
+      purge; 60-artifact cap; allowance consumption)
+- [x] Deterministic-first slice design per approved boundary
+- [ ] Owner RFC merge decision on #1312
+
+#### Acceptance criteria — implementation gate (fresh Draft PR, same TASK ID)
+- [ ] Steps 1–6 implemented per merged RFC
+- [ ] Redacted production-structure fixture reviewed and approved in the
+      implementation PR (token mapping; private transcript stays out of git)
+- [ ] All invariants green in the regression suite; existing CV suites green;
+      frontend build green
+- [ ] No deploy / no production migration without separate owner authorization
 
 #### Required verification
 - [ ] Unit tests: n/a for this docs-only PR
@@ -7200,22 +7221,23 @@ JWT-scoped download → Arabic redacted-transcript regression.
 - Base branch: main (rebased onto 2fcaee8 after #1306 merged as 60d37c2 —
   owner correction 6)
 - Last safe commit SHA: 2fcaee8 (current main base)
-- Current head SHA: 74c9686 (RFC rev-2 commit) + this ledger-reconciliation
-  commit on top of it (PR #1312 head; base 2fcaee8)
+- Current head SHA: 6e1da2b218d992950da13111e277b6250c21fec7 (rev-2 head,
+  owner-verified) — superseded by the rev-3 corrective head recorded in the
+  anchor commit that follows the rev-3 push
 - Uncommitted changes present: no (after this commit)
-- Status: review (RFC gate)
+- Status: review (RFC gate — ready for owner merge decision after rev 3)
 - Files inspected: see Context above (read-only trace)
 - Files changed: AI_WORKSPACE/proposals/2026-07-22-cv-generation-integrity-slice.md
   (rev 2 — owner review applied: deterministic-first, storage/lifecycle
   contracts, extraction states, redacted fixture, career_context scope
   correction, two-gate process); AI_WORKSPACE/TASKS.md (this entry)
 - Deployment: none
-- Known blockers: owner approval required for (a) the corrected RFC, (b) the
-  redacted fixture content (turn sequence + token mapping), (c) proposed
-  numeric bounds (512 KB extracted-text cap; 2 MB DOCX cap; 90-day retention)
+- Known blockers: owner RFC merge decision on #1312 only (all decisions
+  answered; bounds approved; fixture reviewed later in the implementation PR)
 - Risks: none (docs only)
 - Rollback plan: revert the docs commits on this branch
-- Next exact action: owner re-review of rev 2 on #1312; after RFC merge, open
-  ONE fresh Draft implementation PR from then-current main (same TASK ID)
-- Stop condition: STOP after rev 2 is pushed and #1312 is mergeable at its new
-  head; no implementation before RFC merge + explicit authorization
+- Next exact action: owner merge decision on #1312 (marked ready per owner
+  re-review); after RFC merge, open ONE fresh Draft implementation PR from
+  then-current main (same TASK ID)
+- Stop condition: STOP after rev 3 is pushed and #1312 is marked ready at a
+  green head; no implementation before RFC merge + explicit authorization

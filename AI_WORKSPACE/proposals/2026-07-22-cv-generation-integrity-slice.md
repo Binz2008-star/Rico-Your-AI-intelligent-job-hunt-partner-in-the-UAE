@@ -1,7 +1,7 @@
 # P1 — CV Generation Integrity: Repository Trace + Bounded Vertical Slice (RFC)
 
-Date: 2026-07-22 (rev 2 — owner review of PR #1312 applied)
-Status: RFC under owner review — docs only; implementation gated on this RFC merging
+Date: 2026-07-22 (rev 3 — owner re-review corrections applied; bounds approved)
+Status: RFC ready for owner merge decision — docs only; implementation gated on this RFC merging
 Task: TASK-20260722-001 (canonical — one task, two sequential review gates)
 RFC PR: #1312 (docs-only; stays docs-only per owner ruling)
 Implementation PR: opened FRESH from then-current `main` only after this RFC
@@ -43,6 +43,36 @@ account.
    the repo.
 4. **Deterministic-first implementation.** No free-form AI rewrite in the
    first slice; AI rephrasing is a later, separately gated enhancement.
+
+**Owner re-review (2026-07-22, second pass) — bounds APPROVED, all decisions
+answered:**
+
+5. **Extracted-text cap: 512 KiB, truncation REJECTED.** Over-cap extraction
+   is an honest 4xx failure with no new row and no profile/document mutation —
+   never a silently shortened CV that could omit work history yet still
+   produce a "verified" artifact.
+6. **`failed` extraction status is reserved** for an *existing* row that later
+   fails re-validation/reparse. A failed NEW upload creates no row at all —
+   the two events are never conflated.
+7. **DOCX/storage: 2 MiB hard cap approved**, SHA-256 write/read-back
+   verification, account-deletion cleanup, strict user scope, sanitized
+   download filename — plus defense in depth: creation consumes the existing
+   CV/profile-optimization allowance (`profile_optimization_limit`
+   entitlement, `src/subscription_plans.py`), and an absolute maximum of
+   **60 retained generated artifacts per user** (successful creation purges
+   the oldest rows beyond the cap).
+8. **Retention: 90 days from artifact creation** (not rolling from last
+   access) as **logical expiry + lazy physical purge** — persisted
+   `expires_at`, expired rows filtered to 404 on every read, bounded-batch
+   deletes on create/download, immediate and complete purge on account
+   deletion. A strict physical day-90 deletion guarantee would need a
+   separately approved scheduler job and is NOT part of v1.
+9. **Fixture approval boundary:** the redaction *contract* is approved here;
+   the actual synthetic fixture (exact token mapping) is reviewed in the
+   implementation PR — it is not a blocker on this RFC. The private verbatim
+   transcript stays out of git history.
+10. **No migration number is reserved by this RFC** — the implementation PR
+    uses the next available migration number at its then-current `main`.
 
 ---
 
@@ -192,14 +222,20 @@ from the then-current `main` under TASK-20260722-001. No competing PRs.
 
 ### Step 1 — Every stored CV retains retrievable extracted content, with explicit state
 
-- Schema (additive, 026/038 precedent, drift-checked numbered migration file
-  `migrations/052_user_documents_extracted_text.sql` mirrored into
-  `_USER_DOCUMENTS_DDL` via `ADD COLUMN IF NOT EXISTS`):
-  - `extracted_text TEXT` — bounded: hard cap (proposed 512 KB) enforced at
-    write time; oversized extractions are truncated-with-marker never silently.
+- Schema (additive, 026/038 precedent, drift-checked numbered migration file —
+  **next available migration number at implementation time**, not reserved
+  here — mirrored into `_USER_DOCUMENTS_DDL` via `ADD COLUMN IF NOT EXISTS`):
+  - `extracted_text TEXT` — hard cap **512 KiB** (owner-approved) enforced at
+    write time. **No truncation**: an over-cap extraction is an honest 4xx
+    failure with no new row and no profile/document mutation — a silently
+    shortened CV could omit work history yet still yield a "verified"
+    artifact, so it is rejected outright.
   - `extraction_status TEXT NOT NULL DEFAULT 'legacy_missing'`
     (`ready` | `legacy_missing` | `failed`) — `NULL extracted_text` never
     encodes state by itself; every reader branches on `extraction_status`.
+    `failed` is reserved for an EXISTING row that later fails
+    re-validation/reparse; a failed new upload creates no row (the two events
+    are never conflated).
   - `extraction_parser_version TEXT`, `extracted_at TIMESTAMPTZ`.
 - Confirm path (`/api/v1/rico/confirm-cv-profile`): pass the artifact's
   `cv_text` into `get_or_create_user_document` → row lands `ready`.
@@ -262,15 +298,25 @@ New `src/services/cv_fact_sheet.py` (name final at implementation):
   `doc_kind` (`tailored_cv`), `source_document_id`, `target_role`,
   `target_city`, `language`, `content_text`, `provenance_json JSONB`
   (offset-based, per Step 2), `docx_bytes BYTEA`, `docx_sha256 TEXT`,
-  `byte_size INTEGER`, `created_at`, `last_accessed_at`.
-- Storage/lifecycle contract (owner-required):
-  - hard DOCX size cap (proposed 2 MB; deterministic render stays ~tens of KB);
+  `byte_size INTEGER`, `created_at`, `expires_at TIMESTAMPTZ NOT NULL`.
+- Storage/lifecycle contract (owner-approved bounds):
+  - hard DOCX size cap **2 MiB** (deterministic render stays ~tens of KB);
   - SHA-256 recorded at write; download re-verifies bytes against it;
-  - bounded retention with **lazy purge** (038 precedent — each create deletes
-    a bounded batch of rows older than the retention window, proposed 90 days;
-    no background worker exists on Render);
+  - creation consumes the existing CV/profile-optimization allowance
+    (`profile_optimization_limit` entitlement, `src/subscription_plans.py` —
+    "20 CV & profile optimizations per month" paid / 1 free);
+  - absolute cap of **60 retained generated artifacts per user** — a
+    successful creation purges the oldest rows beyond the cap (defense in
+    depth so retention is bounded even if lazy purge lags);
+  - retention = **logical expiry + lazy physical purge**, NOT guaranteed
+    physical deletion at exactly day 90 (that would require a separately
+    approved scheduler job): `expires_at = created_at + 90 days` persisted at
+    write; every read/download filters expired rows and returns 404; create
+    and download paths delete a bounded batch of expired rows (038 lazy-purge
+    precedent — no background worker exists on Render);
   - account deletion purges all `generated_documents` rows for the user
-    (wired into the existing deletion path alongside `clear_cv_grounding`);
+    immediately and completely (wired into the existing deletion path
+    alongside `clear_cv_grounding`);
   - source-CV deletion: generated artifacts SURVIVE (they are the user's own
     derived documents) but `source_document_id` dangles to NULL via
     `ON DELETE SET NULL`, and re-tailoring from the deleted source is
@@ -370,7 +416,12 @@ New `src/services/cv_fact_sheet.py` (name final at implementation):
 - No env vars added. No provider changes. `agent_runtime`/safety layers
   consumed, never bypassed. No deploys from either PR; Render/Vercel
   verification follows OPERATING_RULES after owner merge.
-- Remaining owner input needed before implementation starts: approval of the
-  redacted fixture content (turn sequence + token mapping) and of the two
-  proposed numeric bounds (512 KB extracted-text cap; 2 MB DOCX cap / 90-day
-  retention).
+- All owner decisions are ANSWERED (see Owner decisions 1–10 above): bounds
+  approved (512 KiB extracted-text / no truncation; 2 MiB DOCX; 90-day logical
+  expiry + lazy purge; 60-artifact per-user cap; optimization-allowance
+  consumption). The redaction *contract* is approved; the actual synthetic
+  fixture (exact token mapping) is reviewed in the implementation PR and is
+  not a blocker on this RFC.
+- The only remaining gate before implementation is the owner's RFC merge
+  decision on #1312. The RFC merge authorizes NO deploy and NO production
+  migration — implementation is a fresh Draft PR under TASK-20260722-001.
