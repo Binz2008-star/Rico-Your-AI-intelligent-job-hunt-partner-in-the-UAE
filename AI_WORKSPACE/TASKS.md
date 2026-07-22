@@ -7200,8 +7200,8 @@ JWT-scoped download → Arabic redacted-transcript regression.
 - Base branch: main (rebased onto 2fcaee8 after #1306 merged as 60d37c2 —
   owner correction 6)
 - Last safe commit SHA: 2fcaee8 (current main base)
-- Current head SHA: rev-2 docs commit on top of 2fcaee8 (exact SHA recorded in
-  the ledger-reconciliation commit that follows it; PR #1312 head)
+- Current head SHA: 74c9686 (RFC rev-2 commit) + this ledger-reconciliation
+  commit on top of it (PR #1312 head; base 2fcaee8)
 - Uncommitted changes present: no (after this commit)
 - Status: review (RFC gate)
 - Files inspected: see Context above (read-only trace)
