@@ -41,8 +41,16 @@ from threading import RLock
 from typing import Any, Callable, Dict, List, Optional
 
 from src.jsearch_client import FetchResult
+from src.services.cancellation import CancellationToken, is_cancelled as _is_cancelled
 
 logger = logging.getLogger(__name__)
+
+
+def _cancelled_result() -> FetchResult:
+    """The single, distinct cancellation outcome (never no-results/degradation/
+    quota/HTTP). Empty, flagged ``cancelled`` with ``error='ownership_lost'``;
+    callers discard it without side effects."""
+    return FetchResult(items=[], provider="none", cancelled=True, error="ownership_lost")
 
 # ── Tunables (env-overridable, no code change needed) ─────────────────────────
 # 24h shared result cache: identical (role, location) searches reuse results and
@@ -215,16 +223,29 @@ def _normalize_jooble(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _jooble_search(role: str, location: str, *, page: int = 1) -> FetchResult:
+def _jooble_search(
+    role: str, location: str, *, page: int = 1,
+    cancel: Optional[CancellationToken] = None,
+) -> FetchResult:
     """Query Jooble for *role* in *location*. Never raises.
 
     Jooble's quota is small, so callers must front this with the cache. The key is
     embedded in the URL path per Jooble's API contract — it is therefore NEVER
     logged.
+
+    Cooperative cancellation (``cancel``): the token is checked BEFORE the HTTP
+    request is issued and AFTER the response arrives, so a de-owned worker issues
+    no request and — if ownership is lost while the request is in flight —
+    discards the response WITHOUT recording observations or marking the provider
+    degraded.
     """
     api_key = os.getenv("JOOBLE_API_KEY", "").strip()
     if not api_key:
         return FetchResult(error="no_api_key", provider="jooble")
+
+    # Cancelled before the request → issue NO HTTP request at all.
+    if _is_cancelled(cancel):
+        return _cancelled_result()
 
     url = f"https://jooble.org/api/{api_key}"
     payload = json.dumps({
@@ -242,6 +263,10 @@ def _jooble_search(role: str, location: str, *, page: int = 1) -> FetchResult:
         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_S) as resp:
             data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
+        # An in-flight failure that lands after ownership loss is discarded
+        # WITHOUT the degradation side effect (we no longer own this operation).
+        if _is_cancelled(cancel):
+            return _cancelled_result()
         code = getattr(exc, "code", 0)
         rate_limited = code == 429
         # 401/403 from Jooble == bad/expired key or quota → degrade hard.
@@ -254,9 +279,16 @@ def _jooble_search(role: str, location: str, *, page: int = 1) -> FetchResult:
             rate_limited=rate_limited, quota_exhausted=quota,
         )
     except Exception as exc:  # network, JSON, timeout
+        if _is_cancelled(cancel):
+            return _cancelled_result()
         mark_degraded("jooble", "error")
         logger.warning("jooble_fetch_failed role=%r err=%s", role, type(exc).__name__)
         return FetchResult(error=type(exc).__name__, provider="jooble")
+
+    # Response arrived — if ownership was lost meanwhile, discard it WITHOUT
+    # recording observations (no side effects for a de-owned worker).
+    if _is_cancelled(cancel):
+        return _cancelled_result()
 
     raw_jobs = data.get("jobs") if isinstance(data, dict) else None
     if not isinstance(raw_jobs, list):
@@ -321,17 +353,29 @@ def _normalize_adzuna(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _adzuna_search(role: str, location: str, *, page: int = 1) -> FetchResult:
+def _adzuna_search(
+    role: str, location: str, *, page: int = 1,
+    cancel: Optional[CancellationToken] = None,
+) -> FetchResult:
     """Query Adzuna for *role* in *location*. Never raises.
 
     Adzuna's country coverage does not currently include the UAE; this client is
     provided as opt-in scaffolding (enabled only when both keys exist) and the
     target country is configurable via ``ADZUNA_COUNTRY`` (default "gb").
+
+    Cooperative cancellation (``cancel``) is honored the same way as
+    :func:`_jooble_search`: checked before the HTTP request and after the
+    response, so a de-owned worker issues no request and discards any in-flight
+    response WITHOUT marking the provider degraded or recording observations.
     """
     app_id = os.getenv("ADZUNA_APP_ID", "").strip()
     app_key = os.getenv("ADZUNA_APP_KEY", "").strip()
     if not (app_id and app_key):
         return FetchResult(error="no_api_key", provider="adzuna")
+
+    # Cancelled before the request → issue NO HTTP request at all.
+    if _is_cancelled(cancel):
+        return _cancelled_result()
 
     country = os.getenv("ADZUNA_COUNTRY", "gb").strip().lower()
     from urllib.parse import urlencode, quote
@@ -349,6 +393,8 @@ def _adzuna_search(role: str, location: str, *, page: int = 1) -> FetchResult:
         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_S) as resp:
             data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
+        if _is_cancelled(cancel):
+            return _cancelled_result()
         code = getattr(exc, "code", 0)
         rate_limited = code == 429
         quota = code in (401, 403)
@@ -360,9 +406,15 @@ def _adzuna_search(role: str, location: str, *, page: int = 1) -> FetchResult:
             rate_limited=rate_limited, quota_exhausted=quota,
         )
     except Exception as exc:
+        if _is_cancelled(cancel):
+            return _cancelled_result()
         mark_degraded("adzuna", "error")
         logger.warning("adzuna_fetch_failed role=%r err=%s", role, type(exc).__name__)
         return FetchResult(error=type(exc).__name__, provider="adzuna")
+
+    # Response arrived — discard WITHOUT recording observations if de-owned.
+    if _is_cancelled(cancel):
+        return _cancelled_result()
 
     raw = data.get("results") if isinstance(data, dict) else None
     if not isinstance(raw, list):
@@ -378,11 +430,17 @@ def _adzuna_search(role: str, location: str, *, page: int = 1) -> FetchResult:
 
 # ── JSearch (existing client, wrapped) ────────────────────────────────────────
 
-def _jsearch_search(role: str, location: str, country: str) -> FetchResult:
+def _jsearch_search(
+    role: str, location: str, country: str,
+    *, cancel: Optional[CancellationToken] = None,
+) -> FetchResult:
     from src import jsearch_client
     query = f"{role} {location}".strip() if location else f"{role} UAE"
-    result = jsearch_client.search(query, country=country)
-    result.provider = "jsearch"
+    result = jsearch_client.search(query, country=country, cancel=cancel)
+    # A cancelled fetch carries provider="none" — do not relabel it "jsearch",
+    # or the distinct cancelled outcome would masquerade as a provider result.
+    if not getattr(result, "cancelled", False):
+        result.provider = "jsearch"
     return result
 
 
@@ -396,31 +454,58 @@ def search_jobs(
     use_cache: bool = True,
     internal_lookup: Optional[Callable[[], List[Dict[str, Any]]]] = None,
     cache_context: str = "",
+    cancel: Optional[CancellationToken] = None,
 ) -> FetchResult:
     """Run the provider cascade for *role* / *location* and return a FetchResult.
 
     The cascade short-circuits at the first provider that yields results, caches
     the normalized output for 24h, and degrades gracefully (never raises) when
     every provider is unavailable.
+
+    Cooperative cancellation (``cancel``, DEC-20260721-001 slice 4): if the
+    operation loses ownership at any observable checkpoint, the cascade stops
+    launching NEW providers, discards any in-flight/harvested result WITHOUT
+    side effects (no cache write, no winner), and returns the distinct
+    cancelled FetchResult. An absent token means 'never cancelled'.
     """
     role = (role or "").strip()
     key = _cache_key(role, location, country, cache_context)
+
+    # Cancelled before we start any work: no provider request, no cache read to
+    # deliver — return the distinct cancelled outcome immediately.
+    if _is_cancelled(cancel):
+        logger.info("provider_cascade_cancelled role=%r stage=entry", role)
+        return _cancelled_result()
 
     # 1. Cache first — identical searches never touch the network within the TTL.
     if use_cache:
         cached = _cache_get(key)
         if cached is not None:
+            # Race guard: a cache hit found AFTER cancellation became observable
+            # must not be delivered (nothing goes to a de-owned worker's user).
+            if _is_cancelled(cancel):
+                logger.info("provider_cascade_cancelled role=%r stage=cache", role)
+                return _cancelled_result()
             logger.info("provider_cache hit role=%r results=%d", role, len(cached))
             return FetchResult(items=cached, cache_hit=True, provider="cache")
 
     # 2. Internal recent/saved results (caller-supplied; e.g. recent matches).
     if internal_lookup is not None:
+        # Do not even run the internal lookup once ownership is lost.
+        if _is_cancelled(cancel):
+            logger.info("provider_cascade_cancelled role=%r stage=internal_pre", role)
+            return _cancelled_result()
         try:
             internal_items = internal_lookup() or []
         except Exception as exc:
             internal_items = []
             logger.debug("internal_lookup failed err=%s", type(exc).__name__)
         if internal_items:
+            # Race guard: ownership may have been lost while the lookup ran —
+            # do not persist the internal result to cache or deliver it.
+            if _is_cancelled(cancel):
+                logger.info("provider_cascade_cancelled role=%r stage=internal_post", role)
+                return _cancelled_result()
             logger.info("provider_internal hit role=%r results=%d", role, len(internal_items))
             _cache_put(key, internal_items)
             return FetchResult(items=internal_items, provider="internal")
@@ -442,9 +527,9 @@ def search_jobs(
     # situations the serial cascade would have fired it anyway. Worst-case
     # wall time drops from sum(timeouts) to ~timeout + last stagger.
     cascade = [
-        ("jooble", _provider_configured("jooble"), lambda: _jooble_search(role, location)),
-        ("adzuna", _adzuna_enabled() and _adzuna_serves_country(country), lambda: _adzuna_search(role, location)),
-        ("jsearch", _provider_configured("jsearch"), lambda: _jsearch_search(role, location, country)),
+        ("jooble", _provider_configured("jooble"), lambda: _jooble_search(role, location, cancel=cancel)),
+        ("adzuna", _adzuna_enabled() and _adzuna_serves_country(country), lambda: _adzuna_search(role, location, cancel=cancel)),
+        ("jsearch", _provider_configured("jsearch"), lambda: _jsearch_search(role, location, country, cancel=cancel)),
     ]
     # Whether any provider is configured at all. This separates a genuinely
     # *degraded* deployment (keys present but providers failing / quota-spent)
@@ -464,10 +549,21 @@ def search_jobs(
         eligible.append((name, runner))
 
     def _run_provider(name: str, runner: Callable[[], FetchResult]) -> FetchResult:
+        # NEW-work guard: if ownership was already lost when this worker starts,
+        # do NOT issue the provider request at all — this is the core "no new
+        # provider work after cancellation" guarantee.
+        if _is_cancelled(cancel):
+            return _cancelled_result()
         # Degradation marking lives in the worker thread so a provider that
         # finishes AFTER a winner was chosen still records its rate/quota
-        # state for the cooldown registry.
+        # state for the cooldown registry — UNLESS we've been cancelled, in
+        # which case the in-flight response is discarded without side effects.
         result = runner()
+        # The client itself already discards in-flight results without side
+        # effects when de-owned; a cancelled result is passed straight through
+        # (its rate_limited/quota flags are False, so no marking happens).
+        if result.cancelled or _is_cancelled(cancel):
+            return _cancelled_result()
         if result.rate_limited:
             mark_degraded(name, "rate_limit")
         if result.quota_exhausted:
@@ -484,8 +580,15 @@ def search_jobs(
         winner: Optional[FetchResult] = None
         started = 0
         t0 = time.time()
+        cancelled = False
         try:
             while True:
+                # Cancellation observed mid-cascade: stop launching NEW
+                # providers and discard whatever is pending — no winner, no
+                # cache write, no side effects.
+                if _is_cancelled(cancel):
+                    cancelled = True
+                    break
                 elapsed = time.time() - t0
                 # Launch the next provider when its stagger slot arrives, or
                 # immediately when everything launched so far finished empty.
@@ -508,6 +611,8 @@ def search_jobs(
                     except Exception as exc:  # defensive: providers never raise
                         logger.warning("provider_worker_error provider=%s err=%s", nm, type(exc).__name__)
                         continue
+                    if result.cancelled:
+                        continue  # a de-owned in-flight result — discard it
                     if result.rate_limited:
                         aggregate_rate_limited = True
                     if result.quota_exhausted:
@@ -517,7 +622,19 @@ def search_jobs(
                 if winner is not None:
                     break
         finally:
-            pool.shutdown(wait=False)
+            # Mechanically cancel queued-but-unstarted futures so cancellation
+            # prevents their provider work from ever starting; already-running
+            # HTTP calls cannot be aborted, but their results are discarded by
+            # the cancel checks above. shutdown does not wait on the pool.
+            for fut in list(pending):
+                fut.cancel()
+            pool.shutdown(wait=False, cancel_futures=True)
+
+        # Final ownership re-check before delivering a winner: if ownership was
+        # lost after the winner was picked, discard it (no cache, not delivered).
+        if cancelled or _is_cancelled(cancel):
+            logger.info("provider_cascade_cancelled role=%r stage=harvest", role)
+            return _cancelled_result()
 
         if winner is not None:
             _cache_put(key, winner.items)

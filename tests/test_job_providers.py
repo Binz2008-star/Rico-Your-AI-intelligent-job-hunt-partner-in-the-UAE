@@ -104,7 +104,7 @@ def test_repeated_identical_search_uses_cache(monkeypatch):
     monkeypatch.setenv("JOOBLE_API_KEY", "x")
     calls = {"n": 0}
 
-    def _jooble(role, location, page=1):
+    def _jooble(role, location, page=1, *, cancel=None):
         calls["n"] += 1
         return FetchResult(items=[{"title": role, "company": "ACME"}], provider="jooble")
 
@@ -124,7 +124,7 @@ def test_use_cache_false_bypasses_cache(monkeypatch):
     monkeypatch.setenv("JOOBLE_API_KEY", "x")
     calls = {"n": 0}
 
-    def _jooble(role, location, page=1):
+    def _jooble(role, location, page=1, *, cancel=None):
         calls["n"] += 1
         return FetchResult(items=[{"title": role}], provider="jooble")
 
@@ -186,7 +186,7 @@ def test_jsearch_quota_exhausted_marks_degraded_and_does_not_recall(monkeypatch)
     monkeypatch.setenv("RAPIDAPI_KEY", "y")
     calls = {"n": 0}
 
-    def _jsearch(role, location, country):
+    def _jsearch(role, location, country, *, cancel=None):
         calls["n"] += 1
         return FetchResult(items=[], provider="jsearch", quota_exhausted=True)
 
@@ -375,11 +375,11 @@ def test_hedge_overtakes_a_slow_provider(monkeypatch):
     monkeypatch.setenv("RAPIDAPI_KEY", "y")
     monkeypatch.setattr(jp, "_HEDGE_STAGGER_S", 0.1)
 
-    def _slow_jooble(role, location):
+    def _slow_jooble(role, location, *, cancel=None):
         time.sleep(1.0)
         return FetchResult(items=[{"title": "late", "company": "j"}], provider="jooble")
 
-    def _fast_jsearch(role, location, country):
+    def _fast_jsearch(role, location, country, *, cancel=None):
         return FetchResult(items=[{"title": "fast", "company": "s"}], provider="jsearch")
 
     monkeypatch.setattr(jp, "_jooble_search", _slow_jooble)
@@ -402,11 +402,11 @@ def test_stagger_preserves_cost_preference(monkeypatch):
     monkeypatch.setattr(jp, "_HEDGE_STAGGER_S", 0.5)
     called = {"jsearch": False}
 
-    def _quick_jooble(role, location):
+    def _quick_jooble(role, location, *, cancel=None):
         time.sleep(0.05)
         return FetchResult(items=[{"title": "cheap", "company": "j"}], provider="jooble")
 
-    def _jsearch(role, location, country):
+    def _jsearch(role, location, country, *, cancel=None):
         called["jsearch"] = True
         return FetchResult(items=[{"title": "pricey", "company": "s"}], provider="jsearch")
 
@@ -426,10 +426,10 @@ def test_fast_empty_failures_skip_the_stagger(monkeypatch):
     monkeypatch.setenv("RAPIDAPI_KEY", "y")
     monkeypatch.setattr(jp, "_HEDGE_STAGGER_S", 5.0)  # would be visible if waited
 
-    monkeypatch.setattr(jp, "_jooble_search", lambda role, location: FetchResult(provider="jooble"))
+    monkeypatch.setattr(jp, "_jooble_search", lambda role, location, *, cancel=None: FetchResult(provider="jooble"))
     monkeypatch.setattr(
         jp, "_jsearch_search",
-        lambda role, location, country: FetchResult(items=[{"title": "ok", "company": "s"}], provider="jsearch"),
+        lambda role, location, country, *, cancel=None: FetchResult(items=[{"title": "ok", "company": "s"}], provider="jsearch"),
     )
 
     t0 = time.time()

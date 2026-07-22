@@ -30,8 +30,13 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
 
 from src.services.source_quality import pick_best_alternate_apply_link
+from src.services.cancellation import CancellationToken, is_cancelled as _is_cancelled
 
 logger = logging.getLogger(__name__)
+
+# Granularity of the interruptible backoff wait — small enough that a lost
+# lease is honored within a fraction of a second, not the full backoff window.
+_CANCEL_POLL_S = 0.1
 
 _JSEARCH_HOST = "jsearch.p.rapidapi.com"
 _JSEARCH_BASE = f"https://{_JSEARCH_HOST}"
@@ -67,12 +72,42 @@ class FetchResult:
     error: Optional[str] = None
     quota_exhausted: bool = False
     provider: str = "jsearch"
+    # ``cancelled`` is True ONLY when the search operation lost ownership
+    # mid-flight (cooperative cancellation, DEC-20260721-001 slice 4). It is a
+    # DISTINCT outcome — never conflated with no-results, provider degradation,
+    # quota exhaustion, or an HTTP error. When cancelled, ``error`` is
+    # "ownership_lost" and callers MUST discard the result: no cache write, no
+    # job_observations, no provider-winner, no terminal response, not delivered
+    # to the user. The attempt fence stays the final write-time guard.
+    cancelled: bool = False
 
 
 def clear_cache() -> None:
     """Drop all cached responses (used by tests)."""
     with _cache_lock:
         _cache.clear()
+
+
+def _cancelled_fetch() -> FetchResult:
+    """The distinct cancellation outcome (ownership lost mid-flight). Empty,
+    ``cancelled=True``, ``error='ownership_lost'``, ``provider='none'`` — never a
+    no-results / rate-limit / quota / HTTP-error result. Callers discard it
+    without side effects (no cache write, no observations, not delivered)."""
+    return FetchResult(items=[], provider="none", cancelled=True, error="ownership_lost")
+
+
+def _wait_or_cancelled(seconds: float, cancel: Optional[CancellationToken]) -> bool:
+    """Interruptible backoff: sleep up to *seconds*, but return True as soon as
+    cancellation becomes observable so a de-owned worker never waits out a full
+    retry backoff before stopping. Returns False if the wait completed."""
+    deadline = time.time() + seconds
+    while True:
+        if _is_cancelled(cancel):
+            return True
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            return False
+        time.sleep(min(_CANCEL_POLL_S, remaining))
 
 
 def _cache_get(query: str) -> Optional[List[Dict[str, Any]]]:
@@ -215,20 +250,40 @@ def build_queries_for_profile(
     return queries[:max_queries]
 
 
-def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchResult:
+def search(
+    query: str, *, use_cache: bool = True, country: str = "ae",
+    cancel: Optional[CancellationToken] = None,
+) -> FetchResult:
     """Fetch + normalize JSearch results for *query* with cache, retry, backoff.
 
     Never raises. On a rate-limited source it returns whatever was cached (if
     anything) plus `rate_limited=True`.
+
+    Cooperative cancellation (``cancel``, DEC-20260721-001 slice 4): the token
+    is checked at entry, before returning any cached response, before EVERY HTTP
+    attempt/retry, immediately after each response (before any cache write or
+    observation), and the retry backoff is interruptible. Once ownership is lost
+    the client issues no new request, starts no new retry, writes no cache or
+    job_observations, and returns the distinct cancelled FetchResult instead of
+    stale cache. An absent token means 'never cancelled'.
     """
     api_key = os.getenv("RAPIDAPI_KEY", "").strip()
     if not api_key:
         logger.debug("jsearch: RAPIDAPI_KEY not set — skipping query")
         return FetchResult(error="no_api_key")
 
+    # Cancelled before any work: no request, and no cache is served to a
+    # de-owned worker.
+    if _is_cancelled(cancel):
+        return _cancelled_fetch()
+
     if use_cache:
         cached = _cache_get(query)
         if cached is not None:
+            # Race guard: ownership may have been lost between the entry check
+            # and the cache read — never deliver even a cache hit once de-owned.
+            if _is_cancelled(cancel):
+                return _cancelled_fetch()
             logger.info("jsearch_cache hit query=%r results=%d", query, len(cached))
             return FetchResult(items=cached, cache_hit=True)
     logger.info("jsearch_cache miss query=%r", query)
@@ -246,10 +301,18 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
     retries = 0
     last_error: Optional[str] = None
     while retries <= _MAX_RETRIES:
+        # Guard EVERY attempt (first request and every retry): a worker that lost
+        # ownership issues no new HTTP request.
+        if _is_cancelled(cancel):
+            return _cancelled_fetch()
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
                 data = json.loads(resp.read().decode())
+            # Response arrived — if ownership was lost meanwhile, discard it
+            # WITHOUT writing cache or recording observations.
+            if _is_cancelled(cancel):
+                return _cancelled_fetch()
             raw_items = [
                 normalize_item(it) for it in _raw_items(data) if _is_uae_job(it)
             ]
@@ -273,6 +336,9 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
             logger.info("jsearch_fetch ok query=%r results=%d retries=%d", query, len(items), retries)
             return FetchResult(items=items, retries=retries)
         except urllib.error.HTTPError as exc:
+            # Discard an in-flight failure without side effects if de-owned.
+            if _is_cancelled(cancel):
+                return _cancelled_fetch()
             code = getattr(exc, "code", 0)
             # 403 on RapidAPI means the monthly quota is fully spent — there is no
             # point retrying, so stop immediately and flag quota_exhausted.
@@ -290,15 +356,24 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
                     "jsearch_retry query=%r status=%d retry=%d/%d backoff=%.1fs",
                     query, code, retries, _MAX_RETRIES, backoff,
                 )
-                time.sleep(backoff)
+                # Interruptible backoff: stop waiting (and do NOT start the next
+                # retry) the moment ownership is lost.
+                if _wait_or_cancelled(backoff, cancel):
+                    return _cancelled_fetch()
                 continue
             logger.warning("jsearch_http_error query=%r status=%d", query, code)
             last_error = f"http_{code}"
             break
         except Exception as exc:  # network, JSON, timeout
+            if _is_cancelled(cancel):
+                return _cancelled_fetch()
             logger.warning("jsearch_fetch_failed query=%r err=%s", query, type(exc).__name__)
             last_error = type(exc).__name__
             break
+
+    # A lease lost during the final break paths must not serve stale cache.
+    if _is_cancelled(cancel):
+        return _cancelled_fetch()
 
     rate_limited = last_error == "http_429"
     quota_exhausted = last_error == "http_403"

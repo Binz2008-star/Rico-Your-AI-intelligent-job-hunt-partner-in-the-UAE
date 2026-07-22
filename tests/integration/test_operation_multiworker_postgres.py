@@ -481,3 +481,112 @@ def test_partition_after_claim_starts_second_cascade_window_documented():
     late = repo.update_status(user_id=_USER, operation_id=_OP, status="completed", result_count=7, attempt=1)
     assert late is None
     assert _row(_OP)[1:3] == ("running", 2)
+
+
+# ── ACCEPTANCE (TASK-20260721-014): the self-fenced owner's in-flight cascade is
+#    cooperatively CANCELLED — no new provider work, and the already-in-flight
+#    response is discarded without side effects (no cache / observations /
+#    degradation / winner / terminal write). This is the end-to-end proof that
+#    closes the behavior the window test above only documents. It runs the REAL
+#    cascade under a REAL post-claim partition; the provider boundary is a local
+#    stand-in (no network) whose response deliberately lands AFTER the self-fence.
+
+def _cancel_aware_partition_owner(user_id, op_id, dead_url, ready_q, result_q):
+    _worker_env()
+    _fresh_nonce()
+    os.environ["JOOBLE_API_KEY"] = "k"          # only Jooble is eligible
+    from src.services import operation_state as ops
+    from src import job_providers as jp
+    from src.jsearch_client import FetchResult
+    from src.services.cancellation import CancellationToken
+
+    jp.clear_state()
+    counts = {"provider": 0, "obs": 0, "degrade": 0}
+
+    op = ops.start_job_search_operation(
+        user_id=user_id, role_or_query="hse manager", operation_id=op_id
+    )
+    attempt = op["attempt"]
+    token = CancellationToken(
+        operation_id=op_id, attempt=attempt,
+        is_cancelled=lambda: ops.ownership_lost(op_id, attempt),
+    )
+
+    # A slow provider: it starts (legitimate in-flight work), then blocks until
+    # THIS worker self-fences, so its response arrives strictly AFTER ownership
+    # was lost — the exact in-flight-discard case.
+    def _slow_jooble(role, location, *, cancel=None):
+        counts["provider"] += 1
+        deadline = time.monotonic() + _LEASE * 6
+        while time.monotonic() < deadline and not ops.ownership_lost(op_id, attempt):
+            time.sleep(0.05)
+        return FetchResult(items=[{"title": "x", "link": "https://x.test"}], provider="jooble")
+
+    jp._jooble_search = _slow_jooble
+    jp._record_observations_safe = lambda *a, **k: counts.__setitem__("obs", counts["obs"] + 1)
+    jp.mark_degraded = lambda *a, **k: counts.__setitem__("degrade", counts["degrade"] + 1)
+
+    ready_q.put(("A_claimed", attempt))
+
+    # Partition begins for THIS worker; its heartbeat can no longer renew and
+    # will self-fence once the outage outlasts the lease. The cascade is launched
+    # concurrently and observes the fence mid-flight.
+    os.environ["DATABASE_URL"] = dead_url
+    result = jp.search_jobs("hse manager", cancel=token)
+
+    from src.job_providers import _cache_key
+    cached = jp._cache_get(_cache_key("hse manager", "", "ae", ""))
+    result_q.put((
+        "A_result",
+        bool(result.cancelled),
+        result.error,
+        result.provider,
+        counts["provider"],       # in-flight call count (1 = the single call)
+        counts["obs"],            # observations written (must be 0)
+        counts["degrade"],        # degradation side effects (must be 0)
+        cached is not None,       # cache written (must be False)
+        bool(ops.ownership_lost(op_id, attempt)),
+    ))
+
+
+def test_self_fenced_owner_inflight_cascade_cancelled_without_side_effects():
+    from src.repositories import chat_operations_repo as repo
+
+    ready = _CTX.Queue()
+    result = _CTX.Queue()
+    a = _CTX.Process(
+        target=_cancel_aware_partition_owner,
+        args=(_USER, _OP, "postgresql://bad-host:1/nodb", ready, result),
+    )
+    a.start()
+    assert ready.get(timeout=30) == ("A_claimed", 1)
+
+    a.join(timeout=90)
+    outcome = result.get(timeout=5)
+    assert outcome[0] == "A_result", outcome
+    (_, cancelled, error, provider, provider_calls,
+     obs_writes, degrade_calls, cache_written, self_fenced) = outcome
+
+    assert self_fenced is True, "the stale owner must self-fence under the partition"
+    # Cooperative cancellation is the DISTINCT outcome.
+    assert cancelled is True
+    assert error == "ownership_lost"
+    assert provider == "none"
+    # No NEW provider work was launched after the fence: only the single
+    # already-in-flight call happened, and its response was discarded.
+    assert provider_calls == 1, f"only the in-flight call is allowed, saw {provider_calls}"
+    # The in-flight response produced NO side effects.
+    assert obs_writes == 0, "a discarded in-flight response must record no observations"
+    assert degrade_calls == 0, "a discarded in-flight response must mark no degradation"
+    assert cache_written is False, "a discarded in-flight response must not be cached"
+
+    # A's cascade returned the cancelled outcome, so the caller writes no
+    # terminal status: the row stays "running" (A never completed it). The SQL
+    # attempt-fence that additionally refuses a de-owned write AFTER a peer
+    # takeover is proven separately by the window test above; here there is no
+    # takeover, so the point is purely that cooperative cancellation produced no
+    # side effects.
+    row = _row(_OP)
+    assert row is not None and row[1] == "running", (
+        f"A must not write a terminal status for a cancelled cascade: {row}"
+    )
