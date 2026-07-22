@@ -85,6 +85,7 @@ export function CommandTranscriptStep({
     isStructured,
     canRegenerate = false,
     onRegenerate,
+    skipEntranceAnimation = false,
     children,
 }: {
     authenticated: boolean;
@@ -96,12 +97,18 @@ export function CommandTranscriptStep({
     canRegenerate?: boolean;
     /** Reuses the page's existing send/retry path (never a new endpoint). */
     onRegenerate?: () => void;
+    /** True for a message that arrived via bulk history hydration (initial
+     *  load or session switch) rather than a live send/stream — suppresses
+     *  the entrance animation so historical rows don't replay fade/slide-in
+     *  on every mount. */
+    skipEntranceAnimation?: boolean;
     children: React.ReactNode;
 }) {
     const c = useWorkspaceTheme();
     const { language } = useLanguage();
     const t = useTranslation(language);
     const isAr = language === "ar";
+    const entranceClass = skipEntranceAnimation ? "" : "animate-in fade-in motion-reduce:animate-none";
 
     if (!authenticated) {
         /* Public/guest surface — pre-C2 presentation, byte-identical. */
@@ -111,6 +118,7 @@ export function CommandTranscriptStep({
                 role={message.role}
                 isFirstInGroup={isFirstInGroup}
                 isStructured={isStructured}
+                skipEntranceAnimation={skipEntranceAnimation}
             >
                 {children}
             </CommandMessageRow>
@@ -161,7 +169,7 @@ export function CommandTranscriptStep({
         return (
             <div
                 data-testid="transcript-you-row"
-                className={`${isFirstInGroup ? "mt-6" : "mt-2"} animate-in fade-in motion-reduce:animate-none`}
+                className={`${isFirstInGroup ? "mt-6" : "mt-2"} ${entranceClass}`}
             >
                 <RicoUserBubble text={message.text ?? ""} />
             </div>
@@ -219,7 +227,7 @@ export function CommandTranscriptStep({
         return (
             <div className={`flex flex-col gap-2 ${isFirstInGroup ? "mt-6" : "mt-2"}`}>
                 {progressRows}
-                <div data-testid="transcript-rico-row" className="animate-in fade-in motion-reduce:animate-none">
+                <div data-testid="transcript-rico-row" className={entranceClass}>
                     <RicoReply
                         text={message.text ?? ""}
                         streaming={message.streaming === true}
@@ -240,7 +248,7 @@ export function CommandTranscriptStep({
             {progressRows}
             <div
                 data-testid="transcript-card-row"
-                className="flex items-start gap-4 animate-in fade-in motion-reduce:animate-none"
+                className={`flex items-start gap-4 ${entranceClass}`}
             >
                 <TranscriptGutter label={t("cmdGutterRico")} hot={message.streaming === true} />
                 <div

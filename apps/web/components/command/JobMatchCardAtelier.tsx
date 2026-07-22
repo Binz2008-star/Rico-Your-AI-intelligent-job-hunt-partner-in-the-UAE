@@ -280,12 +280,37 @@ function ScorePip({ score, scorePct, accent, contrastInk, fitLabel }: {
  * `match.match_reasons` (fallback `why`), gaps from `match.match_concerns`, and
  * the block is omitted entirely when the source field is empty.
  */
-export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
+/** idle → pending → success (only after confirmed completion) → error (safe
+ *  retry back to pending). Never skips straight to success on click. */
+type ApplyState = "idle" | "pending" | "success" | "error";
+
+export function JobMatchCardAtelier({
+    match,
+    onAction,
+    onMarkApplied,
+}: {
+    match: JobMatch;
+    onAction: (prompt: string) => void;
+    /** Confirms the "I've applied…" turn actually produced a real, non-error
+     *  reply before the card is allowed to claim success. Optional so
+     *  existing callers/tests that don't wire it keep working — the card
+     *  simply stays in "idle" (never confirms) without it. */
+    onMarkApplied?: (prompt: string) => Promise<boolean>;
+}) {
     const { language } = useLanguage();
     const t = useTranslation(language);
     const c = useWorkspaceTheme();
     const [linkOpened, setLinkOpened] = useState(false);
-    const [markedApplied, setMarkedApplied] = useState(false);
+    const [applyState, setApplyState] = useState<ApplyState>("idle");
+
+    async function handleMarkApplied() {
+        // Guards duplicate clicks: a second click while pending, or after
+        // success, is a no-op — matches PermissionRequestCard/ProposedChangeCard.
+        if (applyState === "pending" || applyState === "success" || !onMarkApplied) return;
+        setApplyState("pending");
+        const ok = await onMarkApplied(`I've applied to ${match.title} at ${match.company}`);
+        setApplyState(ok ? "success" : "error");
+    }
 
     const accent = c.red; // route's single signal — Atelier sun-red on this surface
     const contrastInk = c.bg; // readable text on an accent-filled plate
@@ -451,18 +476,29 @@ export function JobMatchCardAtelier({ match, onAction }: { match: JobMatch; onAc
                 </div>
             )}
 
-            {/* Mark as Applied — appears after the user opens the apply link */}
-            {linkOpened && !markedApplied && (
+            {/* Mark as Applied — appears after the user opens the apply link.
+                State machine: idle → pending → success (only once onMarkApplied
+                resolves true) → error (safe retry, same button). Never shows
+                the confirmed state before the backend-round-trip settles. */}
+            {linkOpened && applyState !== "success" && (
                 <button
                     type="button"
-                    onClick={() => { setMarkedApplied(true); onAction(`I've applied to ${match.title} at ${match.company}`); }}
-                    className="mt-2 w-full rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1.5 text-[10px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 animate-in fade-in slide-in-from-bottom-1"
+                    data-testid="job-mark-applied"
+                    onClick={handleMarkApplied}
+                    disabled={applyState === "pending" || !onMarkApplied}
+                    aria-live="polite"
+                    className="mt-2 w-full rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1.5 text-[10px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 disabled:cursor-not-allowed disabled:opacity-70 animate-in fade-in slide-in-from-bottom-1"
                 >
-                    {t("cmdMarkApplied")}
+                    {applyState === "pending" ? t("cmdMarkAppliedPending") : t("cmdMarkApplied")}
                 </button>
             )}
-            {markedApplied && (
-                <p className="mt-2 text-[10px] font-medium text-emerald-300">✓ {t("cmdMarkAppliedConfirm")}</p>
+            {applyState === "error" && (
+                <p data-testid="job-mark-applied-error" role="alert" aria-live="assertive" className="mt-1.5 text-[10px] text-red-400">
+                    {t("cmdMarkAppliedError")}
+                </p>
+            )}
+            {applyState === "success" && (
+                <p data-testid="job-mark-applied-success" className="mt-2 text-[10px] font-medium text-emerald-300">✓ {t("cmdMarkAppliedConfirm")}</p>
             )}
 
             {/* Source quality row — verification status + honest link notes */}

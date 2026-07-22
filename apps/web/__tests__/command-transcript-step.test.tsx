@@ -129,3 +129,66 @@ describe("TranscriptWorkingRow", () => {
         expect(screen.queryByTestId("transcript-run-row")).not.toBeInTheDocument();
     });
 });
+
+/**
+ * History-replay suppression — a message hydrated from bulk history (initial
+ * load or session switch) must not replay the entrance animation. Only rows
+ * for genuinely new/live messages animate in.
+ */
+describe("CommandTranscriptStep — skipEntranceAnimation (history replay)", () => {
+    it("you row: carries the entrance class by default, omits it when hydrated from history", () => {
+        const { rerender } = render(
+            <CommandTranscriptStep authenticated message={{ role: "user", text: "hi" } as never} isFirstInGroup isStructured={false}>
+                hi
+            </CommandTranscriptStep>,
+        );
+        expect(screen.getByTestId("transcript-you-row").className).toMatch(/animate-in/);
+
+        rerender(
+            <CommandTranscriptStep authenticated message={{ role: "user", text: "hi" } as never} isFirstInGroup isStructured={false} skipEntranceAnimation>
+                hi
+            </CommandTranscriptStep>,
+        );
+        expect(screen.getByTestId("transcript-you-row").className).not.toMatch(/animate-in/);
+    });
+
+    it("rico row: omits the entrance class when hydrated from history", () => {
+        render(
+            <CommandTranscriptStep authenticated message={{ role: "rico", text: "hi" } as never} isFirstInGroup isStructured={false} skipEntranceAnimation>
+                hi
+            </CommandTranscriptStep>,
+        );
+        expect(screen.getByTestId("transcript-rico-row").className).not.toMatch(/animate-in/);
+    });
+
+    it("card row: omits the entrance class when hydrated from history", () => {
+        render(
+            <CommandTranscriptStep
+                authenticated
+                message={{ role: "rico", text: "", matches: [{}] } as never}
+                isFirstInGroup
+                isStructured={false}
+                skipEntranceAnimation
+            >
+                card content
+            </CommandTranscriptStep>,
+        );
+        expect(screen.getByTestId("transcript-card-row").className).not.toMatch(/animate-in/);
+    });
+
+    it("public/guest surface: CommandMessageRow also honors skipEntranceAnimation", () => {
+        const { rerender } = render(
+            <CommandTranscriptStep authenticated={false} message={{ role: "user", text: "hi" } as never} isFirstInGroup isStructured={false}>
+                hi
+            </CommandTranscriptStep>,
+        );
+        expect(document.querySelector('[dir="ltr"]')?.className).toMatch(/animate-in/);
+
+        rerender(
+            <CommandTranscriptStep authenticated={false} message={{ role: "user", text: "hi" } as never} isFirstInGroup isStructured={false} skipEntranceAnimation>
+                hi
+            </CommandTranscriptStep>,
+        );
+        expect(document.querySelector('[dir="ltr"]')?.className).not.toMatch(/animate-in/);
+    });
+});

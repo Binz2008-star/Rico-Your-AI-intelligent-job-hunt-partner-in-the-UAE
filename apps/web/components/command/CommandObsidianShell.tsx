@@ -356,11 +356,11 @@ function CommandConsole({
                     [data-testid="command-obsidian-shell"] .atl-match-card:hover { transform: none; }
                 }
                 /* Staggered entrance for sibling cards in one reply. */
-                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(2) { animation-delay: 70ms; }
-                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(3) { animation-delay: 140ms; }
-                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(4) { animation-delay: 210ms; }
-                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(5) { animation-delay: 280ms; }
-                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(n+6) { animation-delay: 340ms; }
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(2) { animation-delay: 40ms; }
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(3) { animation-delay: 80ms; }
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(4) { animation-delay: 120ms; }
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(5) { animation-delay: 160ms; }
+                [data-testid="command-obsidian-shell"] .atl-match-card:nth-of-type(n+6) { animation-delay: 200ms; }
                 [lang="ar"][data-testid="command-obsidian-shell"] * { letter-spacing: 0 !important; }
             ` }} />
         </div>

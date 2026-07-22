@@ -63,6 +63,9 @@ export interface CommandMessageRowProps {
     isFirstInGroup: boolean;
     /** profile_preview renders on a paper panel; other Rico turns flow. */
     isStructured: boolean;
+    /** True for a message hydrated from history rather than freshly
+     *  sent/streamed — suppresses the entrance animation. */
+    skipEntranceAnimation?: boolean;
     children: React.ReactNode;
 }
 
@@ -76,16 +79,18 @@ export function CommandMessageRow({
     role,
     isFirstInGroup,
     isStructured,
+    skipEntranceAnimation = false,
     children,
 }: CommandMessageRowProps) {
     const c = useWorkspaceTheme();
+    const entranceClass = skipEntranceAnimation ? "" : "animate-in fade-in motion-reduce:animate-none";
 
     if (!authenticated) {
         /* Pre-4b public surface, unchanged. */
         return (
             <div
                 dir="ltr"
-                className={`flex min-h-6 animate-in fade-in motion-reduce:animate-none ${role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
+                className={`flex min-h-6 ${entranceClass} ${role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
             >
                 {role === "rico" && (
                     <div

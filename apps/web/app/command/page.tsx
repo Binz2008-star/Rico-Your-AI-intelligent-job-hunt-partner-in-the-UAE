@@ -965,6 +965,22 @@ export default function CommandPage() {
     // React state (thinking) is async-batched and cannot guard against same-tick
     // re-entry; a useRef is set/cleared synchronously so the second tap sees it.
     const sendingRef = useRef(false);
+    // Message ids that arrived as part of a bulk history hydration (initial
+    // load or session switch) rather than a live send/stream. The transcript
+    // skips the entrance animation for these — replaying fade/slide-in for
+    // every historical row on every page load or rail switch was jarring and
+    // is not "new" content the animation is meant to draw attention to.
+    const [hydratedIds, setHydratedIds] = useState<Set<number>>(() => new Set());
+    /** Immutable-update helper: reading .current directly during render trips
+     *  the refs-during-render rule, so this is real state, updated alongside
+     *  (never after) the setMessages call it accompanies. */
+    function markHydrated(msgs: Array<{ id: number }>) {
+        setHydratedIds((prev) => {
+            const next = new Set(prev);
+            for (const m of msgs) next.add(m.id);
+            return next;
+        });
+    }
     // Holds the AbortController for the current in-flight request (primary or retry).
     // Exposed so the cancel button can abort mid-stream without waiting for the
     // 45-second hard timeout.  Nulled in the sendMessage finally block.
@@ -1079,6 +1095,7 @@ export default function CommandPage() {
         const applyHistory = (rows: Array<{ role: string; content: string }>): boolean => {
             if (rows.length === 0) return false;
             const mappedMessages = mapHistoryToMessages(rows);
+            markHydrated(mappedMessages);
             // If the user already started chatting while history was in
             // flight, prepend history instead of wiping their live turns.
             setMessages((prev) => (prev.length > 0 ? [...mappedMessages, ...prev] : mappedMessages));
@@ -1173,7 +1190,9 @@ export default function CommandPage() {
         const stored = loadPublicHistory(sessionIdRef);
         if (stored.length > 0) {
             // Same reserved negative namespace as the authenticated loader.
-            setMessages(stored.map((m, idx) => ({ id: -(idx + 2), role: m.role, text: m.text })));
+            const restored = stored.map((m, idx) => ({ id: -(idx + 2), role: m.role, text: m.text }));
+            markHydrated(restored);
+            setMessages(restored);
             promptSentRef.current = true;
             setHistoryState("has_history");
             setInitialContentReady(true);
@@ -1224,14 +1243,23 @@ export default function CommandPage() {
         setTimeout(scrollMessagesPane, 50);
     }, []);
 
-    const sendMessage = useCallback(async (text: string, displayText?: string) => {
-        if (chatAudience === "checking") return;
+    // `onSettled` is an optional, purely-additive hook: most callers (job
+    // search, refine, option chips) don't pass it and behavior is unchanged.
+    // It exists so a specific UI affordance (e.g. JobMatchCardAtelier's
+    // "Mark as Applied") can know whether THIS particular turn actually
+    // produced a confirmed, non-error reply — never inferred, never assumed.
+    // Default is false-by-omission: any path that doesn't explicitly call
+    // onSettled(true) is treated as not-confirmed, which is the safe default
+    // for "do not show success before the backend confirms success".
+    const sendMessage = useCallback(async (text: string, displayText?: string, onSettled?: (ok: boolean) => void) => {
+        if (chatAudience === "checking") { onSettled?.(false); return; }
         if (text === "__cv_upload__") {
             fileInputRef.current?.click();
+            onSettled?.(false);
             return;
         }
         const trimmed = text.trim();
-        if (!trimmed || sendingRef.current) return;
+        if (!trimmed || sendingRef.current) { onSettled?.(false); return; }
 
         // One user turn = ONE operation id, shared by every transport attempt
         // (SSE, JSON fallback, timeout recovery). The backend refuses to start
@@ -1283,6 +1311,7 @@ export default function CommandPage() {
                     setOperationState(null);
                     scrollBottom();
                     textareaRef.current?.focus();
+                    onSettled?.(true);
                     return;
                 }
                 // No trajectory nodes yet (e.g. profile pending) — fall through to chat.
@@ -1295,6 +1324,10 @@ export default function CommandPage() {
         // rendered. Prevents a late stream/network failure from appending a
         // stale "Something went wrong" message below successful job cards (#325).
         let responseApplied = false;
+        // Narrower than responseApplied: true only for a genuine, non-error,
+        // non-rate-limited, non-fallback reply — the bar onSettled uses to
+        // decide "confirmed success" for callers like Mark-as-Applied.
+        let settledOk = false;
         // Hoisted out of the try so the AbortError handler can finalize a
         // partial streamed message on a deliberate user Stop (slice C2).
         const streamId = nextId();
@@ -1334,6 +1367,7 @@ export default function CommandPage() {
                         return [...filtered, { id: streamId, role: "rico", text: t("cmdErrEmptyResponse") }];
                     });
                 } else {
+                    settledOk = true;
                     const hasEmptyMatches = res.type === "job_matches" && Array.isArray(res.matches) && res.matches.length === 0;
                     const displayText = hasEmptyMatches && !reply ? t("cmdErrNoMatches") : reply;
                     const displayOptions: RicoOption[] = hasEmptyMatches && !res.options ? [
@@ -1600,6 +1634,7 @@ export default function CommandPage() {
             setOperationState(null);
             scrollBottom();
             textareaRef.current?.focus();
+            onSettled?.(settledOk);
         }
     }, [chatAudience, language, scrollBottom, t]);
 
@@ -1890,6 +1925,7 @@ export default function CommandPage() {
         try {
             const history = await fetchChatHistory(50, undefined, id);
             const mapped = mapHistoryToMessages(history.messages);
+            if (mapped.length > 0) markHydrated(mapped);
             setActiveChatSession(id);
             setHistoryState(mapped.length > 0 ? "has_history" : "empty");
             setMessages(
@@ -2357,6 +2393,7 @@ export default function CommandPage() {
                                     isStructured={isStructured}
                                     canRegenerate={canRegenerate}
                                     onRegenerate={regenText ? () => sendMessage(regenText) : undefined}
+                                    skipEntranceAnimation={hydratedIds.has(m.id)}
                                 >
 
                                     {/* Search result caption — 4d: Atelier ink on the
@@ -2431,7 +2468,7 @@ export default function CommandPage() {
                                                     <div className="mt-2 space-y-2 opacity-70">
                                                         {m.matches.map((match, i) =>
                                                             atelierCards ? (
-                                                                <JobMatchCardAtelier key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                                <JobMatchCardAtelier key={i} match={match} onAction={(prompt) => sendMessage(prompt)} onMarkApplied={(prompt) => new Promise<boolean>((resolve) => { void sendMessage(prompt, undefined, resolve); })} />
                                                             ) : (
                                                                 <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
                                                             ),
