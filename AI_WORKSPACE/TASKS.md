@@ -6941,3 +6941,53 @@ next free ID.
   rounds remediated; nothing further scheduled by the session)
 - Stop condition: STOP at Draft PR + evidence report; owner reviews before
   merge; no second objective in this session
+
+### TASK-20260722-002 — Fix CRLF line endings for shell scripts on Windows
+
+Status: review
+Owner: Claude (agent)
+Branch: fix/rico-development-loop-crlf
+Issue/PR: #1308
+
+#### Objective
+Make scripts/rico-development-loop.sh and scripts/rico-supervisor-push.sh runnable under bash/Git Bash on Windows by forcing LF line endings via .gitattributes, regardless of core.autocrlf.
+
+#### Context
+- Relevant files: scripts/rico-development-loop.sh, scripts/rico-supervisor-push.sh, .gitattributes
+- Existing behavior: On Windows with core.autocrlf=true, the scripts are checked out with CRLF endings and bash fails with \$'\r': command not found / set: pipefail: invalid option name.
+
+#### Constraints
+- Do not touch: script logic, runtime code, migrations, workflows.
+- No behavior changes.
+
+#### Acceptance criteria
+- [x] .gitattributes added with *.sh text eol=lf and .gitattributes text eol=lf.
+- [x] ash -n passes on both scripts.
+- [x] ash scripts/rico-development-loop.sh --smoke reaches the smoke logic (subsequent auth failure is unrelated).
+- [x] PR opened.
+
+#### Required verification
+- [x] Syntax check: ash -n on both scripts.
+- [ ] CI: standard checks on PR #1308.
+
+#### Continuity Block
+- Task ID: TASK-20260722-002
+- GitHub issue/PR: #1308
+- Branch: fix/rico-development-loop-crlf
+- Base branch: main @ 788b5674
+- Last safe commit SHA: 788b5674
+- Current head SHA: (set after task ledger update)
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: scripts/rico-development-loop.sh, scripts/rico-supervisor-push.sh
+- Files changed: .gitattributes
+- Files intentionally not touched: script logic; all runtime/product code
+- What is complete: .gitattributes fix, PR #1308 opened
+- What is incomplete: owner review/merge; CI on PR #1308
+- Known blockers: none
+- Validation already run: ash -n on both scripts; smoke reaches supervisor logic
+- Validation still required: PR CI
+- Deployment/CI/Vercel state to check next: n/a — no deployable files changed
+- Next exact action: owner review and merge of PR #1308
+- Stop condition: CI failure or owner rejection
+- Rollback plan: revert PR #1308
