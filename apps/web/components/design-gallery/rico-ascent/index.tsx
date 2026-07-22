@@ -35,6 +35,11 @@ import {
   CheckCircle2,
   HelpCircle,
   RefreshCcw,
+  AlertTriangle,
+  FileX,
+  RotateCw,
+  Copy,
+  Check,
 } from "lucide-react";
 import { ricoAscentFontVars } from "./fonts";
 import { RICO_ASCENT_COPY, type Lang } from "./content";
@@ -83,6 +88,7 @@ export default function RicoAscent() {
     >
       <Hero lang={lang} setLang={setLang} rtl={rtl} reduce={!!reduce} displayFont={displayFontFamily} bodyFont={bodyFontFamily} />
       <Moment rtl={rtl} reduce={!!reduce} copy={copy.moment} displayFont={displayFontFamily} bodyFont={bodyFontFamily} />
+      <Evidence rtl={rtl} reduce={!!reduce} copy={copy.evidence} displayFont={displayFontFamily} bodyFont={bodyFontFamily} />
       <Closing rtl={rtl} reduce={!!reduce} copy={copy.closing} displayFont={displayFontFamily} bodyFont={bodyFontFamily} />
     </div>
   );
@@ -260,6 +266,7 @@ function Hero({
    ════════════════════════════════════════════════════════════════════════ */
 
 const STEP_MS = 2600;
+type MomentTab = "working" | "loading" | "error" | "failedMedia";
 
 function Moment({
   rtl,
@@ -276,8 +283,23 @@ function Moment({
 }) {
   const steps = copy.steps;
   const [active, setActive] = useState(0);
+  const [tab, setTab] = useState<MomentTab>("working");
+  const [note, setNote] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const noteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isOutcome = active === steps.length - 1;
+
+  function showReferenceOnlyNote() {
+    setNote(copy.referenceOnlyNote);
+    if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
+    noteTimerRef.current = setTimeout(() => setNote(null), 1600);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (reduce) return; // no autoplay under reduced motion
@@ -340,10 +362,84 @@ function Moment({
       >
         {copy.heading}
       </h2>
-      <p style={{ fontFamily: bodyFont, color: ink45, fontSize: "0.98rem", maxWidth: "50ch", marginBottom: 48 }}>
+      <p style={{ fontFamily: bodyFont, color: ink45, fontSize: "0.98rem", maxWidth: "50ch", marginBottom: 32 }}>
         {copy.subtext}
       </p>
 
+      {/* Restaged as an actual chat turn — a real question, then Rico's reply area below */}
+      <div style={{ display: "flex", justifyContent: rtl ? "flex-start" : "flex-end", marginBottom: 20 }}>
+        <div
+          dir="auto"
+          style={{
+            maxWidth: "72%",
+            borderRadius: 14,
+            background: surface,
+            border: `1px solid ${hairline}`,
+            padding: "10px 16px",
+            fontFamily: bodyFont,
+            fontSize: "0.94rem",
+          }}
+        >
+          {copy.userQuestion}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+        <span
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: "50%",
+            background: "rgba(240,169,74,0.14)",
+            border: `1px solid rgba(240,169,74,0.3)`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: `var(--font-ra-mono), monospace`,
+            fontSize: 11,
+            color: gold,
+            flexShrink: 0,
+          }}
+          aria-hidden
+        >
+          R
+        </span>
+        <span style={{ fontFamily: bodyFont, fontSize: "0.85rem", color: ink45 }}>{copy.replyLabel}</span>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {(["working", "loading", "error", "failedMedia"] as MomentTab[]).map((key) => {
+            const isActive = tab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                style={{
+                  fontFamily: `var(--font-ra-mono), monospace`,
+                  fontSize: 10.5,
+                  padding: "4px 11px",
+                  borderRadius: 999,
+                  border: `1px solid ${isActive ? "rgba(240,169,74,0.4)" : hairline}`,
+                  background: isActive ? "rgba(240,169,74,0.10)" : "transparent",
+                  color: isActive ? gold : ink45,
+                  cursor: "pointer",
+                }}
+                aria-pressed={isActive}
+              >
+                {copy.tabs[key]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {tab === "loading" && <LoadingState note={copy.loadingNote} bodyFont={bodyFont} reduce={reduce} />}
+      {tab === "error" && <ErrorState copy={copy.errorState} bodyFont={bodyFont} onRetry={showReferenceOnlyNote} note={note} />}
+      {tab === "failedMedia" && <FailedMediaState copy={copy.failedMediaState} bodyFont={bodyFont} />}
+
+      {tab !== "working" && <div style={{ marginBottom: 40 }} />}
+
+      {tab === "working" && (
+      <>
       {/* Rail of stops */}
       <div style={{ position: "relative", marginBottom: 40 }}>
         <div
@@ -412,7 +508,7 @@ function Moment({
                   <Icon size={15} strokeWidth={2} />
                 </span>
                 <span
-                  style={{ fontFamily: bodyFont, fontSize: 11.5, color: isActive ? "white" : ink25 }}
+                  style={{ fontFamily: bodyFont, fontSize: 11.5, color: isActive ? "white" : ink45 }}
                   className="hidden sm:block"
                 >
                   {s.label}
@@ -484,7 +580,220 @@ function Moment({
           )}
         </AnimatePresence>
       </div>
+
+      {/* The reply Rico eventually gives — a real chat turn, not just abstract steps */}
+      <div style={{ marginTop: 20 }}>
+        <p dir="auto" style={{ fontFamily: bodyFont, fontSize: "0.98rem", lineHeight: 1.6, color: ink70, maxWidth: "58ch" }}>
+          {copy.finalReply}
+        </p>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginTop: 10,
+            alignItems: "center",
+            position: "relative",
+            justifyContent: rtl ? "flex-end" : "flex-start",
+          }}
+        >
+          <ReplyActionButton icon={Copy} label={copy.copyLabel} onClick={showReferenceOnlyNote} bodyFont={bodyFont} />
+          <ReplyActionButton icon={RotateCw} label={copy.regenerateLabel} onClick={showReferenceOnlyNote} bodyFont={bodyFont} />
+          <AnimatePresence>
+            {note && (
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{ fontFamily: bodyFont, fontSize: 11.5, color: ink45, fontStyle: "italic" }}
+              >
+                {note}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+      </>
+      )}
     </section>
+  );
+}
+
+function ReplyActionButton({
+  icon: Icon,
+  label,
+  onClick,
+  bodyFont,
+}: {
+  icon: typeof Copy;
+  label: string;
+  onClick: () => void;
+  bodyFont: string;
+}) {
+  const [clicked, setClicked] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        onClick();
+        setClicked(true);
+        setTimeout(() => setClicked(false), 1600);
+      }}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontFamily: bodyFont,
+        fontSize: 11.5,
+        padding: "5px 12px",
+        borderRadius: 999,
+        border: `1px solid ${hairline}`,
+        background: "rgba(255,255,255,0.02)",
+        color: ink45,
+        cursor: "pointer",
+      }}
+    >
+      {clicked ? <Check size={12} strokeWidth={2} /> : <Icon size={12} strokeWidth={2} />}
+      {label}
+    </button>
+  );
+}
+
+function LoadingState({ note, bodyFont, reduce }: { note: string; bodyFont: string; reduce: boolean }) {
+  const shimmer: CSSProperties = {
+    borderRadius: 8,
+    background: "linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.09) 37%, rgba(255,255,255,0.05) 63%)",
+    backgroundSize: "400% 100%",
+    animation: reduce ? "none" : "rico-ascent-shimmer 1.6s ease-in-out infinite",
+  };
+  return (
+    <div
+      style={{
+        borderRadius: 20,
+        border: `1px solid ${hairline}`,
+        background: "linear-gradient(180deg, rgba(23,28,58,0.72) 0%, rgba(13,16,38,0.6) 100%)",
+        padding: "32px 28px",
+      }}
+    >
+      <style>{`@keyframes rico-ascent-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }`}</style>
+      <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 18 }}>
+        <div style={{ width: 52, height: 52, ...shimmer }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ width: "38%", height: 14, marginBottom: 8, ...shimmer }} />
+          <div style={{ width: "70%", height: 12, ...shimmer }} />
+        </div>
+      </div>
+      <p style={{ fontFamily: bodyFont, color: ink45, fontSize: "0.85rem", fontStyle: "italic", margin: 0 }}>{note}</p>
+    </div>
+  );
+}
+
+function ErrorState({
+  copy,
+  bodyFont,
+  onRetry,
+  note,
+}: {
+  copy: { label: string; detail: string; retry: string };
+  bodyFont: string;
+  onRetry: () => void;
+  note: string | null;
+}) {
+  return (
+    <div
+      style={{
+        borderRadius: 20,
+        border: "1px solid rgba(240,169,74,0.22)",
+        background: "rgba(240,169,74,0.05)",
+        padding: "28px 28px",
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 18,
+      }}
+    >
+      <span
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "rgba(240,169,74,0.12)",
+          color: gold,
+          flexShrink: 0,
+        }}
+      >
+        <AlertTriangle size={20} strokeWidth={1.75} />
+      </span>
+      <div>
+        <div style={{ fontFamily: bodyFont, fontWeight: 600, fontSize: "1.02rem" }}>{copy.label}</div>
+        <div style={{ fontFamily: bodyFont, color: ink45, fontSize: "0.9rem", marginTop: 4, maxWidth: "48ch" }}>
+          {copy.detail}
+        </div>
+        <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={onRetry}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontFamily: bodyFont,
+              fontSize: 12,
+              padding: "6px 14px",
+              borderRadius: 999,
+              border: `1px solid rgba(240,169,74,0.35)`,
+              background: "rgba(240,169,74,0.10)",
+              color: gold,
+              cursor: "pointer",
+            }}
+          >
+            <RotateCw size={12} strokeWidth={2} />
+            {copy.retry}
+          </button>
+          {note && (
+            <span style={{ fontFamily: bodyFont, fontSize: 11.5, color: ink45, fontStyle: "italic" }}>{note}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FailedMediaState({ copy, bodyFont }: { copy: { label: string; detail: string }; bodyFont: string }) {
+  return (
+    <div
+      style={{
+        borderRadius: 20,
+        border: `1px solid ${hairline}`,
+        background: "linear-gradient(180deg, rgba(23,28,58,0.72) 0%, rgba(13,16,38,0.6) 100%)",
+        padding: "28px 28px",
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 18,
+      }}
+    >
+      <span
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "rgba(255,255,255,0.04)",
+          border: `1px solid ${hairline}`,
+          color: ink25,
+          flexShrink: 0,
+        }}
+      >
+        <FileX size={20} strokeWidth={1.75} />
+      </span>
+      <div>
+        <div style={{ fontFamily: bodyFont, fontWeight: 600, fontSize: "1.02rem", color: ink70 }}>{copy.label}</div>
+        <div style={{ fontFamily: bodyFont, color: ink45, fontSize: "0.9rem", marginTop: 4, maxWidth: "48ch" }}>
+          {copy.detail}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -519,6 +828,109 @@ function OutcomeChip({
         <div style={{ color: ink45, fontSize: "0.84rem", marginTop: 2, lineHeight: 1.45 }}>{detail}</div>
       </div>
     </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   EVIDENCE — three synthetic verification examples. One deliberately fails
+   to confirm, because Rico flagging a gap is real product behavior, not
+   a flaw to hide in a marketing page.
+   ════════════════════════════════════════════════════════════════════════ */
+
+function Evidence({
+  rtl,
+  reduce,
+  copy,
+  displayFont,
+  bodyFont,
+}: {
+  rtl: boolean;
+  reduce: boolean;
+  copy: (typeof RICO_ASCENT_COPY)["en"]["evidence"];
+  displayFont: string;
+  bodyFont: string;
+}) {
+  return (
+    <section
+      style={{ borderTop: `1px solid ${hairline}`, padding: "88px 20px 96px", maxWidth: 980, margin: "0 auto" }}
+    >
+      <span
+        style={{
+          display: "inline-block",
+          fontSize: 10.5,
+          fontFamily: `var(--font-ra-mono), monospace`,
+          textTransform: rtl ? "none" : "uppercase",
+          letterSpacing: rtl ? "normal" : "0.14em",
+          padding: "3px 10px",
+          borderRadius: 999,
+          background: "rgba(111,233,208,0.08)",
+          border: `1px solid rgba(111,233,208,0.22)`,
+          color: "rgba(111,233,208,0.85)",
+        }}
+      >
+        {copy.badge}
+      </span>
+      <h2
+        style={{
+          fontFamily: displayFont,
+          fontWeight: 600,
+          fontSize: "clamp(1.7rem, 3.4vw, 2.5rem)",
+          lineHeight: 1.15,
+          marginTop: 18,
+          marginBottom: 10,
+          maxWidth: "22ch",
+        }}
+      >
+        {copy.heading}
+      </h2>
+      <p style={{ fontFamily: bodyFont, color: ink45, fontSize: "0.98rem", maxWidth: "50ch", marginBottom: 40 }}>
+        {copy.subtext}
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {copy.items.map((item, i) => (
+          <motion.div
+            key={i}
+            initial={reduce ? false : { opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.5, delay: reduce ? 0 : i * 0.08, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              borderRadius: 18,
+              border: `1px solid ${hairline}`,
+              background: "rgba(255,255,255,0.02)",
+              padding: "22px 20px",
+            }}
+          >
+            <p dir="auto" style={{ fontFamily: bodyFont, fontStyle: "italic", color: ink70, fontSize: "0.92rem", margin: 0 }}>
+              {item.claim}
+            </p>
+            <p dir="auto" style={{ fontFamily: bodyFont, color: ink45, fontSize: "0.85rem", marginTop: 10, lineHeight: 1.5 }}>
+              {item.source}
+            </p>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 14,
+                padding: "4px 11px",
+                borderRadius: 999,
+                background: item.confirmed ? "rgba(111,233,208,0.10)" : "rgba(240,169,74,0.10)",
+                border: `1px solid ${item.confirmed ? "rgba(111,233,208,0.28)" : "rgba(240,169,74,0.28)"}`,
+                color: item.confirmed ? teal : gold,
+                fontFamily: bodyFont,
+                fontSize: "0.78rem",
+                fontWeight: 600,
+              }}
+            >
+              {item.confirmed ? <CheckCircle2 size={13} strokeWidth={2} /> : <AlertTriangle size={13} strokeWidth={2} />}
+              {item.verdict}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </section>
   );
 }
 
