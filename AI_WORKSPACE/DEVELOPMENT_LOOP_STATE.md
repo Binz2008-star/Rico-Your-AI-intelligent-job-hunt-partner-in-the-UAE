@@ -107,4 +107,22 @@ ledger:
       - "tests/test_development_supervisor_contract.py"
     tests: "python -m pytest tests/test_development_supervisor_contract.py -q -> 48 passed (adds create-pr refusal matrix with gh-never-invoked + remote-untouched proofs, clean-create zero-push proof via ls-remote before/after, gh-pr-create denial guards, outside-repo log-default guard, behavioral IDLE untouched-tree test); bash -n + py_compile OK; --smoke PASSED exit 0; --smoke-perms PASSED exit 0; logs confirmed under XDG state dir outside the repo"
     next_action: "Owner review / merge decision on PR #1305; full CI must be green on the final head; nothing further scheduled by the session."
+  - session: "claude/rico-development-supervisor-sfdh8w"
+    date: "2026-07-22"
+    role: "WRITER"
+    result: "COMPLETE"
+    task: "TASK-20260721-015 — round-4 per owner review of ea7a0fd: create-pr TOCTOU window closed (push and PR creation share validate_against_live_state run immediately before either action); reserved identity/state passthrough flags rejected before gh is invoked (content flags only)"
+    branch: "claude/rico-development-supervisor-sfdh8w"
+    base_sha: "0e0497baff9d18e37d09c2410ceb7e372c011dce"
+    validated_head_sha: "26267ddf7dfdbca117cac5d91ae9ed563c3e3443"
+    correction_cycles: 0
+    owner_gate: "none"
+    files_changed:
+      - ".claude/skills/rico-development-supervisor/SKILL.md"
+      - "AI_WORKSPACE/DEVELOPMENT_LOOP_STATE.md"
+      - "AI_WORKSPACE/TASKS.md"
+      - "scripts/supervisor_push_gate.py"
+      - "tests/test_development_supervisor_contract.py"
+    tests: "python -m pytest tests/test_development_supervisor_contract.py -q -> 52 passed (adds shared-validation static pin, TOCTOU fail-before matrix: main drift after push -> no PR, competing PR after push -> no PR, reserved flags -> exit 6 with empty gh call log, clean case zero remote-ref change); py_compile OK; launcher untouched this round so smokes unchanged from round 3 (both PASSED)"
+    next_action: "Owner review / merge decision on PR #1305; full CI must be green on the corrected final head; nothing further scheduled by the session."
 ```
