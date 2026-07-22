@@ -146,9 +146,13 @@ where they are stricter, they win.
    contract, the gate is its enforcement. Then open the **Draft** PR ONLY
    through the gate's `--create-pr` mode — raw `gh pr create` is denied
    because it can implicitly push an unpushed branch (an alternate push
-   path); the gate first proves `origin/<branch>` exists and equals local
-   HEAD, then calls `gh pr create --draft --head <branch> --base main`.
-   The PR body carries the evidence report.
+   path). `--create-pr` re-runs the SAME shared validation as the push path
+   immediately before creating (main drift, open-PR overlap, Task-ID
+   uniqueness — no TOCTOU window), proves `origin/<branch>` exists and
+   equals local HEAD, then calls `gh pr create --draft --head <branch>
+   --base main` with content flags only (identity/state flags such as
+   `--head`, `--base`, `--repo`, `--web`, `--dry-run` are rejected before
+   `gh` is invoked). The PR body carries the evidence report.
 
 ## Stage: STOP OR LOOP
 

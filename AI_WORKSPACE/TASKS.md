@@ -6874,13 +6874,18 @@ next free ID.
   implicitly push an unpushed branch — an alternate push path); the gate's
   --create-pr mode first proves origin/<branch> exists AND equals local
   HEAD, then runs gh pr create --draft --head <branch> --base main (no push
-  side effect; refusals create nothing and push nothing). Immediately before pushing it re-fetches
+  side effect; refusals create nothing and push nothing). Round 4: push and
+  PR creation share ONE read-only validation (validate_against_live_state)
+  run immediately before either action — no TOCTOU window between passing
+  the push gate and creating the PR; passthrough accepts content flags only
+  (reserved identity/state flags --head/-H --base/-B --draft --repo/-R
+  --web --dry-run are rejected before gh is ever invoked). Immediately before pushing it re-fetches
   origin/main and mechanically checks merge-base freshness, changed-file
   overlap vs main and every open PR, and Task-ID uniqueness (frozen
   TASK-20260721-005 exception pinned to its two EXACT historical headings,
   not a count); refuses with nothing pushed (exit 2) on conflict; exit 6 on
   preconditions (non-claude/ branch, dirty tree, missing gh, fetch failure).
-- tests/test_development_supervisor_contract.py — 48 static + functional
+- tests/test_development_supervisor_contract.py — 52 static + functional
   guards: Task-ID uniqueness incl. exact-heading pin and swapped-duplicate
   rejection, strict-parser subprocess matrix, scoping/denial checks
   (Read(//etc/**) double-slash absolute form), --tools availability
@@ -6897,7 +6902,11 @@ next free ID.
   behavioral IDLE test (fake Claude returns IDLE; every file, ref, and
   status byte under the working tree identical before/after; run log lands
   outside the repository — XDG state dir default, project-local default
-  forbidden by guard).
+  forbidden by guard). Round 4 adds: shared-validation static pin (both
+  paths call validate_against_live_state; reserved-flag list pinned) and
+  TOCTOU fail-before tests (main drift after push but before create -> no
+  PR; competing PR after push -> no PR; reserved override flags -> rejected
+  with gh never invoked; clean case unchanged).
 - AI_WORKSPACE/TASKS.md (this entry).
 
 #### Explicitly out of scope (owner directive)
@@ -6913,7 +6922,7 @@ next free ID.
   the work commit the full evidence ran against; exact SHAs in the ledger
   and PR #1305)
 - Status: in_review — Draft PR #1305; merge is owner-gated
-- Validation already run: focused contract suite 48/48 at the work commit;
+- Validation already run: focused contract suite 52/52 at the work commit;
   bash -n + py_compile OK; --classify and --parse-result subprocess
   matrices; push-gate fail-before matrix; --smoke PASSED (CLI accepts
   --tools/--strict-mcp-config/--setting-sources); --smoke-perms PASSED

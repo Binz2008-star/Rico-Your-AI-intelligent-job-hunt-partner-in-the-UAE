@@ -797,6 +797,78 @@ def test_create_pr_refuses_head_mismatch(tmp_path):
     assert remote_sha == pushed_sha, "remote must be untouched by the refusal"
 
 
+def test_gate_shares_one_validation_between_push_and_create():
+    """Both actions must call the same read-only validation right before
+    acting — no TOCTOU window between passing the push gate and creating."""
+    source = PUSH_GATE_PY.read_text(encoding="utf-8")
+    create_body = source.split("def create_pr(")[1].split("\ndef ")[0]
+    main_body = source.split("def main(")[1].split("\ndef ")[0]
+    assert "validate_against_live_state(" in create_body
+    assert "validate_against_live_state(" in main_body
+    for flag in ("--head", "-H", "--base", "-B", "--draft", "--repo", "-R",
+                 "--web", "--dry-run"):
+        assert f'"{flag}"' in source.split("RESERVED_CREATE_FLAGS")[1].split("}")[0], (
+            f"reserved flag {flag} missing from RESERVED_CREATE_FLAGS"
+        )
+
+
+def test_create_pr_refuses_main_drift_after_push(tmp_path):
+    """main advances with an overlapping file AFTER the push but BEFORE
+    --create-pr: the shared validation must refuse and create no PR."""
+    _, work = _setup_remote_and_clone(tmp_path)
+    _git(work, "checkout", "-b", "claude/gate-test")
+    (work / "README.md").write_text("branch change\n", encoding="utf-8")
+    _git(work, "commit", "-am", "branch change")
+    _git(work, "push", "-u", "origin", "claude/gate-test")
+    other = tmp_path / "other"
+    subprocess.run(
+        ["git", "clone", str(tmp_path / "origin.git"), str(other)],
+        check=True, capture_output=True,
+    )
+    _git(other, "config", "user.email", "o@example.invalid")
+    _git(other, "config", "user.name", "o")
+    (other / "README.md").write_text("main advanced after push\n", encoding="utf-8")
+    _git(other, "commit", "-am", "post-push main advance")
+    _git(other, "push", "origin", "main")
+    result = _run_gate(work, _fake_gh(tmp_path), "--create-pr", "--title", "t")
+    assert result.returncode == 2, result.stderr
+    assert "BLOCKED_CONFLICT" in result.stderr
+    assert "pr create" not in _gh_calls(tmp_path), "no PR may be created"
+
+
+def test_create_pr_refuses_new_overlapping_pr_after_push(tmp_path):
+    """A competing PR opens AFTER the push but BEFORE --create-pr: refuse."""
+    _, work = _setup_remote_and_clone(tmp_path)
+    _git(work, "checkout", "-b", "claude/gate-test")
+    (work / "README.md").write_text("branch change\n", encoding="utf-8")
+    _git(work, "commit", "-am", "branch change")
+    _git(work, "push", "-u", "origin", "claude/gate-test")
+    pr_list = json.dumps(
+        [{"number": 99, "headRefName": "other/late", "files": [{"path": "README.md"}]}]
+    )
+    result = _run_gate(
+        work, _fake_gh(tmp_path, pr_list_json=pr_list), "--create-pr", "--title", "t"
+    )
+    assert result.returncode == 2, result.stderr
+    assert "#99" in result.stderr
+    assert "pr create" not in _gh_calls(tmp_path)
+
+
+def test_create_pr_rejects_reserved_override_flags(tmp_path):
+    """Identity/state flags must be rejected BEFORE gh is invoked at all."""
+    _, work = _setup_remote_and_clone(tmp_path)
+    _git(work, "checkout", "-b", "claude/gate-test")
+    (work / "README.md").write_text("branch change\n", encoding="utf-8")
+    _git(work, "commit", "-am", "branch change")
+    _git(work, "push", "-u", "origin", "claude/gate-test")
+    for reserved in (["--head", "evil/branch"], ["--base=release"], ["--dry-run"],
+                     ["--repo", "evil/repo"], ["--web"]):
+        result = _run_gate(work, _fake_gh(tmp_path), "--create-pr", *reserved)
+        assert result.returncode == 6, (reserved, result.stderr)
+        assert "reserved flag" in result.stderr
+    assert _gh_calls(tmp_path) == "", "gh must never be invoked on reserved flags"
+
+
 def test_create_pr_clean_creates_without_push(tmp_path):
     """Fully pushed branch: PR created via explicit --head, no push side effect."""
     _, work = _setup_remote_and_clone(tmp_path)

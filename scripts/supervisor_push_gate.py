@@ -18,10 +18,17 @@ push anyway:
 
 A second mode, --create-pr, is the ONLY sanctioned way to open the Draft PR:
 `gh pr create` is denied to supervised sessions because it can implicitly
-push an unpushed branch (an alternate push path around this gate). The mode
-first proves refs/heads/<branch> exists on origin AND equals local HEAD,
-then invokes `gh pr create --draft --head <branch> --base main ...`
-(explicit --head; no push side effect). Extra arguments are passed through.
+push an unpushed branch (an alternate push path around this gate). Both the
+push path and --create-pr call the SAME read-only validation immediately
+before their action (no TOCTOU window between passing the push gate and
+creating the PR): fetch origin/main, main-drift overlap, open-PR file
+overlap, Task-ID uniqueness. --create-pr additionally proves
+refs/heads/<branch> exists on origin AND equals local HEAD, then invokes
+`gh pr create --draft --head <branch> --base main ...` (no push side
+effect). Passthrough accepts CONTENT flags only (--title, --body,
+--body-file, --label, --assignee, --reviewer); flags that could override
+gate-owned identity/state (--head/-H, --base/-B, --draft, --repo/-R,
+--web, --dry-run) are rejected before gh is ever invoked.
 
 Exit codes: 0 pushed / PR created (or --check-only passed); 2 refused
 (conflict/overlap/duplicate/unpushed — nothing pushed, no PR created);
@@ -110,59 +117,33 @@ def precondition(reason: str) -> int:
     return EXIT_PRECONDITION
 
 
-def create_pr(argv: list[str]) -> int:
-    """Open the Draft PR for an already-pushed, up-to-date branch. Never pushes."""
-    branch = run("git", "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+# Passthrough flags that could override gate-owned identity/state. Rejected
+# before gh is ever invoked; only content flags (--title, --body,
+# --body-file, --label, --assignee, --reviewer, ...) may pass through.
+RESERVED_CREATE_FLAGS = {
+    "--head", "-H", "--base", "-B", "--draft", "--repo", "-R", "--web", "--dry-run",
+}
+
+
+def _common_preconditions(branch: str, action: str) -> int | None:
     if not branch.startswith("claude/"):
-        return precondition(f"only claude/* branches may open a PR (on '{branch}')")
-    if shutil.which("gh") is None:
-        return precondition("gh CLI required (fail closed)")
-
-    ls_remote = run("git", "ls-remote", "origin", f"refs/heads/{branch}")
-    if ls_remote.returncode != 0:
-        return precondition(f"git ls-remote failed: {ls_remote.stderr.strip()}")
-    remote_fields = ls_remote.stdout.split()
-    if not remote_fields:
-        return refuse(
-            f"refs/heads/{branch} does not exist on origin — push through this "
-            "gate first; gh pr create must never push implicitly."
-        )
-    local_head = run("git", "rev-parse", "HEAD").stdout.strip()
-    if remote_fields[0] != local_head:
-        return refuse(
-            f"origin/{branch} ({remote_fields[0][:8]}) != local HEAD "
-            f"({local_head[:8]}) — push through this gate first."
-        )
-
-    passthrough = [a for a in argv if a != "--create-pr"]
-    proc = subprocess.run(
-        ["gh", "pr", "create", "--draft", "--head", branch, "--base", "main",
-         *passthrough]
-    )
-    if proc.returncode != 0:
-        return precondition(f"gh pr create exited {proc.returncode}")
-    return EXIT_OK
-
-
-def main(argv: list[str]) -> int:
-    if "--create-pr" in argv:
-        return create_pr(argv)
-    check_only = "--check-only" in argv
-
-    branch = run("git", "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-    if not branch.startswith("claude/"):
-        return precondition(f"only claude/* branches may be pushed (on '{branch}')")
-
+        return precondition(f"only claude/* branches may {action} (on '{branch}')")
     if run("git", "status", "--porcelain").stdout.strip():
         return precondition("working tree is dirty; commit or discard first")
-
     if shutil.which("gh") is None:
         return precondition("gh CLI required for open-PR overlap check (fail closed)")
-
     fetch = run("git", "fetch", "origin", "main")
     if fetch.returncode != 0:
         return precondition(f"git fetch origin main failed: {fetch.stderr.strip()}")
+    return None
 
+
+def validate_against_live_state(branch: str) -> int | None:
+    """Read-only revalidation shared by the push path AND --create-pr, run
+    immediately before either action so no TOCTOU window opens between them:
+    main-drift overlap, open-PR file overlap, Task-ID uniqueness (current
+    TASKS.md + open PR patches). Returns None when clean, else the exit code
+    (reason already printed). Assumes origin/main was just fetched."""
     base = run("git", "merge-base", "HEAD", "origin/main").stdout.strip()
     origin_main = run("git", "rev-parse", "origin/main").stdout.strip()
     branch_files = [
@@ -231,6 +212,71 @@ def main(argv: list[str]) -> int:
             )
 
     print(f"push-gate: all checks passed for {branch} (base {base[:8]}).")
+    return None
+
+
+def create_pr(argv: list[str]) -> int:
+    """Open the Draft PR for an already-pushed, up-to-date branch. Never
+    pushes; re-runs the FULL shared validation immediately before creating."""
+    passthrough = [a for a in argv if a != "--create-pr"]
+    bad = [
+        a for a in passthrough
+        if a in RESERVED_CREATE_FLAGS or a.split("=", 1)[0] in RESERVED_CREATE_FLAGS
+    ]
+    if bad:
+        return precondition(
+            f"reserved flag(s) {bad} may not be overridden — the gate owns "
+            "--head/--base/--draft/--repo/--web/--dry-run; pass content flags only"
+        )
+
+    branch = run("git", "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    code = _common_preconditions(branch, "open a PR")
+    if code is not None:
+        return code
+
+    code = validate_against_live_state(branch)
+    if code is not None:
+        return code
+
+    ls_remote = run("git", "ls-remote", "origin", f"refs/heads/{branch}")
+    if ls_remote.returncode != 0:
+        return precondition(f"git ls-remote failed: {ls_remote.stderr.strip()}")
+    remote_fields = ls_remote.stdout.split()
+    if not remote_fields:
+        return refuse(
+            f"refs/heads/{branch} does not exist on origin — push through this "
+            "gate first; gh pr create must never push implicitly."
+        )
+    local_head = run("git", "rev-parse", "HEAD").stdout.strip()
+    if remote_fields[0] != local_head:
+        return refuse(
+            f"origin/{branch} ({remote_fields[0][:8]}) != local HEAD "
+            f"({local_head[:8]}) — push through this gate first."
+        )
+
+    proc = subprocess.run(
+        ["gh", "pr", "create", "--draft", "--head", branch, "--base", "main",
+         *passthrough]
+    )
+    if proc.returncode != 0:
+        return precondition(f"gh pr create exited {proc.returncode}")
+    return EXIT_OK
+
+
+def main(argv: list[str]) -> int:
+    if "--create-pr" in argv:
+        return create_pr(argv)
+    check_only = "--check-only" in argv
+
+    branch = run("git", "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    code = _common_preconditions(branch, "be pushed")
+    if code is not None:
+        return code
+
+    code = validate_against_live_state(branch)
+    if code is not None:
+        return code
+
     if check_only:
         return EXIT_OK
 
