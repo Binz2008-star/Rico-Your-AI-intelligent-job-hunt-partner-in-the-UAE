@@ -6540,10 +6540,11 @@ sign-off), not missing code.
 
 ### TASK-20260721-012 — Renumber duplicate migration 050: chat_operations → 051
 
-Status: review
+Status: done
 Owner: Claude (agent), owner-directed single-item execution (2026-07-21)
 Branch: claude/system-tools-analysis-wc4o4g (restarted from main fdb4ff3c, contains #1297)
-Issue/PR: set at PR open (DRAFT — owner merges; agent stops at evidence report)
+Issue/PR: #1299 (owner-merged 2026-07-21, squash 5e03ec48, after owner review
+fix 9000b78 — ledger contradiction corrected)
 
 #### Objective
 Remove the duplicate migration number 050 (readiness report §5.1):
@@ -6584,33 +6585,36 @@ verified no 051 reference existed anywhere).
       all other code edits are comments + one test path constant
 - [x] Broad run: tests/unit/ + test_agent + test_agent_runtime +
       test_avatar_endpoints — 3605 passed
-- [ ] Full PR CI on exact head
+- [x] Full PR CI green on both heads (5e6a71e: 13/13; review-fix 9000b78:
+      gating pull_request run fully green)
 
 #### Continuity Block
 - Task ID: TASK-20260721-012
-- GitHub issue/PR: set at PR open
+- GitHub issue/PR: #1299 (owner-merged, squash 5e03ec48)
 - Branch: claude/system-tools-analysis-wc4o4g
 - Base branch: main
 - Last safe commit SHA: fdb4ff3c
-- Current head SHA: set at commit
+- Current head SHA: 5e03ec48 (main after squash merge)
 - Uncommitted changes present: no (after commit)
-- Status: review
+- Status: done
 - Files changed: as in the atomic change set above
 - Files intentionally not touched: migrations/050_user_avatars.sql (keeper);
   PRs #1295/#1206/#1138/#1129 (not merged this cycle per owner); #1177
   (stays ON HOLD); #1136 (not closed here — board disposition comes after
   this fix merges)
 - What is complete: renumber + all references + proofs, local
-- What is incomplete: full CI on the PR head; owner merge
+- What is incomplete: nothing — owner reviewed (one blocker: ledger
+  contradiction), fix 9000b78 applied, owner merged; Deploy Render Backend
+  for 5e03ec48 success (/version-gated, identical runtime as predicted)
 - Known blockers: none
 - Validation already run: see Proofs
-- Validation still required: full PR CI (qa-tests dispatch fallback if the
-  pull_request webhook drops again)
+- Validation still required: none
 - Deployment/CI/Neon/Vercel state to check next: none — no deploy is
   triggered by a correct merge (migrations/** touches deploy-render paths?
   YES migrations/** is in deploy-render path filter — note: merge will
   trigger a redeploy of identical runtime; expected and harmless)
-- Next exact action: owner reviews evidence and merges the draft PR
+- Next exact action: none — task fully closed; PR-board disposition
+  continues under the readiness report §3
 - Stop condition: agent STOPS after CI evidence report (owner instruction)
 - Rollback plan: revert the PR (pure rename + comments + docs + one test)
 
