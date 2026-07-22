@@ -7114,3 +7114,82 @@ pattern). Product SSE path confirmed healthy at this baseline.
 - Next exact action: owner decision on #1306; after its merge + deploy,
   re-run Delivery-Smoke under the 8 conditions with workers = 1
 - Stop condition: STOP after this record merges; no re-run scheduled by agent
+
+---
+
+### TASK-20260722-001 — P1 CV-generation integrity: trace + bounded vertical slice plan
+
+Status: scoped
+Owner: Claude (session claude/cv-generation-integrity-cgggby)
+Branch: claude/cv-generation-integrity-cgggby
+Issue/PR: (draft PR for this evidence + plan)
+
+#### Objective
+Record the read-only repository trace of the P1 tailored-CV incident and the
+approved-scope implementation plan for ONE vertical slice:
+selected stored CV → verified fact reconciliation → Operations/Dubai tailored
+CV → DOCX artifact → authenticated download.
+
+#### Context
+- Evidence + full plan: AI_WORKSPACE/proposals/2026-07-22-cv-generation-integrity-slice.md
+- Relevant files (traced, unmodified):
+  src/rico_chat_api.py (:452 dead placeholder guard, :6121 pending-city resume,
+  :8045 cv_builder follow-up gate, :9954 cv_generate routing, :11779 generic AI
+  fallback, :15113 _handle_cv_generate_from_profile, :2795 active-CV-only copy),
+  src/agent/intelligence/intent_classifier.py (:644 _CV_GENERATE_RE),
+  src/rico_apply_ai.py (:66 "[Your Name]" placeholder, :71 tailor_application),
+  src/api/routers/apply_queue.py, src/api/routers/files.py (metadata-only
+  upload :174, set-primary partial resync :355),
+  src/rico_db.py (:201 user_documents DDL — no text column),
+  src/api/routers/rico_chat.py (:2500 confirm persists no doc text, :2540
+  profile cv_text single slot), migrations/032, migrations/038,
+  src/services/career_context.py, src/services/document_resolver.py,
+  apps/web/lib/translations.ts (:604 My Files promise).
+- Existing behavior: non-active CV documents retain only metadata; CV draft
+  handler renders profile-scalar skeleton and never reads cv_text; Arabic
+  role/city tailoring follow-ups fall to generic AI fallback; tailoring engine
+  is prompt-only ("never invent") with no reconciliation; no generated-document
+  artifact or download endpoint exists.
+
+#### Constraints
+- Do not touch: production deploys, provider routing, agent_runtime action
+  scheme, safety-layer bypasses, Cognitive Control Plane scope, career-context
+  M2 identity dedupe.
+- Migrations: additive only (user_documents.extracted_text + generated_documents
+  table), 026/038 precedent, drift-checked.
+- Keep scope limited to: the single slice in the proposal; one PR.
+
+#### Acceptance criteria
+- [ ] Evidence + plan document reviewed by owner
+- [ ] Open decisions answered (DOCX bytes persistence; My Files parse in-slice;
+      verbatim Arabic transcript supplied for the regression fixture)
+- [ ] Implementation task started only after owner sign-off
+
+#### Required verification
+- [ ] Unit tests: n/a for this docs-only PR
+- [ ] Integration tests: n/a
+- [ ] Frontend build: n/a
+- [ ] Local smoke: n/a
+- [ ] Production/deploy smoke if applicable: none — no production change
+
+#### Continuity Block
+- Task ID: TASK-20260722-001
+- GitHub issue/PR: draft PR from claude/cv-generation-integrity-cgggby
+- Branch: claude/cv-generation-integrity-cgggby
+- Base branch: main
+- Last safe commit SHA: b3e0377
+- Current head SHA: (this docs commit)
+- Uncommitted changes present: no (after this commit)
+- Status: scoped
+- Files inspected: see Context above (read-only trace)
+- Files changed: AI_WORKSPACE/proposals/2026-07-22-cv-generation-integrity-slice.md (new — evidence + plan);
+  AI_WORKSPACE/TASKS.md (this entry)
+- Deployment: none
+- Known blockers: verbatim production transcript not yet in repo (fixture
+  requirement — see proposal E7)
+- Risks: none (docs only)
+- Rollback plan: revert the docs commit
+- Next exact action: owner review of the proposal; on approval, implement the
+  slice on this branch per proposal Steps 1–6
+- Stop condition: STOP after evidence + plan PR is opened; no implementation
+  before owner sign-off
