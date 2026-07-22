@@ -371,6 +371,15 @@ body::after {
     align-items: center;
 }
 
+/* Elapsed stamp beside the cycling thinking label — quiet mono, never louder
+   than the label itself. */
+.rico-elapsed {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.38);
+}
+
 .rico-dots i {
     display: block;
     width: 4px;

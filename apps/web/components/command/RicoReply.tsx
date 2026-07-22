@@ -29,6 +29,7 @@
 import { Check, Copy, RotateCcw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { RicoReplyMarkdown } from "./RicoReplyMarkdown";
+import { useThinkingStages } from "./thinkingStages";
 
 export function RicoReply({ text, streaming = false, canRegenerate = false, onRegenerate, isAr = false }:
   { text: string; streaming?: boolean; canRegenerate?: boolean; onRegenerate?: () => void; isAr?: boolean }) {
@@ -79,16 +80,27 @@ export function RicoUserBubble({ text }: { text: string }) {
  * dots. Same role/aria contract as before.
  */
 export function RicoThinking({ isAr = false }: { isAr?: boolean }) {
+  /* The label evolves through honest stages while the wait grows (6s / 16s
+     boundaries), each swap entering with the stage-in blur-crossfade so it
+     reads as one thought developing. The elapsed stamp (aria-hidden, so the
+     polite region never announces per-second ticks) appears once the wait is
+     long enough to be worth explaining. */
+  const { label, stage, elapsed } = useThinkingStages(isAr);
   return (
     <div className="relative ps-3 animate-fade-up motion-reduce:animate-none" role="status" aria-live="polite">
       <span aria-hidden className="absolute inset-y-1 start-0 w-px animate-rail-draw motion-reduce:animate-none bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
       <p className="serif-italic text-[16.5px] leading-[1.65] text-ink-mute">
-        <span className="atl-reason-shimmer">{isAr ? "أُفكّر…" : "Thinking…"}</span>
+        <span key={stage} className="atl-reason-shimmer inline-block animate-stage-in motion-reduce:animate-none">{label}</span>
         <span aria-hidden className="ms-1.5 inline-flex items-baseline gap-[3px] align-middle">
           <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" />
           <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" style={{ animationDelay: "0.15s" }} />
           <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" style={{ animationDelay: "0.3s" }} />
         </span>
+        {elapsed >= 5 && (
+          <span aria-hidden className="ms-2 inline-block align-middle text-[11px] not-italic tabular-nums text-ink-mute/80" style={{ fontFamily: "var(--font-mono), ui-monospace, monospace" }}>
+            {elapsed}s
+          </span>
+        )}
       </p>
     </div>
   );
