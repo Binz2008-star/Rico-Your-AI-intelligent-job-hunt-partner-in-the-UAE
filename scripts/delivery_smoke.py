@@ -226,6 +226,7 @@ def main() -> int:
             timeout=180,
         )
         jobs_count = -1
+        resp_shape = "unparseable"
         try:
             def _find_jobs(node):
                 if isinstance(node, dict):
@@ -243,23 +244,44 @@ def main() -> int:
                             return found
                 return None
 
-            jobs = _find_jobs(json.loads(body.decode(errors="replace")))
+            parsed = json.loads(body.decode(errors="replace"))
+            jobs = _find_jobs(parsed)
             jobs_count = len(jobs) if jobs is not None else -1
+            # Diagnostic shape evidence (synthetic-user content only): the
+            # top-level keys, any type markers, and a short reply snippet tell
+            # apart "search ran, shape unexpected" from "search never ran".
+            if isinstance(parsed, dict):
+                _types = [
+                    str(v) for k, v in parsed.items() if k in ("type", "response_type", "intent")
+                ]
+                _snip = ""
+                for key in ("message", "reply", "response", "text"):
+                    val = parsed.get(key)
+                    if isinstance(val, str) and val.strip():
+                        _snip = " ".join(val.split())[:200]
+                        break
+                resp_shape = f"keys={sorted(parsed.keys())} types={_types} snippet={_snip!r}"
         except Exception:
-            jobs_count = -1
+            pass
         record(
             "real search completes and reaches the user",
             code == 200 and jobs_count >= 1,
-            f"HTTP {code} jobs_in_reply={jobs_count}",
+            f"HTTP {code} jobs_in_reply={jobs_count} {resp_shape}",
         )
 
+        auth_uid = None
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE email = %s", (EMAIL,))
+            row = cur.fetchone()
+            auth_uid = str(row[0]) if row else None
+        probe_ids = [uid for uid in (rico_uid, auth_uid) if uid]
         ops: list = []
-        if rico_uid:
+        if probe_ids:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT operation_id, status, attempt, result_count "
-                    "FROM chat_operations WHERE user_id = %s ORDER BY created_at",
-                    (rico_uid,),
+                    "FROM chat_operations WHERE user_id = ANY(%s) ORDER BY created_at",
+                    (probe_ids,),
                 )
                 ops = cur.fetchall()
         statuses = [(o[1], int(o[2])) for o in ops]
@@ -289,8 +311,12 @@ def main() -> int:
             with conn.cursor() as cur:
                 if rico_uid:
                     cur.execute("DELETE FROM rico_chat_history WHERE user_id = %s::uuid", (rico_uid,))
-                    cur.execute("DELETE FROM chat_operations WHERE user_id = %s", (rico_uid,))
                     cur.execute("DELETE FROM rico_users WHERE id = %s::uuid", (rico_uid,))
+                cur.execute(
+                    "DELETE FROM chat_operations WHERE user_id IN "
+                    "(SELECT id::text FROM users WHERE email = %s UNION SELECT %s)",
+                    (EMAIL, rico_uid or ""),
+                )
                 cur.execute("DELETE FROM email_verification_tokens WHERE user_email = %s", (EMAIL,))
                 cur.execute("DELETE FROM users WHERE email = %s", (EMAIL,))
             print("[CLEANUP] synthetic user and all its rows removed")
