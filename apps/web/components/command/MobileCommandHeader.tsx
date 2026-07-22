@@ -255,7 +255,7 @@ export function MobileCommandHeader({
                         className="pointer-events-auto flex items-center gap-1.5 text-text-primary font-black text-[15px] tracking-tight"
                         tabIndex={-1}
                     >
-                        <div className="w-6 h-6 rounded-[7px] bg-gold flex items-center justify-center text-[11px] font-black text-[#0a0a1a] shadow-[0_3px_10px_rgba(245,166,35,0.30)]">
+                        <div className="w-6 h-6 rounded-[7px] bg-gold flex items-center justify-center text-[11px] font-black text-white">
                             R
                         </div>
                         Rico<span className="text-gold"> Hunt</span>
@@ -356,7 +356,7 @@ export function MobileCommandHeader({
                                 </Link>
                                 <Link
                                     href={signupHref}
-                                    className="whitespace-nowrap rounded-lg bg-gold px-2 py-1.5 text-[11px] font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover"
+                                    className="whitespace-nowrap rounded-lg bg-gold px-2 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-gold-hover"
                                 >
                                     {t("signUp")}
                                 </Link>
@@ -397,21 +397,21 @@ export function MobileCommandHeader({
                 }`}
                 style={{
                     paddingTop: "env(safe-area-inset-top, 0px)",
-                    background: "linear-gradient(180deg, #0e0e1f 0%, #0a0a1a 100%)",
-                    borderInlineEnd: "1px solid rgba(255,255,255,0.07)",
+                    background: "rgb(var(--surface))",
+                    borderInlineEnd: "1px solid rgb(var(--overlay) / 0.10)",
                 }}
             >
                 {/* Gold glow at top */}
                 <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-gold/[0.07] to-transparent" />
 
                 {/* Drawer header */}
-                <div className="relative flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <div className="relative flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgb(var(--overlay) / 0.08)" }}>
                     <Link
                         href="/"
                         onClick={() => setDrawerOpen(false)}
-                        className="flex items-center gap-2 font-black text-[15px] tracking-tight text-white"
+                        className="flex items-center gap-2 font-black text-[15px] tracking-tight text-text-primary"
                     >
-                        <div className="w-7 h-7 rounded-[8px] bg-gold flex items-center justify-center text-[12px] font-black text-[#0a0a1a] shadow-[0_3px_12px_rgba(245,166,35,0.35)]">
+                        <div className="w-7 h-7 rounded-[8px] bg-gold flex items-center justify-center text-[12px] font-black text-white">
                             R
                         </div>
                         Rico<span className="text-gold"> Hunt</span>
@@ -420,7 +420,7 @@ export function MobileCommandHeader({
                         type="button"
                         aria-label={t("close")}
                         onClick={() => setDrawerOpen(false)}
-                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80"
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-overlay/[0.06] hover:text-text-primary"
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                             <line x1="18" y1="6" x2="6" y2="18" />
@@ -431,13 +431,13 @@ export function MobileCommandHeader({
 
                 {/* User badge — authenticated only */}
                 {chatAudience === "authenticated" && (
-                    <div className="relative mx-4 mt-4 mb-1 flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "rgba(245,166,35,0.07)", border: "1px solid rgba(245,166,35,0.14)" }}>
-                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold/30 to-amber-400/10 text-[13px] font-bold text-gold shadow-[0_0_16px_rgba(245,166,35,0.2)]">
+                    <div className="relative mx-4 mt-4 mb-1 flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "rgb(var(--gold) / 0.07)", border: "1px solid rgb(var(--gold) / 0.14)" }}>
+                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold/30 to-gold/10 text-[13px] font-bold text-gold">
                             {userEmail ? userEmail[0].toUpperCase() : "?"}
                         </div>
                         <div className="min-w-0">
-                            <p className="text-[12px] font-semibold text-white/90 truncate">{userEmail ? userEmail.split("@")[0] : (language === "ar" ? "حساب نشط" : "Active account")}</p>
-                            <p className="text-[10px] text-white/40 uppercase tracking-[0.12em]">{language === "ar" ? "حساب نشط" : "Active account"}</p>
+                            <p className="text-[12px] font-semibold text-text-primary truncate">{userEmail ? userEmail.split("@")[0] : (language === "ar" ? "حساب نشط" : "Active account")}</p>
+                            <p className="text-[10px] text-text-muted uppercase tracking-[0.12em]">{language === "ar" ? "حساب نشط" : "Active account"}</p>
                         </div>
                         <span className="ms-auto flex h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]" aria-hidden="true" />
                     </div>
@@ -448,7 +448,7 @@ export function MobileCommandHeader({
                     {/* Section: Navigate */}
                     {drawerItems.length > 0 && (
                         <>
-                            <p className="px-3 pb-1.5 pt-2 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
+                            <p className="px-3 pb-1.5 pt-2 text-[9px] font-bold uppercase tracking-[0.18em] text-text-muted">
                                 {language === "ar" ? "التنقل" : "Navigate"}
                             </p>
                             {drawerItems.map((item) => {
@@ -462,13 +462,13 @@ export function MobileCommandHeader({
                                             "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer",
                                             isActive
                                                 ? "text-gold bg-gold/10"
-                                                : "text-white/60 hover:text-white/90 hover:bg-white/[0.05]"
+                                                : "text-text-secondary hover:text-text-primary hover:bg-overlay/[0.05]"
                                         )}
                                     >
                                         {isActive && (
-                                            <span aria-hidden="true" className={cn("absolute top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-gold shadow-[0_0_8px_rgba(245,166,35,0.6)]", isRTL ? "right-0" : "left-0")} />
+                                            <span aria-hidden="true" className={cn("absolute top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-gold", isRTL ? "right-0" : "left-0")} />
                                         )}
-                                        <span className={cn("flex-shrink-0 transition-colors", isActive ? "text-gold" : "text-white/35 group-hover:text-white/60")}>
+                                        <span className={cn("flex-shrink-0 transition-colors", isActive ? "text-gold" : "text-text-muted group-hover:text-text-secondary")}>
                                             {item.icon}
                                         </span>
                                         {item.label}
@@ -479,26 +479,26 @@ export function MobileCommandHeader({
                     )}
 
                     {/* Divider + Section: Preferences */}
-                    <div className="my-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} />
-                    <p className="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
+                    <div className="my-3" style={{ borderTop: "1px solid rgb(var(--overlay) / 0.08)" }} />
+                    <p className="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-text-muted">
                         {language === "ar" ? "التفضيلات" : "Preferences"}
                     </p>
 
                     <button
                         type="button"
                         onClick={() => setLanguage(language === "en" ? "ar" : "en")}
-                        className="group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-white/60 transition-all hover:bg-white/[0.05] hover:text-white/90"
+                        className="group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-text-secondary transition-all hover:bg-overlay/[0.05] hover:text-text-primary"
                     >
-                        <span className="flex-shrink-0 text-white/35 group-hover:text-white/60 transition-colors"><IconGlobe /></span>
+                        <span className="flex-shrink-0 text-text-muted group-hover:text-text-secondary transition-colors"><IconGlobe /></span>
                         {language === "ar" ? "English" : "العربية"}
                     </button>
 
                     <button
                         type="button"
                         onClick={() => setTheme(isDark ? "light" : "dark")}
-                        className="group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-white/60 transition-all hover:bg-white/[0.05] hover:text-white/90"
+                        className="group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-text-secondary transition-all hover:bg-overlay/[0.05] hover:text-text-primary"
                     >
-                        <span className="flex-shrink-0 text-white/35 group-hover:text-white/60 transition-colors">{isDark ? <IconSun /> : <IconMoon />}</span>
+                        <span className="flex-shrink-0 text-text-muted group-hover:text-text-secondary transition-colors">{isDark ? <IconSun /> : <IconMoon />}</span>
                         {isDark ? t("lightMode") : t("darkMode")}
                     </button>
 
@@ -509,13 +509,13 @@ export function MobileCommandHeader({
                             "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition-all cursor-pointer",
                             pathname === "/settings"
                                 ? "text-gold bg-gold/10"
-                                : "text-white/60 hover:text-white/90 hover:bg-white/[0.05]"
+                                : "text-text-secondary hover:text-text-primary hover:bg-overlay/[0.05]"
                         )}
                     >
                         {pathname === "/settings" && (
-                            <span aria-hidden="true" className="absolute start-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-gold shadow-[0_0_8px_rgba(245,166,35,0.6)]" />
+                            <span aria-hidden="true" className="absolute start-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-gold" />
                         )}
-                        <span className={cn("flex-shrink-0 transition-colors", pathname === "/settings" ? "text-gold" : "text-white/35 group-hover:text-white/60")}>
+                        <span className={cn("flex-shrink-0 transition-colors", pathname === "/settings" ? "text-gold" : "text-text-muted group-hover:text-text-secondary")}>
                             <IconSettings />
                         </span>
                         {t("settings")}
@@ -523,7 +523,7 @@ export function MobileCommandHeader({
                 </nav>
 
                 {/* Auth footer */}
-                <div className="relative px-4 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}>
+                <div className="relative px-4 py-4" style={{ borderTop: "1px solid rgb(var(--overlay) / 0.08)", paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}>
                     {chatAudience === "authenticated" ? (
                         <button
                             type="button"
@@ -538,14 +538,14 @@ export function MobileCommandHeader({
                             <Link
                                 href={signupHref}
                                 onClick={() => setDrawerOpen(false)}
-                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] font-bold bg-gold text-[#0a0a1a] hover:bg-gold-hover transition-colors shadow-[0_4px_16px_rgba(245,166,35,0.25)]"
+                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] font-bold bg-gold text-white hover:bg-gold-hover transition-colors"
                             >
                                 {t("signUpFree")}
                             </Link>
                             <Link
                                 href={loginHref}
                                 onClick={() => setDrawerOpen(false)}
-                                className="flex w-full items-center justify-center rounded-xl px-3 py-2 text-[13px] text-white/50 transition-colors hover:text-white/80"
+                                className="flex w-full items-center justify-center rounded-xl px-3 py-2 text-[13px] text-text-muted transition-colors hover:text-text-primary"
                             >
                                 {t("signIn")}
                             </Link>

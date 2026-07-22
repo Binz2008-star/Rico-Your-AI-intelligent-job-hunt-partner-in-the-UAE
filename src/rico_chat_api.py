@@ -29,6 +29,7 @@ from src.agent.intelligence.intent_classifier import (
     _OPEN_APPLY_LINK_ORDINAL_RE,
     _SAVE_JOB_ORDINAL_RE,
     _SAVE_JOB_ORDINAL_AR_RE,
+    _ARABIC_ORDINAL_TO_INT,
     _CV_PROFILE_REF_RE,
     _clean_role_token,
 )
@@ -61,6 +62,8 @@ from src.services.profile_context_resolver import (
     resolve_profile_context,
 )
 from src.services.operation_state import (
+    OperationClaimRefused,
+    OperationStoreUnavailable,
     mark_completed,
     mark_failed,
     start_job_search_operation,
@@ -200,6 +203,33 @@ _SKIP_CARD_ACTION_RE = re.compile(
 # Arabic skip verbs (تجاهل / تخطَّ / لا تعرض) with "في/لدى <company>" attachment.
 _SKIP_CARD_ACTION_AR_RE = re.compile(
     r"^\s*(?:تجاهل|تخط[ىَّ]?|تخطي|لا\s+تعرض)\s+(?:وظيفة\s+)?(?P<title>.+?)\s+(?:في|لدى)\s+(?P<company>.+?)\s*[.!؟]?\s*$"
+)
+
+# Ordinal skip (#1262 phase 5): "skip the first one" / "skip job 2" /
+# "skip the 2nd" — the Save/Skip buttons are retired, so position-based skip
+# gets the same deterministic route the ordinal save/apply-link already have.
+# Anchored full-match so onboarding "skip" / "skip this question" and search
+# phrasing like "skip coding jobs" can never fall in here.
+_SKIP_ORDINAL_RE = re.compile(
+    r"^\s*(?:please\s+)?skip\s+(?:the\s+)?"
+    r"(?:(?P<word>first|second|third|fourth|fifth|last)(?:\s+(?:one|job))?"
+    r"|job\s+(?P<num>\d{1,2})"
+    r"|(?P<num2>\d{1,2})(?:st|nd|rd|th)?(?:\s+(?:one|job))?)"
+    r"\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+_SKIP_WORD_ORDINAL_TO_INT = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "last": -1,
+}
+# Arabic ordinal skip: «تجاهل الوظيفة الأولى» / «تخطَّ الثانية» — same verbs as
+# the named-skip pattern above, same ordinal tokens as the ordinal-save map
+# (_ARABIC_ORDINAL_TO_INT resolves the position).
+_SKIP_ORDINAL_AR_RE = re.compile(
+    r"^\s*(?:تجاهل|تخط[ىَّ]?|تخطي|لا\s+تعرض)\s+(?:ال)?(?:وظيفة\s+)?"
+    r"(?P<aord>اول|أول|الاولى|الأولى|الاولي|ثاني|ثانيه|ثانية|الثاني|الثانيه|الثانية|"
+    r"ثالث|ثالثه|ثالثة|الثالثة|رابع|رابعة|الرابعة|خامس|خامسة|الخامسة|"
+    r"اخر|آخر|الاخير|الأخير|الاخيره|الأخيرة)"
+    r"\s*(?:وظيفة)?\s*[.!؟]?\s*$"
 )
 
 # CV improvement follow-up phrases — used ONLY when last_flow_state == "cv_builder".
@@ -553,6 +583,23 @@ _NON_ROLE_SCOPE_WORDS: frozenset[str] = frozenset({
 # Cover-letter command: "make me a cover [letter]", "write a cover letter",
 # "draft a cover letter" — route to the cover-letter clarification flow before
 # the intent classifier, which returns "unknown" for bare "cover" forms.
+# Generic (non-targeted) cover-letter request: "اكتب واحد عام غير محدد" /
+# "لا شيء محدد بصورة عامة" / "write me a general cover letter". Without this
+# the clarification loop re-asks for role+company VERBATIM on every generic
+# reply (seen in production 2026-07-21). Pattern harvested from #1278
+# (parallel session, tighter than the first cut): "عام"/"general" count only
+# as descriptors of the LETTER itself, so "مدير عام" / "General Manager" /
+# "general accountant" (ROLES) never trigger the generic path.
+_GENERIC_DRAFT_RE = re.compile(
+    r"(?:(?:واحد|خطاب|رسالة|كفر|لتر)\s+عام(?:ة|اً|ا)?\b|عام\s+غير\s+محدد"
+    r"|بشكل\s+عام|بصور[ةه]\s+عام[ةه]|غير\s+محدد|بدون\s+شركة"
+    r"|لأي\s+شركة|لاي\s+شركة|لا\s*شيء\s+محدد|لاشيء\s+محدد)"
+    r"|\bgeneral\s+(?:one|letter|cover\s+letter|version|template)\b"
+    r"|\bgeneric\b|\bunspecified\b|\bany\s+company\b|\bin\s+general\b"
+    r"|\bnot?\s+(?:for\s+)?a?\s*specific\b",
+    re.IGNORECASE,
+)
+
 _COVER_LETTER_COMMAND_RE = re.compile(
     # "write/make/draft/create/generate/prepare [me/a/my] cover [letter] [for ...]"
     # No end-anchor so trailing context ("for ADNOC", "for the HSE role") still matches.
@@ -2164,6 +2211,12 @@ class RicoChatAPI:
             role_or_query=role_or_query,
             operation_id=self._current_operation_id,
         )
+        if operation.get("claimed") is False:
+            # Atomic-claim refusal (shared store): another live execution —
+            # e.g. a concurrent worker that won the race after the read-path
+            # guard passed — owns this operation_id. Do NOT run a second
+            # cascade and do NOT touch executor state (we own nothing).
+            raise OperationClaimRefused(operation)
         self._current_operation_id = str(operation["operation_id"])
         # Attempt fence: outcome writes from THIS execution carry this token;
         # if the operation is later expired + legitimately re-started, the
@@ -3350,6 +3403,73 @@ class RicoChatAPI:
             suggestion_resp = {**suggestion_resp, "stale_target_role": resolved_role}
         self._append_chat(user_id, "assistant", suggestion_resp.get("message", ""))
         return suggestion_resp
+
+    def _closest_adjacent_role(self, user_id: str, search_role: str, profile: Any) -> str:
+        """Top adjacent role for a title-floored search — the same local
+        role-intelligence engine as enrichment, scored against THIS user's
+        profile at request time. Returns "" when no recommendation exists."""
+        try:
+            from src.rico_agent import RicoProfile
+
+            rico_profile = RicoProfile(
+                user_id=user_id,
+                skills=self._as_list(self._profile_value(profile, "skills")) or [],
+                years_experience=self._profile_value(profile, "years_experience"),
+                preferred_cities=self._as_list(self._profile_value(profile, "preferred_cities")) or [],
+                industries=self._as_list(self._profile_value(profile, "industries")) or [],
+            )
+            adjacent = recommend_adjacent_roles(rico_profile, search_role, limit=1)
+            return adjacent[0].canonical_role if adjacent else ""
+        except Exception:
+            return ""
+
+    def _search_top_track_with_alternatives(
+        self,
+        user_id: str,
+        candidates: list[str],
+        profile: Any,
+        message: str,
+        *,
+        location: str = "",
+        employment_type_filter: str = "",
+    ) -> dict[str, Any]:
+        """Search-first for a multi-track profile (owner directive 2026-07-21):
+        instead of blocking on a which-track menu, search the most relevant
+        track NOW and speak the alternatives. Track choice is per-user data at
+        request time — the track the user searched last (when still saved),
+        else their first saved track. Works identically for every user; users
+        without candidates never reach here (callers gate on 'ambiguous')."""
+        arabic = self._is_arabic_text(message)
+        chosen = candidates[0]
+        try:
+            _ctx = self._get_recent_context(user_id) or {}
+            _recent = str(_ctx.get("recent_search_role") or "").strip().lower()
+            if _recent:
+                for c in candidates:
+                    if c.strip().lower() == _recent:
+                        chosen = c
+                        break
+        except Exception:
+            pass
+        others = [c for c in candidates if c != chosen][:3]
+
+        response = self._target_role_search_response(
+            user_id, chosen, profile,
+            location=location,
+            employment_type_filter=employment_type_filter,
+            from_saved_profile=True,
+        )
+        if others:
+            others_text = "، ".join(others) if arabic else ", ".join(others)
+            note = (
+                f"بدأت بمسارك **{chosen}** — ولأي مسار آخر قل مثلاً: «ابحث عن {others[0]}». مساراتك الأخرى: {others_text}."
+                if arabic else
+                f"Starting with your **{chosen}** track — for another track just say e.g. \"search {others[0]} jobs\". Your other tracks: {others_text}."
+            )
+            response["message"] = (response.get("message") or "") + "\n\n" + note
+            self._append_chat(user_id, "assistant", note)
+            response["track_alternatives"] = others
+        return response
 
     def _profile_role_choice_response(
         self, candidates: list[str], message: str = ""
@@ -4733,6 +4853,18 @@ class RicoChatAPI:
         "لا", "لأ", "مو الحين", "مو ذا", "بعدين", "ما ابي", "ما أبغى",
     })
 
+    # Strict spoken confirmation for DESTRUCTIVE actions (#1262 phase 4).
+    # Deliberately narrower than _AFFIRMATIVE_PHRASES: an irreversible bulk
+    # delete must never fire on a loose "ok"/"sure"/«يلا» — only on a literal
+    # phrase that carries the delete verb, exactly as Rico's prompt instructs.
+    # Cancelling stays loose (_is_negative) — that direction is fail-safe.
+    _DELETE_CONFIRM_PHRASES = frozenset({
+        "yes delete", "yes delete all", "yes delete everything",
+        "yes delete all my saved jobs", "delete all my saved jobs",
+        "نعم احذف", "نعم أحذف", "نعم احذف الكل", "نعم أحذف الكل",
+        "احذف الكل", "أحذف الكل",
+    })
+
     _ARABIC_WHAT_NOW_TERMS = frozenset({
         "مالحل", "ما الحل", "ماالحل",
         "مالحل الان", "مالحل الآن",
@@ -4783,6 +4915,19 @@ class RicoChatAPI:
         """True for no/لا single-word negatives."""
         text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
         return text in RicoChatAPI._NEGATIVE_PHRASES
+
+    @staticmethod
+    def _is_delete_confirmation(message: str) -> bool:
+        """True ONLY for the literal delete-confirm phrases (#1262 phase 4).
+
+        Exact-set membership after punctuation/whitespace normalization —
+        no regex, no fuzzy matching, no AI interpretation. What Rico's
+        prompt instructs is exactly what this accepts (cross-pinned in
+        tests), so a "yes" meant for some other question can never trigger
+        an irreversible deletion.
+        """
+        text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
+        return text in RicoChatAPI._DELETE_CONFIRM_PHRASES
 
     @staticmethod
     def _is_arabic_text(message: str) -> bool:
@@ -4905,7 +5050,7 @@ class RicoChatAPI:
     @staticmethod
     def _clean_explicit_job_value(value: Any) -> str:
         text = str(value or "")
-        text = re.sub(r"\s+", " ", text).strip(" \t\r\n\"'`.,!?;:")
+        text = re.sub(r"\s+", " ", text).strip(" \t\r\n\"'`.,!?;:\\/|")
         text = re.sub(
             r"\b(?:please|use what you know about me|using what you know about me)$",
             "",
@@ -4988,6 +5133,25 @@ class RicoChatAPI:
                 job["location"] = location
             return _finalize(job)
 
+        # Institution-name company mid-sentence: «اكتبلي ايميل لبنك دبي الاسلامي
+        # استعلم به عن وظائف …». The connectors above (في شركة/لدى/لشركة) miss
+        # the bare "لـ<مؤسسة>" form, and the end-anchored patterns below fail
+        # whenever the sentence continues past the company. Capture the
+        # institution noun + up to 4 following words, stopping at an
+        # inquiry/continuation verb or punctuation.
+        ar_institution = re.search(
+            r"(?:^|\s)(?:ل|إلى\s+|الى\s+)"
+            r"(?P<company>(?:بنك|مصرف|هيئ[ةه]|مجموع[ةه]|"
+            r"مستشفى|جامع[ةه]|فندق|وزار[ةه])\s+\S+(?:\s+\S+){0,3}?)"
+            r"(?=\s+(?:استعلم|أستعلم|اسال|أسال|اسأل|أسأل|اطلب|أطلب|اعرض|أعرض|"
+            r"واعرض|وأعرض|بخصوص|حول|عن|لأستفسر|لاستفسر)\b|[.?!,؛;]|\s*$)",
+            text,
+        )
+        if ar_institution:
+            return _finalize(
+                {"company": cls._clean_explicit_job_value(ar_institution.group("company"))}
+            )
+
         ar_company = re.search(
             rf"{_ar_company_conn}\s+"
             r"(?:شرك[ةه]\s+)?(?P<company>.+?)"
@@ -5067,13 +5231,36 @@ class RicoChatAPI:
             bool((job or {}).get("company")),
         )
 
+    # Words that mark a "name" as actually being a job title. CV parsing can
+    # land a CV HEADLINE in profile.name (seen in production: a user greeted as
+    # "Vip Relationship Manager") — a vocative must never use such a string.
+    _ROLE_LIKE_NAME_RE = re.compile(
+        r"\b(manager|officer|specialist|engineer|consultant|analyst|director|"
+        r"supervisor|coordinator|executive|accountant|relationship|assistant)\b"
+        r"|مدير|مسؤول|أخصائي|اخصائي|مهندس|محاسب|منسق|مشرف|مستشار",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _vocative_name(profile: Any) -> str:
+        """Profile name that is SAFE to greet the user with.
+
+        Returns "" (templates then omit the vocative) when the stored name is
+        empty, implausibly long, or looks like a job title — a global guard
+        against CV-parse pollution of profile.name, for every user.
+        """
+        name = str(RicoChatAPI._profile_value(profile, "name") or "").strip()
+        if not name or len(name) > 40 or RicoChatAPI._ROLE_LIKE_NAME_RE.search(name):
+            return ""
+        return name
+
     def _cover_letter_clarification_message(
         self,
         profile: Any,
         partial_job: dict[str, Any] | None = None,
         arabic: bool | None = None,
     ) -> str:
-        name = self._profile_value(profile, "name") or ""
+        name = self._vocative_name(profile)
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         title = self._job_context_value(partial_job or {}, "title")
         company = self._job_context_value(partial_job or {}, "company")
@@ -5157,6 +5344,71 @@ class RicoChatAPI:
             f"Best regards"
         )
 
+    def _generic_cover_letter(self, profile: Any, *, arabic: bool) -> str:
+        """Deterministic general-purpose cover letter built ONLY from real
+        profile fields (no AI call, no fabricated employers, roles, or
+        achievements). Arabic output is Modern Standard Arabic, no dialect,
+        no vocatives. Harvested from #1278 (parallel session) — cheaper and
+        fabrication-proof by construction versus the AI-path first cut."""
+        name = str(self._profile_value(profile, "name") or "").strip()
+        years = self._profile_value(profile, "years_experience")
+        current_role = str(self._profile_value(profile, "current_role") or "").strip()
+        skills = [str(s) for s in self._as_list(self._profile_value(profile, "skills"))[:5]]
+        certs = [str(c) for c in self._as_list(self._profile_value(profile, "certifications"))[:3]]
+        strengths = skills + [c for c in certs if c not in skills]
+        if arabic:
+            years_part = f"أمتلك خبرة تُقارب {years} سنوات" if years else "أمتلك خبرة عملية متراكمة"
+            role_part = f"، وأعمل حالياً في دور {current_role}" if current_role else ""
+            strengths_part = (
+                "تشمل نقاط قوتي العملية: " + "، ".join(strengths) + ".\n\n" if strengths else ""
+            )
+            sig = f"\n{name}" if name else ""
+            return (
+                "خطاب تقديم عام — عدّل عليه بما يناسب كل جهة قبل الإرسال:\n\n"
+                "---\n\n"
+                "تحية طيبة وبعد،\n\n"
+                f"{years_part}{role_part}. "
+                "أتقدم بهذا الخطاب للتعبير عن اهتمامي بالفرص المتاحة لديكم بما يتوافق مع خلفيتي المهنية.\n\n"
+                f"{strengths_part}"
+                "يسعدني تزويدكم بسيرتي الذاتية ومناقشة ما يمكنني إضافته لفريقكم في مقابلة قادمة.\n\n"
+                "مع خالص التقدير،"
+                f"{sig}\n\n"
+                "---\n\n"
+                "عند استهداف جهة محددة، أرسل اسمها والمسمى الوظيفي لأخصص الخطاب بالكامل."
+            )
+        years_part = f"I bring approximately {years} years of experience" if years else "I bring hands-on professional experience"
+        role_part = f", currently working as {current_role}" if current_role else ""
+        strengths_part = ("Key strengths: " + ", ".join(strengths) + ".\n\n") if strengths else ""
+        sig = f"\n{name}" if name else ""
+        return (
+            "General cover letter — tailor it per employer before sending:\n\n"
+            "---\n\n"
+            "Dear Hiring Team,\n\n"
+            f"{years_part}{role_part}. "
+            "I am writing to express my interest in opportunities that align with my professional background.\n\n"
+            f"{strengths_part}"
+            "I would welcome the chance to share my CV and discuss how I can contribute to your team.\n\n"
+            "Kind regards,"
+            f"{sig}\n\n"
+            "---\n\n"
+            "When you have a specific company and role, send them over and I will tailor this fully."
+        )
+
+    def _handle_generic_cover_letter_request(
+        self, user_id: str, message: str, profile: Any
+    ) -> dict[str, Any]:
+        """Produce a GENERAL cover letter (no specific job/company) from the
+        user's real profile — instead of re-asking for a role and company the
+        user explicitly said they don't want to name."""
+        self._log_document_draft_context_source("generic_cover_letter", {})
+        cover = self._generic_cover_letter(profile, arabic=self._is_arabic_text(message))
+        self._append_chat(user_id, "assistant", cover)
+        return self._finalize(
+            {"type": "draft_message", "intent": "draft_message", "message": cover},
+            self.SOURCE_KEYWORD,
+            profile=profile,
+        )
+
     def _handle_application_channel_followup(
         self, user_id: str, message: str, profile: Any
     ) -> dict[str, Any] | None:
@@ -5177,8 +5429,21 @@ class RicoChatAPI:
         no_favorite = self._wants_no_favorite(message)
         recruiter_email = EMAIL_RE.search(message or "")
         if wants_draft:
+            # Generic ask — produce the general letter (plain dict per this
+            # method's convention; harvested wiring point from #1278).
+            if _GENERIC_DRAFT_RE.search(message):
+                self._log_document_draft_context_source("generic_cover_letter", {})
+                return {
+                    "type": "draft_message",
+                    "intent": "draft_message",
+                    "message": self._generic_cover_letter(
+                        profile, arabic=self._is_arabic_text(message)
+                    ),
+                }
             self._log_document_draft_context_source("clarification_required", {})
-            msg = self._cover_letter_clarification_message(profile)
+            msg = self._cover_letter_clarification_message(
+                profile, arabic=self._is_arabic_text(message)
+            )
             return {
                 "type": "cover_letter_prompt",
                 "intent": "draft_message",
@@ -6265,6 +6530,7 @@ class RicoChatAPI:
         from_saved_profile: bool = False,
         location: str = "",
         employment_type_filter: str = "",
+        _adjacent_hop: bool = False,
     ) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
         # Detect user's language from the most recent user turn.  This lets all
@@ -6610,6 +6876,51 @@ class RicoChatAPI:
                 "relevance_floor: role=%r dropped all %d off-title results op=%s",
                 search_role, len(all_matches), operation_id,
             )
+
+        # Adjacent-role auto-hop (owner directive 2026-07-21 «كي أضغط وأقدم»):
+        # live results existed but the title floor dropped them ALL — instead
+        # of stopping at the honest zero, take exactly ONE hop to the closest
+        # adjacent role (role-intelligence taxonomy scored against THIS user's
+        # profile at request time — no hardcoded roles) and, when it yields
+        # real matches, return them with an honest relabel. The hop runs the
+        # full pipeline (integrity gate + floor included), never hops again
+        # (_adjacent_hop guard), and the outer operation is completed with its
+        # own truthful zero. Operation state is saved/cleared around the
+        # nested call so the atomic store mints a fresh operation for the hop
+        # instead of refusing a re-claim of the live outer one.
+        if _off_title_only and not _adjacent_hop:
+            _hop_role = self._closest_adjacent_role(user_id, search_role, profile)
+            if _hop_role and _hop_role.strip().lower() != (search_role or "").strip().lower():
+                _saved_op_id = self._current_operation_id
+                _saved_attempt = getattr(self, "_current_operation_attempt", None)
+                self._current_operation_id = None
+                try:
+                    _hop_resp = self._target_role_search_response(
+                        user_id, _hop_role, profile,
+                        location=location,
+                        employment_type_filter=employment_type_filter,
+                        _adjacent_hop=True,
+                    )
+                except Exception:
+                    logger.warning(
+                        "adjacent_hop_failed from=%r to=%r", search_role, _hop_role,
+                        exc_info=True,
+                    )
+                    _hop_resp = None
+                finally:
+                    self._current_operation_id = _saved_op_id
+                    self._current_operation_attempt = _saved_attempt
+                if _hop_resp and _hop_resp.get("matches"):
+                    _hop_note = (
+                        f"لم أجد نتائج قوية بمسمى **{search_role}** حرفياً، فبحثت في الدور الأقرب لملفك — **{_hop_role}**:"
+                        if arabic else
+                        f"No strong hits for **{search_role}** by exact title, so I searched the closest role to your profile — **{_hop_role}**:"
+                    )
+                    _hop_resp["message"] = _hop_note + "\n\n" + (_hop_resp.get("message") or "")
+                    _hop_resp["adjacent_hop_from"] = search_role
+                    self._append_chat(user_id, "assistant", _hop_resp["message"])
+                    mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
+                    return _hop_resp
 
         # Server-side city filter (multi-city). When the user named 2+ cities the
         # provider query was widened to UAE scope (one call), so restrict the
@@ -6963,6 +7274,17 @@ class RicoChatAPI:
                 " Everything lives on [your jobs board](/flow) anytime."
             )
 
+        # Spoken job-action how-to (#1262 phase 5): the Save/Skip buttons are
+        # retired — Rico says how to act on the list in words. Each suggested
+        # phrase is cross-pinned in tests to its deterministic route (ordinal
+        # save intent / ordinal skip fast-path) so speech can never misroute.
+        if top_matches:
+            base_message += (
+                " قل لي ماذا أفعل بأي منها — مثلاً «احفظ أول وظيفة» أو «تجاهل الوظيفة الثانية»."
+                if arabic else
+                " Tell me what to do with any of these — say \"save the first job\" or \"skip the second one\"."
+            )
+
         # Save-search offer (#1262 phase 3): the retired "Save search" card,
         # spoken. The suggested phrase routes via the deterministic
         # save_search_create intent (pinned in tests), never save_job.
@@ -7052,9 +7374,66 @@ class RicoChatAPI:
                 # ("make sure", "list them", "that one") can resolve reliably.
                 self._record_last_turn(user_id, message, result)
             return result
+        except OperationClaimRefused as exc:
+            # A concurrent live execution owns this operation_id (atomic-claim
+            # refusal — the shared-store closing of the guard→start race).
+            # Mirror the duplicate-operation guard's honest in-progress reply:
+            # no cascade ran, we own nothing (never mark_failed here — that
+            # would stomp the live owner's record), no history/analytics
+            # (a duplicate is not a new turn; this returns before
+            # _record_last_turn).
+            live = exc.operation
+            arabic = language == "ar" or self._is_arabic_text(message or "")
+            return {
+                "type": "search_in_progress",
+                "intent": "search_jobs",
+                "success": True,
+                "operation_id": str(live.get("operation_id") or ""),
+                "operation_type": "job_search",
+                "operation_status": "running",
+                "response_source": "operation_guard",
+                "debug_id": debug_id,
+                "message": (
+                    "ما زلت أعمل على بحثك الحالي — النتائج ستظهر هنا خلال لحظات، ولم أبدأ بحثاً ثانياً."
+                    if arabic else
+                    "I'm still working on your current job search — results will appear here shortly. "
+                    "I didn't start a second search."
+                ),
+            }
+        except OperationStoreUnavailable as exc:
+            # Mandatory Postgres ownership store is unreachable (fail-closed —
+            # DEC-20260721-001 slice 4). We could NOT atomically claim the
+            # operation, so NO provider cascade ran and we own nothing: never
+            # mark_failed (there is no owned record, and the store is down
+            # anyway). Surface an honest temporary-unavailable reply carrying
+            # service_unavailable=True so the transport can map it to 503 —
+            # NOT a raw 500, and NOT an unguarded cascade.
+            logger.error("rico_chat_api: operation store unavailable user=%s: %s", user_id, exc)
+            arabic = language == "ar" or self._is_arabic_text(message or "")
+            return {
+                "type": "service_unavailable",
+                "intent": "search_jobs",
+                "success": False,
+                "service_unavailable": True,
+                "response_source": "operation_store_unavailable",
+                "debug_id": debug_id,
+                "error": "operation_store_unavailable",
+                "message": (
+                    "الخدمة غير متاحة مؤقتاً — تعذّر بدء البحث الآن. أعد المحاولة بعد قليل."
+                    if arabic else
+                    "The service is temporarily unavailable — I couldn't start the search right now. "
+                    "Please try again shortly."
+                ),
+            }
         except Exception as exc:
             if self._current_operation_id:
-                mark_failed(user_id, self._current_operation_id, str(exc), attempt=self._operation_attempt())
+                try:
+                    mark_failed(user_id, self._current_operation_id, str(exc), attempt=self._operation_attempt())
+                except OperationStoreUnavailable:
+                    # Store went down mid-request; don't let the fail-closed
+                    # cleanup mask the original error — the lease will expire
+                    # and free the operation regardless.
+                    logger.error("rico_chat_api: could not mark_failed (store unavailable) op=%s", self._current_operation_id)
             return build_error_response(
                 "Something went wrong processing your message.",
                 debug_id=debug_id,
@@ -7520,6 +7899,52 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", msg)
         return self._finalize(response, self.SOURCE_KEYWORD, profile=profile, runtime_result=result)
 
+    def _skip_job_by_ordinal(
+        self, user_id: str, ordinal: int, profile: Any, arabic: bool = False,
+    ) -> dict[str, Any]:
+        """Skip the first/second/Nth/last job from recent search results.
+
+        Mirrors _save_job_by_ordinal's resolution (the same ordered list the
+        cards were rendered from), then delegates to the named-skip handler so
+        the suppression semantics stay in one place (#1262 phase 5).
+        """
+        matches = self._recent_search_matches(user_id)
+        if not matches:
+            msg = (
+                "لا توجد قائمة وظائف حديثة لأتجاهل منها — ابحث عن دور أولاً ثم قل «تجاهل الوظيفة الأولى»."
+                if arabic else
+                "I don't have a recent job list to skip from yet. Search for a role first, "
+                "then say 'skip the first one'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "skip_job", "message": msg}
+
+        idx = len(matches) - 1 if ordinal == -1 else ordinal - 1
+        if idx < 0 or idx >= len(matches):
+            n = len(matches)
+            msg = (
+                f"لديك {n} وظيفة في قائمتك الأخيرة — أي واحدة أتجاهل؟ اختر رقماً من 1 إلى {n}."
+                if arabic else
+                f"You have {n} job{'s' if n != 1 else ''} in your recent list. "
+                f"Which one should I skip? Pick a number between 1 and {n}."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "skip_job", "message": msg}
+
+        job = matches[idx]
+        title = str(job.get("title") or "").strip()
+        company = str(job.get("company") or "").strip()
+        if not title:
+            msg = (
+                "لم أستطع قراءة تفاصيل تلك الوظيفة لأتجاهلها — جرّب «تجاهل <العنوان> لدى <الشركة>»."
+                if arabic else
+                "I couldn't read that job's details to skip it. Try 'skip <title> at <company>'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "skip_job", "message": msg}
+
+        return self._handle_skip_card_action(user_id, title, company, profile, arabic=arabic)
+
     def _resolve_profile(self, user_id: str):
         """Load and normalise profile into a ProfileContext.
 
@@ -7761,6 +8186,29 @@ class RicoChatAPI:
                 _skip_m.group("company"),
                 profile,
                 arabic=self._is_arabic_text(message),
+            )
+
+        # ── Ordinal Skip (#1262 phase 5) — "skip the first one" / «تجاهل الأولى»
+        # The Save/Skip buttons are retired; position-based skip gets the same
+        # deterministic route the named form above already has.
+        _skip_ord_m = (
+            _SKIP_ORDINAL_AR_RE.match(message)
+            if self._is_arabic_text(message)
+            else _SKIP_ORDINAL_RE.match(message)
+        )
+        if _skip_ord_m:
+            _sk_gd = _skip_ord_m.groupdict()
+            if _sk_gd.get("aord"):
+                _sk_tok = _sk_gd["aord"]
+                _sk_n = _ARABIC_ORDINAL_TO_INT.get(
+                    _sk_tok, _ARABIC_ORDINAL_TO_INT.get(_sk_tok.removeprefix("ال"), 0)
+                )
+            elif _sk_gd.get("word"):
+                _sk_n = _SKIP_WORD_ORDINAL_TO_INT[_sk_gd["word"].lower()]
+            else:
+                _sk_n = int(_sk_gd.get("num") or _sk_gd.get("num2") or 0)
+            return self._skip_job_by_ordinal(
+                user_id, _sk_n, profile, arabic=self._is_arabic_text(message),
             )
 
         # ── Manual Application Status: English (before Arabic block for priority) ─
@@ -8171,6 +8619,11 @@ class RicoChatAPI:
         # Exception: if the message already contains explicit job context (company/role),
         # skip and let the draft_message intent handler extract and use that context.
         if _COVER_LETTER_COMMAND_RE.search(message) and not self._extract_explicit_draft_job_from_message(message) and not _RESIGNATION_LETTER_RE.search(message):
+            # Generic ask ("write me a general cover letter") — must run BEFORE
+            # the cached-job shortcut below, or the last search's job would
+            # hijack a letter the user explicitly wants untargeted.
+            if _GENERIC_DRAFT_RE.search(message):
+                return self._handle_generic_cover_letter_request(user_id, message, profile)
             # If there's a cached job from a recent search, use it as context so the
             # cover letter is tailored to that specific role instead of asking the user.
             _cached_job: dict[str, Any] = {}
@@ -8198,7 +8651,9 @@ class RicoChatAPI:
                     profile=profile,
                     save_user_message=False,
                 )
-            _cl_msg = self._cover_letter_clarification_message(profile)
+            _cl_msg = self._cover_letter_clarification_message(
+                profile, arabic=self._is_arabic_text(message)
+            )
             self._append_chat(user_id, "assistant", _cl_msg)
             return self._finalize(
                 {
@@ -8472,7 +8927,9 @@ class RicoChatAPI:
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
-                _cl_msg = self._cover_letter_clarification_message(profile, _cl_draft_job)
+                _cl_msg = self._cover_letter_clarification_message(
+                    profile, _cl_draft_job, arabic=self._is_arabic_text(message)
+                )
                 self._append_chat(user_id, "assistant", _cl_msg)
                 return self._finalize(
                     {"type": "cover_letter_prompt", "message": _cl_msg, "next_action": "provide_job_for_cover_letter"},
@@ -9857,9 +10314,15 @@ class RicoChatAPI:
                 profile, excluded_roles=_pm_excluded
             )
             if _pm_status == "ambiguous":
-                _pm_choice = self._profile_role_choice_response(_pm_candidates, message)
-                self._append_chat(user_id, "assistant", _pm_choice["message"])
-                return self._finalize(_pm_choice, self.SOURCE_KEYWORD, profile=profile)
+                # Search-first (owner directive 2026-07-21): search the user's
+                # most relevant track immediately and speak the alternatives —
+                # never block a generic "find me jobs" on a which-track menu.
+                _pm_response = self._search_top_track_with_alternatives(
+                    user_id, _pm_candidates, profile, message
+                )
+                if _pm_excluded:
+                    _pm_response["excluded_roles"] = _pm_excluded
+                return self._finalize(_pm_response, self.SOURCE_KEYWORD, profile=profile)
             if _pm_status in ("none", "stale"):
                 # Search-first: if the CV has a clear single-track suggestion list,
                 # search the top CV-evidenced role immediately with an explanatory
@@ -11129,7 +11592,9 @@ class RicoChatAPI:
                 draft_job, context_source = self._resolve_explicit_draft_job_context(user_id, explicit_draft_job)
                 if not (self._job_context_value(draft_job, "title", "job_title") and self._job_context_value(draft_job, "company", "company_name")):
                     self._log_document_draft_context_source("clarification_required", draft_job)
-                    msg = self._cover_letter_clarification_message(profile, draft_job)
+                    msg = self._cover_letter_clarification_message(
+                        profile, draft_job, arabic=self._is_arabic_text(message)
+                    )
                     self._append_chat(user_id, "assistant", msg)
                     return self._finalize(
                         {"type": "cover_letter_prompt", "message": msg, "next_action": "provide_job_for_cover_letter"},
@@ -11161,6 +11626,11 @@ class RicoChatAPI:
                     }
                     self._append_chat(user_id, "assistant", result.message)
                     return self._finalize(response, routed.source, profile=profile, runtime_result=result)
+
+            # Generic ask ("اكتب واحد عام غير محدد" / "a general one") — never
+            # re-ask for a role+company the user refused to name (#loop fix).
+            if _GENERIC_DRAFT_RE.search(message):
+                return self._handle_generic_cover_letter_request(user_id, message, profile)
 
             self._log_document_draft_context_source("clarification_required", {})
             msg = self._cover_letter_clarification_message(
@@ -14071,15 +14541,17 @@ class RicoChatAPI:
                 })
             except Exception:
                 pass
+            # #1262 phase 4: the prompt instructs the EXACT strict phrase the
+            # gate accepts (_is_delete_confirmation) — transcript parity.
             if arabic:
                 msg = (
                     "هل أنت متأكد أنك تريد حذف **جميع** وظائفك المحفوظة؟\n\n"
-                    "هذا الإجراء لا يمكن التراجع عنه. اكتب **نعم** للمتابعة أو **لا** للإلغاء."
+                    "هذا الإجراء لا يمكن التراجع عنه. للتأكيد اكتب **نعم احذف**، وللإلغاء اكتب **لا**."
                 )
             else:
                 msg = (
                     "Are you sure you want to delete **all** your saved jobs?\n\n"
-                    "This cannot be undone. Type **yes** to confirm or **no** to cancel."
+                    "This cannot be undone. To confirm, type **yes, delete** — to cancel, type **no**."
                 )
             self._append_chat(user_id, "assistant", msg)
             return {
@@ -14142,7 +14614,9 @@ class RicoChatAPI:
 
         arabic = self._is_arabic_text(message)
 
-        if RicoChatAPI._is_affirmative(message):
+        # #1262 phase 4: destructive execution requires the STRICT literal
+        # phrase — a loose "ok"/"sure"/«يلا» falls through to the re-prompt.
+        if RicoChatAPI._is_delete_confirmation(message):
             _clear()
             try:
                 from src.rico_db import RicoDB as _RicoDB
@@ -14203,11 +14677,12 @@ class RicoChatAPI:
                 "message": msg,
             }
 
-        # Ambiguous reply — re-prompt
+        # Ambiguous reply — re-prompt with the exact strict phrase. Loose
+        # affirmatives ("ok", "sure", bare "yes") land here BY DESIGN.
         if arabic:
-            msg = "اكتب **نعم** لتأكيد الحذف أو **لا** للإلغاء."
+            msg = "للتأكيد اكتب **نعم احذف**، وللإلغاء اكتب **لا**."
         else:
-            msg = "Please type **yes** to confirm deletion or **no** to cancel."
+            msg = "To confirm, type **yes, delete** — to cancel, type **no**."
         self._append_chat(user_id, "assistant", msg)
         return {
             "type": "delete_saved_jobs_confirm",
@@ -20976,9 +21451,12 @@ class RicoChatAPI:
             # blindly search saved target_roles[0].
             _lg_role, _lg_candidates, _lg_status = self._resolve_profile_search_role(profile)
             if _lg_status == "ambiguous":
-                _lg_choice = self._profile_role_choice_response(_lg_candidates, role_text)
-                self._append_chat(user_id, "assistant", _lg_choice["message"])
-                return _lg_choice
+                # Search-first (owner directive 2026-07-21): same idiom as the
+                # profile-match branch — search the top track, speak the rest.
+                return self._search_top_track_with_alternatives(
+                    user_id, _lg_candidates, profile, role_text,
+                    location=location, employment_type_filter=employment_type_filter,
+                )
             if _lg_status in ("none", "stale"):
                 # Search-first: if the CV has a clear single-track suggestion
                 # list, search immediately with an explanatory note — or, for

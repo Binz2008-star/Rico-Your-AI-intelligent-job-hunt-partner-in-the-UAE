@@ -21,6 +21,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import time
 import urllib.error
 
 import pytest
@@ -358,3 +359,82 @@ def test_no_secret_values_logged(monkeypatch, caplog):
         jp._jooble_search("PO", "UAE")
     # The key must never appear in any log record.
     assert all(secret not in rec.getMessage() for rec in caplog.records)
+
+
+# ── Hedged cascade (perf regression fix, 2026-07-21) ─────────────────────────
+# The serial cascade stacked each provider's full HTTP budget: one slow
+# provider pushed production first searches to 30-60s on a warm instance.
+# The cascade now hedges: provider N+1 launches after a stagger (or
+# immediately once every launched provider finished empty) and the first
+# non-empty result wins.
+
+def test_hedge_overtakes_a_slow_provider(monkeypatch):
+    """A hanging cheap provider must NOT hold the search hostage — the next
+    provider launches after the stagger and its result wins."""
+    monkeypatch.setenv("JOOBLE_API_KEY", "x")
+    monkeypatch.setenv("RAPIDAPI_KEY", "y")
+    monkeypatch.setattr(jp, "_HEDGE_STAGGER_S", 0.1)
+
+    def _slow_jooble(role, location):
+        time.sleep(1.0)
+        return FetchResult(items=[{"title": "late", "company": "j"}], provider="jooble")
+
+    def _fast_jsearch(role, location, country):
+        return FetchResult(items=[{"title": "fast", "company": "s"}], provider="jsearch")
+
+    monkeypatch.setattr(jp, "_jooble_search", _slow_jooble)
+    monkeypatch.setattr(jp, "_jsearch_search", _fast_jsearch)
+
+    t0 = time.time()
+    result = jp.search_jobs("HSE Manager", "UAE")
+    elapsed = time.time() - t0
+
+    assert result.provider == "jsearch"
+    assert result.items[0]["title"] == "fast"
+    assert elapsed < 0.9, f"hedge failed to overtake the slow provider ({elapsed:.2f}s)"
+
+
+def test_stagger_preserves_cost_preference(monkeypatch):
+    """A responsive cheap provider wins inside its head start — the more
+    expensive provider is never called at all."""
+    monkeypatch.setenv("JOOBLE_API_KEY", "x")
+    monkeypatch.setenv("RAPIDAPI_KEY", "y")
+    monkeypatch.setattr(jp, "_HEDGE_STAGGER_S", 0.5)
+    called = {"jsearch": False}
+
+    def _quick_jooble(role, location):
+        time.sleep(0.05)
+        return FetchResult(items=[{"title": "cheap", "company": "j"}], provider="jooble")
+
+    def _jsearch(role, location, country):
+        called["jsearch"] = True
+        return FetchResult(items=[{"title": "pricey", "company": "s"}], provider="jsearch")
+
+    monkeypatch.setattr(jp, "_jooble_search", _quick_jooble)
+    monkeypatch.setattr(jp, "_jsearch_search", _jsearch)
+
+    result = jp.search_jobs("HSE Manager", "UAE")
+
+    assert result.provider == "jooble"
+    assert called["jsearch"] is False
+
+
+def test_fast_empty_failures_skip_the_stagger(monkeypatch):
+    """Providers that finish empty immediately must NOT make the next
+    provider wait out its stagger slot — fall-through stays instant."""
+    monkeypatch.setenv("JOOBLE_API_KEY", "x")
+    monkeypatch.setenv("RAPIDAPI_KEY", "y")
+    monkeypatch.setattr(jp, "_HEDGE_STAGGER_S", 5.0)  # would be visible if waited
+
+    monkeypatch.setattr(jp, "_jooble_search", lambda role, location: FetchResult(provider="jooble"))
+    monkeypatch.setattr(
+        jp, "_jsearch_search",
+        lambda role, location, country: FetchResult(items=[{"title": "ok", "company": "s"}], provider="jsearch"),
+    )
+
+    t0 = time.time()
+    result = jp.search_jobs("HSE Manager", "UAE")
+    elapsed = time.time() - t0
+
+    assert result.provider == "jsearch"
+    assert elapsed < 1.0, f"empty fall-through waited out the stagger ({elapsed:.2f}s)"

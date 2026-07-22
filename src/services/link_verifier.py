@@ -115,11 +115,15 @@ async def _is_safe_url_async(url: str) -> bool:
                     except ValueError:
                         continue
             except Exception:
-                # DNS resolution failed - allow URL but note limitation
-                # This is a trade-off: we prefer false positives (allowing potentially unsafe URLs)
-                # over false negatives (blocking all public URLs when DNS is flaky)
-                pass
-        
+                # DNS resolution failed — FAIL CLOSED (LOW-3). If we cannot
+                # resolve the hostname we cannot prove its address is public,
+                # so we MUST NOT let it through the SSRF check: a resolver
+                # error (NXDOMAIN, timeout, transient failure) or a rebinding
+                # attempt would otherwise bypass the private-range guard.
+                # Rejecting an unresolvable host is safe — a live fetch of it
+                # could not have succeeded anyway.
+                return False
+
         return True
     except Exception:
         return False
@@ -201,11 +205,12 @@ def _is_safe_url_sync(url: str) -> bool:
                     except ValueError:
                         continue
             except Exception:
-                # DNS resolution failed - allow URL but note limitation
-                # This is a trade-off: we prefer false positives (allowing potentially unsafe URLs)
-                # over false negatives (blocking all public URLs when DNS is flaky)
-                pass
-        
+                # DNS resolution failed — FAIL CLOSED (LOW-3). Identical policy
+                # to _is_safe_url_async: an unresolvable hostname cannot be
+                # proven public, so it is rejected rather than allowed through
+                # the SSRF check. See _is_safe_url_async for the full rationale.
+                return False
+
         return True
     except (ValueError, TypeError):
         # Invalid URL format

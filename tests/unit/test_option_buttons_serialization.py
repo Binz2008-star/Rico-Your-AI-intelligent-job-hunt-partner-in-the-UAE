@@ -8,9 +8,11 @@ response over /chat/stream crashed. The JSON /chat path masked the defect
 because ``RicoChatResponse.agentic_ui`` accepts the model instance.
 
 The repro profile is synthetic: seven target roles spanning multiple career
-families (including the compound "Risk & Compliance Officer"), which drives
-"find matching jobs" into the ambiguous profile-match branch that emits the
-letter-choice clarification.
+families (including the compound "Risk & Compliance Officer"). Since the
+steps-to-apply change (#1294) the ambiguous profile-match branch no longer
+emits a letter-choice clarification — it searches the top track immediately
+(job_matches) and speaks the other tracks in ``track_alternatives``. The
+serialization pins below cover that response shape end-to-end.
 """
 import json
 
@@ -51,9 +53,9 @@ def profile_match_response() -> dict:
 
 
 def test_seven_role_profile_match_is_json_dumpable(profile_match_response):
-    """The ambiguous profile-match clarification survives the SSE done-event
+    """The search-first profile-match response survives the SSE done-event
     serialization exactly as the stream router performs it (bare json.dumps)."""
-    assert profile_match_response.get("type") == "clarification"
+    assert profile_match_response.get("type") == "job_matches"
     payload = json.dumps({"type": "done", "response": profile_match_response})
     assert '"agentic_ui"' in payload
 
@@ -66,22 +68,28 @@ def test_agentic_ui_is_plain_dict_not_model(profile_match_response):
     assert not isinstance(ui, RicoAgenticUi)
 
 
-def test_four_chat_continue_buttons_with_payload_message(profile_match_response):
+def test_search_first_single_refine_action_and_spoken_alternatives(profile_match_response):
+    """#1294 search-first: the top track is searched immediately (job_matches),
+    the response carries a single refine-search drawer action, and the other
+    tracks are SPOKEN — not rendered as a button menu."""
     actions = profile_match_response["agentic_ui"]["actions"]
-    assert len(actions) == 4
-    for action in actions:
-        assert action["kind"] == "chat_continue"
-        assert action["payload"]["message"].startswith("search ")
-        assert action["payload"]["message"].endswith(" jobs in UAE")
+    assert len(actions) == 1
+    assert actions[0]["id"] == "refine-search"
+    assert actions[0]["payload"]["search_query"] == "Environmental Manager"
+    assert profile_match_response.get("track_alternatives") == [
+        "Compliance Manager", "ESG Manager", "Audit Manager",
+    ]
+    assert "Starting with your **Environmental Manager** track" in profile_match_response["message"]
 
 
-def test_compound_role_stays_one_unsplit_option(profile_match_response):
-    """'Risk & Compliance Officer' must appear intact — never split on '&'."""
-    labels = [o.get("label") for o in profile_match_response.get("options", [])]
-    risk_labels = [l for l in labels if "risk" in (l or "").lower()]
-    assert risk_labels == ["Risk & Compliance Officer"]
-    assert "Risk" not in labels
-    assert "Compliance Officer" not in labels
+def test_compound_role_never_split_into_fragments(profile_match_response):
+    """'Risk & Compliance Officer' must never be split on '&'. Under #1294 it
+    collapses into the 'Compliance Manager' track by canonical dedupe (same
+    behaviour as test_dedup_collapses_canonical_variants_keeps_raw_text) — the
+    invariant is that '&'-split fragments never surface as tracks."""
+    alternatives = profile_match_response.get("track_alternatives") or []
+    assert "Risk" not in alternatives
+    assert "Compliance Officer" not in alternatives
 
 
 def test_intent_stays_profile_match_not_unknown():
@@ -128,5 +136,5 @@ def test_rest_response_contract_still_validates(profile_match_response):
 
     response = RicoChatResponse(**profile_match_response, trace_id="t-1")
     assert isinstance(response.agentic_ui, RicoAgenticUi)
-    assert len(response.agentic_ui.actions) == 4
-    assert response.type == "clarification"
+    assert len(response.agentic_ui.actions) == 1
+    assert response.type == "job_matches"

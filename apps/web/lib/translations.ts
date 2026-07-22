@@ -115,27 +115,27 @@ export const translations = {
     gmailConsentReview: "Review & approve recurring sync",
     gmailConsentTitle: "Approve recurring background sync",
     gmailConsentIntro:
-        "This is separate from connecting Gmail. Before Rico syncs your inbox in the background on a schedule, please review and approve:",
+      "This is separate from connecting Gmail. Before Rico syncs your inbox in the background on a schedule, please review and approve:",
     gmailConsentReadOnly:
-        "Access stays read-only — Rico cannot send, delete, or modify email.",
+      "Access stays read-only — Rico cannot send, delete, or modify email.",
     gmailConsentJobOnly:
-        "Rico reads only job-search-related email (recruiter and application messages).",
+      "Rico reads only job-search-related email (recruiter and application messages).",
     gmailConsentMetadata:
-        "To classify a message Rico reads its content in memory during a sync (subject and body). It stores only metadata: a short subject snippet, the sender, and the classification result — full email bodies and attachments are never stored.",
+      "To classify a message Rico reads its content in memory during a sync (subject and body). It stores only metadata: a short subject snippet, the sender, and the classification result — full email bodies and attachments are never stored.",
     gmailConsentStored:
-        "What is stored: job-related metadata (subject snippet, sender), the classification/match result, and a secret-free audit trail — never email bodies or attachments.",
+      "What is stored: job-related metadata (subject snippet, sender), the classification/match result, and a secret-free audit trail — never email bodies or attachments.",
     gmailConsentWhyStored:
-        "Why it is stored: to detect application updates and surface them to you.",
+      "Why it is stored: to detect application updates and surface them to you.",
     gmailConsentNoSend: "Rico never sends email through this permission.",
     gmailConsentNoSilent: "No application status is ever changed silently.",
     gmailConsentReviewUpdates:
-        "You review every consequential update before it is applied.",
+      "You review every consequential update before it is applied.",
     gmailConsentDisconnectNote:
-        "You can disconnect at any time from this card.",
+      "You can disconnect at any time from this card.",
     gmailConsentDeleteNote:
-        "Disconnecting revokes Rico's access at Google and clears the saved connection and its stored access token. Job updates already detected are kept with your applications.",
+      "Disconnecting revokes Rico's access at Google and clears the saved connection and its stored access token. Job updates already detected are kept with your applications.",
     gmailConsentCheckbox:
-        "I understand and approve recurring background sync under these terms.",
+      "I understand and approve recurring background sync under these terms.",
     gmailConsentGrant: "Approve recurring sync",
     gmailConsentCancel: "Cancel",
     gmailConsentRevoke: "Turn off recurring sync",
@@ -143,7 +143,7 @@ export const translations = {
     gmailConsentRevoked: "Recurring sync turned off.",
     gmailDisconnectConfirmTitle: "Disconnect Gmail?",
     gmailDisconnectConfirmBody:
-        "Rico will revoke access at Google and remove the stored connection. Imported history is kept.",
+      "Rico will revoke access at Google and remove the stored connection. Imported history is kept.",
     gmailDisconnectConfirm: "Yes, disconnect",
 
     // Forgot / Reset password
@@ -870,8 +870,6 @@ export const translations = {
     cmdMatchGaps: "HONEST GAPS",
     cmdMatchPicks: "RICO PICKS",
     cmdMatchFit: "FIT",
-    cmdMatchSave: "Save",
-    cmdMatchSkip: "Skip",
     // Accessibility format strings — interpolated at render time so screen-reader
     // labels are localized (not hardcoded EN). `cmdJobAtCompany` is the shared
     // "{title} at {company}" join reused as {job} inside the aria templates.
@@ -1278,6 +1276,8 @@ export const translations = {
     jobCardApplyNow: "Apply now",
     jobCardSearchThisJob: "Search this job",
     jobCardSave: "Save",
+    jobCardShare: "Share on WhatsApp",
+    jobCardShareText: "Found via Rico Hunt — your AI job-hunt partner in the UAE:",
     jobCardIgnore: "Ignore",
     jobCardDone: "Action completed",
 
@@ -1481,27 +1481,27 @@ export const translations = {
     gmailConsentReview: "مراجعة واعتماد المزامنة المتكررة",
     gmailConsentTitle: "اعتماد المزامنة الخلفية المتكررة",
     gmailConsentIntro:
-        "هذا منفصل عن ربط Gmail. قبل أن يزامن ريكو بريدك في الخلفية وفق جدول، يُرجى مراجعة واعتماد ما يلي:",
+      "هذا منفصل عن ربط Gmail. قبل أن يزامن ريكو بريدك في الخلفية وفق جدول، يُرجى مراجعة واعتماد ما يلي:",
     gmailConsentReadOnly:
-        "يبقى الوصول للقراءة فقط — لا يستطيع ريكو إرسال بريدك أو حذفه أو تعديله.",
+      "يبقى الوصول للقراءة فقط — لا يستطيع ريكو إرسال بريدك أو حذفه أو تعديله.",
     gmailConsentJobOnly:
-        "يقرأ ريكو فقط الرسائل المتعلقة بالبحث عن عمل (رسائل جهات التوظيف والتقديم).",
+      "يقرأ ريكو فقط الرسائل المتعلقة بالبحث عن عمل (رسائل جهات التوظيف والتقديم).",
     gmailConsentMetadata:
-        "لتصنيف الرسالة يقرأ ريكو محتواها في الذاكرة أثناء المزامنة (الموضوع والنص). ويُخزّن البيانات الوصفية فقط: مقتطفًا قصيرًا من الموضوع، والمُرسِل، ونتيجة التصنيف — ولا يُخزَّن نص الرسائل الكامل ولا المرفقات إطلاقًا.",
+      "لتصنيف الرسالة يقرأ ريكو محتواها في الذاكرة أثناء المزامنة (الموضوع والنص). ويُخزّن البيانات الوصفية فقط: مقتطفًا قصيرًا من الموضوع، والمُرسِل، ونتيجة التصنيف — ولا يُخزَّن نص الرسائل الكامل ولا المرفقات إطلاقًا.",
     gmailConsentStored:
-        "ما يُخزَّن: بيانات وصفية متعلقة بالوظائف (مقتطف الموضوع، المُرسِل)، ونتيجة التصنيف/المطابقة، وسجل تدقيق خالٍ من الأسرار — دون نص الرسائل أو المرفقات.",
+      "ما يُخزَّن: بيانات وصفية متعلقة بالوظائف (مقتطف الموضوع، المُرسِل)، ونتيجة التصنيف/المطابقة، وسجل تدقيق خالٍ من الأسرار — دون نص الرسائل أو المرفقات.",
     gmailConsentWhyStored:
-        "لماذا يُخزَّن: لاكتشاف تحديثات طلبات التوظيف وعرضها عليك.",
+      "لماذا يُخزَّن: لاكتشاف تحديثات طلبات التوظيف وعرضها عليك.",
     gmailConsentNoSend: "لا يرسل ريكو أي بريد عبر هذا الإذن إطلاقًا.",
     gmailConsentNoSilent: "لا تتغيّر حالة أي طلب توظيف بصمت أبدًا.",
     gmailConsentReviewUpdates:
-        "تراجع كل تحديث مهم قبل تطبيقه.",
+      "تراجع كل تحديث مهم قبل تطبيقه.",
     gmailConsentDisconnectNote:
-        "يمكنك فصل الاتصال في أي وقت من هذه البطاقة.",
+      "يمكنك فصل الاتصال في أي وقت من هذه البطاقة.",
     gmailConsentDeleteNote:
-        "الفصل يُلغي وصول ريكو لدى Google ويمسح الاتصال المحفوظ ورمز الوصول المُخزَّن. وتبقى تحديثات الوظائف المكتشفة سابقًا ضمن طلباتك.",
+      "الفصل يُلغي وصول ريكو لدى Google ويمسح الاتصال المحفوظ ورمز الوصول المُخزَّن. وتبقى تحديثات الوظائف المكتشفة سابقًا ضمن طلباتك.",
     gmailConsentCheckbox:
-        "أفهم وأعتمد المزامنة الخلفية المتكررة وفق هذه الشروط.",
+      "أفهم وأعتمد المزامنة الخلفية المتكررة وفق هذه الشروط.",
     gmailConsentGrant: "اعتماد المزامنة المتكررة",
     gmailConsentCancel: "إلغاء",
     gmailConsentRevoke: "إيقاف المزامنة المتكررة",
@@ -1509,7 +1509,7 @@ export const translations = {
     gmailConsentRevoked: "تم إيقاف المزامنة المتكررة.",
     gmailDisconnectConfirmTitle: "فصل Gmail؟",
     gmailDisconnectConfirmBody:
-        "سيُلغي ريكو الوصول لدى Google ويزيل الاتصال المُخزَّن. يُحتفَظ بالسجل المستورد.",
+      "سيُلغي ريكو الوصول لدى Google ويزيل الاتصال المُخزَّن. يُحتفَظ بالسجل المستورد.",
     gmailDisconnectConfirm: "نعم، افصل",
 
     // Forgot / Reset password
@@ -2234,8 +2234,6 @@ export const translations = {
     cmdMatchGaps: "نقاط تستحق الصراحة",
     cmdMatchPicks: "اختيار ريكو",
     cmdMatchFit: "ملاءمة",
-    cmdMatchSave: "احفظها",
-    cmdMatchSkip: "تجاوز",
     // نصوص تنسيق لإمكانية الوصول — تُدرج وقت العرض كي تكون تسميات قارئ الشاشة
     // مترجمة (وليست إنجليزية ثابتة). ‏cmdJobAtCompany هو الوصلة المشتركة
     // "{title} لدى {company}" المُعاد استخدامها كـ {job} داخل قوالب aria.
@@ -2642,6 +2640,8 @@ export const translations = {
     jobCardApplyNow: "تقدّم الآن",
     jobCardSearchThisJob: "ابحث عن هذه الوظيفة",
     jobCardSave: "حفظ",
+    jobCardShare: "مشاركة عبر واتساب",
+    jobCardShareText: "وصلتني هذه الوظيفة عبر ريكو هانت — مساعدك الذكي للبحث عن عمل في الإمارات:",
     jobCardIgnore: "تجاهل",
     jobCardDone: "تم تنفيذ الإجراء",
 

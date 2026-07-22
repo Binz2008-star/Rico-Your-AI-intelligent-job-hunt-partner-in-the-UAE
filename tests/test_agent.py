@@ -345,6 +345,73 @@ class TestResponseBuilder:
         resp = build_response(result)
         assert any(a.type == "trigger_pipeline" for a in resp.actions)
 
+    # ── Bilingual responses — reply language follows the user's message
+    # language (Product Generalization Rule: no single-language path). An
+    # Arabic message gets Arabic reply text and action labels; English or
+    # empty messages keep the original English byte-for-byte.
+
+    def _arabic(self, text: str) -> bool:
+        import re
+        return bool(re.search(r"[؀-ۿ]", text or ""))
+
+    def test_arabic_message_gets_arabic_job_list_reply_and_labels(self):
+        from src.agent.response_builder.response_builder import build_response
+        jobs = [{"id": "1", "title": "HSE Mgr", "company": "ACME", "link": "https://ex.com/1", "score": 80}]
+        result = self._make_result("get_ranked_jobs", {"jobs": jobs, "total": 1})
+        resp = build_response(result, original_message="ورني افضل الوظائف")
+        assert self._arabic(resp.message)
+        # Action types stay language-independent; labels are localized.
+        apply_action = next(a for a in resp.actions if a.type == "apply")
+        assert self._arabic(apply_action.label)
+
+    def test_english_message_reply_unchanged(self):
+        from src.agent.response_builder.response_builder import build_response
+        jobs = [{"id": "1", "title": "HSE Mgr", "company": "ACME", "link": "https://ex.com/1", "score": 80}]
+        result = self._make_result("get_ranked_jobs", {"jobs": jobs, "total": 1})
+        resp = build_response(result, original_message="Show me the best jobs today")
+        assert resp.message.startswith("Here are your top 1 job match")
+        assert not self._arabic(resp.message)
+
+    def test_empty_message_defaults_to_english(self):
+        from src.agent.response_builder.response_builder import build_response
+        result = self._make_result("get_ranked_jobs", {"jobs": [], "total": 0})
+        resp = build_response(result)
+        assert not self._arabic(resp.message)
+
+    def test_arabic_error_response_is_arabic(self):
+        from src.agent.response_builder.response_builder import build_response
+        result = self._make_result("apply_job", success=False, error="Connection timeout")
+        resp = build_response(result, original_message="قدم على هذه الوظيفة")
+        assert resp.success is False
+        assert "Connection timeout" in resp.message  # tool error text passes through
+        assert self._arabic(resp.message)
+
+    def test_arabic_help_lists_arabic_commands(self):
+        from src.agent.response_builder.response_builder import build_response
+        result = self._make_result("help", {"intent": "help"})
+        resp = build_response(result, original_message="مساعدة او اي شي")
+        assert self._arabic(resp.message)
+        assert resp.ui is not None and resp.ui.data.get("commands")
+        assert all(self._arabic(c) for c in resp.ui.data["commands"])
+
+    def test_arabic_stats_reply_is_arabic_with_action(self):
+        from src.agent.response_builder.response_builder import build_response
+        data = {"total_applied": 5, "interviews_scheduled": 1, "success_rate": 20.0, "rejections": 0, "pending": 4, "status_breakdown": {}}
+        result = self._make_result("get_application_stats", data)
+        resp = build_response(result, original_message="كم طلب قدمت؟")
+        assert self._arabic(resp.message)
+        assert "**5**" in resp.message
+        assert any(a.type == "trigger_pipeline" for a in resp.actions)
+
+    def test_end_to_end_arabic_intent_gets_arabic_reply(self):
+        # Full orchestrator path: Arabic NL message → detected intent →
+        # tool execution → Arabic reply.
+        from src.agent.orchestrator.orchestrator import process
+        with patch("src.repositories.applications_repo.get_stats", return_value={"total_applied": 3, "interviews_scheduled": 1, "success_rate": 33.3, "rejections": 0, "pending": 2, "status_breakdown": {}}):
+            resp = process("إحصائيات طلباتي", user_email="test-user")
+        assert resp.success is True
+        assert self._arabic(resp.message)
+
     def test_help_response_lists_commands(self):
         from src.agent.response_builder.response_builder import build_response
         from src.schemas.agent import AgentUIType

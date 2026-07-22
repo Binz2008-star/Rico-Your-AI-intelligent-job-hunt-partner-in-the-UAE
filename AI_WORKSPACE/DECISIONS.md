@@ -89,6 +89,91 @@ one source of truth per domain is decided.
 
 ## Accepted decisions
 
+### DEC-20260721-001 — Five-stage strategic priority ordering for Rico development (stabilize → daily loop → data moat → reach → employers)
+
+Status: accepted
+Date: 2026-07-21
+Owner: Roben (owner directive, 2026-07-21) — recorded by Claude
+Related PR: #1269 (`docs/strategy/2026-07-21-rico-radical-upgrade-research/`)
+
+#### Context
+
+The strategic research merged in #1269 maps how Rico becomes the UAE's
+essential job-hunt utility. The owner reviewed it and issued a binding
+priority ordering so execution proceeds inside-out instead of feature-first.
+
+#### Decision
+
+Rico development follows this five-stage order. Later stages do not start
+before earlier ones are proven:
+
+1. **System stabilization before any new feature:** close the security/
+   CONTAINMENT sequence; finish database + source-of-truth reconciliation;
+   **break the single-worker/single-instance constraint** (operation
+   ownership moves to an atomic shared store) BEFORE driving user growth;
+   add clear monitoring for errors, costs, and stuck operations; stabilize
+   the chat/search/save/apply core paths.
+2. **The daily-loop product (most important stage):** durable per-user
+   memory (role/salary/location/constraints never forgotten across
+   sessions); automatic morning search; dedupe and stale/weak-listing
+   removal; only the best matches surfaced with match explanations;
+   notifications only when something is worth it; tracking of saved and
+   applied jobs; learning from accept/skip/reject behavior.
+3. **Data moat:** every search, choice, skip, and application feeds
+   Rico's UAE-specific knowledge (real demand, consistently-hiring
+   companies, recurring/suspicious postings, salary averages by title and
+   city, interview-lifting skills, typical response times, source quality).
+4. **Reach — only after the loop is stable:** installable PWA + in-app and
+   Web Push notifications FIRST; WhatsApp AFTER loop maturity and initially
+   for brief alerts and action approvals only (it is explicitly NOT the
+   first stage); native Arabic experience; very fast mobile.
+5. **Employer/Emiratisation side LATER:** deferred until the seeker side
+   has active users, good data, and proven outcomes. The standing priority
+   is "get the seeker better interviews, faster."
+
+Execution rules attached to this decision: the research's chapters are NOT
+converted into tasks in bulk; work proceeds as one small PR at a time; the
+first execution track after work is allowed is **system stabilization** —
+not WhatsApp, not agents, not employers.
+### DEC-20260721-002 — #1262 phase 6 closed: the Refine drawer stays a structured UI action (no slot-filling dialogue)
+
+Status: accepted
+Date: 2026-07-21
+Owner: Roben (owner approval of Claude's recommendation, 2026-07-21)
+Related task: Issue #1262 (conversation-first migration), phases 1–5 merged
+
+#### Context
+
+Issue #1262 retired every card/button family for speech (phases 1–5:
+scheduled-search offer, navigation pointers, suggestion offers, strict spoken
+delete confirm, spoken job actions). Phase 6 proposed replacing the last
+structured artifact — the Refine drawer on job-match responses — with a
+slot-filling dialogue. The drawer exists for a P1 safety reason: it collects
+role+city as STRUCTURED input and only the final composed natural-language
+query ever reaches the intent router, so UI wording can never be parsed as a
+job role (the original P1 bug). It is also two clicks with no discoverability
+problem.
+
+#### Decision
+
+The Refine drawer stays structural. Phase 6 is closed by owner decision
+without code change; the conversation-first migration is complete with the
+drawer as the one deliberate structured exception (alongside real external
+affordances: apply/source links, fallback links, and runtime safety artifacts
+such as permission requests).
+
+#### Consequences
+
+- Positive: the P1 guarantee (no UI wording through the LLM/intent router)
+  stays enforced by construction; no regression risk in the refine flow.
+- Negative/trade-off: one non-conversational artifact remains on job-match
+  responses; revisit only if the owner asks for a conversational refine.
+
+#### Follow-up
+
+- [x] Phase 7 cleanup: dead `cmdMatchSave`/`cmdMatchSkip` translation keys
+      removed; closure handoff written; Issue #1262 closed.
+
 ### DEC-20260720-001 — Free plan AI messages become a daily allowance (10/day, UTC calendar day) with a reset countdown, replacing the 50-per-month cap
 
 Status: accepted

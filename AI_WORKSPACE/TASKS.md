@@ -6060,6 +6060,67 @@ fell to the "help" fallback — prohibited by the Product Generalization Rule
 - Stop condition: any English-intent regression in CI → fix before merge
 - Rollback plan: revert the PR; detector returns to English-only matching
 
+### TASK-20260721-005 — Command v5 PR 3: live modes (Overview / Applications / Documents)
+
+Status: review (Draft PR opened from branch claude/command-v5-pr3-live-modes)
+Owner: Claude (agent) / owner review
+Branch: claude/command-v5-pr3-live-modes
+Issue/PR: PR — Command v5 PR 3 live modes (opened from this task)
+
+#### Objective
+PIVOTED 2026-07-21 (owner instruction: "cancel the repo design entirely and
+apply the attachment"): PR #1271 now applies the owner-supplied Command
+Workspace artifact design — full palette swap (LIGHT + DARK), artifact fonts
+(Inter / IBM Plex Mono / Amiri / IBM Plex Sans Arabic; Fraunces stays),
+artifact MODE_THEME accents + bilingual hero language on the three live
+modes, artifact rail/brand/ambience on WorkspaceShell — replacing the
+earlier v5-rebuild palette everywhere it lived. Real data and contracts
+only. `/command` chat surface styling remains the next step (PR 4 slot).
+Interview/Learning/Activity stay hidden (no production capability).
+
+#### Context
+- Relevant files: apps/web/components/workspace/DashboardAtelier.tsx; apps/web/components/applications/ApplicationsAtelier.tsx; apps/web/components/upload/UploadAtelier.tsx; apps/web/components/workspace/theme.ts
+- Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md (PR 3 row)
+- Existing behavior: all data derivations, API calls, status taxonomy, translation keys, testids, aria contracts pinned by dashboard-atelier / flow-manual-application / upload-shell-composition tests.
+
+#### Constraints
+- Do not touch: data logic, APIs, auth, routing, translation keys, dark-island palette, /command chat surface.
+- No migrations unless explicitly required: none.
+- Keep scope limited to: presentation of the three mode components + additive `dark` flag on WorkspacePalette.
+
+#### Acceptance criteria
+- [x] v5 mode accents/typography/surfaces on the three modes (light island only); dark island keeps its existing language
+- [x] All loading/error/empty states restyled without weakening (skeletons + presence orb are additive; roles/testids unchanged)
+- [x] Accent-colored text uses AA text-safe tokens only (modeAText / onEmber)
+- [x] EN + AR RTL verified with screenshots; mobile no-overflow proven by e2e
+- [x] All existing behavior contracts green without weakening
+
+#### Required verification
+- [x] Unit tests: vitest 854/854
+- [ ] Integration tests: n/a
+- [x] Frontend build: PASS; lint identical to main baseline (0 new findings); check:contrast:v5 PASS
+- [x] Local smoke: Playwright single-shell + mobile-usability 18/18 on chromium; screenshots desktop/mobile/AR captured from mocked synthetic data
+- [ ] Production/deploy smoke if applicable: after merge via Vercel auto-deploy
+
+#### Continuity Block
+- Task ID: TASK-20260721-005
+- GitHub issue/PR: PR — Command v5 PR 3 live modes
+- Branch: claude/command-v5-pr3-live-modes
+- Base branch: main
+- Last safe commit SHA: 9fbd32c (main tip at branch start)
+- Current head SHA: (set at PR open)
+- Uncommitted changes present: no (after commit)
+- Status: done
+- Files changed: DashboardAtelier.tsx, ApplicationsAtelier.tsx, UploadAtelier.tsx — v5 mode skins; theme.ts — additive `dark` flag; AI_WORKSPACE — task + map sync
+- Files intentionally not touched: app/command/page.tsx (PR 4), WorkspaceShell.tsx (PR 2 done), GuestUploadAtelier.tsx (public flow, not a workspace mode)
+- What is complete: implementation + local verification (build, unit, e2e, contrast, screenshots EN/AR/desktop/mobile)
+- What is incomplete: owner review + merge decision
+- Known blockers: none
+- Validation already run: vitest 854/854; build PASS; lint = main baseline; check:contrast:v5 PASS; Playwright 18/18
+- Validation still required: none; owner visual acceptance vs the v5 evidence package
+- Next exact action: owner review of the Draft PR
+- Stop condition: any behavior-contract regression → fix before merge
+- Rollback plan: revert the PR — presentation-only diff, no data/API/schema impact
 ### TASK-20260722-001 — Atelier Arabic copy: rewrite translated-feeling strings to native Arabic
 
 Status: review
@@ -6113,6 +6174,821 @@ Review the Arabic strings used by Atelier/command surfaces (`translations.ts` an
 - Files changed: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`; `apps/web/__tests__/command-job-match-card-atelier.test.tsx`; `AI_WORKSPACE/TASKS.md`
 - Files intentionally not touched: all runtime/backend code; layout/components; tokens
 - What is complete: translation edits, build/test, PR #1276 opened
+- What is incomplete: owner review and merge
+- Known blockers: none
+- Validation already run: `npm run build` green; `npm run test` 83/83 files, 854/854 tests passed
+- Validation still required: owner review; optional visual smoke in Arabic
+- Deployment/CI/Vercel state to check next: n/a
+- Next exact action: owner review and merge
+- Stop condition: owner request for copy revisions or CI failure
+- Rollback plan: revert PR #1276; pure copy changes, no state or API effects
+
+### TASK-20260721-006 — Command artifact design PR 4: public /command chat surface
+
+Status: review (Draft PR from branch claude/command-v5-pr4-chat-surface)
+Owner: Claude (agent) / owner review
+Branch: claude/command-v5-pr4-chat-surface
+Issue/PR: PR — public /command artifact chrome (opened from this task)
+
+#### Objective
+Extend the merged artifact design (#1271) to the PUBLIC /command guest
+surface. Technique: the repo's established channel-variable remap
+(AtelierCardScope precedent) applied at the guest chrome root —
+`publicCommandArtifactVars()` remaps every channel token (bg/surface/gold/
+text tiers/aura + the Atelier editorial layer) to the artifact workspace
+palettes, following the existing global light/dark toggle (dark stays the
+production default; both faces are artifact faces). The authenticated
+/command already repainted via #1271's WORKSPACE_THEME swap.
+
+#### Constraints
+- Do not touch: chat behavior, streaming, attachments, safety, session flow,
+  auth gating, translation keys, testids.
+- Keep scope limited to: presentation (channel remap + literal color-class
+  swaps: navy-on-gold labels → white-on-sun (AA 4.85), amber glow literals
+  removed, MobileCommandHeader drawer literals → channel tokens).
+
+#### Acceptance criteria
+- [x] Guest /command wears the artifact palette in BOTH themes with zero markup/behavior change
+- [x] Sun-button labels AA (white on sun ≥4.85; fixes the pre-existing dark-on-sun user bubble post-#1271)
+- [x] Mobile drawer follows the artifact palette (no hardcoded navy)
+- [x] All existing behavior contracts green without weakening
+
+#### Required verification
+- [x] Unit tests: vitest 854/854
+- [x] Frontend build: PASS; lint identical to main baseline (0 new findings)
+- [x] Local smoke: Playwright single-shell + mobile-usability 18/18; guest light/dark/mobile/drawer screenshots reviewed
+- [ ] Production/deploy smoke if applicable: after merge via Vercel auto-deploy
+
+#### Continuity Block
+- Task ID: TASK-20260721-006
+- GitHub issue/PR: PR — public /command artifact chrome
+- Branch: claude/command-v5-pr4-chat-surface
+- Base branch: main (4b33709)
+- Current head SHA: (set at PR open)
+- Status: review
+- Files changed: app/command/page.tsx (public chrome remap + label fixes), components/command/CommandStates.tsx (publicCommandArtifactVars), components/command/MobileCommandHeader.tsx (drawer literals → channel tokens), components/command/CommandComposer.tsx + CommandMessages.tsx (send button / user bubble labels white-on-sun), AI_WORKSPACE sync
+- Known pre-existing issue (NOT from this PR): dev-only hydration warning for the theme-toggle sun/moon icon when a guest has rico-theme=light stored (icon depends on client-only theme state; predates this change)
+- Next exact action: owner review of the Draft PR
+- Rollback plan: revert the PR — presentation-only diff
+
+### TASK-20260721-007 — Profile avatar + measured performance slice (post-design program)
+
+Status: done (both merged and live)
+Owner: Claude (agent) / owner approvals in-session
+
+#### Delivered
+1. Profile avatar (#1279, squash f6c0d84): /api/v1/user/avatar GET/POST/DELETE,
+   dedicated user_avatars table (migration 050 — APPLIED to production Neon and
+   verified via to_regclass BEFORE merge), ProfileAvatar hero UI with client-side
+   downscale; drift-check signature added. Render deploy for f6c0d84: success
+   (SHA-gated).
+2. Perf slice 1 (#1282, squash 902c820): Arabic font families preload:false;
+   dead global IBM Plex Sans moved route-scoped to the design gallery.
+   Lighthouse 12 mobile: landing 66→90 (LCP 5.1→3.6s); guest /command 72→80
+   (LCP 10.3→5.4s, font bytes 950→552 KB).
+3. Perf slice 2 (JS split of react-markdown) — implemented, MEASURED, REJECTED:
+   route JS 87.5→43 KB but LCP 5.4→~9s across three clean-server runs (the
+   welcome message is the LCP element; the lazy swap delays its final paint).
+   Fully reverted; no PR. Recorded so the next optimizer doesn't repeat it.
+4. Chat-quality branch #1278 closed as superseded by #1277 (deeper root-cause:
+   hardcoded Gulf-dialect runtime rule); its superior deterministic pieces were
+   harvested into main by the owner-side follow-up (0665312f).
+
+#### Production verification (this task's closure)
+- Render: deploy-render success on 0665312f (latest backend-relevant main).
+- SMOKE-1197 + Delivery-Smoke: dispatched on main — results recorded in the
+  session report.
+### TASK-20260721-008 — Atomic Postgres operation-ownership store (stabilization slice 1)
+
+Status: done
+Owner: Claude (agent), owner-directed ("اعمل اللازم" 2026-07-21 — first
+stabilization slice per DEC-20260721-001)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from main 963ba2e)
+Issue/PR: #1285 (merged 2026-07-21, squash 7497c2a3; "Deploy Render Backend"
+for 7497c2a3 = success, /version-gated). NOTE: originally ledgered as
+TASK-20260721-007 inside #1285; renumbered to -008 here to resolve a same-day
+ID collision with the profile-avatar task entry above.
+
+#### Objective
+Move chat job-search operation ownership from the in-process
+process-nonce model (safe ONLY single-instance/single-worker — pinned by
+test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker)
+to an atomic shared Postgres store: table `chat_operations` (migration 051 —
+renumbered from 050 on 2026-07-21; 050 stays with user_avatars, the older reference),
+row-lock-serialized claims, heartbeat-lease liveness (renewal thread; missed
+lease = proof of executor death), SQL-enforced attempt fence, and an
+atomic-claim refusal path so a losing racer never runs a duplicate provider
+cascade. Migration 051 (chat_operations + idx_chat_operations_user_latest)
+is APPLIED — verified read-only on production Neon 2026-07-21 (#1299
+evidence: to_regclass PRESENT for both) — so the Postgres store is ACTIVE
+in production. Scaling workers/instances stays BLOCKED until slice-4
+validation passes.
+
+#### Scope
+- migrations/050_chat_operations.sql (new, idempotent, additive; renamed
+  to 051_chat_operations.sql on 2026-07-21 — identity is now 051)
+- src/repositories/chat_operations_repo.py (new)
+- src/services/operation_state.py (dual backend: postgres + memory fallback;
+  RICO_OPERATION_STORE=auto|postgres|memory, default auto)
+- src/rico_chat_api.py (claim-refusal → honest in-progress reply; no
+  history/analytics; never mark_failed on an unowned operation)
+- scripts/check_migration_drift.py (chat_operations signature objects — now under id 051)
+- tests/conftest.py (suite-wide memory-backend default)
+- tests/unit/test_operation_duplicate_guard.py (docstrings rescoped to the
+  memory fallback)
+- tests/integration/test_operation_ownership_postgres.py (new — proves the
+  multi-worker-safety property on real Postgres)
+
+#### Continuity Block
+- Current head SHA: 7497c2a3 (main after squash merge of #1285)
+- Status: done — merged + deployed (Deploy Render Backend success for
+  7497c2a3, /version-gated); CI on final PR head 5ae19599 was 9/9 green
+  (pytest, postgres-integration, frontend, playwright, guards, Neon)
+- Validation already run: py_compile; tests/unit 3,433 passed (incl. 37
+  operation-focused + drift checks after fix); focused canonical set 245
+  passed; operation-adjacent root tests 47 passed; NEW postgres integration
+  8/8 passed against a real local Postgres 16; full tests/integration run:
+  117 passed + 4 PRE-EXISTING failures in
+  test_jotform_webhook_to_chat_flow.py::TestPublicChatWithEmail (reproduced
+  identically on pre-change code via git stash — unrelated to this task)
+- Validation still required: CI pytest + postgres-integration on the PR head
+- Deployment: migration (applied while numbered 050; reference identity now
+  051) is PRESENT in production Neon — verified read-only 2026-07-21
+  (to_regclass: chat_operations + idx_chat_operations_user_latest both
+  PRESENT). The Postgres store is therefore ACTIVE. Renaming the file does
+  not and cannot un-apply the object; the drift guard checks object
+  presence, not filenames. Worker/instance count is NOT changed by this task.
+- Known blockers: none
+- Risks: DB unavailability falls back to legacy semantics (documented;
+  logged); heartbeat thread is daemon + self-terminating on terminal/supersede
+- Rollback plan: revert the PR (fallback path is the current production
+  behavior); migration 051 may stay applied (additive) or be dropped with
+  DROP TABLE IF EXISTS chat_operations
+- Next exact action: none — migration applied and Postgres store active
+  (verified 2026-07-21). Workers/instances stay at 1 (BLOCKED) until
+  slice-4 multi-worker validation passes.
+- Stop condition: met — merged and deployed; no further writes on this task
+
+
+### TASK-20260721-005 — Bilingual (AR/EN) agent replies — response builder localization
+
+Status: done
+Owner: Claude (agent), owner-directed ("استمر بما يعود بالفائدة الأكبر على المنتج" 2026-07-21)
+Branch: claude/system-tools-analysis-wc4o4g (restarted from main 247e83a)
+Issue/PR: #1288 (merged 2026-07-21, squash c626521f)
+
+#### Objective
+Complete the bilingual agent path opened by TASK-20260721-004: after #1266 an
+Arabic user's intent executes, but every reply, action label, and UI title
+came back in English (src/agent/response_builder/response_builder.py is the
+sole AgentUIResponse producer). Localize all reply templates so the reply
+language follows the user's message language.
+
+#### Constraints
+- Keep scope limited to: response_builder.py + tests + ledger
+- Do not touch: action `type` values, tool names, data payloads, UI type enums
+- English output must remain byte-for-byte identical for non-Arabic messages
+
+#### Acceptance criteria
+- [x] Language detection from the user's message (Arabic block regex); empty/
+      button-driven requests default to English (existing behavior)
+- [x] Arabic templates for every builder: job list, apply/skip/save/block,
+      stats, pipeline status/trigger, market, strategy, learning profile,
+      help, error — messages, action labels, and UI titles
+- [x] English strings byte-identical (existing tests untouched and green)
+- [x] 7 new tests incl. end-to-end: Arabic NL message → intent → tool →
+      Arabic reply through orchestrator.process
+- [x] CI green on exact head: qa-tests full suite via workflow_dispatch on
+      2c8ca71 and db8b12a (GitHub-linked to #1288; pull_request event delivery
+      failed that hour — dispatched runs are the evidence)
+
+#### Continuity Block
+- Task ID: TASK-20260721-005
+- GitHub issue/PR: #1288 (merged, squash c626521f)
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: 247e83a (main tip at branch restart)
+- Current head SHA: c626521f (main after squash merge)
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files changed: src/agent/response_builder/response_builder.py — bilingual
+  templates + _lang_of; tests/test_agent.py — 7 bilingual response tests;
+  AI_WORKSPACE/TASKS.md — this entry
+- Files intentionally not touched: schemas/agent.py (no schema change),
+  orchestrator.py (already passes original_message), frontend (labels arrive
+  via existing action payloads)
+- What is complete: implementation + local verification (test_agent 100/100;
+  agent+UI-contract suites 281/281 under CI env)
+- What is incomplete: nothing — Deploy Render Backend for c626521f verified
+  success (/version-gated); production replies are bilingual
+- Known blockers: none
+- Validation already run: test_agent.py 100/100; agent_runtime + agentic_ui
+  composer/contracts/schema suites 281/281 under CI env
+- Validation still required: PR CI on exact head
+- Deployment/CI/Neon/Vercel state to check next: none
+- Next exact action: none — task fully closed
+- Stop condition: any English-output regression or UI-contract failure in CI
+- Rollback plan: revert the PR; replies return to English-only
+
+### TASK-20260721-009 — Admin operations observability endpoint (stabilization slice 2)
+
+Status: done — #1293 merged 2026-07-21 (squash 2ed5cee7); "Deploy Render
+Backend" for 2ed5cee7 = success (/version-gated). chat_operations (id 051,
+applied while numbered 050) is PRESENT in production — verified read-only
+2026-07-21 — so the operations section reports available=true (store
+active); confirm visually at the next owner admin smoke.
+Owner: Claude (agent), owner-directed ("تمام باشر" 2026-07-21 — slice 2 per
+DEC-20260721-001: monitoring for errors, costs, stuck operations)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from main b8379d7)
+Issue/PR: (opens with this branch's new PR)
+
+#### Objective
+Give the owner one read-only, admin-gated snapshot of operational health:
+GET /api/v1/admin/ops/overview — stuck/pending chat operations (heartbeat-
+lease view over the slice-1 shared store: running, timed_out,
+stuck_lease_dead, oldest active age), 24h/7d search volume + failure counts
+(the honest error/cost proxies available today), job-provider degradation
+state (existing provider_health()), AI-provider readiness (strict boolean
+allowlist over RicoEnvReport), and process-local chat-API counters.
+Explicitly deferred (later increments): per-token AI spend counters
+(needs provider instrumentation) and any alerting/cron trigger.
+
+#### Scope
+- src/api/routers/admin_ops.py (new; require_admin-gated; read-only)
+- src/api/app.py (router registration — 2 lines)
+- src/repositories/chat_operations_repo.py (stats() aggregate, read-only)
+- tests/unit/test_admin_ops_overview.py (new — 5 tests: authz wiring,
+  unauthenticated rejection, snapshot shape, honest store-degradation
+  reporting, ai_provider strict allowlist)
+- tests/integration/test_operation_ownership_postgres.py (+ stats test)
+- AI_WORKSPACE/TASKS.md (this entry; -008 closure; ID-collision renumber)
+
+#### Continuity Block
+- Current head SHA: (set at commit)
+- Status: in_review — PR opens as draft; merge is owner-gated
+- Validation already run: py_compile; new unit file 5/5; postgres
+  integration 9/9 (incl. new stats test) on local Postgres 16; full
+  tests/unit 3,434 passed after the app.py router registration
+- Validation still required: CI pytest + postgres-integration on PR head
+- Deployment: additive read-only endpoint; no schema change, no migration;
+  chat_operations (id 051) verified PRESENT in production 2026-07-21, so
+  the operations section is live (available=true, store active)
+- Known blockers: none
+- Risks: none material — endpoint is read-only, admin-gated, value-free
+  (booleans/counts/enum strings; no key values, user identifiers, or query
+  text)
+- Rollback plan: revert the PR — no schema or behavior dependency
+- Next exact action: open draft PR, CI green, owner review/merge
+- Stop condition: any CI regression → fix before merge; no alerting/cron
+  surface in this slice
+
+### TASK-20260721-010 — Core-path real-wrapper contract tests (stabilization slice 3)
+
+Status: in_review
+Owner: Claude (agent), owner-directed ("افعل ما تراه مناسباً" 2026-07-21 —
+slice 3 per DEC-20260721-001: pin chat/search/save/apply contracts with
+tests that run through the REAL paths)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from latest main)
+Issue/PR: (opens with this branch's new PR)
+
+#### Objective
+Generalize the #1166→#1169 lesson (endpoint tests that patch the router's
+own wrapper hide router↔wrapper kwarg drift — the class that shipped the
+production save outage) to the remaining core paths:
+- Chat: POST /api/v1/rico/chat runs the REAL chat_service.send_message with
+  a capturing spy only one layer down (_legacy_send_message) — proves
+  ctx/message/operation_id/language bind and SURVIVE router → service →
+  dispatch (the transport contract the duplicate-execution guard depends
+  on), plus JWT-only identity and 401 on the real path.
+- Save/apply actions: POST /api/v1/actions/run executes the REAL
+  agent_runtime.handle_action with ZERO runtime mocks, using the runtime's
+  own dry_run log-only mode — proves the router's handle_action(...) kwarg
+  contract, ActionResult→ActionResponse serialization, unknown-action
+  controlled refusal (200 ok=false, not 500), the _approved-sentinel strip,
+  and 401 unauthenticated.
+- Search: deep chain already runs real in test_operation_duplicate_guard +
+  the postgres ownership suite; this slice pins the transport contract that
+  feeds it (documented in the test module docstring).
+
+#### Scope
+- tests/test_core_path_real_wrappers.py (new — 9 tests; TEST-ONLY change,
+  no src/ modification)
+- AI_WORKSPACE/TASKS.md (this entry; -009 closure)
+
+#### Continuity Block
+- Current head SHA: (set at commit)
+- Status: in_review — PR opens as draft; merge is owner-gated
+- Validation already run: new file 9/9; adjacent regression
+  (test_rico_routes + test_agent_runtime + test_agent +
+  test_jwt_user_isolation) 331 passed
+- Validation still required: CI pytest on PR head
+- Deployment: none — test-only; no runtime, schema, or config change
+- Known blockers: none
+- Risks: none material (test-only)
+- Rollback plan: revert the PR
+- Next exact action: open draft PR, CI green, owner review/merge
+- Stop condition: any CI regression → fix before merge
+
+### TASK-20260721-011 — Launch-readiness reconciliation report (owner: "هل المنتج جاهز للنشر")
+
+Status: review
+Owner: Claude (agent), owner-directed ("تفضل" 2026-07-21)
+Branch: claude/system-tools-analysis-wc4o4g (restarted from main 0b94c55)
+Issue/PR: set at PR open
+
+#### Objective
+Answer the owner's launch-readiness question with a fact-based control-plane
+reconciliation: live snapshot, LAUNCH_EXECUTION_PLAN gate status, full open-PR
+triage (15), route matrix, new anomalies, and a numbered owner decision list.
+
+#### Deliverable
+AI_WORKSPACE/LAUNCH_READINESS_2026-07-21.md — verdict: LIVE STABLE OPEN BETA,
+not commercially launch-ready; blockers are owner decisions (billing activation,
+rotation confirmation, PR dispositions, invitations, owner smoke, legal
+sign-off), not missing code.
+
+#### Notable findings recorded
+- Duplicate migration number 050 in main (chat_operations + user_avatars)
+- #1177 would collide on migration 047 (analytics_events already in main)
+- PROJECT_STATUS snapshot still 2026-07-18 — superseded for readiness purposes
+  by this report; refresh to ride the next control-plane docs PR
+
+#### Continuity Block
+- Task ID: TASK-20260721-011
+- GitHub issue/PR: set at PR open
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: 0b94c55
+- Current head SHA: set at commit
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files changed: AI_WORKSPACE/LAUNCH_READINESS_2026-07-21.md (new);
+  AI_WORKSPACE/TASKS.md — this entry
+- Files intentionally not touched: PROJECT_STATUS.md (avoid racing parallel
+  active sessions; refresh recommended as its own docs PR)
+- What is complete: report compiled from live evidence (main 0b94c55, fresh
+  PR list, deploy-run gating, routes, migrations, decisions/tasks ledgers)
+- What is incomplete: owner decisions 1–8 in the report's §6
+- Known blockers: none for this docs task
+- Validation already run: n/a — docs-only
+- Validation still required: none (docs-only per merge policy)
+- Next exact action: owner reads §6 and issues decisions; agent executes on
+  request (e.g. migration renumber, ACTIVE security merges, PROJECT_STATUS refresh)
+- Stop condition: any conflict between this report and live GitHub state →
+  live state wins; report to owner
+- Rollback plan: revert the PR (single new doc + ledger entry)
+
+### TASK-20260721-012 — Renumber duplicate migration 050: chat_operations → 051
+
+Status: review
+Owner: Claude (agent), owner-directed single-item execution (2026-07-21)
+Branch: claude/system-tools-analysis-wc4o4g (restarted from main fdb4ff3c, contains #1297)
+Issue/PR: set at PR open (DRAFT — owner merges; agent stops at evidence report)
+
+#### Objective
+Remove the duplicate migration number 050 (readiness report §5.1):
+050_user_avatars (#1279, 11:45) and 050_chat_operations (#1285, 13:40)
+collided. Decision per owner rule (applied-first / older-reference):
+user_avatars keeps 050; chat_operations renumbered to 051 (next free —
+verified no 051 reference existed anywhere).
+
+#### Evidence gathered before changing anything
+- Read-only Neon production check (project robenjob): user_avatars PRESENT,
+  chat_operations PRESENT, idx_chat_operations_user_latest PRESENT — BOTH
+  are applied, so the older-reference criterion decided the keeper. No SQL
+  was executed beyond SELECT to_regclass.
+- Drift guard checks OBJECT PRESENCE, not filenames, and there is no
+  filename-based migration ledger — the rename is DB-neutral by design.
+- scripts/apply_migration_drift.py: no 050/chat_operations references.
+
+#### Atomic change set
+- migrations/050_chat_operations.sql → 051_chat_operations.sql (git rename,
+  97% similarity; only the header number line changed — SQL body untouched)
+- scripts/check_migration_drift.py: both chat_operations entries 050 → 051
+  + renumber note in the comment
+- src/services/operation_state.py, src/repositories/chat_operations_repo.py,
+  tests/unit/test_operation_duplicate_guard.py: comment references 050 → 051
+- tests/integration/test_operation_ownership_postgres.py: _MIGRATION file
+  path updated (functional reference)
+- NEW tests/unit/test_migration_numbering.py: (1) unique numeric prefixes,
+  (2) every drift-guard CHECKS id maps to an existing migration file
+- AI_WORKSPACE: TASKS prose for TASK-008/-009 updated to 051;
+  LAUNCH_READINESS §5.1 marked RESOLVED
+
+#### Proofs (rule 6)
+- [x] Fail-before: test_migration_numbers_are_unique FAILED on pre-fix tree
+      with {'050': ['050_chat_operations.sql', '050_user_avatars.sql']}
+- [x] Pass-after: 2/2 numbering tests; drift-guard ids unique
+      (005…050,051); chat_operations → 051 entries, user_avatars → 050
+- [x] No runtime/schema change: rename similarity 97% (header line only);
+      all other code edits are comments + one test path constant
+- [x] Broad run: tests/unit/ + test_agent + test_agent_runtime +
+      test_avatar_endpoints — 3605 passed
+- [ ] Full PR CI on exact head
+
+#### Continuity Block
+- Task ID: TASK-20260721-012
+- GitHub issue/PR: set at PR open
+- Branch: claude/system-tools-analysis-wc4o4g
+- Base branch: main
+- Last safe commit SHA: fdb4ff3c
+- Current head SHA: set at commit
+- Uncommitted changes present: no (after commit)
+- Status: review
+- Files changed: as in the atomic change set above
+- Files intentionally not touched: migrations/050_user_avatars.sql (keeper);
+  PRs #1295/#1206/#1138/#1129 (not merged this cycle per owner); #1177
+  (stays ON HOLD); #1136 (not closed here — board disposition comes after
+  this fix merges)
+- What is complete: renumber + all references + proofs, local
+- What is incomplete: full CI on the PR head; owner merge
+- Known blockers: none
+- Validation already run: see Proofs
+- Validation still required: full PR CI (qa-tests dispatch fallback if the
+  pull_request webhook drops again)
+- Deployment/CI/Neon/Vercel state to check next: none — no deploy is
+  triggered by a correct merge (migrations/** touches deploy-render paths?
+  YES migrations/** is in deploy-render path filter — note: merge will
+  trigger a redeploy of identical runtime; expected and harmless)
+- Next exact action: owner reviews evidence and merges the draft PR
+- Stop condition: agent STOPS after CI evidence report (owner instruction)
+- Rollback plan: revert the PR (pure rename + comments + docs + one test)
+
+### TASK-20260721-013 — SSRF DNS fail-open remediation in link_verifier (LOW-3)
+
+Status: done — #1302 merged 2026-07-21 (squash 7b8df097); "Deploy Render
+Backend" for 7b8df097 = success (/version-gated). Live in production: any
+URL with an unresolvable hostname is rejected on both the sync and async
+SSRF paths.
+Owner: Claude (agent), owner-directed (LOW-3 remediation 2026-07-21)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from main 46bdd32)
+Issue/PR: #1302 (merged, deploy verified 7b8df097)
+
+#### Objective
+Close the DNS fail-OPEN in src/services/link_verifier.py's SSRF guard. Both
+_is_safe_url_async and _is_safe_url_sync caught EVERY DNS-resolution error
+and returned True ("allow URL but note limitation") — so any URL whose
+hostname failed to resolve (NXDOMAIN, resolver error, timeout, or a
+rebinding attempt racing the check) bypassed the private-range/metadata
+guard entirely. Fix: on getaddrinfo failure, return False (fail closed),
+identically on both paths.
+
+Acceptance: no URL with an unresolvable hostname can pass the SSRF check on
+the sync OR async path.
+
+#### Scope (narrow — LOW-3 only)
+- src/services/link_verifier.py: the two DNS-failure `except Exception`
+  blocks change `pass` (→ fall through to `return True`) into `return False`.
+  NOTHING ELSE changed — protocol allow-list, private/metadata ranges,
+  redirect logic, and HTTP fetch are all untouched. No DNS pinning, no
+  redesign (explicitly out of scope).
+- tests/test_link_verifier_dns_fail_closed.py: NEW regression suite
+  (16 tests, deterministic getaddrinfo mocks, no network) — NXDOMAIN,
+  generic resolver exception, public→public (allowed), public→private
+  (rejected), public→metadata (rejected), sync/async parity across all DNS
+  outcomes, and the verify_link caller contract (unresolvable host →
+  BLOCKED, no HTTP fetch, no 500).
+- AI_WORKSPACE/TASKS.md (this entry).
+
+#### Caller audit
+- src/api/routers/link_verification.py (Pydantic `validate_url` /
+  `validate_urls`): call `_is_safe_url` → `_is_safe_url_sync`; a False now
+  raises the existing ValueError("URL is not allowed (SSRF protection)") —
+  a clean 422, not a 500. Correct.
+- src/services/link_verifier.LinkVerifier.verify_link (async, self-protects
+  via `_is_safe_url_async` for the initial URL and every redirect target):
+  a False now returns LinkStatus.BLOCKED with no HTTP fetch — honest,
+  no 500. Pinned by test_verify_link_blocks_unresolvable_host_without_fetch.
+- src/rico_chat_api._verify_link_sync → verify_link: inherits the BLOCKED
+  result; no bypass path.
+
+#### Continuity Block
+- Current head SHA: (set at commit)
+- Status: in_review — Draft PR; NO merge, NO deploy, NO LOW-1/LOW-2, NO
+  slice-4 (owner stop conditions)
+- Validation already run: new suite 16/16 post-fix; PROVEN 7/16 FAIL on
+  pre-fix code (git stash of link_verifier.py) — the 7 DNS-failure cases;
+  existing tests/test_link_verifier.py + tests/test_354_apply_link_verification.py
+  34 passed; py_compile OK
+- Validation still required: full CI on the PR head
+- Deployment: none in this task — owner-gated
+- Known blockers: none
+- Risks: a hostname that is genuinely unresolvable at check time is now
+  BLOCKED instead of allowed — this is the intended security posture, and a
+  fetch of such a host could not have succeeded anyway
+- Rollback plan: revert the PR (restores prior fail-open behavior)
+- Next exact action: open Draft PR, targeted tests + full CI green, stop
+- Stop condition: STOP after evidence report and green CI (owner directive)
+
+### TASK-20260721-014 — Multi-worker readiness: mandatory-Postgres fail-closed + real-process concurrency proof (stabilization slice 4)
+
+Status: in_review — **NOT done; expansion gate REMAINS CLOSED.** Owner review
+(2026-07-21) identified an un-eliminated post-claim-partition duplicate-cascade
+window (see "Owner-review follow-up" below). Slice 4 is NOT complete and
+Render workers/instances MUST stay at 1 until end-to-end cooperative cascade
+cancellation lands (a separate follow-up PR).
+Owner: Claude (agent), owner-directed (slice 4 per DEC-20260721-001 —
+"إثبات وتشديد أمان التشغيل متعدد العمال" 2026-07-21)
+Branch: claude/ricco-research-improvements-dkmhin (restarted from main e3a5780)
+Issue/PR: #1304 (Draft; head 09b6ab6)
+
+#### Objective
+**PARTIAL HARDENING ONLY — slice 4 is NOT complete and the multi-worker
+expansion gate stays CLOSED.** Harden the atomic ownership store (slices 1-2,
+live in production) and remove the unsafe memory fallback in the mandatory
+Postgres mode, backed by real-process evidence. This PR does NOT prove full
+multi-worker safety and does NOT raise Render workers/instances: the owner
+review exposed an un-eliminated **post-claim-partition duplicate-cascade
+window** (a peer can start a SECOND cascade if a DB partition outlasts the
+lease while a worker is still executing). **BLOCKER for closing slice 4 /
+opening the gate = post-claim partition cascade cancellation** (end-to-end
+cooperative cancellation through job_providers/jsearch_client — a separate,
+larger follow-up PR). Workers/instances MUST stay at 1 until then.
+
+#### Scope
+- src/services/operation_state.py:
+  * NEW `OperationStoreUnavailable`; `_mandatory_db()` +
+    `_on_repo_unavailable()`. Under RICO_OPERATION_STORE=postgres every store
+    op (start/get/get_latest/update) FAILS CLOSED (raises) instead of falling
+    back to memory; `auto`/`memory` keep the single-worker memory fallback.
+  * Absent-row in mandatory mode returns None (never resurrects memory state).
+  * TEST-ONLY lease/heartbeat overrides via `_lease_seconds()` /
+    `_heartbeat_interval()`, GATED by `_test_timings_allowed()` (honored only
+    when `PYTEST_CURRENT_TEST` is set; ignored in production). Production
+    defaults (60s / 10s) can never be overridden by a stray env var.
+  * `build_status_response` returns an honest service_unavailable dict when
+    the mandatory store is down.
+  * PREPARATORY ownership-loss signal (`ownership_lost()` +
+    `_mark_ownership_lost`/`_discard_ownership_loss`): heartbeat self-fences
+    when the lease is unrenewable past its window or the row is taken over.
+    NO executor consumer yet — it does NOT stop provider calls, so it does
+    not reduce the duplicate-cascade window; explicit lifecycle (cleared on
+    terminal/restart, FIFO-capped at 2048) prevents unbounded growth. Full
+    consumer lands with the cancellation PR.
+- src/repositories/chat_operations_repo.py: `claim()` first-insert race fix —
+  `INSERT ... ON CONFLICT (operation_id) DO NOTHING RETURNING` + re-SELECT
+  FOR UPDATE on conflict. A plain FOR UPDATE does not lock a not-yet-existing
+  key, so two workers could both INSERT the same new id → UniqueViolation for
+  the loser (exposed by the multiprocessing race). Now the loser is refused
+  (or takes over a dead lease), never a 500.
+- src/rico_chat_api.py: `process_message` maps OperationStoreUnavailable to an
+  honest `service_unavailable` reply (no cascade, no 500); the cleanup
+  `mark_failed` is guarded so a store outage during error handling can't mask
+  the original error.
+- tests/unit/test_operation_store_mandatory_failclosed.py (NEW, 9): mandatory
+  mode raises + NEVER touches memory (fail-before via _memory_start assertion),
+  auto mode still falls back, mode helpers, honest process_message reply.
+- tests/integration/test_operation_multiworker_postgres.py (NEW, 8): REAL
+  Postgres + REAL independent processes racing on a Barrier — (1) simultaneous
+  race → one claim/one refuse, cascade runs once via the real
+  _begin_job_search_operation decision path; (2) live heartbeating owner can't
+  be robbed past the lease; (3) dead owner → takeover after lease, attempt→2,
+  late attempt=1 write refused; (4) normal completion → heartbeat stops, no
+  stuck row, stats clean; (5) mandatory + dead DB before claim → fail closed,
+  no cascade, nothing written; (6) two users same id → independent ownership,
+  no leak/clobber; (7) admin_ops overview reflects running/stuck/failed;
+  (8) **post-claim partition → SECOND cascade runs (counter==2): the OPEN
+  window, proven not eliminated.**
+- AI_WORKSPACE/TASKS.md (this entry; TASK-013 closure).
+
+#### Continuity Block
+- Current head SHA: 09b6ab6
+- Status: in_review — Draft PR; slice 4 NOT complete, gate CLOSED. NO merge by
+  agent, NO deploy, NO Render worker/instance change, NO LOW-1/LOW-2, NO daily
+  loop (owner stop conditions). Owner may merge as PARTIAL hardening.
+- Validation already run: full tests/unit 3,449 passed; multiworker
+  integration 8/8 on real local Postgres 16 (fork processes, short lease);
+  ownership integration 9/9; mandatory-failclosed 13/13; py_compile OK; CI 9/9
+  complete and green on 09b6ab6 (pytest + postgres-integration + frontend +
+  playwright + guards + Neon). Fail-before demonstrated for THREE paths:
+  mandatory→memory (unit assertion), the claim insert-race (UniqueViolation on
+  pre-ON-CONFLICT code), and the post-claim partition duplicate-cascade window
+  (the new test asserts a second cascade runs).
+- Validation still required: none for this partial-hardening PR.
+- Deployment: none. What IS proven safe: simultaneous claim race → one
+  cascade; first-insert race fixed; dead worker → safe takeover after lease;
+  late stale write refused; mandatory-mode outage BEFORE claim fails closed;
+  monitoring truthful. What is NOT: a partition AFTER claim can still start a
+  second cascade (open window). Raising workers/instances stays BLOCKED.
+- Known blockers: **post-claim-partition duplicate-cascade cancellation** —
+  needs end-to-end cooperative cancellation through the provider cascade
+  (separate follow-up PR); until it lands the gate stays closed.
+- Risks: in mandatory mode a store outage returns 503-style replies instead
+  of degrading to memory — intended (correctness over availability under
+  multi-worker). `auto` default is unchanged for single-worker today.
+- Rollback plan: revert the PR (restores prior fallback + pre-race claim).
+- Next exact action: owner review of the corrected PR; decide whether to
+  merge as partial hardening. Agent does not merge, does not raise workers.
+- Stop condition: STOP after evidence report + green CI (owner directive).
+
+#### Owner-review follow-up (2026-07-21) — addressed on this branch, gate stays CLOSED
+Owner review of #1304 (head ee37126e) found two issues; both handled here:
+
+1. **Post-claim DB partition can still start a SECOND cascade (NOT eliminated).**
+   In `_start_heartbeat`, a `RepoUnavailable` during a partition can't renew the
+   lease; if the outage outlasts the lease a peer takes over and starts a second
+   cascade while worker A is still executing. The attempt fence stops A's late
+   WRITE but not A's in-flight provider calls. Actions taken:
+   - Added a **preparatory self-fence signal** (NOT a duplicate-cascade
+     reduction — no executor consumer yet): when the heartbeat is unrenewable
+     past the lease (or the row is taken over), the worker marks
+     `ownership_lost(op, attempt)` and stops renewing. Explicit lifecycle —
+     cleared on terminal/restart via `_discard_ownership_loss`/`_stop_heartbeats`
+     and FIFO-capped at `_MAX_LOST_OWNERSHIP` (2048) — so the state cannot leak.
+   - Added a REAL-process **fail-before/window test**
+     `test_partition_after_claim_starts_second_cascade_window_documented`:
+     A claims + partitions + stays alive; after the lease B takes over and a
+     SECOND cascade runs (cascade counter == 2); A self-fences; A's attempt=1
+     write is refused. The test PROVES the window still exists.
+   - **Corrected the claims** everywhere: no "exactly one cascade" in general and
+     no "gate criteria all proven". The "one cascade" guarantee is now scoped to
+     the simultaneous-claim race and the pre-claim outage only.
+   - **Full elimination is deferred to a separate PR**: end-to-end cooperative
+     cascade cancellation (checkpoints threaded through job_providers/
+     jsearch_client so A stops issuing provider calls the moment it loses the
+     lease). Until it lands, workers/instances stay at 1.
+
+2. **Lease/heartbeat overrides were readable in production.** Now gated by
+   `_test_timings_allowed()` (honored ONLY when `PYTEST_CURRENT_TEST` is set —
+   an active pytest run; forked children inherit it). A stray
+   `RICO_OPERATION_LEASE_SECONDS` in production is IGNORED, so it can never
+   shrink the lease to a takeover-racy value. Pinned by
+   test_timing_overrides_are_ignored_without_pytest_marker.
+
+Revised head after follow-up: (set at commit). CI: full unit + postgres
+integration green on the new head. **No merge, no deploy, no worker/instance
+change** (owner stop conditions).
+
+### TASK-20260721-015 — Development-control layer: rico-development-supervisor skill + ledger + bounded launcher (rebuilt per owner review of #1305)
+
+Status: in_review
+Owner: Claude (session claude/rico-development-supervisor-sfdh8w), owner-directed 2026-07-21
+Branch: claude/rico-development-supervisor-sfdh8w (rebuilt from main 0e0497ba after owner review)
+Issue/PR: #1305 (Draft)
+
+#### Objective
+Add the controlled "Rico Development Supervisor" loop as a development-control
+layer ONLY — no Rico runtime behavior change. One invocation = at most ONE
+implementation task, max THREE observe/verify correction cycles, hard owner
+gates before merge/deploy/DB/secrets/billing/production mutation/destructive
+commands/scope expansion, IDLE modifies nothing, conflicting workspace vs
+live state stops execution, failed acceptance criteria cannot be reported
+complete.
+
+#### History (honesty note)
+Attempt 1 (base e3a5780, head 3c8f9f6) failed its own OBSERVE contract: open
+PR #1304 was concurrently editing AI_WORKSPACE/TASKS.md and using
+TASK-20260721-014, yet the session claimed no overlap and reused that ID; the
+ledger contradicted append-only; result parsing was lax; Read/Edit/Write were
+unscoped; no real CLI smoke ran. Recorded as INCOMPLETE_EVIDENCE in
+DEVELOPMENT_LOOP_STATE.md. This entry is the corrective rebuild under the
+next free ID.
+
+#### Scope (control-plane only; no src/, no apps/web runtime code)
+- .claude/skills/rico-development-supervisor/SKILL.md — loop contract
+  (OBSERVE/DECIDE/ACT/VERIFY/RECORD/STOP-OR-LOOP, 12 hard owner gates,
+  strict final-line RICO_SUPERVISOR_RESULT contract) + remediations:
+  changed-FILE-LIST overlap inspection, Task-ID uniqueness rule, mandatory
+  pre-push revalidation (re-fetch main, re-check overlap/uniqueness, stop
+  BLOCKED_CONFLICT without pushing), two-commit append-only ledger pattern,
+  launcher main-only precondition, defense-in-depth (not sandbox) wording.
+- AI_WORKSPACE/DEVELOPMENT_LOOP_STATE.md — append-only YAML ledger schema v2:
+  validated_head_sha (real SHA only, sentinels forbidden), full-diff
+  files_changed; attempt 1 recorded as INCOMPLETE_EVIDENCE.
+- scripts/rico-development-loop.sh — bounded launcher: refuses to start
+  unless on clean main == fresh origin/main; strict result parser (single
+  exact-format result line that must be the last non-empty line; rejects
+  early/duplicate/trailing/unknown); --parse-result and --classify test
+  modes; --smoke isolated one-turn no-op CLI check; --smoke-perms isolated
+  sentinel-file permission smoke (mechanical: token surfacing + checksum,
+  not self-report); --tools restricted to Read,Edit,Write,Grep,Glob,Bash;
+  --strict-mcp-config with mcp__* denied and --setting-sources project (no
+  MCP/connector, no user/local widening); Read/Edit path-scoped to project;
+  explicit secret-path denials (.env*, *.env, credentials, *.pem, *.key,
+  ~/ , //etc) plus merge/deploy/destructive/DB/network denials and direct
+  git-push denial; --permission-mode default; NEVER
+  --dangerously-skip-permissions; git-fetch failure exits documented code 6.
+- scripts/rico-supervisor-push.sh + scripts/supervisor_push_gate.py — NEW
+  deterministic push gate (owner review round 2): the ONLY sanctioned push
+  path for supervised sessions. Round 3: raw gh pr create is denied (it can
+  implicitly push an unpushed branch — an alternate push path); the gate's
+  --create-pr mode first proves origin/<branch> exists AND equals local
+  HEAD, then runs gh pr create --draft --head <branch> --base main (no push
+  side effect; refusals create nothing and push nothing). Round 4: push and
+  PR creation share ONE read-only validation (validate_against_live_state)
+  run immediately before either action — no TOCTOU window between passing
+  the push gate and creating the PR; passthrough accepts content flags only
+  (reserved identity/state flags --head/-H --base/-B --draft --repo/-R
+  --web --dry-run are rejected before gh is ever invoked). Immediately before pushing it re-fetches
+  origin/main and mechanically checks merge-base freshness, changed-file
+  overlap vs main and every open PR, and Task-ID uniqueness (frozen
+  TASK-20260721-005 exception pinned to its two EXACT historical headings,
+  not a count); refuses with nothing pushed (exit 2) on conflict; exit 6 on
+  preconditions (non-claude/ branch, dirty tree, missing gh, fetch failure).
+- tests/test_development_supervisor_contract.py — 52 static + functional
+  guards: Task-ID uniqueness incl. exact-heading pin and swapped-duplicate
+  rejection, strict-parser subprocess matrix, scoping/denial checks
+  (Read(//etc/**) double-slash absolute form), --tools availability
+  restriction, MCP isolation (--strict-mcp-config + mcp__* deny +
+  --setting-sources project), push-only-via-gate, permission-smoke presence,
+  launcher fetch-failure exit 6 (functional), and fail-before push-gate
+  matrix in temp repos with a fake gh (non-claude branch / main advanced
+  with overlapping file / newly opened overlapping PR / duplicate Task ID —
+  each refuses without pushing; clean case pushes; --check-only never
+  pushes). Round 3 adds: create-pr refusal matrix (unpushed branch and
+  head-mismatch refuse with gh never invoked and remote untouched; clean
+  case creates the PR with explicit --head and zero push side effect,
+  proven by ls-remote before/after), gh-pr-create denial guards, and a
+  behavioral IDLE test (fake Claude returns IDLE; every file, ref, and
+  status byte under the working tree identical before/after; run log lands
+  outside the repository — XDG state dir default, project-local default
+  forbidden by guard). Round 4 adds: shared-validation static pin (both
+  paths call validate_against_live_state; reserved-flag list pinned) and
+  TOCTOU fail-before tests (main drift after push but before create -> no
+  PR; competing PR after push -> no PR; reserved override flags -> rejected
+  with gh never invoked; clean case unchanged).
+- AI_WORKSPACE/TASKS.md (this entry).
+
+#### Explicitly out of scope (owner directive)
+- PR #1304 content and its follow-up cancellation implementation — untouched
+  (its merge into base 0e0497ba is inherited, not modified).
+- LOW-1, LOW-2, Constitutional AI, any product feature — not started.
+- No second supervised development task run in this session.
+
+#### Continuity Block
+- Base SHA: 0e0497baff9d18e37d09c2410ceb7e372c011dce (main, includes #1304)
+- Current head SHA: final head = the ledger-finalization commit recorded in
+  DEVELOPMENT_LOOP_STATE.md (two-commit pattern; its validated_head_sha is
+  the work commit the full evidence ran against; exact SHAs in the ledger
+  and PR #1305)
+- Status: in_review — Draft PR #1305; merge is owner-gated
+- Validation already run: focused contract suite 52/52 at the work commit;
+  bash -n + py_compile OK; --classify and --parse-result subprocess
+  matrices; push-gate fail-before matrix; --smoke PASSED (CLI accepts
+  --tools/--strict-mcp-config/--setting-sources); --smoke-perms PASSED
+  (safe read surfaced token, denied .env-style read leaked nothing, denied
+  edit left checksum unchanged)
+- Validation still required: none beyond the automatic full CI on the final
+  head (must be green before the merge decision; verified in PR #1305 checks)
+- Deployment: none — docs/skill/script/test only; no runtime path imports
+  any of these files
+- Known blockers: none
+- Risks: permission lists are defense in depth, not a sandbox (Grep/Glob
+  remain an absolute-path read surface — documented); prose-rule compliance
+  is pinned statically, not proven at runtime
+- Rollback plan: revert the PR (pure additive files; nothing references them)
+- Next exact action: owner review / merge decision on PR #1305 (all review
+  rounds remediated; nothing further scheduled by the session)
+- Stop condition: STOP at Draft PR + evidence report; owner reviews before
+  merge; no second objective in this session
+
+### TASK-20260722-001 — Atelier Arabic copy: rewrite translated-feeling strings to native Arabic
+
+Status: review
+Owner: Claude (agent)
+Branch: fix/atelier-arabic-copy-native
+Issue/PR: #1276
+
+#### Objective
+Review the Arabic strings used by Atelier/command surfaces (`translations.ts` and the Atelier console gallery content) and replace the most obviously translated/literal phrasing with natural, written-for-Arabic copy that matches Rico's UAE/GCC career-assistant tone (modern fus7a, warm, professional). No behavior or layout changes.
+
+#### Context
+- Relevant files: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`
+- Relevant docs: `AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md`; strategy PR #1269 chapter 9 (Arabic-written-first)
+- Existing behavior: Arabic strings exist and render correctly in RTL; some are literal translations of English labels (e.g., "ثغرات بصراحة", "تخطَّ", "تحديد كمتقدّم") rather than natural Arabic UI copy.
+
+#### Constraints
+- Do not touch: layout, CSS, tokens, routing, behavior, non-Arabic strings, backend/API code.
+- No migrations or env changes.
+- Keep scope limited to: Arabic copy refinement in the two translation/content files above.
+
+#### Acceptance criteria
+- [x] Most visibly translated Atelier/command labels rephrased to native Arabic.
+- [x] English meanings preserved (no semantic drift).
+- [x] Gallery specimen content (`rico-content.ts`) aligned with production translation tone.
+- [x] Frontend build passes.
+- [x] Existing vitest/tests green (updated assertions; main now uses non-label Arabic gates).
+
+#### Required verification
+- [x] Unit tests: `npm run test` from `apps/web` — 83/83 files, 854/854 tests passed
+- [ ] Integration tests: n/a
+- [x] Frontend build: `npm run build` from `apps/web` — green
+- [ ] Local smoke: visual spot-check of /command and /applications in AR — owner PR review
+- [ ] Production/deploy smoke if applicable: n/a
+
+#### Continuity Block
+- Task ID: TASK-20260722-001
+- GitHub issue/PR: #1276
+- Branch: fix/atelier-arabic-copy-native
+- Base branch: main @ 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
+- Last safe commit SHA: 9fbd32c0c83f5f835d84feb77ecc6fb2860bbf93
+- Current head SHA: (set after merge)
+- Uncommitted changes present: no
+- Status: review
+- Files inspected: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`; `apps/web/__tests__/command-job-match-card-atelier.test.tsx`; `AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md`
+- Files changed: `apps/web/lib/translations.ts`; `apps/web/components/design-gallery/atelier-console/rico-content.ts`; `apps/web/__tests__/command-job-match-card-atelier.test.tsx`; `AI_WORKSPACE/TASKS.md`
+- Files intentionally not touched: all runtime/backend code; layout/components; tokens
+- What is complete: translation edits, build/test, PR #1276 opened and synced with main
 - What is incomplete: owner review and merge
 - Known blockers: none
 - Validation already run: `npm run build` green; `npm run test` 83/83 files, 854/854 tests passed

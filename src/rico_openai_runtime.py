@@ -362,17 +362,11 @@ def call_openai_minimal(
         payload["profile_context_present"] = profile_present
         return payload
 
-    from src.rico_identity import get_rico_system_prompt
+    from src.rico_identity import get_language_rule, get_rico_system_prompt
     import re as _re
     _arabic_re = _re.compile(r'[؀-ۿ]')
     _user_lang = "ar" if (language == "ar" or _arabic_re.search(str(user_message or ""))) else "en"
-    _lang_rule = (
-        "\n\nIMPORTANT: The user is writing in Arabic. You MUST reply entirely in Arabic. "
-        "Use natural, professional Gulf Arabic. Never switch to English mid-reply."
-        if _user_lang == "ar" else
-        "\n\nReply in English."
-    )
-    system_prompt = get_rico_system_prompt() + _lang_rule
+    system_prompt = get_rico_system_prompt() + get_language_rule(_user_lang)
 
     final_user_message = "Say OK" if smoke else str(user_message or "")
 
@@ -492,12 +486,8 @@ def call_openai_stream(
 
     _arabic_re = _re.compile(r'[؀-ۿ]')
     _user_lang = "ar" if (language == "ar" or _arabic_re.search(str(user_message or ""))) else "en"
-    _lang_rule = (
-        "\n\nIMPORTANT: The user is writing in Arabic. You MUST reply entirely in Arabic. "
-        "Use natural, professional Gulf Arabic."
-        if _user_lang == "ar" else "\n\nReply in English."
-    )
-    system_prompt = get_rico_system_prompt() + _lang_rule
+    from src.rico_identity import get_language_rule as _get_language_rule
+    system_prompt = get_rico_system_prompt() + _get_language_rule(_user_lang)
 
     final_message = str(user_message or "")
     if profile_context:

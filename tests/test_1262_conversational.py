@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -193,3 +194,323 @@ class TestSaveSearchDispatch:
             result = self._call_inner("احفظ هذا البحث", recent_context=ctx)
         assert result.get("action") == "created"
         assert "[بحوثك المحفوظة](/saved-searches)" in result.get("message", "")
+
+
+# ---------------------------------------------------------------------------
+# 4. Phase 4 — strict spoken confirm for the destructive delete
+# ---------------------------------------------------------------------------
+
+class TestStrictDeleteConfirmPhrases:
+    """The Yes/No buttons are retired; execution is gated by
+    _is_delete_confirmation — literal phrases only, carrying the delete verb.
+    The full pending-flow behavior is pinned in test_delete_saved_jobs_chat.py;
+    here we pin the gate itself and its transcript parity with the prompts."""
+
+    def _gate(self, text: str) -> bool:
+        from src.rico_chat_api import RicoChatAPI
+        return RicoChatAPI._is_delete_confirmation(text)
+
+    def test_instructed_phrases_pass(self):
+        assert self._gate("yes, delete")
+        assert self._gate("Yes delete")
+        assert self._gate("نعم احذف")
+        assert self._gate("نعم أحذف")
+
+    def test_legacy_card_payload_passes(self):
+        assert self._gate("yes delete all my saved jobs")
+
+    def test_loose_affirmatives_fail(self):
+        for phrase in ("yes", "ok", "okay", "sure", "go ahead", "do it",
+                       "please", "نعم", "يلا", "اه", "طبعا", "اكيد"):
+            assert not self._gate(phrase), (
+                f"{phrase!r} must NOT confirm an irreversible delete"
+            )
+
+    def test_sentences_containing_the_phrase_fail(self):
+        # Exact-set membership, not substring: no smart interpretation.
+        assert not self._gate("yes delete my account")
+        assert not self._gate("I think yes, delete maybe?")
+
+    def test_prompts_instruct_exactly_what_the_gate_accepts(self):
+        """Transcript parity: the ask prompt (EN and AR) must contain a phrase
+        that passes the gate verbatim."""
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api.memory = MagicMock()
+        api._append_chat = MagicMock()
+
+        api._is_arabic_text = MagicMock(return_value=False)
+        en = api._intercept_unsupported_delete_mutation("u1", "delete all my saved jobs")
+        assert en["type"] == "delete_saved_jobs_confirm"
+        assert "yes, delete" in en["message"] and self._gate("yes, delete")
+
+        api._is_arabic_text = MagicMock(return_value=True)
+        ar = api._intercept_unsupported_delete_mutation("u1", "احذف جميع الوظائف المحفوظة")
+        assert ar["type"] == "delete_saved_jobs_confirm"
+        assert "نعم احذف" in ar["message"] and self._gate("نعم احذف")
+
+
+# ---------------------------------------------------------------------------
+# 5. Phase 5 — Save/Skip buttons retired; ordinal skip + spoken how-to
+# ---------------------------------------------------------------------------
+
+class TestOrdinalSkipRegex:
+    """Position-based skip ("skip the first one") previously fell into the
+    AI fallback — now it has the same deterministic route as ordinal save."""
+
+    def _en(self, text: str):
+        from src.rico_chat_api import _SKIP_ORDINAL_RE
+        return _SKIP_ORDINAL_RE.match(text)
+
+    def _ar(self, text: str):
+        from src.rico_chat_api import _SKIP_ORDINAL_AR_RE
+        return _SKIP_ORDINAL_AR_RE.match(text)
+
+    def test_english_variants_match(self):
+        for text in ("skip the first one", "skip the second job", "Skip job 2",
+                     "skip 3", "skip the 2nd", "please skip the last one"):
+            assert self._en(text), f"{text!r} must match the ordinal-skip route"
+
+    def test_arabic_variants_match(self):
+        for text in ("تجاهل الوظيفة الأولى", "تجاهل الأولى", "تخطى الثانية",
+                     "تجاهل ثاني وظيفة", "تجاهل الوظيفة الأخيرة"):
+            assert self._ar(text), f"{text!r} must match the ordinal-skip route"
+
+    def test_non_ordinal_skip_phrases_do_not_match(self):
+        # Onboarding "skip", question skip, search-filter phrasing, and the
+        # named title-at-company form all keep their existing routes.
+        for text in ("skip", "skip this question", "skip coding jobs",
+                     "Skip HSE Manager at ACME Gulf"):
+            assert not self._en(text), f"{text!r} must NOT match ordinal skip"
+
+    def test_named_skip_still_routes_to_card_action(self):
+        from src.rico_chat_api import _SKIP_CARD_ACTION_RE
+        assert _SKIP_CARD_ACTION_RE.match("Skip HSE Manager at ACME Gulf")
+
+
+class TestOrdinalSkipDispatch:
+    """End-to-end: the ordinal resolves against the recent results list and the
+    suppression goes through agent_runtime.handle_action(action='skip')."""
+
+    def _call(self, message: str, *, matches, ok: bool = True):
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api.memory = MagicMock()
+        mock_profile = MagicMock()
+        mock_profile.has_cv = True
+        rt_result = MagicMock()
+        rt_result.ok = ok
+        rt_result.error = None if ok else "db down"
+
+        with (
+            patch.object(api, "_resolve_profile", return_value=mock_profile),
+            patch.object(api, "_get_recent_messages", return_value=[]),
+            patch.object(api, "_get_recent_context", return_value={}),
+            patch.object(api, "_append_chat"),
+            patch.object(api, "_finalize", side_effect=lambda r, *a, **kw: r),
+            patch.object(api, "_recent_search_matches", return_value=matches),
+            patch.object(api, "_resolve_card_job", return_value=None),
+            patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
+            patch("src.rico_chat_api.agent_runtime") as rt,
+        ):
+            rt.handle_action.return_value = rt_result
+            result = api._handle_active_user_inner("user@test.com", message)
+        return result, rt
+
+    _TWO = [{"title": "A", "company": "X"}, {"title": "B", "company": "Y"}]
+
+    def test_skip_second_targets_the_second_match(self):
+        result, rt = self._call("skip the second one", matches=self._TWO)
+        assert result["type"] == "skip_job"
+        kwargs = rt.handle_action.call_args.kwargs
+        assert kwargs["action"] == "skip"
+        assert kwargs["job"]["title"] == "B" and kwargs["job"]["company"] == "Y"
+
+    def test_arabic_last_targets_the_last_match(self):
+        result, rt = self._call("تجاهل الوظيفة الأخيرة", matches=self._TWO)
+        assert result["type"] == "skip_job"
+        assert rt.handle_action.call_args.kwargs["job"]["title"] == "B"
+
+    def test_no_recent_list_gets_honest_reply_without_action(self):
+        result, rt = self._call("skip the first one", matches=[])
+        assert result["type"] == "clarification"
+        rt.handle_action.assert_not_called()
+
+    def test_out_of_range_asks_which_without_action(self):
+        result, rt = self._call("skip job 5", matches=[{"title": "A", "company": "X"}])
+        assert result["type"] == "clarification"
+        rt.handle_action.assert_not_called()
+
+    def test_runtime_failure_never_claims_success(self):
+        result, _ = self._call("skip the first one", matches=self._TWO, ok=False)
+        assert result["type"] == "skip_job"
+        assert "couldn't skip" in result["message"]
+
+
+class TestSpokenActionHowTo:
+    """The retired Save/Skip buttons, spoken: the results message says how to
+    act, and each suggested phrase routes deterministically (cross-pins)."""
+
+    _EN_SAVE = "save the first job"
+    _EN_SKIP = "skip the second one"
+    _AR_SAVE = "احفظ أول وظيفة"
+    _AR_SKIP = "تجاهل الوظيفة الثانية"
+
+    def _build(self, *, arabic: bool = False, matches=None):
+        from src.rico_chat_api import RicoChatAPI
+
+        if matches is None:
+            matches = [{"title": "A", "company": "B", "link": "https://j.example/1"}]
+        return RicoChatAPI._build_role_search_message(
+            None, "HSE Manager", "", "", matches, None, arabic=arabic,
+        )
+
+    def test_howto_present_with_matches(self):
+        msg = self._build()
+        assert f'"{self._EN_SAVE}"' in msg
+        assert f'"{self._EN_SKIP}"' in msg
+
+    def test_arabic_howto_present(self):
+        msg = self._build(arabic=True)
+        assert f"«{self._AR_SAVE}»" in msg
+        assert f"«{self._AR_SKIP}»" in msg
+
+    def test_absent_without_matches(self):
+        assert self._EN_SAVE not in self._build(matches=[])
+
+    def test_suggested_phrases_route_deterministically(self):
+        from src.rico_chat_api import _SKIP_ORDINAL_AR_RE, _SKIP_ORDINAL_RE
+
+        assert _legacy(self._EN_SAVE) == "save_job"
+        assert _legacy(self._AR_SAVE) == "save_job"
+        assert _SKIP_ORDINAL_RE.match(self._EN_SKIP)
+        assert _SKIP_ORDINAL_AR_RE.match(self._AR_SKIP)
+
+
+# ---------------------------------------------------------------------------
+# 6. Steps-to-apply (owner directive 2026-07-21 «كي أضغط وأقدم»)
+# ---------------------------------------------------------------------------
+
+class TestSearchTopTrackWithAlternatives:
+    """A generic "find me jobs" with a multi-track profile searches the most
+    relevant track immediately and SPEAKS the alternatives — never blocks on
+    a which-track menu. Track choice is per-user data at request time."""
+
+    _CANDIDATES = ["Environmental Manager", "Compliance Manager", "ESG Manager"]
+
+    def _api(self, recent_context=None):
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api.memory = MagicMock()
+        api._append_chat = MagicMock()
+        api._get_recent_context = MagicMock(return_value=recent_context or {})
+        api._target_role_search_response = MagicMock(
+            return_value={"message": "RESULTS", "matches": [{"title": "x"}]}
+        )
+        return api
+
+    def test_searches_first_track_and_speaks_alternatives(self):
+        api = self._api()
+        resp = api._search_top_track_with_alternatives(
+            "u@test.com", list(self._CANDIDATES), SimpleNamespace(), "find me jobs"
+        )
+        chosen = api._target_role_search_response.call_args.args[1]
+        assert chosen == "Environmental Manager"
+        assert "Compliance Manager" in resp["message"]
+        assert "ESG Manager" in resp["message"]
+        assert resp["track_alternatives"] == ["Compliance Manager", "ESG Manager"]
+
+    def test_recent_track_preferred_case_insensitive(self):
+        api = self._api(recent_context={"recent_search_role": "esg manager"})
+        api._search_top_track_with_alternatives(
+            "u@test.com", list(self._CANDIDATES), SimpleNamespace(), "find me jobs"
+        )
+        assert api._target_role_search_response.call_args.args[1] == "ESG Manager"
+
+    def test_arabic_ask_gets_arabic_note(self):
+        api = self._api()
+        resp = api._search_top_track_with_alternatives(
+            "u@test.com", list(self._CANDIDATES), SimpleNamespace(), "ابحثلي عن وظائف"
+        )
+        assert "بدأت بمسارك" in resp["message"]
+
+    def test_single_candidate_adds_no_note(self):
+        api = self._api()
+        resp = api._search_top_track_with_alternatives(
+            "u@test.com", ["Environmental Manager"], SimpleNamespace(), "find me jobs"
+        )
+        assert resp["message"] == "RESULTS"
+        assert "track_alternatives" not in resp
+
+
+class TestAdjacentRoleAutoHop:
+    """When live results exist but the title floor drops them ALL, the search
+    takes exactly ONE hop to the closest adjacent role and returns its real
+    matches with an honest relabel — never a dead-end zero when the taxonomy
+    knows a near neighbour."""
+
+    def _profile(self):
+        return SimpleNamespace(
+            user_id="u@test.com", has_cv=True, name="Test",
+            target_roles=["ESG Manager"], skills=["iso 14001"],
+            certifications=[], years_experience=8, industries=[],
+            preferred_cities=["Dubai"], current_role="Manager",
+            nationality="", citizenship="", deal_breakers=[],
+        )
+
+    def _api(self, monkeypatch, fetch_side_effects):
+        from src.jsearch_client import FetchResult
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api.memory = MagicMock()
+        api._persist = False
+        api._append_chat = MagicMock()
+        api._get_recent_messages = MagicMock(return_value=[])
+        api._get_recent_context = MagicMock(return_value={})
+        api._store_recent_context = MagicMock()
+        api._current_operation_id = None
+
+        monkeypatch.setattr(
+            api, "_search_jsearch_meta",
+            MagicMock(side_effect=[FetchResult(items=it) for it in fetch_side_effects]),
+        )
+        monkeypatch.setattr(api, "_enrich_with_role_intelligence", lambda *a, **k: None)
+        monkeypatch.setattr(
+            api, "_begin_job_search_operation",
+            lambda _u, _r: {"operation_id": f"op-{_r}", "attempt": 1},
+        )
+        monkeypatch.setattr("src.rico_chat_api.mark_completed", lambda *a, **k: None)
+        monkeypatch.setattr("src.rico_chat_api.mark_failed", lambda *a, **k: None)
+        monkeypatch.setattr(api, "_closest_adjacent_role", lambda _u, _r, _p: "HSE Manager")
+        return api
+
+    # Passes the coarse integrity gate (weak single "environment") but fails
+    # the strict 3-layer title floor for "ESG Manager" — the exact production
+    # shape that used to end in an honest-but-dead-end zero.
+    _OFF_TITLE = [{"title": "Environment Officer", "company": "ACME", "location": "Dubai, AE",
+                   "link": "https://j.example/1", "job_apply_link": "https://j.example/1"}]
+    _HSE = [{"title": "HSE Manager", "company": "Gulf Co", "location": "Dubai, AE",
+             "link": "https://j.example/2", "job_apply_link": "https://j.example/2"}]
+
+    def test_floored_zero_hops_once_and_relabels_honestly(self, monkeypatch):
+        api = self._api(monkeypatch, [self._OFF_TITLE, self._HSE])
+        resp = api._target_role_search_response("u@test.com", "ESG Manager", self._profile())
+        assert resp.get("adjacent_hop_from") == "ESG Manager"
+        assert resp.get("matches"), "hop results must be presented"
+        assert "HSE Manager" in resp.get("message", "")
+        assert "closest role" in resp.get("message", "") or "الأقرب" in resp.get("message", "")
+        # Exactly two searches: the floored original + ONE hop.
+        assert api._search_jsearch_meta.call_count == 2
+
+    def test_hop_never_recurses(self, monkeypatch):
+        # Both searches floor out — the guard stops after one hop.
+        api = self._api(monkeypatch, [self._OFF_TITLE, self._OFF_TITLE])
+        resp = api._target_role_search_response("u@test.com", "ESG Manager", self._profile())
+        assert api._search_jsearch_meta.call_count == 2
+        assert not resp.get("matches")
+        assert "adjacent_hop_from" not in resp

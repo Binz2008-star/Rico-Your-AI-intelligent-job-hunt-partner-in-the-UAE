@@ -40,6 +40,20 @@ from src.services.profile_context_resolver import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _disable_rate_limiter():
+    """The onboarding-submit cases invoke the handler directly with a mock
+    Request; @limiter.limit rejects a non-Request object. Disable enforcement
+    here — rate limiting is covered by the HTTP-level suites."""
+    from src.api.rate_limit import limiter
+    prev = limiter.enabled
+    limiter.enabled = False
+    try:
+        yield
+    finally:
+        limiter.enabled = prev
+
+
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------

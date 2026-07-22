@@ -15,12 +15,18 @@
  *
  * Visual system: shared atelier-kit tokens + Mono primitive; theme colors come
  * from WorkspaceShell via useWorkspaceTheme so the light/dark island stays
- * consistent with the shell chrome.
+ * consistent with the shell chrome. Command v5 PR 3 applies the v5
+ * Applications mode treatment (coral/amber accents, card surfaces, skeleton
+ * loading, presence-aware empty state) to the LIGHT island only — the dark
+ * island keeps its existing language; every API call, status taxonomy,
+ * translation key, testid and aria contract is unchanged.
  */
 
 import { Mono } from "@/components/atelier-kit/primitives";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { useWorkspaceTheme } from "@/components/workspace/theme";
+import { V5, V5_GRADIENT, V5_MODE_ACCENTS } from "@/components/workspace/v5/tokens";
+import { RicoPresence } from "@/components/workspace/v5/RicoPresence";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
     ApiError,
@@ -42,16 +48,19 @@ const SERIF = ATELIER_FONT.serif;
 // Reference-specific editorial strings (eyebrow / headline / intro) follow the
 // DashboardAtelier inline-T precedent; every functional string reuses the
 // existing flow* keys so wording stays identical to the legacy page.
-const T: Record<"en" | "ar", { eyebrow: string; title: string; intro: string }> = {
+/* Artifact applications hero (MODE_THEME.applications) */
+const T: Record<"en" | "ar", { eyebrow: string; lead: string; word: string; sub: string }> = {
     en: {
-        eyebrow: "Applications",
-        title: "Your applications.",
-        intro: "Every application Rico is tracking for you, across all stages.",
+        eyebrow: "Live pipeline",
+        lead: "Your career pipeline",
+        word: "is moving",
+        sub: "Every stage, every signal — Rico pushes applications forward and flags whatever has gone quiet.",
     },
     ar: {
-        eyebrow: "الطلبات",
-        title: "طلباتك.",
-        intro: "كل طلبٍ يتابعه ريكو من أجلك، عبر جميع المراحل.",
+        eyebrow: "مسار حي",
+        lead: "مسار مسيرتك",
+        word: "يتحرّك",
+        sub: "كل مرحلة وكل إشارة — يدفع ريكو الطلبات ويشير إلى ما توقّف.",
     },
 };
 
@@ -304,22 +313,40 @@ export function ApplicationsAtelier() {
         fontFamily: ATELIER_FONT.body,
     };
 
+    // v5 Applications mode (light island only) — coral/amber accent triple.
+    const v5 = !c.dark;
+    const acc = V5_MODE_ACCENTS.applications;
+
     return (
         <div>
             {/* Header */}
             <div>
-                <Mono style={{ color: c.ink55 }}>{tt.eyebrow}</Mono>
-                <h1 className="mt-2 text-[2.4rem] sm:text-[3rem] leading-[0.98] font-normal" style={{ fontFamily: SERIF, color: c.ink }}>{tt.title}</h1>
+                <span className="flex items-center gap-2.5">
+                    <span className="wsx5-breathe-dot" style={{ background: v5 ? acc.modeA : c.red }} aria-hidden="true" />
+                    <Mono style={{ color: v5 ? acc.modeAText : c.red }}>{tt.eyebrow}</Mono>
+                </span>
+                <h1 className="wsx5-display mt-3 text-[2.2rem] sm:text-[2.9rem]" style={{ fontFamily: SERIF, color: c.ink }}>
+                    {tt.lead} <em style={v5 ? undefined : { background: "none", color: c.red }}>{tt.word}</em>
+                </h1>
             </div>
-            <div className="my-6 h-px" style={{ background: c.hair }} aria-hidden="true" />
-            <p className="max-w-2xl text-[1.02rem] leading-relaxed" style={{ color: c.ink70 }}>{tt.intro}</p>
+            <p className="mt-4 max-w-2xl text-[1.02rem] leading-[1.62]" style={{ color: c.ink70 }}>{tt.sub}</p>
 
             {loading && (
-                <p className="mt-10" style={{ color: c.ink40 }} aria-busy="true">{t("flowLoadingState")}</p>
+                <div className="mt-10" aria-busy="true">
+                    <p style={{ color: c.ink40 }}>{t("flowLoadingState")}</p>
+                    {v5 && (
+                        <div className="mt-6 flex flex-col gap-3" aria-hidden="true">
+                            <div className="wsx5-skel" style={{ height: 120 }} />
+                            <div className="wsx5-skel" style={{ height: 120 }} />
+                            <div className="wsx5-skel" style={{ height: 120 }} />
+                        </div>
+                    )}
+                </div>
             )}
 
             {!loading && error && (
-                <div className="mt-10 rounded-[4px] p-6" style={{ background: c.panel, border: `1px solid ${c.hair}` }} role="alert">
+                <div className={`mt-10 p-6 ${v5 ? "wsx5-card" : "rounded-[4px]"}`} style={{ background: c.panel, border: `1px solid ${c.hair}` }} role="alert">
+                    {v5 && <RicoPresence state="warning" size="sm" decorative className="mb-3" />}
                     <p style={{ color: c.ink }}>{error === "auth" ? t("flowErrAuth") : t("flowErrNetwork")}</p>
                     {error === "auth" ? (
                         <Link href="/login?next=%2Fapplications" className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold" style={{ color: c.ink, borderBottom: `1px solid ${c.ink}`, textDecoration: "none", paddingBottom: 1 }}>
@@ -341,7 +368,7 @@ export function ApplicationsAtelier() {
             {!loading && !error && (
                 <>
                     {/* Controls row: tracked count · view toggle · track action */}
-                    <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-wsx5-anim="rise" style={{ "--i": 1 } as React.CSSProperties}>
                         <div className="flex min-w-0 flex-wrap items-center gap-3">
                             <Mono style={{ color: c.ink55 }}>{total} {t("flowTrackedAcrossStages")}</Mono>
                             {total > applications.length && (
@@ -374,7 +401,11 @@ export function ApplicationsAtelier() {
                                 type="button"
                                 onClick={() => setShowModal(true)}
                                 className="rounded-[6px] px-4 py-2 text-[13px] font-semibold"
-                                style={{ background: c.ink, color: c.bg, border: `1px solid ${c.ink}`, cursor: "pointer" }}
+                                style={
+                                    v5
+                                        ? { background: V5_GRADIENT.emberButton, color: V5.onEmber, border: "none", borderRadius: 999, cursor: "pointer" }
+                                        : { background: c.ink, color: c.bg, border: `1px solid ${c.ink}`, cursor: "pointer" }
+                                }
                             >
                                 {t("flowTrackApplication")}
                             </button>
@@ -383,10 +414,10 @@ export function ApplicationsAtelier() {
 
                     {/* Status count plates */}
                     {applications.length > 0 && (
-                        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+                        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8" data-wsx5-anim="rise" style={{ "--i": 2 } as React.CSSProperties}>
                             {STATUS_COUNT_ORDER.map((s) => (
-                                <div key={s} className="rounded-[4px] p-3 text-center" style={{ background: c.panel, border: `1px solid ${c.hair}` }}>
-                                    <p style={{ fontFamily: SERIF, fontSize: "1.5rem", lineHeight: 1.1, color: c.ink }}>{grouped[s]}</p>
+                                <div key={s} className={`${v5 ? "wsx5-card" : "rounded-[4px]"} p-3 text-center`} style={{ background: c.panel, border: `1px solid ${c.hair}` }}>
+                                    <p style={{ fontFamily: SERIF, fontSize: "1.5rem", lineHeight: 1.1, color: v5 && grouped[s] > 0 ? acc.modeAText : c.ink }}>{grouped[s]}</p>
                                     <Mono className="mt-1 block [overflow-wrap:anywhere]" style={{ color: c.ink55, fontSize: 9.5 }}>
                                         {t(STATUS_LABEL_KEYS[s])}
                                     </Mono>
@@ -396,27 +427,32 @@ export function ApplicationsAtelier() {
                     )}
 
                     {applications.length === 0 ? (
-                        <div className="mt-6 rounded-[4px] p-8 text-center" style={{ background: c.panel, border: `1px solid ${c.hair}` }}>
+                        <div className={`mt-6 p-8 text-center ${v5 ? "wsx5-card" : "rounded-[4px]"}`} style={{ background: c.panel, border: `1px solid ${c.hair}` }}>
+                            {v5 && (
+                                <span className="mb-4 inline-flex">
+                                    <RicoPresence state="ready" size="lg" decorative />
+                                </span>
+                            )}
                             <h2 className="text-[1.4rem] font-normal" style={{ fontFamily: SERIF, color: c.ink }}>{t("flowEmptyTitle")}</h2>
                             <p className="mx-auto mt-2 max-w-md text-[0.95rem] leading-relaxed" style={{ color: c.ink55 }}>{t("flowEmptyDesc")}</p>
                         </div>
                     ) : viewMode === "board" ? (
                         /* ── Board ── */
-                        <div className="mt-6 overflow-x-hidden">
+                        <div className="mt-6 overflow-x-hidden" data-wsx5-anim="rise" style={{ "--i": 3 } as React.CSSProperties}>
                             <div className="-mx-1 flex gap-3 overflow-x-auto pb-4 sm:mx-0">
                                 {KANBAN_COLS.map((col) => {
                                     const colApps = applications.filter((a) => col.statuses.includes(a.status));
                                     return (
                                         <div
                                             key={col.key}
-                                            className="flex min-w-[220px] flex-1 flex-col rounded-[4px] p-3 sm:min-w-[200px]"
-                                            style={{ background: c.inset, border: `1px solid ${c.hair}` }}
+                                            className="flex min-w-[220px] flex-1 flex-col p-3 sm:min-w-[200px]"
+                                            style={{ background: c.inset, border: `1px solid ${c.hair}`, borderRadius: v5 ? 14 : 4 }}
                                         >
                                             <div className="mb-3 flex items-center justify-between">
                                                 <h3 className="font-normal">
                                                     <Mono style={{ color: c.ink55 }}>{t(col.labelKey)}</Mono>
                                                 </h3>
-                                                <span style={{ fontFamily: ATELIER_FONT.mono, fontSize: 11, color: c.ink40 }}>{colApps.length}</span>
+                                                <span style={{ fontFamily: ATELIER_FONT.mono, fontSize: 11, color: v5 && colApps.length > 0 ? acc.modeAText : c.ink40 }}>{colApps.length}</span>
                                             </div>
                                             <div className="flex flex-col gap-2">
                                                 {colApps.length === 0 && (
@@ -425,8 +461,8 @@ export function ApplicationsAtelier() {
                                                 {colApps.map((item) => (
                                                     <div
                                                         key={item.application_id}
-                                                        className="wsx-action rounded-[4px] p-3"
-                                                        style={{ background: c.panel, border: `1px solid ${c.hair}` }}
+                                                        className={`wsx-action ${v5 ? "wsx5-card" : "rounded-[4px]"} p-3`}
+                                                        style={{ background: c.panel, border: `1px solid ${c.hair}`, ...(v5 ? { borderRadius: 12 } : {}) }}
                                                     >
                                                         <p className="text-[0.95rem] leading-snug [overflow-wrap:anywhere]" style={{ fontFamily: SERIF, color: c.ink }}>
                                                             {item.title}
@@ -440,7 +476,7 @@ export function ApplicationsAtelier() {
                                                                 target="_blank"
                                                                 rel="noreferrer"
                                                                 className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold"
-                                                                style={{ color: c.red, textDecoration: "none" }}
+                                                                style={{ color: v5 ? acc.modeAText : c.red, textDecoration: "none" }}
                                                             >
                                                                 {t("flowViewListing")} ↗
                                                             </a>
@@ -466,11 +502,11 @@ export function ApplicationsAtelier() {
                         </div>
                     ) : (
                         /* ── List ── */
-                        <div className="mt-6 flex flex-col gap-3">
+                        <div className="mt-6 flex flex-col gap-3" data-wsx5-anim="rise" style={{ "--i": 3 } as React.CSSProperties}>
                             {applications.map((item) => (
                                 <div
                                     key={item.application_id}
-                                    className="wsx-action rounded-[4px] p-5 sm:p-6"
+                                    className={`wsx-action ${v5 ? "wsx5-card" : "rounded-[4px]"} p-5 sm:p-6`}
                                     style={{ background: c.panel, border: `1px solid ${c.hair}` }}
                                 >
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -484,14 +520,21 @@ export function ApplicationsAtelier() {
                                             )}
                                         </div>
                                         <div className="shrink-0 self-start">
-                                            <span className="inline-flex rounded-[3px] px-2 py-1" style={{ border: `1px solid ${c.hair}`, background: c.inset }}>
+                                            <span
+                                                className="inline-flex px-2 py-1"
+                                                style={
+                                                    v5
+                                                        ? { border: `1px solid ${c.hair}`, background: `${acc.modeA}14`, borderRadius: 999 }
+                                                        : { border: `1px solid ${c.hair}`, background: c.inset, borderRadius: 3 }
+                                                }
+                                            >
                                                 <Mono style={{ color: c.ink70 }}>{t(STATUS_LABEL_KEYS[item.status])}</Mono>
                                             </span>
                                         </div>
                                     </div>
 
                                     {isLeadWithNoUrl(item) && (
-                                        <p className="mt-3 text-[12.5px]" style={{ color: c.red }}>
+                                        <p className="mt-3 text-[12.5px]" style={{ color: v5 ? acc.modeAText : c.red }}>
                                             {t("flowNoApplyLink")}
                                         </p>
                                     )}
@@ -502,7 +545,7 @@ export function ApplicationsAtelier() {
                                             target="_blank"
                                             rel="noreferrer"
                                             className="mt-3 inline-flex max-w-full items-center gap-1 text-[13px] font-semibold"
-                                            style={{ color: c.red, textDecoration: "none" }}
+                                            style={{ color: v5 ? acc.modeAText : c.red, textDecoration: "none" }}
                                         >
                                             <span className="truncate">{t("flowViewListing")}</span>
                                             <span aria-hidden="true">↗</span>
@@ -543,8 +586,8 @@ export function ApplicationsAtelier() {
                     onClick={closeTrackModal}
                 >
                     <div
-                        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-[4px]"
-                        style={{ background: c.panel, border: `1px solid ${c.hair}` }}
+                        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden"
+                        style={{ background: c.panel, border: `1px solid ${c.hair}`, borderRadius: v5 ? 18 : 4 }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <h2 className="shrink-0 px-5 pb-4 pt-5 text-[1.35rem] font-normal sm:px-6 sm:pt-6" style={{ fontFamily: SERIF, color: c.ink, borderBottom: `1px solid ${c.hair}` }}>
@@ -624,7 +667,11 @@ export function ApplicationsAtelier() {
                                     type="submit"
                                     disabled={saving}
                                     className="flex-1 rounded-[6px] px-4 py-2 text-sm font-semibold disabled:opacity-60"
-                                    style={{ background: c.ink, color: c.bg, border: `1px solid ${c.ink}`, cursor: "pointer" }}
+                                    style={
+                                        v5
+                                            ? { background: V5_GRADIENT.emberButton, color: V5.onEmber, border: "none", borderRadius: 999, cursor: "pointer" }
+                                            : { background: c.ink, color: c.bg, border: `1px solid ${c.ink}`, cursor: "pointer" }
+                                    }
                                 >
                                     {saving ? t("saving") : t("flowModalSaveApplication")}
                                 </button>

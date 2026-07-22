@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { assertInternalPreviewAccess } from "@/lib/internalPreview";
 import { atelierFraunces, atelierNaskhArabic, atelierSansArabic } from "@/components/atelier-kit/fonts";
-import { v5SpaceGrotesk } from "@/components/workspace/v5/fonts";
+import { v5Amiri, v5Inter, v5PlexArabic, v5PlexMono } from "@/components/workspace/v5/fonts";
 import CommandV5Specimen from "./_specimen";
 
 /**
@@ -26,7 +26,7 @@ export default function CommandV5FoundationPage() {
     assertInternalPreviewAccess();
     return (
         <div
-            className={`${atelierFraunces.variable} ${atelierNaskhArabic.variable} ${atelierSansArabic.variable} ${v5SpaceGrotesk.variable}`}
+            className={`${atelierFraunces.variable} ${atelierNaskhArabic.variable} ${atelierSansArabic.variable} ${v5Inter.variable} ${v5PlexMono.variable} ${v5Amiri.variable} ${v5PlexArabic.variable}`}
         >
             <CommandV5Specimen />
         </div>

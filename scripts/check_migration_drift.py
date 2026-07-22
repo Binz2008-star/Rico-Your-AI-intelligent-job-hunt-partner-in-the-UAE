@@ -99,9 +99,21 @@ CHECKS: list[tuple[str, str, object]] = [
     # WhatsApp-assisted subscription pending requests (DEC-20260719-003).
     # Additive, entitlement-neutral: rows here never grant access — the code
     # fails closed (503 on the request endpoint) until 049 is applied.
+    # 050: profile avatars (owner request 2026-07-21). Avatar endpoints fail
+    # open on reads and 503 on writes until 050 is applied.
+    ("050", "table", "user_avatars"),
     ("049", "table", "whatsapp_subscription_requests"),
     ("049", "index", "uq_whatsapp_sub_requests_user_pending"),
     ("048", "index", "idx_rico_chat_user_session_created"),
+    # Atomic shared operation-ownership store (DEC-20260721-001 slice 1).
+    # Renumbered 050 -> 051 on 2026-07-21: it landed the same day as
+    # 050_user_avatars and collided on the number; user_avatars (older
+    # reference) keeps 050. Additive and deploy-order safe: until 051 is
+    # applied the code falls back to the legacy in-process ownership
+    # (single-worker invariant unchanged); the Postgres store activates once
+    # the table exists.
+    ("051", "table", "chat_operations"),
+    ("051", "index", "idx_chat_operations_user_latest"),
 ]
 
 

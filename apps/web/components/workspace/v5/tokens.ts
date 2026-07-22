@@ -1,97 +1,97 @@
 /**
- * Command Workspace v5 — foundation tokens (PR 1 of the approved v5
- * implementation program; owner adoption decision 2026-07-20, evidence
- * package: design-handoffs/incoming/2026-07-20-command-workspace-v5-cinematic
- * at commit 69074a8 = the visual acceptance reference).
+ * Command Workspace — foundation tokens.
  *
- * Values are the artifact's audited palette: every *Text token already
- * carries the WCAG AA fix from EVIDENCE.md §6 (19 failing pairs corrected).
- * `check:contrast:v5` gates these pairs in CI the same way
- * `check:contrast` gates globals.css.
+ * Source of truth: the owner-supplied Command Workspace artifact
+ * (Rico_Command_Workspace_v5.dc.html, applied 2026-07-21 on the owner's
+ * direct instruction — it supersedes the earlier v5 rebuild palette
+ * entirely). Values are the artifact's LIGHT/DARK palettes and MODE_THEME
+ * accents; every *Text token is an AA-corrected variant of its artifact
+ * accent (darkened until ≥4.5:1 on paper — same policy the accepted
+ * evidence package used).
  *
  * Source-of-truth contract: the CSS custom properties live in
  * `./motion.css` (`.wsx5` scope) so plain CSS can consume them; this module
  * re-exports the SAME values for TS consumers. A unit test
  * (`__tests__/command-v5-foundation.test.tsx`) parses motion.css and fails
  * on any drift between the two — edit both together.
- *
- * This module intentionally does NOT touch WORKSPACE_THEME or ATELIER:
- * existing routes keep rendering byte-identically until their own v5 PRs.
  */
 
 export const V5 = {
-    /* paper world (light plane) */
-    paper: "#F1EADD",
-    panel: "#F7F1E6",
-    panel2: "#EDE5D6",
-    inset: "#EAE1D0",
-    raise: "#FBF7EE",
+    /* paper world (artifact LIGHT) */
+    paper: "#F2ECE0",
+    panel: "#F6F0E5" /* artifact paperCard */,
+    panel2: "#EAE1CD" /* artifact paper2 */,
+    inset: "#EAE1CD",
+    raise: "#F6F0E5",
 
-    /* ink scale — ink55 is the AA-corrected secondary text (was .52) */
-    ink: "#1F1B15",
-    ink85: "rgba(31,27,21,.85)",
-    ink70: "rgba(31,27,21,.70)",
-    ink55: "rgba(31,27,21,.62)",
-    ink40: "rgba(31,27,21,.38)" /* borders/decoration ONLY — never text */,
-    ink25: "rgba(31,27,21,.24)",
-    hair: "rgba(31,27,21,.14)",
-    hair2: "rgba(31,27,21,.08)",
+    /* ink scale (artifact ink / inkSoft / inkMute) */
+    ink: "#14110D",
+    ink85: "rgba(20,17,13,.85)",
+    ink70: "#3A342C" /* inkSoft, 10.4:1 */,
+    ink55: "#6B6355" /* inkMute, 5.04:1 */,
+    ink40: "rgba(20,17,13,.38)" /* borders/decoration ONLY — never text */,
+    ink25: "rgba(20,17,13,.24)",
+    hair: "#D3C9B4" /* artifact rule */,
+    hair2: "#E0D6BF" /* artifact rule-soft */,
 
-    /* deep cinematic plane */
-    deep: "#191D2E",
-    deepPanel: "#171B2B",
-    deepPanel2: "#1F2439",
-    deepEdge: "#131627",
-    lightInk: "#F2ECDD",
-    lightInk70: "rgba(242,236,221,.72)",
-    lightInk58: "rgba(242,236,221,.58)" /* smallest AA text on deep */,
-    lightInk50: "rgba(242,236,221,.5)",
-    lightInk30: "rgba(242,236,221,.30)" /* decoration ONLY — never text */,
-    deepHair: "rgba(242,236,221,.14)",
+    /* deep plane (artifact DARK) */
+    deep: "#16130E",
+    deepPanel: "#1A1710" /* dark paperCard */,
+    deepPanel2: "#1E1A12" /* dark paper2 */,
+    deepEdge: "#120F0A",
+    lightInk: "#F2ECE0",
+    lightInk70: "#D7CEBC" /* dark inkSoft */,
+    lightInk58: "#9A907D" /* dark inkMute, 5.5:1 on deepPanel2 */,
+    lightInk50: "rgba(242,236,224,.5)",
+    lightInk30: "rgba(242,236,224,.3)" /* decoration ONLY — never text */,
+    deepHair: "#35302A" /* dark rule */,
 
-    /* energy palette (decorative / large surfaces) */
-    terra: "#C6492E",
-    terraDeep: "#9E3520",
-    coral: "#E0895A",
-    amber: "#E8A33D",
-    gold: "#CA8A04",
-    goldSoft: "#E7C46B",
-    moss: "#3E7C4F",
+    /* energy palette (artifact sun + MODE_THEME accents; decorative) */
+    terra: "#CF3D17" /* sun */,
+    terraDeep: "#B23A1A" /* destructive */,
+    coral: "#E07A3A" /* applications accent-2 */,
+    amber: "#D99C4E" /* overview/documents accent-2 */,
+    gold: "#B8791A" /* search accent */,
+    goldSoft: "#E0A93F" /* search accent-2 */,
+    moss: "#3C7A52" /* success / learning accent */,
     mossSoft: "#DCE8D8",
-    purple: "#7A5CF0",
-    electric: "#3D5BF5",
-    electricSoft: "rgba(61,91,245,.14)",
+    purple: "#7FA9C7" /* interview accent-2 (info-soft) */,
+    electric: "#3A5F7D" /* info / interview accent */,
+    electricSoft: "rgba(58,95,125,.12)",
 
-    /* AA text-safe accent inks (EVIDENCE.md §6) — use these for any
-       accent-colored TEXT or active icon on the paper plane */
-    terraText: "#A83A22" /* 5.33:1 on paper */,
-    amberText: "#8A5E0E" /* 4.76:1 */,
-    goldText: "#77560A" /* 5.63:1 */,
-    goldTextL: "#9C6705" /* 4.03:1 — large text (≥24px / 18.66px bold) only */,
-    coralTextL: "#C05A28" /* 3.71:1 — large text only */,
-    electricText: "#2F48D1" /* 5.91:1 */,
-    purpleText: "#5B3ED6" /* 5.65:1 */,
-    emberBtnEnd: "#BE452B" /* white ≥4.85:1 across the ember button */,
-    onEmber: "#FFF7EC" /* label ink on ember-button fills */,
+    /* AA text-safe accent inks — use these for any accent-colored TEXT or
+       active icon on the paper plane (artifact accents darkened to ≥4.5) */
+    terraText: "#C33916" /* 4.56:1 on paper */,
+    coralText: "#B24827" /* 4.64:1 — applications accent text */,
+    amberText: "#906025" /* 4.59:1 — documents/vault accent text */,
+    goldText: "#936115" /* 4.51:1 — search accent text */,
+    mossText: "#3A754F" /* 4.65:1 — learning accent text */,
+    logText: "#8A5A2B" /* 4.99:1 — activity accent text */,
+    electricText: "#3A5F7D" /* 5.73:1 */,
+    goldTextL: "#B8791A" /* 3.08:1 — large text (≥24px / 18.66px bold) only */,
+    coralTextL: "#C24E2A" /* 4.04:1 — large text only */,
+    emberBtnEnd: "#B23A1A" /* white 5.98:1 at the button-gradient end */,
+    onEmber: "#FFFFFF" /* label ink on sun/ember button fills (≥4.85:1) */,
 } as const;
 
 /* Gradients — *Text variants keep every stop AA for their text size. */
 export const V5_GRADIENT = {
-    /** decorative ember (bars, rails, glows — never behind body text) */
-    ember: `linear-gradient(98deg, ${V5.terra} 0%, ${V5.coral} 52%, ${V5.amber} 100%)`,
+    /** decorative sun→amber sweep (bars, rails, glows — never behind body text) */
+    ember: `linear-gradient(100deg, ${V5.terra} 0%, ${V5.coral} 55%, ${V5.amber} 100%)`,
     /** display-headline accent words (large-text AA ≥3.0 at every stop) */
-    emberDisplayText: "linear-gradient(98deg,#A83A22,#C6492E 50%,#B25419)",
+    emberDisplayText: "linear-gradient(100deg,#C33916,#CF3D17 50%,#A8702B)",
     /** primary energetic button fill (white label ≥4.85:1 at every stop) */
-    emberButton: `linear-gradient(98deg,#A83A22,${V5.emberBtnEnd})`,
+    emberButton: `linear-gradient(98deg,${V5.terra},${V5.emberBtnEnd})`,
     /** decorative gold */
-    gold: `linear-gradient(98deg,#B07507 0%, ${V5.gold} 45%, ${V5.goldSoft} 100%)`,
+    gold: `linear-gradient(98deg,#936115 0%, ${V5.gold} 45%, ${V5.goldSoft} 100%)`,
     /** large gold numerals (≥3.0 at every stop) */
-    goldNumeralText: "linear-gradient(98deg,#8F6203,#9C6705 60%,#B07507)",
+    goldNumeralText: "linear-gradient(98deg,#7D5312,#936115 60%,#B8791A)",
     /** AI-moment accent (decorative) */
     ai: `linear-gradient(98deg, ${V5.electric}, ${V5.purple} 60%, ${V5.coral})`,
 } as const;
 
-/* Per-mode accent triples. modeA/modeB drive atmosphere and decoration;
+/* Per-mode accent triples (artifact MODE_THEME). modeA/modeB drive
+   atmosphere, decoration and the animated display-word gradient;
    modeAText is the ONLY member allowed to color text/icons on paper. */
 export type V5ModeKey =
     | "overview"
@@ -106,13 +106,13 @@ export const V5_MODE_ACCENTS: Record<
     V5ModeKey,
     { modeA: string; modeB: string; modeAText: string }
 > = {
-    overview: { modeA: V5.terra, modeB: V5.amber, modeAText: V5.terraText },
-    search: { modeA: V5.electric, modeB: V5.coral, modeAText: V5.electricText },
-    applications: { modeA: V5.coral, modeB: V5.amber, modeAText: V5.terraText },
-    documents: { modeA: V5.gold, modeB: V5.goldSoft, modeAText: V5.goldText },
-    interview: { modeA: V5.terra, modeB: V5.electric, modeAText: V5.terraText },
-    learning: { modeA: V5.purple, modeB: V5.goldSoft, modeAText: V5.purpleText },
-    activity: { modeA: V5.terra, modeB: V5.electric, modeAText: V5.terraText },
+    overview: { modeA: "#CF3D17", modeB: "#D99C4E", modeAText: V5.terraText },
+    search: { modeA: "#B8791A", modeB: "#E0A93F", modeAText: V5.goldText },
+    applications: { modeA: "#C24E2A", modeB: "#E07A3A", modeAText: V5.coralText },
+    documents: { modeA: "#A8702B", modeB: "#D99C4E", modeAText: V5.amberText },
+    interview: { modeA: "#3A5F7D", modeB: "#7FA9C7", modeAText: V5.electricText },
+    learning: { modeA: "#3C7A52", modeB: "#6FBE8F", modeAText: V5.mossText },
+    activity: { modeA: "#8A5A2B", modeB: "#CF3D17", modeAText: V5.logText },
 };
 
 /* Motion language (matches .wsx5 CSS vars in motion.css). */
@@ -125,13 +125,16 @@ export const V5_MOTION = {
     slowMs: 760,
 } as const;
 
-export const V5_RADIUS = { card: 18, hero: 26 } as const;
+/* Artifact radii: sections 16, rail rows 8, buttons 9. */
+export const V5_RADIUS = { card: 16, hero: 16 } as const;
 
-/* Typography roles (families resolve via route-scoped next/font variables —
-   see ./fonts.ts; Fraunces reuses the shared atelier-kit loader). */
+/* Typography roles (artifact FONT_EN/FONT_AR: Fraunces + Inter + IBM Plex
+   Mono; Amiri + IBM Plex Sans Arabic. Families resolve via route-scoped
+   next/font variables — see ./fonts.ts; Fraunces reuses the shared
+   atelier-kit loader). */
 export const V5_FONT = {
     display:
-        "var(--font-fraunces-landing), var(--font-naskh-arabic, 'Noto Naskh Arabic'), Georgia, serif",
-    sans: "var(--font-space-grotesk), var(--font-sans-arabic, 'Noto Sans Arabic'), ui-sans-serif, system-ui, sans-serif",
-    mono: "ui-monospace,'SF Mono','Cascadia Mono',Consolas,monospace",
+        "var(--font-fraunces-landing), var(--font-amiri-v5, 'Amiri'), Georgia, serif",
+    sans: "var(--font-inter-v5), var(--font-plex-arabic-v5, 'IBM Plex Sans Arabic'), ui-sans-serif, system-ui, sans-serif",
+    mono: "var(--font-plex-mono-v5), ui-monospace,'SF Mono','Cascadia Mono',Consolas,monospace",
 } as const;

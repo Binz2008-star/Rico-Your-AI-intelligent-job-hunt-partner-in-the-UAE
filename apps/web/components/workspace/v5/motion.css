@@ -13,62 +13,64 @@
  */
 
 .wsx5 {
-    /* paper world */
-    --wsx5-paper: #f1eadd;
-    --wsx5-panel: #f7f1e6;
-    --wsx5-panel2: #ede5d6;
-    --wsx5-inset: #eae1d0;
-    --wsx5-raise: #fbf7ee;
-    /* ink scale (ink55 = AA-corrected secondary text; ink40 = borders only) */
-    --wsx5-ink: #1f1b15;
-    --wsx5-ink85: rgba(31, 27, 21, 0.85);
-    --wsx5-ink70: rgba(31, 27, 21, 0.7);
-    --wsx5-ink55: rgba(31, 27, 21, 0.62);
-    --wsx5-ink40: rgba(31, 27, 21, 0.38);
-    --wsx5-ink25: rgba(31, 27, 21, 0.24);
-    --wsx5-hair: rgba(31, 27, 21, 0.14);
-    --wsx5-hair2: rgba(31, 27, 21, 0.08);
-    /* deep cinematic plane */
-    --wsx5-deep: #191d2e;
-    --wsx5-deepPanel: #171b2b;
-    --wsx5-deepPanel2: #1f2439;
-    --wsx5-deepEdge: #131627;
-    --wsx5-lightInk: #f2ecdd;
-    --wsx5-lightInk70: rgba(242, 236, 221, 0.72);
-    --wsx5-lightInk58: rgba(242, 236, 221, 0.58);
-    --wsx5-lightInk50: rgba(242, 236, 221, 0.5);
-    --wsx5-lightInk30: rgba(242, 236, 221, 0.3);
-    --wsx5-deepHair: rgba(242, 236, 221, 0.14);
-    /* energy palette (decorative) */
-    --wsx5-terra: #c6492e;
-    --wsx5-terraDeep: #9e3520;
-    --wsx5-coral: #e0895a;
-    --wsx5-amber: #e8a33d;
-    --wsx5-gold: #ca8a04;
-    --wsx5-goldSoft: #e7c46b;
-    --wsx5-moss: #3e7c4f;
+    /* paper world (artifact LIGHT) */
+    --wsx5-paper: #f2ece0;
+    --wsx5-panel: #f6f0e5;
+    --wsx5-panel2: #eae1cd;
+    --wsx5-inset: #eae1cd;
+    --wsx5-raise: #f6f0e5;
+    /* ink scale (artifact ink / inkSoft / inkMute; ink40 = borders only) */
+    --wsx5-ink: #14110d;
+    --wsx5-ink85: rgba(20, 17, 13, 0.85);
+    --wsx5-ink70: #3a342c;
+    --wsx5-ink55: #6b6355;
+    --wsx5-ink40: rgba(20, 17, 13, 0.38);
+    --wsx5-ink25: rgba(20, 17, 13, 0.24);
+    --wsx5-hair: #d3c9b4;
+    --wsx5-hair2: #e0d6bf;
+    /* deep plane (artifact DARK) */
+    --wsx5-deep: #16130e;
+    --wsx5-deepPanel: #1a1710;
+    --wsx5-deepPanel2: #1e1a12;
+    --wsx5-deepEdge: #120f0a;
+    --wsx5-lightInk: #f2ece0;
+    --wsx5-lightInk70: #d7cebc;
+    --wsx5-lightInk58: #9a907d;
+    --wsx5-lightInk50: rgba(242, 236, 224, 0.5);
+    --wsx5-lightInk30: rgba(242, 236, 224, 0.3);
+    --wsx5-deepHair: #35302a;
+    /* energy palette (artifact sun + MODE_THEME accents; decorative) */
+    --wsx5-terra: #cf3d17;
+    --wsx5-terraDeep: #b23a1a;
+    --wsx5-coral: #e07a3a;
+    --wsx5-amber: #d99c4e;
+    --wsx5-gold: #b8791a;
+    --wsx5-goldSoft: #e0a93f;
+    --wsx5-moss: #3c7a52;
     --wsx5-mossSoft: #dce8d8;
-    --wsx5-purple: #7a5cf0;
-    --wsx5-electric: #3d5bf5;
-    --wsx5-electricSoft: rgba(61, 91, 245, 0.14);
-    /* AA text-safe accent inks (EVIDENCE.md §6) */
-    --wsx5-terraText: #a83a22;
-    --wsx5-amberText: #8a5e0e;
-    --wsx5-goldText: #77560a;
-    --wsx5-goldTextL: #9c6705;
-    --wsx5-coralTextL: #c05a28;
-    --wsx5-electricText: #2f48d1;
-    --wsx5-purpleText: #5b3ed6;
-    --wsx5-emberBtnEnd: #be452b;
-    --wsx5-onEmber: #fff7ec;
+    --wsx5-purple: #7fa9c7;
+    --wsx5-electric: #3a5f7d;
+    --wsx5-electricSoft: rgba(58, 95, 125, 0.12);
+    /* AA text-safe accent inks (artifact accents darkened to ≥4.5 on paper) */
+    --wsx5-terraText: #c33916;
+    --wsx5-coralText: #b24827;
+    --wsx5-amberText: #906025;
+    --wsx5-goldText: #936115;
+    --wsx5-mossText: #3a754f;
+    --wsx5-logText: #8a5a2b;
+    --wsx5-electricText: #3a5f7d;
+    --wsx5-goldTextL: #b8791a;
+    --wsx5-coralTextL: #c24e2a;
+    --wsx5-emberBtnEnd: #b23a1a;
+    --wsx5-onEmber: #ffffff;
     /* gradients */
-    --wsx5-g-ember: linear-gradient(98deg, #c6492e 0%, #e0895a 52%, #e8a33d 100%);
-    --wsx5-g-ember-display-text: linear-gradient(98deg, #a83a22, #c6492e 50%, #b25419);
-    --wsx5-g-ember-button: linear-gradient(98deg, #a83a22, #be452b);
-    --wsx5-g-gold: linear-gradient(98deg, #b07507 0%, #ca8a04 45%, #e7c46b 100%);
-    --wsx5-g-gold-numeral-text: linear-gradient(98deg, #8f6203, #9c6705 60%, #b07507);
-    --wsx5-g-ai: linear-gradient(98deg, #3d5bf5, #7a5cf0 60%, #e0895a);
-    /* per-mode accents — PR 2 shell sets these per active mode */
+    --wsx5-g-ember: linear-gradient(100deg, #cf3d17 0%, #e07a3a 55%, #d99c4e 100%);
+    --wsx5-g-ember-display-text: linear-gradient(100deg, #c33916, #cf3d17 50%, #a8702b);
+    --wsx5-g-ember-button: linear-gradient(98deg, #cf3d17, #b23a1a);
+    --wsx5-g-gold: linear-gradient(98deg, #936115 0%, #b8791a 45%, #e0a93f 100%);
+    --wsx5-g-gold-numeral-text: linear-gradient(98deg, #7d5312, #936115 60%, #b8791a);
+    --wsx5-g-ai: linear-gradient(98deg, #3a5f7d, #7fa9c7 60%, #e07a3a);
+    /* per-mode accents — the shell sets these per active route */
     --wsx5-modeA: var(--wsx5-terra);
     --wsx5-modeB: var(--wsx5-amber);
     --wsx5-modeAText: var(--wsx5-terraText);
@@ -142,13 +144,52 @@
     text-wrap: balance;
 }
 .wsx5-display em {
+    /* artifact hero accent word: italic, animated per-mode gradient
+       (every stop is the mode's AA-large-safe accent family) */
     font-style: italic;
     font-weight: 480;
-    background: var(--wsx5-g-ember-display-text);
+    background: linear-gradient(
+        100deg,
+        var(--wsx5-modeAText) 0%,
+        var(--wsx5-modeA) 50%,
+        var(--wsx5-modeAText) 100%
+    );
+    background-size: 200% auto;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    padding-right: 0.04em;
+    padding-inline-end: 0.04em;
+    animation: wsx5-gradtext 5s linear infinite;
+}
+@keyframes wsx5-gradtext {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 200% 50%;
+    }
+}
+/* artifact root ambience — accent-tinted radials, slow drift */
+@keyframes wsx5-ambient {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+    33% {
+        transform: translate(-4%, 3%) scale(1.1);
+    }
+    66% {
+        transform: translate(3%, -3%) scale(1.05);
+    }
+}
+/* artifact header scan line */
+@keyframes wsx5-scan {
+    0% {
+        background-position: -40% 0;
+    }
+    100% {
+        background-position: 140% 0;
+    }
 }
 
 /* ── entrance primitives (replayable: toggle .wsx5-play on the section) ── */

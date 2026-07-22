@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.api.deps import get_current_user
+from src.api.rate_limit import LIMIT_PROFILE, limiter
 from src.models.onboarding import (
     ONBOARDING_COMPLETED,
     ONBOARDING_IN_PROGRESS,
@@ -35,6 +36,7 @@ class OnboardingSubmitRequest(BaseModel):
 
 
 @router.post("/submit")
+@limiter.limit(LIMIT_PROFILE)
 def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[str, Any]:
     user = get_current_user(request)
     user_id: str = user["email"]
@@ -111,6 +113,7 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
 
 
 @router.get("/status")
+@limiter.limit(LIMIT_PROFILE)
 def onboarding_status(request: Request) -> Dict[str, Any]:
     """Read-only onboarding-completion signal for the authenticated user.
 

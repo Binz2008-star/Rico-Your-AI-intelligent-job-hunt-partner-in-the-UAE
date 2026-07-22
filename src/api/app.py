@@ -42,10 +42,12 @@ from src.api.routers.stats import router as stats_router
 from src.api.routers.journey import router as journey_router
 from src.api.routers.subscription import router as subscription_router
 from src.api.routers.admin_subscriptions import router as admin_subscriptions_router
+from src.api.routers.admin_ops import router as admin_ops_router
 from src.api.routers.job_lifecycle import router as job_lifecycle_router
 from src.api.routers.apply_queue import router as apply_queue_router
 from src.api.routers.mission import router as mission_router
 from src.api.routers.user import router as user_router
+from src.api.routers.avatar import router as avatar_router
 from src.api.routers.files import router as files_router
 from src.api.routers.paddle_billing import paddle_billing_router
 from src.api.routers.billing_whatsapp import billing_whatsapp_router
@@ -350,6 +352,7 @@ async def hydrate_request_auth_context(request: Request, call_next):
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(files_router)
+app.include_router(avatar_router)
 app.include_router(actions_router)
 app.include_router(agent_router)
 app.include_router(rico_chat_router)
@@ -365,6 +368,7 @@ app.include_router(onboarding_router)
 app.include_router(pipeline_router)
 app.include_router(subscription_router)
 app.include_router(admin_subscriptions_router)
+app.include_router(admin_ops_router)
 app.include_router(job_lifecycle_router)
 app.include_router(apply_queue_router)
 app.include_router(mission_router)

@@ -6,10 +6,16 @@ motion, modes, states and interaction design. GitHub `main` remains the source
 of truth for auth, APIs, data, chat behavior, routing and tests. The v4 design
 freeze is lifted **only** for this approved v5 implementation scope.
 
-Visual acceptance reference: PR #1238 —
-`design-handoffs/incoming/2026-07-20-command-workspace-v5-cinematic/` at
-commit `69074a8` (artifact + EVIDENCE.md). The standalone prototype HTML is
-never deployed and never copied wholesale.
+Visual acceptance reference — **superseded 2026-07-21 by owner instruction**:
+the owner-supplied artifact
+`design-handoffs/incoming/2026-07-21-command-workspace-artifact/Rico_Command_Workspace_v5.dc.html`
+is now the sole visual source of truth (palette LIGHT+DARK, fonts
+Fraunces/Inter/IBM Plex Mono + Amiri/IBM Plex Sans Arabic, MODE_THEME
+accents, hero language). The earlier v5-rebuild palette (#1238 evidence
+package) is cancelled and fully replaced in the repo. The standalone
+prototype HTML is never deployed and never copied wholesale; AA text-safe
+darkened variants are derived where an artifact accent falls below WCAG AA
+for small text (same policy the evidence package used).
 
 ## Traceability chain
 
@@ -19,8 +25,8 @@ never deployed and never copied wholesale.
 | Epic | Command Workspace v5 implementation (this document) |
 | Milestone | v5 visual system live on production workspace routes without behavior regressions |
 | Phases | PR 1 foundation → PR 2 shell → PR 3 live modes → PR 4 message/action styling → PR 5 motion + final QA |
-| PR (current) | PR 1 merged (#1242 `984edfa`) · PR 2 merged (#1243 `7b40b70`) · PRs 3–5 not started (owner hold: no further Command v5 work) |
-| Task | `AI_WORKSPACE/TASKS.md` → TASK-20260720-004 (done) · TASK-20260720-005 (done) |
+| PR (current) | PR 1 merged (#1242 `984edfa`) · PR 2 merged (#1243 `7b40b70`) · PR 3 merged (#1271 `4b33709`) · PR 4 merged (#1275 `a656290` — public /command artifact chrome) · PR 5 (motion/final-QA) largely absorbed by PRs 3–4 verification (reduced-motion, mobile, EN/AR RTL, contrast gate); remaining formal pass not scheduled |
+| Task | `AI_WORKSPACE/TASKS.md` → TASK-20260720-004 (done) · TASK-20260720-005 (done) · TASK-20260721-005 (done, merged #1271) · TASK-20260721-006 (done, merged #1275) |
 
 ## Artifact → production map (exact)
 

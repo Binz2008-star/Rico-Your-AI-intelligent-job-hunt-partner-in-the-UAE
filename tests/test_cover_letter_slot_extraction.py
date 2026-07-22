@@ -89,6 +89,150 @@ class TestSlotExtraction:
             "find me ESG jobs in Abu Dhabi"
         ) == {}
 
+    def test_arabic_bank_inquiry_mid_sentence(self):
+        """Production regression (2026-07-21): «لبنك …» with the sentence
+        continuing past the company. The connectors (في شركة/لدى/لشركة) missed
+        the bare institution form, and the end-anchored patterns failed on the
+        continuation — the user got a generic which-company question after
+        naming the company."""
+        slots = RicoChatAPI._extract_explicit_draft_job_from_message(
+            "اكتبلي ايميل لبنك دبي الاسلامي استعلم به عن وظائف واعرض مهاراتي وخبراتي"
+        )
+        assert slots.get("company") == "بنك دبي الاسلامي"
+        assert slots.get("language") == "ar"
+
+    def test_arabic_institution_variants(self):
+        for msg, company in [
+            ("اكتب لي خطاب لمصرف الإمارات المركزي.", "مصرف الإمارات المركزي"),
+            ("اكتب لي رسالة إلى هيئة الطرق والمواصلات عن وظائف", "هيئة الطرق والمواصلات"),
+        ]:
+            slots = RicoChatAPI._extract_explicit_draft_job_from_message(msg)
+            assert slots.get("company") == company, msg
+
+    def test_trailing_backslash_stripped(self):
+        # Production shape: «اكتبلي ايميل لبنك دبي الاسلامي\» (stray key smash).
+        slots = RicoChatAPI._extract_explicit_draft_job_from_message(
+            "اكتبلي ايميل لبنك دبي الاسلامي\\"
+        )
+        assert slots.get("company") == "بنك دبي الاسلامي"
+
+
+# ---------------------------------------------------------------------------
+# 1c. Generic cover-letter request (production loop fix, 2026-07-21)
+# ---------------------------------------------------------------------------
+
+class TestGenericDraftDetection:
+    """«اكتب واحد عام غير محدد» after a clarification used to get the SAME
+    clarification verbatim — an infinite re-ask loop. The generic marker now
+    routes to a general-letter generation instead."""
+
+    def test_generic_phrases_detected(self):
+        from src.rico_chat_api import _GENERIC_DRAFT_RE
+        for m in ("اكتب واحد عام غير محدد", "لاشيء محدد بصوره عامه",
+                  "لا شيء محدد بصورة عامة", "اكتب خطاب عام",
+                  "رسالة عامة بدون شركة", "بدون شركة محددة",
+                  "write me a general cover letter", "a general letter please",
+                  "make me a generic one", "not for a specific company",
+                  "cover letter for any company", "no specific company"):
+            assert _GENERIC_DRAFT_RE.search(m), m
+
+    def test_specific_role_phrases_not_detected(self):
+        # "عام"/"general" as part of a ROLE title must never count as a
+        # genericness marker (pattern tightened via the #1278 harvest — the
+        # first cut fired on "general accountant").
+        from src.rico_chat_api import _GENERIC_DRAFT_RE
+        for m in ("اكتب خطاب لوظيفة مدير عام في شركة إعمار",
+                  "cover letter for General Manager at Aldar",
+                  "cover letter for the general accountant position",
+                  "write a cover letter for ADNOC",
+                  "اكتب خطاب تقديم لشركة الإمارات",
+                  "اكتبلي كفر لترر"):
+            assert not _GENERIC_DRAFT_RE.search(m), m
+
+
+class TestGenericLetterOutput:
+    """The general letter is DETERMINISTIC — built only from real profile
+    fields, MSA register, no dialect, no vocatives, no fabrication."""
+
+    def _profile(self, **over):
+        base = dict(
+            name="Roben Edwan", years_experience=8, current_role="General Manager",
+            skills=["iso 14001", "compliance"], certifications=["ISO 14001 Lead Auditor"],
+        )
+        base.update(over)
+        return SimpleNamespace(**base)
+
+    def _api(self):
+        return RicoChatAPI.__new__(RicoChatAPI)
+
+    def test_arabic_letter_is_msa_no_dialect_no_vocative(self):
+        letter = self._api()._generic_cover_letter(self._profile(), arabic=True)
+        assert "8" in letter and "iso 14001" in letter and "Roben Edwan" in letter
+        for banned in ("شنو", "وش ", "تبي", "دلوقتي", "يا Roben", "😊", "🚀"):
+            assert banned not in letter, banned
+
+    def test_english_letter_uses_real_profile_only(self):
+        letter = self._api()._generic_cover_letter(self._profile(), arabic=False)
+        assert "8 years" in letter and "General Manager" in letter
+        assert "Roben Edwan" in letter
+
+    def test_empty_profile_never_fabricates(self):
+        empty = SimpleNamespace(
+            name=None, years_experience=None, current_role=None,
+            skills=[], certifications=[],
+        )
+        for arabic in (True, False):
+            letter = self._api()._generic_cover_letter(empty, arabic=arabic)
+            assert "None" not in letter
+            assert "8" not in letter
+
+
+# ---------------------------------------------------------------------------
+# 1b. Vocative guard + clarification language (production regressions 2026-07-21)
+# ---------------------------------------------------------------------------
+
+class TestVocativeGuardAndClarificationLanguage:
+    """The live defect: a user whose profile.name was polluted by CV parsing
+    (a CV headline — "Vip Relationship Manager") was greeted BY that title, in
+    English, in reply to an Arabic request. The guard and the arabic param are
+    global — any user, any language."""
+
+    def _profile(self, name):
+        return SimpleNamespace(
+            name=name, target_roles=["Environmental Manager"], skills=[],
+        )
+
+    def test_role_like_name_never_used_as_vocative(self):
+        assert RicoChatAPI._vocative_name(self._profile("Vip Relationship Manager")) == ""
+        assert RicoChatAPI._vocative_name(self._profile("مدير علاقات كبار العملاء")) == ""
+
+    def test_real_names_pass_the_guard(self):
+        assert RicoChatAPI._vocative_name(self._profile("Roben Edwan")) == "Roben Edwan"
+        assert RicoChatAPI._vocative_name(self._profile("روبن")) == "روبن"
+
+    def test_clarification_omits_role_like_name(self):
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        msg = api._cover_letter_clarification_message(
+            self._profile("Vip Relationship Manager"), arabic=False
+        )
+        assert "Vip Relationship Manager" not in msg
+        assert "I can write a cover letter for you." in msg
+
+    def test_arabic_request_gets_arabic_clarification(self):
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        msg = api._cover_letter_clarification_message(self._profile("روبن"), arabic=True)
+        assert "يمكنني كتابة خطاب تقديم" in msg
+        assert "I can write" not in msg
+
+    def test_company_prefilled_arabic_clarification_asks_only_for_role(self):
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        msg = api._cover_letter_clarification_message(
+            self._profile("روبن"),
+            {"company": "بنك دبي الاسلامي", "language": "ar"},
+        )
+        assert "بنك دبي الاسلامي" in msg
+        assert "المسمى الوظيفي" in msg
+
 
 # ---------------------------------------------------------------------------
 # 2. End-to-end chat flow harness (mirrors test_cover_letter_context_isolation)
