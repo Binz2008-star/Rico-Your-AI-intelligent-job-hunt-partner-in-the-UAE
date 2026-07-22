@@ -1,3 +1,4 @@
 # Shell scripts must always be checked out with LF line endings so they can run
 # under bash on Windows (Git Bash / WSL) even when core.autocrlf is enabled.
 *.sh text eol=lf
+.gitattributes text eol=lf
