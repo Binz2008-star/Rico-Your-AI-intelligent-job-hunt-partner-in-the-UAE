@@ -7227,10 +7227,10 @@ the implementation criteria below; nothing in the RFC gate starts it.
 - Base branch: main (rebased onto 2fcaee8 after #1306 merged as 60d37c2 —
   owner correction 6)
 - Last safe commit SHA: 2fcaee8 (current main base)
-- Current head SHA: rev-3 corrective commit
-  4a0db4ce3f2cb23bf9e8aa8e53532b7961249a87 + this anchor commit directly on
-  top of it (= PR #1312 head; base 2fcaee8; prior owner-verified head was
-  6e1da2b218d992950da13111e277b6250c21fec7)
+- Current head SHA: final corrective commit
+  a18eec6153da526ab3c548dfb8e7d592ec237fb1 (rev 3.1) + this anchor commit
+  directly on top of it (= PR #1312 head; base 2fcaee8; prior owner-verified
+  head was 6e1da2b218d992950da13111e277b6250c21fec7)
 - Uncommitted changes present: no (after this commit)
 - Status: review (RFC gate — ready for owner merge decision after rev 3)
 - Files inspected: see Context above (read-only trace)
