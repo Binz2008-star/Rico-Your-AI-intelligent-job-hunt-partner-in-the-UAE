@@ -3,6 +3,9 @@ import { cn } from "@/lib/utils";
 
 export interface EmptyStateProps {
   icon?: React.ReactNode;
+  /** Editorial spot illustration (e.g. an EditorialInk drawing). When set it
+   *  replaces the small icon ring and the copy staggers in beneath it. */
+  illustration?: React.ReactNode;
   title: string;
   description?: string;
   actionLabel?: string;
@@ -52,6 +55,7 @@ const SearchIcon = (
 
 export function EmptyState({
   icon,
+  illustration,
   title,
   description,
   actionLabel,
@@ -70,24 +74,31 @@ export function EmptyState({
         className
       )}
     >
-      {/* Icon with subtle glow ring */}
-      <div className="relative mb-1">
-        <div className="absolute inset-0 rounded-2xl bg-gold/5 blur-lg opacity-80" />
-        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-overlay/8 bg-surface-elevated/60">
-          {resolvedIcon}
+      {illustration ? (
+        <div className="mb-1 animate-fade-up motion-reduce:animate-none" aria-hidden="true">
+          {illustration}
         </div>
-      </div>
+      ) : (
+        /* Icon with subtle glow ring */
+        <div className="relative mb-1">
+          <div className="absolute inset-0 rounded-2xl bg-gold/5 blur-lg opacity-80" />
+          <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-overlay/8 bg-surface-elevated/60">
+            {resolvedIcon}
+          </div>
+        </div>
+      )}
 
-      <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+      <h3 className="animate-fade-up motion-reduce:animate-none text-sm font-semibold text-text-primary" style={{ animationDelay: "120ms" }}>{title}</h3>
 
       {description && (
-        <p className="max-w-xs text-sm leading-relaxed text-text-tertiary">{description}</p>
+        <p className="animate-fade-up motion-reduce:animate-none max-w-xs text-sm leading-relaxed text-text-tertiary" style={{ animationDelay: "200ms" }}>{description}</p>
       )}
 
       {actionLabel && actionHref && (
         <Link
           href={actionHref}
-          className="mt-2 inline-flex items-center gap-2 rounded-xl bg-gold px-5 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover cursor-pointer"
+          className="animate-fade-up motion-reduce:animate-none mt-2 inline-flex items-center gap-2 rounded-xl bg-gold px-5 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-[background-color,transform] duration-150 hover:bg-gold-hover active:scale-[0.97] cursor-pointer"
+          style={{ animationDelay: "280ms" }}
         >
           {actionLabel}
         </Link>
@@ -96,7 +107,8 @@ export function EmptyState({
       {actionLabel && onAction && !actionHref && (
         <button
           onClick={onAction}
-          className="mt-2 inline-flex items-center gap-2 rounded-xl bg-gold px-5 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover cursor-pointer"
+          className="animate-fade-up motion-reduce:animate-none mt-2 inline-flex items-center gap-2 rounded-xl bg-gold px-5 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-[background-color,transform] duration-150 hover:bg-gold-hover active:scale-[0.97] cursor-pointer"
+          style={{ animationDelay: "280ms" }}
         >
           {actionLabel}
         </button>

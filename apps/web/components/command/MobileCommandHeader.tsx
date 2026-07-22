@@ -252,6 +252,7 @@ export function MobileCommandHeader({
                 <div className="absolute inset-x-0 flex justify-center pointer-events-none" data-testid="command-mobile-brand">
                     <Link
                         href="/"
+                        dir="ltr"
                         className="pointer-events-auto flex items-center gap-1.5 text-text-primary font-black text-[15px] tracking-tight"
                         tabIndex={-1}
                     >
@@ -284,7 +285,7 @@ export function MobileCommandHeader({
                         {language === "ar" ? "EN" : "AR"}
                     </button>
 
-                    <div className="flex h-8 w-[6.75rem] shrink-0 items-center justify-end" data-testid="command-mobile-auth-slot">
+                    <div className="flex h-8 min-w-[6.75rem] shrink-0 items-center justify-end" data-testid="command-mobile-auth-slot">
                         {chatAudience === "authenticated" && (
                             <div className="flex items-center justify-end gap-1">
                             {/* New chat */}
@@ -350,7 +351,7 @@ export function MobileCommandHeader({
                             <div className="flex w-full items-center justify-end gap-1.5">
                                 <Link
                                     href={loginHref}
-                                    className="px-1 text-[12px] text-text-muted transition-colors hover:text-text-primary"
+                                    className="whitespace-nowrap px-1 text-[12px] text-text-muted transition-colors hover:text-text-primary"
                                 >
                                     {t("signIn")}
                                 </Link>
@@ -409,6 +410,7 @@ export function MobileCommandHeader({
                     <Link
                         href="/"
                         onClick={() => setDrawerOpen(false)}
+                        dir="ltr"
                         className="flex items-center gap-2 font-black text-[15px] tracking-tight text-text-primary"
                     >
                         <div className="w-7 h-7 rounded-[8px] bg-gold flex items-center justify-center text-[12px] font-black text-white">

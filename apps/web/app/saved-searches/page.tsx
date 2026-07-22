@@ -3,6 +3,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { ScheduledSearchCard } from "@/components/ScheduledSearchCard";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { EmptyApplicationsInk } from "@/components/illustrations/EditorialInk";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
@@ -101,6 +102,7 @@ export default function SavedSearchesPage() {
 
                 {!loading && !error && scheduled.length === 0 && searches.length === 0 && (
                     <EmptyState
+                        illustration={<EmptyApplicationsInk className="h-28 w-28 text-text-secondary" />}
                         title="No saved searches yet"
                         description="Use the Rico chat to save a job search — or say “search daily for jobs in Dubai” to schedule one."
                         actionLabel="Open chat"

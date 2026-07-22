@@ -229,6 +229,7 @@ const config: Config = {
                 "pop-in": "popIn 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both",
                 "dot-cascade": "dotCascade 1.15s ease-in-out infinite",
                 "rail-draw": "railDraw 0.45s ease-out both",
+                "stage-in": "stageIn 0.28s cubic-bezier(0.23, 1, 0.32, 1) both",
                 // Nocturne Aura animations
                 breathe: "breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
                 "pulse-ring": "pulse-ring 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
@@ -281,6 +282,12 @@ const config: Config = {
                 railDraw: {
                     "0%": { transform: "scaleY(0)", transformOrigin: "top" },
                     "100%": { transform: "scaleY(1)", transformOrigin: "top" },
+                },
+                // Thinking-stage crossfade: blur bridges the old/new label swap
+                // so it reads as one evolving thought, not two strings replacing.
+                stageIn: {
+                    "0%": { opacity: "0", filter: "blur(3px)", transform: "translateY(3px)" },
+                    "100%": { opacity: "1", filter: "blur(0)", transform: "translateY(0)" },
                 },
                 // Nocturne Aura keyframes
                 breathe: {

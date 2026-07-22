@@ -11,6 +11,7 @@ import { AtelierCardScope, publicCommandArtifactVars } from "@/components/comman
 import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
 import { useTheme } from "@/contexts/ThemeContext";
 import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
+import { useThinkingStages } from "@/components/command/thinkingStages";
 import { SubscriptionCta } from "@/components/command/SubscriptionCta";
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
@@ -303,14 +304,22 @@ function mapHistoryToMessages(rows: Array<{ role: string; content: string }>): M
 }
 
 
-function WorkingIndicator({ message }: { message: string }) {
+function WorkingIndicator({ operationMessage, fallback, isAr }: { operationMessage?: string | null; fallback: string; isAr: boolean }) {
+    /* With a real operation label the row shows it verbatim; plain thinking
+       evolves through the shared honest stages plus an elapsed stamp, so a
+       long wait reads as Rico still working rather than the UI freezing.
+       The announced text (sr-only + aria-label) stays stable — the cycling
+       visuals are aria-hidden so the polite region never chatters. */
+    const { label, stage, elapsed } = useThinkingStages(isAr);
+    const opLabel = operationMessage?.trim() || null;
     return (
-        <div className="rico-thinking-row" role="status" aria-live="polite" aria-label={message}>
-            <span className="sr-only">{message}</span>
+        <div className="rico-thinking-row" role="status" aria-live="polite" aria-label={opLabel ?? fallback}>
+            <span className="sr-only">{opLabel ?? fallback}</span>
             <div className="rico-orb" aria-hidden="true"><span>R</span></div>
-            <div className="rico-thinking-label">
-                <span>{message}</span>
-                <span className="rico-dots" aria-hidden="true"><i /><i /><i /></span>
+            <div className="rico-thinking-label" aria-hidden="true">
+                <span key={opLabel ? "op" : stage} className="inline-block animate-stage-in motion-reduce:animate-none">{opLabel ?? label}</span>
+                <span className="rico-dots"><i /><i /><i /></span>
+                {!opLabel && elapsed >= 5 && <span className="rico-elapsed">{elapsed}s</span>}
             </div>
         </div>
     );
@@ -2185,10 +2194,10 @@ export default function CommandPage() {
                         role="status"
                         aria-hidden={!(slowHint && thinking)}
                         data-testid="command-slow-banner"
-                        className={`pointer-events-none absolute inset-x-0 top-0 z-20 mx-2 mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-300 shadow-lg shadow-background/40 transition-opacity duration-200 sm:mx-4 ${slowHint && thinking ? "visible opacity-100" : "invisible opacity-0"
+                        className={`pointer-events-none absolute inset-x-0 top-0 z-20 mx-2 mt-2 flex min-h-9 items-center gap-2.5 rounded-lg border border-border-subtle bg-surface-elevated/90 px-3.5 py-2 text-[11px] font-medium text-text-secondary shadow-lg shadow-background/20 backdrop-blur-md transition-opacity duration-200 sm:mx-4 ${slowHint && thinking ? "visible opacity-100" : "invisible opacity-0"
                             }`}
                     >
-                        <span aria-hidden="true">⚡</span>
+                        <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold animate-pulse motion-reduce:animate-none" />
                         {t("cmdWorkingSlowHint")}
                     </div>
 
@@ -2709,7 +2718,7 @@ export default function CommandPage() {
                             <div className="flex min-h-12 flex-col gap-2">
                                 {chatAudience === "authenticated"
                                     ? <TranscriptWorkingRow operationMessage={operationState?.message} fallback={t("cmdWorking")} />
-                                    : <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />}
+                                    : <WorkingIndicator operationMessage={operationState?.message} fallback={t("cmdWorking")} isAr={language === "ar"} />}
                                 {operationState?.state === "searching" && (
                                     <AtelierCardScope authenticated={chatAudience === "authenticated"}>
                                         <SearchElapsedTimer t={t} />
