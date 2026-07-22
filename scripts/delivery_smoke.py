@@ -13,9 +13,16 @@ owner checklist items ON THE REAL DOMAINS:
   4. Authenticated SSE works: POST /api/v1/rico/chat/stream returns
      text/event-stream, at least one `data:` frame, and a terminal frame that
      parses as JSON with type=done (exercises the #1239 total encoder live).
-  5. Cleanup: always removes the synthetic user and every row it created
-     (chat rows, rico_users, verification tokens, users) — mirrors the
-     session_smoke_1197 cleanup exactly.
+  5. A REAL job search completes and reaches the user (slice-4 re-verification,
+     TASK-20260721-016 conditions 3/5/6/7): the authenticated chat runs a real
+     provider search, the reply carries verified jobs, and the chat_operations
+     ownership store shows exactly ONE operation row for this user with
+     status=completed and attempt=1 — no duplicate cascade, no stale-owner
+     terminal write, and the row's existence proves the Postgres-backed
+     operation store is active.
+  6. Cleanup: always removes the synthetic user and every row it created
+     (chat rows, chat_operations rows, rico_users, verification tokens,
+     users) — mirrors the session_smoke_1197 cleanup exactly.
 
 Secrets (DATABASE_URL) come from env and are never printed.
 Refuses to run unless SMOKE_CONFIRM=DELIVERY-SMOKE (APPLY-712 gate pattern).
@@ -136,6 +143,26 @@ def main() -> int:
             row = cur.fetchone()
             rico_uid = str(row[0]) if row else None
 
+        # ── 3b. complete the minimum profile through the REAL onboarding funnel ──
+        # The chat deliberately gates job-search requests on a minimum profile
+        # (evaluate_minimum_profile downgrade → type=onboarding) and gates
+        # off-profile roles behind the role-fit clarification. The probe follows
+        # the product funnel exactly like a real user: complete onboarding
+        # first, then search a role that IS the profile's target role — so the
+        # search must run the real provider cascade with no gate in the way.
+        code, _, _ = call(
+            "POST",
+            f"{BACKEND}/api/v1/onboarding/submit",
+            {
+                "target_roles": ["Accountant"],
+                "preferred_cities": ["Dubai"],
+                "years_experience": 5,
+                "skills": ["Accounting", "Financial Reporting", "Excel"],
+            },
+            timeout=60,
+        )
+        record("onboarding submit completes profile", code == 200, f"HTTP {code}")
+
         # ── 4a. control probes: isolate cookie transport vs the stream route ──
         # Evidence for the 2026-07-21 SSE 'Unauthorized' frame: (1) does the jar
         # still hold access_token? (2) does a NON-stream authenticated POST on
@@ -208,13 +235,122 @@ def main() -> int:
                 f"HTTP {status} content-type={ctype.split(';')[0]} data_frames={frames} done_json={done_ok} frame_types={seq}{extra}",
             )
 
+        # ── 5. real job search + ownership-store evidence ─────────────────
+        # TASK-20260721-016 re-verification conditions 3/5/6/7. The message is
+        # a plain English search request so the intent path runs the REAL
+        # provider cascade for this synthetic (profile-less) user.
+        code, _, body = call(
+            "POST",
+            f"{BACKEND}/api/v1/rico/chat",
+            {"message": "Find accountant jobs in Dubai"},
+            timeout=180,
+        )
+        def _find_jobs(node):
+            if isinstance(node, dict):
+                j = node.get("jobs")
+                if isinstance(j, list):
+                    return j
+                for v in node.values():
+                    found = _find_jobs(v)
+                    if found is not None:
+                        return found
+            elif isinstance(node, list):
+                for v in node:
+                    found = _find_jobs(v)
+                    if found is not None:
+                        return found
+            return None
+
+        def _reply_evidence(raw: bytes):
+            """(jobs_count, top_type, shape) for a chat reply body."""
+            try:
+                parsed = json.loads(raw.decode(errors="replace"))
+            except Exception:
+                return -1, "", "unparseable"
+            jobs = _find_jobs(parsed)
+            count = len(jobs) if jobs is not None else -1
+            top_type = ""
+            shape = ""
+            if isinstance(parsed, dict):
+                top_type = str(parsed.get("type") or "")
+                snip = ""
+                for key in ("message", "reply", "response", "text"):
+                    val = parsed.get(key)
+                    if isinstance(val, str) and val.strip():
+                        snip = " ".join(val.split())[:180]
+                        break
+                shape = f"type={top_type} snippet={snip!r}"
+            return count, top_type, shape
+
+        jobs_count, top_type, resp_shape = _reply_evidence(body)
+        # The role-fit guard may ask ONE clarification before spending a real
+        # provider search on a role that does not match the CV profile (the
+        # synthetic user has none) — intended product behavior. Follow the
+        # conversational contract like a real user: confirm, then re-evaluate.
+        clarified = False
+        if code == 200 and top_type == "clarification":
+            clarified = True
+            code, _, body = call(
+                "POST",
+                f"{BACKEND}/api/v1/rico/chat",
+                {"message": "YES"},
+                timeout=180,
+            )
+            jobs_count, top_type, resp_shape = _reply_evidence(body)
+        record(
+            "real search completes and reaches the user",
+            code == 200 and jobs_count >= 1,
+            f"HTTP {code} jobs_in_reply={jobs_count} clarification_confirmed={clarified} {resp_shape}",
+        )
+
+        auth_uid = None
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE email = %s", (EMAIL,))
+            row = cur.fetchone()
+            auth_uid = str(row[0]) if row else None
+        probe_ids = [uid for uid in (rico_uid, auth_uid) if uid]
+        ops: list = []
+        if probe_ids:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT operation_id, status, attempt, result_count "
+                    "FROM chat_operations WHERE user_id = ANY(%s) ORDER BY created_at",
+                    (probe_ids,),
+                )
+                ops = cur.fetchall()
+        statuses = [(o[1], int(o[2])) for o in ops]
+        record(
+            "no duplicate cascade (single operation row)",
+            len(ops) == 1,
+            f"operation_rows={len(ops)} status_attempt={statuses}",
+        )
+        record(
+            "operation completed by original owner (attempt=1)",
+            len(ops) == 1 and ops[0][1] == "completed" and int(ops[0][2]) == 1,
+            (
+                f"status={ops[0][1]} attempt={ops[0][2]} result_count={ops[0][3]}"
+                if ops
+                else "no operation row found"
+            ),
+        )
+        record(
+            "postgres operation store active (auto mode, DB-backed)",
+            len(ops) >= 1,
+            f"rows_in_chat_operations={len(ops)}",
+        )
+
     finally:
-        # ── 5. cleanup — always (mirrors session_smoke_1197) ──────────────
+        # ── 6. cleanup — always (mirrors session_smoke_1197) ──────────────
         try:
             with conn.cursor() as cur:
                 if rico_uid:
                     cur.execute("DELETE FROM rico_chat_history WHERE user_id = %s::uuid", (rico_uid,))
                     cur.execute("DELETE FROM rico_users WHERE id = %s::uuid", (rico_uid,))
+                cur.execute(
+                    "DELETE FROM chat_operations WHERE user_id IN "
+                    "(SELECT id::text FROM users WHERE email = %s UNION SELECT %s)",
+                    (EMAIL, rico_uid or ""),
+                )
                 cur.execute("DELETE FROM email_verification_tokens WHERE user_email = %s", (EMAIL,))
                 cur.execute("DELETE FROM users WHERE email = %s", (EMAIL,))
             print("[CLEANUP] synthetic user and all its rows removed")
