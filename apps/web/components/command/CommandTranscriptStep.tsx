@@ -35,6 +35,7 @@ const GUTTER_KEY: Record<Exclude<TranscriptRowKind, "card">, TranslationKey> = {
     rico: "cmdGutterRico",
     fail: "cmdGutterFail",
     stopped: "cmdGutterRico",
+    needs_input: "cmdGutterAsk",
 };
 
 export function TranscriptGutter({
@@ -211,6 +212,45 @@ export function CommandTranscriptStep({
                     style={{ color: c.ink, borderInlineStart: `2px solid ${c.red}99` }}
                 >
                     {children}
+                </div>
+            </div>
+        );
+    }
+
+    if (kind === "needs_input") {
+        /* TASK-20260723-001: Rico needs one detail or decision before it can
+           continue — the operation is PAUSED, not failed. Classified only
+           from the backend's explicit `type: "clarification"` field (see
+           classifyMessage). Calm/editorial, not a warning: a neutral
+           hairline rail (not the fail row's red border) and a small, sparing
+           sun-red dot + label as the ONLY red touch — color is never the
+           sole indicator, the label text carries the meaning on its own.
+           The full reply + any options/next_action chips render unchanged
+           via `children`, exactly as every other kind already does; nothing
+           here paraphrases or duplicates the question. */
+        return (
+            <div className={`flex flex-col gap-2 ${isFirstInGroup ? "mt-5" : "mt-2"} ${entranceClass}`}>
+                <div
+                    data-testid="transcript-needs-input-row"
+                    className="flex items-start gap-4"
+                    role="status"
+                    aria-live="polite"
+                >
+                    <TranscriptGutter label={t("cmdGutterAsk")} />
+                    <div
+                        dir="auto"
+                        className="min-w-0 flex-1 break-words ps-3 text-[14px] leading-relaxed"
+                        style={{ color: c.ink, borderInlineStart: `2px solid ${c.hair}` }}
+                    >
+                        <div
+                            className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium uppercase"
+                            style={{ fontFamily: ATELIER_FONT.mono, letterSpacing: language === "ar" ? "0.02em" : "0.14em", color: c.red }}
+                        >
+                            <span aria-hidden="true" className="inline-block h-1 w-1 shrink-0 rounded-full" style={{ background: c.red }} />
+                            {t("cmdNeedsInputLabel")}
+                        </div>
+                        {children}
+                    </div>
                 </div>
             </div>
         );

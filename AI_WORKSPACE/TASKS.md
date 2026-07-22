@@ -7248,3 +7248,116 @@ the implementation criteria below; nothing in the RFC gate starts it.
   then-current main (same TASK ID)
 - Stop condition: STOP after rev 3 is pushed and #1312 is marked ready at a
   green head; no implementation before RFC merge + explicit authorization
+
+### TASK-20260723-001 — Clarification / Needs-Input transcript treatment (Command chat)
+
+Status: proposed
+Owner: Claude (agent) / owner review
+Branch: none yet (proposed: fix/command-clarification-needs-input)
+Issue/PR: none yet — Draft PR only after scope approval
+
+#### Objective
+Give `type: "clarification"` responses (Rico needs one detail or decision
+from the user before continuing) their own visually and semantically
+distinct transcript treatment — calm, editorial, Atelier, clearly distinct
+from both a normal reply and a failure — using only the existing, already
+production-shipped `type: "clarification"` field. No backend changes.
+Superseded priority (owner decision, 2026-07-23): the previously proposed
+progress-row/CHECK-RUN presentation slice is paused, unimplemented — no code
+was written for it; nothing to preserve or roll back.
+
+#### Context
+- Relevant files: `apps/web/components/command/CommandEventAdapter.ts`;
+  `apps/web/components/command/CommandTranscriptStep.tsx`;
+  `apps/web/lib/translations.ts`;
+  `apps/web/__tests__/command-transcript-step.test.tsx`
+- Relevant docs: this session's Visible Work response-style read-only audit
+  (owner-accepted 2026-07-23); `CommandEventAdapter.ts`'s anti-fabrication
+  contract (no PLAN/TOOL events invented; CHECK/FAIL rows only from real
+  `agentic_ui.progress`)
+- Existing behavior: `src/rico_chat_api.py` already returns
+  `{"type": "clarification", ...}` from 30+ real call sites (sign-in-required,
+  missing job context, ambiguous role, etc. — e.g. lines 12868, 12918, 13436),
+  each carrying `message` and often `options`/`next_action`. Both transport
+  paths (`/chat` JSON via `RicoChatResponseSchema`'s `extra="allow"`,
+  `/chat/stream` SSE via raw `_sse_done` `json.dumps`) already deliver `type`
+  untouched to the frontend — confirmed during the PR #1325 persistence-
+  contract hotfix trace. `CommandEventAdapter.classifyMessage()` does not
+  check for `type === "clarification"`, so these messages fall through to
+  the generic `"rico"` row kind today — rendered as ordinary prose,
+  indistinguishable from a normal reply.
+
+#### Constraints
+- Do not touch: backend/API code; the `type` value itself; add no new
+  backend fields; `JobMatchCardAtelier`, `PermissionRequestCard`,
+  `ProposedChangeCard`, `ChatActionCard` (duplication reported in the audit,
+  not refactored here); `operationState.ts`'s `pickOperationState()`
+  (provisional-state visual distinction is a proposal only in the audit
+  report, not implemented in this task unless owner narrows it to a very
+  small isolated change).
+- No migrations.
+- Keep scope limited to: one new `TranscriptRowKind` (`"needs_input"`), its
+  presentation in `CommandTranscriptStep`, new translation keys, and tests.
+
+#### Acceptance criteria
+- [ ] `classifyMessage()` returns `"needs_input"` if and only if
+      `message.type === "clarification"` — never inferred from reply text
+- [ ] New row: distinct gutter/label, calm/editorial Atelier styling,
+      visually distinct from `"rico"` (normal) and `"fail"` rows; no
+      warning-red treatment; sun-red used only as a sparing accent
+- [ ] `role="status" aria-live="polite"` on the new row (never assertive)
+- [ ] Full Rico reply text preserved verbatim; existing options/next_action
+      chips render unchanged (children pass-through untouched)
+- [ ] No duplicated question text (the label is a state indicator, not a
+      paraphrase of the message)
+- [ ] Reduced-motion respected, mobile-safe, no layout jump
+- [ ] Hydrated history rows (`skipEntranceAnimation`) do not re-animate or
+      re-announce
+- [ ] Composer keyboard focus behavior unchanged (already unconditional via
+      the existing `textareaRef.current?.focus()` in `sendMessage`'s
+      `finally` block — no new code needed for this)
+- [ ] EN/AR labels natural, correct RTL
+- [ ] Full suite green; tsc/eslint/build clean
+
+#### Required verification
+- [ ] Unit tests: new cases in `command-transcript-step.test.tsx`
+      (classification, presentation, aria, children/options preserved,
+      history-replay)
+- [ ] Integration tests: n/a — no backend contract change
+- [ ] Frontend build: `npm run build`
+- [ ] Local smoke: n/a for this PR (Draft only, no deploy)
+- [ ] Production/deploy smoke if applicable: n/a — no merge/deploy this PR
+
+#### Continuity Block
+- Task ID: TASK-20260723-001
+- GitHub issue/PR: none yet — Draft PR only after scope approval
+- Branch: none yet (proposed: fix/command-clarification-needs-input)
+- Base branch: main @ 9132da74963327b8b856f58baa4e92d9c07e54f2 (current
+  origin/main head, includes merged PR #1325)
+- Last safe commit SHA: 9132da74963327b8b856f58baa4e92d9c07e54f2
+- Current head SHA: n/a — no commits yet
+- Uncommitted changes present: no
+- Status: proposed — awaiting owner scope approval per this entry
+- Files inspected: `apps/web/components/command/CommandEventAdapter.ts`;
+  `apps/web/components/command/CommandTranscriptStep.tsx`;
+  `apps/web/app/command/page.tsx`; `apps/web/lib/translations.ts`;
+  `apps/web/__tests__/command-transcript-step.test.tsx`;
+  `src/rico_chat_api.py` (clarification response sites)
+- Files changed: `AI_WORKSPACE/TASKS.md` (this entry only, so far)
+- Files intentionally not touched: `src/**`; `JobMatchCardAtelier.tsx`;
+  `PermissionRequestCard.tsx`; `ProposedChangeCard.tsx`;
+  `ChatActionCard.tsx`; `operationState.ts` (proposal only)
+- What is complete: read-only audit (owner-accepted); this
+  pre-implementation proposal
+- What is incomplete: everything else — no code written
+- Known blockers: owner scope approval (this entry) + EN/AR label choice
+- Risks: presentational-only change; low regression risk to existing
+  `"rico"`/`"card"` rows since classification only adds one narrowly-gated
+  branch; risk is mainly visual-consistency if gutter/label copy isn't
+  finalized before implementation starts
+- Rollback plan: revert the single implementation commit/PR; no data or
+  backend contract changes to unwind
+- Next exact action: owner approval of scope + EN/AR label choice (see
+  report)
+- Stop condition: do not create a branch or commits until this entry's
+  scope is approved

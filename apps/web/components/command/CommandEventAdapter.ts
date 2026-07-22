@@ -36,8 +36,10 @@ export interface TranscriptMessageLike {
 
 /** Canonical row kinds C2 owns. Card-bearing turns pass through as `card`
  *  with their existing (4c/4d) presentation untouched — card restyles are
- *  C4/C5 scope. */
-export type TranscriptRowKind = "you" | "rico" | "fail" | "stopped" | "card";
+ *  C4/C5 scope. `needs_input` is TASK-20260723-001: the backend's real,
+ *  explicit `type: "clarification"` field, given its own calm, distinct
+ *  transcript treatment instead of blending into ordinary `rico` prose. */
+export type TranscriptRowKind = "you" | "rico" | "fail" | "stopped" | "card" | "needs_input";
 
 function hasAgenticSurface(ui: RicoAgenticUi | null | undefined): boolean {
     if (!ui) return false;
@@ -62,6 +64,11 @@ export function classifyMessage(m: TranscriptMessageLike): TranscriptRowKind {
     if (m.role === "user") return "you";
     if (m.type === "stopped") return "stopped";
     if (m.isError) return "fail";
+    // TASK-20260723-001: classified ONLY from the backend's explicit
+    // `type` field — never inferred from reply text — and checked before
+    // the generic card heuristics so it can never be shadowed by an
+    // incidental matches/options/agentic_ui surface on the same message.
+    if (m.type === "clarification") return "needs_input";
     if (
         (m.type && CARD_TYPES.has(m.type)) ||
         (m.matches && m.matches.length > 0) ||
