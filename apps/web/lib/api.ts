@@ -1212,6 +1212,15 @@ export interface ChatApiResponse {
   matches?: JobMatch[];
   options?: RicoOption[];
   next_action?: string;
+  /**
+   * Persistence outcome for the applied-status flow only — set by
+   * `_handle_application_status_update` (src/rico_chat_api.py) to "applied"
+   * when the DB write actually succeeded, and to `null`/omitted on every
+   * other response (including a conversational reply where the write
+   * failed). Never infer applied-status success from message text, HTTP
+   * status, or response type alone — this is the one authoritative signal.
+   */
+  job_status?: string | null;
   response_source?: string;
   role?: string;
   reasons?: string[];
