@@ -13,9 +13,16 @@ owner checklist items ON THE REAL DOMAINS:
   4. Authenticated SSE works: POST /api/v1/rico/chat/stream returns
      text/event-stream, at least one `data:` frame, and a terminal frame that
      parses as JSON with type=done (exercises the #1239 total encoder live).
-  5. Cleanup: always removes the synthetic user and every row it created
-     (chat rows, rico_users, verification tokens, users) — mirrors the
-     session_smoke_1197 cleanup exactly.
+  5. A REAL job search completes and reaches the user (slice-4 re-verification,
+     TASK-20260721-016 conditions 3/5/6/7): the authenticated chat runs a real
+     provider search, the reply carries verified jobs, and the chat_operations
+     ownership store shows exactly ONE operation row for this user with
+     status=completed and attempt=1 — no duplicate cascade, no stale-owner
+     terminal write, and the row's existence proves the Postgres-backed
+     operation store is active.
+  6. Cleanup: always removes the synthetic user and every row it created
+     (chat rows, chat_operations rows, rico_users, verification tokens,
+     users) — mirrors the session_smoke_1197 cleanup exactly.
 
 Secrets (DATABASE_URL) come from env and are never printed.
 Refuses to run unless SMOKE_CONFIRM=DELIVERY-SMOKE (APPLY-712 gate pattern).
@@ -208,12 +215,81 @@ def main() -> int:
                 f"HTTP {status} content-type={ctype.split(';')[0]} data_frames={frames} done_json={done_ok} frame_types={seq}{extra}",
             )
 
+        # ── 5. real job search + ownership-store evidence ─────────────────
+        # TASK-20260721-016 re-verification conditions 3/5/6/7. The message is
+        # a plain English search request so the intent path runs the REAL
+        # provider cascade for this synthetic (profile-less) user.
+        code, _, body = call(
+            "POST",
+            f"{BACKEND}/api/v1/rico/chat",
+            {"message": "Find accountant jobs in Dubai"},
+            timeout=180,
+        )
+        jobs_count = -1
+        try:
+            def _find_jobs(node):
+                if isinstance(node, dict):
+                    j = node.get("jobs")
+                    if isinstance(j, list):
+                        return j
+                    for v in node.values():
+                        found = _find_jobs(v)
+                        if found is not None:
+                            return found
+                elif isinstance(node, list):
+                    for v in node:
+                        found = _find_jobs(v)
+                        if found is not None:
+                            return found
+                return None
+
+            jobs = _find_jobs(json.loads(body.decode(errors="replace")))
+            jobs_count = len(jobs) if jobs is not None else -1
+        except Exception:
+            jobs_count = -1
+        record(
+            "real search completes and reaches the user",
+            code == 200 and jobs_count >= 1,
+            f"HTTP {code} jobs_in_reply={jobs_count}",
+        )
+
+        ops: list = []
+        if rico_uid:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT operation_id, status, attempt, result_count "
+                    "FROM chat_operations WHERE user_id = %s ORDER BY created_at",
+                    (rico_uid,),
+                )
+                ops = cur.fetchall()
+        statuses = [(o[1], int(o[2])) for o in ops]
+        record(
+            "no duplicate cascade (single operation row)",
+            len(ops) == 1,
+            f"operation_rows={len(ops)} status_attempt={statuses}",
+        )
+        record(
+            "operation completed by original owner (attempt=1)",
+            len(ops) == 1 and ops[0][1] == "completed" and int(ops[0][2]) == 1,
+            (
+                f"status={ops[0][1]} attempt={ops[0][2]} result_count={ops[0][3]}"
+                if ops
+                else "no operation row found"
+            ),
+        )
+        record(
+            "postgres operation store active (auto mode, DB-backed)",
+            len(ops) >= 1,
+            f"rows_in_chat_operations={len(ops)}",
+        )
+
     finally:
-        # ── 5. cleanup — always (mirrors session_smoke_1197) ──────────────
+        # ── 6. cleanup — always (mirrors session_smoke_1197) ──────────────
         try:
             with conn.cursor() as cur:
                 if rico_uid:
                     cur.execute("DELETE FROM rico_chat_history WHERE user_id = %s::uuid", (rico_uid,))
+                    cur.execute("DELETE FROM chat_operations WHERE user_id = %s", (rico_uid,))
                     cur.execute("DELETE FROM rico_users WHERE id = %s::uuid", (rico_uid,))
                 cur.execute("DELETE FROM email_verification_tokens WHERE user_email = %s", (EMAIL,))
                 cur.execute("DELETE FROM users WHERE email = %s", (EMAIL,))
