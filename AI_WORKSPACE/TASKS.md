@@ -6818,3 +6818,126 @@ Owner review of #1304 (head ee37126e) found two issues; both handled here:
 Revised head after follow-up: (set at commit). CI: full unit + postgres
 integration green on the new head. **No merge, no deploy, no worker/instance
 change** (owner stop conditions).
+
+### TASK-20260721-015 — Development-control layer: rico-development-supervisor skill + ledger + bounded launcher (rebuilt per owner review of #1305)
+
+Status: in_review
+Owner: Claude (session claude/rico-development-supervisor-sfdh8w), owner-directed 2026-07-21
+Branch: claude/rico-development-supervisor-sfdh8w (rebuilt from main 0e0497ba after owner review)
+Issue/PR: #1305 (Draft)
+
+#### Objective
+Add the controlled "Rico Development Supervisor" loop as a development-control
+layer ONLY — no Rico runtime behavior change. One invocation = at most ONE
+implementation task, max THREE observe/verify correction cycles, hard owner
+gates before merge/deploy/DB/secrets/billing/production mutation/destructive
+commands/scope expansion, IDLE modifies nothing, conflicting workspace vs
+live state stops execution, failed acceptance criteria cannot be reported
+complete.
+
+#### History (honesty note)
+Attempt 1 (base e3a5780, head 3c8f9f6) failed its own OBSERVE contract: open
+PR #1304 was concurrently editing AI_WORKSPACE/TASKS.md and using
+TASK-20260721-014, yet the session claimed no overlap and reused that ID; the
+ledger contradicted append-only; result parsing was lax; Read/Edit/Write were
+unscoped; no real CLI smoke ran. Recorded as INCOMPLETE_EVIDENCE in
+DEVELOPMENT_LOOP_STATE.md. This entry is the corrective rebuild under the
+next free ID.
+
+#### Scope (control-plane only; no src/, no apps/web runtime code)
+- .claude/skills/rico-development-supervisor/SKILL.md — loop contract
+  (OBSERVE/DECIDE/ACT/VERIFY/RECORD/STOP-OR-LOOP, 12 hard owner gates,
+  strict final-line RICO_SUPERVISOR_RESULT contract) + remediations:
+  changed-FILE-LIST overlap inspection, Task-ID uniqueness rule, mandatory
+  pre-push revalidation (re-fetch main, re-check overlap/uniqueness, stop
+  BLOCKED_CONFLICT without pushing), two-commit append-only ledger pattern,
+  launcher main-only precondition, defense-in-depth (not sandbox) wording.
+- AI_WORKSPACE/DEVELOPMENT_LOOP_STATE.md — append-only YAML ledger schema v2:
+  validated_head_sha (real SHA only, sentinels forbidden), full-diff
+  files_changed; attempt 1 recorded as INCOMPLETE_EVIDENCE.
+- scripts/rico-development-loop.sh — bounded launcher: refuses to start
+  unless on clean main == fresh origin/main; strict result parser (single
+  exact-format result line that must be the last non-empty line; rejects
+  early/duplicate/trailing/unknown); --parse-result and --classify test
+  modes; --smoke isolated one-turn no-op CLI check; --smoke-perms isolated
+  sentinel-file permission smoke (mechanical: token surfacing + checksum,
+  not self-report); --tools restricted to Read,Edit,Write,Grep,Glob,Bash;
+  --strict-mcp-config with mcp__* denied and --setting-sources project (no
+  MCP/connector, no user/local widening); Read/Edit path-scoped to project;
+  explicit secret-path denials (.env*, *.env, credentials, *.pem, *.key,
+  ~/ , //etc) plus merge/deploy/destructive/DB/network denials and direct
+  git-push denial; --permission-mode default; NEVER
+  --dangerously-skip-permissions; git-fetch failure exits documented code 6.
+- scripts/rico-supervisor-push.sh + scripts/supervisor_push_gate.py — NEW
+  deterministic push gate (owner review round 2): the ONLY sanctioned push
+  path for supervised sessions. Round 3: raw gh pr create is denied (it can
+  implicitly push an unpushed branch — an alternate push path); the gate's
+  --create-pr mode first proves origin/<branch> exists AND equals local
+  HEAD, then runs gh pr create --draft --head <branch> --base main (no push
+  side effect; refusals create nothing and push nothing). Round 4: push and
+  PR creation share ONE read-only validation (validate_against_live_state)
+  run immediately before either action — no TOCTOU window between passing
+  the push gate and creating the PR; passthrough accepts content flags only
+  (reserved identity/state flags --head/-H --base/-B --draft --repo/-R
+  --web --dry-run are rejected before gh is ever invoked). Immediately before pushing it re-fetches
+  origin/main and mechanically checks merge-base freshness, changed-file
+  overlap vs main and every open PR, and Task-ID uniqueness (frozen
+  TASK-20260721-005 exception pinned to its two EXACT historical headings,
+  not a count); refuses with nothing pushed (exit 2) on conflict; exit 6 on
+  preconditions (non-claude/ branch, dirty tree, missing gh, fetch failure).
+- tests/test_development_supervisor_contract.py — 52 static + functional
+  guards: Task-ID uniqueness incl. exact-heading pin and swapped-duplicate
+  rejection, strict-parser subprocess matrix, scoping/denial checks
+  (Read(//etc/**) double-slash absolute form), --tools availability
+  restriction, MCP isolation (--strict-mcp-config + mcp__* deny +
+  --setting-sources project), push-only-via-gate, permission-smoke presence,
+  launcher fetch-failure exit 6 (functional), and fail-before push-gate
+  matrix in temp repos with a fake gh (non-claude branch / main advanced
+  with overlapping file / newly opened overlapping PR / duplicate Task ID —
+  each refuses without pushing; clean case pushes; --check-only never
+  pushes). Round 3 adds: create-pr refusal matrix (unpushed branch and
+  head-mismatch refuse with gh never invoked and remote untouched; clean
+  case creates the PR with explicit --head and zero push side effect,
+  proven by ls-remote before/after), gh-pr-create denial guards, and a
+  behavioral IDLE test (fake Claude returns IDLE; every file, ref, and
+  status byte under the working tree identical before/after; run log lands
+  outside the repository — XDG state dir default, project-local default
+  forbidden by guard). Round 4 adds: shared-validation static pin (both
+  paths call validate_against_live_state; reserved-flag list pinned) and
+  TOCTOU fail-before tests (main drift after push but before create -> no
+  PR; competing PR after push -> no PR; reserved override flags -> rejected
+  with gh never invoked; clean case unchanged).
+- AI_WORKSPACE/TASKS.md (this entry).
+
+#### Explicitly out of scope (owner directive)
+- PR #1304 content and its follow-up cancellation implementation — untouched
+  (its merge into base 0e0497ba is inherited, not modified).
+- LOW-1, LOW-2, Constitutional AI, any product feature — not started.
+- No second supervised development task run in this session.
+
+#### Continuity Block
+- Base SHA: 0e0497baff9d18e37d09c2410ceb7e372c011dce (main, includes #1304)
+- Current head SHA: final head = the ledger-finalization commit recorded in
+  DEVELOPMENT_LOOP_STATE.md (two-commit pattern; its validated_head_sha is
+  the work commit the full evidence ran against; exact SHAs in the ledger
+  and PR #1305)
+- Status: in_review — Draft PR #1305; merge is owner-gated
+- Validation already run: focused contract suite 52/52 at the work commit;
+  bash -n + py_compile OK; --classify and --parse-result subprocess
+  matrices; push-gate fail-before matrix; --smoke PASSED (CLI accepts
+  --tools/--strict-mcp-config/--setting-sources); --smoke-perms PASSED
+  (safe read surfaced token, denied .env-style read leaked nothing, denied
+  edit left checksum unchanged)
+- Validation still required: none beyond the automatic full CI on the final
+  head (must be green before the merge decision; verified in PR #1305 checks)
+- Deployment: none — docs/skill/script/test only; no runtime path imports
+  any of these files
+- Known blockers: none
+- Risks: permission lists are defense in depth, not a sandbox (Grep/Glob
+  remain an absolute-path read surface — documented); prose-rule compliance
+  is pinned statically, not proven at runtime
+- Rollback plan: revert the PR (pure additive files; nothing references them)
+- Next exact action: owner review / merge decision on PR #1305 (all review
+  rounds remediated; nothing further scheduled by the session)
+- Stop condition: STOP at Draft PR + evidence report; owner reviews before
+  merge; no second objective in this session
