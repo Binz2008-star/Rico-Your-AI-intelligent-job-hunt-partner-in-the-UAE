@@ -5,6 +5,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { atelierFraunces, atelierNaskhArabic, atelierSansArabic } from "@/components/atelier-kit/fonts";
 import { ATELIER as C, ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { Mono, Plate } from "@/components/atelier-kit/primitives";
+import { BLOG_COVERS } from "@/components/illustrations/EditorialInk";
 import { POSTS } from "@/lib/blog/posts";
 import { BlogMasthead, BLOG_SCOPED_CSS } from "./BlogMasthead";
 
@@ -58,20 +59,33 @@ export function BlogIndexContent() {
                     {isAr ? `${post.readingMinutes} دقائق قراءة` : `${post.readingMinutes} min read`}
                   </Mono>
                 </div>
-                <h2
-                  className="rblog-title text-[1.45rem] sm:text-[1.8rem] leading-snug font-medium"
-                  style={{ fontFamily: SERIF, color: C.ink }}
-                >
-                  {isAr ? post.title.ar : post.title.en}
-                </h2>
-                <p className="mt-3 max-w-2xl text-[0.95rem] leading-relaxed" style={{ color: C.ink70 }}>
-                  {isAr ? post.description.ar : post.description.en}
-                </p>
-                <p className="mt-5">
-                  <Mono style={{ color: C.red, letterSpacing: "0.18em" }}>
-                    {isAr ? `اقرأ الدليل ${arrow}` : `Read the guide ${arrow}`}
-                  </Mono>
-                </p>
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-8">
+                  <div className="min-w-0 flex-1">
+                    <h2
+                      className="rblog-title text-[1.45rem] sm:text-[1.8rem] leading-snug font-medium"
+                      style={{ fontFamily: SERIF, color: C.ink }}
+                    >
+                      {isAr ? post.title.ar : post.title.en}
+                    </h2>
+                    <p className="mt-3 max-w-2xl text-[0.95rem] leading-relaxed" style={{ color: C.ink70 }}>
+                      {isAr ? post.description.ar : post.description.en}
+                    </p>
+                    <p className="mt-5">
+                      <Mono style={{ color: C.red, letterSpacing: "0.18em" }}>
+                        {isAr ? `اقرأ الدليل ${arrow}` : `Read the guide ${arrow}`}
+                      </Mono>
+                    </p>
+                  </div>
+                  {BLOG_COVERS[post.slug] && (
+                    <div
+                      className="hidden sm:block w-56 shrink-0 transition-transform duration-300 ease-out group-hover:-translate-y-1 motion-reduce:transition-none motion-reduce:group-hover:translate-y-0"
+                      style={{ color: C.ink }}
+                      aria-hidden="true"
+                    >
+                      {BLOG_COVERS[post.slug]({ className: "w-full h-auto" })}
+                    </div>
+                  )}
+                </div>
               </Plate>
             </Link>
           ))}

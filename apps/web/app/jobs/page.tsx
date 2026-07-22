@@ -3,6 +3,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { JobCard } from "@/components/jobs/JobCard";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { EmptyJobsInk } from "@/components/illustrations/EditorialInk";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { SkeletonCard } from "@/components/shared/LoadingState";
 import { ToastContainer } from "@/components/ui/Toast";
@@ -324,6 +325,7 @@ export default function JobsPage() {
                 </>
             ) : (
                 <EmptyState
+                    illustration={<EmptyJobsInk className="h-28 w-28 text-text-secondary" />}
                     title={t("jobsEmptyTitle")}
                     description={t("jobsEmptyDesc")}
                     actionLabel={filter !== "all" ? t("jobsShowAll") : undefined}

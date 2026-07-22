@@ -2,6 +2,7 @@
 
 import { AppShell } from '@/components/layout/AppShell';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { EmptySearchInk } from '@/components/illustrations/EditorialInk';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { GlassPanel } from '@/components/ui/GlassPanel';
@@ -108,6 +109,7 @@ export default function ArchivePage() {
         />
       ) : messages.length === 0 ? (
         <EmptyState
+          illustration={<EmptySearchInk className="h-28 w-28 text-text-secondary" />}
           title={t("archiveEmptyTitle")}
           description={t("archiveEmptyDesc")}
           actionLabel={t("archiveOpenCommand")}

@@ -5,6 +5,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { atelierFraunces, atelierNaskhArabic, atelierSansArabic } from "@/components/atelier-kit/fonts";
 import { ATELIER as C, ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { Mono, Plate } from "@/components/atelier-kit/primitives";
+import { BLOG_COVERS } from "@/components/illustrations/EditorialInk";
 import { getPostBySlug } from "@/lib/blog/posts";
 import { BlogMasthead, BLOG_SCOPED_CSS } from "../BlogMasthead";
 
@@ -52,6 +53,12 @@ export function BlogPostContent({ slug }: { slug: string }) {
             </Mono>
             <span className="h-px flex-1" style={{ background: C.hair }} aria-hidden="true" />
           </div>
+
+          {BLOG_COVERS[post.slug] && (
+            <div className="mt-9 max-w-md" style={{ color: C.ink }} aria-hidden="true">
+              {BLOG_COVERS[post.slug]({ className: "w-full h-auto" })}
+            </div>
+          )}
 
           <div className="mt-9 space-y-4 text-[1.02rem] leading-relaxed" style={{ color: C.ink70 }}>
             {post.intro[lang].map((paragraph, idx) => (

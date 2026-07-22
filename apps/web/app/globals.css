@@ -371,6 +371,54 @@ body::after {
     align-items: center;
 }
 
+/* EditorialInk pen draw-in: every [data-draw] stroke carries pathLength=100,
+   so a fixed dash of 100 undraws it and the animation redraws it like a pen;
+   [data-accent] marks land after their lines. Stagger comes from --d (ms). */
+.ink-draw [data-draw] {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: inkDraw 0.9s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+    animation-delay: calc(var(--d, 0) * 1ms);
+}
+
+.ink-draw [data-accent] {
+    opacity: 0;
+    animation: inkAccent 0.45s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+    animation-delay: calc(var(--d, 0) * 1ms);
+}
+
+@keyframes inkDraw {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes inkAccent {
+    from {
+        opacity: 0;
+        transform: scale(0.85);
+        transform-origin: center;
+        transform-box: fill-box;
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+        transform-origin: center;
+        transform-box: fill-box;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .ink-draw [data-draw],
+    .ink-draw [data-accent] {
+        animation: none;
+        stroke-dashoffset: 0;
+        opacity: 1;
+    }
+}
+
 /* Elapsed stamp beside the cycling thinking label — quiet mono, never louder
    than the label itself. */
 .rico-elapsed {
