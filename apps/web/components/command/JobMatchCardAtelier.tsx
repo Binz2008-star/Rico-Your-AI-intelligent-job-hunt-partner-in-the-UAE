@@ -498,7 +498,7 @@ export function JobMatchCardAtelier({
                 </p>
             )}
             {applyState === "success" && (
-                <p data-testid="job-mark-applied-success" className="mt-2 text-[10px] font-medium text-emerald-300">✓ {t("cmdMarkAppliedConfirm")}</p>
+                <p data-testid="job-mark-applied-success" role="status" aria-live="polite" className="mt-2 text-[10px] font-medium text-emerald-300">✓ {t("cmdMarkAppliedConfirm")}</p>
             )}
 
             {/* Source quality row — verification status + honest link notes */}
