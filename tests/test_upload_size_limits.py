@@ -37,11 +37,20 @@ _PUBLIC_UID = "public:web-size12345"
 _MB = 1024 * 1024
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
+# A realistic (readable) CV body. Must clear the parse-quality readability gate
+# in src/cv_parse_quality.py (>= 50 readable chars + printable ratio), which real
+# CVs always do; the earlier 40-char stub predated that gate (#1118) and tripped it.
+_CV_TEXT = (
+    "Jane Doe — Product Owner. Work Experience: 8 years leading product teams. "
+    "Skills: product management, roadmapping, stakeholder alignment, analytics. "
+    "Education: BSc Computer Science. Languages: English, Arabic."
+)
+
 _CV_PARSE_RESULT = {
-    "text": "Jane Doe. Work Experience. Skills: product.",
+    "text": _CV_TEXT,
     "skills": ["product"], "emails": ["jane@x.com"], "phones": [],
     "years_experience_hint": 8.0, "certifications": [], "languages": ["english"],
-    "extraction_quality": "good", "extracted_chars": 40,
+    "extraction_quality": "good", "extracted_chars": len(_CV_TEXT),
     "name": "Jane Doe", "current_role": "Product Owner", "document_type": "cv",
 }
 
@@ -50,7 +59,7 @@ def _cv_classification() -> ClassificationResult:
     return ClassificationResult(
         document_type="cv", confidence=0.9, confidence_scores={"cv": 0.9},
         suggested_actions=[], display_label="Resume / CV", file_format="pdf",
-        metadata={"chars": 40},
+        metadata={"chars": len(_CV_TEXT)},
     )
 
 
