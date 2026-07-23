@@ -1,0 +1,71 @@
+name: Diagnostic Pytest First Failure
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest-first-failure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Stop at first backend failure
+        env:
+          REDIS_URL: ""
+          DATABASE_URL: "postgresql://fake:fake@localhost/fake"
+          JWT_SECRET: "test-secret-ci-only"
+          DEEPSEEK_API_KEY: "sk-fake"
+          OPENAI_API_KEY: "sk-fake"
+          ENVIRONMENT: "test"
+        run: |
+          PYTHONPATH=$GITHUB_WORKSPACE pytest \
+            tests/unit/ \
+            tests/test_agent.py \
+            tests/test_agent_runtime.py \
+            tests/test_jotform_webhook.py \
+            tests/test_jwt_user_isolation.py \
+            tests/test_onboarding_state.py \
+            tests/test_link_verifier.py \
+            tests/test_rico_product_behavior.py \
+            tests/test_cv_profile_extraction.py \
+            tests/test_rico_routes.py \
+            tests/test_security_audit.py \
+            tests/test_rico_memory_safety.py \
+            tests/test_rico_hardening.py \
+            tests/test_tc2_target_role_propagation.py \
+            tests/test_tc2_tc8_wiring.py \
+            tests/test_job_result_integrity.py \
+            tests/test_bug3_duplicate_kanban_entries.py \
+            tests/test_764_durable_mutation_truth.py \
+            tests/test_1082_consent_fail_closed.py \
+            tests/test_1070_guest_identity_binding.py \
+            tests/test_1084_workflow_guards.py \
+            tests/test_1076_log_privacy.py \
+            tests/test_1077_no_paid_probe.py \
+            tests/test_1086_single_scheduled_pipeline.py \
+            tests/test_journey_state.py \
+            tests/test_journey_route.py \
+            tests/test_tc8_interview_prep_grounding.py \
+            tests/test_user_documents_dedup.py \
+            tests/test_1080_bounded_upload_reads.py \
+            tests/test_908_rc4_prevent_noncv_active_cv.py \
+            tests/test_963_onboarding_cv_persistence.py \
+            tests/test_paddle_billing.py \
+            tests/test_identity_doc_image_bypass.py \
+            tests/test_attachment_ocr_pipeline.py \
+            tests/test_uploaded_document_durable_context.py \
+            tests/test_attachment_analysis_factory.py \
+            tests/decision_regression/ \
+            -x -vv --tb=short
