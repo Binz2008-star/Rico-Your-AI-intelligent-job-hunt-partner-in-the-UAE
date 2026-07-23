@@ -146,10 +146,23 @@ def _is_arabic_browse_market_request(text: str) -> bool:
 # Broader listing-request pattern: catches "show me real job listings", "can you find me
 # some openings?", "do you have any PM roles?" — things _DIRECT_JOB_REQUEST_RE misses
 # because they have adjectives ("real", "any", "some") between the verb and the noun.
-_LISTING_REQUEST_RE: Final[re.Pattern[str]] = re.compile(
+_LISTING_REQUEST_STRONG_RE: Final[re.Pattern[str]] = re.compile(
     r"\b(?:show|find|get|search|list|give|have\s+you\s+got|do\s+you\s+have)\b"
-    r"(?:\s+\w+){0,4}\s+(?:jobs?|roles?|openings?|positions?|vacancies?|listings?|matches?)\b"
-    r"|\b(?:jobs?|roles?|openings?|positions?|listings?)\s+(?:in|for|at)\b",
+    r"(?:\s+\w+){0,4}\s+(?:jobs?|roles?|openings?|positions?|vacancies?|listings?|matches?)\b",
+    re.IGNORECASE,
+)
+
+# Weak, verb-less listing pattern ("jobs in Dubai", "roles for HSE"). No request verb,
+# so it also matches inside advice/informational questions in passing — "What are the
+# visa requirements for jobs in Dubai?", "How do salaries for HSE roles in the UAE
+# compare to Saudi?" — misclassifying them as listing requests and routing them to the
+# deterministic public CTA / legacy classifier instead of actually answering them
+# (live-tested 2026-07-23: reproduced on production for exactly these phrasings).
+# Only trusted as a listing request when the message doesn't otherwise look like a
+# question — see _looks_like_question, which reuses the same signals as
+# is_open_ended_question so the two gates never disagree about the same message.
+_LISTING_REQUEST_WEAK_RE: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:jobs?|roles?|openings?|positions?|listings?)\s+(?:in|for|at)\b",
     re.IGNORECASE,
 )
 
@@ -159,6 +172,26 @@ _JOB_SEARCH_INTENTS: Final[frozenset[str]] = frozenset({
     "job_search_multi_role",
     "job_search_profile_match",
 })
+
+
+def _looks_like_question(text: str) -> bool:
+    """True for the same question-shaped signals `is_open_ended_question` uses.
+
+    Shared here so the weak listing-request pattern and the open-ended-question
+    gate can never disagree about whether the same message is a question.
+    """
+    if not text:
+        return False
+    if any(ch in text for ch in _QUESTION_CHARS):
+        return True
+    lowered = text.lower()
+    for phrase in _OPENING_PHRASES:
+        if lowered == phrase or lowered.startswith(phrase + " "):
+            return True
+    tokens = lowered.split()
+    if tokens and tokens[0].strip(_FIRST_TOKEN_STRIP) in _OPENING_TOKENS:
+        return True
+    return False
 
 
 def is_explicit_job_listing_request(message: str) -> bool:
@@ -173,12 +206,15 @@ def is_explicit_job_listing_request(message: str) -> bool:
     drifts from the actual job-search classification.
     """
     lowered = (message or "").lower()
+    text = (message or "").strip()
     if (
         _DIRECT_JOB_REQUEST_RE.search(lowered)
-        or _LISTING_REQUEST_RE.search(lowered)
+        or _LISTING_REQUEST_STRONG_RE.search(lowered)
         or _ARABIC_JOB_REQUEST_RE.search(message or "")
         or _is_arabic_browse_market_request(message or "")
     ):
+        return True
+    if _LISTING_REQUEST_WEAK_RE.search(lowered) and not _looks_like_question(text):
         return True
     # Lazy import keeps this lightweight module free of a load-time dependency on
     # the classifier (and avoids any import cycle).
