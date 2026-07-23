@@ -104,6 +104,45 @@ def _is_arabic_job_request(text: str) -> bool:
     return bool(_ARABIC_JOB_REQUEST_RE.search(text))
 
 
+# Colloquial Arabic "browse the market / show me what's available" requests.
+# These are genuine job-listing requests that _ARABIC_JOB_REQUEST_RE misses
+# because they open with a look/show verb ("انظر", "شوف", "ورني", "اعرض") that
+# is not in that anchored imperative list, or state an availability phrase
+# ("المتوفر في سوق العمل", "وش المتاح من وظائف") with no imperative verb at all.
+# Live-QA 2026-07-19: an authenticated user typed "انظر المتوفر بسوق العمل ..."
+# and Rico returned a hollow "سأبحث الآن" promise instead of running the real
+# search, because this predicate returned False and the search router never
+# forced the grounded path. Detection requires BOTH a look/availability signal
+# AND a job/market noun so it never fires on unrelated "look at this" chatter.
+# Substring matching (not anchored) is intentional: Arabic proclitics glue
+# prepositions/conjunctions to the noun ("بسوق", "بالسوق", "والوظائف"), so a
+# token-anchored pattern would miss the common phrasings.
+_AR_BROWSE_VERB_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:انظر|أنظر|اشوف|أشوف|نشوف|شوف|شوفي|ورني|ورّني|وريني|ورينى"
+    r"|اعرض|أعرض|اعرضي|اعرضلي|فرجني|فرجيني)",
+    re.UNICODE,
+)
+_AR_AVAILABILITY_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:المتوفر|المتوفره|المتوفرة|متوفر|متوفرة|المتاح|المتاحة|متاح|متاحة"
+    r"|الموجود|الموجوده|الموجودة|موجود|المعروض|معروض)",
+    re.UNICODE,
+)
+# Job/market nouns. Deliberately excludes bare ambiguous tokens like "شغل"
+# (appears in "شغلي"/"مشغول"-adjacent chatter) and "فرصة" (generic "chance") so
+# a co-occurring availability/browse signal is what actually gates a match.
+_AR_JOB_MARKET_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:سوق\s*العمل|السوق|الوظائف|وظائف|وظيفة|الشواغر|شواغر)",
+    re.UNICODE,
+)
+
+
+def _is_arabic_browse_market_request(text: str) -> bool:
+    """Return True for colloquial Arabic 'show me what's in the job market' asks."""
+    if not text or not _AR_JOB_MARKET_RE.search(text):
+        return False
+    return bool(_AR_AVAILABILITY_RE.search(text) or _AR_BROWSE_VERB_RE.search(text))
+
+
 # Broader listing-request pattern: catches "show me real job listings", "can you find me
 # some openings?", "do you have any PM roles?" — things _DIRECT_JOB_REQUEST_RE misses
 # because they have adjectives ("real", "any", "some") between the verb and the noun.
@@ -138,6 +177,7 @@ def is_explicit_job_listing_request(message: str) -> bool:
         _DIRECT_JOB_REQUEST_RE.search(lowered)
         or _LISTING_REQUEST_RE.search(lowered)
         or _ARABIC_JOB_REQUEST_RE.search(message or "")
+        or _is_arabic_browse_market_request(message or "")
     ):
         return True
     # Lazy import keeps this lightweight module free of a load-time dependency on

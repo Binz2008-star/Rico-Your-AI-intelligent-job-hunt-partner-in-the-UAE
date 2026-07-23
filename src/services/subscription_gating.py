@@ -88,6 +88,12 @@ def _build_gate_check(user_id: str, feature: str, usage: int, resolved: Any | No
     remaining = max(0, limit_int - usage_int)
     allowed = usage_int < limit_int
     feature_label = feature.replace("_", " ")
+    # Some feature keys already end in "limit" (e.g. monthly_ai_message_limit).
+    # The templates below append their own "limit"/context, so strip a trailing
+    # "limit" to avoid the doubled "... ai message limit limit ..." seen in
+    # production (Live-QA 2026-07-19).
+    if feature_label.endswith(" limit"):
+        feature_label = feature_label[: -len(" limit")]
     message = (
         f"You have reached your {feature_label} limit on the {plan.title()} plan "
         f"({usage_int}/{limit_int}). Upgrade to continue."

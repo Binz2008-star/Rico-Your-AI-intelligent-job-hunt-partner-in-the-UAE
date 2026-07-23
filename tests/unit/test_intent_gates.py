@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from src.rico.intent.gates import is_open_ended_question
+from src.rico.intent.gates import (
+    is_explicit_job_listing_request,
+    is_open_ended_question,
+)
 
 
 @pytest.mark.parametrize("msg", [
@@ -82,3 +85,33 @@ def test_application_status_questions_bypass_ai_gate(msg: str) -> None:
     is_open, reason = is_open_ended_question(msg)
     assert is_open is False, f"Expected legacy route for {msg!r}, got reason={reason}"
     assert reason == "ok"
+
+
+@pytest.mark.parametrize("msg", [
+    # Live-QA 2026-07-19: the exact message that produced a hollow promise.
+    "انظر المتوفر بسوق العمل لا يوجد لدي شيء محدد ببالي حاليا",
+    "شوف المتوفر بالسوق",
+    "ورني الوظائف المتوفرة",
+    "وش المتاح من وظائف",
+    "اعرض المتوفر من وظائف",
+    "شوفلي وش متوفر بسوق العمل",
+    "المتاح في السوق حالياً",
+])
+def test_arabic_browse_market_is_explicit_job_listing(msg: str) -> None:
+    """Colloquial Arabic 'browse the market' asks must force the real search path.
+
+    Without this, an authenticated user's browse request skips _force_real_search
+    and falls to the AI path, which returns a hollow 'سأبحث الآن' promise.
+    """
+    assert is_explicit_job_listing_request(msg) is True, msg
+
+
+@pytest.mark.parametrize("msg", [
+    "ما هو وضع سوق العمل في دبي؟",   # market question, not a browse-for-listings ask
+    "شوف سيرتي الذاتية",              # look at my CV — no market noun
+    "شغلي الحالي صعب جداً",           # 'my job is hard' — bare شغل, no browse/avail
+    "أنا موجود في دبي",              # availability word but no job/market noun
+])
+def test_arabic_conversational_not_flagged_as_listing(msg: str) -> None:
+    """Genuine conversation must not be misrouted to the job-search path."""
+    assert is_explicit_job_listing_request(msg) is False, msg
