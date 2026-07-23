@@ -133,32 +133,55 @@ comes from the DB, not stale token claims; store outage fails closed.
 - GitHub issue/PR: #1072; draft PR from `fix/1072-jwt-auth-version`
 - Branch: `fix/1072-jwt-auth-version`
 - Base branch: main
-- Last safe commit SHA: 5069447 (origin/main at branch cut)
+- Re-cut: 2026-07-23 onto current main (CTO ruling on #1138). Verified live:
+  `public.users.auth_version` absent, users table 72 rows, migration number
+  045 unused in main. Manual-apply / no startup auto-apply retained.
+- Last safe commit SHA: base is current origin/main at re-cut
 - Current head SHA: see branch head on origin
 - Uncommitted changes present: no (updated at push time)
 - Status: review
 - Files inspected: `src/api/auth.py`, `src/api/deps.py`,
   `src/repositories/users_repo.py`, `src/db.py` (availability semantics),
-  `tests/test_jwt_user_isolation.py` (harness patterns),
-  `migrations/044_guest_identity_claims.sql` (migration style)
+  `src/api/app.py` (hydrate_request_auth_context middleware — added to main
+  since the original cut), `src/api/routers/user.py` (`/me`),
+  `tests/test_jwt_user_isolation.py` (harness patterns)
 - Files changed: `migrations/045_add_auth_version.sql` — additive column;
   `src/repositories/users_repo.py` — AuthStoreUnavailable, get_auth_snapshot,
   increment_auth_version, atomic update_password; `src/api/deps.py` —
   validation core (av match, active check, DB-authoritative role,
-  fail-closed 503); `src/api/auth.py` — av claim at login, env-admin marker,
-  POST /auth/logout-all; `scripts/check_migration_drift.py` — 045 drift check;
-  `tests/test_1072_jwt_auth_version.py` — 27-test suite
+  fail-closed 503) + re-cut hardening: the enforcement point now caches on a
+  dedicated `request.state.verified_user` and NO LONGER trusts the middleware's
+  claims-only `current_user`/`user_id` hydration (that cache would have
+  bypassed revocation for real HTTP traffic); `src/api/routers/user.py` —
+  `/me` now fully verifies (revoked/deactivated token → guest shape; outage →
+  503) instead of echoing claims-only hydration; `src/api/auth.py` — av claim
+  at login, env-admin marker, POST /auth/logout-all;
+  `scripts/check_migration_drift.py` — 045 drift check;
+  `tests/test_1072_jwt_auth_version.py` — suite extended: middleware-bypass
+  guards + `/me` revocation guards; `tests/conftest.py` — default healthy fake
+  auth store (echoes each token's role) so the whole suite exercises the new
+  enforcement without a real DB; `.github/workflows/qa-tests.yml` — suite wired
 - Files intentionally not touched: frontend (logout-all button is follow-up
-  UI work); refresh-token architecture (issue lists it as optional)
-- What is complete: revocation model, fail-closed validation, tests
+  UI work); refresh-token architecture (issue lists it as optional); the
+  claims-only middleware itself (kept for cheap guest/anon hints — the fix is
+  that protected deps re-verify, not that the hint is removed)
+- What is complete: revocation model, fail-closed validation, middleware-bypass
+  hardening, tests
 - What is incomplete: UI for logout-all; optional short-TTL+refresh design
 - Known blockers: migration 045 must be applied to Neon BEFORE deploy
-  (code degrades loudly-but-safely if not, revocation inert)
-- Validation already run: new suite 27 passed; full local unit suite diffed
-  against clean-main baseline — no new failures beyond the fixed drift guard
-- Validation still required: CI on the PR head; owner-approved 045 apply
-- Deployment/CI/Neon/Vercel state to check next: QA Tests on the PR
-- Next exact action: owner review; then apply 045 to Neon before merge/deploy
+  (code degrades loudly-but-safely if not, revocation inert); a KNOWN
+  pre-existing main failure `tests/unit/test_subscription_feature_gating.py::
+  test_limit_message_has_no_doubled_limit_word` (stale 50/50 vs free limit 10)
+  is being fixed on a separate branch (`fix/subscription-gate-test-current-limit`)
+  — NOT caused by and NOT in scope for this PR
+- Validation already run: full curated qa-tests pytest list locally — every
+  test green except the one pre-existing unrelated subscription-gate failure
+  above; auth suites (test_1072, test_jwt_user_isolation, test_security_audit,
+  test_agent) all green with the bypass closed
+- Validation still required: exact-head CI on the PR; owner-approved 045 apply
+- Deployment/CI/Neon/Vercel state to check next: QA Tests on the PR head
+- Next exact action: owner review; then the change-window (Neon restore-point
+  branch → apply 045 → schema verify → merge → deploy → auth smoke)
 - Stop condition: any test or review finding that validation adds >1 DB
   round-trip per request or breaks guest flows → redesign before merging
 - Rollback plan: revert the squash commit (behavior returns to stateless

@@ -197,6 +197,100 @@ class TestRevocationLifecycle:
             assert get_current_user(_request_with_token(token))["email"] == EMAIL
 
 
+# ── Middleware hydration must never satisfy the enforcement point ─────────────
+# app.py's hydrate_request_auth_context primes request.state.current_user /
+# user_id from token CLAIMS ONLY on every request. If get_current_user or
+# get_current_user_id ever trusts that hydration, the entire auth_version /
+# is_active / DB-role enforcement is silently bypassed for real HTTP traffic.
+
+class TestClaimsHydrationCannotBypassEnforcement:
+    def _primed_request(self, token: str) -> Request:
+        req = _request_with_token(token)
+        # Exactly what the middleware writes — claims-only, unverified.
+        req.state.current_user = {"email": EMAIL, "role": "user"}
+        req.state.user_id = EMAIL
+        req.state.access_token_present = True
+        return req
+
+    def test_revoked_token_rejected_despite_hydrated_state(self):
+        req = self._primed_request(_token(av=1))
+        with patch("src.db.is_db_available", return_value=True), \
+             patch("src.repositories.users_repo.get_auth_snapshot",
+                   return_value=_snapshot(av=2)):
+            with pytest.raises(HTTPException) as e:
+                get_current_user(req)
+        assert e.value.status_code == 401
+
+    def test_get_current_user_id_ignores_hydrated_user_id(self):
+        from src.api.deps import get_current_user_id
+        req = self._primed_request(_token(av=1))
+        with patch("src.db.is_db_available", return_value=True), \
+             patch("src.repositories.users_repo.get_auth_snapshot",
+                   return_value=_snapshot(av=2)):
+            with pytest.raises(HTTPException) as e:
+                get_current_user_id(req)
+        assert e.value.status_code == 401
+
+    def test_store_outage_fails_closed_despite_hydrated_state(self):
+        req = self._primed_request(_token(av=1))
+        with patch("src.db.is_db_available", return_value=True), \
+             patch("src.repositories.users_repo.get_auth_snapshot",
+                   side_effect=AuthStoreUnavailable("down")):
+            with pytest.raises(HTTPException) as e:
+                get_current_user(req)
+        assert e.value.status_code == 503
+
+    def test_verified_cache_set_only_after_full_verification(self):
+        req = self._primed_request(_token(av=3))
+        with patch("src.db.is_db_available", return_value=True), \
+             patch("src.repositories.users_repo.get_auth_snapshot",
+                   return_value=_snapshot(av=3, role="admin")):
+            user = get_current_user(req)
+        # Verified result overwrites the claims-only hydration (DB role wins).
+        assert user["role"] == "admin"
+        assert req.state.verified_user == user
+        assert req.state.current_user == user
+
+
+# ── /me renders revoked tokens as logged out, never as the account ────────────
+
+class TestMeEndpointHonorsRevocation:
+    def _client(self, token: str) -> TestClient:
+        from src.api.app import app
+        tc = TestClient(app, raise_server_exceptions=False)
+        tc.cookies.set("access_token", token)
+        return tc
+
+    def test_me_with_revoked_token_returns_guest_shape(self):
+        tc = self._client(_token(av=1))
+        with patch("src.db.is_db_available", return_value=True), \
+             patch("src.repositories.users_repo.get_auth_snapshot",
+                   return_value=_snapshot(av=2)):
+            r = tc.get("/api/v1/me")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["authenticated"] is False
+        assert body["email"] is None
+
+    def test_me_with_valid_token_returns_account(self):
+        tc = self._client(_token(av=1))
+        with patch("src.db.is_db_available", return_value=True), \
+             patch("src.repositories.users_repo.get_auth_snapshot",
+                   return_value=_snapshot(av=1)):
+            r = tc.get("/api/v1/me")
+        assert r.status_code == 200
+        assert r.json()["authenticated"] is True
+        assert r.json()["email"] == EMAIL
+
+    def test_me_store_outage_is_retryable_503_not_identity_guess(self):
+        tc = self._client(_token(av=1))
+        with patch("src.db.is_db_available", return_value=True), \
+             patch("src.repositories.users_repo.get_auth_snapshot",
+                   side_effect=AuthStoreUnavailable("down")):
+            r = tc.get("/api/v1/me")
+        assert r.status_code == 503
+
+
 # ── users_repo: atomic bump + migration-045-missing degradation ──────────────
 
 def _conn_with_cursor(cur):
@@ -205,6 +299,7 @@ def _conn_with_cursor(cur):
     return conn
 
 
+@pytest.mark.real_auth_store
 class TestUsersRepoAuthVersion:
     def test_update_password_bumps_auth_version_in_same_statement(self):
         from src.repositories.users_repo import update_password

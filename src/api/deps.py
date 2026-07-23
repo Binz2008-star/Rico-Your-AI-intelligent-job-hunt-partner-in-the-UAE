@@ -48,9 +48,14 @@ def get_current_user(request: Request) -> Dict[str, Any]:
     Raises HTTP 401 if missing/invalid/revoked, 503 if the store is down.
     Usage: route(user: dict = Depends(get_current_user))
     """
-    cached_user = getattr(request.state, "current_user", None)
-    if isinstance(cached_user, dict) and cached_user.get("email"):
-        return cached_user
+    # Per-request cache — set ONLY by this function after full verification.
+    # request.state.current_user is NOT trusted here: the app's
+    # hydrate_request_auth_context middleware fills it from token CLAIMS ONLY
+    # on every request, so treating it as authoritative would bypass the
+    # auth_version / is_active / DB-role enforcement entirely (#1072).
+    verified = getattr(request.state, "verified_user", None)
+    if isinstance(verified, dict) and verified.get("email"):
+        return verified
 
     token = request.cookies.get("access_token")
     request.state.access_token_present = bool(token)
@@ -96,6 +101,9 @@ def get_current_user(request: Request) -> Dict[str, Any]:
                 )
             user = {"email": email, "role": snapshot["role"] or "user"}
 
+    request.state.verified_user = user
+    # Overwrite the middleware's claims-only hydration so downstream readers
+    # of request.state see the DB-verified identity on protected routes.
     request.state.current_user = user
     request.state.user_id = user["email"]
     return user
@@ -112,9 +120,11 @@ def get_current_user_id(request: Request) -> str:
     Raises HTTP 401 if the token is missing, invalid, or has an empty sub.
     Usage: route(user_id: str = Depends(get_current_user_id))
     """
-    cached_user_id = getattr(request.state, "user_id", None)
-    if isinstance(cached_user_id, str) and cached_user_id.strip():
-        return cached_user_id.strip()
+    # request.state.user_id is claims-only middleware hydration — never
+    # sufficient on its own (#1072). Only the verified cache short-circuits.
+    verified = getattr(request.state, "verified_user", None)
+    if isinstance(verified, dict) and str(verified.get("email", "")).strip():
+        return str(verified["email"]).strip()
 
     user = get_current_user(request)
     user_id = user.get("email", "").strip()
