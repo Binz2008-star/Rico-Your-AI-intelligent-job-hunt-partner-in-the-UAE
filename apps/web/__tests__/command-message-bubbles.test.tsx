@@ -193,6 +193,39 @@ describe("CommandEmptyState — Atelier surface", () => {
         expect(onClick).not.toHaveBeenCalled();
     });
 
+    it("renders an optional category hint above the label, without changing the click contract", () => {
+        const onClick = vi.fn();
+        render(
+            <CommandEmptyState
+                authenticated
+                variant="chips"
+                title="t"
+                subtitle="s"
+                actions={[{ key: "x", label: "Find UAE jobs", hint: "Search", icon: <svg />, onClick }]}
+                disabled={false}
+            />,
+        );
+        expect(screen.getByText("Search")).toBeTruthy();
+        expect(screen.getByText("Find UAE jobs")).toBeTruthy();
+        screen.getByTestId("atelier-quick-chip").click();
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it("omits the hint row entirely when not provided (unchanged layout)", () => {
+        render(
+            <CommandEmptyState
+                authenticated
+                variant="chips"
+                title="t"
+                subtitle="s"
+                actions={ACTIONS}
+                disabled={false}
+            />,
+        );
+        const chip = screen.getAllByTestId("atelier-quick-chip")[0];
+        expect(chip.querySelector(".atl-chip-hint")).toBeNull();
+    });
+
     it("public hero keeps the pre-4b classes", () => {
         const { container } = render(
             <CommandEmptyState
