@@ -249,6 +249,7 @@ def _extract_subscription_data(
         _user_id_from_sub_id(db_module, sub_id)
         or _user_id_from_customer(db_module, customer_id)
     )
+    checkout_session_token = None
     if not user_id:
         custom_data = data.get("custom_data") or {}
         session_token = custom_data.get("checkout_session_id")
@@ -259,7 +260,10 @@ def _extract_subscription_data(
                     "paddle_identity_via_checkout_session sub_id=%s session=%s user=%s",
                     sub_id, token_ref(session_token), user_ref(user_id),
                 )
-                _consume_checkout_session(db_module, session_token)
+                # Don't consume the session here — only consume AFTER the
+                # subscription is successfully upserted (#1074).  If the upsert
+                # fails and Paddle retries, the session must still be resolvable.
+                checkout_session_token = session_token
 
     return {
         "unmapped": False,
@@ -273,6 +277,7 @@ def _extract_subscription_data(
         "period_end": period_end,
         "cancel_at": cancel_at,
         "user_id": user_id,
+        "checkout_session_token": checkout_session_token,
     }
 
 
@@ -314,6 +319,11 @@ def _handle_subscription_created(
         past_due_since=past_due_since,
         clear_past_due=clear_past_due,
     )
+    # Consume checkout session only after the subscription is durably written
+    # (#1074): if the upsert failed, Paddle retries the webhook and the
+    # session must still be available to resolve user_id.
+    if fields.get("checkout_session_token"):
+        _consume_checkout_session(db_module, fields["checkout_session_token"])
     logger.info("paddle_subscription_created user_id=%s plan=%s status=%s",
                 user_id, fields["plan"], fields["rico_status"])
     return {"user_id": user_id, "plan": fields["plan"], "subscription_status": fields["rico_status"]}
@@ -358,6 +368,10 @@ def _handle_subscription_updated(
         past_due_since=past_due_since,
         clear_past_due=clear_past_due,
     )
+    # Consume checkout session only after the subscription is durably written
+    # (#1074): same retry-safety rationale as subscription.created.
+    if fields.get("checkout_session_token"):
+        _consume_checkout_session(db_module, fields["checkout_session_token"])
     logger.info("paddle_subscription_updated user_id=%s plan=%s status=%s",
                 user_id, fields["plan"], fields["rico_status"])
     return {"user_id": user_id, "plan": fields["plan"], "subscription_status": fields["rico_status"]}
