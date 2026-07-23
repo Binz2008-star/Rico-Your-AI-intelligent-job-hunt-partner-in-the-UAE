@@ -88,6 +88,7 @@ export function CommandConversationRail({
     switchingSessionId = null,
     sessionSwitchError = false,
     onSelectSession,
+    variant = "full",
 }: {
     audience: "checking" | "public" | "authenticated";
     messages: Array<{ role: "user" | "rico"; text: string }>;
@@ -109,6 +110,13 @@ export function CommandConversationRail({
     /** True when the last thread switch failed to load (real signal). */
     sessionSwitchError?: boolean;
     onSelectSession?: (id: string) => void;
+    /** "full": today's text rail (unchanged), used at ≥1200px and inside the
+     *  Sessions drawer (768–899px). "compact": a ~64–80px icon/initial-only
+     *  column for the 900–1199px tier (TASK-20260723-002). A static prop set
+     *  once per call site — never computed from a viewport measurement — so
+     *  which variant renders where is decided entirely by which CSS-gated
+     *  wrapper the instance sits inside (no JS breakpoint state machine). */
+    variant?: "full" | "compact";
 }) {
     const c = useWorkspaceTheme();
     const { language } = useLanguage();
@@ -133,8 +141,81 @@ export function CommandConversationRail({
     const activeEntry = multiSession ? sessions.find((s) => s.id === activeSessionId) : undefined;
     const clearable = multiSession ? real || (activeEntry ? activeEntry.userTurns > 0 : false) : real;
 
+    if (variant === "compact") {
+        // 900–1199px (TASK-20260723-002): a narrow icon/initial-only column,
+        // not a shrunk copy of the text list — real session identity via a
+        // derived initial, an active-state ring, a native title tooltip, and
+        // a full accessible name (never an anonymous dot). Clear-history is
+        // intentionally not duplicated at this width — it stays reachable via
+        // the full rail (≥1200px) or the Sessions drawer (768–899px), which
+        // both render the unmodified full variant below.
+        return (
+            <div
+                data-testid="command-conversation-rail-compact"
+                className="flex w-20 flex-1 min-h-0 flex-col items-center gap-2 overflow-y-auto py-3"
+            >
+                <button
+                    type="button"
+                    onClick={onNewChat}
+                    disabled={busy}
+                    data-testid="command-rail-new-chat-compact"
+                    aria-label={t("cmdSessionsNew")}
+                    title={t("cmdSessionsNew")}
+                    className="obs-ghost flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                    style={{ border: `1px dashed ${c.hair}`, color: c.ink55, background: "transparent", cursor: busy ? "default" : "pointer" }}
+                >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                </button>
+                {multiSession ? (
+                    sessions.map((s) => {
+                        const isActive = s.id === activeSessionId;
+                        const isSwitching = switchingSessionId === s.id;
+                        const rowTitle = isActive ? title : (s.title ?? t("cmdSessionsCurrentFallback"));
+                        const initial = rowTitle.trim().charAt(0).toUpperCase() || "?";
+                        return (
+                            <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => { if (!isActive) onSelectSession?.(s.id); }}
+                                disabled={busy || clearingHistory || switchingSessionId !== null}
+                                aria-current={isActive ? "true" : undefined}
+                                aria-label={`${t("cmdSessionOpen")}: ${rowTitle}`}
+                                title={rowTitle}
+                                data-testid={isActive ? "command-rail-current-compact" : "command-rail-session-compact"}
+                                data-session-id={s.id}
+                                className="obs-session-row flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold"
+                                style={{
+                                    background: isActive ? c.panel : "transparent",
+                                    color: isActive ? c.ink : c.ink70,
+                                    border: isActive ? `1.5px solid ${c.red}` : `1px solid ${c.hair}`,
+                                    cursor: isActive || busy || switchingSessionId !== null ? "default" : "pointer",
+                                    opacity: isSwitching ? 0.6 : 1,
+                                }}
+                            >
+                                {initial}
+                            </button>
+                        );
+                    })
+                ) : (
+                    <div
+                        data-testid="command-rail-current-compact"
+                        aria-label={title}
+                        title={title}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold"
+                        style={{ background: c.panel, color: c.ink, border: `1.5px solid ${c.red}` }}
+                    >
+                        {title.trim().charAt(0).toUpperCase() || "?"}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
-        <div data-testid="command-conversation-rail" className="flex w-[260px] flex-1 min-h-0 flex-col p-4">
+        <div data-testid="command-conversation-rail" className="flex w-[232px] flex-1 min-h-0 flex-col p-4">
             {/* Header: SESSIONS · + new */}
             <div className="mb-4 flex items-center justify-between">
                 <span style={{ ...eyebrow, color: c.ink55 }}>{t("cmdSessionsTitle")}</span>

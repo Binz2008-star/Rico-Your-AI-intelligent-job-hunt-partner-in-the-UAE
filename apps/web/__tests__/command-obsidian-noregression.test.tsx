@@ -338,17 +338,19 @@ describe("C1 no-regression — real CommandPage over network fixtures", () => {
         const leftToggle = screen.getByLabelText("Toggle sessions rail");
         const leftRail = screen.getByTestId("command-obsidian-leftrail");
         expect(leftToggle).toHaveAttribute("aria-expanded", "true");
-        expect(leftRail.className).toContain("lg:w-[260px]");
+        // TASK-20260723-002: the full rail is now ≥1200px (was ≥1024px/lg),
+        // rebalanced to 232px (was 260px) so the transcript stays primary.
+        expect(leftRail.className).toContain("min-[1200px]:w-[232px]");
         fireEvent.click(leftToggle);
         expect(leftToggle).toHaveAttribute("aria-expanded", "false");
-        expect(leftRail.className).toContain("lg:w-0");
+        expect(leftRail.className).toContain("min-[1200px]:w-0");
 
         const rightToggle = screen.getByLabelText("Toggle shortlist rail");
         const rightRail = screen.getByTestId("command-rail");
-        expect(rightRail.className).toContain("lg:flex");
+        expect(rightRail.className).toContain("min-[1200px]:flex");
         fireEvent.click(rightToggle);
         expect(rightToggle).toHaveAttribute("aria-expanded", "false");
-        expect(screen.getByTestId("command-rail").className).not.toContain("lg:flex");
+        expect(screen.getByTestId("command-rail").className).not.toContain("min-[1200px]:flex");
     });
 
     it("language toggle flips the shell to Arabic RTL and back", async () => {
