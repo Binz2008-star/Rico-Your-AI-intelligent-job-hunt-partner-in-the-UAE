@@ -58,6 +58,21 @@ def _sanitize_cities_safe(cities: list) -> list:
         return cities
 
 
+def _sanitize_cities_write(cities: list) -> list:
+    """Sanitize preferred_cities at the write boundary (#1336).
+
+    Returns a clean list of plausible city names, or ``[]`` when every entry
+    is a misfiled chat/intent message or the sanitizer raises.  Never raises
+    and never returns raw input — a failure must omit the field so existing
+    stored cities are preserved, not replaced with unsanitized data.
+    """
+    try:
+        from src.services.city_validation import sanitize_cities
+        return sanitize_cities(cities) or []
+    except Exception:
+        return []
+
+
 # Dynamic field extraction from dataclasses
 _PROFILE_FIELDS = {f.name for f in fields(RicoProfile)}
 _SETTINGS_FIELDS = {f.name for f in fields(RicoAgentSettings)}
@@ -291,6 +306,31 @@ def upsert_profile(
         k: v for k, v in updates.items()
         if (k in _PROFILE_FIELDS or k in _SETTINGS_FIELDS) and v is not None
     }
+
+    # ── Write-boundary sanitization for preferred_cities (#1336) ──────────────
+    # Defense-in-depth: even if a caller forgets to sanitize, the write
+    # boundary itself rejects non-city values so they can never reach Neon
+    # or the JSON mirror.  An intentional empty list ([]) is preserved so
+    # users can clear the preference; a non-empty list that sanitizes to
+    # empty is dropped entirely so existing stored cities are not replaced
+    # with garbage-then-empty.
+    if "preferred_cities" in filtered_updates:
+        raw_cities = filtered_updates["preferred_cities"]
+        if isinstance(raw_cities, list):
+            if len(raw_cities) == 0:
+                pass  # intentional clearing — keep []
+            else:
+                sanitized = _sanitize_cities_write(raw_cities)
+                if sanitized:
+                    filtered_updates["preferred_cities"] = sanitized
+                else:
+                    # All entries were invalid or sanitizer failed — omit to
+                    # preserve existing stored cities (#1336 fail-closed).
+                    del filtered_updates["preferred_cities"]
+        else:
+            # Non-list value (string, dict, etc.) — reject to prevent
+            # unsanitized data from reaching either storage path.
+            del filtered_updates["preferred_cities"]
 
     clears = {k for k in clear_fields if k in _CLEARABLE_PROFILE_FIELDS}
 

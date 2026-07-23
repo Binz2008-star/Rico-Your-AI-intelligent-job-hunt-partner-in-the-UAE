@@ -125,9 +125,10 @@ export function CommandConversationRail({
 
     const eyebrow: React.CSSProperties = {
         fontFamily: ATELIER_FONT.mono,
-        fontSize: 10,
+        fontSize: 9,
+        fontWeight: 500,
         textTransform: "uppercase",
-        letterSpacing: isAr ? "0.04em" : "0.22em",
+        letterSpacing: isAr ? "0.04em" : "0.1em",
     };
 
     const loading = audience === "checking" || (audience === "authenticated" && historyState === "pending");
@@ -215,21 +216,22 @@ export function CommandConversationRail({
     }
 
     return (
-        <div data-testid="command-conversation-rail" className="flex w-[232px] flex-1 min-h-0 flex-col p-4">
-            {/* Header: SESSIONS · + new */}
-            <div className="mb-4 flex items-center justify-between">
+        <div data-testid="command-conversation-rail" className="flex w-[220px] flex-1 min-h-0 flex-col p-5 px-3.5">
+            {/* Header: SESSIONS */}
+            <div className="mb-2.5 flex items-center justify-between px-1">
                 <span style={{ ...eyebrow, color: c.ink55 }}>{t("cmdSessionsTitle")}</span>
-                <button
-                    type="button"
-                    onClick={onNewChat}
-                    disabled={busy}
-                    data-testid="command-rail-new-chat"
-                    className="obs-ghost rounded px-1"
-                    style={{ fontFamily: ATELIER_FONT.mono, fontSize: 11, color: c.ink, background: "transparent", border: "none", cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1 }}
-                >
-                    {t("cmdSessionsNew")}
-                </button>
             </div>
+
+            <button
+                type="button"
+                onClick={onNewChat}
+                disabled={busy}
+                data-testid="command-rail-new-chat"
+                className="mb-1 w-full rounded-lg border border-dashed border-rule bg-transparent py-2 px-3 text-center text-ink-soft transition-colors hover:border-sun hover:text-sun hover:bg-sun/10 disabled:opacity-50"
+                style={{ fontFamily: ATELIER_FONT.mono, fontSize: 11.5, cursor: busy ? "default" : "pointer" }}
+            >
+                {t("cmdSessionsNew")}
+            </button>
 
             {/* Body: real conversation state only */}
             <div className="flex-1 min-h-0 overflow-y-auto">
@@ -242,7 +244,7 @@ export function CommandConversationRail({
                         {t("cmdSessionsLoading")}
                     </div>
                 ) : multiSession ? (
-                    <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="command-rail-sessions">
+                    <ul className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="command-rail-sessions">
                         {sessions.map((s, i) => {
                             const isActive = s.id === activeSessionId;
                             const isSwitching = switchingSessionId === s.id;
@@ -267,11 +269,12 @@ export function CommandConversationRail({
                                         aria-label={`${t("cmdSessionOpen")}: ${rowTitle}`}
                                         data-testid={isActive ? "command-rail-current" : "command-rail-session"}
                                         data-session-id={s.id}
-                                        className={`obs-session-row flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-start ${isActive ? "" : "obs-ghost"}`}
+                                        className="obs-session-row flex w-full items-baseline gap-2 rounded-lg py-2.5 px-3 text-start transition-colors"
                                         style={{
-                                            background: isActive ? c.panel : "transparent",
+                                            background: isActive ? c.bg : "transparent",
                                             color: isActive ? c.ink : c.ink70,
-                                            border: "none",
+                                            border: isActive ? `1px solid ${c.hair}` : "1px solid transparent",
+                                            fontWeight: isActive ? 500 : 400,
                                             cursor: isActive || busy || switchingSessionId !== null ? "default" : "pointer",
                                             opacity: switchingSessionId !== null && !isSwitching && !isActive ? 0.55 : 1,
                                         }}
@@ -281,7 +284,7 @@ export function CommandConversationRail({
                                             className={`h-1 w-1 shrink-0 -translate-y-[2px] rounded-full ${(isActive && busy) || isSwitching ? "animate-pulse motion-reduce:animate-none" : ""}`}
                                             style={{ background: isActive || isSwitching ? c.red : c.track }}
                                         />
-                                        <span className="min-w-0 flex-1 truncate text-[13px] leading-snug">
+                                        <span className="min-w-0 flex-1 truncate text-[12px] leading-snug">
                                             {rowTitle}
                                         </span>
                                         {isSwitching ? (
@@ -311,12 +314,12 @@ export function CommandConversationRail({
                 ) : (
                     <div
                         data-testid="command-rail-current"
-                        className="flex items-baseline gap-2 rounded-md px-2 py-1.5"
-                        style={{ background: c.panel, color: c.ink }}
+                        className="flex items-baseline gap-2 rounded-lg py-2.5 px-3"
+                        style={{ background: c.bg, color: c.ink, border: `1px solid ${c.hair}`, fontWeight: 500 }}
                         aria-current="true"
                     >
                         <span aria-hidden="true" className="h-1 w-1 shrink-0 -translate-y-[2px] rounded-full" style={{ background: c.red }} />
-                        <span className="min-w-0 flex-1 truncate text-[13px] leading-snug">{title}</span>
+                        <span className="min-w-0 flex-1 truncate text-[12px] leading-snug">{title}</span>
                         {real && (
                             <span
                                 dir="ltr"
@@ -409,18 +412,21 @@ export function CommandConversationRail({
             {/* Session-row micro-motion: colors via obs-ghost (shell layer);
                 the inline-start hover nudge and its RTL mirror live here.
                 Reduced motion keeps color feedback, drops movement. */}
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 [data-testid="command-conversation-rail"] .obs-session-row {
                     transition: background-color .15s ease, color .15s ease, transform .18s ease;
                 }
                 [data-testid="command-conversation-rail"] .obs-session-row:not([aria-current]):not(:disabled):hover {
                     transform: translateX(2px);
+                    background-color: ${c.bg};
                 }
                 [dir="rtl"] [data-testid="command-conversation-rail"] .obs-session-row:not([aria-current]):not(:disabled):hover {
                     transform: translateX(-2px);
+                    background-color: ${c.bg};
                 }
                 @media (prefers-reduced-motion: reduce) {
-                    [data-testid="command-conversation-rail"] .obs-session-row:hover { transform: none; }
+                    [data-testid="command-conversation-rail"] .obs-session-row:hover { transform: none; background-color: ${c.bg}; }
                 }
             ` }} />
         </div>

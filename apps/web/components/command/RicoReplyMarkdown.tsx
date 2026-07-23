@@ -22,10 +22,10 @@
  * it only renders the same answer string the transcript already receives.
  */
 
+import { linkifySubscriptionMentions } from "@/lib/subscriptionCta";
 import React from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { linkifySubscriptionMentions } from "@/lib/subscriptionCta";
 
 /** Only allow schemes that can't execute script; anything else is inert. */
 function safeHref(href: string | undefined): string | undefined {
@@ -38,7 +38,7 @@ function safeHref(href: string | undefined): string | undefined {
 
 const components: Components = {
     p: ({ children }) => (
-        <p dir="auto" className="serif my-3 text-[16.5px] leading-[1.7] text-ink first:mt-0 last:mb-0 [overflow-wrap:anywhere]">
+        <p dir="auto" className="serif my-3 text-[16px] leading-[1.75] text-ink first:mt-0 last:mb-0 [overflow-wrap:anywhere]">
             {children}
         </p>
     ),
@@ -72,7 +72,7 @@ const components: Components = {
         <ol dir="auto" className="my-3 list-decimal space-y-1.5 ps-6 marker:text-ink-mute">{children}</ol>
     ),
     li: ({ children }) => (
-        <li className="serif ps-1 text-[16px] leading-[1.65] text-ink [overflow-wrap:anywhere]">{children}</li>
+        <li className="serif ps-1 text-[16px] leading-[1.75] text-ink [overflow-wrap:anywhere]">{children}</li>
     ),
     blockquote: ({ children }) => (
         <blockquote dir="auto" className="serif my-3 border-s-2 border-sun/50 ps-4 text-[16px] italic leading-[1.6] text-ink-soft">

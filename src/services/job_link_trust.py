@@ -46,6 +46,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from src.services.source_quality import is_placeholder_url
 
@@ -95,6 +96,42 @@ _SEQUENTIAL_LINKEDIN_JOB_ID_RE = re.compile(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def validate_job_url(raw: Any) -> str:
+    """Canonical URL safety check for job links at ingestion and egress.
+
+    Returns the cleaned URL string if it passes all checks, or "" if it
+    fails any check.  This is a pure URL-safety gate — it does NOT check
+    provenance (use ``resolve_trusted_apply_url`` for that).
+
+    Checks:
+      1. Non-empty string after stripping.
+      2. Parses as a valid URL.
+      3. Scheme is exactly ``http`` or ``https``.
+      4. Has a non-empty hostname.
+      5. No credentials (user:pass@) in the netloc.
+      6. No control characters or whitespace in the URL.
+    """
+    if not raw or not isinstance(raw, str):
+        return ""
+    url = raw.strip()
+    if not url:
+        return ""
+    # Reject control characters and embedded null bytes.
+    if any(ord(c) < 0x20 for c in url):
+        return ""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return ""
+    if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
+        return ""
+    if not parsed.hostname:
+        return ""
+    if parsed.username or parsed.password:
+        return ""
+    return url
 
 
 def resolve_trusted_apply_url(

@@ -346,21 +346,21 @@ export function JobMatchCardAtelier({
 
     const EYEBROW: React.CSSProperties = {
         fontFamily: ATELIER_FONT.mono,
-        fontSize: 10,
-        letterSpacing: language === "ar" ? "0" : "0.18em",
+        fontSize: 9,
+        letterSpacing: language === "ar" ? "0" : "0.14em",
         textTransform: language === "ar" ? "none" : "uppercase",
         color: c.ink55,
     };
     const metaStyle: React.CSSProperties = {
         fontFamily: ATELIER_FONT.mono,
-        fontSize: 11,
+        fontSize: 12.5,
         letterSpacing: language === "ar" ? "0" : "0.02em",
-        color: c.ink55,
+        color: c.ink70,
     };
 
     return (
         <article
-            className="atl-match-card mt-2 rounded-xl px-3.5 py-3 animate-fade-up motion-reduce:animate-none"
+            className="atl-match-card mt-2 rounded-[10px] px-5 py-[18px] animate-fade-up motion-reduce:animate-none"
             aria-label={ariaMatch}
             data-testid="opportunity-card"
             style={{
@@ -376,7 +376,7 @@ export function JobMatchCardAtelier({
                         <h3
                             data-testid="opportunity-card-title"
                             className="min-w-0 break-words"
-                            style={{ fontFamily: ATELIER_FONT.body, fontSize: 18, fontWeight: 600, lineHeight: 1.2, letterSpacing: "-0.01em", color: c.ink }}
+                            style={{ fontFamily: ATELIER_FONT.serif, fontSize: 16, fontWeight: 500, lineHeight: 1.3, letterSpacing: "-0.01em", color: c.ink }}
                         >
                             {match.title}
                         </h3>
@@ -408,7 +408,7 @@ export function JobMatchCardAtelier({
                     <div style={EYEBROW}>{t("cmdMatchWhy")}</div>
                     <ul className="mt-1.5 space-y-1" data-testid="job-why-fits">
                         {whyReasons.map((r, i) => (
-                            <li key={i} className="flex gap-2" style={{ fontSize: 13, lineHeight: 1.5, color: c.ink70 }}>
+                            <li key={i} className="flex gap-2" style={{ fontSize: 12.5, lineHeight: 1.65, color: c.ink70 }}>
                                 <span aria-hidden="true" style={{ color: accent }}>→</span>
                                 <span className="min-w-0">{r}</span>
                             </li>
@@ -423,7 +423,7 @@ export function JobMatchCardAtelier({
                     <div style={EYEBROW}>{t("cmdMatchGaps")}</div>
                     <ul className="mt-1 space-y-0.5">
                         {gaps.map((g, i) => (
-                            <li key={i} className="flex gap-2" style={{ fontSize: 12.5, fontStyle: "italic", lineHeight: 1.5, color: c.ink55 }}>
+                            <li key={i} className="flex gap-2" style={{ fontSize: 12, fontStyle: "italic", lineHeight: 1.6, color: c.ink55 }}>
                                 <span aria-hidden="true">·</span>
                                 <span className="min-w-0">{g}</span>
                             </li>
@@ -445,7 +445,7 @@ export function JobMatchCardAtelier({
                         aria-label={ariaFor(linkLabel)}
                         onClick={() => setLinkOpened(true)}
                         className="rounded-md px-3 py-1.5 text-[11px] font-semibold transition-[opacity,transform] duration-150 hover:opacity-90 hover:-translate-y-px active:translate-y-0 active:scale-[0.98]"
-                        style={{ background: c.ink, color: c.bg }}
+                        style={{ background: c.red, color: "#fff", border: `1px solid ${c.red}` }}
                     >
                         {linkLabel}
                     </a>
@@ -461,7 +461,7 @@ export function JobMatchCardAtelier({
                         rel="noopener noreferrer"
                         data-testid="job-link-source"
                         aria-label={ariaFor(t("cmdViewSource"))}
-                        className="rounded-md px-3 py-1.5 text-[11px] transition-[opacity,transform] duration-150 hover:opacity-80 active:scale-[0.98]"
+                        className="rounded-md px-3 py-1.5 text-[11px] transition-[opacity,transform] duration-150 hover:opacity-80 hover:text-ink active:scale-[0.98]"
                         style={{ border: `1px solid ${c.hair}`, color: c.ink70 }}
                     >
                         {t("cmdViewSource")}

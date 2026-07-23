@@ -59,12 +59,16 @@ def _send_message(chat_id: str, text: str, reply_markup: dict | None = None) -> 
 
 
 def _format_job_card(job: dict[str, Any], index: int = 1) -> str:
-    title = job.get("title") or "Untitled"
-    company = job.get("company") or "Unknown company"
-    location = job.get("location") or ""
-    salary = job.get("salary") or ""
-    score = job.get("score") or job.get("final_score") or ""
-    apply_url = job.get("apply_url") or job.get("source_url") or job.get("link") or ""
+    import html as _html
+    from src.services.job_link_trust import validate_job_url
+
+    title = _html.escape(str(job.get("title") or "Untitled"), quote=True)
+    company = _html.escape(str(job.get("company") or "Unknown company"), quote=True)
+    location = _html.escape(str(job.get("location") or ""), quote=True)
+    salary = _html.escape(str(job.get("salary") or ""), quote=True)
+    score = _html.escape(str(job.get("score") or job.get("final_score") or ""), quote=True)
+    raw_url = job.get("apply_url") or job.get("source_url") or job.get("link") or ""
+    apply_url = validate_job_url(raw_url)
 
     lines = [f"<b>{index}. {title}</b>"]
     lines.append(f"🏢 {company}")
@@ -75,7 +79,7 @@ def _format_job_card(job: dict[str, Any], index: int = 1) -> str:
     if score:
         lines.append(f"⭐ Match: {score}%")
     if apply_url:
-        lines.append(f'<a href="{apply_url}">Apply / View →</a>')
+        lines.append(f'<a href="{_html.escape(apply_url, quote=True)}">Apply / View →</a>')
     return "\n".join(lines)
 
 

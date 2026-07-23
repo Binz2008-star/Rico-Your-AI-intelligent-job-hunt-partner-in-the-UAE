@@ -39,6 +39,7 @@ from src.schemas.auth import (
     ResendVerificationResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    VerifyEmailConfirmRequest,
     VerifyEmailResponse,
 )
 
@@ -674,16 +675,46 @@ def register(
 @router.get("/verify-email", response_model=VerifyEmailResponse)
 @limiter.limit(LIMIT_VERIFY_EMAIL)
 def verify_email(request: Request, token: str) -> VerifyEmailResponse:
-    """Validate a verification token and mark the user's email as verified.
+    """Scanner-safe token validation — does NOT consume the token.
 
-    Intentionally does NOT set an auth cookie — the user must sign in explicitly
-    after verification.  This prevents link-scanner prefetches from issuing a
-    session cookie before the real user opens the link.
+    Email link prefetchers (Gmail, Outlook, Slack) issue GET requests
+    before the user clicks.  If GET consumed the token, the real user
+    would find an "already used" error.  This endpoint only validates
+    that the token is valid and returns the email so the frontend can
+    show a "Click to verify" button.  The actual consumption happens
+    via POST /verify-email.
+    """
+    from src.repositories.email_verification_repo import check_verification_token
+
+    email = check_verification_token(token)
+    if email is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid, expired, or already used verification link.",
+        )
+
+    return VerifyEmailResponse(
+        message="Token valid — click the button to verify your email.",
+        email=email,
+    )
+
+
+@router.post("/verify-email", response_model=VerifyEmailResponse)
+@limiter.limit(LIMIT_VERIFY_EMAIL)
+def verify_email_confirm(
+    request: Request,
+    body: VerifyEmailConfirmRequest,
+) -> VerifyEmailResponse:
+    """Consume the verification token and mark the user's email as verified.
+
+    This is the destructive operation — it atomically marks the token
+    used and sets email_verified=TRUE.  Only reachable via POST so
+    link-scanner prefetches cannot consume the token.
     """
     from src.repositories.email_verification_repo import consume_verification_token
     from src.repositories.users_repo import mark_email_verified
 
-    email = consume_verification_token(token)
+    email = consume_verification_token(body.token)
     if email is None:
         raise HTTPException(
             status_code=400,

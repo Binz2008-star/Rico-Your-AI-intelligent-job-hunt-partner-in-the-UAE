@@ -6179,6 +6179,7 @@ Branch: claude/command-v5-pr3-live-modes
 Issue/PR: PR — Command v5 PR 3 live modes (opened from this task)
 
 #### Objective
+
 PIVOTED 2026-07-21 (owner instruction: "cancel the repo design entirely and
 apply the attachment"): PR #1271 now applies the owner-supplied Command
 Workspace artifact design — full palette swap (LIGHT + DARK), artifact fonts
@@ -6190,16 +6191,19 @@ only. `/command` chat surface styling remains the next step (PR 4 slot).
 Interview/Learning/Activity stay hidden (no production capability).
 
 #### Context
+
 - Relevant files: apps/web/components/workspace/DashboardAtelier.tsx; apps/web/components/applications/ApplicationsAtelier.tsx; apps/web/components/upload/UploadAtelier.tsx; apps/web/components/workspace/theme.ts
 - Relevant docs: AI_WORKSPACE/COMMAND_V5_IMPLEMENTATION_MAP.md (PR 3 row)
 - Existing behavior: all data derivations, API calls, status taxonomy, translation keys, testids, aria contracts pinned by dashboard-atelier / flow-manual-application / upload-shell-composition tests.
 
 #### Constraints
+
 - Do not touch: data logic, APIs, auth, routing, translation keys, dark-island palette, /command chat surface.
 - No migrations unless explicitly required: none.
 - Keep scope limited to: presentation of the three mode components + additive `dark` flag on WorkspacePalette.
 
 #### Acceptance criteria
+
 - [x] v5 mode accents/typography/surfaces on the three modes (light island only); dark island keeps its existing language
 - [x] All loading/error/empty states restyled without weakening (skeletons + presence orb are additive; roles/testids unchanged)
 - [x] Accent-colored text uses AA text-safe tokens only (modeAText / onEmber)
@@ -6207,6 +6211,7 @@ Interview/Learning/Activity stay hidden (no production capability).
 - [x] All existing behavior contracts green without weakening
 
 #### Required verification
+
 - [x] Unit tests: vitest 854/854
 - [ ] Integration tests: n/a
 - [x] Frontend build: PASS; lint identical to main baseline (0 new findings); check:contrast:v5 PASS
@@ -6214,6 +6219,7 @@ Interview/Learning/Activity stay hidden (no production capability).
 - [ ] Production/deploy smoke if applicable: after merge via Vercel auto-deploy
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-005
 - GitHub issue/PR: PR — Command v5 PR 3 live modes
 - Branch: claude/command-v5-pr3-live-modes
@@ -6232,6 +6238,7 @@ Interview/Learning/Activity stay hidden (no production capability).
 - Next exact action: owner review of the Draft PR
 - Stop condition: any behavior-contract regression → fix before merge
 - Rollback plan: revert the PR — presentation-only diff, no data/API/schema impact
+
 ### TASK-20260722-001 — Atelier Arabic copy: rewrite translated-feeling strings to native Arabic
 
 Status: review
@@ -6302,6 +6309,7 @@ Branch: claude/command-v5-pr4-chat-surface
 Issue/PR: PR — public /command artifact chrome (opened from this task)
 
 #### Objective
+
 Extend the merged artifact design (#1271) to the PUBLIC /command guest
 surface. Technique: the repo's established channel-variable remap
 (AtelierCardScope precedent) applied at the guest chrome root —
@@ -6312,6 +6320,7 @@ production default; both faces are artifact faces). The authenticated
 /command already repainted via #1271's WORKSPACE_THEME swap.
 
 #### Constraints
+
 - Do not touch: chat behavior, streaming, attachments, safety, session flow,
   auth gating, translation keys, testids.
 - Keep scope limited to: presentation (channel remap + literal color-class
@@ -6319,18 +6328,21 @@ production default; both faces are artifact faces). The authenticated
   removed, MobileCommandHeader drawer literals → channel tokens).
 
 #### Acceptance criteria
+
 - [x] Guest /command wears the artifact palette in BOTH themes with zero markup/behavior change
 - [x] Sun-button labels AA (white on sun ≥4.85; fixes the pre-existing dark-on-sun user bubble post-#1271)
 - [x] Mobile drawer follows the artifact palette (no hardcoded navy)
 - [x] All existing behavior contracts green without weakening
 
 #### Required verification
+
 - [x] Unit tests: vitest 854/854
 - [x] Frontend build: PASS; lint identical to main baseline (0 new findings)
 - [x] Local smoke: Playwright single-shell + mobile-usability 18/18; guest light/dark/mobile/drawer screenshots reviewed
 - [ ] Production/deploy smoke if applicable: after merge via Vercel auto-deploy
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-006
 - GitHub issue/PR: PR — public /command artifact chrome
 - Branch: claude/command-v5-pr4-chat-surface
@@ -6348,6 +6360,7 @@ Status: done (both merged and live)
 Owner: Claude (agent) / owner approvals in-session
 
 #### Delivered
+
 1. Profile avatar (#1279, squash f6c0d84): /api/v1/user/avatar GET/POST/DELETE,
    dedicated user_avatars table (migration 050 — APPLIED to production Neon and
    verified via to_regclass BEFORE merge), ProfileAvatar hero UI with client-side
@@ -6366,9 +6379,11 @@ Owner: Claude (agent) / owner approvals in-session
    harvested into main by the owner-side follow-up (0665312f).
 
 #### Production verification (this task's closure)
+
 - Render: deploy-render success on 0665312f (latest backend-relevant main).
 - SMOKE-1197 + Delivery-Smoke: dispatched on main — results recorded in the
   session report.
+
 ### TASK-20260721-008 — Atomic Postgres operation-ownership store (stabilization slice 1)
 
 Status: done
@@ -6381,6 +6396,7 @@ TASK-20260721-007 inside #1285; renumbered to -008 here to resolve a same-day
 ID collision with the profile-avatar task entry above.
 
 #### Objective
+
 Move chat job-search operation ownership from the in-process
 process-nonce model (safe ONLY single-instance/single-worker — pinned by
 test_concurrent_foreign_process_would_release_ownership_UNSAFE_for_multiworker)
@@ -6396,6 +6412,7 @@ in production. Scaling workers/instances stays BLOCKED until slice-4
 validation passes.
 
 #### Scope
+
 - migrations/050_chat_operations.sql (new, idempotent, additive; renamed
   to 051_chat_operations.sql on 2026-07-21 — identity is now 051)
 - src/repositories/chat_operations_repo.py (new)
@@ -6411,6 +6428,7 @@ validation passes.
   multi-worker-safety property on real Postgres)
 
 #### Continuity Block
+
 - Current head SHA: 7497c2a3 (main after squash merge of #1285)
 - Status: done — merged + deployed (Deploy Render Backend success for
   7497c2a3, /version-gated); CI on final PR head 5ae19599 was 9/9 green
@@ -6440,7 +6458,6 @@ validation passes.
   slice-4 multi-worker validation passes.
 - Stop condition: met — merged and deployed; no further writes on this task
 
-
 ### TASK-20260721-005 — Bilingual (AR/EN) agent replies — response builder localization
 
 Status: done
@@ -6449,6 +6466,7 @@ Branch: claude/system-tools-analysis-wc4o4g (restarted from main 247e83a)
 Issue/PR: #1288 (merged 2026-07-21, squash c626521f)
 
 #### Objective
+
 Complete the bilingual agent path opened by TASK-20260721-004: after #1266 an
 Arabic user's intent executes, but every reply, action label, and UI title
 came back in English (src/agent/response_builder/response_builder.py is the
@@ -6456,11 +6474,13 @@ sole AgentUIResponse producer). Localize all reply templates so the reply
 language follows the user's message language.
 
 #### Constraints
+
 - Keep scope limited to: response_builder.py + tests + ledger
 - Do not touch: action `type` values, tool names, data payloads, UI type enums
 - English output must remain byte-for-byte identical for non-Arabic messages
 
 #### Acceptance criteria
+
 - [x] Language detection from the user's message (Arabic block regex); empty/
       button-driven requests default to English (existing behavior)
 - [x] Arabic templates for every builder: job list, apply/skip/save/block,
@@ -6474,6 +6494,7 @@ language follows the user's message language.
       failed that hour — dispatched runs are the evidence)
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-005
 - GitHub issue/PR: #1288 (merged, squash c626521f)
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -6514,6 +6535,7 @@ Branch: claude/ricco-research-improvements-dkmhin (restarted from main b8379d7)
 Issue/PR: (opens with this branch's new PR)
 
 #### Objective
+
 Give the owner one read-only, admin-gated snapshot of operational health:
 GET /api/v1/admin/ops/overview — stuck/pending chat operations (heartbeat-
 lease view over the slice-1 shared store: running, timed_out,
@@ -6525,6 +6547,7 @@ Explicitly deferred (later increments): per-token AI spend counters
 (needs provider instrumentation) and any alerting/cron trigger.
 
 #### Scope
+
 - src/api/routers/admin_ops.py (new; require_admin-gated; read-only)
 - src/api/app.py (router registration — 2 lines)
 - src/repositories/chat_operations_repo.py (stats() aggregate, read-only)
@@ -6535,6 +6558,7 @@ Explicitly deferred (later increments): per-token AI spend counters
 - AI_WORKSPACE/TASKS.md (this entry; -008 closure; ID-collision renumber)
 
 #### Continuity Block
+
 - Current head SHA: (set at commit)
 - Status: in_review — PR opens as draft; merge is owner-gated
 - Validation already run: py_compile; new unit file 5/5; postgres
@@ -6563,9 +6587,11 @@ Branch: claude/ricco-research-improvements-dkmhin (restarted from latest main)
 Issue/PR: (opens with this branch's new PR)
 
 #### Objective
+
 Generalize the #1166→#1169 lesson (endpoint tests that patch the router's
 own wrapper hide router↔wrapper kwarg drift — the class that shipped the
 production save outage) to the remaining core paths:
+
 - Chat: POST /api/v1/rico/chat runs the REAL chat_service.send_message with
   a capturing spy only one layer down (_legacy_send_message) — proves
   ctx/message/operation_id/language bind and SURVIVE router → service →
@@ -6582,11 +6608,13 @@ production save outage) to the remaining core paths:
   feeds it (documented in the test module docstring).
 
 #### Scope
+
 - tests/test_core_path_real_wrappers.py (new — 9 tests; TEST-ONLY change,
   no src/ modification)
 - AI_WORKSPACE/TASKS.md (this entry; -009 closure)
 
 #### Continuity Block
+
 - Current head SHA: (set at commit)
 - Status: in_review — PR opens as draft; merge is owner-gated
 - Validation already run: new file 9/9; adjacent regression
@@ -6608,23 +6636,27 @@ Branch: claude/system-tools-analysis-wc4o4g (restarted from main 0b94c55)
 Issue/PR: set at PR open
 
 #### Objective
+
 Answer the owner's launch-readiness question with a fact-based control-plane
 reconciliation: live snapshot, LAUNCH_EXECUTION_PLAN gate status, full open-PR
 triage (15), route matrix, new anomalies, and a numbered owner decision list.
 
 #### Deliverable
+
 AI_WORKSPACE/LAUNCH_READINESS_2026-07-21.md — verdict: LIVE STABLE OPEN BETA,
 not commercially launch-ready; blockers are owner decisions (billing activation,
 rotation confirmation, PR dispositions, invitations, owner smoke, legal
 sign-off), not missing code.
 
 #### Notable findings recorded
+
 - Duplicate migration number 050 in main (chat_operations + user_avatars)
 - #1177 would collide on migration 047 (analytics_events already in main)
 - PROJECT_STATUS snapshot still 2026-07-18 — superseded for readiness purposes
   by this report; refresh to ride the next control-plane docs PR
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-011
 - GitHub issue/PR: set at PR open
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -6658,6 +6690,7 @@ Issue/PR: #1299 (owner-merged 2026-07-21, squash 5e03ec48, after owner review
 fix 9000b78 — ledger contradiction corrected)
 
 #### Objective
+
 Remove the duplicate migration number 050 (readiness report §5.1):
 050_user_avatars (#1279, 11:45) and 050_chat_operations (#1285, 13:40)
 collided. Decision per owner rule (applied-first / older-reference):
@@ -6665,6 +6698,7 @@ user_avatars keeps 050; chat_operations renumbered to 051 (next free —
 verified no 051 reference existed anywhere).
 
 #### Evidence gathered before changing anything
+
 - Read-only Neon production check (project robenjob): user_avatars PRESENT,
   chat_operations PRESENT, idx_chat_operations_user_latest PRESENT — BOTH
   are applied, so the older-reference criterion decided the keeper. No SQL
@@ -6674,13 +6708,14 @@ verified no 051 reference existed anywhere).
 - scripts/apply_migration_drift.py: no 050/chat_operations references.
 
 #### Atomic change set
+
 - migrations/050_chat_operations.sql → 051_chat_operations.sql (git rename,
   97% similarity; only the header number line changed — SQL body untouched)
 - scripts/check_migration_drift.py: both chat_operations entries 050 → 051
-  + renumber note in the comment
+  - renumber note in the comment
 - src/services/operation_state.py, src/repositories/chat_operations_repo.py,
   tests/unit/test_operation_duplicate_guard.py: comment references 050 → 051
-- tests/integration/test_operation_ownership_postgres.py: _MIGRATION file
+- tests/integration/test_operation_ownership_postgres.py:_MIGRATION file
   path updated (functional reference)
 - NEW tests/unit/test_migration_numbering.py: (1) unique numeric prefixes,
   (2) every drift-guard CHECKS id maps to an existing migration file
@@ -6688,6 +6723,7 @@ verified no 051 reference existed anywhere).
   LAUNCH_READINESS §5.1 marked RESOLVED
 
 #### Proofs (rule 6)
+
 - [x] Fail-before: test_migration_numbers_are_unique FAILED on pre-fix tree
       with {'050': ['050_chat_operations.sql', '050_user_avatars.sql']}
 - [x] Pass-after: 2/2 numbering tests; drift-guard ids unique
@@ -6700,6 +6736,7 @@ verified no 051 reference existed anywhere).
       gating pull_request run fully green)
 
 #### Continuity Block
+
 - Task ID: TASK-20260721-012
 - GitHub issue/PR: #1299 (owner-merged, squash 5e03ec48)
 - Branch: claude/system-tools-analysis-wc4o4g
@@ -6721,7 +6758,7 @@ verified no 051 reference existed anywhere).
 - Validation already run: see Proofs
 - Validation still required: none
 - Deployment/CI/Neon/Vercel state to check next: none — no deploy is
-  triggered by a correct merge (migrations/** touches deploy-render paths?
+  triggered by a correct merge (migrations/**touches deploy-render paths?
   YES migrations/** is in deploy-render path filter — note: merge will
   trigger a redeploy of identical runtime; expected and harmless)
 - Next exact action: none — task fully closed; PR-board disposition
@@ -6740,8 +6777,9 @@ Branch: claude/ricco-research-improvements-dkmhin (restarted from main 46bdd32)
 Issue/PR: #1302 (merged, deploy verified 7b8df097)
 
 #### Objective
+
 Close the DNS fail-OPEN in src/services/link_verifier.py's SSRF guard. Both
-_is_safe_url_async and _is_safe_url_sync caught EVERY DNS-resolution error
+_is_safe_url_async and_is_safe_url_sync caught EVERY DNS-resolution error
 and returned True ("allow URL but note limitation") — so any URL whose
 hostname failed to resolve (NXDOMAIN, resolver error, timeout, or a
 rebinding attempt racing the check) bypassed the private-range/metadata
@@ -6752,6 +6790,7 @@ Acceptance: no URL with an unresolvable hostname can pass the SSRF check on
 the sync OR async path.
 
 #### Scope (narrow — LOW-3 only)
+
 - src/services/link_verifier.py: the two DNS-failure `except Exception`
   blocks change `pass` (→ fall through to `return True`) into `return False`.
   NOTHING ELSE changed — protocol allow-list, private/metadata ranges,
@@ -6766,6 +6805,7 @@ the sync OR async path.
 - AI_WORKSPACE/TASKS.md (this entry).
 
 #### Caller audit
+
 - src/api/routers/link_verification.py (Pydantic `validate_url` /
   `validate_urls`): call `_is_safe_url` → `_is_safe_url_sync`; a False now
   raises the existing ValueError("URL is not allowed (SSRF protection)") —
@@ -6778,6 +6818,7 @@ the sync OR async path.
   result; no bypass path.
 
 #### Continuity Block
+
 - Current head SHA: (set at commit)
 - Status: in_review — Draft PR; NO merge, NO deploy, NO LOW-1/LOW-2, NO
   slice-4 (owner stop conditions)
@@ -6808,6 +6849,7 @@ Branch: claude/ricco-research-improvements-dkmhin (restarted from main e3a5780)
 Issue/PR: #1304 (Draft; head 09b6ab6)
 
 #### Objective
+
 **PARTIAL HARDENING ONLY — slice 4 is NOT complete and the multi-worker
 expansion gate stays CLOSED.** Harden the atomic ownership store (slices 1-2,
 live in production) and remove the unsafe memory fallback in the mandatory
@@ -6821,19 +6863,20 @@ cooperative cancellation through job_providers/jsearch_client — a separate,
 larger follow-up PR). Workers/instances MUST stay at 1 until then.
 
 #### Scope
+
 - src/services/operation_state.py:
-  * NEW `OperationStoreUnavailable`; `_mandatory_db()` +
+  - NEW `OperationStoreUnavailable`; `_mandatory_db()` +
     `_on_repo_unavailable()`. Under RICO_OPERATION_STORE=postgres every store
     op (start/get/get_latest/update) FAILS CLOSED (raises) instead of falling
     back to memory; `auto`/`memory` keep the single-worker memory fallback.
-  * Absent-row in mandatory mode returns None (never resurrects memory state).
-  * TEST-ONLY lease/heartbeat overrides via `_lease_seconds()` /
+  - Absent-row in mandatory mode returns None (never resurrects memory state).
+  - TEST-ONLY lease/heartbeat overrides via `_lease_seconds()` /
     `_heartbeat_interval()`, GATED by `_test_timings_allowed()` (honored only
     when `PYTEST_CURRENT_TEST` is set; ignored in production). Production
     defaults (60s / 10s) can never be overridden by a stray env var.
-  * `build_status_response` returns an honest service_unavailable dict when
+  - `build_status_response` returns an honest service_unavailable dict when
     the mandatory store is down.
-  * PREPARATORY ownership-loss signal (`ownership_lost()` +
+  - PREPARATORY ownership-loss signal (`ownership_lost()` +
     `_mark_ownership_lost`/`_discard_ownership_loss`): heartbeat self-fences
     when the lease is unrenewable past its window or the row is taken over.
     NO executor consumer yet — it does NOT stop provider calls, so it does
@@ -6867,6 +6910,7 @@ larger follow-up PR). Workers/instances MUST stay at 1 until then.
 - AI_WORKSPACE/TASKS.md (this entry; TASK-013 closure).
 
 #### Continuity Block
+
 - Current head SHA: 09b6ab6
 - Status: in_review — Draft PR; slice 4 NOT complete, gate CLOSED. NO merge by
   agent, NO deploy, NO Render worker/instance change, NO LOW-1/LOW-2, NO daily
@@ -6897,6 +6941,7 @@ larger follow-up PR). Workers/instances MUST stay at 1 until then.
 - Stop condition: STOP after evidence report + green CI (owner directive).
 
 #### Owner-review follow-up (2026-07-21) — addressed on this branch, gate stays CLOSED
+
 Owner review of #1304 (head ee37126e) found two issues; both handled here:
 
 1. **Post-claim DB partition can still start a SECOND cascade (NOT eliminated).**
@@ -6935,6 +6980,7 @@ integration green on the new head. **No merge, no deploy, no worker/instance
 change** (owner stop conditions).
 
 #### Follow-up (2026-07-22, owner-directed) — end-to-end cooperative cancellation (PR #1306, in_review, NOT merged; #1305 frozen, no new TASK ID)
+
 The BLOCKER named above (post-claim-partition duplicate-cascade cancellation)
 now has a real executor consumer: the ownership-loss signal is threaded all the
 way into the provider HTTP layer, so a de-owned worker stops NEW provider work
@@ -6990,6 +7036,7 @@ before the partition. All 8 are addressed:
   new `log_privacy.operation_ref()` HMAC fingerprint.
 
 Evidence (fail-before / pass-after where the finding named a specific gap):
+
 - tests/test_provider_cascade_cancellation.py (10) — entry / before-worker /
   in-flight-discard / distinct-outcome / absent-token / **raising-check
   fail-closed** + cascade-stops / **jooble in-flight records no observations &
@@ -7032,6 +7079,7 @@ Branch: claude/rico-development-supervisor-sfdh8w (rebuilt from main 0e0497ba af
 Issue/PR: #1305 (Draft)
 
 #### Objective
+
 Add the controlled "Rico Development Supervisor" loop as a development-control
 layer ONLY — no Rico runtime behavior change. One invocation = at most ONE
 implementation task, max THREE observe/verify correction cycles, hard owner
@@ -7041,6 +7089,7 @@ live state stops execution, failed acceptance criteria cannot be reported
 complete.
 
 #### History (honesty note)
+
 Attempt 1 (base e3a5780, head 3c8f9f6) failed its own OBSERVE contract: open
 PR #1304 was concurrently editing AI_WORKSPACE/TASKS.md and using
 TASK-20260721-014, yet the session claimed no overlap and reused that ID; the
@@ -7050,6 +7099,7 @@ DEVELOPMENT_LOOP_STATE.md. This entry is the corrective rebuild under the
 next free ID.
 
 #### Scope (control-plane only; no src/, no apps/web runtime code)
+
 - .claude/skills/rico-development-supervisor/SKILL.md — loop contract
   (OBSERVE/DECIDE/ACT/VERIFY/RECORD/STOP-OR-LOOP, 12 hard owner gates,
   strict final-line RICO_SUPERVISOR_RESULT contract) + remediations:
@@ -7067,9 +7117,9 @@ next free ID.
   modes; --smoke isolated one-turn no-op CLI check; --smoke-perms isolated
   sentinel-file permission smoke (mechanical: token surfacing + checksum,
   not self-report); --tools restricted to Read,Edit,Write,Grep,Glob,Bash;
-  --strict-mcp-config with mcp__* denied and --setting-sources project (no
+  --strict-mcp-config with mcp__*denied and --setting-sources project (no
   MCP/connector, no user/local widening); Read/Edit path-scoped to project;
-  explicit secret-path denials (.env*, *.env, credentials, *.pem, *.key,
+  explicit secret-path denials (.env*, *.env, credentials,*.pem, *.key,
   ~/ , //etc) plus merge/deploy/destructive/DB/network denials and direct
   git-push denial; --permission-mode default; NEVER
   --dangerously-skip-permissions; git-fetch failure exits documented code 6.
@@ -7115,12 +7165,14 @@ next free ID.
 - AI_WORKSPACE/TASKS.md (this entry).
 
 #### Explicitly out of scope (owner directive)
+
 - PR #1304 content and its follow-up cancellation implementation — untouched
   (its merge into base 0e0497ba is inherited, not modified).
 - LOW-1, LOW-2, Constitutional AI, any product feature — not started.
 - No second supervised development task run in this session.
 
 #### Continuity Block
+
 - Base SHA: 0e0497baff9d18e37d09c2410ceb7e372c011dce (main, includes #1304)
 - Current head SHA: final head = the ledger-finalization commit recorded in
   DEVELOPMENT_LOOP_STATE.md (two-commit pattern; its validated_head_sha is
@@ -7155,6 +7207,7 @@ Branch: claude/workspace-delivery-baseline-record
 Issue/PR: —
 
 #### Objective
+
 Record the successful production Delivery-Smoke as a **historical baseline**,
 with its evidentiary scope stated precisely, per owner review. The earlier
 report's phrase "الخضرة الإنتاجية الكاملة الآن" overclaimed: the run proves
@@ -7185,6 +7238,7 @@ it) — fixed in #1287 via explicit Set-Cookie capture/replay (the #1264
 pattern). Product SSE path confirmed healthy at this baseline.
 
 #### Scope correction (what this run does NOT prove)
+
 - `main` moved after the run: #1304 (operation ownership / partial multi-worker
   hardening — touches operation_state, chat_operations claim,
   rico_chat_api) and #1305 (development-supervisor control layer) merged;
@@ -7199,6 +7253,7 @@ pattern). Product SSE path confirmed healthy at this baseline.
   (frame-type dump + isolation probes + explicit cookie replay).
 
 #### Re-verification conditions (owner-specified; run after #1306 merges AND deploys)
+
 ```text
 1. /version يطابق آخر backend deploy commit
 2. workers/instances تبقى 1
@@ -7211,6 +7266,7 @@ pattern). Product SSE path confirmed healthy at this baseline.
 ```
 
 #### Continuity Block
+
 - Current head SHA: (this docs commit)
 - Status: done — record only; AI_WORKSPACE/TASKS.md is the sole file changed
 - Validation already run: run 29818358371 log quoted from GitHub Actions;
@@ -7239,6 +7295,7 @@ FRESH Draft PR from then-current main under this same TASK ID after the RFC
 merges)
 
 #### Objective
+
 Record the read-only repository trace of the P1 tailored-CV incident and the
 owner-approved implementation boundary for ONE deterministic vertical slice:
 selected readable CV → provenance-bearing fact sheet → deterministic
@@ -7246,6 +7303,7 @@ Operations/Dubai CV → verified DOCX persisted with retention controls →
 JWT-scoped download → Arabic redacted-transcript regression.
 
 #### Owner decisions (2026-07-22, PR #1312 review + re-review — ALL ANSWERED)
+
 - DOCX v1: persist bytes; unbounded storage NOT approved. Approved bounds:
   2 MiB hard DOCX cap, SHA-256 write/read-back, account-deletion cleanup,
   strict user scope, sanitized download filename; creation consumes the
@@ -7274,6 +7332,7 @@ JWT-scoped download → Arabic redacted-transcript regression.
   monitoring; the armed 1-hour check-in was cancelled).
 
 #### Context
+
 - Evidence + full plan: AI_WORKSPACE/proposals/2026-07-22-cv-generation-integrity-slice.md
 - Relevant files (traced, unmodified):
   src/rico_chat_api.py (:452 dead placeholder guard, :6121 pending-city resume,
@@ -7295,6 +7354,7 @@ JWT-scoped download → Arabic redacted-transcript regression.
   artifact or download endpoint exists.
 
 #### Constraints
+
 - Do not touch: production deploys, provider routing, agent_runtime action
   scheme, safety-layer bypasses, Cognitive Control Plane scope, career-context
   M2 identity dedupe.
@@ -7303,6 +7363,7 @@ JWT-scoped download → Arabic redacted-transcript regression.
 - Keep scope limited to: the single slice in the proposal; one PR.
 
 #### Acceptance criteria — RFC gate (#1312; can close before implementation)
+
 - [x] Design reviewed (read-only trace with file:line evidence +
       deterministic-first slice per the approved boundary)
 - [x] Owner decisions recorded as answered (bounds approved with fail-closed
@@ -7317,6 +7378,7 @@ Implementation is a SEPARATE second gate (fresh Draft PR, same TASK ID) — see
 the implementation criteria below; nothing in the RFC gate starts it.
 
 #### Acceptance criteria — implementation gate (fresh Draft PR, same TASK ID)
+
 - [ ] Steps 1–6 implemented per merged RFC
 - [ ] Redacted production-structure fixture reviewed and approved in the
       implementation PR (token mapping; private transcript stays out of git)
@@ -7325,6 +7387,7 @@ the implementation criteria below; nothing in the RFC gate starts it.
 - [ ] No deploy / no production migration without separate owner authorization
 
 #### Required verification
+
 - [ ] Unit tests: n/a for this docs-only PR
 - [ ] Integration tests: n/a
 - [ ] Frontend build: n/a
@@ -7332,6 +7395,7 @@ the implementation criteria below; nothing in the RFC gate starts it.
 - [ ] Production/deploy smoke if applicable: none — no production change
 
 #### Continuity Block
+
 - Task ID: TASK-20260722-001
 - GitHub issue/PR: #1312 (draft, docs-only RFC)
 - Branch: claude/cv-generation-integrity-cgggby
@@ -7368,6 +7432,7 @@ Branch: fix/command-clarification-needs-input
 Issue/PR: #1326 (Draft)
 
 #### Objective
+
 Give `type: "clarification"` responses (Rico needs one detail or decision
 from the user before continuing) their own visually and semantically
 distinct transcript treatment — calm, editorial, Atelier, clearly distinct
@@ -7378,6 +7443,7 @@ progress-row/CHECK-RUN presentation slice is paused, unimplemented — no code
 was written for it; nothing to preserve or roll back.
 
 #### Context
+
 - Relevant files: `apps/web/components/command/CommandEventAdapter.ts`;
   `apps/web/components/command/CommandTranscriptStep.tsx`;
   `apps/web/lib/translations.ts`;
@@ -7421,6 +7487,7 @@ from history instead of the same latent bug — not a new contract, the same
 one-line fix applied generically as specified.
 
 #### Constraints
+
 - Do not touch: backend/API code; the `type` value itself; add no new
   backend fields; `JobMatchCardAtelier`, `PermissionRequestCard`,
   `ProposedChangeCard`, `ChatActionCard` (duplication reported in the audit,
@@ -7437,6 +7504,7 @@ one-line fix applied generically as specified.
   fallback. No other change to `page.tsx`.
 
 #### Acceptance criteria
+
 - [x] `classifyMessage()` returns `"needs_input"` if and only if
       `message.type === "clarification"` — never inferred from reply text
 - [x] New row: distinct gutter/label (`ask`/`سؤال`), calm/editorial Atelier
@@ -7467,6 +7535,7 @@ one-line fix applied generically as specified.
       `"needs_input"` exactly like a live message — not just on first send
 
 #### Required verification
+
 - [x] Unit tests: `command-transcript-step.test.tsx` (19 cases: classification,
       presentation, aria, children/options preserved, history-replay) +
       `command-clarification-history-restore.test.tsx` (6 new cases: real
@@ -7485,6 +7554,7 @@ one-line fix applied generically as specified.
 - [ ] Production/deploy smoke if applicable: n/a — no merge/deploy this PR
 
 #### Continuity Block
+
 - Task ID: TASK-20260723-001
 - GitHub issue/PR: #1326 (Draft)
 - Branch: fix/command-clarification-needs-input
@@ -7542,8 +7612,10 @@ Branch: feat/command-medium-workspace-layout
 Issue/PR: #1329 (Draft)
 
 #### Objective
+
 Preserve `/command`'s "Career Workspace" identity — not an anonymous chat —
 at medium desktop/tablet widths, per the owner-corrected breakpoint contract:
+
 - **≥1200px**: full sessions rail (232px), full transcript, full
   career-context rail (272px) — rebalanced from the prior 260px/300px so the
   transcript keeps priority width.
@@ -7559,6 +7631,7 @@ Frontend-only. No backend, no data model, no new job-card/permission-card
 redesign.
 
 #### Context
+
 - Relevant files: `apps/web/components/command/CommandObsidianShell.tsx`;
   `apps/web/components/command/CommandConversationRail.tsx`;
   `apps/web/components/command/CommandRail.tsx`;
@@ -7593,6 +7666,7 @@ redesign.
   destabilizing mobile nav.
 
 #### Constraints
+
 - Do not touch: job-card redesign, permission-card redesign, Arabic font
   changes, STOP gutter, backend progress events, new data models, fake
   counts/jobs/progress, sound effects, unrelated cleanup.
@@ -7609,6 +7683,7 @@ redesign.
   context drawer opens from inline-end.
 
 #### Acceptance criteria
+
 - [x] ≥1200px: full three-column layout renders (232px sessions rail /
       transcript / 272px career-context rail)
 - [x] 900–1199px: compact icon/initial sessions rail renders; career context
@@ -7640,6 +7715,7 @@ redesign.
       against a deployed preview — pending
 
 #### Required verification
+
 - [x] Unit tests: 3 existing test files updated for the intentional
       width/breakpoint class-string changes
       (`command-obsidian-noregression.test.tsx`,
@@ -7676,9 +7752,10 @@ redesign.
       preview
 
 #### Continuity Block
+
 - Task ID: TASK-20260723-002
 - GitHub issue/PR: #1329 (Draft) —
-  https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/1329
+  <https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/1329>
 - Branch: feat/command-medium-workspace-layout
 - Base branch: main @ 8c1c5dc1a168f00e5eba02887c520b48a4c107c0 (current
   origin/main head at task start)
@@ -7723,3 +7800,71 @@ redesign.
 - Next exact action: run the required browser-smoke matrix against PR
   #1329's Vercel preview once it deploys, then report results
 - Stop condition: do not merge or deploy production
+
+### TASK-20260723-003 — Rico Chat Visual Alignment
+
+Status: verified locally / rebased on main 9ca0d44d / smoke complete / Draft PR #1331 ready for push
+Owner: Windsurf WRITER / owner review
+Branch: design/rico-chat-composer
+Issue/PR: #1331 (Draft)
+
+#### Objective
+
+Align the existing `/command` chat presentation with the owner-provided
+`rico-chat-design.html` reference while preserving current behavior,
+responsive tiers, safety controls, audience isolation, and PR #1329's merged
+medium-workspace architecture.
+
+#### Scope and acceptance
+
+- Frontend presentation only; no backend, auth, billing, database, migration,
+  provider, routing, landing-page, deployment, or production mutation work.
+- Base: `main` at `9ca0d44d` (rebased from `608451ea`).
+- Owner explicitly approved processing this task on 2026-07-23.
+- Atelier semantic tokens only; no parallel design system or user-specific logic.
+- Preserve behavior, approval/safety actions, English, and Arabic/RTL paths.
+- Rebase, focused tests, production build, scoped diff, and Draft PR required.
+- Responsive browser smoke is mandatory before Ready-for-Review or merge.
+
+#### Continuity Block
+
+- Task ID: TASK-20260723-003
+- Objective: owner-approved visual alignment of the existing Rico chat UI to
+  `rico-chat-design.html`, with no behavior or backend changes
+- Authority role: WRITER
+- Activity pass: Coder, then Tester
+- Owner/session: Windsurf / owner review
+- Branch: `design/rico-chat-composer`
+- Base: `main` @ `9ca0d44d` (rebased from `608451ea`)
+- Head before ledger update: rebased on `9ca0d44d` + test fix pending commit
+- Rollback branch: `backup/rico-chat-composer-pre-rebase-20260723`
+- PR: #1331 (Draft)
+- Files changed: `CommandComposer.tsx`, `WorkspaceShell.tsx`,
+  `command-obsidian-shell.test.tsx` (rail width 220px assertion fix), plus
+  this task ledger
+- Post-rebase verification: focused Vitest 334/334 passed; `npm run build`
+  passed with 48/48 routes; `git diff --check` passed
+- Responsive browser smoke: 28 Playwright captures completed — desktop
+  (1440px), tablet (900px), mobile (390px) × EN/AR × light/dark ×
+  empty/active transcript; no horizontal overflow detected on any
+  viewport
+- Status: implementation rebased on `9ca0d44d`, verified, smoke complete;
+  ready for force-push and CI
+- Risks: broad visual diff overlaps PR #1329 surfaces; smoke passed
+  without issues
+- Product scope: all `/command` users; global, user-agnostic, synthetic test
+  fixtures only, no owner-account special-casing
+- Must not touch: `apps/web/app/page.tsx`, backend `src/**`, migrations,
+  auth/session/JWT/cookies, billing, deploy configuration, or unrelated
+  untracked screenshots/design assets
+- Uncommitted tracked changes: `command-obsidian-shell.test.tsx` (rail
+  width assertion fix); unrelated pre-existing untracked assets remain
+  untouched
+- Deploy/CI/Neon/Vercel: no deploy or Neon action; CI/Vercel pending after
+  force-push
+- Rollback: close the Draft PR or revert the task commits; no data/schema/API
+  unwind required
+- Next action: force-push rebased branch, update PR #1331 description, wait
+  for CI, then mark Ready for Review
+- Stop condition: do not merge or deploy; stop on test/build failure,
+  unexpected file overlap, or behavior change

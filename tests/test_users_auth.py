@@ -774,17 +774,27 @@ class TestEmailVerificationFlow:
         assert r.status_code == 200
         mock_ull.assert_called_once_with(20)
 
-    def test_verify_email_valid_token_marks_verified_no_cookie(self):
+    def test_verify_email_valid_token_validates_no_consume_no_cookie(self):
+        # #1095/#1339: GET /verify-email is scanner-safe — it VALIDATES the
+        # token (check_verification_token) without consuming it, so an email
+        # prefetcher's GET cannot burn the token before the real user clicks.
+        # Consumption + marking happens on POST /verify-email (covered by
+        # tests/test_email_verification_scanner_safe.py).
         from fastapi.testclient import TestClient
         from src.api.app import app
         _reset_limiter()
         tc = TestClient(app, raise_server_exceptions=False)
-        with patch("src.repositories.email_verification_repo.consume_verification_token",
-                   return_value="verified@rico.ai"), \
-             patch("src.repositories.users_repo.mark_email_verified", return_value=True):
+        with patch("src.repositories.email_verification_repo.check_verification_token",
+                   return_value="verified@rico.ai") as check, \
+             patch("src.repositories.email_verification_repo.consume_verification_token") as consume, \
+             patch("src.repositories.users_repo.mark_email_verified", return_value=True) as mark:
             r = tc.get("/api/v1/auth/verify-email?token=valid-tok-abc")
         assert r.status_code == 200
         assert r.json()["email"] == "verified@rico.ai"
+        # Scanner-safe: GET must NOT consume the token or mark verified.
+        check.assert_called_once()
+        consume.assert_not_called()
+        mark.assert_not_called()
         # GET /verify-email intentionally does not set a session cookie —
         # user must sign in explicitly after verification.
         assert "access_token" not in r.cookies
