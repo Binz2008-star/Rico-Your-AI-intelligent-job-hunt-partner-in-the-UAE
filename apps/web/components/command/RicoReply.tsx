@@ -27,6 +27,7 @@
  */
 
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { Check, Copy, RotateCcw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { RicoReplyMarkdown } from "./RicoReplyMarkdown";
@@ -103,15 +104,16 @@ export function RicoThinking({ isAr = false }: { isAr?: boolean }) {
      polite region never announces per-second ticks) appears once the wait is
      long enough to be worth explaining. */
   const { label, stage, elapsed } = useThinkingStages(isAr);
+  const c = useWorkspaceTheme();
   return (
     <div className="relative ps-3.5 animate-fade-up motion-reduce:animate-none" role="status" aria-live="polite">
       <span aria-hidden className="absolute inset-y-1 start-0 w-px animate-rail-draw motion-reduce:animate-none bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
       <p className="serif-italic text-[16px] leading-[1.75] text-ink-mute">
         <span key={stage} className="atl-reason-shimmer inline-block animate-stage-in motion-reduce:animate-none">{label}</span>
         <span aria-hidden className="ms-1.5 inline-flex items-baseline gap-[3px] align-middle">
-          <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" />
-          <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" style={{ animationDelay: "0.15s" }} />
-          <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" style={{ animationDelay: "0.3s" }} />
+          <span className="inline-block h-1 w-1 rounded-full animate-dot-cascade motion-reduce:animate-pulse" style={{ background: c.red }} />
+          <span className="inline-block h-1 w-1 rounded-full animate-dot-cascade motion-reduce:animate-pulse" style={{ background: c.red, animationDelay: "0.15s" }} />
+          <span className="inline-block h-1 w-1 rounded-full animate-dot-cascade motion-reduce:animate-pulse" style={{ background: c.red, animationDelay: "0.3s" }} />
         </span>
         {elapsed >= 5 && (
           <span aria-hidden className="ms-2 inline-block align-middle text-[11px] not-italic tabular-nums text-ink-mute/80" style={{ fontFamily: "var(--font-mono), ui-monospace, monospace" }}>
