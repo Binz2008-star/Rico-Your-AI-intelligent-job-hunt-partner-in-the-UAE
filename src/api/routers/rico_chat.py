@@ -1772,19 +1772,6 @@ async def rico_upload_cv(
         # client-echoed hash or re-parsing.
         content_hash = hashlib.sha256(data).hexdigest()
 
-        # Enforce per-plan CV quota for authenticated users — but never for an
-        # exact re-upload of bytes already stored for this user. A duplicate
-        # consumes no storage, so the limit must not block it (same
-        # dedupe-before-quota order #960 gave /api/v1/user/files). Without
-        # this, a user at their limit cannot re-upload their own saved CV to
-        # refresh its parse — the exact flow Rico itself suggests in chat.
-        # Guest/public sessions (public:*) are exempt — they have no plan record.
-        if not is_valid_public_user_id(resolved_user_id) and not _stored_document_with_hash_exists(
-            resolved_user_id, content_hash
-        ):
-            from src.services.subscription_gating import enforce_document_quota
-            enforce_document_quota(resolved_user_id, "cv")
-
         safe_name = _safe_filename(file.filename)
 
         # Per-kind size cap, enforced from the real magic-byte format BEFORE any
@@ -1793,6 +1780,29 @@ async def rico_upload_cv(
         # CV parsing and never asking the user to pointlessly retry.
         from src.services.document_classifier import classify_document, detect_format
         upload_format = detect_format(data, safe_name)
+
+        # Per-plan CV storage quota — enforced HERE, after the real magic-byte
+        # format is known, and ONLY for document uploads. Three exemptions, all
+        # fail-safe:
+        #   • Images are transient chat attachments analysed in-session (a job/
+        #     recruiter screenshot, an offer-letter photo). They are never
+        #     written to user_documents, so they must never be charged against —
+        #     or blocked by — the CV storage limit (chat attachment ≠ CV upload).
+        #   • An exact re-upload of bytes already stored for this user consumes
+        #     no storage, so the limit must not block it (dedupe-before-quota,
+        #     #960/#1245): a user at their limit can still re-upload their own
+        #     saved CV to refresh its parse — the exact flow Rico suggests.
+        #   • Guest/public sessions (public:*) have no plan record.
+        # Classifying the format first is what lets the image exemption key on
+        # real magic bytes, never the client-supplied extension/MIME.
+        if (
+            upload_format != "image"
+            and not is_valid_public_user_id(resolved_user_id)
+            and not _stored_document_with_hash_exists(resolved_user_id, content_hash)
+        ):
+            from src.services.subscription_gating import enforce_document_quota
+            enforce_document_quota(resolved_user_id, "cv")
+
         size_limit = _upload_limit_for(upload_format)
         if len(data) > size_limit:
             raise HTTPException(

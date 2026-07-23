@@ -29,18 +29,20 @@ import {
 } from "@/lib/api";
 import { describe, expect, it } from "vitest";
 
-/** Exact shape raised by enforce_document_quota (subscription_gating.py). */
+/** Exact shape raised by enforce_document_quota (subscription_gating.py).
+ * A PAID plan at its ceiling gets manage-your-files guidance, never an
+ * "upgrade to the plan you already own" prompt. */
 const QUOTA_BODY = {
     detail: {
         detail: "cv_storage_limit_exceeded",
         plan: "pro",
         used: 5,
         limit: 5,
-        upgrade_hint: "Upgrade to Rico Monthly for up to 5 CVs",
+        upgrade_hint: "Delete or replace an existing CV to add another",
         doc_type: "cv",
         message:
             "You have reached your CV storage limit (5/5) on the Pro plan. " +
-            "Upgrade to Rico Monthly for up to 5 CVs.",
+            "Delete or replace an existing CV to add another.",
     },
 };
 

@@ -156,6 +156,27 @@ class TestEnforceDocumentQuota:
         assert detail["detail"] == "other_document_limit_exceeded"
         assert detail["doc_type"] == "cover_letter"
 
+    def test_free_message_offers_upgrade(self):
+        """Free users at their ceiling are pointed to an upgrade."""
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            self._enforce("cv", 1, _make_resolved(1, 2))
+        detail = exc_info.value.detail
+        assert "upgrade" in detail["message"].lower()
+        assert "upgrade" in detail["upgrade_hint"].lower()
+
+    def test_paid_message_guides_to_manage_not_upgrade(self):
+        """A user already on a paid plan must NOT be told to upgrade to the
+        plan they already own — guide them to delete/replace instead."""
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            self._enforce("cv", 5, _make_resolved(5, 10, "pro"))
+        detail = exc_info.value.detail
+        assert detail["plan"] == "pro"
+        assert "upgrade" not in detail["message"].lower()
+        assert "upgrade" not in detail["upgrade_hint"].lower()
+        assert "delete" in detail["message"].lower() or "replace" in detail["message"].lower()
+
 
 # ── Files API endpoint ─────────────────────────────────────────────────────────
 
@@ -440,6 +461,47 @@ class TestUploadCvEndpointQuota:
         assert uid == "authed@example.com", f"must use JWT identity, got: {uid!r}"
         assert not uid.startswith("public:"), f"must NOT be a guest ID, got: {uid!r}"
         assert doc_type == "cv"
+
+    def test_image_upload_never_charged_cv_quota(self):
+        """An image is a transient chat attachment, not a CV. Even for an
+        authenticated user whose CV vault is full, uploading an image must
+        NOT touch the CV storage quota — the analysis proceeds instead of a
+        cv_storage_limit_exceeded 422. (chat attachment ≠ CV upload)
+
+        The image exemption keys on the real magic-byte format (PNG header),
+        classified before the quota gate — never the client filename/MIME.
+        """
+        from io import BytesIO
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+
+        # Minimal PNG magic bytes — detect_format() returns "image".
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+        with (
+            patch("src.api.routers.rico_chat._resolve_upload_user_id",
+                  return_value="authed@example.com"),
+            patch("src.api.routers.rico_chat.is_valid_public_user_id", return_value=False),
+            # If the CV quota is enforced for an image, this raises and fails.
+            patch("src.services.subscription_gating.enforce_document_quota",
+                  side_effect=AssertionError("CV quota must not be enforced for an image")) as mock_quota,
+            # No real vision/OCR call — force the graceful OCR-empty path.
+            patch("src.services.image_extractor.extract_text_from_image", return_value=""),
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            response = client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("Screenshot.png", BytesIO(png_bytes), "image/png")},
+            )
+
+        mock_quota.assert_not_called()
+        # Never the CV storage-quota rejection.
+        if response.status_code == 422:
+            detail = response.json().get("detail", {})
+            assert not (
+                isinstance(detail, dict)
+                and detail.get("detail") == "cv_storage_limit_exceeded"
+            ), f"image upload was wrongly charged CV quota: {detail!r}"
 
 
 # ── 7. /api/v1/rico/upload-cv — exact re-upload is never quota-blocked ─────────
