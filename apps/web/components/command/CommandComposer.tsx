@@ -161,6 +161,7 @@ export function CommandComposer({
                 className="relative shrink-0 px-5 pt-3.5 pb-[calc(18px_+_env(safe-area-inset-bottom))]"
                 data-testid="atelier-composer"
                 dir={isRTL ? "rtl" : "ltr"}
+                style={{ borderTop: `1px solid ${c.hair}` }}
             >
                 {/* Gradient fade from the paper surface above the sticky composer
                     (Atelier spec). Route-scoped, decorative, non-interactive — the
