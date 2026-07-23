@@ -13,43 +13,81 @@ export interface Toast {
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Track the component's mounted state and every pending auto-dismiss timer so
-  // that (a) a timer never calls setState after unmount — which in a torn-down
-  // jsdom/test environment throws "window is not defined", and in the browser
-  // is a benign-but-real setState-on-unmounted-component leak — and (b) all
-  // outstanding timers are cleared when the hook unmounts.
+  // Track the component's mounted state and each toast's auto-dismiss timer so
+  // timers never update state after unmount and one toast can be refreshed or
+  // dismissed without cancelling unrelated toast timers.
   const mountedRef = useRef(true);
-  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  // Mirror of toasts for synchronous dedup checks without reading state in
+  // the callback (avoids stale-closure issues).
+  const toastsRef = useRef<Toast[]>([]);
 
   useEffect(() => {
     mountedRef.current = true;
     const timers = timersRef.current;
     return () => {
       mountedRef.current = false;
-      for (const timer of timers) {
+      for (const timer of timers.values()) {
         clearTimeout(timer);
       }
       timers.clear();
     };
   }, []);
 
-  const toast = useCallback(
-    (message: string, variant: ToastVariant = "info", duration = 3500) => {
-      const id = crypto.randomUUID();
-      setToasts((prev) => [...prev, { id, message, variant }]);
+  const dismiss = useCallback((id: string) => {
+    const timer = timersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timersRef.current.delete(id);
+    }
+
+    setToasts((prev) => {
+      const next = prev.filter((toast) => toast.id !== id);
+      toastsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const scheduleDismiss = useCallback(
+    (id: string, duration: number) => {
+      const existingTimer = timersRef.current.get(id);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+
       const timer = setTimeout(() => {
-        timersRef.current.delete(timer);
+        timersRef.current.delete(id);
         if (!mountedRef.current) return;
-        setToasts((prev) => prev.filter((t) => t.id !== id));
+        dismiss(id);
       }, duration);
-      timersRef.current.add(timer);
+      timersRef.current.set(id, timer);
     },
-    []
+    [dismiss],
   );
 
-  const dismiss = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  const toast = useCallback(
+    (message: string, variant: ToastVariant = "info", duration = 3500) => {
+      // Dedupe: if an identical toast (same message + variant) is already
+      // visible, refresh only that toast's timer instead of stacking it or
+      // disturbing unrelated notifications (#1217).
+      const existing = toastsRef.current.find(
+        (item) => item.message === message && item.variant === variant,
+      );
+      if (existing) {
+        scheduleDismiss(existing.id, duration);
+        return;
+      }
+
+      const id = crypto.randomUUID();
+      const next = [...toastsRef.current, { id, message, variant }];
+      toastsRef.current = next;
+      setToasts(next);
+      scheduleDismiss(id, duration);
+    },
+    [scheduleDismiss],
+  );
 
   return { toasts, toast, dismiss };
 }

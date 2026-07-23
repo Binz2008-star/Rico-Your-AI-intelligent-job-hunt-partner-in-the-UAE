@@ -115,27 +115,27 @@ export const translations = {
     gmailConsentReview: "Review & approve recurring sync",
     gmailConsentTitle: "Approve recurring background sync",
     gmailConsentIntro:
-        "This is separate from connecting Gmail. Before Rico syncs your inbox in the background on a schedule, please review and approve:",
+      "This is separate from connecting Gmail. Before Rico syncs your inbox in the background on a schedule, please review and approve:",
     gmailConsentReadOnly:
-        "Access stays read-only — Rico cannot send, delete, or modify email.",
+      "Access stays read-only — Rico cannot send, delete, or modify email.",
     gmailConsentJobOnly:
-        "Rico reads only job-search-related email (recruiter and application messages).",
+      "Rico reads only job-search-related email (recruiter and application messages).",
     gmailConsentMetadata:
-        "To classify a message Rico reads its content in memory during a sync (subject and body). It stores only metadata: a short subject snippet, the sender, and the classification result — full email bodies and attachments are never stored.",
+      "To classify a message Rico reads its content in memory during a sync (subject and body). It stores only metadata: a short subject snippet, the sender, and the classification result — full email bodies and attachments are never stored.",
     gmailConsentStored:
-        "What is stored: job-related metadata (subject snippet, sender), the classification/match result, and a secret-free audit trail — never email bodies or attachments.",
+      "What is stored: job-related metadata (subject snippet, sender), the classification/match result, and a secret-free audit trail — never email bodies or attachments.",
     gmailConsentWhyStored:
-        "Why it is stored: to detect application updates and surface them to you.",
+      "Why it is stored: to detect application updates and surface them to you.",
     gmailConsentNoSend: "Rico never sends email through this permission.",
     gmailConsentNoSilent: "No application status is ever changed silently.",
     gmailConsentReviewUpdates:
-        "You review every consequential update before it is applied.",
+      "You review every consequential update before it is applied.",
     gmailConsentDisconnectNote:
-        "You can disconnect at any time from this card.",
+      "You can disconnect at any time from this card.",
     gmailConsentDeleteNote:
-        "Disconnecting revokes Rico's access at Google and clears the saved connection and its stored access token. Job updates already detected are kept with your applications.",
+      "Disconnecting revokes Rico's access at Google and clears the saved connection and its stored access token. Job updates already detected are kept with your applications.",
     gmailConsentCheckbox:
-        "I understand and approve recurring background sync under these terms.",
+      "I understand and approve recurring background sync under these terms.",
     gmailConsentGrant: "Approve recurring sync",
     gmailConsentCancel: "Cancel",
     gmailConsentRevoke: "Turn off recurring sync",
@@ -143,7 +143,7 @@ export const translations = {
     gmailConsentRevoked: "Recurring sync turned off.",
     gmailDisconnectConfirmTitle: "Disconnect Gmail?",
     gmailDisconnectConfirmBody:
-        "Rico will revoke access at Google and remove the stored connection. Imported history is kept.",
+      "Rico will revoke access at Google and remove the stored connection. Imported history is kept.",
     gmailDisconnectConfirm: "Yes, disconnect",
 
     // Forgot / Reset password
@@ -307,9 +307,13 @@ export const translations = {
     faqHowUpgrade: "How does upgrading work?",
     faqHowUpgradePaddle:
       "Click Upgrade to open secure checkout. After payment your plan activates immediately.",
+    faqHowUpgradeUnavailable:
+      "Card checkout is temporarily paused while we finalize our payment system. Tap Subscribe via WhatsApp to request a plan — a team member verifies your payment manually and your plan is activated after verification.",
     faqPaymentMethods: "What payment methods are accepted?",
     faqPaymentMethodsPaddle:
       "We accept all major credit and debit cards. Your payment is securely processed by Paddle and card details are never stored on our servers.",
+    faqPaymentMethodsUnavailable:
+      "Card payments are temporarily unavailable. You can subscribe via WhatsApp — a team member will assist you with payment and activation.",
     faqActivationTime: "How quickly is my account activated?",
     faqActivationTimePaddle:
       "Activation is immediate after successful payment.",
@@ -1355,10 +1359,10 @@ export const translations = {
 
     // Paddle Billing
     paddleBillingTitle: "Subscription",
-    paddleBillingSubtitle: "Manage your Rico Pro plan",
+    paddleBillingSubtitle: "Manage your Rico Monthly plan",
     paddleCurrentPlan: "Current plan",
     paddlePlanFree: "Free",
-    paddlePlanPro: "Rico Pro",
+    paddlePlanPro: "Rico Monthly",
     paddlePlanPremium: "Rico Premium",
     paddleStatusActive: "Active",
     paddleStatusTrialing: "Trial",
@@ -1490,27 +1494,27 @@ export const translations = {
     gmailConsentReview: "مراجعة واعتماد المزامنة المتكررة",
     gmailConsentTitle: "اعتماد المزامنة الخلفية المتكررة",
     gmailConsentIntro:
-        "هذا منفصل عن ربط Gmail. قبل أن يزامن ريكو بريدك في الخلفية وفق جدول، يُرجى مراجعة واعتماد ما يلي:",
+      "هذا منفصل عن ربط Gmail. قبل أن يزامن ريكو بريدك في الخلفية وفق جدول، يُرجى مراجعة واعتماد ما يلي:",
     gmailConsentReadOnly:
-        "يبقى الوصول للقراءة فقط — لا يستطيع ريكو إرسال بريدك أو حذفه أو تعديله.",
+      "يبقى الوصول للقراءة فقط — لا يستطيع ريكو إرسال بريدك أو حذفه أو تعديله.",
     gmailConsentJobOnly:
-        "يقرأ ريكو فقط الرسائل المتعلقة بالبحث عن عمل (رسائل جهات التوظيف والتقديم).",
+      "يقرأ ريكو فقط الرسائل المتعلقة بالبحث عن عمل (رسائل جهات التوظيف والتقديم).",
     gmailConsentMetadata:
-        "لتصنيف الرسالة يقرأ ريكو محتواها في الذاكرة أثناء المزامنة (الموضوع والنص). ويُخزّن البيانات الوصفية فقط: مقتطفًا قصيرًا من الموضوع، والمُرسِل، ونتيجة التصنيف — ولا يُخزَّن نص الرسائل الكامل ولا المرفقات إطلاقًا.",
+      "لتصنيف الرسالة يقرأ ريكو محتواها في الذاكرة أثناء المزامنة (الموضوع والنص). ويُخزّن البيانات الوصفية فقط: مقتطفًا قصيرًا من الموضوع، والمُرسِل، ونتيجة التصنيف — ولا يُخزَّن نص الرسائل الكامل ولا المرفقات إطلاقًا.",
     gmailConsentStored:
-        "ما يُخزَّن: بيانات وصفية متعلقة بالوظائف (مقتطف الموضوع، المُرسِل)، ونتيجة التصنيف/المطابقة، وسجل تدقيق خالٍ من الأسرار — دون نص الرسائل أو المرفقات.",
+      "ما يُخزَّن: بيانات وصفية متعلقة بالوظائف (مقتطف الموضوع، المُرسِل)، ونتيجة التصنيف/المطابقة، وسجل تدقيق خالٍ من الأسرار — دون نص الرسائل أو المرفقات.",
     gmailConsentWhyStored:
-        "لماذا يُخزَّن: لاكتشاف تحديثات طلبات التوظيف وعرضها عليك.",
+      "لماذا يُخزَّن: لاكتشاف تحديثات طلبات التوظيف وعرضها عليك.",
     gmailConsentNoSend: "لا يرسل ريكو أي بريد عبر هذا الإذن إطلاقًا.",
     gmailConsentNoSilent: "لا تتغيّر حالة أي طلب توظيف بصمت أبدًا.",
     gmailConsentReviewUpdates:
-        "تراجع كل تحديث مهم قبل تطبيقه.",
+      "تراجع كل تحديث مهم قبل تطبيقه.",
     gmailConsentDisconnectNote:
-        "يمكنك فصل الاتصال في أي وقت من هذه البطاقة.",
+      "يمكنك فصل الاتصال في أي وقت من هذه البطاقة.",
     gmailConsentDeleteNote:
-        "الفصل يُلغي وصول ريكو لدى Google ويمسح الاتصال المحفوظ ورمز الوصول المُخزَّن. وتبقى تحديثات الوظائف المكتشفة سابقًا ضمن طلباتك.",
+      "الفصل يُلغي وصول ريكو لدى Google ويمسح الاتصال المحفوظ ورمز الوصول المُخزَّن. وتبقى تحديثات الوظائف المكتشفة سابقًا ضمن طلباتك.",
     gmailConsentCheckbox:
-        "أفهم وأعتمد المزامنة الخلفية المتكررة وفق هذه الشروط.",
+      "أفهم وأعتمد المزامنة الخلفية المتكررة وفق هذه الشروط.",
     gmailConsentGrant: "اعتماد المزامنة المتكررة",
     gmailConsentCancel: "إلغاء",
     gmailConsentRevoke: "إيقاف المزامنة المتكررة",
@@ -1518,7 +1522,7 @@ export const translations = {
     gmailConsentRevoked: "تم إيقاف المزامنة المتكررة.",
     gmailDisconnectConfirmTitle: "فصل Gmail؟",
     gmailDisconnectConfirmBody:
-        "سيُلغي ريكو الوصول لدى Google ويزيل الاتصال المُخزَّن. يُحتفَظ بالسجل المستورد.",
+      "سيُلغي ريكو الوصول لدى Google ويزيل الاتصال المُخزَّن. يُحتفَظ بالسجل المستورد.",
     gmailDisconnectConfirm: "نعم، افصل",
 
     // Forgot / Reset password
@@ -1682,9 +1686,13 @@ export const translations = {
     faqHowUpgrade: "كيف تعمل الترقية؟",
     faqHowUpgradePaddle:
       "انقر ترقية لفتح الدفع الآمن. بعد الدفع، يتم تفعيل خطتك فورًا.",
+    faqHowUpgradeUnavailable:
+      "الدفع بالبطاقة متوقف مؤقتًا ريثما ننهي إعداد نظام الدفع. اضغط اشترك عبر واتساب لطلب الخطة — يتحقق أحد أعضاء الفريق من دفعتك يدويًا ويتم تفعيل خطتك بعد التحقق.",
     faqPaymentMethods: "ما هي طرق الدفع المقبولة؟",
     faqPaymentMethodsPaddle:
       "نقبل جميع بطاقات الائتمان والخصم الرئيسية. يتم معالجة الدفع بشكل آمن عبر Paddle ولا يتم تخزين تفاصيل البطاقة على خوادمنا.",
+    faqPaymentMethodsUnavailable:
+      "الدفع بالبطاقة غير متاح مؤقتًا. يمكنك الاشتراك عبر واتساب — سيساعدك أحد أعضاء الفريق في الدفع والتفعيل.",
     faqActivationTime: "كم سرعة تفعيل حسابي؟",
     faqActivationTimePaddle: "التفعيل فوري بعد الدفع الناجح.",
     faqChangeCancel: "هل يمكنني تغيير أو إلغاء خطتي؟",
@@ -2728,10 +2736,10 @@ export const translations = {
 
     // Paddle Billing
     paddleBillingTitle: "الاشتراك",
-    paddleBillingSubtitle: "إدارة خطة ريكو برو",
+    paddleBillingSubtitle: "إدارة خطة ريكو الشهرية",
     paddleCurrentPlan: "الخطة الحالية",
     paddlePlanFree: "مجاني",
-    paddlePlanPro: "ريكو برو",
+    paddlePlanPro: "ريكو الشهرية",
     paddlePlanPremium: "ريكو بريميوم",
     paddleStatusActive: "نشط",
     paddleStatusTrialing: "تجريبي",
