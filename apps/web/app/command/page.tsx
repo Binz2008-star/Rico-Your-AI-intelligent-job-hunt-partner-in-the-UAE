@@ -1827,12 +1827,22 @@ export default function CommandPage() {
             // localized key — never the raw English backend message.
             const tooLarge = err instanceof ApiError && err.statusCode === 413;
             const quota = tooLarge ? null : getCvQuotaError(err);
+            // A user already on a paid plan has filled their CV vault — guide
+            // them to manage files, never to "upgrade" to the plan they own.
+            // `plan` is absent/"free" for Free users, who DO get the upgrade copy.
+            const quotaKey: TranslationKey =
+                quota && quota.plan && quota.plan !== "free"
+                    ? "uploadErrQuotaManage"
+                    : "uploadErrQuota";
             const msg = tooLarge
                 ? t("cmdCvTooLarge")
                 : quota
-                    ? `${t("uploadErrQuota")}${cvQuotaCountSuffix(quota)}`
+                    ? `${t(quotaKey)}${cvQuotaCountSuffix(quota)}`
                     : t("cmdCvUploadErr");
-            setUploadError(msg);
+            // Single surface: Rico's chat reply carries the error (it flows
+            // naturally after the "Uploading …" line). The red composer banner
+            // is NOT also set for these handled cases — the same text appearing
+            // twice (chat + banner) was the duplicate-error complaint.
             setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: msg }]);
         } finally {
             setThinking(false);
