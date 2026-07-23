@@ -490,14 +490,16 @@ export function UploadAtelier() {
             )}
 
             {uploadOpen && (
-                <UploadZone
-                    docType={docType}
-                    onDocTypeChange={setDocType}
-                    onFileSelected={handleFileSelected}
-                    isUploading={isUploading}
-                    t={t}
-                    palette={palette}
-                />
+                <div data-wsx5-anim={v5 ? "unfold" : undefined} style={v5 ? ({ "--i": 1 } as React.CSSProperties) : undefined}>
+                    <UploadZone
+                        docType={docType}
+                        onDocTypeChange={setDocType}
+                        onFileSelected={handleFileSelected}
+                        isUploading={isUploading}
+                        t={t}
+                        palette={palette}
+                    />
+                </div>
             )}
 
             {loading ? (
@@ -515,7 +517,11 @@ export function UploadAtelier() {
                     </div>
                 )
             ) : files.length === 0 ? (
-                <div className={`flex flex-col items-center gap-3 py-14 text-center ${v5 ? "wsx5-card" : "rounded-xl"}`} style={{ border: `1px solid ${palette.hair}`, background: palette.panel }}>
+                <div
+                    className={`flex flex-col items-center gap-3 py-14 text-center ${v5 ? "wsx5-card" : "rounded-xl"}`}
+                    style={{ border: `1px solid ${palette.hair}`, background: palette.panel, ...(v5 ? ({ "--i": 2 } as React.CSSProperties) : {}) }}
+                    data-wsx5-anim={v5 ? "unfold" : undefined}
+                >
                     {v5 ? (
                         <RicoPresence state="ready" size="lg" decorative />
                     ) : (
@@ -532,7 +538,11 @@ export function UploadAtelier() {
                     </button>
                 </div>
             ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div
+                    className="grid gap-3 sm:grid-cols-2"
+                    data-wsx5-anim={v5 ? "unfold" : undefined}
+                    style={v5 ? ({ "--i": 2 } as React.CSSProperties) : undefined}
+                >
                     {files.map(doc => (
                         <FileCard
                             key={doc.id}
