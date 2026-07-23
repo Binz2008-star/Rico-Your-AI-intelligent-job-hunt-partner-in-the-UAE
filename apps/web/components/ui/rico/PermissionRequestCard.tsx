@@ -1,8 +1,9 @@
 "use client";
 
+import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { useWorkspaceTheme } from "@/components/workspace/theme";
+import type { RicoChatAction, RicoPermissionRequest } from "@/lib/schemas";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
-import type { RicoPermissionRequest, RicoChatAction } from "@/lib/schemas";
 
 export interface PermissionRequestCardProps {
     request: RicoPermissionRequest;
@@ -18,21 +19,9 @@ export interface PermissionRequestCardProps {
     disabled?: boolean;
 }
 
-const RISK_BADGE: Record<string, string> = {
-    medium: "bg-amber-500/10 border-amber-500/30 text-amber-400",
-    high:   "bg-red-500/10  border-red-500/30  text-red-400",
-};
-
 const RISK_LABEL: Record<string, string> = {
     medium: "Medium risk",
-    high:   "High risk",
-};
-
-// Cards for high-risk actions get a subtle red accent on the top border to
-// draw the eye before the user reads the title.
-const CARD_ACCENT: Record<string, string> = {
-    medium: "border-amber-500/20",
-    high:   "border-red-500/25",
+    high: "High risk",
 };
 
 export function PermissionRequestCard({
@@ -64,54 +53,70 @@ export function PermissionRequestCard({
         }
     }
 
+    const c = useWorkspaceTheme();
+
     if (executed) return null;
 
-    const riskBadge = RISK_BADGE[request.risk_level] ?? RISK_BADGE.medium;
+    const isHighRisk = request.risk_level === "high";
     const riskLabel = RISK_LABEL[request.risk_level] ?? request.risk_level;
-    const cardAccent = CARD_ACCENT[request.risk_level] ?? "";
+    const riskBadgeStyle: React.CSSProperties = isHighRisk
+        ? { background: `${c.red}1a`, border: `1px solid ${c.red}40`, color: c.red }
+        : { background: `${c.ink}0d`, border: `1px solid ${c.hair}`, color: c.ink55 };
+
+    const sectionLabelStyle: React.CSSProperties = {
+        fontFamily: ATELIER_FONT.mono,
+        fontSize: 9,
+        letterSpacing: "0.14em",
+        textTransform: "uppercase",
+        color: c.ink55,
+    };
+
+    const itemStyle: React.CSSProperties = {
+        fontSize: 12,
+        lineHeight: 1.6,
+        color: c.ink70,
+    };
 
     return (
         <div
             data-testid="permission-request-card"
-            className={cn(
-                "mt-3 rounded-xl border bg-surface-2 p-4 space-y-3",
-                cardAccent,
-            )}
+            className="mt-3 rounded-[14px] space-y-3"
+            style={{
+                background: c.panel,
+                border: `1px solid ${isHighRisk ? c.red : c.hair}`,
+                padding: "18px 20px",
+            }}
         >
             {/* Header: title + risk badge */}
             <div className="flex items-start justify-between gap-3">
-                <h4 className="text-sm font-semibold text-text-primary leading-tight">
+                <h4
+                    className="min-w-0 break-words"
+                    style={{ fontFamily: ATELIER_FONT.serif, fontSize: 15, fontWeight: 500, lineHeight: 1.35, color: c.ink }}
+                >
                     {request.title}
                 </h4>
                 <span
                     data-testid="risk-badge"
-                    className={cn(
-                        "shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border",
-                        riskBadge,
-                    )}
+                    className="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-medium"
+                    style={riskBadgeStyle}
                 >
                     {riskLabel}
                 </span>
             </div>
 
             {/* Summary */}
-            <p className="text-[13px] text-text-muted leading-relaxed">
+            <p style={{ fontSize: 12.5, lineHeight: 1.65, color: c.ink70 }}>
                 {request.summary}
             </p>
 
             {/* Data used */}
             {request.data_used.length > 0 && (
                 <div className="space-y-1" data-testid="data-used-section">
-                    <p className="text-[11px] font-medium text-text-muted uppercase tracking-wide">
-                        Data used
-                    </p>
+                    <p style={sectionLabelStyle}>Data used</p>
                     <ul className="space-y-0.5">
                         {request.data_used.map((item) => (
-                            <li
-                                key={item}
-                                className="text-[12px] text-text-secondary flex items-center gap-1.5"
-                            >
-                                <span className="w-1 h-1 rounded-full bg-text-muted shrink-0" />
+                            <li key={item} className="flex items-center gap-1.5" style={itemStyle}>
+                                <span className="w-1 h-1 rounded-full shrink-0" style={{ background: c.ink55 }} />
                                 {item}
                             </li>
                         ))}
@@ -122,16 +127,11 @@ export function PermissionRequestCard({
             {/* Effects */}
             {request.effects.length > 0 && (
                 <div className="space-y-1" data-testid="effects-section">
-                    <p className="text-[11px] font-medium text-text-muted uppercase tracking-wide">
-                        What will happen
-                    </p>
+                    <p style={sectionLabelStyle}>What will happen</p>
                     <ul className="space-y-0.5">
                         {request.effects.map((item) => (
-                            <li
-                                key={item}
-                                className="text-[12px] text-text-secondary flex items-center gap-1.5"
-                            >
-                                <span className="w-1 h-1 rounded-full bg-gold/60 shrink-0" />
+                            <li key={item} className="flex items-center gap-1.5" style={itemStyle}>
+                                <span className="w-1 h-1 rounded-full shrink-0" style={{ background: isHighRisk ? `${c.red}99` : c.ink55 }} />
                                 {item}
                             </li>
                         ))}
@@ -159,13 +159,13 @@ export function PermissionRequestCard({
                     data-testid="permission-approve-btn"
                     onClick={handleApprove}
                     disabled={disabled || executing}
-                    className={cn(
-                        "text-[12px] px-3 py-1.5 rounded-lg font-medium transition-colors",
-                        "bg-gold/20 border border-gold/40 text-gold",
-                        "hover:bg-gold/30 hover:border-gold/60",
-                        "disabled:opacity-50 disabled:cursor-not-allowed",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50",
-                    )}
+                    className="rounded-md px-3.5 py-1.5 text-[11px] font-medium transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+                    style={{
+                        background: c.red,
+                        color: "#fff",
+                        border: `1px solid ${c.red}`,
+                        ["--tw-ring-color" as string]: `${c.red}80`,
+                    }}
                 >
                     {executing ? "Executing…" : request.approve_action.label}
                 </button>
@@ -179,13 +179,13 @@ export function PermissionRequestCard({
                         onClick={onReview ? () => onReview(request.review_action!) : undefined}
                         disabled={disabled || executing || !onReview}
                         title={!onReview ? "Review details — coming soon" : undefined}
-                        className={cn(
-                            "text-[12px] px-3 py-1.5 rounded-lg border transition-colors",
-                            "border-border-soft text-text-secondary",
-                            "hover:border-border-default enabled:hover:text-text-primary",
-                            "disabled:opacity-50 disabled:cursor-not-allowed",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-soft",
-                        )}
+                        className="rounded-md px-3.5 py-1.5 text-[11px] font-medium transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+                        style={{
+                            background: "transparent",
+                            color: c.ink70,
+                            border: `1px solid ${c.hair}`,
+                            ["--tw-ring-color" as string]: `${c.red}80`,
+                        }}
                     >
                         {request.review_action.label}
                     </button>
@@ -197,13 +197,13 @@ export function PermissionRequestCard({
                     data-testid="permission-cancel-btn"
                     onClick={onCancel}
                     disabled={executing}
-                    className={cn(
-                        "text-[12px] px-3 py-1.5 rounded-lg border transition-colors",
-                        "border-border-soft text-text-muted",
-                        "hover:border-border-default hover:text-text-secondary",
-                        "disabled:opacity-50 disabled:cursor-not-allowed",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-soft",
-                    )}
+                    className="rounded-md px-3.5 py-1.5 text-[11px] font-medium transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+                    style={{
+                        background: "transparent",
+                        color: c.ink55,
+                        border: `1px solid ${c.hair}`,
+                        ["--tw-ring-color" as string]: `${c.red}80`,
+                    }}
                 >
                     {request.cancel_action.label}
                 </button>

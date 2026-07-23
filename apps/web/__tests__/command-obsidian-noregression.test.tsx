@@ -338,9 +338,8 @@ describe("C1 no-regression — real CommandPage over network fixtures", () => {
         const leftToggle = screen.getByLabelText("Toggle sessions rail");
         const leftRail = screen.getByTestId("command-obsidian-leftrail");
         expect(leftToggle).toHaveAttribute("aria-expanded", "true");
-        // TASK-20260723-002: the full rail is now ≥1200px (was ≥1024px/lg),
-        // rebalanced to 232px (was 260px) so the transcript stays primary.
-        expect(leftRail.className).toContain("min-[1200px]:w-[232px]");
+        // rico-chat-design.html .chat-layout uses a 220px left column.
+        expect(leftRail.className).toContain("min-[1200px]:w-[220px]");
         fireEvent.click(leftToggle);
         expect(leftToggle).toHaveAttribute("aria-expanded", "false");
         expect(leftRail.className).toContain("min-[1200px]:w-0");

@@ -51,12 +51,13 @@ export function TranscriptGutter({
     const { language } = useLanguage();
     return (
         <span
-            className="min-w-[56px] shrink-0 select-none pt-[5px]"
+            className="min-w-[52px] shrink-0 select-none pt-[5px] text-start"
             style={{
                 fontFamily: ATELIER_FONT.mono,
-                fontSize: 10,
+                fontSize: 9.5,
                 textTransform: "uppercase",
-                letterSpacing: language === "ar" ? "0.04em" : "0.2em",
+                letterSpacing: language === "ar" ? "0.04em" : "0.18em",
+                fontWeight: 500,
                 color: hot ? c.red : ink ? c.ink : c.ink55,
             }}
             aria-hidden="true"
@@ -130,29 +131,45 @@ export function CommandTranscriptStep({
     const progress = realProgressRows(message);
 
     /* Real progress rows (agentic_ui.progress) — CHECK/RUN/FAIL, API-sent only. */
+    const progressColor = (status: string) => {
+        if (status === "complete") return c.ink55;
+        if (status === "pending") return c.ink40;
+        return c.ink70;
+    };
+    const progressWeight = (status: string) => status === "running" ? 450 : 400;
+    const progressDecoration = (status: string) => status === "complete" ? "line-through" : "none";
+    const progressIcon = (status: string) => {
+        if (status === "complete") return t("cmdGutterCheck");
+        if (status === "failed") return "×";
+        return null; // running/pending renders a small spinner
+    };
+
     const progressRows = progress.length > 0 && (
-        <div className="flex flex-col gap-1" data-testid="transcript-progress">
+        <div className="flex flex-col gap-0.5" data-testid="transcript-progress">
             {progress.map((p) => (
-                <div key={p.id} className="flex items-start gap-4">
-                    <TranscriptGutter
-                        label={
-                            p.status === "complete"
-                                ? t("cmdGutterCheck")
-                                : p.status === "failed"
-                                    ? t("cmdGutterFail")
-                                    : t("cmdGutterRun")
-                        }
-                        hot={p.status === "running" || p.status === "failed"}
-                    />
+                <div key={p.id} className="flex items-start gap-3 py-0.5">
+                    <span
+                        className="mt-px flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center text-[10px]"
+                        aria-hidden="true"
+                        style={{ color: progressColor(p.status) }}
+                    >
+                        {progressIcon(p.status) ?? (
+                            <span
+                                className="inline-block h-2.5 w-2.5 animate-pulse rounded-full"
+                                style={{ background: c.red }}
+                            />
+                        )}
+                    </span>
                     <span
                         className="min-w-0 flex-1"
                         style={{
                             fontFamily: ATELIER_FONT.mono,
-                            fontSize: 11,
-                            textTransform: "uppercase",
-                            letterSpacing: language === "ar" ? "0.02em" : "0.16em",
-                            color: p.status === "complete" ? c.ink55 : c.ink70,
-                            textDecoration: p.status === "complete" ? "line-through" : "none",
+                            fontSize: 10.5,
+                            letterSpacing: "0.06em",
+                            fontWeight: progressWeight(p.status),
+                            color: progressColor(p.status),
+                            textDecoration: progressDecoration(p.status),
+                            paddingTop: 1,
                         }}
                     >
                         {p.label}
@@ -203,7 +220,7 @@ export function CommandTranscriptStep({
         return (
             <div
                 data-testid="transcript-fail-row"
-                className={`flex items-start gap-4 ${isFirstInGroup ? "mt-5" : "mt-2"}`}
+                className={`flex items-start gap-3.5 ${isFirstInGroup ? "mt-5" : "mt-2"}`}
             >
                 <TranscriptGutter label={t("cmdGutterFail")} hot />
                 <div
@@ -232,7 +249,7 @@ export function CommandTranscriptStep({
             <div className={`flex flex-col gap-2 ${isFirstInGroup ? "mt-5" : "mt-2"} ${entranceClass}`}>
                 <div
                     data-testid="transcript-needs-input-row"
-                    className="flex items-start gap-4"
+                    className="flex items-start gap-3.5"
                     role="status"
                     aria-live="polite"
                 >
@@ -288,7 +305,7 @@ export function CommandTranscriptStep({
             {progressRows}
             <div
                 data-testid="transcript-card-row"
-                className={`flex items-start gap-4 ${entranceClass}`}
+                className={`flex items-start gap-3.5 ${entranceClass}`}
             >
                 <TranscriptGutter label={t("cmdGutterRico")} hot={message.streaming === true} />
                 <div
@@ -327,7 +344,7 @@ export function TranscriptWorkingRow({
 
     if (label) {
         return (
-            <div data-testid="transcript-run-row" className="mt-2 flex items-start gap-4" role="status">
+            <div data-testid="transcript-run-row" className="mt-2 flex items-start gap-3.5" role="status">
                 <TranscriptGutter label={t("cmdGutterRun")} hot />
                 <span
                     className="min-w-0 flex-1"

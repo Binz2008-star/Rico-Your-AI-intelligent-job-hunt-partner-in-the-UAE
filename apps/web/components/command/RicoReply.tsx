@@ -26,6 +26,8 @@
  *      receive the streamed answer.
  */
 
+import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { Check, Copy, RotateCcw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { RicoReplyMarkdown } from "./RicoReplyMarkdown";
@@ -41,14 +43,14 @@ export function RicoReply({ text, streaming = false, canRegenerate = false, onRe
   // `animate-fade-up` here used to compound with it (message settle ~400ms
   // vs. the ~150-220ms this is meant to feel like) — one animation, not two.
   return (
-    <div className="relative ps-3" aria-live="polite" aria-busy={streaming || undefined}>
+    <div className="relative ps-3.5" aria-live="polite" aria-busy={streaming || undefined}>
       <span aria-hidden className="absolute inset-y-1 start-0 w-px animate-rail-draw motion-reduce:animate-none bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
       {/* Structured answer: the same reply string rendered as safe markdown —
           headings, lists, links, code, blockquotes, hierarchy — at a controlled
           reading width. Markdown renders during streaming too (not a plain→
           formatted swap at settle), so long answers don't jump on completion.
           The `serif` class here keeps the transcript's prose contract. */}
-      <div dir="auto" className="serif max-w-[72ch] text-[16.5px] leading-[1.7] text-ink">
+      <div dir="auto" className="serif max-w-[70ch] text-[16px] leading-[1.75] text-ink">
         <RicoReplyMarkdown text={text} />
         {streaming && <span data-testid="transcript-streaming-caret" aria-hidden className="animate-caret motion-reduce:animate-none ms-0.5 inline-block h-[1em] w-[0.55ch] translate-y-[0.15em] bg-ink align-baseline" />}
       </div>
@@ -73,7 +75,17 @@ export function RicoUserBubble({ text }: { text: string }) {
   // provides entrance — no second animation on this component's own root.
   return (
     <div className="flex justify-end">
-      <div dir="auto" className="max-w-[78%] rounded-sm border border-ink bg-ink px-3 py-2 text-[14.5px] text-paper">{text}</div>
+      <div
+        dir="auto"
+        className="max-w-[74%] rounded-[14px] bg-ink px-[18px] py-[10px] text-[14px] leading-[1.55] text-paper"
+        style={{
+          fontFamily: ATELIER_FONT.body,
+          fontWeight: 450,
+          letterSpacing: "-0.01em",
+        }}
+      >
+        {text}
+      </div>
     </div>
   );
 }
@@ -92,15 +104,16 @@ export function RicoThinking({ isAr = false }: { isAr?: boolean }) {
      polite region never announces per-second ticks) appears once the wait is
      long enough to be worth explaining. */
   const { label, stage, elapsed } = useThinkingStages(isAr);
+  const c = useWorkspaceTheme();
   return (
-    <div className="relative ps-3 animate-fade-up motion-reduce:animate-none" role="status" aria-live="polite">
+    <div className="relative ps-3.5 animate-fade-up motion-reduce:animate-none" role="status" aria-live="polite">
       <span aria-hidden className="absolute inset-y-1 start-0 w-px animate-rail-draw motion-reduce:animate-none bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
-      <p className="serif-italic text-[16.5px] leading-[1.65] text-ink-mute">
+      <p className="serif-italic text-[16px] leading-[1.75] text-ink-mute">
         <span key={stage} className="atl-reason-shimmer inline-block animate-stage-in motion-reduce:animate-none">{label}</span>
         <span aria-hidden className="ms-1.5 inline-flex items-baseline gap-[3px] align-middle">
-          <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" />
-          <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" style={{ animationDelay: "0.15s" }} />
-          <span className="inline-block h-1 w-1 rounded-full bg-ink-mute animate-dot-cascade motion-reduce:animate-pulse" style={{ animationDelay: "0.3s" }} />
+          <span className="inline-block h-1 w-1 rounded-full animate-dot-cascade motion-reduce:animate-pulse" style={{ background: c.red }} />
+          <span className="inline-block h-1 w-1 rounded-full animate-dot-cascade motion-reduce:animate-pulse" style={{ background: c.red, animationDelay: "0.15s" }} />
+          <span className="inline-block h-1 w-1 rounded-full animate-dot-cascade motion-reduce:animate-pulse" style={{ background: c.red, animationDelay: "0.3s" }} />
         </span>
         {elapsed >= 5 && (
           <span aria-hidden className="ms-2 inline-block align-middle text-[11px] not-italic tabular-nums text-ink-mute/80" style={{ fontFamily: "var(--font-mono), ui-monospace, monospace" }}>
