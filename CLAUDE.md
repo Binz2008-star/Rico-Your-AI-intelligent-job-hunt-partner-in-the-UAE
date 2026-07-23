@@ -35,6 +35,8 @@ For new Rico work sessions, start from `AI_WORKSPACE/START_HERE.md`.
 
 Use the AI workspace as the shared source of truth for tasks, decisions, handoffs, evaluations, and prompt contracts. Do not rely on chat memory when the repository already contains current workspace files.
 
+Multiple AI agents (Claude, Windsurf, Codex, Devin, Lovable) work in this repository. `AGENTS.md` defines the mandatory cross-session coordination gate: read `AI_WORKSPACE/PROJECT_STATUS.md` (the current execution lock) before planning or editing, one writer per branch, and never create a competing branch when an active PR already exists for the objective.
+
 ## Rico Operating Rules
 
 Before planning, coding, reviewing, merging, or verifying production, read `AI_WORKSPACE/OPERATING_RULES.md`.
@@ -173,6 +175,10 @@ The repo combines three layers:
 - `src/api/routers/actions.py` — idempotent job actions (apply/save/skip/block/draft/why)
 - `src/api/routers/agent.py` — natural-language chat with Rico agent
 - `src/api/routers/pipeline.py` — pipeline status/trigger
+- `src/api/routers/subscription.py`, `paddle_billing.py`, `billing_whatsapp.py`, `admin_subscriptions.py` — billing/entitlements (Paddle + WhatsApp-assisted channel; activation is admin-only)
+- `src/api/routers/apply_queue.py` — apply queue management
+- `src/api/routers/link_verification.py` — job apply-link verification (#354)
+- (the full router set lives in `src/api/routers/` — more routers exist than are listed here)
 - `src/rico_jotform_webhook.py` — Jotform processing and idempotency
 - `src/rico_telegram_webhook.py` — Telegram webhook processing
 - `src/rico_db.py` — Rico DB helper
@@ -273,15 +279,27 @@ python -m uvicorn src.api.app:app --reload --port 8000
 # Legacy/Rico daily pipeline
 python -m src.run_daily
 
-# Backend tests
+# Backend tests (pytest.ini sets testpaths=tests, asyncio_mode=strict)
 python -m pytest tests/ -v --tb=short
 python -m pytest tests/test_agent.py tests/test_agent_runtime.py tests/test_jotform_webhook.py tests/test_jwt_user_isolation.py tests/test_onboarding_state.py -q
+
+# Single backend test
+python -m pytest tests/test_agent.py::test_name -v
 
 # Frontend
 cd apps/web
 npm run dev
 npm run build
 npm run lint
+
+# Frontend unit tests (Vitest, jsdom; tests live in apps/web/__tests__/)
+cd apps/web
+npm run test                                  # full suite (CI-required gate)
+npx vitest run __tests__/auth-guard.test.tsx  # single file
+
+# Frontend E2E (Playwright specs in apps/web/e2e/; excluded from Vitest)
+cd apps/web
+npx playwright test
 ```
 
 ## Required Env Vars
@@ -387,6 +405,12 @@ NEXT_PUBLIC_RICO_API=https://rico-job-automation-api.onrender.com
 
 Do not invent new env var names unless the code is being intentionally migrated.
 
+## Database Migrations
+
+- Schema migrations are numbered SQL files in `migrations/` (e.g. `034_drop_redundant_indexes.sql`). New migrations continue the numeric sequence.
+- Migration drift is checked by `scripts/check_migration_drift.py` (workflow `migration-drift-check.yml`) and applied through `scripts/apply_migration_drift.py` (workflow `apply-migration-drift.yml`) — not by hand.
+- Never mutate the live Neon database directly. Neon migration safety rules are in `AI_WORKSPACE/OPERATING_RULES.md`.
+
 ## Async I/O Patterns
 
 - `src/cv_parser.py` is synchronous by design (CPU/IO-bound parsing operations).
@@ -408,7 +432,9 @@ Do not invent new env var names unless the code is being intentionally migrated.
 - Unit tests must not write to the live Neon database.
 - Prefer mocks/fixtures for repositories and external services.
 - Do not call live OpenAI, Hugging Face, Telegram, Jotform, Gmail, or JSearch APIs in unit tests.
-- For frontend changes, run `npm run build` in `apps/web`.
+- For frontend changes, run `npm run build` AND `npm run test` in `apps/web` — both are required CI gates in `qa-tests.yml`.
+- Frontend unit tests are Vitest + Testing Library in `apps/web/__tests__/`; Playwright E2E specs live in `apps/web/e2e/` and are excluded from the Vitest run.
+- CI (`qa-tests.yml`) runs backend pytest with fake env values and `REDIS_URL` unset (SlowAPI falls back to `memory://` — with a real `REDIS_URL` absent, rate-limited routes would 500). Match that setup when reproducing CI failures locally.
 - For Daily Job Bot changes, run `python -m py_compile src/run_daily.py` before running the workflow.
 
 ## AI Provider Routing
@@ -438,6 +464,10 @@ Migration is complete. `apps/web/lib/client.ts` has been deleted. All API calls 
 - All job actions (apply/save/skip/block/draft/why/remind) MUST go through `agent_runtime.handle_action()` — never call repo layer directly from routers for actions.
 - Idempotency key: MD5 of `user_id:action:job_key`. Do not change this scheme without updating the audit log schema.
 - `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true` is the default. Any code path that bypasses this for apply actions is a safety violation.
+
+## Landing Page Production Freeze
+
+Do not change `apps/web/app/page.tsx` to swap the production landing component without explicit owner approval. New landing designs go through `design-handoffs/` → `/design-gallery` → owner approval → a separate minimal swap PR. Copy-only or bug-fix changes inside the current production component are allowed. Full rule and incident history: `AGENTS.md` → "Landing Page Production Freeze".
 
 ## Safety Layer Rules
 
