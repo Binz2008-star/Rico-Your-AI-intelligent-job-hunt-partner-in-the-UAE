@@ -93,6 +93,33 @@ describe("v5 foundation tokens", () => {
         expect(ratio(V5.onEmber, V5.emberBtnEnd)).toBeGreaterThanOrEqual(4.5);
     });
 
+    it("wsx5-card hover/focus border-color stays capable of overriding the global .wsx-action accent rule", () => {
+        // WorkspaceShell injects `.wsx-root .wsx-action:hover { border-color:
+        // ${c.red} !important; }` for non-card .wsx-action surfaces (nav
+        // items, buttons). That selector and `.wsx-action.wsx5-card:hover`
+        // are equal specificity (two classes + one pseudo-class each), so
+        // without `!important` on this rule too, cascade order alone decides
+        // and the hairline lift's border-color can silently never render.
+        const css = readFileSync(
+            join(__dirname, "..", "components", "workspace", "v5", "motion.css"),
+            "utf8",
+        );
+        const block = css.match(
+            /\.wsx-action\.wsx5-card:hover,\s*\n\.wsx-action\.wsx5-card:focus-visible\s*\{([\s\S]*?)\}/,
+        );
+        expect(block, "motion.css: .wsx-action.wsx5-card hover/focus rule not found").not.toBeNull();
+        expect(block![1]).toMatch(/border-color:\s*var\(--wsx5-hair2\)\s*!important\s*;/);
+
+        const shellSrc = readFileSync(
+            join(__dirname, "..", "components", "workspace", "WorkspaceShell.tsx"),
+            "utf8",
+        );
+        expect(
+            shellSrc,
+            "WorkspaceShell's global .wsx-action:hover border-color !important rule moved or was removed — re-check the equal-specificity tradeoff above before changing it",
+        ).toMatch(/\.wsx-root \.wsx-action:hover \{ border-color: \$\{c\.red\} !important; \}/);
+    });
+
     it("mode accent map covers all seven modes with AA text accents only", () => {
         const modes: V5ModeKey[] = [
             "overview",

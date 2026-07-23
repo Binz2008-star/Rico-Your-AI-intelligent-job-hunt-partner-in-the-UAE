@@ -119,7 +119,12 @@
     box-shadow:
         0 2px 4px rgba(31, 27, 21, 0.06),
         0 16px 36px -16px rgba(31, 27, 21, 0.32);
-    border-color: var(--wsx5-hair2);
+    /* !important required: WorkspaceShell injects a same-specificity
+       global rule (.wsx-root .wsx-action:hover) with its own !important
+       for non-card .wsx-action surfaces (nav/buttons); without this,
+       cascade order alone decides the winner and the hairline lift's
+       border-color silently never renders. */
+    border-color: var(--wsx5-hair2) !important;
 }
 .wsx5-deepcard {
     background: linear-gradient(
