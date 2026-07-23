@@ -314,7 +314,7 @@ def mark_checkout_session_used(
                 """
                 UPDATE paddle_checkout_sessions
                 SET used = TRUE
-                WHERE session_token = %s
+                WHERE session_token = %s AND used = FALSE
                 """,
                 (session_token,),
             )
