@@ -78,6 +78,145 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260723-004 — CLAUDE.md best-practices tooling + full open-PR backlog merge & production verification
+
+Status: done
+Owner: Claude (owner-directed: install+run the claude-md-best-practices skill,
+then "take the lead as CTO" on reviewing and merging the entire open-PR
+backlog)
+Branch: `claude/md-best-practices-generator-auau3b` (final home of the
+CLAUDE.md refactor commit, reconciled onto the pre-existing PR #1346 rather
+than opened as a competing PR)
+Issue/PR: #1346 (tooling+refactor), plus reviewed-and-merged #1347, #1348,
+#1349, #1350 as part of the same session
+
+#### Objective
+
+Install the `claude-md-best-practices` Claude Code plugin, run its guideline
+pipeline and `/refactor-claude-md` audit against root `CLAUDE.md`, apply the
+resulting split (root + scoped files), reconcile with a pre-existing PR doing
+overlapping install work, then — on explicit owner instruction — review and
+merge the full open-PR backlog and verify production.
+
+#### Context
+
+- Relevant files: `CLAUDE.md`, `src/CLAUDE.md` (new), `apps/web/CLAUDE.md`
+  (new), `docs/env-vars.md` (new), `docs/CLAUDE-MD-SOTA.md` (new),
+  `.claude/skills/{refresh-guidelines,refactor-claude-md,scaffold-claude-md}`
+  (new, from PR #1346's original commit), `.gitignore`.
+- Relevant docs: `AGENTS.md` (the cross-tool contract that shaped the split —
+  see Decision below), `AI_WORKSPACE/OPERATING_RULES.md` (Backend/Render
+  Verification + Production Smoke Matrix, used for the post-merge check).
+- Existing behavior: root `CLAUDE.md` was 498 lines, mixing cross-cutting
+  rules with backend/frontend-only implementation detail.
+
+#### Decision worth recording
+
+`AGENTS.md` explicitly promises non-Claude-Code agent tools (Windsurf, Codex,
+Devin, Lovable) that root `CLAUDE.md` contains the full auth rules, safety
+rules, testing strategy, and AI provider routing. Those tools likely don't
+support Claude Code's on-demand subdirectory-CLAUDE.md loading, so those
+sections were deliberately kept in root even though it means missing the
+generic 300-line SOTA guideline (root ended at 349 lines, not <300). Only
+genuinely backend/frontend **implementation-only** detail (Jotform
+idempotency, async I/O pattern, agent-runtime internals, Telegram audience
+routing, migration-status notes, Landing Page Freeze working copy) moved to
+the new scoped files. This was a live human-in-the-loop decision, not an
+automatic application of the generic guideline — flagged to the owner before
+executing.
+
+A second coordination conflict was found and resolved: a separate PR (#1346)
+already existed doing overlapping "install this plugin" work (different
+mechanism — project-committed `.claude/skills/*` vs. this session's global
+`claude plugin marketplace add`/`install`; different `docs/CLAUDE-MD-SOTA.md`
+content — theirs had 9/14 sources blocked by a sandboxed network proxy,
+this session's had all 14 succeed). Reconciled by cherry-picking this
+session's refactor commit onto PR #1346's branch in an isolated worktree
+(`X:/rico-worktrees/claude-md-sota-reconcile`, removed after use) rather than
+opening a second, competing PR — resolving the `docs/CLAUDE-MD-SOTA.md`
+add/add conflict in favor of the more complete fetch.
+
+A third, more serious conflict: mid-session, another agent was found actively
+committing directly in the shared **main working directory** (not an isolated
+worktree) — caught via `git reflog` showing branch switches and a commit
+(`docs(workspace): reconcile PROJECT_STATUS.md with live main`, → `#1349`)
+landing while this session was running. Restored the main worktree's HEAD to
+where that agent left it and moved all further git work to a dedicated
+worktree, per `AGENTS.md`'s "another writer owns the objective" stop
+condition.
+
+#### Constraints
+
+- Do not touch: application/runtime code (this task is docs+tooling only,
+  aside from reviewing — not authoring — #1347/#1348's app-code changes).
+- No migrations: n/a, none involved.
+- Keep scope limited to: CLAUDE.md-family docs, plus the owner-directed PR
+  review/merge sweep once explicitly authorized.
+
+#### Acceptance criteria
+
+- [x] `docs/CLAUDE-MD-SOTA.md` generated from all 14 reachable curated sources.
+- [x] Root `CLAUDE.md` audited against it via the plugin's own
+      `/refactor-claude-md` procedure (manually followed, since the plugin
+      wasn't yet registered with the Skill tool mid-session).
+- [x] Scoped `src/CLAUDE.md` / `apps/web/CLAUDE.md` created; no content
+      deleted, only relocated (verified via diff read-through).
+- [x] Reconciled with pre-existing PR #1346 instead of opening a competing PR.
+- [x] Full open-PR backlog (5 PRs) individually reviewed (diff read, CI
+      status, mergeability) before merge — not a blind bulk merge.
+- [x] Production verified post-merge: Render deploy workflow success on the
+      final SHA, `/version` + `/health` confirmed, live public-chat smoke
+      test passed.
+- [x] `PROJECT_STATUS.md` and this file reconciled to reflect the merges.
+
+#### Required verification
+
+- [x] Unit tests: pre-existing CI on each PR (not re-run standalone by this
+      task; relied on each PR's own green CI).
+- [x] Integration tests: same — CI included `postgres-integration`, `playwright`.
+- [x] Frontend build: covered by each PR's CI `frontend` check.
+- [x] Local smoke: n/a (docs/tooling task).
+- [x] Production/deploy smoke: done directly — `GET /version`, `GET /health`,
+      live `POST /api/v1/rico/chat/public` call, all after the final merge.
+
+#### Continuity Block
+
+- Task ID: TASK-20260723-004
+- GitHub issue/PR: #1346 (+ #1347, #1348, #1349, #1350 reviewed/merged same session)
+- Branch: `claude/md-best-practices-generator-auau3b` (merged, deleted)
+- Base branch: main
+- Last safe commit SHA: `45fa80c47b2a885bf9680e9f92f978a13aa3c5ad` (current main, post-merge)
+- Current head SHA: `45fa80c47b2a885bf9680e9f92f978a13aa3c5ad`
+- Uncommitted changes present: no (this doc update itself is the only pending write)
+- Status: done
+- Files inspected: root `CLAUDE.md` (full), `AGENTS.md` (full), diffs for
+  #1347/#1348/#1350, `AI_WORKSPACE/PROJECT_STATUS.md`, `docs/guidelines-raw.json`
+  (partial — large file, sampled rather than read whole to control cost)
+- Files changed: `CLAUDE.md`, `src/CLAUDE.md` (new), `apps/web/CLAUDE.md`
+  (new), `docs/env-vars.md` (new), `docs/CLAUDE-MD-SOTA.md` (new/reconciled),
+  `.gitignore`, `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/CURRENT_STATE.md`,
+  this file
+- Files intentionally not touched: `AI_WORKSPACE/ROADMAP`-family docs (not
+  reconciled in this pass — flagged, not done); `docs/architecture.md`
+  (referenced, unchanged, still accurate)
+- What is complete: everything in Acceptance criteria above
+- What is incomplete: nothing for this task's own scope; broader items
+  (canonical CV inventory, repo-wide ungrounded-generation sweep, full
+  production smoke gate beyond chat) remain open per `PROJECT_STATUS.md`
+  "Next exact action" — not part of this task
+- Known blockers: none
+- Validation already run: `gh pr checks` / `gh pr view --json mergeable,mergeStateStatus`
+  per PR before each merge; `curl /version`, `curl /health`,
+  `curl POST /api/v1/rico/chat/public` after the final merge (all passed)
+- Validation still required: none for this task
+- Deployment/CI/Neon/Vercel state to check next: none outstanding — Render
+  confirmed live on the merged SHA; no Vercel-relevant frontend code changed
+- Next exact action: none for this task; see `PROJECT_STATUS.md` for the
+  repo's actual next priorities
+- Stop condition: n/a, task closed
+- Rollback plan: each merged PR is a single squash commit on `main`
+  (`git revert <sha>` per PR if needed); no migrations, no irreversible state
+
 ### TASK-20260723-003 — #1072: invalidate stale JWTs after reset, deactivation, or role change
 
 Status: review (re-cut from current main per CTO ruling 2026-07-23 on #1138;
