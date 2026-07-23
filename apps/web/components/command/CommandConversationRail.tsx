@@ -216,21 +216,22 @@ export function CommandConversationRail({
     }
 
     return (
-        <div data-testid="command-conversation-rail" className="flex w-[232px] flex-1 min-h-0 flex-col p-5 px-3.5">
-            {/* Header: SESSIONS · + new */}
+        <div data-testid="command-conversation-rail" className="flex w-[220px] flex-1 min-h-0 flex-col p-5 px-3.5">
+            {/* Header: SESSIONS */}
             <div className="mb-2.5 flex items-center justify-between px-1">
                 <span style={{ ...eyebrow, color: c.ink55 }}>{t("cmdSessionsTitle")}</span>
-                <button
-                    type="button"
-                    onClick={onNewChat}
-                    disabled={busy}
-                    data-testid="command-rail-new-chat"
-                    className="w-full rounded-lg border border-dashed border-rule bg-transparent py-2 px-3 text-center text-ink-soft transition-colors hover:border-sun hover:text-sun hover:bg-sun/10 disabled:opacity-50"
-                    style={{ fontFamily: ATELIER_FONT.mono, fontSize: 11.5, cursor: busy ? "default" : "pointer" }}
-                >
-                    {t("cmdSessionsNew")}
-                </button>
             </div>
+
+            <button
+                type="button"
+                onClick={onNewChat}
+                disabled={busy}
+                data-testid="command-rail-new-chat"
+                className="mb-1 w-full rounded-lg border border-dashed border-rule bg-transparent py-2 px-3 text-center text-ink-soft transition-colors hover:border-sun hover:text-sun hover:bg-sun/10 disabled:opacity-50"
+                style={{ fontFamily: ATELIER_FONT.mono, fontSize: 11.5, cursor: busy ? "default" : "pointer" }}
+            >
+                {t("cmdSessionsNew")}
+            </button>
 
             {/* Body: real conversation state only */}
             <div className="flex-1 min-h-0 overflow-y-auto">
@@ -270,7 +271,7 @@ export function CommandConversationRail({
                                         data-session-id={s.id}
                                         className="obs-session-row flex w-full items-baseline gap-2 rounded-lg py-2.5 px-3 text-start transition-colors"
                                         style={{
-                                            background: isActive ? c.panel : "transparent",
+                                            background: isActive ? c.bg : "transparent",
                                             color: isActive ? c.ink : c.ink70,
                                             border: isActive ? `1px solid ${c.hair}` : "1px solid transparent",
                                             fontWeight: isActive ? 500 : 400,
@@ -314,7 +315,7 @@ export function CommandConversationRail({
                     <div
                         data-testid="command-rail-current"
                         className="flex items-baseline gap-2 rounded-lg py-2.5 px-3"
-                        style={{ background: c.panel, color: c.ink, border: `1px solid ${c.hair}`, fontWeight: 500 }}
+                        style={{ background: c.bg, color: c.ink, border: `1px solid ${c.hair}`, fontWeight: 500 }}
                         aria-current="true"
                     >
                         <span aria-hidden="true" className="h-1 w-1 shrink-0 -translate-y-[2px] rounded-full" style={{ background: c.red }} />
@@ -418,14 +419,14 @@ export function CommandConversationRail({
                 }
                 [data-testid="command-conversation-rail"] .obs-session-row:not([aria-current]):not(:disabled):hover {
                     transform: translateX(2px);
-                    background-color: ${c.panel};
+                    background-color: ${c.bg};
                 }
                 [dir="rtl"] [data-testid="command-conversation-rail"] .obs-session-row:not([aria-current]):not(:disabled):hover {
                     transform: translateX(-2px);
-                    background-color: ${c.panel};
+                    background-color: ${c.bg};
                 }
                 @media (prefers-reduced-motion: reduce) {
-                    [data-testid="command-conversation-rail"] .obs-session-row:hover { transform: none; background-color: ${c.panel}; }
+                    [data-testid="command-conversation-rail"] .obs-session-row:hover { transform: none; background-color: ${c.bg}; }
                 }
             ` }} />
         </div>

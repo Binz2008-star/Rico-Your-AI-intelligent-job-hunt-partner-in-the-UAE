@@ -120,7 +120,7 @@ export function CommandRail({
         <>
             <div className="flex flex-1 min-h-0 flex-col gap-5 overflow-y-auto pt-5 px-3.5" data-testid="command-rail-content">
                 {/* Shortlist eyebrow + count */}
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-2.5 flex items-center justify-between">
                     <span style={{ ...eyebrow, color: c.ink55 }}>{t("cmdRailShortlist")}</span>
                     <span dir="ltr" style={{ ...eyebrow, color: c.ink }} data-testid="command-rail-count">
                         {picks.length}
@@ -144,13 +144,13 @@ export function CommandRail({
                                 <li
                                     key={`${j.title}|${j.company}`}
                                     data-testid="command-rail-pick"
-                                    className="rounded-lg p-2.5 transition-colors"
+                                    className="rr-item rounded-lg p-2.5 transition-colors"
                                     style={{ background: "transparent" }}
                                 >
                                     <div className="mb-1 flex items-baseline justify-between gap-2">
                                         <span
                                             className="truncate text-[12px] leading-tight"
-                                            style={{ color: c.ink, fontFamily: ATELIER_FONT.serif, fontWeight: 500 }}
+                                            style={{ color: c.ink, fontFamily: ATELIER_FONT.body, fontWeight: 500 }}
                                         >
                                             {j.company}
                                         </span>
@@ -202,13 +202,13 @@ export function CommandRail({
                                 <li
                                     key={p.key}
                                     data-testid="command-rail-pipeline"
-                                    className="rounded-lg p-2.5 transition-colors"
+                                    className="rr-item rounded-lg p-2.5 transition-colors"
                                     style={{ background: "transparent" }}
                                 >
                                     <div className="flex items-baseline justify-between gap-2">
                                         <span
                                             className="truncate text-[12px] leading-tight"
-                                            style={{ color: c.ink, fontFamily: ATELIER_FONT.serif, fontWeight: 500 }}
+                                            style={{ color: c.ink, fontFamily: ATELIER_FONT.body, fontWeight: 500 }}
                                         >
                                             {p.company || p.title}
                                         </span>
@@ -246,6 +246,8 @@ export function CommandRail({
                 </Link>
                 <style dangerouslySetInnerHTML={{
                     __html: `
+                    .rr-item { transition: background-color .15s ease; cursor: pointer; }
+                    .rr-item:hover:not(:disabled) { background-color: ${c.bg}; }
                     .atl-rail-link:hover { color: ${c.red} !important; }
                 ` }} />
             </div>
@@ -259,8 +261,8 @@ export function CommandRail({
     return (
         <aside
             data-testid="command-rail"
-            className={`hidden w-[272px] shrink-0 flex-col overflow-hidden ${open ? "min-[1200px]:flex" : ""}`}
-            style={{ borderInlineStart: `1px solid ${c.hair}`, background: c.panel }}
+            className={`hidden w-[200px] shrink-0 flex-col overflow-hidden ${open ? "min-[1200px]:flex" : ""}`}
+            style={{ borderInlineStart: `1px solid ${c.hair}`, background: c.rail }}
             aria-label={t("cmdRailShortlist")}
         >
             {content}
