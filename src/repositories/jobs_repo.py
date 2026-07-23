@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from psycopg2 import sql
 
 from src.db import get_db_connection
+from src.services.job_link import resolve_job_link
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ def get_pipeline_stats() -> Dict[str, Any]:
 
 
 def _row_to_job(row: tuple) -> Dict[str, Any]:
-    return {
+    base = {
         "id": str(row[0]),
         # Trusted provenance marker for the job_link_trust gate: this row
         # exists because the DB write path persisted it after source ingest.
@@ -154,3 +155,17 @@ def _row_to_job(row: tuple) -> Dict[str, Any]:
         "link_status": row[10] if len(row) > 10 else "needs_review",
         "link_verified_at": row[11].isoformat() if len(row) > 11 and row[11] else None,
     }
+    # Enrich with canonical link resolution so the frontend receives
+    # usable_link / link_unavailable without reconstructing trust from raw fields.
+    try:
+        link_view = resolve_job_link(base)
+        base["usable_link"] = link_view["usable_link"]
+        base["link_unavailable"] = link_view["link_unavailable"]
+        base["link_unavailable_reason"] = link_view["reason"]
+        base["verification_status"] = link_view["verification_status"]
+    except Exception:
+        base["usable_link"] = ""
+        base["link_unavailable"] = True
+        base["link_unavailable_reason"] = "no_link"
+        base["verification_status"] = "lead_needs_verification"
+    return base

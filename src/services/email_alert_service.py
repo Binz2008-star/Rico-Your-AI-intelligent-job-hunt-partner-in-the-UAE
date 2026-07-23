@@ -80,10 +80,14 @@ def _excluded_job_keys(user_id: str) -> set[str]:
 
 
 def _match_link(job: Dict[str, Any]) -> str:
+    from src.services.job_link_trust import validate_job_url
+
     for k in ("link", "apply_link", "url", "alt_link"):
         v = (job.get(k) or "").strip()
         if v:
-            return v
+            safe = validate_job_url(v)
+            if safe:
+                return safe
     return ""
 
 

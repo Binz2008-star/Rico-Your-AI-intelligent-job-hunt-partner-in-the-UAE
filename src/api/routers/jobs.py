@@ -97,6 +97,8 @@ def apply_job(
         )
         from src.job_lifecycle import lifecycle_for_action
 
+        from src.services.job_link_trust import validate_job_url
+
         record_interaction(
             user_id=user_id,
             title=job.get("title", ""),
@@ -106,13 +108,15 @@ def apply_job(
         lc = lifecycle_for_action("apply")
         if lc:
             lc_status, _ = lc
+            raw_link = job.get("apply_link") or job.get("link") or ""
+            safe_link = validate_job_url(raw_link)
             set_lifecycle_status(
                 user_id=user_id,
                 title=job.get("title", ""),
                 company=job.get("company", ""),
                 status=lc_status,
-                apply_url=job.get("apply_link") or job.get("link") or "",
-                source_url=job.get("link") or "",
+                apply_url=safe_link,
+                source_url=validate_job_url(job.get("link") or ""),
             )
     except Exception:
         import logging as _logging

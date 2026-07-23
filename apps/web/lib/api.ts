@@ -604,6 +604,9 @@ function normalizeJob(raw: unknown): Job {
     posted_at: String(item.posted_at ?? item.date_found ?? ""),
     apply_url: String(item.apply_url ?? item.link ?? ""),
     source_url: String(item.source_url ?? item.url ?? ""),
+    usable_link: String(item.usable_link ?? ""),
+    link_unavailable: typeof item.link_unavailable === "boolean" ? item.link_unavailable : undefined,
+    link_unavailable_reason: String(item.link_unavailable_reason ?? item.reason ?? ""),
     verification_status: String(item.verification_status ?? ""),
     match_explanation: matchExplanation,
   };
