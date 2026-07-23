@@ -8586,8 +8586,13 @@ class RicoChatAPI:
                 _ack_role = _ack_pending_js["role"]
                 _ack_loc = _ack_pending_js.get("location", "")
                 self._clear_pending_job_search(user_id)
+                self._discard_pending_role_confirmation(user_id)
+                # Execute DIRECTLY — re-entering _classified_role_search here re-fires
+                # the known_but_off_profile gate and re-emits the SAME clarification
+                # the user just confirmed (the #1314 typed-YES loop, recurring here for
+                # bare "تمام"/"حسنا"/"ok"/"okay" acknowledgements).
                 return self._finalize(
-                    self._classified_role_search(user_id, _ack_role, profile, location=_ack_loc),
+                    self._target_role_search_response(user_id, _ack_role, profile, location=_ack_loc),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
@@ -10276,14 +10281,21 @@ class RicoChatAPI:
             # Priority 1.5: stored pending job search (set when Rico promised "ببحث" but
             # the turn ended without executing the search). Checked here so that "تمام"
             # and other follow_up_confirmation phrases correctly trigger the search.
+            # Execute DIRECTLY via _target_role_search_response — re-entering
+            # _classified_role_search here re-fires the known_but_off_profile gate and
+            # re-emits the SAME clarification the user just confirmed (the #1314 typed-YES
+            # loop, recurring here for bare "تمام"/"اوكي"/"اي"/"طيب"/"continue"/"confirm"
+            # confirmations that reach this legacy_intent branch instead of the two sites
+            # _resolve_pending_intent and answer_conversationally already fixed).
             try:
                 _pending_js = self._get_pending_job_search(user_id)
                 if _pending_js and _pending_js.get("role"):
                     _js_role = _pending_js["role"]
                     _js_loc = _pending_js.get("location", "")
                     self._clear_pending_job_search(user_id)
+                    self._discard_pending_role_confirmation(user_id)
                     return self._finalize(
-                        self._classified_role_search(user_id, _js_role, profile, location=_js_loc),
+                        self._target_role_search_response(user_id, _js_role, profile, location=_js_loc),
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
