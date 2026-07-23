@@ -157,3 +157,11 @@ data/*.lock
 
 # rico-development-supervisor permission-smoke sentinels
 .rico-smoke/
+
+# claude-md-best-practices skill — re-fetchable pipeline artifacts
+# (the seed docs/CLAUDE-MD-SOTA.md stays tracked; these are regenerated)
+docs/CLAUDE-MD-SOTA.enriched.md
+docs/guidelines-raw.json
+docs/insights-parsed.json
+docs/freshness-report.json
+docs/insights-raw.md
