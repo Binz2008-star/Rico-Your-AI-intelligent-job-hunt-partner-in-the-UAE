@@ -3,12 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { renderHook, act } = await import("@testing-library/react");
 const { useToast } = await import("@/hooks/useToast");
 
-// Regression guard for the useToast auto-dismiss timer leak: a toast schedules a
-// setTimeout that calls setToasts after `duration` ms. If the component unmounts
-// before the timer fires and the timer is not cleared, the callback runs after
-// teardown — in jsdom that throws "ReferenceError: window is not defined" and
-// fails the whole run; in the browser it is a setState-on-unmounted-component leak.
-describe("useToast timer cleanup on unmount", () => {
+// Regression guards for useToast auto-dismiss timers. Timers must be cleaned
+// up on unmount and managed per toast so refreshing one notification never
+// cancels the auto-dismiss timer of another notification.
+describe("useToast timer management", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -53,6 +51,37 @@ describe("useToast timer cleanup on unmount", () => {
 
     act(() => {
       vi.advanceTimersByTime(3500);
+    });
+    expect(result.current.toasts).toHaveLength(0);
+  });
+
+  it("refreshes only the duplicate toast timer and preserves unrelated timers", () => {
+    const { result } = renderHook(() => useToast());
+
+    act(() => {
+      result.current.toast("first", "info", 1000);
+      result.current.toast("second", "success", 2000);
+    });
+    expect(result.current.toasts).toHaveLength(2);
+
+    act(() => {
+      vi.advanceTimersByTime(500);
+      result.current.toast("first", "info", 1000);
+    });
+
+    // The duplicate is not stacked, and its refreshed timer must not cancel
+    // the independently scheduled auto-dismiss for "second".
+    expect(result.current.toasts).toHaveLength(2);
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(result.current.toasts.map((toast) => toast.message)).toEqual([
+      "second",
+    ]);
+
+    act(() => {
+      vi.advanceTimersByTime(500);
     });
     expect(result.current.toasts).toHaveLength(0);
   });
