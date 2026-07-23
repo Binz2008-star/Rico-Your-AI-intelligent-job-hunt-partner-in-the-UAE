@@ -433,7 +433,15 @@ def enforce_document_quota(user_id: str, doc_type: str) -> None:
     limit = check.limit
     feature = _feature_for_doc_type(doc_type)
     doc_label = "CV" if doc_type == "cv" else "document"
-    hint = _UPGRADE_HINTS.get(feature, "Upgrade your plan for more storage")
+
+    # A user already on a paid plan has hit the ceiling of the plan they OWN —
+    # prompting them to "upgrade" to that same plan is contradictory (a Pro user
+    # at 5/5 CVs was told "Upgrade to Rico Monthly for up to 5 CVs"). Guide them
+    # to free a slot instead. Only Free users are offered an upgrade.
+    if plan != SubscriptionTier.FREE.value:
+        hint = f"Delete or replace an existing {doc_label} to add another"
+    else:
+        hint = _UPGRADE_HINTS.get(feature, "Upgrade your plan for more storage")
 
     raise HTTPException(
         status_code=422,

@@ -455,6 +455,8 @@ export const translations = {
     uploadErrLoad: "Could not load files. Try refreshing.",
     uploadErrQuota:
       "Storage limit reached. Delete a file you no longer need from My Files to free a slot, or upgrade your plan.",
+    uploadErrQuotaManage:
+      "You've reached your CV storage limit. Delete or replace an existing CV in My Files to upload another.",
     uploadCvPreviewReady: "CV preview ready",
     uploadCvConfirmHint: "Complete the review in the chat to save it to My Files.",
     processingStage1: "Reading your CV...",
@@ -1826,6 +1828,8 @@ export const translations = {
     uploadErrLoad: "تعذّر تحميل الملفات. حاول التحديث.",
     uploadErrQuota:
       "تم بلوغ حد التخزين. احذف ملفاً لم تعد بحاجته من «ملفاتي» لتفريغ مكان، أو ارقِ خطتك.",
+    uploadErrQuotaManage:
+      "لقد بلغت حدّ تخزين السير الذاتية. احذف أو استبدل سيرة ذاتية موجودة في «ملفاتي» لرفع أخرى.",
     uploadCvPreviewReady: "معاينة السيرة الذاتية جاهزة",
     uploadCvConfirmHint: "أكمل المراجعة في المحادثة لحفظها في ملفاتي.",
     processingStage1: "قراءة سيرتك الذاتية...",
