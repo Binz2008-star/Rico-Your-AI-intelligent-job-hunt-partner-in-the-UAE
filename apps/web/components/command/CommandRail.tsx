@@ -110,14 +110,15 @@ export function CommandRail({
 
     const eyebrow: React.CSSProperties = {
         fontFamily: ATELIER_FONT.mono,
-        fontSize: 10,
+        fontSize: 9,
+        fontWeight: 500,
         textTransform: "uppercase",
-        letterSpacing: "0.22em",
+        letterSpacing: "0.1em",
     };
 
     const content = (
         <>
-            <div className="flex-1 min-h-0 overflow-y-auto p-4" data-testid="command-rail-content">
+            <div className="flex flex-1 min-h-0 flex-col gap-5 overflow-y-auto pt-5 px-3.5" data-testid="command-rail-content">
                 {/* Shortlist eyebrow + count */}
                 <div className="mb-4 flex items-center justify-between">
                     <span style={{ ...eyebrow, color: c.ink55 }}>{t("cmdRailShortlist")}</span>
@@ -129,13 +130,13 @@ export function CommandRail({
                 {picks.length === 0 ? (
                     <p
                         data-testid="command-rail-empty"
-                        className="text-[13px] italic leading-relaxed"
+                        className="text-[12px] leading-relaxed"
                         style={{ color: c.ink55, fontFamily: ATELIER_FONT.body }}
                     >
                         {t("cmdRailEmpty")}
                     </p>
                 ) : (
-                    <ul className="space-y-2">
+                    <ul className="space-y-1">
                         {picks.map((j) => {
                             const pct = scoreText(j.score);
                             const strong = isStrongPick(j.score);
@@ -143,20 +144,20 @@ export function CommandRail({
                                 <li
                                     key={`${j.title}|${j.company}`}
                                     data-testid="command-rail-pick"
-                                    className="rounded-md p-2.5"
-                                    style={{ border: `1px solid ${c.hair}`, background: c.inset }}
+                                    className="rounded-lg p-2.5 transition-colors"
+                                    style={{ background: "transparent" }}
                                 >
                                     <div className="mb-1 flex items-baseline justify-between gap-2">
                                         <span
-                                            className="truncate text-[13px] leading-tight"
-                                            style={{ color: c.ink, fontFamily: ATELIER_FONT.serif, fontWeight: 600 }}
+                                            className="truncate text-[12px] leading-tight"
+                                            style={{ color: c.ink, fontFamily: ATELIER_FONT.serif, fontWeight: 500 }}
                                         >
                                             {j.company}
                                         </span>
                                         {pct && (
                                             <span
                                                 dir="ltr"
-                                                className="shrink-0 text-[10px] tabular-nums"
+                                                className="shrink-0 text-[9px] tabular-nums"
                                                 style={{
                                                     fontFamily: ATELIER_FONT.mono,
                                                     color: strong ? c.red : c.ink55,
@@ -168,7 +169,7 @@ export function CommandRail({
                                         )}
                                     </div>
                                     <div
-                                        className="truncate text-[10.5px]"
+                                        className="truncate text-[9px]"
                                         style={{ fontFamily: ATELIER_FONT.mono, color: c.ink70 }}
                                     >
                                         {j.title}
@@ -176,7 +177,7 @@ export function CommandRail({
                                     {j.location && (
                                         <div
                                             className="mt-1 truncate"
-                                            style={{ ...eyebrow, fontSize: 10, letterSpacing: "0.18em", color: c.ink40 }}
+                                            style={{ ...eyebrow, color: c.ink40 }}
                                         >
                                             {j.location}
                                         </div>
@@ -190,37 +191,37 @@ export function CommandRail({
                 {/* Pipeline — only when the session surfaced application data */}
                 {pipeline.length > 0 && (
                     <>
-                        <div className="mb-2 mt-5 flex items-center justify-between">
+                        <div className="mb-2 flex items-center justify-between">
                             <span style={{ ...eyebrow, color: c.ink55 }}>{t("cmdRailPipeline")}</span>
                             <span dir="ltr" style={{ ...eyebrow, color: c.ink }}>
                                 {pipeline.length}
                             </span>
                         </div>
-                        <ul className="space-y-1.5">
+                        <ul className="space-y-1">
                             {pipeline.map((p) => (
                                 <li
                                     key={p.key}
                                     data-testid="command-rail-pipeline"
-                                    className="rounded-md p-2"
-                                    style={{ border: `1px solid ${c.hair}`, background: c.inset }}
+                                    className="rounded-lg p-2.5 transition-colors"
+                                    style={{ background: "transparent" }}
                                 >
                                     <div className="flex items-baseline justify-between gap-2">
                                         <span
-                                            className="truncate text-[12.5px] leading-tight"
-                                            style={{ color: c.ink, fontFamily: ATELIER_FONT.serif, fontWeight: 600 }}
+                                            className="truncate text-[12px] leading-tight"
+                                            style={{ color: c.ink, fontFamily: ATELIER_FONT.serif, fontWeight: 500 }}
                                         >
                                             {p.company || p.title}
                                         </span>
                                         <span
                                             className="shrink-0"
-                                            style={{ ...eyebrow, fontSize: 9, color: c.red }}
+                                            style={{ ...eyebrow, color: c.red }}
                                         >
                                             {p.statusLabel}
                                         </span>
                                     </div>
                                     {p.company && p.title && (
                                         <div
-                                            className="mt-0.5 truncate text-[10px]"
+                                            className="mt-0.5 truncate text-[9px]"
                                             style={{ fontFamily: ATELIER_FONT.mono, color: c.ink55 }}
                                         >
                                             {p.title}
@@ -234,7 +235,7 @@ export function CommandRail({
             </div>
 
             {/* Footer — existing route, the rail's only interactive element */}
-            <div className="p-4 pt-0">
+            <div className="px-3.5 pb-5 pt-0">
                 <Link
                     href="/applications"
                     data-testid="command-rail-applications-link"
@@ -243,7 +244,8 @@ export function CommandRail({
                 >
                     {t("cmdRailOpenApplications")} →
                 </Link>
-                <style dangerouslySetInnerHTML={{ __html: `
+                <style dangerouslySetInnerHTML={{
+                    __html: `
                     .atl-rail-link:hover { color: ${c.red} !important; }
                 ` }} />
             </div>
