@@ -17,9 +17,9 @@ export function useToast() {
   // timers never update state after unmount and one toast can be refreshed or
   // dismissed without cancelling unrelated toast timers.
   const mountedRef = useRef(true);
-  const timersRef = useRef<
-    Map<string, ReturnType<typeof setTimeout>>
-  >(new Map());
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
   // Mirror of toasts for synchronous dedup checks without reading state in
   // the callback (avoids stale-closure issues).
   const toastsRef = useRef<Toast[]>([]);
