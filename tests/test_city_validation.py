@@ -1,13 +1,15 @@
 """Profile location-field hygiene (preferred_cities).
 
-Production showed a corrupted profile: preferred_cities=['Summarize this document
-for me.'] — a misfiled chat message stored as a city, poisoning search location
-and the AI context. These tests pin the validation that prevents the write and
-neutralizes the stored value on read.
+Production showed corrupted profiles where chat commands were stored as cities:
+``Summarize this document for me.`` and, later, ``ابحث عن وظيفه``. These tests
+pin the bilingual validation that prevents those values from poisoning search
+location and the AI context.
 
 Pure/deterministic — no I/O, no DB, no LLM.
 """
 from __future__ import annotations
+
+import pytest
 
 from src.services.city_validation import is_plausible_city, sanitize_cities
 
@@ -20,7 +22,7 @@ def test_known_uae_cities_accepted():
 
 
 def test_known_arabic_cities_accepted():
-    for c in ["دبي", "أبوظبي", "الشارقة", "رأس الخيمة"]:
+    for c in ["دبي", "أبوظبي", "ابوظبي", "الشارقة", "الشارقه", "رأس الخيمة", "راس الخيمه"]:
         assert is_plausible_city(c), c
 
 
@@ -30,12 +32,38 @@ def test_unlisted_but_plausible_city_accepted():
     assert is_plausible_city("Salalah")
 
 
-# ── The production corruption rejected ────────────────────────────────────────
+# ── Production corruption rejected ───────────────────────────────────────────
 
 def test_document_action_sentence_rejected():
     assert not is_plausible_city("Summarize this document for me.")
     assert not is_plausible_city("Describe what's in this image.")
     assert not is_plausible_city("Extract the most important information from this document.")
+
+
+@pytest.mark.parametrize("command", [
+    "ابحث عن وظيفه",
+    "ابحث عن وظيفة",
+    "أبحث عن وظيفة",
+    "دورلي على شغل",
+    "اريد عمل",
+    "أريد وظائف",
+    "اعرضلي شواغر",
+    "ساعدني في ايجاد وظيفة",
+])
+def test_arabic_job_search_commands_rejected(command):
+    assert not is_plausible_city(command), command
+
+
+@pytest.mark.parametrize("cv_status_text", [
+    "لديك سيرتي الذاتيه",
+    "لديك سيرتي الذاتية",
+    "عندك سيرتي الذاتية",
+    "السيرة الذاتية مرفوعة",
+    "السيره الذاتيه مرفوعه",
+])
+def test_arabic_cv_status_text_rejected(cv_status_text):
+    """Exact production correction and common variants are not city values."""
+    assert not is_plausible_city(cv_status_text), cv_status_text
 
 
 def test_intent_and_affirmation_rejected():
@@ -58,8 +86,20 @@ def test_sanitize_drops_corrupted_value():
     assert sanitize_cities(["Summarize this document for me."]) == []
 
 
+def test_sanitize_drops_arabic_search_command():
+    assert sanitize_cities(["ابحث عن وظيفه"]) == []
+
+
+def test_sanitize_drops_arabic_cv_status_text():
+    assert sanitize_cities(["لديك سيرتي الذاتيه"]) == []
+
+
 def test_sanitize_keeps_valid_drops_invalid():
-    assert sanitize_cities(["Dubai", "Summarize this document for me.", "Abu Dhabi"]) == ["Dubai", "Abu Dhabi"]
+    assert sanitize_cities(["Dubai", "ابحث عن وظيفه", "Abu Dhabi"]) == ["Dubai", "Abu Dhabi"]
+
+
+def test_sanitize_keeps_valid_drops_cv_status_text():
+    assert sanitize_cities(["دبي", "لديك سيرتي الذاتيه", "أبوظبي"]) == ["دبي", "أبوظبي"]
 
 
 def test_sanitize_dedups_case_insensitive_preserving_order():
@@ -71,7 +111,7 @@ def test_sanitize_empty_and_none_safe():
     assert sanitize_cities(None) == []
 
 
-# ── Integration: write boundary + AI context + search read ────────────────────
+# ── Integration: AI context + search read ─────────────────────────────────────
 
 def test_build_openai_context_drops_corrupted_city():
     from src.rico_chat_api import RicoChatAPI
@@ -83,6 +123,26 @@ def test_build_openai_context_drops_corrupted_city():
     }
     ctx = api._build_openai_context(profile, user_id=None)
     # The corrupted city must not reach the model context.
+    assert "preferred_cities" not in ctx
+
+
+def test_build_openai_context_drops_arabic_search_command():
+    from src.rico_chat_api import RicoChatAPI
+    api = RicoChatAPI(persist=False)
+    ctx = api._build_openai_context(
+        {"skills": ["iso 14001"], "preferred_cities": ["ابحث عن وظيفه"]},
+        user_id=None,
+    )
+    assert "preferred_cities" not in ctx
+
+
+def test_build_openai_context_drops_arabic_cv_status_text():
+    from src.rico_chat_api import RicoChatAPI
+    api = RicoChatAPI(persist=False)
+    ctx = api._build_openai_context(
+        {"skills": ["iso 14001"], "preferred_cities": ["لديك سيرتي الذاتيه"]},
+        user_id=None,
+    )
     assert "preferred_cities" not in ctx
 
 

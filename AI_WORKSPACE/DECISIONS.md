@@ -89,6 +89,84 @@ one source of truth per domain is decided.
 
 ## Accepted decisions
 
+### DEC-20260723-001 — CEO verdict: trust-first commercial strategy, UAE mid-career wedge, verified-career-actions north star
+
+Status: accepted
+Date: 2026-07-23
+Owner: Roben (owner/CEO directive, 2026-07-23) — recorded by Claude
+Related doc: `docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md`
+Related decision: builds on DEC-20260721-001 (five-stage priority ordering)
+
+#### Context
+
+Following the strategic research merged in #1269 and the five-stage priority
+ordering (DEC-20260721-001), the owner issued a full commercial verdict on how
+Rico becomes durable revenue: positioning, target segment, paid promise,
+north-star metric, monetization tiers, 90-day plan, and scale gates. It needed
+to be persisted in the repository as the binding strategy record instead of
+living only in conversation.
+
+#### Decision
+
+The CEO verdict recorded verbatim in
+`docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md` is the binding
+commercial strategy. Its load-bearing rulings:
+
+1. **No new features until trust and execution reliability are fixed** — CV
+   continuity, grounded job results, action execution, and billing correctness
+   are the current bottlenecks. Scaling formula:
+   Trust × Activation × Retention × Distribution × Margin = Revenue.
+2. **Commercial wedge:** UAE-based, English/Arabic, mid-career professionals
+   seeking AED 8,000–30,000 roles (HSE/QHSE/ESG, quality & compliance,
+   operations & facilities, finance & banking, engineering & technical
+   management, sales & account management) — not "every job seeker."
+3. **Paid promise:** "Rico turns your career profile into verified
+   opportunities and helps you complete the right career action every day" —
+   not unlimited chat, generic advice, unverified job lists, or fabricated
+   salary estimates.
+4. **North-star metric:** verified career actions completed per weekly active
+   user. Activation = first verified career action, not account creation.
+5. **Trust engine is the moat:** no invented jobs, no false execution claims,
+   one canonical active CV, consistent profile state, explicit approval before
+   external actions, source/date/confidence on recommendations, permanent
+   sponsored/organic separation. Never sell ranking priority or user data.
+6. **Monetization:** simple Free / Pro / Premium tiers priced on customer
+   value, not tokens; no "unlimited AI" — governed fair-use limits. Additional
+   revenue streams and recruiter-side products only after subscription
+   retention is proven; no recruitment commissions initially (bias risk).
+7. **90-day sequence:** Days 0–30 make Rico sellable (close #1336 slices,
+   canonical CV inventory, eliminate ungrounded generation, fail-closed
+   billing/quota, atomic checkout attribution, analytics, smoke tests,
+   AI_WORKSPACE sync); Days 31–60 founder cohort of 50–100 users proves
+   payment; Days 61–90 repeatable acquisition — only after retention.
+8. **Scale gates:** 100 users with a verified action → 50 paying → ≥25%
+   week-two return of activated users → three consecutive months net paid
+   growth → controlled support/AI-cost/failure rates as acquisition doubles.
+   First objective: 100 paying users receiving recurring verified value
+   without founder intervention.
+9. **Margin controls:** per-user AI cost tracking, model routing by task
+   complexity, deterministic classification before LLM use, caching, capped
+   retries, budgeted background work, fail-closed blocking when billing or
+   canonical data is unavailable, gross-margin reporting by plan.
+
+#### Consequences
+
+- Positive: one persisted, citable strategy record; feature requests can be
+  triaged against the wedge, the paid promise, and the north-star metric;
+  reliability work (#1336 et al.) is explicitly the top commercial priority,
+  not just an engineering preference.
+- Negative/trade-off: deliberately narrows near-term audience and defers
+  feature/growth work; revenue ladder figures are illustrative, not targets.
+
+#### Follow-up
+
+- [ ] Days 0–30 reliability items proceed as individual small PRs under
+      existing gates (no bulk task conversion, per DEC-20260721-001 rules)
+- [ ] Synchronize `AI_WORKSPACE` control-plane docs with current live reality
+      (PROJECT_STATUS snapshot predates recent main) — separate docs PR
+- [ ] Owner decision needed later: concrete Free/Pro/Premium pricing points
+      (current implemented billing remains single-plan Rico Monthly USD 21.50)
+
 ### DEC-20260721-001 — Five-stage strategic priority ordering for Rico development (stabilize → daily loop → data moat → reach → employers)
 
 Status: accepted

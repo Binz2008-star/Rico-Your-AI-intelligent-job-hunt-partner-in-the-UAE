@@ -188,6 +188,9 @@ def count_saved_jobs(user_id: str) -> int:
         # capped in-memory snapshot — quota decisions see every saved job.
         return count_by_status(user_id, "saved")
     except Exception:
+        pass
+
+    try:
         from src.applications import get_applied_jobs
 
         # Fallback path: count only rows that belong to *this* user. Rows with a
@@ -201,6 +204,12 @@ def count_saved_jobs(user_id: str) -> int:
         return sum(
             1 for app in apps if isinstance(app, dict) and app.get("status") == "saved"
         )
+    except Exception:
+        logger.debug("subscription_gating: saved jobs count failed user=%s", user_id, exc_info=True)
+
+    # Fail open (#1096): when both DB and fallback are unavailable, return 0
+    # so the quota check allows the request rather than blocking the user.
+    return 0
 
 
 def count_profile_optimizations(user_id: str, since: datetime) -> int:
@@ -302,7 +311,11 @@ def check_ai_message_allowed(ctx: RicoSessionContext) -> GateCheck | None:
 
 def enforce_saved_job_allowed(user_id: str) -> None:
     from fastapi import HTTPException
-    check = _build_gate_check(user_id, "saved_jobs_limit", count_saved_jobs(user_id))
+    try:
+        check = _build_gate_check(user_id, "saved_jobs_limit", count_saved_jobs(user_id))
+    except Exception:
+        logger.debug("subscription_gating: saved job gate failed open user=%s", user_id, exc_info=True)
+        return
     if not check.allowed:
         raise HTTPException(status_code=402, detail=check.to_response())
 
@@ -400,10 +413,18 @@ def enforce_document_quota(user_id: str, doc_type: str) -> None:
 
     Uses 422 (Unprocessable Entity) rather than 402 so the frontend can inspect
     the detail without triggering a global payment-required redirect.
+
+    Fails open (#1096): if the quota check itself errors (DB unavailable,
+    plan resolution failure), the request is allowed rather than blocking
+    a legitimate user behind a transient infrastructure issue.
     """
     from fastapi import HTTPException
 
-    check = check_document_quota(user_id, doc_type)
+    try:
+        check = check_document_quota(user_id, doc_type)
+    except Exception:
+        logger.debug("subscription_gating: document quota gate failed open user=%s", user_id, exc_info=True)
+        return
     if check.allowed:
         return
 

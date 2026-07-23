@@ -23,20 +23,20 @@
  * useLanguage(); dir/lang mirror onto the root.
  */
 
+import { atelierFraunces, atelierNaskhArabic, atelierSansArabic } from "@/components/atelier-kit/fonts";
+import { Mono } from "@/components/atelier-kit/primitives";
+import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { RailGoalMini } from "@/components/workspace/RailGoalMini";
+import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
+import { v5Amiri, v5Inter, v5PlexArabic, v5PlexMono } from "@/components/workspace/v5/fonts";
+import "@/components/workspace/v5/motion.css";
+import { RicoPresence } from "@/components/workspace/v5/RicoPresence";
+import { V5_FONT, V5_MODE_ACCENTS, type V5ModeKey } from "@/components/workspace/v5/tokens";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useMissionSummary } from "@/hooks/useMissionSummary";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { useLanguage } from "@/contexts/LanguageContext";
-import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
-import { atelierFraunces, atelierNaskhArabic, atelierSansArabic } from "@/components/atelier-kit/fonts";
-import { Mono } from "@/components/atelier-kit/primitives";
-import { RailGoalMini } from "@/components/workspace/RailGoalMini";
-import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
-import { useMissionSummary } from "@/hooks/useMissionSummary";
-import "@/components/workspace/v5/motion.css";
-import { V5_FONT, V5_MODE_ACCENTS, type V5ModeKey } from "@/components/workspace/v5/tokens";
-import { v5Amiri, v5Inter, v5PlexArabic, v5PlexMono } from "@/components/workspace/v5/fonts";
-import { RicoPresence } from "@/components/workspace/v5/RicoPresence";
 
 export type NavItem = { key: string; href: string; label: { en: string; ar: string }; icon: React.ReactNode };
 
@@ -209,11 +209,11 @@ export function WorkspaceShell({
                                     fontSize: 10,
                                     ...(active
                                         ? {
-                                              color: c.red,
-                                              background: `${c.red}1F`,
-                                              padding: "1px 7px",
-                                              borderRadius: 999,
-                                          }
+                                            color: c.red,
+                                            background: `${c.red}1F`,
+                                            padding: "1px 7px",
+                                            borderRadius: 999,
+                                        }
                                         : { color: c.ink40 }),
                                 }}
                             >
@@ -230,9 +230,21 @@ export function WorkspaceShell({
         <div className="flex items-center gap-2">
             <RicoPresence state="ready" size="sm" label={isAr ? "ريكو جاهز" : "Rico is ready"} />
             <span className="flex-1" aria-hidden="true" />
-            <span className="inline-flex items-center rounded-[3px] overflow-hidden" style={{ border: `1px solid ${c.hair}` }}>
-                <button type="button" onClick={() => setLanguage("en")} aria-pressed={!isAr} style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10, padding: "3px 7px", background: !isAr ? c.ink : "transparent", color: !isAr ? c.bg : c.ink40, cursor: "pointer" }}>EN</button>
-                <button type="button" onClick={() => setLanguage("ar")} aria-pressed={isAr} style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10, padding: "3px 7px", background: isAr ? c.ink : "transparent", color: isAr ? c.bg : c.ink40, cursor: "pointer" }}>عربي</button>
+            <span className="wsx-lang-toggle flex gap-[3px]">
+                <button
+                    type="button"
+                    onClick={() => setLanguage("en")}
+                    aria-pressed={!isAr}
+                    className="wsx-lang-btn rounded-[6px] border"
+                    style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10.5, fontWeight: 500, padding: "5px 11px", borderColor: c.hair, background: !isAr ? c.ink : c.bg, color: !isAr ? c.bg : c.ink55, cursor: "pointer" }}
+                >EN</button>
+                <button
+                    type="button"
+                    onClick={() => setLanguage("ar")}
+                    aria-pressed={isAr}
+                    className="wsx-lang-btn rounded-[6px] border"
+                    style={{ fontFamily: ATELIER_FONT.mono, fontSize: 10.5, fontWeight: 500, padding: "5px 11px", borderColor: c.hair, background: isAr ? c.ink : c.bg, color: isAr ? c.bg : c.ink55, cursor: "pointer" }}
+                >عربي</button>
             </span>
             <button
                 type="button"
@@ -269,13 +281,16 @@ export function WorkspaceShell({
                 } as React.CSSProperties
             }
         >
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .wsx-root .wsx-nav { transition: background-color .15s ease, color .15s ease; }
                 .wsx-root .wsx-nav:hover { background-color: ${c.activeBg}; color: ${c.ink}; }
                 .wsx-root .wsx-action { transition: border-color .15s ease, transform .15s ease; }
                 .wsx-root .wsx-action:hover { border-color: ${c.red} !important; }
                 .wsx-root a:focus-visible, .wsx-root button:focus-visible { outline: 2px solid ${c.red}; outline-offset: 2px; border-radius: 4px; }
                 .wsx-root.wsx-ar * { letter-spacing: 0 !important; }
+                .wsx-lang-toggle .wsx-lang-btn { transition: border-color .2s cubic-bezier(.4,0,.2,1), color .2s cubic-bezier(.4,0,.2,1), background-color .2s cubic-bezier(.4,0,.2,1); }
+                .wsx-lang-toggle .wsx-lang-btn:hover:not([aria-pressed="true"]) { border-color: ${c.red}; color: ${c.red}; }
             ` }} />
             {/* Artifact route ambience — accent-tinted radials with a slow
                 drift, both themes; decorative, zero pointer impact. */}

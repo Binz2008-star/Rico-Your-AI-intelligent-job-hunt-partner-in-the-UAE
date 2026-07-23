@@ -1790,7 +1790,7 @@ class RicoDB:
                         UPDATE application_drafts
                         SET status = %s, updated_at = now(),
                             follow_up_at = now() + INTERVAL '7 days'
-                        WHERE id = %s AND user_id = %s
+                        WHERE id = %s AND user_id = %s AND status = 'pending'
                         RETURNING id
                         """,
                         (status, draft_id, user_id),
@@ -1800,7 +1800,7 @@ class RicoDB:
                         """
                         UPDATE application_drafts
                         SET status = %s, updated_at = now()
-                        WHERE id = %s AND user_id = %s
+                        WHERE id = %s AND user_id = %s AND status = 'pending'
                         RETURNING id
                         """,
                         (status, draft_id, user_id),
@@ -1809,6 +1809,57 @@ class RicoDB:
             if should_close:
                 conn.commit()
             return updated
+        except Exception:
+            if should_close:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            raise
+        finally:
+            if should_close:
+                conn.close()
+
+    def update_draft_status_returning(
+        self, draft_id: str, user_id: str, status: str, conn=None
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically transition a draft from pending to approved/rejected.
+
+        Returns the full updated row on success, None if the draft was not
+        found, not owned by the user, or not in 'pending' status.  This
+        eliminates the TOCTOU race in the approve endpoint where the draft
+        was fetched separately before the status update.
+        """
+        should_close = conn is None
+        if conn is None:
+            conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                if status == "approved":
+                    cur.execute(
+                        """
+                        UPDATE application_drafts
+                        SET status = %s, updated_at = now(),
+                            follow_up_at = now() + INTERVAL '7 days'
+                        WHERE id = %s AND user_id = %s AND status = 'pending'
+                        RETURNING *
+                        """,
+                        (status, draft_id, user_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE application_drafts
+                        SET status = %s, updated_at = now()
+                        WHERE id = %s AND user_id = %s AND status = 'pending'
+                        RETURNING *
+                        """,
+                        (status, draft_id, user_id),
+                    )
+                row = cur.fetchone()
+            if should_close:
+                conn.commit()
+            return dict(row) if row else None
         except Exception:
             if should_close:
                 try:

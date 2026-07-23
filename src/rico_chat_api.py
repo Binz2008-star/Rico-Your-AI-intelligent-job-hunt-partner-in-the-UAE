@@ -15861,7 +15861,17 @@ class RicoChatAPI:
 
         elif field == "preferred_cities":
             old_value   = list(self._as_list(self._profile_value(profile, "preferred_cities")))
-            new_value   = [raw_value.title()]
+            from src.services.city_validation import sanitize_cities
+            _sanitized = sanitize_cities([raw_value], known_cities=self._UAE_CITIES)
+            if not _sanitized:
+                msg = (
+                    "لم أتعرف على هذه المدينة. حاول مرة أخرى، مثلاً: 'دبي' أو 'أبوظبي'."
+                    if arabic else
+                    "That doesn't look like a city. Try again, e.g. 'Dubai' or 'Abu Dhabi'."
+                )
+                self._append_chat(user_id, "assistant", msg)
+                return {"type": "clarification", "message": msg}
+            new_value   = _sanitized
             updates     = {"preferred_cities": new_value}
 
         elif field == "target_roles":

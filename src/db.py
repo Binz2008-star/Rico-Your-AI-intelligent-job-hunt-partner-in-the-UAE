@@ -195,6 +195,13 @@ def _truncate_description(description: Any, link: Any, max_len: int = 1000) -> s
 
 def save_job(job: Dict[str, Any], score: int) -> bool:
     """Save a job to the database."""
+    from src.services.job_link_trust import validate_job_url
+
+    raw_link = job.get('link', '') or ''
+    safe_link = validate_job_url(raw_link)
+    if raw_link and not safe_link:
+        logger.warning("db_save_job: rejected unsafe link='%s' title='%s'", raw_link[:100], (job.get('title') or '')[:80])
+
     conn = get_db_connection()
     if not conn:
         return False
@@ -212,8 +219,8 @@ def save_job(job: Dict[str, Any], score: int) -> bool:
                 job.get('title', '') or '',
                 job.get('company', '') or '',
                 job.get('location', '') or '',
-                job.get('link', '') or '',
-                _truncate_description(job.get('description'), job.get('link')),
+                safe_link,
+                _truncate_description(job.get('description'), safe_link),
                 score,
                 job.get('profile_explanation', '') or '',
                 job.get('source', 'jobspy') or 'jobspy'

@@ -23,11 +23,11 @@
  *  - Escape           → calls onCancel when thinking
  */
 
+import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { useWorkspaceTheme } from "@/components/workspace/theme";
 import type { TranslationKey } from "@/lib/translations";
 import Link from "next/link";
 import React, { useEffect, useRef } from "react";
-import { useWorkspaceTheme } from "@/components/workspace/theme";
-import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 
 export interface CommandComposerProps {
     /** Whether to show the Atelier authenticated surface (true) or the
@@ -158,9 +158,10 @@ export function CommandComposer({
     if (isAuthenticated) {
         return (
             <div
-                className="relative shrink-0 px-3 pt-2 sm:px-5 sm:pt-3 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]"
+                className="relative shrink-0 px-5 pt-3.5 pb-[calc(18px_+_env(safe-area-inset-bottom))]"
                 data-testid="atelier-composer"
                 dir={isRTL ? "rtl" : "ltr"}
+                style={{ borderTop: `1px solid ${c.hair}` }}
             >
                 {/* Gradient fade from the paper surface above the sticky composer
                     (Atelier spec). Route-scoped, decorative, non-interactive — the
@@ -213,12 +214,12 @@ export function CommandComposer({
 
                 {/* Paper input container */}
                 <div
-                    className="atl-composer-surface flex items-end gap-2 rounded-2xl px-3 py-2.5 sm:px-4"
+                    className="atl-composer-surface flex items-end gap-[10px] rounded-xl px-3.5 py-2.5"
                     style={{
-                        background: c.panel,
+                        background: c.bg,
                         border: `1px solid ${c.hair}`,
-                        boxShadow: `0 2px 12px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12)`,
-                        transition: "border-color .2s ease, box-shadow .25s ease",
+                        boxShadow: "none",
+                        transition: "border-color .2s ease, box-shadow .2s ease",
                     }}
                 >
                     {/* Attachment button (paperclip) */}
@@ -227,14 +228,14 @@ export function CommandComposer({
                         role="button"
                         aria-label={t("cmdUploadCvAriaLabel")}
                         title={t("cmdUploadCvTitle")}
-                        className="atl-composer-attach flex-shrink-0 flex items-center justify-center rounded-lg cursor-pointer"
+                        className="atl-composer-attach flex-shrink-0 flex items-center justify-center rounded-full cursor-pointer"
                         style={{
-                            width: 32,
-                            height: 32,
-                            color: c.ink40,
+                            width: 30,
+                            height: 30,
+                            color: c.ink55,
                             background: "transparent",
                             marginBottom: 1,
-                            transition: "color 0.15s ease",
+                            transition: "color 0.2s ease, background-color 0.2s ease",
                         }}
                         data-testid="attach-button"
                     >
@@ -274,12 +275,12 @@ export function CommandComposer({
                             e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                         }}
                         onKeyDown={handleKeyDown}
-                        className="atl-composer-textarea flex-1 resize-none bg-transparent outline-none text-[15px] leading-relaxed"
+                        className="atl-composer-textarea flex-1 resize-none bg-transparent outline-none text-[14.5px] leading-[1.5]"
                         style={{
                             color: c.ink,
                             fontFamily: ATELIER_FONT.body,
                             caretColor: c.red,
-                            minHeight: 28,
+                            minHeight: 24,
                             maxHeight: 120,
                         }}
                         data-testid="composer-textarea"
@@ -294,14 +295,14 @@ export function CommandComposer({
                             title={t("cmdCancelRequest")}
                             className="atl-composer-cancel flex-shrink-0 flex items-center justify-center rounded-full"
                             style={{
-                                width: 32,
-                                height: 32,
+                                width: 34,
+                                height: 34,
                                 background: c.red,
-                                color: c.panel,
+                                color: "#fff",
                                 border: "none",
                                 cursor: "pointer",
                                 marginBottom: 1,
-                                transition: "opacity 0.15s ease",
+                                transition: "opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease",
                             }}
                             data-testid="cancel-button"
                         >
@@ -328,15 +329,15 @@ export function CommandComposer({
                             title={t("send")}
                             className="atl-composer-send flex-shrink-0 flex items-center justify-center rounded-full"
                             style={{
-                                width: 32,
-                                height: 32,
-                                background: sendDisabled ? c.track : c.red,
-                                color: sendDisabled ? c.ink40 : c.panel,
+                                width: 34,
+                                height: 34,
+                                background: sendDisabled ? c.hair : c.red,
+                                color: "#fff",
                                 border: "none",
                                 cursor: sendDisabled ? "default" : "pointer",
                                 marginBottom: 1,
-                                transition: "background 0.15s ease, color 0.15s ease",
-                                opacity: sendDisabled ? 0.5 : 1,
+                                transition: "opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease",
+                                opacity: sendDisabled ? 0.4 : 1,
                             }}
                             data-testid="send-button"
                         >
@@ -366,9 +367,9 @@ export function CommandComposer({
                     className="mt-2 hidden text-center md:block"
                     style={{
                         fontFamily: ATELIER_FONT.mono,
-                        fontSize: 10,
-                        letterSpacing: isRTL ? 0 : "0.12em",
-                        color: c.ink70,
+                        fontSize: 9.5,
+                        letterSpacing: isRTL ? 0 : "0.1em",
+                        color: c.ink55,
                     }}
                     aria-hidden="true"
                     data-testid="composer-hint"
@@ -377,23 +378,25 @@ export function CommandComposer({
                 </div>
 
                 {/* Scoped hover/focus styles */}
-                <style dangerouslySetInnerHTML={{ __html: `
-                    [data-testid="atelier-composer"] .atl-composer-attach:hover { color: ${c.red} !important; }
+                <style dangerouslySetInnerHTML={{
+                    __html: `
+                    [data-testid="atelier-composer"] .atl-composer-attach:hover { color: ${c.red} !important; background: ${c.red}14 !important; }
                     [data-testid="atelier-composer"] .atl-composer-textarea::placeholder { color: ${c.ink40}; }
                     [data-testid="atelier-composer"] .atl-composer-textarea:focus { outline: none; }
-                    [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):hover { opacity: 0.85 !important; transform: translateY(-1px); }
-                    [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):active { transform: scale(0.94); }
-                    [data-testid="atelier-composer"] .atl-composer-send { transition: opacity .15s ease, transform .15s ease, background-color .15s ease; }
-                    [data-testid="atelier-composer"] .atl-composer-cancel:hover { opacity: 0.85 !important; }
-                    [data-testid="atelier-composer"] .atl-composer-cancel:active { transform: scale(0.94); }
+                    [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):hover { opacity: 0.9 !important; transform: scale(1.04); box-shadow: 0 2px 10px ${c.red}4d; }
+                    [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):active { transform: scale(0.96); }
+                    [data-testid="atelier-composer"] .atl-composer-send { transition: opacity .2s ease, transform .2s ease, background-color .2s ease; }
+                    [data-testid="atelier-composer"] .atl-composer-cancel:hover { opacity: 0.9 !important; transform: scale(1.04); box-shadow: 0 2px 10px ${c.red}4d; }
+                    [data-testid="atelier-composer"] .atl-composer-cancel:active { transform: scale(0.96); }
                     /* Focus glow — the writing surface answers with the route accent. */
                     [data-testid="atelier-composer"] .atl-composer-surface:focus-within {
-                        border-color: ${c.red}66 !important;
-                        box-shadow: 0 0 0 3px ${c.red}1f, 0 2px 12px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12) !important;
+                        border-color: ${c.red} !important;
+                        box-shadow: 0 0 0 3px ${c.red}1a !important;
                     }
                     @media (prefers-reduced-motion: reduce) {
                         [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):hover,
                         [data-testid="atelier-composer"] .atl-composer-send:not(:disabled):active,
+                        [data-testid="atelier-composer"] .atl-composer-cancel:hover,
                         [data-testid="atelier-composer"] .atl-composer-cancel:active { transform: none; }
                     }
                 ` }} />

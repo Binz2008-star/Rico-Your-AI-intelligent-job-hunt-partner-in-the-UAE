@@ -380,7 +380,7 @@ function CommandConsole({
             <div className="relative z-10 flex min-h-0 flex-1">
                 <aside
                     data-testid="command-obsidian-leftrail"
-                    className={`${leftOpen ? "min-[1200px]:flex min-[1200px]:w-[232px]" : "min-[1200px]:w-0"} hidden shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
+                    className={`${leftOpen ? "min-[1200px]:flex min-[1200px]:w-[220px]" : "min-[1200px]:w-0"} hidden shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
                     style={{ borderInlineEnd: leftOpen ? `1px solid ${c.hair}` : "none", background: c.rail }}
                 >
                     {leftRail}
