@@ -88,14 +88,16 @@ def test_limit_message_has_no_doubled_limit_word():
     """
     from src.services.subscription_gating import _build_gate_check
 
-    with patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=_resolved_free()):
-        gate = _build_gate_check("limit@rico.ai", "monthly_ai_message_limit", usage=50)
+    resolved = _resolved_free()
+    limit = resolved.subscription.entitlements.monthly_ai_message_limit
+    with patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=resolved):
+        gate = _build_gate_check("limit@rico.ai", "monthly_ai_message_limit", usage=limit)
 
     assert gate.allowed is False
     assert "limit limit" not in gate.message
     assert gate.message == (
         "You have reached your monthly ai message limit on the Free plan "
-        "(50/50). Upgrade to continue."
+        f"({limit}/{limit}). Upgrade to continue."
     )
 
 
