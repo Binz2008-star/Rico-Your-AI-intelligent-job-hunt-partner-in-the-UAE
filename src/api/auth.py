@@ -656,6 +656,36 @@ def verify_email(request: Request, token: str) -> VerifyEmailResponse:
     return VerifyEmailResponse(message="Email verified. Welcome to RicoHunt!", email=email)
 
 
+def _dispatch_resend_verification(email: str) -> None:
+    """Look up the user, mint a verification token, and email it — all in a
+    background task.
+
+    The DB lookup, token creation, and SMTP send all run here so
+    /resend-verification returns at the same time regardless of whether the
+    email is registered-and-unverified (closes the timing-based enumeration
+    oracle that existed when the lookup + token creation were synchronous — the
+    same fix already applied to /forgot-password).
+    """
+    from src.repositories.email_verification_repo import create_verification_token
+    from src.repositories.users_repo import get_user_by_email
+    from src.services.verification_email import send_verification_email
+
+    user = get_user_by_email(email)
+    if user is None or user.email_verified:
+        # User not found or already verified — nothing to send, and the caller
+        # already returned a generic response so neither state is revealed.
+        logger.info("resend_verification_noop user=%s", user_ref(email))
+        return
+
+    try:
+        verification_token = create_verification_token(email)
+    except Exception:
+        logger.error("resend_verification_failed user=%s", user_ref(email))
+        return
+
+    send_verification_email(email, verification_token)
+
+
 @router.post("/resend-verification", response_model=ResendVerificationResponse)
 @limiter.limit(LIMIT_VERIFY_EMAIL)
 def resend_verification(
@@ -663,25 +693,15 @@ def resend_verification(
     req: ResendVerificationRequest,
     background_tasks: BackgroundTasks,
 ) -> ResendVerificationResponse:
-    """Resend verification email. Always returns generic success to prevent enumeration."""
-    from src.repositories.email_verification_repo import create_verification_token
-    from src.repositories.users_repo import get_user_by_email
-    from src.services.verification_email import send_verification_email
+    """Resend verification email. Always returns generic success to prevent enumeration.
 
-    _generic = ResendVerificationResponse(
+    Both the DB lookup and email delivery are deferred to a background task so the
+    response time does not depend on whether the email is registered-and-unverified.
+    """
+    email = req.email.strip().lower()
+    # Always schedule the background task — lookup, token creation, and SMTP run
+    # inside it so this endpoint returns at the same time for every input.
+    background_tasks.add_task(_dispatch_resend_verification, email)
+    return ResendVerificationResponse(
         message="If that email is registered and unverified, a new verification link has been sent."
     )
-
-    email = req.email.strip().lower()
-    user = get_user_by_email(email)
-    if user is None or user.email_verified:
-        # User not found or already verified — don't reveal which
-        return _generic
-
-    try:
-        verification_token = create_verification_token(email)
-        background_tasks.add_task(send_verification_email, email, verification_token)
-    except Exception:
-        logger.error("resend_verification_failed user=%s", user_ref(email))
-
-    return _generic
