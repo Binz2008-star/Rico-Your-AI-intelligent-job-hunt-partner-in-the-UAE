@@ -217,6 +217,37 @@ _PROFILE_MATCH_PHRASES = frozenset([
     "based on my cv",
     "based on my profile",
     "jobs for me",
+    # #1336 PR3 — saved-target search continuation ("run/start/continue the
+    # job search that already has a saved target role"). Routes to the same
+    # job_search_profile_match handler, which already resolves the single
+    # saved role directly or applies search-first-with-alternatives when
+    # multiple targets exist — no new dispatch logic needed here.
+    "run job search",
+    "run the job search",
+    "start job search",
+    "start the job search",
+    "continue job search",
+    "continue the job search",
+    "search my target roles",
+    "find jobs from my cv",
+    # Arabic equivalents — normalized form (ا for alef variants, ه for ة, ي
+    # for ى), matching what _normalize_arabic() produces before this lookup.
+    # NOTE: "كمل البحث" is deliberately NOT included. "كمل" is one of the
+    # substring triggers _requests_application_send() uses to detect "go
+    # ahead and send my application" (src/rico_chat_api.py), checked earlier
+    # in dispatch than this exact-phrase lookup — "كمل البحث" collides with
+    # it and is misrouted to application_channel_clarification before this
+    # entry would ever be reached. Fixing that requires scoping
+    # _requests_application_send's "كمل" match to an actual pending
+    # draft/send context, which is separate follow-up work, not a change
+    # this phrase-list addition should make. "تابع البحث" (below) covers the
+    # same "continue the search" meaning without the collision.
+    "ابدا البحث",
+    "ابدا بحث الوظائف",
+    "تابع البحث",
+    "نفذ البحث",
+    "ابحث حسب سيرتي",
+    "ابحث عن وظائف تناسب سيرتي",
 ])
 
 _RECENT_CONTEXT_PHRASES = frozenset([

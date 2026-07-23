@@ -241,6 +241,45 @@ def test_open_applications_routes_to_tracking():
     assert result.intent == "application_tracking"
 
 
+# ── #1336 PR3: saved-target search continuation phrases ──────────────────────
+
+@pytest.mark.parametrize("phrase", [
+    "run job search",
+    "run the job search",
+    "start job search",
+    "start the job search",
+    "continue job search",
+    "continue the job search",
+    "search my target roles",
+    "find jobs from my cv",
+])
+def test_saved_target_continuation_phrases_route_to_profile_match(phrase):
+    """"Run/start/continue the (saved-target) job search" must reuse the
+    profile-match handler, which already resolves a single saved role
+    directly or applies search-first-with-alternatives for multiple targets
+    — never re-ask the user to repeat a role already on file (#1336)."""
+    result = classify_intent(phrase, has_cv_profile=True)
+    assert result.intent == "job_search_profile_match", (
+        f"Expected job_search_profile_match for {phrase!r}, got {result.intent!r}"
+    )
+
+
+@pytest.mark.parametrize("phrase", [
+    "ابدأ البحث",
+    "ابدأ بحث الوظائف",
+    "تابع البحث",
+    "نفذ البحث",
+    "ابحث حسب سيرتي",
+    "ابحث عن وظائف تناسب سيرتي",
+])
+def test_saved_target_continuation_phrases_arabic(phrase):
+    """Arabic equivalents of the saved-target continuation commands (#1336)."""
+    result = classify_intent(phrase, has_cv_profile=True)
+    assert result.intent == "job_search_profile_match", (
+        f"Expected job_search_profile_match for {phrase!r}, got {result.intent!r}"
+    )
+
+
 # ── Case insensitivity ────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("phrase", [

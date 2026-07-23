@@ -504,6 +504,10 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "creating", "generating", "sending", "changing", "applying", "submitting",
     "checking", "reviewing", "saving", "building", "preparing", "editing",
     "adding", "removing", "starting", "opening", "setting", "sharing",
+    # #1336 — generic one-word replies to an earlier Rico question. These are
+    # never job titles; without this a bare "Answer" passed every other check
+    # in _looks_like_bare_target_role and was misread as a role search.
+    "answer", "answers",
 })
 _QUESTION_CHARS: frozenset[str] = frozenset("?？!！;:")
 _MAX_ROLE_WORDS: int = 6
@@ -2651,7 +2655,10 @@ class RicoChatAPI:
     # ── Stored-CV reference / analysis ─────────────────────────────────────────
 
     _CV_ANALYZE_ASK_RE = re.compile(
-        r"\b(?:analy[sz]e|review|feedback|assess|evaluate|check)\b"
+        # "analize" (missing the 'y') is a common misspelling of analyze/
+        # analyse named explicitly in #1336 — without it, "analize my cv"
+        # fell through to job-search/AI-fallback instead of CV analysis.
+        r"\b(?:analy[sz]e|anali[sz]e|review|feedback|assess|evaluate|check)\b"
         r"|حلل|تحليل|راجع|مراجعة|قيّم|قيم|تقييم",
         re.IGNORECASE,
     )
