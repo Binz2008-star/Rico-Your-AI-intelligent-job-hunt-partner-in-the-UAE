@@ -1,5 +1,43 @@
 # Current State
 
+> **Header — 2026-07-23 (latest; supersedes all headers below).**
+> `main` HEAD **`45fa80c4`**. This session reconciled `PROJECT_STATUS.md`
+> (`#1349`), then — with explicit owner approval ("merge/PRs all of them ...
+> take the lead on that as CTO") — reviewed and merged the entire open-PR
+> backlog same day: `#1349` (this reconciliation), `#1347` (two more #1314
+> typed-YES ack-loop recurrences in `rico_chat_api.py`), `#1348` (#1336 PR2 —
+> CV/search-continuity fixes from a new authenticated production transcript:
+> Arabic-normalized CV-intent phrase matching, `نفذ`/`راجعها`/`وسع`
+> continuation-intent recognition, adjacent-role-offer pending-search arming,
+> and role-vs-city token disambiguation in `city_validation.py`, all with
+> transcript-replay + unit test coverage), `#1350` (stale CV-upload test
+> fixture fix predating the #1118 parse-quality gate), and `#1346` (installs
+> the `claude-md-best-practices` plugin skills + generates
+> `docs/CLAUDE-MD-SOTA.md`, and splits root `CLAUDE.md` 498→349 lines into
+> root + scoped `src/CLAUDE.md` + `apps/web/CLAUDE.md` + `docs/env-vars.md` —
+> root deliberately kept over the generic 300-line guideline because
+> `AGENTS.md` promises non-Claude-Code agent tools that auth/safety/AI-routing
+> rules live there, and those tools may not honor Claude Code's on-demand
+> subdirectory CLAUDE.md loading).
+>
+> **Zero open PRs remain.** Post-merge, production was verified directly
+> (not just CI green): Render `deploy-render.yml` succeeded on `45fa80c4`;
+> live `GET /version` returned `commit=45fa80c4...`, `GET /health` = `ok`;
+> a live `POST /api/v1/rico/chat/public` smoke call returned a normal
+> DeepSeek response — confirms the #1347/#1348 chat-logic changes are
+> functioning in production, not merely merged. Broader production smoke
+> (CV upload, billing sandbox, applications, AR/mobile) was **not** run in
+> this pass — do not assume it beyond the narrow chat smoke described above.
+>
+> One coordination note for future sessions: mid-session, another agent was
+> found actively committing directly in this same **main working directory**
+> (not an isolated worktree) — `git reflog` showed live branch switches and a
+> commit landing while this session was running. No work was lost (its last
+> action was a commit, not uncommitted state), but this session moved all
+> further git operations to a dedicated `rico-worktrees/` worktree rather than
+> keep touching the shared main checkout. Same-branch collision is a live risk
+> in this repo, not a hypothetical — see `PROJECT_STATUS.md` "Stop conditions."
+
 > **Header — 2026-07-18 (night): Product Truth Sprint — data-integrity
 > foundation MERGED & LIVE (supersedes the evening "in review" header
 > below).** `main` HEAD **`4879c04d`** (PR #1173, squash, expected-head
