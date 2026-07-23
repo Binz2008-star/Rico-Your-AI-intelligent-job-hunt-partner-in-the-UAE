@@ -207,7 +207,13 @@ describe("history-restore: no duplicate announcement/animation across a Sessions
         expect(screen.queryByTestId("transcript-needs-input-row")).not.toBeInTheDocument();
 
         const user = userEvent.setup();
-        await user.click(screen.getByRole("button", { name: /session b/i }));
+        // Scoped to the full (≥1200px) rail: TASK-20260723-002 added a
+        // compact (900–1199px) rail rendered in parallel (CSS, not JS, gates
+        // which is visible per viewport), so an unscoped query now matches
+        // both the full-text button and the compact icon button for the same
+        // real session.
+        const leftRail = screen.getByTestId("command-obsidian-leftrail");
+        await user.click(within(leftRail).getByRole("button", { name: /session b/i }));
 
         const row = await screen.findByTestId("transcript-needs-input-row");
         expect(within(row).getByText(/Manager is too broad/)).toBeInTheDocument();

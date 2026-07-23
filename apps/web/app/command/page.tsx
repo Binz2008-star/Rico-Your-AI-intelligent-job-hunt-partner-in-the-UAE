@@ -868,6 +868,12 @@ export default function CommandPage() {
     // presentation state, never touches chat behavior.
     const [leftRailOpen, setLeftRailOpen] = useState(true);
     const [rightRailOpen, setRightRailOpen] = useState(true);
+    // Medium-workspace drawers (TASK-20260723-002, 768–1199px only) — closed
+    // by default; opened via the persistent "Sessions"/"Career context"
+    // controls, never auto-opened. Independent of leftRailOpen/rightRailOpen,
+    // which still govern the ≥1200px inline rails unchanged.
+    const [sessionsDrawerOpen, setSessionsDrawerOpen] = useState(false);
+    const [careerDrawerOpen, setCareerDrawerOpen] = useState(false);
     // Real signal: the authenticated server-history fetch failed. Existing
     // behavior (fall through to the welcome state) is unchanged — this only
     // lets the conversation rail tell the user truthfully what happened.
@@ -2150,6 +2156,29 @@ export default function CommandPage() {
         );
     }
 
+    // Shared real-data props for every CommandConversationRail instance
+    // (full ≥1200px, compact 900–1199px, full-in-drawer 768–899px) — same
+    // session data and handlers everywhere, only the `variant` differs per
+    // call site (TASK-20260723-002).
+    const conversationRailProps = {
+        audience: chatAudience,
+        messages,
+        historyState,
+        historyLoadError,
+        busy: thinking,
+        confirmClear,
+        clearingHistory,
+        onNewChat: handleNewChat,
+        onClearHistory: () => void handleClearHistory(),
+        onCancelClear: () => setConfirmClear(false),
+        multiSession,
+        sessions: railSessions,
+        activeSessionId: activeChatSession,
+        switchingSessionId,
+        sessionSwitchError,
+        onSelectSession: handleSelectSession,
+    } as const;
+
     return (
         <CommandChrome
             audience={chatAudience}
@@ -2159,6 +2188,10 @@ export default function CommandPage() {
             rightOpen={rightRailOpen}
             onToggleLeft={() => setLeftRailOpen((v) => !v)}
             onToggleRight={() => setRightRailOpen((v) => !v)}
+            sessionsDrawerOpen={sessionsDrawerOpen}
+            onToggleSessionsDrawer={() => setSessionsDrawerOpen((v) => !v)}
+            careerDrawerOpen={careerDrawerOpen}
+            onToggleCareerDrawer={() => setCareerDrawerOpen((v) => !v)}
             onLogout={handleLogout}
             mobileActions={
                 /* Command actions in the shared mobile drawer — replaces the
@@ -2191,24 +2224,15 @@ export default function CommandPage() {
                     </button>
                 </div>
             }
-            leftRail={
-                <CommandConversationRail
-                    audience={chatAudience}
-                    messages={messages}
-                    historyState={historyState}
-                    historyLoadError={historyLoadError}
-                    busy={thinking}
-                    confirmClear={confirmClear}
-                    clearingHistory={clearingHistory}
-                    onNewChat={handleNewChat}
-                    onClearHistory={() => void handleClearHistory()}
-                    onCancelClear={() => setConfirmClear(false)}
-                    multiSession={multiSession}
-                    sessions={railSessions}
-                    activeSessionId={activeChatSession}
-                    switchingSessionId={switchingSessionId}
-                    sessionSwitchError={sessionSwitchError}
-                    onSelectSession={handleSelectSession}
+            leftRail={<CommandConversationRail {...conversationRailProps} variant="full" />}
+            leftRailCompact={<CommandConversationRail {...conversationRailProps} variant="compact" />}
+            sessionsDrawerContent={<CommandConversationRail {...conversationRailProps} variant="full" />}
+            careerContextDrawerContent={
+                <CommandRail
+                    authenticated={chatAudience === "authenticated"}
+                    picks={railPicks}
+                    pipeline={railPipeline}
+                    variant="bare"
                 />
             }
         >
@@ -2854,8 +2878,15 @@ function CommandChrome({
     rightOpen,
     onToggleLeft,
     onToggleRight,
+    sessionsDrawerOpen,
+    onToggleSessionsDrawer,
+    careerDrawerOpen,
+    onToggleCareerDrawer,
     onLogout,
     leftRail,
+    leftRailCompact,
+    sessionsDrawerContent,
+    careerContextDrawerContent,
     mobileActions,
     children,
 }: {
@@ -2867,8 +2898,16 @@ function CommandChrome({
     rightOpen: boolean;
     onToggleLeft: () => void;
     onToggleRight: () => void;
+    /** TASK-20260723-002 — medium-workspace drawer state (768–1199px only). */
+    sessionsDrawerOpen?: boolean;
+    onToggleSessionsDrawer?: () => void;
+    careerDrawerOpen?: boolean;
+    onToggleCareerDrawer?: () => void;
     onLogout?: () => void;
     leftRail: React.ReactNode;
+    leftRailCompact?: React.ReactNode;
+    sessionsDrawerContent?: React.ReactNode;
+    careerContextDrawerContent?: React.ReactNode;
     /** Command actions for the shared mobile drawer (authenticated only). */
     mobileActions?: React.ReactNode;
     children: React.ReactNode;
@@ -2903,8 +2942,15 @@ function CommandChrome({
             rightOpen={rightOpen}
             onToggleLeft={onToggleLeft}
             onToggleRight={onToggleRight}
+            sessionsDrawerOpen={sessionsDrawerOpen}
+            onToggleSessionsDrawer={onToggleSessionsDrawer}
+            careerDrawerOpen={careerDrawerOpen}
+            onToggleCareerDrawer={onToggleCareerDrawer}
             onLogout={onLogout}
             leftRail={leftRail}
+            leftRailCompact={leftRailCompact}
+            sessionsDrawerContent={sessionsDrawerContent}
+            careerContextDrawerContent={careerContextDrawerContent}
             mobileChrome={audience === "authenticated"}
             mobileActions={mobileActions}
         >

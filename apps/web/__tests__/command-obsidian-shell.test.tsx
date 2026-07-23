@@ -83,13 +83,15 @@ describe("CommandObsidianShell (slice C1)", () => {
         expect(onToggleLeft).toHaveBeenCalledTimes(1);
         expect(onToggleRight).toHaveBeenCalledTimes(1);
 
-        expect(screen.getByTestId("command-obsidian-leftrail").className).toContain("lg:w-[260px]");
+        // TASK-20260723-002: full rail is ≥1200px now (was ≥1024px/lg),
+        // rebalanced to 232px (was 260px) so the transcript stays primary.
+        expect(screen.getByTestId("command-obsidian-leftrail").className).toContain("min-[1200px]:w-[232px]");
         rerender(
             <CommandObsidianShell leftOpen={false} rightOpen onToggleLeft={onToggleLeft} onToggleRight={onToggleRight}>
                 x
             </CommandObsidianShell>,
         );
-        expect(screen.getByTestId("command-obsidian-leftrail").className).toContain("lg:w-0");
+        expect(screen.getByTestId("command-obsidian-leftrail").className).toContain("min-[1200px]:w-0");
     });
 
     it("renders the shared WorkspaceShell sidebar nav, /command current", () => {

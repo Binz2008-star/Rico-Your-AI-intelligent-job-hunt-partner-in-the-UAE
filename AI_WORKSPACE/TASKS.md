@@ -7422,3 +7422,193 @@ one-line fix applied generically as specified.
 - Next exact action: owner review of the second browser smoke; if it
   passes, mark PR #1326 Ready for Review (still no merge/deploy)
 - Stop condition: do not merge or deploy; do not open a second PR
+
+### TASK-20260723-002 — Medium Workspace Layout (/command 900–1199px and 768–899px tiers)
+
+Status: implemented / browser smoke pending
+Owner: Claude (agent) / owner review
+Branch: feat/command-medium-workspace-layout
+Issue/PR: #1329 (Draft)
+
+#### Objective
+Preserve `/command`'s "Career Workspace" identity — not an anonymous chat —
+at medium desktop/tablet widths, per the owner-corrected breakpoint contract:
+- **≥1200px**: full sessions rail (232px), full transcript, full
+  career-context rail (272px) — rebalanced from the prior 260px/300px so the
+  transcript keeps priority width.
+- **900–1199px**: compact sessions rail (80px, icon/initial-based, NOT
+  anonymous dots), transcript stays primary, career context opens via a
+  "Career context" drawer (not inline).
+- **768–899px**: transcript full width; Sessions and Career-context each open
+  via their own drawer; persistent workspace trigger buttons stay visible so
+  the surface still reads as a workspace, not a bare chat.
+- **<768px**: unchanged — no regression to composer/cards/RTL/scrolling/
+  keyboard.
+Frontend-only. No backend, no data model, no new job-card/permission-card
+redesign.
+
+#### Context
+- Relevant files: `apps/web/components/command/CommandObsidianShell.tsx`;
+  `apps/web/components/command/CommandConversationRail.tsx`;
+  `apps/web/components/command/CommandRail.tsx`;
+  `apps/web/components/command/CommandWorkspaceDrawer.tsx` (new);
+  `apps/web/app/command/page.tsx`; `apps/web/lib/translations.ts`
+- Tailwind v3 confirmed (`apps/web/package.json`), no custom `screens` in
+  `tailwind.config.ts` — used arbitrary-value breakpoint variants
+  (`min-[1200px]:`, `min-[900px]:`) rather than editing the global config, to
+  keep the change contained to files in scope.
+- Owner-mandated design constraint: CSS/Tailwind-only responsive rendering —
+  no `window.matchMedia`/resize-listener "layout tier" JS state machine (avoids
+  hydration flicker). All rail/drawer variants render simultaneously in the
+  DOM; Tailwind breakpoint classes decide which is visually shown. React state
+  is used only for drawer open/closed (`sessionsDrawerOpen`,
+  `careerDrawerOpen` in `page.tsx`).
+- Known jsdom implication of the CSS-only pattern: jsdom does not evaluate
+  real CSS media queries, so both the full and compact rail instances are
+  simultaneously present and query-able in tests. Existing tests that did
+  unscoped `getByRole`/`getByText` queries against Sessions-rail buttons were
+  updated to scope with `within(screen.getByTestId("command-obsidian-leftrail"))`
+  — not a behavior regression, a test-authoring consequence of the required
+  architecture.
+- Verified (owner mid-task spot-check): `CommandConversationRail.tsx`'s full
+  variant has exactly one root wrapper (`w-[232px]`, was `w-[260px]`) — no
+  duplicate 260px wrapper left behind. The compact variant is a distinct,
+  separately-tagged early-return branch (`data-testid=
+  "command-conversation-rail-compact"`, `w-20`), not a shrunk copy of the
+  full-text rail.
+- `MobileCommandHeader.tsx` (<768px mobile nav/drawer) is untouched — a new,
+  dedicated, content-agnostic `CommandWorkspaceDrawer` primitive was built
+  instead of extending or duplicating the mobile drawer, to avoid
+  destabilizing mobile nav.
+
+#### Constraints
+- Do not touch: job-card redesign, permission-card redesign, Arabic font
+  changes, STOP gutter, backend progress events, new data models, fake
+  counts/jobs/progress, sound effects, unrelated cleanup.
+- Do not alter current mobile (<768px) navigation behavior — `768px belongs
+  to the drawer tier, not the mobile tier` (owner correction).
+- No JS viewport-width state machine; React state manages only drawer
+  open/closed.
+- No anonymous session dots in the compact rail — real derived initial,
+  active-state marker, native tooltip, full accessible name required.
+- Do not directly shrink the existing 260px rail as the "compact" tier — a
+  genuinely different compact branch was required and built.
+- RTL: logical properties only (`start-0`/`end-0`, `border-inline-start`),
+  no hardcoded left/right; Sessions drawer opens from inline-start, Career
+  context drawer opens from inline-end.
+
+#### Acceptance criteria
+- [x] ≥1200px: full three-column layout renders (232px sessions rail /
+      transcript / 272px career-context rail)
+- [x] 900–1199px: compact icon/initial sessions rail renders; career context
+      is drawer-only (not inline)
+- [x] 768–899px: transcript full width; Sessions and Career-context both
+      drawer-only; persistent trigger buttons visible in the topbar
+- [x] <768px: unchanged (no new code path touches `MobileCommandHeader.tsx`)
+- [x] `CommandWorkspaceDrawer`: `role="dialog"`, `aria-modal="true"`,
+      `aria-labelledby`, focus enters panel on open, Escape/backdrop/
+      close-button close it, focus returns to the trigger on close,
+      `motion-reduce:animate-none` respected (reuses the existing
+      `animate-fade-in-scale` utility already used by the account menu)
+- [x] Trigger buttons: `aria-expanded`/`aria-controls` matching the drawer's
+      real DOM `id`
+- [x] Compact rail: real derived initial (not a dot), `aria-label` with full
+      session title, native `title` tooltip, active-state marker
+- [x] RTL: drawer `side="start"`/`side="end"` resolve to `start-0`/`end-0` in
+      both languages (logical properties, no isRTL branching for position)
+- [x] TypeScript: baseline failure, zero new errors — `tsc --noEmit` output
+      is byte-identical (48 errors, same files/lines/codes) between this
+      branch and base SHA, verified via isolated worktree, not just a grep —
+      see Required verification
+- [x] ESLint clean on all changed/new files (pre-existing unrelated
+      `react-hooks/set-state-in-effect` + React Compiler findings in
+      `page.tsx` confirmed present at the same lines, shifted only by line
+      offset, on the unmodified base branch — not introduced by this change)
+- [x] Full test suite green (917/917, incl. 20 new dedicated tests)
+- [ ] Full required browser-smoke matrix (10 widths × EN/AR RTL) executed
+      against a deployed preview — pending
+
+#### Required verification
+- [x] Unit tests: 3 existing test files updated for the intentional
+      width/breakpoint class-string changes
+      (`command-obsidian-noregression.test.tsx`,
+      `command-obsidian-shell.test.tsx`) and the compact-rail-caused query
+      ambiguity (`command-clarification-history-restore.test.tsx`); one new
+      dedicated file, `command-medium-workspace-layout.test.tsx` (20 cases:
+      `CommandWorkspaceDrawer` a11y/focus/RTL, compact-rail accessible
+      names/active-state, `CommandRail` bare variant, `CommandObsidianShell`
+      trigger/drawer wiring)
+- [x] `npx vitest run` (full suite): 917/917 passing
+- [x] TypeScript: baseline failure, zero new errors. `npx tsc --noEmit` on
+      this branch: 48 errors. Identical command run against an isolated
+      `git worktree` checked out at base SHA
+      `8c1c5dc1a168f00e5eba02887c520b48a4c107c0` (node_modules copied in, no
+      dependency changes on this branch to invalidate that): also 48 errors.
+      `diff` of the two full outputs (paths, line:col, error codes, messages)
+      is empty — byte-for-byte identical. All 48 are in files this branch
+      does not touch (`send-double-tap-guard.test.ts`,
+      `sidebar-nav-routing.test.ts`, `subscription-atelier.test.tsx`,
+      `internal-preview-protection.test.tsx`, `paddle-event-callback.test.ts`,
+      `scheduled-search-card.test.tsx`). Not described as "TypeScript
+      passing" — it is a pre-existing baseline failure this branch does not
+      add to.
+- [x] `npx eslint` on all changed/new files: clean except 4 pre-existing
+      findings in `page.tsx` (React Compiler memoization + 3×
+      `react-hooks/set-state-in-effect`), confirmed present at the
+      corresponding lines (shifted only by line offset) on the unmodified
+      base branch via `git stash` comparison
+- [x] `npm run build` (production build): clean, all 48 routes generated
+- [ ] Browser-smoke matrix: 1440×900, 1200×900, 1199×900, 1024×900, 900×900,
+      899×900, 820×900, 768×900, 767×900, 390×844 — EN + AR RTL, empty/new
+      session, active session with job results, rails/drawers, composer, no
+      horizontal overflow — pending, to be run against the Draft PR's Vercel
+      preview
+
+#### Continuity Block
+- Task ID: TASK-20260723-002
+- GitHub issue/PR: #1329 (Draft) —
+  https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/1329
+- Branch: feat/command-medium-workspace-layout
+- Base branch: main @ 8c1c5dc1a168f00e5eba02887c520b48a4c107c0 (current
+  origin/main head at task start)
+- Last safe commit SHA: 8c1c5dc1a168f00e5eba02887c520b48a4c107c0
+- Current head SHA: 371a98186d950af07dc2739133b2d68b16f4ac33
+- Uncommitted changes present: no (after this commit)
+- Status: implemented / browser smoke pending
+- Files inspected: all files listed in Context above, plus
+  `apps/web/app/globals.css`, `apps/web/tailwind.config.ts` (confirmed no
+  custom `screens`), `apps/web/components/command/MobileCommandHeader.tsx`
+  (confirmed untouched)
+- Files changed: `AI_WORKSPACE/TASKS.md`;
+  `apps/web/components/command/CommandObsidianShell.tsx`;
+  `apps/web/components/command/CommandConversationRail.tsx`;
+  `apps/web/components/command/CommandRail.tsx`;
+  `apps/web/components/command/CommandWorkspaceDrawer.tsx` (new);
+  `apps/web/app/command/page.tsx`; `apps/web/lib/translations.ts`;
+  `apps/web/__tests__/command-obsidian-noregression.test.tsx`;
+  `apps/web/__tests__/command-obsidian-shell.test.tsx`;
+  `apps/web/__tests__/command-clarification-history-restore.test.tsx`;
+  `apps/web/__tests__/command-medium-workspace-layout.test.tsx` (new)
+- Files intentionally not touched: `apps/web/components/command/
+  MobileCommandHeader.tsx`; `apps/web/tailwind.config.ts`; job-card/
+  permission-card components; backend (`src/**`)
+- What is complete: implementation of all four tiers, new
+  `CommandWorkspaceDrawer` primitive, compact-rail accessible identity,
+  `CommandRail` bare variant reused for the career-context drawer, full
+  test suite green, tsc/eslint baseline-compared (zero new errors/findings)
+  against base SHA, production build clean, committed, pushed, Draft PR
+  #1329 opened
+- What is incomplete: full browser-smoke matrix against the deployed
+  Vercel preview
+- Known blockers: none
+- Risks: presentational/layout-only change; no backend or data contract
+  touched; the CSS-only "render all variants, gate with Tailwind" pattern
+  means jsdom tests must scope queries — documented above and already
+  applied to the pre-existing tests that needed it
+- Rollback plan: revert commit 371a98186d950af07dc2739133b2d68b16f4ac33 on
+  this branch (or close PR #1329 without merging); `MobileCommandHeader.tsx`
+  and all backend/data paths are untouched, so rollback is a pure frontend
+  revert with no data or contract unwind
+- Next exact action: run the required browser-smoke matrix against PR
+  #1329's Vercel preview once it deploys, then report results
+- Stop condition: do not merge or deploy production

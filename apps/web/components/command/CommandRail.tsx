@@ -88,12 +88,19 @@ export function CommandRail({
     picks,
     pipeline,
     open = true,
+    variant = "aside",
 }: {
     authenticated: boolean;
     picks: JobMatch[];
     pipeline: RailPipelineEntry[];
     /** Desktop visibility — driven by the shell's PanelRight toggle (slice C1). */
     open?: boolean;
+    /** "aside": the ≥1200px inline column (own border/background/width).
+     *  "bare": content only, no outer chrome — for embedding inside
+     *  CommandWorkspaceDrawer (TASK-20260723-002, 768–1199px), which already
+     *  supplies its own panel background, border, and heading. Same props,
+     *  same real data, same markup below the wrapper either way. */
+    variant?: "aside" | "bare";
 }) {
     const c = useWorkspaceTheme();
     const { language } = useLanguage();
@@ -108,14 +115,9 @@ export function CommandRail({
         letterSpacing: "0.22em",
     };
 
-    return (
-        <aside
-            data-testid="command-rail"
-            className={`hidden w-[300px] shrink-0 flex-col overflow-hidden ${open ? "lg:flex" : ""}`}
-            style={{ borderInlineStart: `1px solid ${c.hair}`, background: c.panel }}
-            aria-label={t("cmdRailShortlist")}
-        >
-            <div className="flex-1 min-h-0 overflow-y-auto p-4">
+    const content = (
+        <>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4" data-testid="command-rail-content">
                 {/* Shortlist eyebrow + count */}
                 <div className="mb-4 flex items-center justify-between">
                     <span style={{ ...eyebrow, color: c.ink55 }}>{t("cmdRailShortlist")}</span>
@@ -245,6 +247,21 @@ export function CommandRail({
                     .atl-rail-link:hover { color: ${c.red} !important; }
                 ` }} />
             </div>
+        </>
+    );
+
+    if (variant === "bare") {
+        return <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">{content}</div>;
+    }
+
+    return (
+        <aside
+            data-testid="command-rail"
+            className={`hidden w-[272px] shrink-0 flex-col overflow-hidden ${open ? "min-[1200px]:flex" : ""}`}
+            style={{ borderInlineStart: `1px solid ${c.hair}`, background: c.panel }}
+            aria-label={t("cmdRailShortlist")}
+        >
+            {content}
         </aside>
     );
 }

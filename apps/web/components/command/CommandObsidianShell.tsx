@@ -34,6 +34,7 @@
  */
 
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
+import { CommandWorkspaceDrawer } from "@/components/command/CommandWorkspaceDrawer";
 import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
 import { WORKSPACE_THEME, useWorkspaceTheme } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -111,6 +112,13 @@ export function CommandObsidianShell({
     children: React.ReactNode;
     /** Content of the start rail — the canonical Sessions position. */
     leftRail?: React.ReactNode;
+    /** 900–1199px icon/initial-only rail content (TASK-20260723-002). */
+    leftRailCompact?: React.ReactNode;
+    /** Full Sessions content shown inside the 768–899px Sessions drawer. */
+    sessionsDrawerContent?: React.ReactNode;
+    /** Career-context (Shortlist/Pipeline) content shown inside the
+     *  768–1199px Career-context drawer. */
+    careerContextDrawerContent?: React.ReactNode;
     /** True while Rico is thinking/streaming — drives the console status. */
     busy?: boolean;
     /** A streamed reply is actively rendering (slice C2) — REPLYING status. */
@@ -119,6 +127,10 @@ export function CommandObsidianShell({
     rightOpen?: boolean;
     onToggleLeft?: () => void;
     onToggleRight?: () => void;
+    sessionsDrawerOpen?: boolean;
+    onToggleSessionsDrawer?: () => void;
+    careerDrawerOpen?: boolean;
+    onToggleCareerDrawer?: () => void;
     /** Called when the user clicks Log out in the desktop account menu. */
     onLogout?: () => void;
     /** Render the shared WorkspaceShell mobile bar/drawer (single-shell mobile
@@ -137,12 +149,19 @@ export function CommandObsidianShell({
 function CommandConsole({
     children,
     leftRail,
+    leftRailCompact,
+    sessionsDrawerContent,
+    careerContextDrawerContent,
     busy = false,
     replying = false,
     leftOpen = true,
     rightOpen = true,
     onToggleLeft,
     onToggleRight,
+    sessionsDrawerOpen = false,
+    onToggleSessionsDrawer,
+    careerDrawerOpen = false,
+    onToggleCareerDrawer,
     onLogout,
 }: Parameters<typeof CommandObsidianShell>[0]) {
     const { language } = useLanguage();
@@ -165,6 +184,11 @@ function CommandConsole({
         document.addEventListener("mousedown", handle);
         return () => document.removeEventListener("mousedown", handle);
     }, [accountOpen]);
+
+    // TASK-20260723-002 — medium-workspace drawer triggers. Refs so focus can
+    // return to the exact button that opened each drawer on close.
+    const sessionsDrawerTriggerRef = useRef<HTMLButtonElement>(null);
+    const careerDrawerTriggerRef = useRef<HTMLButtonElement>(null);
 
     return (
         <div
@@ -189,24 +213,50 @@ function CommandConsole({
                 ["--sun" as string]: channels(c.red, c.bg),
             } as React.CSSProperties}
         >
-            {/* ── Console bar (lg+; mobile keeps MobileCommandHeader). Brand, nav,
-                language and theme controls live in the shared workspace sidebar —
-                only command-specific controls remain here. ── */}
+            {/* ── Console bar (md+; mobile keeps MobileCommandHeader). Brand,
+                nav, language and theme controls live in the shared workspace
+                sidebar — only command-specific controls remain here.
+                TASK-20260723-002: visible from 768px (not 1024px) so the
+                Sessions/Career-context drawer triggers have a persistent home
+                at the medium tiers — the workspace still reads as a
+                workspace, not an anonymous chat, below 1200px. ── */}
             <header
                 data-testid="command-obsidian-topbar"
-                className="relative z-20 hidden h-11 shrink-0 items-center gap-3 px-4 md:px-6 lg:flex"
+                className="relative z-20 hidden h-11 shrink-0 items-center gap-3 px-4 md:flex md:px-6"
                 style={{ background: c.rail, borderBottom: `1px solid ${c.hair}` }}
             >
+                {/* ≥1200px only — collapses/expands the full inline Sessions rail. */}
                 <button
                     type="button"
                     onClick={onToggleLeft}
                     aria-label={t("cmdToggleNavRail")}
                     aria-expanded={leftOpen}
-                    className="obs-ghost rounded-md p-1.5"
+                    className="obs-ghost hidden rounded-md p-1.5 min-[1200px]:flex"
                     style={{ color: leftOpen ? c.ink : c.ink55, background: "transparent", border: "none", cursor: "pointer" }}
                 >
                     <PanelIcon side="start" />
                 </button>
+                {/* 768–899px only — the compact rail (900–1199px) already shows
+                    session identity inline, so this trigger is unnecessary
+                    (and would duplicate) above 899px. */}
+                {onToggleSessionsDrawer && (
+                    <button
+                        ref={sessionsDrawerTriggerRef}
+                        type="button"
+                        onClick={onToggleSessionsDrawer}
+                        aria-label={t("cmdSessionsDrawerToggle")}
+                        aria-expanded={sessionsDrawerOpen}
+                        aria-controls="command-sessions-drawer"
+                        data-testid="command-sessions-drawer-trigger"
+                        className="obs-ghost flex items-center gap-1.5 rounded-md px-2 py-1.5 min-[900px]:hidden"
+                        style={{ color: c.ink70, background: "transparent", border: `1px solid ${c.hair}`, cursor: "pointer" }}
+                    >
+                        <PanelIcon side="start" />
+                        <span style={{ ...EYEBROW, fontSize: 9.5, color: c.ink70, letterSpacing: isAr ? "0.02em" : "0.14em" }}>
+                            {t("cmdSessionsTitle")}
+                        </span>
+                    </button>
+                )}
                 <span className="hidden sm:inline" style={{ ...EYEBROW, color: c.ink55, letterSpacing: isAr ? "0.04em" : "0.22em" }}>
                     {t("cmdWorkspaceTag")}
                 </span>
@@ -284,32 +334,100 @@ function CommandConsole({
                         )}
                     </div>
                 )}
+                {/* 768–1199px only — the right rail is never inline at these
+                    widths (owner directive), so the Career-context drawer is
+                    the only access to Shortlist/Pipeline here. */}
+                {onToggleCareerDrawer && (
+                    <button
+                        ref={careerDrawerTriggerRef}
+                        type="button"
+                        onClick={onToggleCareerDrawer}
+                        aria-label={t("cmdCareerContextDrawerToggle")}
+                        aria-expanded={careerDrawerOpen}
+                        aria-controls="command-career-context-drawer"
+                        data-testid="command-career-drawer-trigger"
+                        className="obs-ghost ms-2 flex items-center gap-1.5 rounded-md px-2 py-1.5 min-[1200px]:hidden"
+                        style={{ color: c.ink70, background: "transparent", border: `1px solid ${c.hair}`, cursor: "pointer" }}
+                    >
+                        <span style={{ ...EYEBROW, fontSize: 9.5, color: c.ink70, letterSpacing: isAr ? "0.02em" : "0.14em" }}>
+                            {t("cmdCareerContextTitle")}
+                        </span>
+                        <PanelIcon side="end" />
+                    </button>
+                )}
+                {/* ≥1200px only — collapses/expands the full inline Career-
+                    context rail. */}
                 <button
                     type="button"
                     onClick={onToggleRight}
                     aria-label={t("cmdToggleShortlistRail")}
                     aria-expanded={rightOpen}
-                    className="obs-ghost ms-2 rounded-md p-1.5"
+                    className="obs-ghost ms-2 hidden rounded-md p-1.5 min-[1200px]:flex"
                     style={{ color: rightOpen ? c.ink : c.ink55, background: "transparent", border: "none", cursor: "pointer" }}
                 >
                     <PanelIcon side="end" />
                 </button>
             </header>
 
-            {/* ── Console body: start rail · children (transcript + right rail) ── */}
+            {/* ── Console body: start rail · children (transcript + right rail) ──
+                TASK-20260723-002: the full text rail is now ≥1200px only. The
+                900–1199px tier gets a separate, always-narrow compact aside
+                instead of a shrunk version of the same one — real session
+                identity (icon/initial + active marker + tooltip + accessible
+                name), not a clipped copy of the text list. Below 900px,
+                neither aside renders — Sessions is reachable only through the
+                drawer (768–899px) or not at all (<768px, unchanged). */}
             <div className="relative z-10 flex min-h-0 flex-1">
                 <aside
                     data-testid="command-obsidian-leftrail"
-                    className={`${leftOpen ? "lg:flex lg:w-[260px]" : "lg:w-0"} hidden shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
+                    className={`${leftOpen ? "min-[1200px]:flex min-[1200px]:w-[232px]" : "min-[1200px]:w-0"} hidden shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
                     style={{ borderInlineEnd: leftOpen ? `1px solid ${c.hair}` : "none", background: c.rail }}
                 >
                     {leftRail}
+                </aside>
+
+                <aside
+                    data-testid="command-obsidian-leftrail-compact"
+                    className="hidden w-20 shrink-0 flex-col overflow-hidden min-[900px]:flex min-[1200px]:hidden"
+                    style={{ borderInlineEnd: `1px solid ${c.hair}`, background: c.rail }}
+                >
+                    {leftRailCompact}
                 </aside>
 
                 <main className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
                     {children}
                 </main>
             </div>
+
+            {/* TASK-20260723-002 — medium-workspace drawers (768–1199px). Real
+                content only: the same CommandConversationRail/CommandRail
+                instances used elsewhere, no new data. */}
+            {onToggleSessionsDrawer && (
+                <CommandWorkspaceDrawer
+                    open={sessionsDrawerOpen}
+                    onClose={onToggleSessionsDrawer}
+                    titleId="command-sessions-drawer-title"
+                    title={t("cmdSessionsTitle")}
+                    side="start"
+                    triggerRef={sessionsDrawerTriggerRef}
+                    testId="command-sessions-drawer"
+                >
+                    {sessionsDrawerContent}
+                </CommandWorkspaceDrawer>
+            )}
+            {onToggleCareerDrawer && (
+                <CommandWorkspaceDrawer
+                    open={careerDrawerOpen}
+                    onClose={onToggleCareerDrawer}
+                    titleId="command-career-context-drawer-title"
+                    title={t("cmdCareerContextTitle")}
+                    side="end"
+                    triggerRef={careerDrawerTriggerRef}
+                    testId="command-career-context-drawer"
+                >
+                    {careerContextDrawerContent}
+                </CommandWorkspaceDrawer>
+            )}
 
             <style dangerouslySetInnerHTML={{
                 __html: `
