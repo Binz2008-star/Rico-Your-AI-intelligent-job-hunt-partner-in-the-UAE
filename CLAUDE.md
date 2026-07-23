@@ -167,39 +167,21 @@ The repo combines three layers:
 - `src/api/rate_limit.py` — SlowAPI limits
 - `src/api/routers/rico_chat.py` — Rico chat, public chat, CV upload, webhooks
 - `src/api/routers/onboarding.py` — structured onboarding submit
-- `src/api/routers/jobs.py` — jobs API
-- `src/api/routers/applications.py` — applications API
-- `src/api/routers/settings.py` — settings API
-- `src/api/routers/stats.py` — stats/dashboard API
-- `src/api/routers/user.py` — profile retrieval/update
 - `src/api/routers/actions.py` — idempotent job actions (apply/save/skip/block/draft/why)
 - `src/api/routers/agent.py` — natural-language chat with Rico agent
 - `src/api/routers/pipeline.py` — pipeline status/trigger
-- `src/api/routers/subscription.py`, `paddle_billing.py`, `billing_whatsapp.py`, `admin_subscriptions.py` — billing/entitlements (Paddle + WhatsApp-assisted channel; activation is admin-only)
-- `src/api/routers/apply_queue.py` — apply queue management
-- `src/api/routers/link_verification.py` — job apply-link verification (#354)
-- (the full router set lives in `src/api/routers/` — more routers exist than are listed here)
-- `src/rico_jotform_webhook.py` — Jotform processing and idempotency
-- `src/rico_telegram_webhook.py` — Telegram webhook processing
 - `src/rico_db.py` — Rico DB helper
 - `src/rico_chat_api.py` — primary conversational layer (intent classification, role intelligence pipeline, structured response types)
 - `src/rico_safety.py` — guardrails; blocks forged docs, unapproved applies, spam
-- `src/rico_repo_adapter.py` — bridge between agent layer and legacy pipeline
 - `src/agent/runtime.py` — central action dispatcher; idempotency, audit logging, dry-run
 - `src/agent/registry/tool_registry.py` — declarative tool system
-- `src/services/chat_service.py` — chat business logic
-- `src/db.py` — DB connection layer
-- `src/repositories/*` — repository layer
-- `src/run_daily.py` — Daily Job Bot / intelligence pipeline
+- More backend files (remaining routers, repository layer, webhook processors): `src/CLAUDE.md`.
 
 ## Key Frontend Files
 
 - `apps/web/app/command/page.tsx` — public chat UI (primary chat surface; `/chat` redirects here)
-- `apps/web/app/signup/page.tsx` — self-signup UI
-- `apps/web/app/login/page.tsx` — login UI
-- `apps/web/app/onboarding/page.tsx` — guided onboarding / CV-first flow
 - `apps/web/lib/api.ts` — canonical frontend API helper for auth/chat/CV/profile/onboarding
-- `apps/web/services/*` — older service wrappers (dashboard stats, jobs, applications, settings, health)
+- More frontend files (auth pages, onboarding, service wrappers): `apps/web/CLAUDE.md`.
 
 ## Auth Rules
 
@@ -237,15 +219,6 @@ The repo combines three layers:
 - `POST /api/v1/pipeline/trigger`
 - `GET /health`
 - `GET /version`
-
-## Jotform Idempotency
-
-Current `main` already has stronger DB-backed Jotform idempotency:
-
-- `db.register_webhook_event(...)` before processing
-- `db.mark_webhook_event_processed(...)` after processing
-
-Do not add a parallel `webhook_events_repo` idempotency layer unless intentionally refactoring the current DB-backed implementation.
 
 ## CV Upload
 
@@ -304,104 +277,23 @@ npx playwright test
 
 ## Required Env Vars
 
-### Backend / Render
+Full list with rationale/incident history: `docs/env-vars.md`. Summary (backend/Render unless noted):
 
-```env
-DATABASE_URL=
-JWT_SECRET=
-JWT_TTL_HOURS=
-COOKIE_SECURE=true
-RESET_BASE_URL=https://ricohunt.com
+- `DATABASE_URL`, `JWT_SECRET`, `JWT_TTL_HOURS`, `COOKIE_SECURE`, `RESET_BASE_URL`, `CORS_ORIGINS` — core auth/DB/CORS config
+- `OPENAI_API_KEY`, `OPEN_AI_API`, `RICO_OPENAI_MODEL`, `RICO_AI_PROVIDER`, `DEEPSEEK_API_KEY`, `HF_TOKEN` — AI provider routing (see below)
+- `JSEARCH_API_KEY`, `RAPIDAPI_KEY` — job search API
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — user-facing job/career notifications
+- `TELEGRAM_ADMIN_CHAT_ID`, `TELEGRAM_DEV_CHAT_ID`, `TELEGRAM_ADMIN_BOT_TOKEN` — admin/dev technical alerts only (never falls back to user chat)
+- `JOTFORM_API_KEY`, `JOTFORM_FORM_ID`, `JOTFORM_WEBHOOK_SECRET` — Jotform intake
+- `WHATSAPP_SUBSCRIPTIONS_ENABLED`, `WHATSAPP_SUBSCRIPTION_NUMBER` — assisted subscription channel; never grants entitlement by itself, fail-closed default off
+- `RICO_ENABLE_AUTO_APPLY`, `RICO_INTERACTIVE_APPLY`, `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS`, `RICO_TELEGRAM_PUBLIC_ALERTS` — apply/approval safety switches
+- `RICO_ENABLE_USER_TELEGRAM_ALERTS`, `RICO_ENABLE_SCHEDULED_SEARCHES`, `RICO_ENABLE_ANALYTICS_PURGE` — scheduled-job kill switches, all fail-closed (default `false`)
+- `RICO_CRON_SECRET` — shared secret guarding cron-only pipeline endpoints
+- `GUEST_CAPABILITY_SECRET` — dedicated guest-session signing key; required in production, fails closed if missing; never share with `JWT_SECRET`
+- `RICO_REDIS_URL`, `REDIS_URL` — rate limiting backend
+- `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_TO` — outbound email
 
-CORS_ORIGINS=*
-
-OPENAI_API_KEY=
-OPEN_AI_API=
-RICO_OPENAI_MODEL=
-RICO_AI_PROVIDER=
-DEEPSEEK_API_KEY=
-HF_TOKEN=
-
-JSEARCH_API_KEY=
-RAPIDAPI_KEY=
-
-# User-facing bot/chat — job & career notifications only
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
-
-# Admin/dev channel — technical notifications only (CI, deploy, errors,
-# provider quota). admin_* alerts route here and never fall back to the user
-# chat; if unset, admin alerts are logged and dropped. See
-# src/services/notification_router.py.
-TELEGRAM_ADMIN_CHAT_ID=
-TELEGRAM_DEV_CHAT_ID=
-TELEGRAM_ADMIN_BOT_TOKEN=
-
-JOTFORM_API_KEY=
-JOTFORM_FORM_ID=
-JOTFORM_WEBHOOK_SECRET=
-
-# WhatsApp-assisted subscription channel (DEC-20260719-003). ASSISTED, not a
-# payment processor: creating a request/opening WhatsApp NEVER grants
-# entitlement — activation only via POST /api/v1/admin/subscriptions/activate
-# after owner payment verification. Fail-closed: flag default false; number
-# must be valid E.164 or the channel stays off. Paddle is unaffected.
-WHATSAPP_SUBSCRIPTIONS_ENABLED=false
-WHATSAPP_SUBSCRIPTION_NUMBER=
-
-RICO_ENABLE_AUTO_APPLY=false
-RICO_INTERACTIVE_APPLY=false
-RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true
-RICO_TELEGRAM_PUBLIC_ALERTS=true
-
-# Global kill switch for scheduled PER-USER Telegram job alerts (#1082).
-# Default OFF (fail-closed) while consent enforcement is remediated; distinct
-# from RICO_TELEGRAM_PUBLIC_ALERTS (admin/public bot). Set true to re-enable
-# the daily per-user roster sender.
-RICO_ENABLE_USER_TELEGRAM_ALERTS=false
-
-# Shared secret for the cron-only follow-up reminders sweep
-# (POST /api/v1/pipeline/reminders, X-Cron-Secret header). Issue #355.
-RICO_CRON_SECRET=
-
-# Kill switch for the scheduled saved-search sweep (#1249)
-# (POST /api/v1/pipeline/scheduled-searches, X-Cron-Secret guarded).
-# Default OFF (fail-closed): disabled runs are a no-op; ?dry_run=true
-# evaluates matching without persisting anything. In-app delivery only —
-# email job alerts stay behind RICO_ENABLE_EMAIL_ALERTS + per-user opt-in.
-RICO_ENABLE_SCHEDULED_SEARCHES=false
-
-# Kill switch for the scheduled analytics_events retention purge
-# (POST /api/v1/pipeline/analytics-purge; workflow analytics-purge.yml).
-# Default OFF (fail-closed) — disabled runs are a 200 no-op. The 180-day
-# window is the RETENTION_DAYS code constant in
-# src/repositories/analytics_events_repo.py — never an env var, never an
-# API input. See DEC-20260719-001.
-RICO_ENABLE_ANALYTICS_PURGE=false
-
-# Guest-session capability signing key (#1070). DEDICATED secret — never
-# derived from or shared with JWT_SECRET. Signs the versioned guest capability
-# token (rico_guest_proof cookie) that carries the server-minted guest SID.
-# REQUIRED in production: missing value fails closed (guest surfaces return
-# 503; nothing is minted or validated). Rotation: replacing the value
-# invalidates every outstanding guest capability — active guests transparently
-# restart as fresh anonymous sessions on their next request. Generate with:
-# python3 -c "import secrets; print(secrets.token_hex(32))"
-GUEST_CAPABILITY_SECRET=
-
-RICO_REDIS_URL=
-REDIS_URL=
-
-EMAIL_USER=
-EMAIL_PASS=
-EMAIL_TO=
-```
-
-### Frontend / Vercel
-
-```env
-NEXT_PUBLIC_RICO_API=https://rico-job-automation-api.onrender.com
-```
+Frontend/Vercel: `NEXT_PUBLIC_RICO_API=https://rico-job-automation-api.onrender.com`
 
 Do not invent new env var names unless the code is being intentionally migrated.
 
@@ -410,19 +302,6 @@ Do not invent new env var names unless the code is being intentionally migrated.
 - Schema migrations are numbered SQL files in `migrations/` (e.g. `034_drop_redundant_indexes.sql`). New migrations continue the numeric sequence.
 - Migration drift is checked by `scripts/check_migration_drift.py` (workflow `migration-drift-check.yml`) and applied through `scripts/apply_migration_drift.py` (workflow `apply-migration-drift.yml`) — not by hand.
 - Never mutate the live Neon database directly. Neon migration safety rules are in `AI_WORKSPACE/OPERATING_RULES.md`.
-
-## Async I/O Patterns
-
-- `src/cv_parser.py` is synchronous by design (CPU/IO-bound parsing operations).
-- When calling CV parser from FastAPI routers, wrap in `run_in_executor` to avoid blocking the event loop:
-
-  ```python
-  import asyncio
-  loop = asyncio.get_event_loop()
-  parsed = await loop.run_in_executor(None, parser.parse_bytes, raw_bytes, filename)
-  ```
-
-- Do not make CVParser itself async — the router is the async boundary.
 
 ## Testing Strategy
 
@@ -454,43 +333,16 @@ Do not invent new env var names unless the code is being intentionally migrated.
 - Do not set `openai_available`, `hf_available`, `provider`, `ready_for_hf`,
   or `response_source` as static Render env vars. These are runtime-computed fields.
 
-## Migration Status: `lib/client.ts` → `lib/api.ts`
-
-Migration is complete. `apps/web/lib/client.ts` has been deleted. All API calls now go through `apps/web/lib/api.ts`. Do not reintroduce `lib/client.ts`.
-
-## Agent Runtime Rules
-
-- `agent_runtime` in `src/agent/runtime.py` is a module-level singleton. Do not reinstantiate it.
-- All job actions (apply/save/skip/block/draft/why/remind) MUST go through `agent_runtime.handle_action()` — never call repo layer directly from routers for actions.
-- Idempotency key: MD5 of `user_id:action:job_key`. Do not change this scheme without updating the audit log schema.
-- `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true` is the default. Any code path that bypasses this for apply actions is a safety violation.
-
 ## Landing Page Production Freeze
 
-Do not change `apps/web/app/page.tsx` to swap the production landing component without explicit owner approval. New landing designs go through `design-handoffs/` → `/design-gallery` → owner approval → a separate minimal swap PR. Copy-only or bug-fix changes inside the current production component are allowed. Full rule and incident history: `AGENTS.md` → "Landing Page Production Freeze".
+Do not change `apps/web/app/page.tsx` to swap the production landing component without explicit owner approval (copy-only/bug-fix changes inside the current component are fine). Canonical rule + incident history: `AGENTS.md` → "Landing Page Production Freeze". Working-context copy: `apps/web/CLAUDE.md`.
 
 ## Safety Layer Rules
 
 - `src/rico_safety.py` guardrails are non-negotiable. Do not add routes or tool calls that bypass safety checks.
 - High-impact actions (apply, send message, mutate preferences) require explicit user confirmation when approval mode is enabled.
-
-## Telegram Notification Audience Rules
-
-Telegram notifications are split by audience in `src/services/notification_router.py`.
-
-- User-facing chat (`TELEGRAM_CHAT_ID` / per-user `telegram_chat_id`) is for
-  job/career notifications ONLY: `user_job`, `user_account`.
-- Admin/dev chat (`TELEGRAM_ADMIN_CHAT_ID` → `TELEGRAM_DEV_CHAT_ID`) is for
-  technical alerts ONLY: `admin_ci`, `admin_deploy`, `admin_error`, `admin_provider`
-  (CI/test status, deploy status, errors/logs, AI-provider quota/health).
-- `admin_*` notifications MUST NEVER be delivered to a user chat. If no
-  admin/dev channel is configured, admin alerts are logged and dropped — never
-  redirected to the user chat. Use `send_admin_notification()` /
-  `send_notification(..., notification_type=...)`; do not send technical alerts
-  through `send_telegram_message()`/`send_telegram_to_user()` directly.
-- GitHub Actions admin alerts (`error-notifications.yml`, runner/session and
-  apply-ops alerts in `daily.yml` / `manual-naukrigulf-apply.yml`) target the
-  admin/dev secret and are skipped when it is unset.
+- `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true` is the default; any code path that bypasses it for apply actions is a safety violation. Implementation detail (idempotency key scheme, singleton dispatcher): `src/CLAUDE.md` → "Agent Runtime Rules".
+- Telegram notification audience separation (user-facing vs. admin/dev channels) is non-negotiable — `admin_*` alerts must never reach a user chat. Full rules: `src/CLAUDE.md` → "Telegram Notification Audience Rules".
 
 ## Full Architecture Reference
 
