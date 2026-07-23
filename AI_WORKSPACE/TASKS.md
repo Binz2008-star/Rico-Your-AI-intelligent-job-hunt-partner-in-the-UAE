@@ -7428,7 +7428,7 @@ one-line fix applied generically as specified.
 Status: implemented / browser smoke pending
 Owner: Claude (agent) / owner review
 Branch: feat/command-medium-workspace-layout
-Issue/PR: pending (Draft PR to be opened this session)
+Issue/PR: #1329 (Draft)
 
 #### Objective
 Preserve `/command`'s "Career Workspace" identity — not an anonymous chat —
@@ -7516,9 +7516,10 @@ redesign.
       session title, native `title` tooltip, active-state marker
 - [x] RTL: drawer `side="start"`/`side="end"` resolve to `start-0`/`end-0` in
       both languages (logical properties, no isRTL branching for position)
-- [x] TypeScript clean on all changed/new files (pre-existing unrelated
-      errors in untouched files confirmed present on base branch too — see
-      Required verification)
+- [x] TypeScript: baseline failure, zero new errors — `tsc --noEmit` output
+      is byte-identical (48 errors, same files/lines/codes) between this
+      branch and base SHA, verified via isolated worktree, not just a grep —
+      see Required verification
 - [x] ESLint clean on all changed/new files (pre-existing unrelated
       `react-hooks/set-state-in-effect` + React Compiler findings in
       `page.tsx` confirmed present at the same lines, shifted only by line
@@ -7538,15 +7539,25 @@ redesign.
       names/active-state, `CommandRail` bare variant, `CommandObsidianShell`
       trigger/drawer wiring)
 - [x] `npx vitest run` (full suite): 917/917 passing
-- [x] `npx tsc --noEmit`: no new errors; the 48 pre-existing errors are all
-      in files untouched by this branch (`send-double-tap-guard.test.ts`,
-      `sidebar-nav-routing.test.ts`, `subscription-atelier.test.tsx`, etc.)
+- [x] TypeScript: baseline failure, zero new errors. `npx tsc --noEmit` on
+      this branch: 48 errors. Identical command run against an isolated
+      `git worktree` checked out at base SHA
+      `8c1c5dc1a168f00e5eba02887c520b48a4c107c0` (node_modules copied in, no
+      dependency changes on this branch to invalidate that): also 48 errors.
+      `diff` of the two full outputs (paths, line:col, error codes, messages)
+      is empty — byte-for-byte identical. All 48 are in files this branch
+      does not touch (`send-double-tap-guard.test.ts`,
+      `sidebar-nav-routing.test.ts`, `subscription-atelier.test.tsx`,
+      `internal-preview-protection.test.tsx`, `paddle-event-callback.test.ts`,
+      `scheduled-search-card.test.tsx`). Not described as "TypeScript
+      passing" — it is a pre-existing baseline failure this branch does not
+      add to.
 - [x] `npx eslint` on all changed/new files: clean except 4 pre-existing
       findings in `page.tsx` (React Compiler memoization + 3×
       `react-hooks/set-state-in-effect`), confirmed present at the
-      corresponding lines on the unmodified base branch via `git stash`
-      comparison
-- [ ] `npm run build` (production build) — pending
+      corresponding lines (shifted only by line offset) on the unmodified
+      base branch via `git stash` comparison
+- [x] `npm run build` (production build): clean, all 48 routes generated
 - [ ] Browser-smoke matrix: 1440×900, 1200×900, 1199×900, 1024×900, 900×900,
       899×900, 820×900, 768×900, 767×900, 390×844 — EN + AR RTL, empty/new
       session, active session with job results, rails/drawers, composer, no
@@ -7555,13 +7566,13 @@ redesign.
 
 #### Continuity Block
 - Task ID: TASK-20260723-002
-- GitHub issue/PR: pending (Draft PR to be opened this session)
+- GitHub issue/PR: #1329 (Draft) —
+  https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/1329
 - Branch: feat/command-medium-workspace-layout
 - Base branch: main @ 8c1c5dc1a168f00e5eba02887c520b48a4c107c0 (current
   origin/main head at task start)
 - Last safe commit SHA: 8c1c5dc1a168f00e5eba02887c520b48a4c107c0
-- Current head SHA: to be recorded after this task's commit — see PR for the
-  exact SHA (verify via `git rev-parse HEAD`)
+- Current head SHA: 371a98186d950af07dc2739133b2d68b16f4ac33
 - Uncommitted changes present: no (after this commit)
 - Status: implemented / browser smoke pending
 - Files inspected: all files listed in Context above, plus
@@ -7584,18 +7595,20 @@ redesign.
 - What is complete: implementation of all four tiers, new
   `CommandWorkspaceDrawer` primitive, compact-rail accessible identity,
   `CommandRail` bare variant reused for the career-context drawer, full
-  test suite green, tsc/eslint verified clean relative to base branch
-- What is incomplete: `npm run build`, commit/push/Draft PR, full
-  browser-smoke matrix against the deployed preview
+  test suite green, tsc/eslint baseline-compared (zero new errors/findings)
+  against base SHA, production build clean, committed, pushed, Draft PR
+  #1329 opened
+- What is incomplete: full browser-smoke matrix against the deployed
+  Vercel preview
 - Known blockers: none
 - Risks: presentational/layout-only change; no backend or data contract
   touched; the CSS-only "render all variants, gate with Tailwind" pattern
   means jsdom tests must scope queries — documented above and already
-  applied to the 1 pre-existing test that needed it
-- Rollback plan: revert the commit(s) on this branch; `MobileCommandHeader.tsx`
+  applied to the pre-existing tests that needed it
+- Rollback plan: revert commit 371a98186d950af07dc2739133b2d68b16f4ac33 on
+  this branch (or close PR #1329 without merging); `MobileCommandHeader.tsx`
   and all backend/data paths are untouched, so rollback is a pure frontend
   revert with no data or contract unwind
-- Next exact action: `npm run build`, then commit exactly the files listed
-  above, push, open a Draft PR (no merge, no deploy), then run the required
-  browser-smoke matrix against the preview and report results
+- Next exact action: run the required browser-smoke matrix against PR
+  #1329's Vercel preview once it deploys, then report results
 - Stop condition: do not merge or deploy production
