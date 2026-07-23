@@ -1,0 +1,45 @@
+name: Diagnostic Recent Merges Split
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: intent-gates
+            target: tests/unit/test_intent_gates.py
+          - name: subscription-gating
+            target: tests/unit/test_subscription_feature_gating.py
+          - name: search-convergence
+            target: tests/unit/test_search_execution_contract_convergence.py
+          - name: job-search-contract
+            target: tests/test_job_search_action_contract.py
+          - name: users-auth
+            target: tests/test_users_auth.py
+    name: ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run isolated test file
+        env:
+          REDIS_URL: ""
+          DATABASE_URL: "postgresql://fake:fake@localhost/fake"
+          JWT_SECRET: "test-secret-ci-only"
+          DEEPSEEK_API_KEY: "sk-fake"
+          OPENAI_API_KEY: "sk-fake"
+          ENVIRONMENT: "test"
+        run: PYTHONPATH=$GITHUB_WORKSPACE pytest "${{ matrix.target }}" -q --tb=short
