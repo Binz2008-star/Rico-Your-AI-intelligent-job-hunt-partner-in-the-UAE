@@ -7612,3 +7612,63 @@ redesign.
 - Next exact action: run the required browser-smoke matrix against PR
   #1329's Vercel preview once it deploys, then report results
 - Stop condition: do not merge or deploy production
+
+### TASK-20260723-003 — Rico Chat Visual Alignment
+
+Status: implemented locally / verification and Draft PR pending
+Owner: Windsurf WRITER / owner review
+Branch: design/rico-chat-composer
+Issue/PR: pending
+
+#### Objective
+
+Align the existing `/command` chat presentation with the owner-provided
+`rico-chat-design.html` reference while preserving current behavior,
+responsive tiers, safety controls, audience isolation, and PR #1329's merged
+medium-workspace architecture.
+
+#### Scope and acceptance
+
+- Frontend presentation only; no backend, auth, billing, database, migration,
+  provider, routing, landing-page, deployment, or production mutation work.
+- Base: `main` at `608451eab079f47c159f0fb39c38c2972342626b`.
+- Owner explicitly approved processing this task on 2026-07-23.
+- Atelier semantic tokens only; no parallel design system or user-specific logic.
+- Preserve behavior, approval/safety actions, English, and Arabic/RTL paths.
+- Rebase, focused tests, production build, scoped diff, and Draft PR required.
+- Responsive browser smoke is mandatory before Ready-for-Review or merge.
+
+#### Continuity Block
+
+- Task ID: TASK-20260723-003
+- Objective: owner-approved visual alignment of the existing Rico chat UI to
+  `rico-chat-design.html`, with no behavior or backend changes
+- Authority role: WRITER
+- Activity pass: Coder, then Tester
+- Owner/session: Windsurf / owner review
+- Branch: `design/rico-chat-composer`
+- Base: `main` @ `608451eab079f47c159f0fb39c38c2972342626b`
+- Head before ledger update: `1fc001f1dfc33d1d15afef052225ae77259f479a`
+- Rollback branch: `backup/rico-chat-composer-pre-rebase-20260723`
+- PR: pending
+- Files changed: eleven scoped frontend/test files plus this task ledger
+- Tests before rebase: focused Vitest 113/113; `npm run build` clean; both
+  must be rerun after rebase
+- Status: implementation committed and rebased; post-rebase verification,
+  push, Draft PR, CI, and browser smoke remain
+- Risks: broad visual diff overlaps PR #1329 surfaces; responsive smoke is a
+  mandatory pre-merge gate
+- Product scope: all `/command` users; global, user-agnostic, synthetic test
+  fixtures only, no owner-account special-casing
+- Must not touch: `apps/web/app/page.tsx`, backend `src/**`, migrations,
+  auth/session/JWT/cookies, billing, deploy configuration, or unrelated
+  untracked screenshots/design assets
+- Uncommitted changes: this ledger update only; unrelated pre-existing
+  untracked assets remain untouched
+- Deploy/CI/Neon/Vercel: no deploy or Neon action; CI/Vercel pending Draft PR
+- Rollback: close the Draft PR or revert the task commits; no data/schema/API
+  unwind required
+- Next action: amend this ledger commit, inspect the rebased diff, rerun focused
+  tests and frontend build, then push and open a Draft PR if green
+- Stop condition: do not merge or deploy; stop on test/build failure,
+  unexpected file overlap, or behavior change
