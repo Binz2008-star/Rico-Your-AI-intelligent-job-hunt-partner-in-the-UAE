@@ -149,34 +149,33 @@ def approve_draft(
     user_id = _user_id(user)
     db = _db()
 
-    # Fetch draft details before status update so we have title/company/apply_url
-    drafts = db.get_application_drafts(user_id, status="pending")
-    draft = next((d for d in drafts if str(d["id"]) == draft_id), None)
-
-    updated = db.update_draft_status(draft_id, user_id, "approved")
-    if not updated:
+    # Atomic transition: pending → approved in a single UPDATE...RETURNING.
+    # This eliminates the TOCTOU race where the draft was fetched separately
+    # before the status update, which could allow double-approve or acting on
+    # a draft that was already rejected by a concurrent request.
+    draft = db.update_draft_status_returning(draft_id, user_id, "approved")
+    if draft is None:
         raise HTTPException(status_code=404, detail="Draft not found or already actioned.")
 
     # Wire into lifecycle pipeline — never raises, best-effort
-    if draft:
-        try:
-            from src.repositories.user_job_context_repo import (
-                record_interaction,
-                set_lifecycle_status,
-            )
-            job_title = draft.get("job_title") or ""
-            company = draft.get("company") or ""
-            apply_url = draft.get("apply_url") or ""
-            record_interaction(user_id=user_id, title=job_title, company=company, action="apply")
-            set_lifecycle_status(
-                user_id=user_id,
-                title=job_title,
-                company=company,
-                status="applied",
-                apply_url=apply_url,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("lifecycle wire failed for draft %s: %s", draft_id, exc)
+    try:
+        from src.repositories.user_job_context_repo import (
+            record_interaction,
+            set_lifecycle_status,
+        )
+        job_title = draft.get("job_title") or ""
+        company = draft.get("company") or ""
+        apply_url = draft.get("apply_url") or ""
+        record_interaction(user_id=user_id, title=job_title, company=company, action="apply")
+        set_lifecycle_status(
+            user_id=user_id,
+            title=job_title,
+            company=company,
+            status="applied",
+            apply_url=apply_url,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("lifecycle wire failed for draft %s: %s", draft_id, exc)
 
     return {"ok": True, "status": "approved"}
 
