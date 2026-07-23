@@ -7615,10 +7615,10 @@ redesign.
 
 ### TASK-20260723-003 — Rico Chat Visual Alignment
 
-Status: implemented locally / verification and Draft PR pending
+Status: verified locally / Draft PR #1331 open / CI and browser smoke pending
 Owner: Windsurf WRITER / owner review
 Branch: design/rico-chat-composer
-Issue/PR: pending
+Issue/PR: #1331 (Draft)
 
 #### Objective
 
@@ -7650,7 +7650,7 @@ medium-workspace architecture.
 - Base: `main` @ `608451eab079f47c159f0fb39c38c2972342626b`
 - Head before ledger update: `1fc001f1dfc33d1d15afef052225ae77259f479a`
 - Rollback branch: `backup/rico-chat-composer-pre-rebase-20260723`
-- PR: pending
+- PR: #1331 (Draft)
 - Files changed: eleven scoped frontend/test files plus this task ledger
 - Tests before rebase: focused Vitest 113/113; `npm run build` clean; both
   must be rerun after rebase
@@ -7665,7 +7665,7 @@ medium-workspace architecture.
   untracked screenshots/design assets
 - Uncommitted changes: this ledger update only; unrelated pre-existing
   untracked assets remain untouched
-- Deploy/CI/Neon/Vercel: no deploy or Neon action; CI/Vercel pending Draft PR
+- Deploy/CI/Neon/Vercel: no deploy or Neon action; CI/Vercel pending on #1331
 - Rollback: close the Draft PR or revert the task commits; no data/schema/API
   unwind required
 - Next action: amend this ledger commit, inspect the rebased diff, rerun focused
