@@ -45,8 +45,8 @@ import {
 import type { StoredUser } from "@/lib/auth";
 import { resolveBillingUiMode, type BillingUiMode } from "@/lib/billing";
 import { getPaddlePriceId, openPaddleCheckout } from "@/lib/paddle";
-import type { TranslationKey } from "@/lib/translations";
 import { safeExternalUrl } from "@/lib/safe-external-url";
+import type { TranslationKey } from "@/lib/translations";
 import { useTranslation } from "@/lib/translations";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -781,8 +781,8 @@ export function SubscriptionAtelier({ user }: { user: StoredUser }) {
                 <div style={{ marginTop: "1.5rem" }}>
                     <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600, color: c.ink }}>{t("faqTitle")}</h3>
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                        <FaqItem q={t("faqHowUpgrade")} a={t("faqHowUpgradePaddle")} c={c} />
-                        <FaqItem q={t("faqPaymentMethods")} a={t("faqPaymentMethodsPaddle")} c={c} />
+                        <FaqItem q={t("faqHowUpgrade")} a={uiMode === "paddle" ? t("faqHowUpgradePaddle") : t("faqHowUpgradeUnavailable")} c={c} />
+                        <FaqItem q={t("faqPaymentMethods")} a={uiMode === "paddle" ? t("faqPaymentMethodsPaddle") : t("faqPaymentMethodsUnavailable")} c={c} />
                         <FaqItem q={t("faqActivationTime")} a={t("faqActivationTimePaddle")} c={c} />
                         <FaqItem q={t("faqChangeCancel")} a={t("faqChangeCancelPaddle")} c={c} />
                     </div>
