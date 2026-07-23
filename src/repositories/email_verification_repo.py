@@ -97,3 +97,40 @@ def consume_verification_token(token: str) -> Optional[str]:
         return None
     finally:
         conn.close()
+
+
+def check_verification_token(token: str) -> Optional[str]:
+    """
+    Validate a token WITHOUT consuming it.
+
+    Returns the associated email if the token is valid and unused, None
+    otherwise.  This is scanner-safe: email link prefetchers that issue
+    GET requests will not burn the token.  The actual consumption must
+    happen via ``consume_verification_token`` in a POST handler.
+    """
+    from src.db import get_db_connection
+    token_hash = _hash_token(token)
+    now = datetime.now(_UTC)
+
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT user_email
+                  FROM email_verification_tokens
+                 WHERE token_hash = %s
+                   AND used_at IS NULL
+                   AND expires_at > %s
+                """,
+                (token_hash, now),
+            )
+            row = cur.fetchone()
+        return row[0] if row else None
+    except Exception:
+        logger.exception("email_verification_repo_check_failed")
+        return None
+    finally:
+        conn.close()

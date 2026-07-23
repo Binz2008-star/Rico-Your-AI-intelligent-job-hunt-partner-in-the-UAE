@@ -105,6 +105,10 @@ class VerifyEmailResponse(BaseModel):
     email: str
 
 
+class VerifyEmailConfirmRequest(BaseModel):
+    token: str = Field(..., min_length=1, max_length=128)
+
+
 class ResendVerificationRequest(BaseModel):
     email: str = Field(..., min_length=1, max_length=256, pattern=_EMAIL_RE)
 
