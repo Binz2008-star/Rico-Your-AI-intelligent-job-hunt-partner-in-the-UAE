@@ -1,4 +1,6 @@
+import { cn } from "@/lib/utils";
 import type { MatchingGuardrailWarning } from "@/types";
+import type { WorkspacePalette } from "../workspace/theme";
 
 type Language = "en" | "ar";
 
@@ -48,17 +50,34 @@ function localizedText(
 export function GuardrailWarnings({
   warnings,
   language,
+  palette,
 }: {
   warnings: unknown[] | undefined;
   language: Language;
+  palette?: WorkspacePalette;
 }) {
   const normalized = normalizeWarnings(warnings);
   if (normalized.length === 0) return null;
 
+  const usesPalette = palette != null;
+
   return (
     <div
       role="alert"
-      className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-start"
+      className={cn(
+        "rounded-lg p-3 text-start",
+        !usesPalette && "border border-amber-400/30 bg-amber-400/10"
+      )}
+      style={
+        usesPalette
+          ? {
+            backgroundColor: `color-mix(in srgb, ${palette.red} 10%, ${palette.panel})`,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: `color-mix(in srgb, ${palette.red} 35%, transparent)`,
+          }
+          : undefined
+      }
     >
       <ul className="flex flex-col gap-2">
         {normalized.map((warning, index) => {
@@ -67,8 +86,20 @@ export function GuardrailWarnings({
 
           return (
             <li key={`${warning.code}-${warning.field}-${index}`} className="text-xs leading-5">
-              <p className="font-semibold text-amber-100">{message}</p>
-              {suggestion && <p className="mt-0.5 text-amber-50/80">{suggestion}</p>}
+              <p
+                className={cn("font-semibold", !usesPalette && "text-amber-100")}
+                style={usesPalette ? { color: palette.red } : undefined}
+              >
+                {message}
+              </p>
+              {suggestion && (
+                <p
+                  className={cn("mt-0.5", !usesPalette && "text-amber-50/80")}
+                  style={usesPalette ? { color: palette.ink55 } : undefined}
+                >
+                  {suggestion}
+                </p>
+              )}
             </li>
           );
         })}

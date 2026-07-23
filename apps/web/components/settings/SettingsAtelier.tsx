@@ -561,7 +561,7 @@ export function SettingsAtelier({ user }: { user: StoredUser }) {
                                     </div>
                                 </div>
 
-                                <GuardrailWarnings warnings={settings.warnings} language={language} />
+                                <GuardrailWarnings warnings={settings.warnings} language={language} palette={palette} />
 
                                 <div>
                                     <div className="mb-2 flex items-center justify-between">
