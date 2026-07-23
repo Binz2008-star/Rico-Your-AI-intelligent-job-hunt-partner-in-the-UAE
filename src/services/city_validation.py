@@ -47,6 +47,10 @@ _NON_CITY_TOKENS = frozenset({
     "help", "resume", "cv", "cover", "letter", "job", "jobs", "work",
     # document / chat actions (ar)
     "لخص", "لخّص", "صف", "استخرج", "ترجم", "اقرأ", "مستند", "صورة", "ملف",
+    # CV inventory/status language (ar). These short phrases can be entered while
+    # Rico is awaiting a city, but they describe an existing resume/document and
+    # must never become a location (production transcript: "لديك سيرتي الذاتيه").
+    "سيرة", "سيره", "سيرتي", "السيرة", "السيره", "الذاتية", "الذاتيه",
     # job-search / profile commands (ar) — include common orthographic variants.
     # These exact omissions allowed the production value "ابحث عن وظيفه" to pass
     # the short-value heuristic and become a persisted preferred city.

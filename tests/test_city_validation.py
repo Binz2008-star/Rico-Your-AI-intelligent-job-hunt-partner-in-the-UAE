@@ -54,6 +54,18 @@ def test_arabic_job_search_commands_rejected(command):
     assert not is_plausible_city(command), command
 
 
+@pytest.mark.parametrize("cv_status_text", [
+    "لديك سيرتي الذاتيه",
+    "لديك سيرتي الذاتية",
+    "عندك سيرتي الذاتية",
+    "السيرة الذاتية مرفوعة",
+    "السيره الذاتيه مرفوعه",
+])
+def test_arabic_cv_status_text_rejected(cv_status_text):
+    """Exact production correction and common variants are not city values."""
+    assert not is_plausible_city(cv_status_text), cv_status_text
+
+
 def test_intent_and_affirmation_rejected():
     assert not is_plausible_city("find software engineer jobs")
     assert not is_plausible_city("yes")
@@ -78,8 +90,16 @@ def test_sanitize_drops_arabic_search_command():
     assert sanitize_cities(["ابحث عن وظيفه"]) == []
 
 
+def test_sanitize_drops_arabic_cv_status_text():
+    assert sanitize_cities(["لديك سيرتي الذاتيه"]) == []
+
+
 def test_sanitize_keeps_valid_drops_invalid():
     assert sanitize_cities(["Dubai", "ابحث عن وظيفه", "Abu Dhabi"]) == ["Dubai", "Abu Dhabi"]
+
+
+def test_sanitize_keeps_valid_drops_cv_status_text():
+    assert sanitize_cities(["دبي", "لديك سيرتي الذاتيه", "أبوظبي"]) == ["دبي", "أبوظبي"]
 
 
 def test_sanitize_dedups_case_insensitive_preserving_order():
@@ -111,6 +131,16 @@ def test_build_openai_context_drops_arabic_search_command():
     api = RicoChatAPI(persist=False)
     ctx = api._build_openai_context(
         {"skills": ["iso 14001"], "preferred_cities": ["ابحث عن وظيفه"]},
+        user_id=None,
+    )
+    assert "preferred_cities" not in ctx
+
+
+def test_build_openai_context_drops_arabic_cv_status_text():
+    from src.rico_chat_api import RicoChatAPI
+    api = RicoChatAPI(persist=False)
+    ctx = api._build_openai_context(
+        {"skills": ["iso 14001"], "preferred_cities": ["لديك سيرتي الذاتيه"]},
         user_id=None,
     )
     assert "preferred_cities" not in ctx
