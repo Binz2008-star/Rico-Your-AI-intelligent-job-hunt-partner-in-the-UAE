@@ -435,7 +435,7 @@ def _jsearch_search(
     *, cancel: Optional[CancellationToken] = None,
 ) -> FetchResult:
     from src import jsearch_client
-    query = f"{role} {location}".strip() if location else f"{role} UAE"
+    query = f"{role} {location}".strip() if location else role
     result = jsearch_client.search(query, country=country, cancel=cancel)
     # A cancelled fetch carries provider="none" — do not relabel it "jsearch",
     # or the distinct cancelled outcome would masquerade as a provider result.
