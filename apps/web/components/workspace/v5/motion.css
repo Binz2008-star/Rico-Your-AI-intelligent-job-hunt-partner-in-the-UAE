@@ -106,6 +106,21 @@
         box-shadow var(--wsx5-t-med) var(--wsx5-swift),
         border-color var(--wsx5-t-med);
 }
+/* hover physics — a hairline lift, not a jump; PR5 gap: the transition above
+   was declared but never had a triggering rule. Scoped to .wsx-action (the
+   existing convention this codebase already uses to mark an interactive
+   card — see WorkspaceShell's `.wsx-action:hover` border rule) so static
+   display-only surfaces (StatPlate, error banners, gallery specimens) don't
+   lift for no reason. Keyboard focus gets the same physics as pointer hover
+   so the two input modes feel identical, not just visually outlined. */
+.wsx-action.wsx5-card:hover,
+.wsx-action.wsx5-card:focus-visible {
+    transform: translateY(-2px);
+    box-shadow:
+        0 2px 4px rgba(31, 27, 21, 0.06),
+        0 16px 36px -16px rgba(31, 27, 21, 0.32);
+    border-color: var(--wsx5-hair2);
+}
 .wsx5-deepcard {
     background: linear-gradient(
         160deg,
