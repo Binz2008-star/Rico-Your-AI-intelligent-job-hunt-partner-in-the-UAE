@@ -23,8 +23,6 @@ import {
   ScheduledSearchesResponseSchema,
   UploadCVResponseSchema,
 } from "@/lib/schemas";
-
-export type { RicoChatSession, RicoChatSessionsResponse };
 import { getSignupAttribution } from "@/lib/signupAttribution";
 import type {
   Application,
@@ -43,6 +41,8 @@ import type {
   TelegramStatusResponse,
 } from "@/types";
 import type { ZodType } from "zod";
+
+export type { RicoChatSession, RicoChatSessionsResponse };
 
 // Absolute backend URL — used only for server-side (SSR) fetches such as fetchHealth().
 // No localhost fallback: if unset, SSR fetches will fail loudly rather than silently
@@ -1644,15 +1644,28 @@ export async function register(
 export async function verifyEmail(
   token: string,
 ): Promise<{ message: string; email: string }> {
-  const res = await apiFetch(
+  // Step 1: GET to validate the token (scanner-safe, no side effects).
+  const validateRes = await apiFetch(
     buildProxyUrl("/api/v1/auth/verify-email", { token }),
     { method: "GET", credentials: "include" },
   );
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new ApiError(err.detail ?? "Verification failed", res.status, err);
+  if (!validateRes.ok) {
+    const err = (await validateRes.json().catch(() => ({}))) as { detail?: string };
+    throw new ApiError(err.detail ?? "Verification failed", validateRes.status, err);
   }
-  return res.json() as Promise<{ message: string; email: string }>;
+
+  // Step 2: POST to consume the token and mark email as verified.
+  const confirmRes = await apiFetch(`${PROXY}/api/v1/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ token }),
+  });
+  if (!confirmRes.ok) {
+    const err = (await confirmRes.json().catch(() => ({}))) as { detail?: string };
+    throw new ApiError(err.detail ?? "Verification failed", confirmRes.status, err);
+  }
+  return confirmRes.json() as Promise<{ message: string; email: string }>;
 }
 
 export async function resendVerification(
