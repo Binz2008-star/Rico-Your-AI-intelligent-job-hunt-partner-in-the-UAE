@@ -1,20 +1,20 @@
 "use client";
 
-import { AppShell } from "@/components/layout/AppShell";
-import { JobCard } from "@/components/jobs/JobCard";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { EmptyJobsInk } from "@/components/illustrations/EditorialInk";
+import { JobCard } from "@/components/jobs/JobCard";
+import { AppShell } from "@/components/layout/AppShell";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { SkeletonCard } from "@/components/shared/LoadingState";
 import { ToastContainer } from "@/components/ui/Toast";
-import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTranslation } from "@/lib/translations";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { ApiError, createApplication, getJobs, logout as apiLogout, saveJob, skipJob, updateApplication } from "@/lib/api";
+import { ApiError, logout as apiLogout, createApplication, getJobs, saveJob, skipJob, updateApplication } from "@/lib/api";
+import { useTranslation } from "@/lib/translations";
 import { cn } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 import type { Job } from "@/types";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const SCORE_THRESHOLDS = { HIGH: 85, MID: 65 };
@@ -25,6 +25,9 @@ type Filter = "all" | "high" | "mid";
 type SortKey = "score_desc" | "score_asc" | "company_asc" | "date_desc";
 
 function getJobLink(job: Job): string {
+    const usable = job.usable_link?.trim();
+    if (usable && usable !== "#") return usable;
+
     const applyUrl = job.apply_url?.trim();
     if (applyUrl && applyUrl !== "#") return applyUrl;
 
@@ -160,7 +163,7 @@ export default function JobsPage() {
                 });
 
                 if (jobLink) {
-                    window.open(jobLink, "_blank");
+                    window.open(jobLink, "_blank", "noopener,noreferrer");
                     toast("Application opened. Click 'Mark as applied' after submitting.", "success");
                 } else {
                     toast("Lead saved. Verify the posting before applying.", "success");
