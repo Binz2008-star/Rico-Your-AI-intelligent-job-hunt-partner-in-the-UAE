@@ -38,6 +38,16 @@ function parseColor(value: string): RGBA | null {
     return null; // gradients etc. — not color literals
 }
 
+// Counts class selectors + pseudo-classes (specificity's "class" column).
+// `::before`-style pseudo-elements are excluded via the negative lookahead;
+// this repo's selectors here never use IDs or bare type selectors, so class
+// + pseudo-class count alone is a valid total-specificity proxy for them.
+function classSpecificity(selector: string): number {
+    const classes = selector.match(/\.[a-zA-Z0-9_-]+/g) ?? [];
+    const pseudoClasses = selector.match(/:(?!:)[a-zA-Z-]+(?:\([^)]*\))?/g) ?? [];
+    return classes.length + pseudoClasses.length;
+}
+
 function cssVars(): Record<string, string> {
     const css = readFileSync(
         join(__dirname, "..", "components", "workspace", "v5", "motion.css"),
@@ -93,31 +103,44 @@ describe("v5 foundation tokens", () => {
         expect(ratio(V5.onEmber, V5.emberBtnEnd)).toBeGreaterThanOrEqual(4.5);
     });
 
-    it("wsx5-card hover/focus border-color stays capable of overriding the global .wsx-action accent rule", () => {
-        // WorkspaceShell injects `.wsx-root .wsx-action:hover { border-color:
-        // ${c.red} !important; }` for non-card .wsx-action surfaces (nav
-        // items, buttons). That selector and `.wsx-action.wsx5-card:hover`
-        // are equal specificity (two classes + one pseudo-class each), so
-        // without `!important` on this rule too, cascade order alone decides
-        // and the hairline lift's border-color can silently never render.
+    it("wsx5-card hover/focus selector deterministically outranks the global .wsx-action accent rule", () => {
+        // WorkspaceShell injects a global `.wsx-root .wsx-action:hover`
+        // rule (border-color: ${c.red} !important) for non-card
+        // .wsx-action surfaces (nav items, buttons). The v5 hover/focus
+        // selector must have STRICTLY HIGHER specificity than that rule,
+        // so the override holds regardless of which stylesheet the
+        // cascade happens to load last — !important alone doesn't decide
+        // a tie between equal-specificity selectors, only which side of a
+        // specificity difference wins.
         const css = readFileSync(
             join(__dirname, "..", "components", "workspace", "v5", "motion.css"),
             "utf8",
         );
-        const block = css.match(
-            /\.wsx-action\.wsx5-card:hover,\s*\n\.wsx-action\.wsx5-card:focus-visible\s*\{([\s\S]*?)\}/,
+        const ruleMatch = css.match(
+            /(\.wsx-root \.wsx-action\.wsx5-card:hover),\s*\n(\.wsx-root \.wsx-action\.wsx5-card:focus-visible)\s*\{([\s\S]*?)\}/,
         );
-        expect(block, "motion.css: .wsx-action.wsx5-card hover/focus rule not found").not.toBeNull();
-        expect(block![1]).toMatch(/border-color:\s*var\(--wsx5-hair2\)\s*!important\s*;/);
+        expect(ruleMatch, "motion.css: .wsx-root .wsx-action.wsx5-card hover/focus rule not found").not.toBeNull();
+        const [, hoverSelector, focusSelector, declarations] = ruleMatch!;
+        expect(declarations).toMatch(/border-color:\s*var\(--wsx5-hair2\)\s*!important\s*;/);
 
         const shellSrc = readFileSync(
             join(__dirname, "..", "components", "workspace", "WorkspaceShell.tsx"),
             "utf8",
         );
+        const globalMatch = shellSrc.match(
+            /(\.wsx-root \.wsx-action:hover)\s*\{\s*border-color:\s*\$\{c\.red\}\s*!important;\s*\}/,
+        );
         expect(
-            shellSrc,
-            "WorkspaceShell's global .wsx-action:hover border-color !important rule moved or was removed — re-check the equal-specificity tradeoff above before changing it",
-        ).toMatch(/\.wsx-root \.wsx-action:hover \{ border-color: \$\{c\.red\} !important; \}/);
+            globalMatch,
+            "WorkspaceShell's global .wsx-action:hover border-color rule moved or changed shape — re-verify the specificity relationship above before touching it",
+        ).not.toBeNull();
+        const [, globalSelector] = globalMatch!;
+
+        // The actual proof: both v5 selectors must outrank the global one.
+        // If this ever fails, the fix in motion.css has regressed back to
+        // an order-dependent tie (or worse, lost the override entirely).
+        expect(classSpecificity(hoverSelector)).toBeGreaterThan(classSpecificity(globalSelector));
+        expect(classSpecificity(focusSelector)).toBeGreaterThan(classSpecificity(globalSelector));
     });
 
     it("mode accent map covers all seven modes with AA text accents only", () => {
