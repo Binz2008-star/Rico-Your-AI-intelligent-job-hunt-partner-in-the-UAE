@@ -6967,9 +6967,16 @@ class RicoChatAPI:
             _relevant = all_matches  # degenerate/unknown role → do not over-filter
         # True only when live results existed but none matched the requested title,
         # so the message builder can say so honestly rather than claiming matches.
+        # When the integrity gate drops ALL items for title_role_mismatch, all_matches
+        # is empty but the scenario is identical: the provider returned live jobs that
+        # didn't match the requested title. Without this, the user gets the misleading
+        # "couldn't retrieve live jobs" message instead of the honest "didn't strongly
+        # match — broaden?" fallback (#1221).
+        _integrity_title_rejected = integrity_rejections.get("title_role_mismatch", 0) > 0
         _off_title_only = bool(
             (_floor_strong or _floor_weak or _floor_phrases)
-            and all_matches and not _relevant
+            and not _relevant
+            and (all_matches or _integrity_title_rejected)
         )
         if _off_title_only:
             logger.info(
