@@ -112,14 +112,20 @@
    card — see WorkspaceShell's `.wsx-action:hover` border rule) so static
    display-only surfaces (StatPlate, error banners, gallery specimens) don't
    lift for no reason. Keyboard focus gets the same physics as pointer hover
-   so the two input modes feel identical, not just visually outlined. */
-.wsx-action.wsx5-card:hover,
-.wsx-action.wsx5-card:focus-visible {
+   so the two input modes feel identical, not just visually outlined.
+   Prefixed with .wsx-root (3 classes + :hover) so this selector is
+   strictly higher specificity than WorkspaceShell's global
+   `.wsx-root .wsx-action:hover` (2 classes + :hover) — the override no
+   longer depends on which stylesheet the cascade happens to load last.
+   !important is kept anyway to match this codebase's existing convention
+   for this exact interaction (see WorkspaceShell's own rule). */
+.wsx-root .wsx-action.wsx5-card:hover,
+.wsx-root .wsx-action.wsx5-card:focus-visible {
     transform: translateY(-2px);
     box-shadow:
         0 2px 4px rgba(31, 27, 21, 0.06),
         0 16px 36px -16px rgba(31, 27, 21, 0.32);
-    border-color: var(--wsx5-hair2);
+    border-color: var(--wsx5-hair2) !important;
 }
 .wsx5-deepcard {
     background: linear-gradient(
