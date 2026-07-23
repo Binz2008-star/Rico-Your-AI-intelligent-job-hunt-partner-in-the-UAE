@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""BUG-02 regression — corrupted preferred_cities value sanitized at read time.
+"""Regression coverage for corrupted ``preferred_cities`` values.
 
-Production showed preferred_cities=['Summarize this document for me.'] stored
-in the DB from a prior session. This test confirms that profile_repo strips
-corrupted values on read so the /settings page never surfaces them, without
-any DB migration or backfill.
+Production first showed ``['Summarize this document for me.']`` and later the
+Arabic job-search command ``['ابحث عن وظيفه']`` stored in the DB from prior
+sessions. These tests confirm that profile_repo strips both values on read so
+settings, job search, and model context never consume them.
 """
 from __future__ import annotations
 
@@ -19,18 +19,26 @@ def test_sanitize_strips_chat_command():
     assert _sanitize_cities_safe(["Summarize this document for me."]) == []
 
 
+def test_sanitize_strips_arabic_job_search_command():
+    assert _sanitize_cities_safe(["ابحث عن وظيفه"]) == []
+
+
 def test_sanitize_keeps_valid_uae_city():
     result = _sanitize_cities_safe(["Dubai"])
     assert "Dubai" in result or "dubai" in result.lower() if result else False
     assert result  # non-empty
 
 
+def test_sanitize_keeps_valid_arabic_uae_city():
+    assert _sanitize_cities_safe(["عجمان"]) == ["عجمان"]
+
+
 def test_sanitize_mixed_list():
-    result = _sanitize_cities_safe(["Dubai", "Summarize this document for me.", "Abu Dhabi"])
+    result = _sanitize_cities_safe(["Dubai", "ابحث عن وظيفه", "Abu Dhabi"])
     lowered = [c.lower() for c in result]
     assert any("dubai" in c for c in lowered)
     assert any("abu dhabi" in c for c in lowered)
-    assert not any("summarize" in c.lower() for c in result)
+    assert "ابحث عن وظيفه" not in result
 
 
 def test_sanitize_empty_list():
@@ -70,6 +78,26 @@ def test_bundle_to_profile_sanitizes_corrupted_city():
     profile = _bundle_to_profile(corrupted_bundle)
     assert profile is not None
     assert "Summarize this document for me." not in (profile.preferred_cities or [])
+    assert profile.preferred_cities == []
+
+
+def test_bundle_to_profile_sanitizes_exact_arabic_production_value():
+    """The exact 2026-07-23 production corruption must be neutralized."""
+    from src.repositories.profile_repo import _bundle_to_profile
+
+    corrupted_bundle = {
+        "external_user_id": "u-test",
+        "name": "Test",
+        "email": "test@example.com",
+        "phone": None,
+        "telegram_username": None,
+        "telegram_chat_id": None,
+        "profile": {"preferred_cities": ["ابحث عن وظيفه"]},
+        "settings": {},
+    }
+
+    profile = _bundle_to_profile(corrupted_bundle)
+    assert profile is not None
     assert profile.preferred_cities == []
 
 
