@@ -7652,10 +7652,10 @@ medium-workspace architecture.
 - Rollback branch: `backup/rico-chat-composer-pre-rebase-20260723`
 - PR: #1331 (Draft)
 - Files changed: eleven scoped frontend/test files plus this task ledger
-- Tests before rebase: focused Vitest 113/113; `npm run build` clean; both
-  must be rerun after rebase
-- Status: implementation committed and rebased; post-rebase verification,
-  push, Draft PR, CI, and browser smoke remain
+- Post-rebase verification: focused Vitest 113/113 passed; `npm run build`
+  passed with 48/48 routes; `git diff --check` passed
+- Status: implementation rebased, verified, pushed, and opened as Draft PR
+  #1331; CI/Vercel and responsive browser smoke remain
 - Risks: broad visual diff overlaps PR #1329 surfaces; responsive smoke is a
   mandatory pre-merge gate
 - Product scope: all `/command` users; global, user-agnostic, synthetic test
@@ -7663,12 +7663,12 @@ medium-workspace architecture.
 - Must not touch: `apps/web/app/page.tsx`, backend `src/**`, migrations,
   auth/session/JWT/cookies, billing, deploy configuration, or unrelated
   untracked screenshots/design assets
-- Uncommitted changes: this ledger update only; unrelated pre-existing
-  untracked assets remain untouched
+- Uncommitted tracked changes: none; unrelated pre-existing untracked assets
+  remain untouched
 - Deploy/CI/Neon/Vercel: no deploy or Neon action; CI/Vercel pending on #1331
 - Rollback: close the Draft PR or revert the task commits; no data/schema/API
   unwind required
-- Next action: amend this ledger commit, inspect the rebased diff, rerun focused
-  tests and frontend build, then push and open a Draft PR if green
+- Next action: inspect PR #1331 CI/review results, then run the required
+  responsive browser-smoke matrix before Ready-for-Review
 - Stop condition: do not merge or deploy; stop on test/build failure,
   unexpected file overlap, or behavior change
