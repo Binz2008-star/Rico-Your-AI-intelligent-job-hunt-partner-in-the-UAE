@@ -68,4 +68,4 @@ jobs:
             tests/test_uploaded_document_durable_context.py \
             tests/test_attachment_analysis_factory.py \
             tests/decision_regression/ \
-            -x -vv --tb=short
+            -x -q --tb=short
