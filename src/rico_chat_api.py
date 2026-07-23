@@ -32,6 +32,7 @@ from src.agent.intelligence.intent_classifier import (
     _ARABIC_ORDINAL_TO_INT,
     _CV_PROFILE_REF_RE,
     _clean_role_token,
+    _normalize_arabic,
 )
 from src.agent.intelligence.normalizer import normalize_role
 from src.agent.intelligence.recommender import recommend_adjacent_roles
@@ -4655,8 +4656,11 @@ class RicoChatAPI:
 
     def _looks_like_cv_upload(self, message: str) -> bool:
         lower = message.lower()
+        # Normalize Arabic letter variants (ة/ه, alef forms) so an informal
+        # spelling like "سيرتي الذاتيه" still matches the canonical phrase list.
+        normalized_lower = _normalize_arabic(lower)
         if bool(CV_FILE_RE.search(message)) or any(
-            phrase in lower for phrase in self._CV_INTENT_PHRASES
+            _normalize_arabic(phrase) in normalized_lower for phrase in self._CV_INTENT_PHRASES
         ):
             return True
         # Detect raw pasted CV text: long message with structural CV sections
@@ -4717,7 +4721,13 @@ class RicoChatAPI:
             "attach my cv", "attach my resume",
             "سيرتي الذاتية", "رفع السيرة", "لدي سيرة",
         )
-        return any(phrase in lower for phrase in announce_phrases)
+        # Normalize Arabic letter variants (ة/ه, alef forms) so an informal
+        # spelling like "لديك سيرتي الذاتيه" still matches the phrase list —
+        # without this, "الذاتيه" (heh) never matches "الذاتية" (teh marbuta)
+        # and the message falls through to the AI fallback instead of the
+        # canonical-storage CV-status check in _cv_upload_guidance_with_db_check.
+        normalized_lower = _normalize_arabic(lower)
+        return any(_normalize_arabic(phrase) in normalized_lower for phrase in announce_phrases)
 
     def _extract_inline_contact_updates(self, message: str) -> dict[str, Any]:
         """Extract email, phone, and Telegram handle from message."""
@@ -4942,8 +4952,13 @@ class RicoChatAPI:
             r"(just\s+)(continue|proceed|carry\s+on|go\s+ahead)(\s+please)?|"
             r"(continue|proceed|carry\s+on|go\s+ahead)\s+please|"
             r"please\s+(continue|proceed|carry\s+on|go\s+ahead)|"
-            r"(كمل|استمر|واصل)(\s+من\s+فضلك)?|"
-            r"(ماشي|تمام|اوك|يلا|نعم|حسنا|طيب)\s+(كمل|استمر|واصل)",
+            # "نفذ" (execute) / "راجعها" (review it) / "وسع" (broaden) — bare
+            # deterministic action commands with zero recognition anywhere else
+            # in the router (#1336 PR2), so they fell to free-form AI and
+            # produced hollow "سأبحث الآن" promises or re-ran the wrong role.
+            r"(كمل|استمر|واصل|نفذ|راجعها|وسع)(\s+من\s+فضلك)?|"
+            r"راجعها\s+و?نفذ|"
+            r"(ماشي|تمام|اوك|يلا|نعم|حسنا|طيب)\s+(كمل|استمر|واصل|نفذ|وسع)",
             text,
         ):
             return True
@@ -7116,6 +7131,23 @@ class RicoChatAPI:
             offer_save_search=_offer_save,
         )
 
+        # Whenever _build_role_search_message included a broaden-to-adjacent-role
+        # offer, arm the SPECIFIC offered role as the pending job search so a
+        # bare "وسع"/"yes" redeems that offer, not the already-searched original
+        # role. _maybe_store_pending_job_search only knows the profile's target
+        # role, never an adjacent role just offered in this turn (#1336 PR2).
+        _adjacent_for_offer = (
+            (role_intelligence_data or {}).get("adjacent_roles", [])
+            if role_intelligence_data else []
+        )
+        _adjacent_names_for_offer = [
+            r["role"] for r in _adjacent_for_offer[:3] if r.get("role")
+        ]
+        if _adjacent_names_for_offer:
+            self._store_pending_job_search(
+                user_id, role=_adjacent_names_for_offer[0], query_type="adjacent_broaden"
+            )
+
         response = {
             "type": "job_matches",
             "intent": "search_jobs",
@@ -7819,8 +7851,16 @@ class RicoChatAPI:
                 # captured as a preferred city and the search resumes — instead
                 # of being misread as a role or diverted into a CV draft. Only
                 # when preferred_cities is the resolvable gap (the pending-field
-                # resolver handles cities, not roles).
-                if "preferred_cities" in _missing and getattr(self, "_persist", True):
+                # resolver handles cities, not roles) AND it is the ONLY missing
+                # field — when target_roles is ALSO missing, the downgrade
+                # message below asks for both role and city in one sentence, so
+                # a role-shaped reply ("Environmental Manager") must not be
+                # force-captured as a city answer (#1336 PR2).
+                if (
+                    "preferred_cities" in _missing
+                    and "target_roles" not in _missing
+                    and getattr(self, "_persist", True)
+                ):
                     try:
                         _pend_ctx = self._get_recent_context(user_id)
                         if not isinstance(_pend_ctx, dict):
@@ -15283,8 +15323,12 @@ class RicoChatAPI:
             if not education:
                 unparsed_sections.append("Education")
 
-        # If cities are missing, store pending field so the next reply is captured
-        if not preferred_cities:
+        # If cities are missing, store pending field so the next reply is
+        # captured — but only when current_role is already known. When both
+        # are missing, the "missing" prompt above asks for role and city
+        # together, so a role-shaped reply must not be force-captured as a
+        # city answer (same defect class as the main gate, #1336 PR2).
+        if not preferred_cities and current_role:
             ctx = self._get_recent_context(user_id)
             ctx["_pending_field"] = "preferred_cities"
             ctx["_pending_cv_generate"] = True
