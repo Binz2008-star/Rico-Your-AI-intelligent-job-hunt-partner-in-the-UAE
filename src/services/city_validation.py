@@ -1,14 +1,15 @@
 """Profile location-field hygiene.
 
 A profile's ``preferred_cities`` must hold city names — never a chat sentence.
-Production showed a corrupted value (``['Summarize this document for me.']``): a
-document-action message was captured while Rico was waiting for a city answer,
-which then poisoned job-search location and the AI context.
+Production first showed a corrupted English value
+(``['Summarize this document for me.']``), then a second incident stored the
+Arabic job-search command ``['ابحث عن وظيفه']`` as a city. Both values poisoned
+job-search location and the AI context.
 
-#744 (document-action routing) now intercepts such messages before the
-pending-field resolver, so new corruption is prevented at the source. This module
-adds defense-in-depth at the profile write boundary **and** neutralizes
-already-stored bad values on read — without a DB migration or backfill.
+#744 (document-action routing) intercepts document messages before the
+pending-field resolver. This module provides defense-in-depth for every caller
+by rejecting chat/intent language in both English and Arabic and neutralizing
+already-stored bad values on read.
 
 Pure and deterministic: no I/O, no LLM, never raises.
 """
@@ -27,8 +28,9 @@ _KNOWN_CITIES = frozenset({
     "dubai", "abu dhabi", "sharjah", "ajman", "ras al khaimah", "fujairah",
     "umm al quwain", "al ain", "deira", "bur dubai",
     # UAE (ar)
-    "دبي", "أبوظبي", "الشارقة", "عجمان", "رأس الخيمة", "الفجيرة", "أم القيوين",
-    "العين",
+    "دبي", "أبوظبي", "ابوظبي", "الشارقة", "الشارقه", "عجمان",
+    "رأس الخيمة", "راس الخيمه", "الفجيرة", "الفجيره", "أم القيوين",
+    "ام القيوين", "العين",
     # common regional hubs people legitimately enter
     "doha", "riyadh", "jeddah", "manama", "kuwait city", "muscat", "cairo",
 })
@@ -39,12 +41,20 @@ _NON_CITY_TOKENS = frozenset({
     # document / chat actions (en)
     "summarize", "summarise", "describe", "extract", "translate", "read",
     "document", "image", "file", "picture", "photo", "screenshot", "please",
-    "explain", "analyze", "analyse",
+    "explain", "analyze", "analyse", "analize",
     # intents (en)
     "search", "find", "show", "apply", "generate", "create", "write", "update",
     "help", "resume", "cv", "cover", "letter", "job", "jobs", "work",
     # document / chat actions (ar)
     "لخص", "لخّص", "صف", "استخرج", "ترجم", "اقرأ", "مستند", "صورة", "ملف",
+    # job-search / profile commands (ar) — include common orthographic variants.
+    # These exact omissions allowed the production value "ابحث عن وظيفه" to pass
+    # the short-value heuristic and become a persisted preferred city.
+    "ابحث", "أبحث", "بحث", "دور", "دورلي", "اريد", "أريد", "ابي", "أبي",
+    "ابغي", "أبغي", "احتاج", "محتاج", "ساعدني", "ايجاد", "إيجاد", "اعرض",
+    "أعرض", "اعرضلي", "أعرضلي", "ارني", "أرني", "وريني", "جيب", "جيبلي",
+    "وظيفه", "وظيفة", "وظائف", "وضيفه", "عمل", "شغل", "فرصه", "فرصة",
+    "فرص", "شاغر", "شواغر", "منصب", "مناصب", "توظيف",
 })
 
 # Yes/no/confirmation/acknowledgement words that must never be stored as a city.
