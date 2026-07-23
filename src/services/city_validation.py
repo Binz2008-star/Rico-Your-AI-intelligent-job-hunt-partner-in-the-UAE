@@ -57,6 +57,17 @@ _NON_CITY_TOKENS = frozenset({
     "فرص", "شاغر", "شواغر", "منصب", "مناصب", "توظيف",
 })
 
+# Job-title nouns — a value containing one of these is a role, not a city
+# (#1336 PR2: "Environmental Manager" answering a compound "role + city"
+# prompt was captured whole as a preferred city, since no role vocabulary was
+# in _NON_CITY_TOKENS). Reuses the existing role-keyword bank from the CV
+# parser instead of duplicating a blocklist — kept in sync by import, not copy.
+try:
+    from src.cv_parser import CVParser as _CVParser
+    _ROLE_TITLE_TOKENS = frozenset(w.lower() for w in _CVParser._ROLE_TITLE_KEYWORDS)
+except Exception:
+    _ROLE_TITLE_TOKENS = frozenset()
+
 # Yes/no/confirmation/acknowledgement words that must never be stored as a city.
 # Keep in sync with RicoChatAPI._CITY_REJECT_WORDS.
 _REJECT_WORDS = frozenset({
@@ -105,6 +116,8 @@ def is_plausible_city(value: str, *, known_cities: Optional[Iterable[str]] = Non
     if lowered in _REJECT_WORDS:
         return False
     if any(w.strip(".,،!?") in _NON_CITY_TOKENS for w in words):
+        return False
+    if any(w.strip(".,،!?") in _ROLE_TITLE_TOKENS for w in words):
         return False
     return True
 

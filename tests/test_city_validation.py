@@ -91,6 +91,38 @@ def test_sanitize_empty_and_none_safe():
     assert sanitize_cities(None) == []
 
 
+# ── Role-noun rejection (#1336 PR2) ────────────────────────────────────────────
+# Production transcript: a compound "share your target role(s) and preferred
+# city/cities" prompt was answered with just the role ("Environmental
+# Manager"), and the reply was captured whole as a preferred city because no
+# job-title vocabulary was in the non-city token bank.
+
+@pytest.mark.parametrize("role", [
+    "Environmental Manager",
+    "HSE Officer",
+    "Compliance Manager",
+    "Project Engineer",
+    "Business Analyst",
+    "Operations Director",
+])
+def test_role_titles_rejected(role):
+    assert not is_plausible_city(role), role
+
+
+def test_sanitize_drops_role_title():
+    assert sanitize_cities(["Environmental Manager"]) == []
+
+
+def test_sanitize_keeps_city_drops_role_title():
+    assert sanitize_cities(["Environmental Manager", "Dubai"]) == ["Dubai"]
+
+
+def test_real_cities_still_accepted_after_role_noun_guard():
+    # The role-noun bank must not over-reject legitimate city names.
+    for c in ["Dubai", "Abu Dhabi", "Ras Al Khaimah", "Doha", "Al Ain"]:
+        assert is_plausible_city(c), c
+
+
 # ── Integration: AI context + search read ─────────────────────────────────────
 
 def test_build_openai_context_drops_corrupted_city():
