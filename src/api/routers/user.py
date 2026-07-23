@@ -6,7 +6,7 @@ import logging
 from src.log_privacy import user_ref
 from typing import Any, Dict
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from src.api.rate_limit import LIMIT_PROFILE, limiter
 
@@ -29,14 +29,28 @@ def _fetch_display_name(email: str) -> str | None:
 @router.get("/me")
 @limiter.limit(LIMIT_PROFILE)
 def me(request: Request) -> Dict[str, Any]:
-    user = getattr(request.state, "current_user", None)
-    if not isinstance(user, dict) or not user.get("email"):
-        return {
-            "email": None,
-            "role": "guest",
-            "authenticated": False,
-            "guest": True,
-        }
+    guest = {
+        "email": None,
+        "role": "guest",
+        "authenticated": False,
+        "guest": True,
+    }
+    # Middleware hydration is claims-only — use it to recognize the guest
+    # shape cheaply, but never to assert identity (#1072).
+    hydrated = getattr(request.state, "current_user", None)
+    if not isinstance(hydrated, dict) or not hydrated.get("email"):
+        return guest
+
+    # Full verification (auth_version / is_active / DB role). A revoked or
+    # deactivated token must render as logged-out here, not as the account;
+    # a store outage stays a retryable 503 — never an identity guess.
+    from src.api.deps import get_current_user
+    try:
+        user = get_current_user(request)
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            raise
+        return guest
 
     email = user["email"]
     return {

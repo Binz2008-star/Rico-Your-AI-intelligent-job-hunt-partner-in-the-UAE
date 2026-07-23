@@ -15,6 +15,14 @@ from src.log_privacy import user_ref
 logger = logging.getLogger(__name__)
 
 
+class AuthStoreUnavailable(Exception):
+    """The user store is configured but cannot be read right now.
+
+    Raised (never swallowed into a "not found") so callers on security-sensitive
+    paths can fail closed instead of treating an outage as a missing account.
+    """
+
+
 @dataclass
 class User:
     id: int
@@ -62,6 +70,123 @@ def get_user_by_email(email: str) -> Optional[User]:
             )
     except Exception:
         logger.error("users_repo_get_failed user=%s", user_ref(email))
+        return None
+    finally:
+        conn.close()
+
+
+def get_auth_snapshot(email: str) -> tuple[str, Optional[dict]]:
+    """Current auth state for token validation (#1072).
+
+    Returns ("found", {"auth_version", "is_active", "role", "email_verified"})
+    or ("not_found", None). Unlike get_user_by_email this does NOT filter on
+    is_active — deactivation must be visible so stale tokens are rejected —
+    and it RAISES AuthStoreUnavailable on any infrastructure failure so
+    callers fail closed rather than misreading an outage as a deleted account.
+
+    A missing auth_version column (migration 045 not applied yet) degrades to
+    version 1 with a loud error — sessions keep working, revocation is inert.
+    """
+    from src.db import get_db_connection, is_db_available
+    if not is_db_available():
+        raise AuthStoreUnavailable("user store not configured")
+    conn = get_db_connection()
+    if not conn:
+        raise AuthStoreUnavailable("user store connection failed")
+    try:
+        from psycopg2 import errors as _pg_errors
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    SELECT COALESCE(auth_version, 1), is_active, role,
+                           COALESCE(email_verified, TRUE)
+                    FROM users
+                    WHERE email = %s
+                    LIMIT 1
+                    """,
+                    (email.strip().lower(),),
+                )
+                row = cur.fetchone()
+            except _pg_errors.UndefinedColumn:
+                conn.rollback()
+                logger.error(
+                    "users_repo_auth_snapshot: auth_version column missing — "
+                    "migration 045 not applied; token revocation is INERT"
+                )
+                cur.execute(
+                    """
+                    SELECT 1, is_active, role, COALESCE(email_verified, TRUE)
+                    FROM users
+                    WHERE email = %s
+                    LIMIT 1
+                    """,
+                    (email.strip().lower(),),
+                )
+                row = cur.fetchone()
+        if row is None:
+            return ("not_found", None)
+        return (
+            "found",
+            {
+                "auth_version": int(row[0]),
+                "is_active": bool(row[1]),
+                "role": row[2],
+                "email_verified": bool(row[3]),
+            },
+        )
+    except AuthStoreUnavailable:
+        raise
+    except Exception as exc:
+        logger.error("users_repo_auth_snapshot_failed err=%s", type(exc).__name__)
+        raise AuthStoreUnavailable("user store read failed") from exc
+    finally:
+        conn.close()
+
+
+def increment_auth_version(email: str) -> Optional[int]:
+    """Revoke every outstanding token for this user by bumping auth_version.
+
+    Returns the new version, or None when the bump could not be performed
+    (DB unavailable, user missing/inactive, or migration 045 not applied).
+    Callers whose purpose is revocation (logout-all) must treat None as
+    failure — never claim sessions were revoked when they were not.
+    """
+    from src.db import get_db_connection, is_db_available
+    if not is_db_available():
+        return None
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        from psycopg2 import errors as _pg_errors
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET auth_version = COALESCE(auth_version, 1) + 1
+                    WHERE email = %s AND is_active = TRUE
+                    RETURNING auth_version
+                    """,
+                    (email.strip().lower(),),
+                )
+                row = cur.fetchone()
+            except _pg_errors.UndefinedColumn:
+                conn.rollback()
+                logger.error(
+                    "users_repo_increment_auth_version: auth_version column missing — "
+                    "migration 045 not applied; revocation unavailable"
+                )
+                return None
+        conn.commit()
+        return int(row[0]) if row else None
+    except Exception as exc:
+        logger.error("users_repo_increment_auth_version_failed err=%s", type(exc).__name__)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return None
     finally:
         conn.close()
@@ -181,7 +306,13 @@ def get_signup_sources(user_ids: List[int]) -> dict[int, str]:
 
 
 def update_password(email: str, new_hash: str) -> bool:
-    """Update password_hash for the given email. Returns True on success."""
+    """Update password_hash and revoke all existing sessions atomically (#1072).
+
+    The auth_version bump rides in the same UPDATE statement as the password
+    change so a reset can never succeed while leaving old tokens valid. If
+    migration 045 is not applied yet, falls back to the password-only UPDATE
+    with a loud error (reset works, revocation inert).
+    """
     from src.db import get_db_connection, is_db_available
     if not is_db_available():
         return False
@@ -189,11 +320,28 @@ def update_password(email: str, new_hash: str) -> bool:
     if not conn:
         return False
     try:
+        from psycopg2 import errors as _pg_errors
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE users SET password_hash = %s WHERE email = %s AND is_active = TRUE",
-                (new_hash, email.strip().lower()),
-            )
+            try:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET password_hash = %s,
+                        auth_version = COALESCE(auth_version, 1) + 1
+                    WHERE email = %s AND is_active = TRUE
+                    """,
+                    (new_hash, email.strip().lower()),
+                )
+            except _pg_errors.UndefinedColumn:
+                conn.rollback()
+                logger.error(
+                    "users_repo_update_password: auth_version column missing — "
+                    "migration 045 not applied; existing sessions NOT revoked"
+                )
+                cur.execute(
+                    "UPDATE users SET password_hash = %s WHERE email = %s AND is_active = TRUE",
+                    (new_hash, email.strip().lower()),
+                )
             updated = cur.rowcount
         conn.commit()
         return updated > 0

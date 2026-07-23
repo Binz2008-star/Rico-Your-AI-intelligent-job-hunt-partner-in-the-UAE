@@ -78,6 +78,117 @@ handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
+### TASK-20260723-003 — #1072: invalidate stale JWTs after reset, deactivation, or role change
+
+Status: review (re-cut from current main per CTO ruling 2026-07-23 on #1138;
+originally drafted 2026-07-17 as TASK-20260717-002 — renumbered to avoid the
+ID collision with main's Job Result Integrity Gate entry)
+Owner: Claude (WRITER; Coder pass, owner-directed "full ownership" of the
+2026-07-17 reconciliation-audit remediation sequence)
+Branch: `fix/1072-jwt-auth-version`
+Issue/PR: #1072
+
+#### Objective
+
+Make issued JWTs revocable: password reset and "log out all devices" bump a
+per-user auth_version that every authenticated request validates; deactivated
+or deleted accounts reject existing tokens immediately; authorization role
+comes from the DB, not stale token claims; store outage fails closed.
+
+#### Context
+
+- Relevant files: `src/api/auth.py`, `src/api/deps.py`,
+  `src/repositories/users_repo.py`, `migrations/045_add_auth_version.sql`,
+  `scripts/check_migration_drift.py`
+- Existing behavior: tokens were stateless for the full 24h TTL; reset,
+  deactivation, and role downgrade left already-issued tokens fully valid.
+
+#### Constraints
+
+- Do not touch: guest/public identity (#1070), rate limits, cookie semantics.
+- Migration 045 is additive, idempotent, MANUAL-APPLY before deploy.
+- Per-device logout keeps its existing semantics (cookie delete only).
+
+#### Acceptance criteria
+
+- [x] Password reset invalidates all earlier tokens (atomic with the UPDATE)
+- [x] Deactivation/deletion rejects an existing token immediately
+- [x] Role downgrade rejects an earlier admin token on admin endpoints
+- [x] Store outage → 503 fail-closed, never authorize from stale claims
+- [x] Legacy tokens (no `av`) = version 1 → deploy logs nobody out
+- [x] logout vs logout-all have distinct, tested semantics
+- [x] Env-fallback admin isolated; rejected in production without override
+
+#### Required verification
+
+- [x] Unit tests: `tests/test_1072_jwt_auth_version.py` — 27 passed
+- [x] Regression: full local unit suite — only new failure vs clean-main
+      baseline was the drift-guard (fixed by registering 045); 7200+ passed
+- [ ] Frontend build: n/a (logout-all UI is follow-up)
+- [ ] Production/deploy smoke: apply 045, then login + /me + logout-all
+
+#### Continuity Block
+
+- Task ID: TASK-20260723-003
+- GitHub issue/PR: #1072; draft PR from `fix/1072-jwt-auth-version`
+- Branch: `fix/1072-jwt-auth-version`
+- Base branch: main
+- Re-cut: 2026-07-23 onto current main (CTO ruling on #1138). Verified live:
+  `public.users.auth_version` absent, users table 72 rows, migration number
+  045 unused in main. Manual-apply / no startup auto-apply retained.
+- Last safe commit SHA: base is current origin/main at re-cut
+- Current head SHA: see branch head on origin
+- Uncommitted changes present: no (updated at push time)
+- Status: review
+- Files inspected: `src/api/auth.py`, `src/api/deps.py`,
+  `src/repositories/users_repo.py`, `src/db.py` (availability semantics),
+  `src/api/app.py` (hydrate_request_auth_context middleware — added to main
+  since the original cut), `src/api/routers/user.py` (`/me`),
+  `tests/test_jwt_user_isolation.py` (harness patterns)
+- Files changed: `migrations/045_add_auth_version.sql` — additive column;
+  `src/repositories/users_repo.py` — AuthStoreUnavailable, get_auth_snapshot,
+  increment_auth_version, atomic update_password; `src/api/deps.py` —
+  validation core (av match, active check, DB-authoritative role,
+  fail-closed 503) + re-cut hardening: the enforcement point now caches on a
+  dedicated `request.state.verified_user` and NO LONGER trusts the middleware's
+  claims-only `current_user`/`user_id` hydration (that cache would have
+  bypassed revocation for real HTTP traffic); `src/api/routers/user.py` —
+  `/me` now fully verifies (revoked/deactivated token → guest shape; outage →
+  503) instead of echoing claims-only hydration; `src/api/auth.py` — av claim
+  at login, env-admin marker, POST /auth/logout-all;
+  `scripts/check_migration_drift.py` — 045 drift check;
+  `tests/test_1072_jwt_auth_version.py` — suite extended: middleware-bypass
+  guards + `/me` revocation guards; `tests/conftest.py` — default healthy fake
+  auth store (echoes each token's role) so the whole suite exercises the new
+  enforcement without a real DB; `.github/workflows/qa-tests.yml` — suite wired
+- Files intentionally not touched: frontend (logout-all button is follow-up
+  UI work); refresh-token architecture (issue lists it as optional); the
+  claims-only middleware itself (kept for cheap guest/anon hints — the fix is
+  that protected deps re-verify, not that the hint is removed)
+- What is complete: revocation model, fail-closed validation, middleware-bypass
+  hardening, tests
+- What is incomplete: UI for logout-all; optional short-TTL+refresh design
+- Known blockers: migration 045 must be applied to Neon BEFORE deploy
+  (code degrades loudly-but-safely if not, revocation inert); a KNOWN
+  pre-existing main failure `tests/unit/test_subscription_feature_gating.py::
+  test_limit_message_has_no_doubled_limit_word` (stale 50/50 vs free limit 10)
+  is being fixed on a separate branch (`fix/subscription-gate-test-current-limit`)
+  — NOT caused by and NOT in scope for this PR
+- Validation already run: full curated qa-tests pytest list locally — every
+  test green except the one pre-existing unrelated subscription-gate failure
+  above; auth suites (test_1072, test_jwt_user_isolation, test_security_audit,
+  test_agent) all green with the bypass closed
+- Validation still required: exact-head CI on the PR; owner-approved 045 apply
+- Deployment/CI/Neon/Vercel state to check next: QA Tests on the PR head
+- Next exact action: owner review; then the change-window (Neon restore-point
+  branch → apply 045 → schema verify → merge → deploy → auth smoke)
+- Stop condition: any test or review finding that validation adds >1 DB
+  round-trip per request or breaks guest flows → redesign before merging
+- Rollback plan: revert the squash commit (behavior returns to stateless
+  tokens); column 045 is additive and harmless to leave; dropping it is a
+  separate owner-approved migration
+
+
 ### TASK-20260720-001 — hotfix #1225: agentic_ui option buttons as plain dict (stream TypeError) — PRODUCTION VERIFIED
 
 Status: done — **MERGED (#1225, squash `4ecb5d80`) + PRODUCTION VERIFIED — PASS; incident closed (owner ruling 2026-07-20)**

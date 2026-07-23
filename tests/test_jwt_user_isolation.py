@@ -85,11 +85,20 @@ class TestGetCurrentUserIdDep:
         req._cookies = {"access_token": cookie_value} if cookie_value else {}
         return req
 
+    @staticmethod
+    def _healthy_snapshot(email: str):
+        """Model a live, matching auth store row for #1072 verification."""
+        return ("found", {
+            "auth_version": 1, "is_active": True,
+            "role": "user", "email_verified": True,
+        })
+
     def test_valid_token_returns_email(self):
         from src.api.deps import get_current_user_id
         token = _make_token("alice@rico.ai")
         req = self._request_with_cookie(token)
-        assert get_current_user_id(req) == "alice@rico.ai"
+        with patch("src.repositories.users_repo.get_auth_snapshot", side_effect=self._healthy_snapshot):
+            assert get_current_user_id(req) == "alice@rico.ai"
 
     def test_missing_cookie_raises_401(self):
         from src.api.deps import get_current_user_id
@@ -110,19 +119,22 @@ class TestGetCurrentUserIdDep:
         from src.api.deps import get_current_user_id
         req_alice = self._request_with_cookie(_make_token("alice@rico.ai"))
         req_bob = self._request_with_cookie(_make_token("bob@rico.ai"))
-        assert get_current_user_id(req_alice) != get_current_user_id(req_bob)
-        assert get_current_user_id(req_alice) == "alice@rico.ai"
-        assert get_current_user_id(req_bob) == "bob@rico.ai"
+        with patch("src.repositories.users_repo.get_auth_snapshot", side_effect=self._healthy_snapshot):
+            assert get_current_user_id(req_alice) != get_current_user_id(req_bob)
+            assert get_current_user_id(req_alice) == "alice@rico.ai"
+            assert get_current_user_id(req_bob) == "bob@rico.ai"
 
     def test_valid_token_populates_request_state(self):
         from src.api.deps import get_current_user
 
         token = _make_token("alice@rico.ai")
         req = self._request_with_cookie(token)
-        user = get_current_user(req)
+        with patch("src.repositories.users_repo.get_auth_snapshot", side_effect=self._healthy_snapshot):
+            user = get_current_user(req)
 
         assert user["email"] == "alice@rico.ai"
         assert req.state.current_user == user
+        assert req.state.verified_user == user
         assert req.state.user_id == "alice@rico.ai"
         assert req.state.access_token_present is True
 
