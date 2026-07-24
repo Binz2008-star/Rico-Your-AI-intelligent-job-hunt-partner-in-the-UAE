@@ -5966,17 +5966,93 @@ class RicoChatAPI:
         except Exception:
             pass
 
-    def _resolve_pending_intent(self, user_id: str, message: str, profile: Any) -> dict[str, Any] | None:
+    # `_pending_field` values that genuinely OWN a yes/no confirmation turn — a
+    # bare affirmative ("yes" / "نعم") belongs to these, so they outrank a
+    # stale/armed pending job search (priority 1 > priority 4). These are exactly
+    # the structured confirmations `_resolve_pending_field` resolves via
+    # `_is_affirmative`:
+    #   * ``confirm_profile_update``  — the #1361 persisted-state mutation gate
+    #   * ``confirm_set_active_cv``   — the #1363 active-CV switch confirmation
+    # The value-prompt fields (``preferred_cities`` / ``telegram_username`` /
+    # ``phone`` / ``email``) expect a VALUE, not a bare "yes", so an unrelated or
+    # stale one of those — or any unknown field — must NOT silently suppress a
+    # valid "yes, run the search" and drop the turn to a dead-end fallback. This
+    # is an explicit allowlist, not a generic truthiness check, precisely so a
+    # leftover non-confirmation pending field cannot block search redemption
+    # indefinitely. Keep it in sync with the affirmative-consuming branches of
+    # `_resolve_pending_field`.
+    _SEARCH_OUTRANKING_PENDING_FIELDS: frozenset[str] = frozenset({
+        "confirm_profile_update",
+        "confirm_set_active_cv",
+    })
+
+    def _pending_search_redemption_blocked(self, user_id: str, message: str) -> bool:
+        """True when an armed pending job search must NOT be redeemed by the
+        current turn, because a higher-priority intent owns it.
+
+        Continuation-truth priority order (attachment-provenance PR): an explicit
+        pending mutation confirmation (priority 1) and an explicit
+        higher-specificity current-turn intent (priority 3) both outrank a
+        saved/pending-search continuation (priority 4). Without this guard, a
+        bare affirmative — or a clear CV-analysis request — sent while a pending
+        search is armed is silently swallowed as search-continuation instead of
+        reaching the confirmation flow or the CV-analysis handler (the transcript
+        نعم→search misfire, and #1360's documented known gap).
+
+        Deliberately narrow on BOTH axes: it blocks only for a pending field that
+        actually owns a yes/no confirmation (the allowlist above — never a bare
+        "any pending field exists" check) or for an explicit higher-specificity
+        current-turn intent, so the normal "yes, run the search you offered" path
+        is untouched and a stale/unrelated pending field can never dead-end a
+        valid search.
+        """
+        msg = message or ""
+        # Priority 1 — an explicit pending mutation/confirmation that a bare
+        # affirmative belongs to is armed (allowlisted values only).
+        try:
+            ctx = self._get_recent_context(user_id) or {}
+            pending_field = ctx.get("_pending_field") or ""
+            if pending_field in self._SEARCH_OUTRANKING_PENDING_FIELDS:
+                return True
+        except Exception:
+            pass
+        # Priority 3 — the current turn is an explicit higher-specificity intent
+        # (CV analysis) that must never be consumed as a search continuation.
+        try:
+            if self._CV_ANALYZE_ASK_RE.search(msg):
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _resolve_pending_intent(
+        self,
+        user_id: str,
+        message: str,
+        profile: Any,
+        _precomputed_blocked: "bool | None" = None,
+    ) -> dict[str, Any] | None:
         """If last Rico message offered a yes/no action and user affirms, execute it.
 
         Returns a response dict if a pending intent was resolved, else None.
+
+        ``_precomputed_blocked``: when the caller (``_process_message_inner``)
+        already computed ``_pending_search_redemption_blocked`` BEFORE
+        ``_resolve_pending_field`` ran (which can one-shot-clear the very
+        ``_pending_field`` this guard reads), pass that captured value here
+        instead of re-deriving it from now-possibly-stale context. Standalone
+        callers (tests, other entry points) get the live, self-computed check.
         """
         # Priority 0: stored pending job search state (most reliable — set explicitly when
         # Rico announces a search plan and the turn ends without executing it).
         # Checked BEFORE the _is_affirmative guard because this method is called from
         # both the affirmative path (yes/ok) and the follow_up_confirmation path (تمام/نعم/كمل).
+        _blocked = (
+            _precomputed_blocked if _precomputed_blocked is not None
+            else self._pending_search_redemption_blocked(user_id, message)
+        )
         pending_js = self._get_pending_job_search(user_id)
-        if pending_js and pending_js.get("role"):
+        if pending_js and pending_js.get("role") and not _blocked:
             self._clear_pending_job_search(user_id)
             pending_role = pending_js["role"]
             pending_loc = pending_js.get("location", "")
@@ -7955,6 +8031,44 @@ class RicoChatAPI:
         """Route directly to the existing conversational AI fallback path."""
         debug_id = _generate_debug_id()
         try:
+            # Finding 3 (review correction): computed ONCE, BEFORE
+            # _resolve_pending_field runs below — its confirm_profile_update /
+            # confirm_set_active_cv branches one-shot-clear `_pending_field`
+            # even for an inconclusive reply ("neither yes nor no: the user
+            # moved on"), so re-deriving this guard AFTER that call would see
+            # already-cleared context and silently defeat it for exactly the
+            # ambiguous acknowledgements ("تمام", "confirm") this fix targets.
+            _search_redemption_blocked_this_turn = (
+                self._pending_search_redemption_blocked(user_id, message)
+                if profile is not None else False
+            )
+
+            # This path never called _resolve_pending_field, so a genuine
+            # confirm_profile_update / confirm_set_active_cv confirmation
+            # reaching here (e.g. via chat_service's AI-routed dispatch) fell
+            # through to the generic AI fallback below — the pending-search
+            # guard stopped the WRONG outcome (a stale search) but never
+            # delivered the RIGHT one (the confirmation itself never resolved,
+            # and the mutation never persisted). Resolve it first, exactly
+            # like the legacy dispatch path (_handle_active_user_inner)
+            # already does, so a structured confirmation is honored regardless
+            # of which dispatch entry point the message arrives through.
+            if profile is not None:
+                try:
+                    _pending_field_result = self._resolve_pending_field(user_id, message, profile)
+                except Exception:
+                    _pending_field_result = None
+                if _pending_field_result is not None:
+                    self._append_chat(user_id, "user", message)
+                    _redispatch = _pending_field_result.get("_redispatch_message")
+                    if _redispatch:
+                        return self.answer_conversationally(
+                            user_id, _redispatch, profile, language=language
+                        )
+                    _pending_field_result.setdefault("debug_id", debug_id)
+                    _pending_field_result.setdefault("success", True)
+                    return _pending_field_result
+
             # Priority-0 (conversational path): redeem a pending job search armed by
             # an earlier promise-only reply. Mirrors _resolve_pending_intent's
             # Priority-0 in the legacy path — without this, an "ok/تمام" that the
@@ -7968,7 +8082,7 @@ class RicoChatAPI:
                 if _pending_js.get("role") and (
                     self._is_affirmative(message)
                     or self._is_continuation_intent(message)
-                ):
+                ) and not _search_redemption_blocked_this_turn:
                     self._append_chat(user_id, "user", message)
                     self._clear_pending_job_search(user_id)
                     self._discard_pending_role_confirmation(user_id)
@@ -8399,6 +8513,18 @@ class RicoChatAPI:
         profile = self._resolve_profile(user_id)
         has_cv = profile.has_cv
         text = self._normalize_followup_phrase(message)
+
+        # Finding 3 (review correction): computed ONCE here, before
+        # _resolve_pending_field runs below. Its confirm_profile_update /
+        # confirm_set_active_cv branches one-shot-clear `_pending_field` even
+        # for an inconclusive reply ("neither yes nor no: the user moved on")
+        # — so a LATER re-read of `_get_recent_context(user_id)["_pending_field"]`
+        # at any pending-search-redemption site in this same turn would already
+        # see it gone, silently defeating the guard for exactly the ambiguous
+        # acknowledgements ("تمام", "confirm") this fix targets. Every guarded
+        # site in this method uses this captured value instead of re-deriving
+        # it from (by-then-mutated) context.
+        _search_redemption_blocked_this_turn = self._pending_search_redemption_blocked(user_id, message)
 
         # ── Pasted CV text detection ──────────────────────────────────────────
         # A user may paste raw CV text instead of uploading a file.  Detect it
@@ -8845,7 +8971,10 @@ class RicoChatAPI:
         # Must run before generic routing so "نعم" / "كمل" / "keep going" resolves
         # the last offered action instead of falling through to role classification.
         if self._is_affirmative(message) or self._is_continuation_intent(message):
-            pending = self._resolve_pending_intent(user_id, message, profile)
+            pending = self._resolve_pending_intent(
+                user_id, message, profile,
+                _precomputed_blocked=_search_redemption_blocked_this_turn,
+            )
             if pending is not None:
                 return self._finalize(pending, self.SOURCE_KEYWORD, profile=profile)
             # Continuation with no specific pending offer: if CV exists, proceed with
@@ -8903,8 +9032,17 @@ class RicoChatAPI:
             # used to confirm a search Rico promised in the previous turn. These phrases
             # never reach _is_affirmative or the follow_up_confirmation dispatch, so the
             # pending search check must live here.
+            # Finding 3 (review correction): this site redeemed the stale search
+            # unconditionally — a bare "تمام"/"confirm" reaching THIS block while
+            # confirm_profile_update/confirm_set_active_cv was armed silently
+            # dropped the real confirmation and ran the old search instead.
+            # Reproduced directly against this exact block before the fix.
             _ack_pending_js = self._get_pending_job_search(user_id)
-            if _ack_pending_js and _ack_pending_js.get("role"):
+            if (
+                _ack_pending_js
+                and _ack_pending_js.get("role")
+                and not _search_redemption_blocked_this_turn
+            ):
                 _ack_role = _ack_pending_js["role"]
                 _ack_loc = _ack_pending_js.get("location", "")
                 self._clear_pending_job_search(user_id)
@@ -10607,11 +10745,19 @@ class RicoChatAPI:
             # _classified_role_search here re-fires the known_but_off_profile gate and
             # re-emits the SAME clarification the user just confirmed (the #1314 typed-YES
             # loop, recurring here for bare "تمام"/"اوكي"/"اي"/"طيب"/"continue"/"confirm"
-            # confirmations that reach this legacy_intent branch instead of the two sites
-            # _resolve_pending_intent and answer_conversationally already fixed).
+            # confirmations that reach this legacy_intent branch).
+            # Finding 3 (review correction): this site was UNGUARDED — reproduced
+            # directly: with confirm_profile_update/confirm_set_active_cv armed, a
+            # bare "تمام" or "confirm" reached exactly this block and redeemed the
+            # stale search while the real confirmation was silently dropped. Now
+            # gated on the same turn-scoped guard as every other redemption site.
             try:
                 _pending_js = self._get_pending_job_search(user_id)
-                if _pending_js and _pending_js.get("role"):
+                if (
+                    _pending_js
+                    and _pending_js.get("role")
+                    and not _search_redemption_blocked_this_turn
+                ):
                     _js_role = _pending_js["role"]
                     _js_loc = _pending_js.get("location", "")
                     self._clear_pending_job_search(user_id)
@@ -13416,32 +13562,293 @@ class RicoChatAPI:
         re.IGNORECASE,
     )
 
-    def _get_recent_upload_document_reply(self, user_id: str, message: str) -> dict[str, Any] | None:
-        """Return a document-context reply when the user explicitly asks about their last upload.
+    # Attachment-provenance PR — "latest attachment wins" continuation phrases.
+    # Bare, deictic references to the just-uploaded file that the older
+    # _UPLOAD_DOC_QUERY_RE / _DOC_FOLLOWUP_RE never matched ("what was that?",
+    # "what did you extract?", the Arabic "شو هاد؟" / "ماذا استخرجت؟"). They must
+    # resolve against the LATEST attachment only when one is actually on record —
+    # never against an older subscription answer, an earlier job search, or an
+    # older attachment (the transcript's "answered from an older context" defect).
+    # Deliberately requires a recent attachment in context before firing, so a
+    # bare "what was that?" with no upload on record falls through to normal
+    # routing unchanged. A bare affirmative (yes/نعم) is intentionally NOT here:
+    # it must never consume attachment context unless Rico asked an explicit
+    # attachment-confirmation question.
+    # Finding 1 (review correction): "what did you extract/read/find/get" with
+    # NO noun requirement over-matched ordinary job-search follow-ups ("what did
+    # you find in the search results", "what did you get for the job search"),
+    # hijacking them into an attachment reply whenever any (even stale) document
+    # was on record. Anchored to end-of-message (optionally with a trailing
+    # "from/in it/that/this" referent) so it only fires on a bare, deictic
+    # question about the attachment itself — never one continuing into an
+    # unrelated noun phrase.
+    _LATEST_ATTACHMENT_CONTINUATION_RE = re.compile(
+        r"\bwhat\s+was\s+(?:that|this|it)\b"
+        r"|\bwhat\s+did\s+you\s+(?:extract|read|find|get)\b"
+        r"(?:\s+(?:from|in)\s+(?:it|that|this))?\s*[?.!]*\s*$"
+        r"|\bwhat\s+did\s+i\s+(?:just\s+)?(?:upload|send|share|attach)\b"
+        r"|\bwhat\s+is\s+(?:this|that)\s+(?:file|image|document|attachment)\b"
+        r"|\bwhat'?s\s+(?:this|that)\s+(?:file|image|document|attachment)\b"
+        r"|شو\s*ه[اأ]?د|ما\s*هذا|ما\s*هاد"
+        r"|م[اا]?ذا\s+(?:[اأ]رسلت|استخرجت|رفعت|شاركت)"
+        r"|شو\s*(?:ال)?ملف|شو\s*استخرجت",
+        re.IGNORECASE,
+    )
 
-        Only fires for unambiguous document-meta queries (e.g. 'what did I upload?').
-        Broader document analysis flows through the normal AI pipeline (TASK-030).
+    # Provenance boundary: a question that NAMES its source ("from my CV",
+    # "from my ID", "من سيرتي", "من هويتي") is NOT a bare latest-attachment
+    # continuation — it must be answered from that specific source, never
+    # cross-contaminated with the newest attachment.
+    #
+    # Findings 2 + 6 (review correction): the original combined pattern matched
+    # bare "id"/"identity"/"cv"/"resume"/"profile" as standalone words with no
+    # possessive/ownership marker, so casual prose ("id like to know...", "can
+    # you help me profile this job market") false-matched and silently stood
+    # the latest-attachment handler down with NO source-specific handler taking
+    # over — falling through toward the unredacted generic AI path. Split into
+    # two narrower, ownership-anchored patterns (requiring "my"/"from my"/a
+    # clear Arabic possessive) so each routes to its OWN deterministic,
+    # privacy-safe handler instead of merely disabling the continuation reply.
+    _EXPLICIT_ID_SOURCE_RE = re.compile(
+        r"\bmy\s+(?:id|identity|emirates\s*id|passport)\b"
+        r"|\bfrom\s+my\s+(?:id|identity|emirates\s*id|passport)\b"
+        r"|\bemirates\s*id\b|\bpassport\b"
+        r"|من\s+هويت|من\s+(?:بطاقة|جواز)|هويتي\b|جواز\s*سفري",
+        re.IGNORECASE,
+    )
+    _EXPLICIT_CV_SOURCE_RE = re.compile(
+        r"\bmy\s+(?:cv|resume|r[eé]sum[eé])\b"
+        r"|\bfrom\s+my\s+(?:cv|resume|r[eé]sum[eé])\b"
+        r"|من\s+سيرت|سيرتي\s*(?:الذاتية)?",
+        re.IGNORECASE,
+    )
+    # A DECLARATIVE statement ("this is my ID", "that's my CV", "my cv is
+    # Roben_Edwan_CV.pdf") is a different speech act from a source-named
+    # QUESTION ("what did you extract from my ID?", "from my CV") — the
+    # former either corrects what the latest attachment IS (a separate
+    # concern, e.g. #1365's attachment-type clarification handler) or, during
+    # onboarding, TELLS Rico a CV filename/identity ("my cv is <name>.pdf") —
+    # neither asks to be told about that source, and must never be answered
+    # here as if it did. Reproduced directly: "my cv is Roben_Edwan_CV.pdf"
+    # (the exact onboarding CV-declaration transcript) previously matched
+    # _EXPLICIT_CV_SOURCE_RE and pre-empted the onboarding flow's own
+    # cv_first_profile response with a "your CV is X" describe-reply instead.
+    _ATTACHMENT_CLARIFICATION_SHAPE_RE = re.compile(
+        r"^\s*(?:this|that|it)\s*(?:'s|is)\s+(?:my\s+)?"
+        r"(?:id|identity|emirates\s*id|passport|cv|resume|r[eé]sum[eé])\b"
+        r"|^\s*my\s+(?:id|identity|emirates\s*id|passport|cv|resume|r[eé]sum[eé])\s+is\b"
+        r"|^\s*هذ[ها]\s+(?:هويت|بطاقة|جواز|سيرت)",
+        re.IGNORECASE,
+    )
+
+    # Document types whose extracted values (name, DOB, nationality, ID/card
+    # number, expiry, …) are sensitive PII — never repeated in a general summary,
+    # and never allowed to silently become canonical profile identity.
+    _SENSITIVE_DOC_TYPES = frozenset({"identity_document", "passport"})
+    # Below this classifier confidence a detected type is NOT treated as canonical
+    # document identity — Rico describes it as probable/uncertain and asks the
+    # user to confirm, rather than asserting a type it isn't sure of.
+    _LOW_CONFIDENCE_THRESHOLD = 0.5
+
+    def _describe_latest_attachment(self, doc: dict[str, Any], is_ar: bool) -> str:
+        """Honest, provenance-safe one-paragraph description of the latest
+        attachment. Never repeats sensitive identity values (name / DOB /
+        nationality / ID number / …); for a low-confidence classification it
+        describes the file as probable/uncertain and asks for confirmation
+        instead of asserting a type. Categories, not raw values.
+
+        Finding 5 (review correction): when the canonical latest-attachment
+        context (#1365's ``build_last_uploaded_context``) is present, this
+        respects ``confirmed_by_user``/``requires_confirmation`` instead of
+        re-deriving "needs confirmation" from raw confidence alone — otherwise
+        a user who just clarified a low-confidence document's type ("this is
+        my CV") is asked to reconfirm the very next turn. A confirmed type is
+        described as confirmed, never re-questioned. A SENSITIVE type is
+        ALWAYS redacted to categories-only, confirmed or not — confirmation
+        only changes what Rico calls the file, never whether it echoes values.
+        Confirming a type here is read-only: it never implies a profile or
+        active-CV mutation.
         """
-        if not self._UPLOAD_DOC_QUERY_RE.search(message):
+        raw_type = str(doc.get("detected_type") or doc.get("document_type") or "unknown")
+        label = doc.get("display_label") or raw_type.replace("_", " ").title()
+        filename = doc.get("filename") or ("ملفك" if is_ar else "your file")
+        try:
+            confidence = float(doc.get("classification_confidence", doc.get("confidence", 0)) or 0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        pct = int(round(confidence * 100))
+        is_sensitive = bool(doc.get("is_sensitive")) or raw_type in self._SENSITIVE_DOC_TYPES
+        confirmed = bool(doc.get("confirmed_by_user"))
+        # Prefer the canonical #1365 flag when present (a superset consumer);
+        # otherwise derive the same signal from raw confidence alone so #1364
+        # behaves correctly even without #1365 merged.
+        if "requires_confirmation" in doc:
+            needs_confirmation = bool(doc.get("requires_confirmation")) and not confirmed
+        else:
+            needs_confirmation = confidence < self._LOW_CONFIDENCE_THRESHOLD and not confirmed
+
+        if is_sensitive:
+            # Categories only — never echo the extracted name/DOB/ID number here,
+            # regardless of confirmation state.
+            return (
+                f"آخر ملف رفعته هو **{filename}**، ويبدو أنه **وثيقة هوية**. "
+                "لأسباب تتعلّق بخصوصيتك، لا أكرّر تفاصيلها الحسّاسة (مثل الاسم أو الرقم أو تاريخ الميلاد) "
+                "في الملخّصات العامة، ولم أغيّر ملفك الشخصي بناءً عليها. "
+                "إن أردت أن أعرض حقلاً محدّداً منها، اطلبه صراحةً."
+                if is_ar else
+                f"The most recent file you uploaded was **{filename}**, which looks like an "
+                "**identity document**. For your privacy I don't repeat its sensitive details "
+                "(such as name, number, or date of birth) in general summaries, and I didn't "
+                "change your profile from it. If you want a specific field from it, just ask for that field."
+            )
+        if needs_confirmation:
+            return (
+                f"آخر ملف رفعته هو **{filename}**. لست متأكّداً تماماً من نوعه "
+                f"(أفضل تخمين: **{label}**، بثقة {pct}٪ فقط). هل يمكنك تأكيد نوعه حتى أتعامل معه بشكل صحيح؟"
+                if is_ar else
+                f"The most recent file you uploaded was **{filename}**. I'm not fully sure what it is "
+                f"(my best guess is a **{label}**, but only {pct}% confidence). "
+                "Could you confirm what it is so I handle it correctly?"
+            )
+        # Confident OR user-confirmed, non-sensitive — safe to offer the
+        # classifier's suggested actions.
+        actions = doc.get("suggested_actions") or []
+        actions_str = ""
+        if actions:
+            labels = [a.get("label", str(a)) if isinstance(a, dict) else str(a) for a in actions[:4]]
+            header = "\n\nإليك ما يمكنني مساعدتك به:\n" if is_ar else "\n\nHere's what I can help you with:\n"
+            actions_str = header + "\n".join(f"- {lbl}" for lbl in labels)
+        if confirmed:
+            # The user already told Rico what this is — describe it as
+            # confirmed rather than re-stating a (possibly still low)
+            # confidence percentage, which would read as re-asking.
+            return (
+                f"آخر ملف رفعته هو **{filename}**، وقد أكّدت أنه **{label}**.{actions_str}\n\n"
+                "هل تريد أن أقوم بشيء محدّد به؟"
+                if is_ar else
+                f"The most recent file you uploaded was **{filename}**, which you confirmed is a "
+                f"**{label}**.{actions_str}\n\n"
+                "Would you like me to do anything specific with it?"
+            )
+        return (
+            f"آخر ملف رفعته هو **{filename}**، وقد تعرّفت عليه كـ **{label}** (بثقة {pct}٪).{actions_str}\n\n"
+            "هل تريد أن أقوم بشيء محدّد به؟"
+            if is_ar else
+            f"The most recent file you uploaded was **{filename}**, which I identified as a "
+            f"**{label}** ({pct}% confidence).{actions_str}\n\n"
+            "Would you like me to do anything specific with it?"
+        )
+
+    def _describe_identity_source_document(self, user_id: str, is_ar: bool) -> str:
+        """Deterministic, privacy-safe reply for an explicit ID/passport-source
+        question ("what did you extract from my ID?", "من هويتي؟").
+
+        Finding 2 (review correction): this question must NEVER merely disable
+        the latest-attachment handler and fall through to the generic AI path —
+        that path has no is_sensitive gate and would echo raw extracted values.
+        Answers deterministically: describes the on-record identity document by
+        CATEGORY only (never its values), or honestly says none is on record.
+        Never calls the AI provider, so there is no unredacted-context risk.
+        """
+        doc = self._get_last_uploaded_document(user_id) or {}
+        raw_type = str(doc.get("detected_type") or doc.get("document_type") or "")
+        is_id_doc = bool(doc.get("is_sensitive")) or raw_type in self._SENSITIVE_DOC_TYPES
+        if doc and is_id_doc:
+            filename = doc.get("filename") or ("ملفك" if is_ar else "your file")
+            return (
+                f"لديك **{filename}** مسجّلاً كوثيقة هوية. لأسباب خصوصية، لا أكرّر تفاصيلها الحسّاسة "
+                "(الاسم، الرقم، تاريخ الميلاد) هنا. إن أردت حقلاً محدّداً منها، اطلبه صراحةً — ولن أغيّر "
+                "ملفك الشخصي بناءً عليها."
+                if is_ar else
+                f"You have **{filename}** on record as an identity document. For your privacy I don't "
+                "repeat its sensitive details (name, number, date of birth) here. If you want a "
+                "specific field from it, just ask for that field — and I won't change your profile from it."
+            )
+        return (
+            "لا يوجد لديّ مستند هوية أو جواز سفر مسجّل من رفعك الأخير."
+            if is_ar else
+            "I don't have an identity document or passport on record from your latest upload."
+        )
+
+    def _describe_cv_source_document(self, user_id: str, profile: Any, is_ar: bool) -> str:
+        """Deterministic reply for an explicit CV-source question ("what did
+        you extract from my CV?", "من سيرتي؟").
+
+        Finding 2 (review correction): answers from the user's ACTUAL CV record
+        via ``_collect_uploaded_documents`` (mirrors GET /api/v1/user/files) —
+        never from the latest attachment if that attachment isn't the CV (e.g.
+        an identity document that happens to be the most recent upload). This
+        reaches a real CV-specific answer, not a stand-down into generic AI.
+        """
+        try:
+            entries = self._collect_uploaded_documents(user_id, profile)
+        except Exception:
+            entries = []
+        cv_entries = [e for e in entries if str(e.get("doc_type") or "").lower() == "cv"]
+        active = next((e for e in cv_entries if e.get("is_primary")), cv_entries[0] if cv_entries else None)
+        if not active:
+            return (
+                "لا توجد لديّ سيرة ذاتية مسجّلة في ملفك حالياً. ارفع سيرتك الذاتية وسأتمكن من تحليلها لك."
+                if is_ar else
+                "I don't have a CV on record for your profile yet. Upload your CV and I can analyze it for you."
+            )
+        filename = active.get("filename") or ("سيرتك الذاتية" if is_ar else "your CV")
+        return (
+            f"سيرتك الذاتية المسجّلة هي **{filename}**. اطلب مني تحليلها أو مراجعتها وسأفعل ذلك."
+            if is_ar else
+            f"Your CV on file is **{filename}**. Ask me to analyze or review it and I will."
+        )
+
+    def _get_recent_upload_document_reply(self, user_id: str, message: str) -> dict[str, Any] | None:
+        """Return a document-context reply when the user asks about their last upload.
+
+        Fires for explicit document-meta queries ('what did I upload?') AND for
+        bare "latest attachment wins" continuation phrases ('what was that?',
+        'شو هاد؟') — but the latter only when a recent attachment is actually on
+        record, so they resolve against the newest attachment rather than an
+        older subscription/search/CV context. Broader document analysis still
+        flows through the normal AI pipeline (TASK-030).
+        """
+        msg = message or ""
+        is_ar = (self._is_arabic_text(msg)
+                 if hasattr(self, "_is_arabic_text") else bool(re.search(r"[؀-ۿ]", msg)))
+        # A declarative clarification ("this is my ID") is not a source-named
+        # QUESTION — never answered here (whatever clarification handling
+        # exists upstream owns it; with none on record, normal routing
+        # proceeds unchanged).
+        is_clarification = bool(self._ATTACHMENT_CLARIFICATION_SHAPE_RE.search(msg))
+        # A source-named question ("from my ID", "من هويتي") reaches its own
+        # deterministic, privacy-safe handler — never the generic AI fallback.
+        if not is_clarification and self._EXPLICIT_ID_SOURCE_RE.search(msg):
+            try:
+                reply = self._describe_identity_source_document(user_id, is_ar)
+                self._append_chat(user_id, "assistant", reply)
+                return {"type": "document_context", "message": reply}
+            except Exception:
+                return None
+        # A source-named question ("from my CV", "من سيرتي") reaches the real
+        # CV record, never the latest (possibly unrelated) attachment.
+        if not is_clarification and self._EXPLICIT_CV_SOURCE_RE.search(msg):
+            try:
+                profile = self._resolve_profile(user_id)
+                reply = self._describe_cv_source_document(user_id, profile, is_ar)
+                self._append_chat(user_id, "assistant", reply)
+                return {"type": "document_context", "message": reply}
+            except Exception:
+                return None
+        is_meta = bool(self._UPLOAD_DOC_QUERY_RE.search(message or ""))
+        is_continuation = bool(self._LATEST_ATTACHMENT_CONTINUATION_RE.search(message or ""))
+        if not (is_meta or is_continuation):
             return None
         try:
             ctx = self._get_recent_context(user_id)
             doc = ctx.get("last_uploaded_document")
             if not doc:
+                # A bare continuation phrase with no attachment on record must NOT
+                # be answered from here — let normal routing handle it. Only the
+                # explicit meta query is answered even when nothing is on record.
                 return None
-            label = doc.get("display_label") or doc.get("document_type", "document").replace("_", " ").title()
-            filename = doc.get("filename") or "your file"
-            pct = int(round(doc.get("confidence", 0) * 100))
-            actions = doc.get("suggested_actions") or []
-            actions_str = ""
-            if actions:
-                labels = [a.get("label", str(a)) if isinstance(a, dict) else str(a) for a in actions[:4]]
-                actions_str = "\n\nHere's what I can help you with:\n" + "\n".join(f"- {lbl}" for lbl in labels)
-            reply = (
-                f"The last document you uploaded was **{filename}**, "
-                f"which I identified as a **{label}** ({pct}% confidence).{actions_str}\n\n"
-                "Would you like to do anything specific with it?"
-            )
+            reply = self._describe_latest_attachment(doc, is_ar)
             self._append_chat(user_id, "assistant", reply)
             return {"type": "document_context", "message": reply}
         except Exception:

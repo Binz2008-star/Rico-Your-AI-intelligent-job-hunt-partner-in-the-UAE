@@ -1965,6 +1965,36 @@ async def rico_upload_cv(
                 )
             except Exception:
                 pass
+            # Finding 4 (review correction): this branch previously updated ONLY
+            # the durable store above, never `recent_context` — so a PRIOR
+            # attachment (e.g. an identity document, which DOES get written to
+            # recent_context on its own success path just above) stayed the
+            # "latest" one seen by `_get_last_uploaded_document` (which reads
+            # recent_context first). "What was that?" after this OCR failure
+            # answered about the STALE OLDER attachment, not this newest upload
+            # — the exact "answered from an older context" defect this PR's own
+            # transcript describes. #1364 must deliver this without depending
+            # on another PR, so this newer (OCR-failed) upload now fully
+            # replaces recent_context's last_uploaded_document too, same as the
+            # successful-classification branch above.
+            if not is_valid_public_user_id(resolved_user_id):
+                try:
+                    from src.rico_memory import RicoMemoryStore
+                    _mem = RicoMemoryStore()
+                    _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
+                    _rctx["last_uploaded_document"] = {
+                        "document_type": "image",
+                        "display_label": classification.display_label or "Image",
+                        "filename": safe_name,
+                        "source": "image",
+                        "confidence": 0.0,
+                        "is_sensitive": False,
+                        "extracted_text": "",
+                        "suggested_actions": [],
+                    }
+                    _mem.set_context(resolved_user_id, "recent_context", _rctx)
+                except Exception:
+                    pass
             # Honest OCR-failure response: no readable text exists, so none of
             # the image actions (Describe / Extract text / Save as target job /
             # Score against my CV) can be honored — offer NONE of them, and say
