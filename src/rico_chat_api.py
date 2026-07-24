@@ -13622,18 +13622,21 @@ class RicoChatAPI:
         r"|من\s+سيرت|سيرتي\s*(?:الذاتية)?",
         re.IGNORECASE,
     )
-    # A DECLARATIVE clarification ("this is my ID", "that's my CV") is a
-    # different speech act from a source-named QUESTION ("what did you
-    # extract from my ID?", "from my CV") — the former corrects what the
-    # latest attachment IS (a separate concern, e.g. #1365's attachment-type
-    # clarification handler) and must never be answered here as if it asked
-    # to be told about that source. Without this exclusion, "this is my ID"
-    # with no attachment on record still matched _EXPLICIT_ID_SOURCE_RE and
-    # produced a "no ID on record" reply instead of standing down cleanly for
-    # whatever clarification-handling exists upstream.
+    # A DECLARATIVE statement ("this is my ID", "that's my CV", "my cv is
+    # Roben_Edwan_CV.pdf") is a different speech act from a source-named
+    # QUESTION ("what did you extract from my ID?", "from my CV") — the
+    # former either corrects what the latest attachment IS (a separate
+    # concern, e.g. #1365's attachment-type clarification handler) or, during
+    # onboarding, TELLS Rico a CV filename/identity ("my cv is <name>.pdf") —
+    # neither asks to be told about that source, and must never be answered
+    # here as if it did. Reproduced directly: "my cv is Roben_Edwan_CV.pdf"
+    # (the exact onboarding CV-declaration transcript) previously matched
+    # _EXPLICIT_CV_SOURCE_RE and pre-empted the onboarding flow's own
+    # cv_first_profile response with a "your CV is X" describe-reply instead.
     _ATTACHMENT_CLARIFICATION_SHAPE_RE = re.compile(
         r"^\s*(?:this|that|it)\s*(?:'s|is)\s+(?:my\s+)?"
         r"(?:id|identity|emirates\s*id|passport|cv|resume|r[eé]sum[eé])\b"
+        r"|^\s*my\s+(?:id|identity|emirates\s*id|passport|cv|resume|r[eé]sum[eé])\s+is\b"
         r"|^\s*هذ[ها]\s+(?:هويت|بطاقة|جواز|سيرت)",
         re.IGNORECASE,
     )
