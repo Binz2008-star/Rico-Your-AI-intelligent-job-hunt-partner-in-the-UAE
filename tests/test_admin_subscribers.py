@@ -219,21 +219,54 @@ def test_summary_counts_are_correct():
         _row(user_id=6, status="canceled", canceled_at=now - timedelta(days=1),
              sub_created_at=now - timedelta(days=40)),  # subscribed last month, canceled this month
         _row(user_id=7, status="inactive"),
+        _row(user_id=8, status="paused"),
     ]
     s = repo.summarize(rows, now)
-    assert s["total_users"] == 7
+    assert s["total_users"] == 8
     assert s["active_subscribers"] == 2          # rows 1, 2
     assert s["canceling_subscribers"] == 1       # row 2 (active + cancel_at)
     assert s["past_due_subscribers"] == 1        # row 3 (within grace)
     assert s["payment_failed_subscribers"] == 1  # row 4 (grace expired)
     assert s["canceled_subscribers"] == 1        # row 6
     assert s["expired_subscribers"] == 1         # row 7
-    # Free = not paying: rows 4 (grace expired), 5 (none), 6 (canceled), 7 (inactive)
-    assert s["free_users"] == 4
+    assert s["paused_subscribers"] == 1          # row 8
+    # Free = genuine free-plan accounts only (no subscription row): row 5 only.
+    # Lapsed subscribers (rows 4/6/7/8) are counted in their own buckets, NOT free.
+    assert s["free_users"] == 1
     assert s["new_subscriptions_this_month"] == 1  # only row 1 created this month
     assert s["cancellations_this_month"] == 1      # row 6 canceled this month
+    # MRR counts the 2 active subs (row 2 is canceling-but-still-active → still billed).
     assert s["approximate_mrr_usd"] == pytest.approx(2 * 21.50)
     assert s["mrr_is_approximate"] is True
+
+
+def test_lapsed_subscribers_are_not_counted_as_free():
+    """canceled / expired(inactive) / paused / payment_failed / needs_reconciliation
+    rows must be excluded from free_users — only a no-subscription account is free."""
+    now = _now()
+    rows = [
+        _row(user_id=1, status=None),  # the only genuine free account
+        _row(user_id=2, status="canceled"),
+        _row(user_id=3, status="inactive"),                         # expired
+        _row(user_id=4, status="paused"),
+        _row(user_id=5, status="past_due", past_due_since=now - timedelta(days=30)),  # payment_failed
+        _row(user_id=6, status="active", current_period_end=now - timedelta(days=1)),  # needs_reconciliation
+        _row(user_id=7, status="totally_unknown"),                  # needs_reconciliation
+    ]
+    s = repo.summarize(rows, now)
+    assert s["free_users"] == 1
+    assert s["canceled_subscribers"] == 1
+    assert s["expired_subscribers"] == 1
+    assert s["paused_subscribers"] == 1
+    assert s["payment_failed_subscribers"] == 1
+    assert s["needs_reconciliation"] == 2  # rows 6 and 7
+
+    # And the "free" filter surfaces only the no-row account.
+    free_rows = repo.filter_and_search(rows, "free", "", now)
+    assert [r["user_id"] for r in free_rows] == [1]
+    # The paused filter is a real, selectable bucket.
+    paused_rows = repo.filter_and_search(rows, "paused", "", now)
+    assert [r["user_id"] for r in paused_rows] == [4]
 
 
 @pytest.mark.parametrize(

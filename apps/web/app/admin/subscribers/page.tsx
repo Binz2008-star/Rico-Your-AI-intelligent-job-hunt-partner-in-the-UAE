@@ -25,6 +25,7 @@ const FILTERS: { key: string; labelKey: keyof SubStrings }[] = [
     { key: "canceling", labelKey: "statusCanceling" },
     { key: "canceled", labelKey: "statusCanceled" },
     { key: "expired", labelKey: "statusExpired" },
+    { key: "paused", labelKey: "statusPaused" },
     { key: "payment_failed", labelKey: "statusPaymentFailed" },
     { key: "needs_reconciliation", labelKey: "statusNeedsReconciliation" },
     { key: "inactive_7d", labelKey: "filterInactive7" },
@@ -298,6 +299,7 @@ export default function AdminSubscribersPage() {
                         <SummaryCard label={s.canceling} value={summary.summary.canceling_subscribers} />
                         <SummaryCard label={s.canceled} value={summary.summary.canceled_subscribers} />
                         <SummaryCard label={s.expired} value={summary.summary.expired_subscribers} />
+                        <SummaryCard label={s.statusPaused} value={summary.summary.paused_subscribers} />
                         <SummaryCard label={s.paymentFailed} value={summary.summary.payment_failed_subscribers} />
                         <SummaryCard label={s.needsReconciliation} value={summary.summary.needs_reconciliation} />
                         <SummaryCard label={s.newThisMonth} value={summary.summary.new_subscriptions_this_month} />

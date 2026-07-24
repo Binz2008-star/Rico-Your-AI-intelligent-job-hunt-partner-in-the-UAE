@@ -37,6 +37,7 @@ const summaryPayload = {
         canceling_subscribers: 0,
         canceled_subscribers: 0,
         expired_subscribers: 0,
+        paused_subscribers: 0,
         payment_failed_subscribers: 0,
         needs_reconciliation: 0,
         new_subscriptions_this_month: 1,

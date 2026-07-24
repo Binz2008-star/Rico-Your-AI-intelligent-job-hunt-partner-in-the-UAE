@@ -356,7 +356,16 @@ def _inactive_since(row: Dict[str, Any], now: datetime, days: int) -> bool:
 def _bucket_predicates(now: datetime):
     return {
         "all": lambda r: True,
-        "free": lambda r: not is_paying(r, now),
+        # Genuine free-plan accounts ONLY: no subscription row at all. Former
+        # subscribers (canceled / expired / paused / payment_failed /
+        # needs_reconciliation) are NOT free — each is counted in its own status
+        # bucket instead. There is no persisted "free" status in this schema: a
+        # paddle_subscriptions row always carries a real lifecycle status, so a
+        # free account is exactly one with no row → status is None (from the
+        # users ⟕ paddle_subscriptions LEFT JOIN). This is deliberately NOT
+        # `not is_paying(...)`, which would double-count lapsed subscribers as
+        # free. (is_paying still drives the per-row plan/allowance display.)
+        "free": lambda r: r.get("status") is None,
         "active": lambda r: r.get("status") == "active"
         and not (
             _as_aware(r.get("current_period_end")) is not None
@@ -369,6 +378,9 @@ def _bucket_predicates(now: datetime):
         and not _within_grace(r, now),
         "canceled": lambda r: r.get("status") == "canceled",
         "expired": lambda r: r.get("status") == "inactive",
+        # paused is a real persisted status (Paddle subscription.paused) — a
+        # distinct bucket, never folded into free.
+        "paused": lambda r: r.get("status") == "paused",
         "needs_reconciliation": lambda r: needs_reconciliation(r, now),
         "inactive_7d": lambda r: _inactive_since(r, now, 7),
         "inactive_30d": lambda r: _inactive_since(r, now, 30),
@@ -386,6 +398,7 @@ VALID_FILTERS = frozenset(
         "payment_failed",
         "canceled",
         "expired",
+        "paused",
         "needs_reconciliation",
         "inactive_7d",
         "inactive_30d",
@@ -431,6 +444,7 @@ def summarize(rows: List[Dict[str, Any]], now: Optional[datetime] = None) -> Dic
 
     return {
         "total_users": len(rows),
+        # Free = accounts with no subscription row only (see _bucket_predicates).
         "free_users": count("free"),
         "active_subscribers": active,
         "trialing_subscribers": count("trialing"),
@@ -438,10 +452,16 @@ def summarize(rows: List[Dict[str, Any]], now: Optional[datetime] = None) -> Dic
         "canceling_subscribers": count("canceling"),
         "canceled_subscribers": count("canceled"),
         "expired_subscribers": count("expired"),
+        "paused_subscribers": count("paused"),
         "payment_failed_subscribers": count("payment_failed"),
         "needs_reconciliation": count("needs_reconciliation"),
         "new_subscriptions_this_month": new_this_month,
         "cancellations_this_month": cancellations_this_month,
+        # Approximate MRR = currently-active subscribers × plan price. The
+        # `active` count includes canceling-but-still-active subscriptions
+        # (status='active' with a scheduled cancel_at): they keep their paid
+        # entitlement until the period ends, so they remain in MRR until then
+        # and only drop out once the status transitions to canceled/inactive.
         "approximate_mrr_usd": round(active * _monthly_price_usd(), 2),
         "currency": "USD",
         "mrr_is_approximate": True,

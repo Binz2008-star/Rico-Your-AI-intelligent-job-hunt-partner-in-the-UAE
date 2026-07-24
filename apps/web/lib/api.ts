@@ -2511,6 +2511,7 @@ export interface AdminSubscribersSummary {
     canceling_subscribers: number;
     canceled_subscribers: number;
     expired_subscribers: number;
+    paused_subscribers: number;
     payment_failed_subscribers: number;
     needs_reconciliation: number;
     new_subscriptions_this_month: number;
