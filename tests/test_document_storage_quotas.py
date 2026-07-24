@@ -339,7 +339,10 @@ class TestRicoChatContext:
         assert len(uploaded) == 1
         assert uploaded[0]["doc_type"] == "cv"
         assert uploaded[0]["is_primary"] is True
-        assert uploaded[0]["skills_count"] == 8
+        # #P0 identity guard: LLM copy exposes parse/content status, not
+        # skills_count; a parsed active CV reads content_available=True.
+        assert uploaded[0]["content_available"] is True
+        assert uploaded[0]["parse_status"] == "parsed"
 
     def test_multiple_cvs_all_injected(self):
         docs = [

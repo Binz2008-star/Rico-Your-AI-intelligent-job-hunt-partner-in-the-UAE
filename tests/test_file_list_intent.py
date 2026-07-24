@@ -187,4 +187,13 @@ class TestContextUsesSharedCollector:
              patch.object(api, "_get_recent_messages", return_value=[]), \
              patch.object(api, "_recent_jobs_summary", return_value=""):
             ctx = api._build_openai_context(None, user_id="alice@rico.ai")
-        assert ctx["uploaded_documents"] == docs
+        # #P0 identity guard: the LLM copy is the guarded projection — filename
+        # kept as an untrusted identifier beside safe structured fields.
+        assert ctx["uploaded_documents"] == [{
+            "document_id": None,
+            "doc_type": "cv",
+            "is_primary": True,
+            "parse_status": "metadata_only",
+            "content_available": False,
+            "filename_untrusted": "a.pdf",
+        }]

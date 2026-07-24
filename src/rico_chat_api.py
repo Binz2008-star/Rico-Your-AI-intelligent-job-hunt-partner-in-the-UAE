@@ -2465,6 +2465,8 @@ class RicoChatAPI:
         _docs = _docs_db.list_user_documents(user_id) if _docs_db.available else []
         entries = [
             {
+                "id": d.get("id"),
+                "file_size": d.get("file_size"),
                 "filename": d.get("filename", ""),
                 "doc_type": d.get("doc_type", ""),
                 "label": d.get("label") or d.get("filename", ""),
@@ -2483,6 +2485,8 @@ class RicoChatAPI:
                 entries.insert(
                     0,
                     {
+                        "id": "profile-cv",
+                        "file_size": None,  # parsed profile CV: content is available
                         "filename": cv_filename,
                         "doc_type": "cv",
                         "label": cv_filename,
@@ -2491,6 +2495,56 @@ class RicoChatAPI:
                     },
                 )
         return entries
+
+    @staticmethod
+    def _documents_for_llm(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Two-layer identity guard for the LLM-facing document list (#P0).
+
+        Layer 1 — exclude broken artifacts entirely: a zero-byte upload (the
+        stale ``..._Emirates_ID.pdf`` that triggered a false identity claim) has
+        no content and must never reach the model as if it were evidence.
+
+        Layer 2 — for valid documents keep the filename, but as an explicitly
+        *untrusted* identifier (``filename_untrusted``) sitting next to safe
+        structured fields (``document_id``, ``doc_type``, ``is_primary``,
+        ``parse_status``, ``content_available``). This preserves document
+        disambiguation ("compare X.pdf vs Y.pdf", active-CV references) without
+        presenting the filename as a person's name/employer/role. ``parse_status``
+        / ``content_available`` are derived — there is no such column — from
+        file size and parsed-CV signals (skills/years, or the parsed profile-CV).
+
+        The deterministic My Files handler keeps using the full
+        ``_collect_uploaded_documents`` projection; only this LLM copy is guarded.
+        """
+        safe: list[dict[str, Any]] = []
+        for e in entries or []:
+            size = e.get("file_size")
+            # Layer 1: drop zero-byte / empty / failed-content artifacts.
+            if isinstance(size, int) and size == 0:
+                continue
+            doc_type = e.get("doc_type", "")
+            is_primary = bool(e.get("is_primary"))
+            # Only the active/parsed CV's extracted text is actually available to
+            # the model; every other file is metadata-only.
+            content_available = bool(e.get("is_legacy")) or (
+                doc_type == "cv" and is_primary and (
+                    (e.get("skills_count") or 0) > 0 or e.get("years_experience") is not None
+                )
+            )
+            item: dict[str, Any] = {
+                "document_id": e.get("id"),
+                "doc_type": doc_type,
+                "is_primary": is_primary,
+                "parse_status": "parsed" if content_available else "metadata_only",
+                "content_available": content_available,
+                # Untrusted: identifies a file only — never a person, employer,
+                # role, or credential. Rico must not read identity from it.
+                "filename_untrusted": e.get("filename") or e.get("label") or "",
+            }
+            if e.get("is_legacy"):
+                item["is_legacy"] = True
+            safe.append(item)
+        return safe
 
     def _is_file_list_query(self, message: str) -> bool:
         text = (message or "").strip()
@@ -3087,7 +3141,13 @@ class RicoChatAPI:
             try:
                 _entries = self._collect_uploaded_documents(user_id, profile)
                 if _entries:
-                    ctx["uploaded_documents"] = _entries
+                    # Identity guard (#P0): the LLM copy excludes zero-byte/failed
+                    # artifacts and labels filenames as untrusted identifiers with
+                    # safe structured fields; the templated My Files answer keeps
+                    # the full projection.
+                    _llm_docs = self._documents_for_llm(_entries)
+                    if _llm_docs:
+                        ctx["uploaded_documents"] = _llm_docs
             except Exception:
                 pass
 

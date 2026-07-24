@@ -27,6 +27,8 @@ import pytest
 def _docs_fixture():
     return [
         {
+            "id": "doc-cv-1",
+            "file_size": 90000,
             "filename": "Roben_Finance_CV.pdf",
             "doc_type": "cv",
             "label": "Finance CV",
@@ -35,6 +37,8 @@ def _docs_fixture():
             "years_experience": 7.0,
         },
         {
+            "id": "doc-cl-1",
+            "file_size": 45000,
             "filename": "cover_letter_emaar.pdf",
             "doc_type": "cover_letter",
             "label": None,
@@ -84,17 +88,24 @@ class TestContextOrdering:
         assert keys.index("uploaded_documents") < keys.index("conversation_history")
 
     def test_documents_payload_fields(self):
+        # #P0 identity guard: filenames are kept as an UNTRUSTED identifier
+        # (filename_untrusted) beside safe structured fields; the bare
+        # 'filename'/'label' keys never reach the model.
         ctx = _build_ctx(_docs_fixture())
         docs = ctx["uploaded_documents"]
         assert len(docs) == 2
         primary = [d for d in docs if d["is_primary"]]
         assert len(primary) == 1
-        assert primary[0]["filename"] == "Roben_Finance_CV.pdf"
+        assert primary[0]["document_id"] == "doc-cv-1"
         assert primary[0]["doc_type"] == "cv"
-        assert primary[0]["label"] == "Finance CV"
-        # label falls back to filename when unset
+        assert primary[0]["content_available"] is True
+        assert primary[0]["parse_status"] == "parsed"
+        assert primary[0]["filename_untrusted"] == "Roben_Finance_CV.pdf"
+        # a metadata-only file (cover letter) is kept but flagged unavailable
         other = [d for d in docs if not d["is_primary"]][0]
-        assert other["label"] == "cover_letter_emaar.pdf"
+        assert other["content_available"] is False
+        assert other["parse_status"] == "metadata_only"
+        assert all("filename" not in d and "label" not in d for d in docs)
 
     def test_no_documents_and_no_profile_means_no_key(self):
         ctx = _build_ctx([])
@@ -113,16 +124,20 @@ class TestLegacyProfileCvFallback:
         ctx = _build_ctx([], profile=profile)
         docs = ctx["uploaded_documents"]
         assert len(docs) == 1
-        assert docs[0]["filename"] == "old_profile_cv.pdf"
         assert docs[0]["doc_type"] == "cv"
         assert docs[0]["is_primary"] is True
         assert docs[0]["is_legacy"] is True
+        assert docs[0]["content_available"] is True  # parsed profile CV
+        assert docs[0]["filename_untrusted"] == "old_profile_cv.pdf"
+        assert "filename" not in docs[0]
 
     def test_real_documents_take_precedence_over_fallback(self):
         profile = {"cv_filename": "old_profile_cv.pdf"}
         ctx = _build_ctx(_docs_fixture(), profile=profile)
-        filenames = [d["filename"] for d in ctx["uploaded_documents"]]
-        assert "old_profile_cv.pdf" not in filenames
+        docs = ctx["uploaded_documents"]
+        assert not any(d.get("is_legacy") for d in docs)
+        names = [d["filename_untrusted"] for d in docs]
+        assert "old_profile_cv.pdf" not in names
 
     def test_profile_without_cv_filename_adds_no_key(self):
         ctx = _build_ctx([], profile={"skills": ["excel"]})
