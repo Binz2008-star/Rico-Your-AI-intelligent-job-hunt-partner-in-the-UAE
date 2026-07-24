@@ -889,6 +889,12 @@ export const translations = {
     cmdJobAtCompany: "{title} at {company}",
     cmdAriaJobMatch: "Job match: {job}",
     cmdAriaJobAction: "{label}: {job}",
+    // Source provenance — where a posting was found. `cmdJobVia` is the single-
+    // source case; `cmdJobViaMulti` adds the count when the same posting was
+    // verified across more than one source (deduplicated by the backend).
+    cmdJobVia: "via {source}",
+    cmdJobViaMulti: "via {source} · on {count} sources",
+    cmdAriaJobSources: "Found via {source}",
     cmdWorkingSavingProfile: "Saving your profile…",
     cmdCvProfileError: "Could not confirm profile. Please try again.",
     cmdCvUploading: "Uploading CV",
@@ -2266,6 +2272,11 @@ export const translations = {
     cmdJobAtCompany: "{title} لدى {company}",
     cmdAriaJobMatch: "وظيفة مطابقة: {job}",
     cmdAriaJobAction: "{label}: {job}",
+    // مصدر الإعلان — أين وُجدت الوظيفة. cmdJobVia للمصدر الواحد، وcmdJobViaMulti
+    // يضيف العدد عندما تأكّدت الوظيفة نفسها عبر أكثر من مصدر (بعد إزالة التكرار).
+    cmdJobVia: "عبر {source}",
+    cmdJobViaMulti: "عبر {source} · في {count} مصادر",
+    cmdAriaJobSources: "وُجدت عبر {source}",
     cmdWorkingSavingProfile: "جارٍ حفظ ملفك الشخصي...",
     cmdCvProfileError: "تعذّر تأكيد الملف الشخصي. يرجى المحاولة مرة أخرى.",
     cmdCvUploading: "جارٍ رفع السيرة الذاتية",

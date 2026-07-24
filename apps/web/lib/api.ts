@@ -1181,6 +1181,13 @@ export interface JobMatch {
   | "aggregator_untrusted"
   | "google_intermediary"
   | "expired";
+  /** Source provenance — live providers the posting was verified on. Set by the
+   *  backend's search deduplication; a single-source posting has one entry, and
+   *  the field is absent when no source label was available (never fabricated). */
+  sources?: string[];
+  /** How many raw records collapsed into this posting during dedup. Only present
+   *  (and > 1) when the same job was returned by more than one query/provider. */
+  duplicate_count?: number;
 }
 
 export interface RicoOption {
