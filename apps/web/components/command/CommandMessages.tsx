@@ -203,6 +203,10 @@ export interface CommandQuickAction {
     label: string;
     icon: React.ReactNode;
     onClick: () => void;
+    /** Optional short category eyebrow shown above the label on the Atelier
+     *  surface only (e.g. "Search", "Documents"). Purely presentational —
+     *  omitting it renders the chip exactly as before. */
+    hint?: string;
 }
 
 export interface CommandEmptyStateProps {
@@ -293,7 +297,26 @@ export function CommandEmptyState({
             <span className="atl-chip-icon shrink-0 transition-colors" style={{ color: c.ink40 }} aria-hidden="true">
                 {qa.icon}
             </span>
-            <span>{qa.label}</span>
+            {qa.hint ? (
+                <span className="flex min-w-0 flex-col gap-0.5">
+                    <span
+                        className="atl-chip-hint truncate transition-colors"
+                        style={{
+                            fontFamily: ATELIER_FONT.mono,
+                            fontSize: 9,
+                            fontWeight: 600,
+                            letterSpacing: "0.12em",
+                            textTransform: "uppercase",
+                            color: c.ink40,
+                        }}
+                    >
+                        {qa.hint}
+                    </span>
+                    <span className="truncate">{qa.label}</span>
+                </span>
+            ) : (
+                <span>{qa.label}</span>
+            )}
         </button>
     );
 
@@ -303,6 +326,7 @@ export function CommandEmptyState({
             .atl-chip { transition: border-color .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease; }
             .atl-chip:hover:not(:disabled) { border-color: ${c.red} !important; color: ${c.ink} !important; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
             .atl-chip:hover:not(:disabled) .atl-chip-icon { color: ${c.red} !important; }
+            .atl-chip:hover:not(:disabled) .atl-chip-hint { color: ${c.red} !important; }
             @media (prefers-reduced-motion: reduce) { .atl-chip:hover:not(:disabled) { transform: none; } }
         ` }} />
     );

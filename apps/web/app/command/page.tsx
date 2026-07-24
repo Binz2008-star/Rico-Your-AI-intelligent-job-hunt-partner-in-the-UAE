@@ -148,12 +148,12 @@ function savePublicHistory(sessionIdRef: React.MutableRefObject<string | null>, 
 type ChatAudience = "checking" | "authenticated" | "public";
 
 const QUICK_ACTION_DEFS = [
-    { key: "cmdQaFindJobs", prompt: "Find UAE jobs that match my CV and experience." },
-    { key: "cmdQaUploadCv", prompt: "__cv_upload__" },
-    { key: "cmdQaWhatNext", prompt: "Based on my profile and experience, what's the best next step in my job search?" },
-    { key: "cmdQaCareerMove", prompt: "Analyze the best next career move based on my background." },
-    { key: "cmdQaApplications", prompt: "Show my job applications and their status." },
-    { key: "cmdQaInterview", prompt: "Help me prepare for an upcoming job interview." },
+    { key: "cmdQaFindJobs", hintKey: "cmdQaHintFindJobs", prompt: "Find UAE jobs that match my CV and experience." },
+    { key: "cmdQaUploadCv", hintKey: "cmdQaHintUploadCv", prompt: "__cv_upload__" },
+    { key: "cmdQaWhatNext", hintKey: "cmdQaHintWhatNext", prompt: "Based on my profile and experience, what's the best next step in my job search?" },
+    { key: "cmdQaCareerMove", hintKey: "cmdQaHintCareerMove", prompt: "Analyze the best next career move based on my background." },
+    { key: "cmdQaApplications", hintKey: "cmdQaHintApplications", prompt: "Show my job applications and their status." },
+    { key: "cmdQaInterview", hintKey: "cmdQaHintInterview", prompt: "Help me prepare for an upcoming job interview." },
 ];
 const CV_READY_CHIP_DEFS = [
     { key: "cmdCvReadyChipFindJobs", prompt: "Find UAE jobs that match my CV and experience." },
@@ -2369,6 +2369,7 @@ export default function CommandPage() {
                                     return {
                                         key: qa.key,
                                         label,
+                                        hint: t(qa.hintKey as TranslationKey),
                                         icon: QUICK_ACTION_ICONS[qa.key],
                                         onClick: () => sendMessage(qa.prompt, label),
                                     };
@@ -2388,6 +2389,7 @@ export default function CommandPage() {
                                     return {
                                         key: qa.key,
                                         label,
+                                        hint: t(qa.hintKey as TranslationKey),
                                         icon: QUICK_ACTION_ICONS[qa.key],
                                         onClick: () => sendMessage(qa.prompt, label),
                                     };
