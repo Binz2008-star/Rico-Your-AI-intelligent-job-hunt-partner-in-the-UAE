@@ -6871,6 +6871,13 @@ class RicoChatAPI:
         operation = self._begin_job_search_operation(user_id, search_role)
         operation_id = str(operation["operation_id"])
 
+        # Explicit per-attempt provenance for this ONE operation_id (PR4
+        # slice 1 — observability only, no control-flow change): every
+        # exit point below attaches this list under "search_attempts" so a
+        # caller/test can see exactly which mechanism(s) ran and what each
+        # returned, rather than inferring it from side effects.
+        _attempts: list[dict[str, Any]] = []
+
         # Primary path: provider-cascade query for the exact requested role.
         # Falls back to the legacy scraper pipeline only when providers are empty.
         rate_limited = False
@@ -6897,6 +6904,7 @@ class RicoChatAPI:
                     "job_search_cancelled_ownership_lost role=%r op=%s attempt=%s",
                     search_role, operation_ref(operation_id), self._operation_attempt(),
                 )
+                _attempts.append({"mechanism": "provider_cascade", "outcome": "cancelled"})
                 return {
                     "type": "search_superseded",
                     "intent": "search_jobs",
@@ -6905,6 +6913,7 @@ class RicoChatAPI:
                     "operation_type": "job_search",
                     "operation_status": "superseded",
                     "response_source": "operation_ownership_lost",
+                    "search_attempts": _attempts,
                     "message": (
                         "تم استئناف هذا البحث في جلسة أحدث — لم أكمل النتيجة القديمة."
                         if arabic else
@@ -6923,6 +6932,14 @@ class RicoChatAPI:
                 search_role, len(all_matches), fetch_provider, rate_limited,
                 quota_exhausted, _search_elapsed, operation_id,
             )
+            _attempts.append({
+                "mechanism": "provider_cascade",
+                "provider": fetch_provider,
+                "result_count": len(all_matches),
+                "rate_limited": rate_limited,
+                "quota_exhausted": quota_exhausted,
+                "outcome": "results" if all_matches else "empty",
+            })
             if not all_matches:
                 search_profile = (
                     _dc_replace(profile, target_roles=[search_role])
@@ -6931,6 +6948,11 @@ class RicoChatAPI:
                 )
                 workflow_result = self.system.run_for_profile(search_profile)
                 all_matches = workflow_result.get("matches", [])
+                _attempts.append({
+                    "mechanism": "legacy_fallback",
+                    "result_count": len(all_matches),
+                    "outcome": "results" if all_matches else "empty",
+                })
         except Exception as exc:
             _search_elapsed = _time.monotonic() - _search_start
             logger.warning(
@@ -6938,6 +6960,7 @@ class RicoChatAPI:
                 search_role, _search_elapsed, operation_id, type(exc).__name__,
             )
             mark_failed(user_id, operation_id, str(exc), attempt=self._operation_attempt())
+            _attempts.append({"mechanism": "unknown", "outcome": "exception", "error": type(exc).__name__})
             _graceful_msg = (
                 "عذراً، لم أتمكن من إتمام البحث الآن. "
                 "حاول تحديد اسم الوظيفة — مثلاً: 'وظائف مدير الامتثال في دبي'."
@@ -6946,7 +6969,12 @@ class RicoChatAPI:
                 "Try specifying a role name — for example: 'Compliance Manager jobs in Dubai'."
             )
             self._append_chat(user_id, "assistant", _graceful_msg)
-            return {"type": "search_error", "message": _graceful_msg, "intent": "job_search_explicit"}
+            return {
+                "type": "search_error",
+                "message": _graceful_msg,
+                "intent": "job_search_explicit",
+                "search_attempts": _attempts,
+            }
 
         # Degraded-provider guard: when no live results AND a *configured* provider
         # is quota-exhausted / rate-limited / failing, show a safe fallback CTA
@@ -6964,13 +6992,15 @@ class RicoChatAPI:
                 mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
             except Exception:
                 pass
-            return self._provider_degraded_response(
+            _degraded_resp = self._provider_degraded_response(
                 user_id, normalized_role or search_role,
                 location=location,
                 quota_exhausted=quota_exhausted,
                 rate_limited=rate_limited,
                 arabic=arabic,
             )
+            _degraded_resp["search_attempts"] = _attempts
+            return _degraded_resp
 
         # ── Job Result Integrity Gate (Rico owns the final trust decision) ──────
         # Reject non-UAE / role-mismatched / title-vs-body-conflicting / unavailable
@@ -7419,6 +7449,7 @@ class RicoChatAPI:
             matches=formatted,
         )
         response["search_outcome"] = _outcome
+        response["search_attempts"] = _attempts
         if self._search_outcome_is_completed(_outcome):
             self._store_search_matches_context(
                 user_id, formatted,
