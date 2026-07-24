@@ -5968,16 +5968,23 @@ class RicoChatAPI:
 
     # `_pending_field` values that genuinely OWN a yes/no confirmation turn — a
     # bare affirmative ("yes" / "نعم") belongs to these, so they outrank a
-    # stale/armed pending job search (priority 1 > priority 4). Only
-    # ``confirm_profile_update`` (the #1361 persisted-state mutation gate) is a
-    # true yes/no confirmation; the value-prompt fields
-    # (``preferred_cities`` / ``telegram_username`` / ``phone`` / ``email``)
-    # expect a VALUE, not a bare "yes", so an unrelated/stale one of those — or
-    # any unknown field — must NOT silently suppress a valid "yes, run the
-    # search" and drop the turn to a dead-end fallback. This is an explicit
-    # allowlist, not a generic truthiness check, precisely so a leftover
-    # non-confirmation pending field cannot block search redemption indefinitely.
-    _SEARCH_OUTRANKING_PENDING_FIELDS: frozenset[str] = frozenset({"confirm_profile_update"})
+    # stale/armed pending job search (priority 1 > priority 4). These are exactly
+    # the structured confirmations `_resolve_pending_field` resolves via
+    # `_is_affirmative`:
+    #   * ``confirm_profile_update``  — the #1361 persisted-state mutation gate
+    #   * ``confirm_set_active_cv``   — the #1363 active-CV switch confirmation
+    # The value-prompt fields (``preferred_cities`` / ``telegram_username`` /
+    # ``phone`` / ``email``) expect a VALUE, not a bare "yes", so an unrelated or
+    # stale one of those — or any unknown field — must NOT silently suppress a
+    # valid "yes, run the search" and drop the turn to a dead-end fallback. This
+    # is an explicit allowlist, not a generic truthiness check, precisely so a
+    # leftover non-confirmation pending field cannot block search redemption
+    # indefinitely. Keep it in sync with the affirmative-consuming branches of
+    # `_resolve_pending_field`.
+    _SEARCH_OUTRANKING_PENDING_FIELDS: frozenset[str] = frozenset({
+        "confirm_profile_update",
+        "confirm_set_active_cv",
+    })
 
     def _pending_search_redemption_blocked(self, user_id: str, message: str) -> bool:
         """True when an armed pending job search must NOT be redeemed by the

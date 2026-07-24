@@ -211,6 +211,15 @@ def test_guard_blocks_on_confirm_profile_update():
     assert blocked("u@test.com", "yes") is True
 
 
+# (2b) the #1363 active-CV switch confirmation is also a structured yes/no that
+# a bare affirmative belongs to — it must likewise outrank a stale pending
+# search (kept in sync with _resolve_pending_field's affirmative branches).
+def test_guard_blocks_on_confirm_set_active_cv():
+    blocked = _guard_with_ctx({"_pending_field": "confirm_set_active_cv"})
+    assert blocked("u@test.com", "نعم") is True
+    assert blocked("u@test.com", "yes") is True
+
+
 # (4) explicit CV-analysis intent + pending search → CV analysis outranks.
 def test_guard_blocks_on_cv_analysis_intent():
     blocked = _guard_with_ctx({})
