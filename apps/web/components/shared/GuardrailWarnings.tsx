@@ -60,6 +60,17 @@ export function GuardrailWarnings({
   if (normalized.length === 0) return null;
 
   const usesPalette = palette != null;
+  // Review correction: pure `palette.red` message text only reaches 3.73:1
+  // against this alert's tinted light-mode background — below WCAG AA's
+  // 4.5:1 minimum for 12px bold text (too small to qualify for the 3:1
+  // "large text" relaxation). Blending in a touch of `palette.ink` darkens
+  // it to ~4.7-5:1 while it still reads as red. Dark mode's `palette.red`
+  // already clears 4.5:1 as-is (~5.08:1), so this only applies in light mode.
+  const messageColor = usesPalette
+    ? palette.dark
+      ? palette.red
+      : `color-mix(in srgb, ${palette.ink} 18%, ${palette.red})`
+    : undefined;
 
   return (
     <div
@@ -88,7 +99,7 @@ export function GuardrailWarnings({
             <li key={`${warning.code}-${warning.field}-${index}`} className="text-xs leading-5">
               <p
                 className={cn("font-semibold", !usesPalette && "text-amber-100")}
-                style={usesPalette ? { color: palette.red } : undefined}
+                style={usesPalette ? { color: messageColor } : undefined}
               >
                 {message}
               </p>
