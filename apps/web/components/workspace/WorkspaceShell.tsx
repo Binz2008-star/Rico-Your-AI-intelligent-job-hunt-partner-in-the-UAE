@@ -27,7 +27,7 @@ import { atelierFraunces, atelierNaskhArabic, atelierSansArabic } from "@/compon
 import { Mono } from "@/components/atelier-kit/primitives";
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { RailGoalMini } from "@/components/workspace/RailGoalMini";
-import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
+import { WORKSPACE_THEME, WorkspaceThemeContext, readStoredWorkspaceDark, writeStoredWorkspaceDark } from "@/components/workspace/theme";
 import { v5Amiri, v5Inter, v5PlexArabic, v5PlexMono } from "@/components/workspace/v5/fonts";
 import "@/components/workspace/v5/motion.css";
 import { RicoPresence } from "@/components/workspace/v5/RicoPresence";
@@ -36,7 +36,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useMissionSummary } from "@/hooks/useMissionSummary";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type NavItem = { key: string; href: string; label: { en: string; ar: string }; icon: React.ReactNode };
 
@@ -108,7 +108,16 @@ export function WorkspaceShell({
     const isAr = language === "ar";
     const isApp = variant === "app";
     const showMobileChrome = !isApp || mobileChrome;
+    // `defaultDark` (SSR-safe, per-route) is only the FIRST-EVER value.
+    // The effect below applies the user's own stored choice, if any, right
+    // after mount — so an explicit toggle survives switching tabs/pages or a
+    // full reload instead of reverting to this route's default every time.
     const [dark, setDark] = useState(defaultDark);
+    useEffect(() => {
+        const stored = readStoredWorkspaceDark();
+        if (stored !== null && stored !== dark) setDark(stored);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const [open, setOpen] = useState(false);
     const c = dark ? WORKSPACE_THEME.dark : WORKSPACE_THEME.light;
     const SERIF = ATELIER_FONT.serif;
@@ -248,7 +257,11 @@ export function WorkspaceShell({
             </span>
             <button
                 type="button"
-                onClick={() => setDark((v) => !v)}
+                onClick={() => setDark((v) => {
+                    const next = !v;
+                    writeStoredWorkspaceDark(next);
+                    return next;
+                })}
                 aria-pressed={dark}
                 aria-label={dark ? (isAr ? "الوضع الفاتح" : "Light mode") : (isAr ? "الوضع الداكن" : "Dark mode")}
                 className="inline-flex items-center justify-center rounded-[6px]"

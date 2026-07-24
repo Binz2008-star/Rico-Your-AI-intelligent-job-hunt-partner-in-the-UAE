@@ -70,3 +70,32 @@ export const WorkspaceThemeContext = createContext<WorkspacePalette>(WORKSPACE_T
 export function useWorkspaceTheme(): WorkspacePalette {
     return useContext(WorkspaceThemeContext);
 }
+
+// The dark/light toggle previously lived in plain useState(defaultDark) with
+// no persistence at all, so it reset to each route's hardcoded default on
+// every remount (switching tabs/pages, a full reload) even right after the
+// user explicitly chose the other theme — a real reported bug. Persisted here
+// as one shared, explicit user preference (mirrors LanguageContext's
+// single-key pattern) so an explicit choice sticks across the whole app.
+// `defaultDark` (per-route) still governs the FIRST-EVER visit, before the
+// user has ever toggled anything.
+const WORKSPACE_DARK_STORAGE_KEY = "rico-workspace-dark";
+
+export function readStoredWorkspaceDark(): boolean | null {
+    try {
+        const stored = localStorage.getItem(WORKSPACE_DARK_STORAGE_KEY);
+        if (stored === "1") return true;
+        if (stored === "0") return false;
+    } catch {
+        // Ignore localStorage errors (private browsing, disabled storage, SSR).
+    }
+    return null;
+}
+
+export function writeStoredWorkspaceDark(dark: boolean): void {
+    try {
+        localStorage.setItem(WORKSPACE_DARK_STORAGE_KEY, dark ? "1" : "0");
+    } catch {
+        // Ignore localStorage errors.
+    }
+}
