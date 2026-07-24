@@ -13564,16 +13564,21 @@ class RicoChatAPI:
     # the confirmed type of the LATEST attachment in session context only — never
     # the profile or the active CV. Kept narrow: it must name identity/CV/job as
     # the corrected type, so ordinary chat is never misread as a clarification.
+    # Review correction: the contraction alternative only covered "that's",
+    # so "it's my ID" / "it's my CV" (an equally natural contraction of "it
+    # is") silently fell through to normal routing instead of being
+    # recognized as a clarification. Both "this/it/that" now take the
+    # contracted form too, mirroring the full form's coverage above.
     _ID_CLARIFICATION_RE = re.compile(
         r"\b(?:this|it|that)\s+is\s+(?:my\s+)?(?:an?\s+)?(?:id|identity|emirates\s*id|passport)\b"
-        r"|\bthat'?s\s+(?:my\s+)?(?:id|identity|passport)\b"
+        r"|\b(?:this|it|that)'?s\s+(?:my\s+)?(?:id|identity|passport)\b"
         r"|هذ[ها]\s+(?:هويت|بطاقة\s*(?:ال)?هوية|جواز)"
         r"|ه[اأ]?د\s+(?:هويت|الهوية)",
         re.IGNORECASE,
     )
     _CV_CLARIFICATION_RE = re.compile(
         r"\b(?:this|it|that)\s+is\s+(?:my\s+)?(?:cv|resume|r[eé]sum[eé])\b"
-        r"|\bthat'?s\s+(?:my\s+)?(?:cv|resume)\b"
+        r"|\b(?:this|it|that)'?s\s+(?:my\s+)?(?:cv|resume|r[eé]sum[eé])\b"
         r"|هذ[ها]\s+(?:سيرت|السيرة\s*الذاتية|ال?سي\s*في)",
         re.IGNORECASE,
     )

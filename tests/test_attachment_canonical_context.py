@@ -136,6 +136,30 @@ def test_arabic_this_is_my_id_updates_attachment_only():
     assert h._rctx[u]["last_uploaded_document"]["confirmed_by_user"] is True
 
 
+def test_its_contraction_recognized_same_as_full_form():
+    """Review correction: "it's my ID" (an equally natural contraction of
+    "it is") previously fell through unmatched — only "that's" was covered,
+    not "it's" or "this's". Both contractions must clarify the attachment
+    exactly like the full "it is my ID" form does."""
+    h = ChatHarness()
+    u = USER + ".itscontraction"
+    _seed_with_attachment(h, u)
+    r = h.say(u, "it's my ID")
+    assert r.get("type") == "document_context", f"'it's my ID' must be recognized: {r!r}"
+    assert h._rctx[u]["last_uploaded_document"]["detected_type"] == "identity_document"
+    assert h._rctx[u]["last_uploaded_document"]["confirmed_by_user"] is True
+
+
+def test_its_contraction_recognized_for_cv():
+    h = ChatHarness()
+    u = USER + ".itscontraction.cv"
+    _seed_with_attachment(h, u)
+    r = h.say(u, "it's my CV")
+    assert r.get("type") == "document_context", f"'it's my CV' must be recognized: {r!r}"
+    assert h._rctx[u]["last_uploaded_document"]["detected_type"] == "cv"
+    assert h._rctx[u]["last_uploaded_document"]["confirmed_by_user"] is True
+
+
 def test_clarification_without_attachment_is_ignored():
     h = ChatHarness()
     u = USER + ".noattach"
