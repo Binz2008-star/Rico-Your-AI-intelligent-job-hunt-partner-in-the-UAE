@@ -39,7 +39,7 @@ import { APPLICATION_STATUSES, STAGE_DEFS, type StageKey } from "@/lib/applicati
 import { useTranslation, type TranslationKey } from "@/lib/translations";
 import type { Application, ApplicationStatus } from "@/types";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ViewMode = "list" | "board";
 
@@ -185,7 +185,7 @@ function StatusSelect({
                 value={app.status}
                 onChange={(e) => onChange(e.target.value as ApplicationStatus)}
                 disabled={disabled}
-                className="rounded-[4px] px-2 py-1.5 text-[12px] outline-none disabled:opacity-40"
+                className="rounded-[4px] px-2 py-1.5 text-[12px] disabled:opacity-40"
                 style={{ background: c.panel, border: `1px solid ${c.hair}`, color: c.ink, fontFamily: ATELIER_FONT.body }}
             >
                 {STATUS_OPTIONS.map((s) => (
@@ -211,6 +211,11 @@ export function ApplicationsAtelier() {
     const [formError, setFormError] = useState<string | null>(null);
     const [updating, setUpdating] = useState<string | null>(null);
     const [formData, setFormData] = useState<ManualApplicationForm>(() => createEmptyFormData());
+    // Modal focus management: focus moves into the dialog on open and returns to
+    // the trigger on close (standard dialog a11y). dialogRef also scopes the
+    // focus trap so keyboard focus can't escape the modal while it's open.
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
 
     const closeTrackModal = useCallback(() => {
         setShowModal(false);
@@ -218,14 +223,48 @@ export function ApplicationsAtelier() {
         setFormData(createEmptyFormData());
     }, []);
 
-    // Escape closes the Track Application modal, matching standard dialog behavior.
+    // Dialog behavior: Escape closes; focus moves to the first field on open,
+    // is trapped inside the dialog while open, and returns to the trigger on
+    // close. Standard modal a11y — no structural/testid/aria change.
     useEffect(() => {
         if (!showModal) return;
+        const dialog = dialogRef.current;
+        // capture the trigger now; it is stable while the modal is open, and
+        // reading it here (not in cleanup) satisfies react-hooks/exhaustive-deps.
+        const trigger = triggerRef.current;
+        const focusables = () =>
+            Array.from(
+                dialog?.querySelectorAll<HTMLElement>(
+                    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+                ) ?? [],
+            );
+        // move focus into the dialog (first field)
+        focusables()[0]?.focus();
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") closeTrackModal();
+            if (e.key === "Escape") {
+                closeTrackModal();
+                return;
+            }
+            if (e.key !== "Tab" || !dialog) return;
+            const list = focusables();
+            if (list.length === 0) return;
+            const first = list[0];
+            const last = list[list.length - 1];
+            const active = document.activeElement;
+            if (e.shiftKey && (active === first || !dialog.contains(active))) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && active === last) {
+                e.preventDefault();
+                first.focus();
+            }
         };
         document.addEventListener("keydown", onKeyDown);
-        return () => document.removeEventListener("keydown", onKeyDown);
+        // on close (cleanup), return focus to the trigger that opened the dialog
+        return () => {
+            document.removeEventListener("keydown", onKeyDown);
+            trigger?.focus();
+        };
     }, [showModal, closeTrackModal]);
 
     const loadApplications = useCallback(async () => {
@@ -398,6 +437,7 @@ export function ApplicationsAtelier() {
                                 </button>
                             </span>
                             <button
+                                ref={triggerRef}
                                 type="button"
                                 onClick={() => setShowModal(true)}
                                 className="rounded-[6px] px-4 py-2 text-[13px] font-semibold"
@@ -416,7 +456,7 @@ export function ApplicationsAtelier() {
                     {applications.length > 0 && (
                         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8" data-wsx5-anim="rise" style={{ "--i": 2 } as React.CSSProperties}>
                             {STATUS_COUNT_ORDER.map((s) => (
-                                <div key={s} className={`${v5 ? "wsx5-card" : "rounded-[4px]"} p-3 text-center`} style={{ background: c.panel, border: `1px solid ${c.hair}` }}>
+                                <div key={s} className={`${v5 ? "wsx5-card" : "rounded-[4px]"} p-3 text-center`} style={{ background: c.panel, border: `1px solid ${v5 && grouped[s] > 0 ? `${acc.modeA}40` : c.hair}` }}>
                                     <p style={{ fontFamily: SERIF, fontSize: "1.5rem", lineHeight: 1.1, color: v5 && grouped[s] > 0 ? acc.modeAText : c.ink }}>{grouped[s]}</p>
                                     <Mono className="mt-1 block [overflow-wrap:anywhere]" style={{ color: c.ink55, fontSize: 9.5 }}>
                                         {t(STATUS_LABEL_KEYS[s])}
@@ -452,7 +492,7 @@ export function ApplicationsAtelier() {
                                                 <h3 className="font-normal">
                                                     <Mono style={{ color: c.ink55 }}>{t(col.labelKey)}</Mono>
                                                 </h3>
-                                                <span style={{ fontFamily: ATELIER_FONT.mono, fontSize: 11, color: v5 && colApps.length > 0 ? acc.modeAText : c.ink40 }}>{colApps.length}</span>
+                                                <span style={{ fontFamily: ATELIER_FONT.mono, fontSize: 11, color: v5 && colApps.length > 0 ? acc.modeAText : c.ink40, ...(v5 && colApps.length > 0 ? { background: `${acc.modeA}14`, borderRadius: 999, padding: "2px 8px" } : {}) }}>{colApps.length}</span>
                                             </div>
                                             <div className="flex flex-col gap-2">
                                                 {colApps.length === 0 && (
@@ -586,6 +626,7 @@ export function ApplicationsAtelier() {
                     onClick={closeTrackModal}
                 >
                     <div
+                        ref={dialogRef}
                         className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden"
                         style={{ background: c.panel, border: `1px solid ${c.hair}`, borderRadius: v5 ? 18 : 4 }}
                         onClick={(e) => e.stopPropagation()}
@@ -601,7 +642,7 @@ export function ApplicationsAtelier() {
                                     type="text"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                    className="w-full rounded-[4px] px-3 py-2 text-sm outline-none"
+                                    className="w-full rounded-[4px] px-3 py-2 text-sm"
                                     style={fieldStyle}
                                     placeholder={t("flowPhTitle")}
                                     disabled={saving}
@@ -614,7 +655,7 @@ export function ApplicationsAtelier() {
                                     type="text"
                                     value={formData.company}
                                     onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                                    className="w-full rounded-[4px] px-3 py-2 text-sm outline-none"
+                                    className="w-full rounded-[4px] px-3 py-2 text-sm"
                                     style={fieldStyle}
                                     placeholder={t("flowPhCompany")}
                                     disabled={saving}
@@ -627,7 +668,7 @@ export function ApplicationsAtelier() {
                                     type="text"
                                     value={formData.location}
                                     onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                                    className="w-full rounded-[4px] px-3 py-2 text-sm outline-none"
+                                    className="w-full rounded-[4px] px-3 py-2 text-sm"
                                     style={fieldStyle}
                                     placeholder={t("flowPhLocation")}
                                     disabled={saving}
@@ -640,7 +681,7 @@ export function ApplicationsAtelier() {
                                     type="url"
                                     value={formData.url}
                                     onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                                    className="w-full rounded-[4px] px-3 py-2 text-sm outline-none"
+                                    className="w-full rounded-[4px] px-3 py-2 text-sm"
                                     style={fieldStyle}
                                     placeholder={t("flowPhUrl")}
                                     disabled={saving}
@@ -652,7 +693,7 @@ export function ApplicationsAtelier() {
                                     id="status"
                                     value={formData.status}
                                     onChange={(e) => setFormData({ ...formData, status: e.target.value as ApplicationStatus })}
-                                    className="w-full rounded-[4px] px-3 py-2 text-sm outline-none"
+                                    className="w-full rounded-[4px] px-3 py-2 text-sm"
                                     style={fieldStyle}
                                     disabled={saving}
                                 >
