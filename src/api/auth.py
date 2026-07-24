@@ -387,7 +387,17 @@ def me(request: Request) -> Dict[str, Any]:
 
     try:
         user = get_current_user(request)
-        return {"email": user["email"], "role": user.get("role", "user"), "authenticated": True}
+        # is_owner is computed server-side from the immutable canonical users.id
+        # vs RICO_OWNER_USER_ID; the owner id itself is never returned. Lets the
+        # frontend reveal the owner-only nav entry without exposing the secret.
+        # Short-circuits without a DB hit when RICO_OWNER_USER_ID is unset.
+        from src.api.deps import is_owner as _is_owner
+        return {
+            "email": user["email"],
+            "role": user.get("role", "user"),
+            "authenticated": True,
+            "is_owner": _is_owner(user),
+        }
     except HTTPException as e:
         # Return guest-friendly response for unauthenticated requests
         # This allows public/guest users to use the app without being forced to login
