@@ -331,6 +331,22 @@ export function JobMatchCardAtelier({
 
     const vStatus = match.verification_status;
 
+    // SOURCE PROVENANCE — where this posting was found. Real provider labels only
+    // (backend never fabricates them); the block is omitted when absent. When the
+    // same posting was deduplicated across more than one source, the count is
+    // surfaced as a light trust signal ("verified across N sources").
+    const provenanceSources = (match.sources ?? []).filter((s) => typeof s === "string" && s.trim() !== "");
+    const primarySource = provenanceSources[0] ?? "";
+    const sourceCount = match.duplicate_count && match.duplicate_count > 1 ? match.duplicate_count : provenanceSources.length;
+    const provenanceLabel = primarySource
+        ? (sourceCount > 1
+            ? fmt(t("cmdJobViaMulti"), { source: primarySource, count: String(sourceCount) })
+            : fmt(t("cmdJobVia"), { source: primarySource }))
+        : "";
+    const provenanceAria = primarySource
+        ? fmt(t("cmdAriaJobSources"), { source: provenanceSources.join(", ") })
+        : "";
+
     // ── Link resolution — SHARED with the public JobMatchCard via resolveJobLink
     // so the apply/source/alt/unavailable decision (BUG-03 trust gating) can
     // never drift between the two cards. Labels come back as translation keys.
@@ -395,6 +411,19 @@ export function JobMatchCardAtelier({
                         <span className="break-words">{match.company}</span>
                         {match.location && (<><span aria-hidden="true">·</span><span className="break-words">{match.location}</span></>)}
                         {match.salary && (<><span aria-hidden="true">·</span><span className="break-words">{match.salary}</span></>)}
+                        {provenanceLabel && (
+                            <>
+                                <span aria-hidden="true">·</span>
+                                <span
+                                    data-testid="job-provenance"
+                                    className="break-words"
+                                    aria-label={provenanceAria}
+                                    style={{ color: c.ink55 }}
+                                >
+                                    {provenanceLabel}
+                                </span>
+                            </>
+                        )}
                     </div>
                 </div>
                 {scorePct && (

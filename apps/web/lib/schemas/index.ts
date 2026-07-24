@@ -466,6 +466,10 @@ export const JobMatchSchema = z.object({
     apply_url: StringFromUnknownSchema,
     source_url: StringFromUnknownSchema,
     verification_status: VerificationStatusSchema,
+    // Source provenance from backend dedup — optional so responses without them
+    // still parse. Tolerant: a malformed value is dropped, never a parse error.
+    sources: StringArrayFromUnknownSchema.optional(),
+    duplicate_count: z.coerce.number().int().positive().optional().catch(undefined),
 }).passthrough();
 
 export const RicoOptionSchema = z.object({

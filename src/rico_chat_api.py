@@ -3981,8 +3981,12 @@ class RicoChatAPI:
             except Exception as exc:
                 logger.debug("career_execution_search_failed query_len=%d err=%s", len(query or ""), safe_exc(exc))
 
+        # Collapse duplicate postings before ranking: overlapping role queries
+        # against the same UAE market return the same job more than once, and the
+        # 5-match window must not be spent on repeats. Provenance is preserved.
+        from src.services.search_dedup import dedupe_job_matches
         top_matches = self._sort_by_company_quality(
-            self._rerank_by_learned_preferences(all_matches, user_id)
+            self._rerank_by_learned_preferences(dedupe_job_matches(all_matches), user_id)
         )[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
         execution_state = "MATCHES_SCORED" if formatted else "SEARCH_RUNNING"
@@ -4435,6 +4439,21 @@ class RicoChatAPI:
                 "confidence": _me_conf,
             },
         }
+
+        # Source provenance — which live providers surfaced this posting. Set by
+        # search_dedup.dedupe_job_matches when duplicates were collapsed; falls
+        # back to the single source label on the record. Never fabricated: an
+        # unknown-source record simply carries no provenance. duplicate_count is
+        # only surfaced when the posting genuinely appeared more than once.
+        _sources = m.get("sources")
+        if not isinstance(_sources, list) or not _sources:
+            _single = str(m.get("source") or m.get("provider") or "").strip()
+            _sources = [_single] if _single else []
+        if _sources:
+            result["sources"] = _sources
+        _dup = m.get("duplicate_count")
+        if isinstance(_dup, int) and _dup > 1:
+            result["duplicate_count"] = _dup
 
         location = m.get("location")
         if location:
@@ -7289,7 +7308,11 @@ class RicoChatAPI:
                 sorted(_canon_cities), len(_relevant), operation_id,
             )
 
-        top_matches = _relevant[:5]
+        # Collapse duplicate postings (same job returned by the provider cascade
+        # or repeated across the widened query) before taking the top window, so
+        # result_count and the shown cards are an honest, non-repeating set.
+        from src.services.search_dedup import dedupe_job_matches
+        top_matches = dedupe_job_matches(_relevant)[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]
@@ -11072,8 +11095,9 @@ class RicoChatAPI:
                     all_explicit = [m for m in all_explicit if not app_map.get(get_job_id(m), False)]
             except Exception:
                 pass
+            from src.services.search_dedup import dedupe_job_matches
             top_matches = self._sort_by_company_quality(
-                self._rerank_by_learned_preferences(all_explicit, user_id)
+                self._rerank_by_learned_preferences(dedupe_job_matches(all_explicit), user_id)
             )[:5]
             formatted = [self._format_match(m, profile) for m in top_matches]
             if top_matches:
