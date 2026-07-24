@@ -140,7 +140,9 @@ class RicoOpenAIAgent:
         # Callers that augment user_message with untrusted document content
         # (OCR text, attachment excerpts) pass the ORIGINAL user request here
         # so safety evaluates genuine user intent, never embedded document text.
-        safety = self.safety.check_message(safety_check_message or user_message)
+        safety = self.safety.check_message(
+            safety_check_message if safety_check_message is not None else user_message
+        )
         if not safety.allowed:
             return {
                 "type": "safety_refusal",

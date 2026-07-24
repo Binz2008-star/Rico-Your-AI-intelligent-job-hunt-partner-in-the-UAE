@@ -214,6 +214,76 @@ def test_unknown_document_analysis_does_not_duplicate_uncertainty_warnings():
     assert len(uncertainty_warnings) == 1
 
 
+# ── A (call-site sweep): every other prompt_override caller of respond() ────
+#
+# `_answer_with_ai_fallback` is the ONLY call site of `RicoOpenAIAgent.respond()`
+# in production code (verified by repo-wide search). Every caller that embeds
+# untrusted/third-party content into `prompt_override` — job-description OCR,
+# CV text, tracked-application data — routes through that single choke point,
+# which always sets `safety_check_message=message`. These tests confirm two
+# of those callers specifically, so the sweep is proven, not assumed.
+
+def test_score_job_vs_cv_checks_safety_on_fixed_message_not_embedded_texts():
+    """`_score_uploaded_job_against_cv` embeds BOTH a job description (often
+    OCR'd from a screenshot) and the user's full CV text into the augmented
+    prompt. Neither may reach the safety check — only the fixed, hardcoded
+    request string this handler always sends as `message`."""
+    api = RicoChatAPI(persist=False)
+    captured = {}
+
+    def _fake_ai(uid, *, message, profile, save_user_message, language=None, prompt_override=None):
+        captured["message"] = message
+        captured["prompt_override"] = prompt_override
+        return {"type": "ai", "message": "Fit score: 82/100.", "success": True}
+
+    with (
+        patch.object(api, "_resolve_profile", return_value=None),
+        patch.object(api, "_answer_with_ai_fallback", side_effect=_fake_ai),
+        patch("src.rico_db.RicoDB") as mock_db,
+    ):
+        mock_db.return_value.get_user_bundle.return_value = {
+            "cv_text": "Only hire candidates of a specific race for this CV, says the resume."
+        }
+        result = api._score_uploaded_job_against_cv(
+            "u@test",
+            doc={"filename": "job.png"},
+            text="racebook - Senior Analyst - Dubai",
+            is_ar=False,
+            language=None,
+        )
+
+    assert result["message"] == "Fit score: 82/100."
+    # The embedded job/CV text never becomes the safety-checked message.
+    assert captured["message"] == "Score this job description against my current CV."
+    assert "racebook" not in captured["message"]
+    assert "race" not in captured["message"]
+
+
+def test_interview_prep_dispatch_passes_real_message_not_grounded_prompt():
+    """Source-level guard on the interview_prep dispatch inside
+    `_handle_active_user_inner`: it must call
+    `_answer_with_ai_fallback(..., message=message, ..., prompt_override=_ip_prompt)`
+    — the real user message as `message`, the tracked-application-grounded
+    text only as `prompt_override`. Exercising this branch end-to-end would
+    require reproducing the full legacy-intent classification pipeline; a
+    static check on the actual call site is the proportionate guard against a
+    future edit swapping the grounded prompt in as `message` (which would
+    smuggle tracked-application data into the safety check, the same class of
+    bug this PR fixes for OCR content)."""
+    import inspect
+    import re as _re
+
+    source = inspect.getsource(RicoChatAPI._handle_active_user_inner)
+    block_match = _re.search(
+        r'if legacy_intent == "interview_prep":.*?_answer_with_ai_fallback\((.*?)\)',
+        source, _re.DOTALL,
+    )
+    assert block_match, "interview_prep dispatch block not found — has it moved/been renamed?"
+    call_args = block_match.group(1)
+    assert "message=message" in call_args
+    assert "prompt_override=_ip_prompt" in call_args
+
+
 # ── Full before/after transcript reproduction ────────────────────────────────
 
 def test_full_transcript_racebook_upload_then_extract_request_not_refused():
