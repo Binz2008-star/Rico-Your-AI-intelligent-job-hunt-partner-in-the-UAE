@@ -33,20 +33,23 @@ OPENAI_PRIMARY_MODEL = (
 )
 OPENAI_FALLBACK_MODEL = os.getenv("OPENAI_FALLBACK_MODEL", "gpt-4.1-mini")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-# Stable DeepSeek OpenAI-compatible model aliases.
-# deepseek-chat  → latest instruction-following model (V3 family)
-# deepseek-reasoner → DeepSeek-R1 reasoning model
-# Previous defaults (deepseek-v4-flash / deepseek-v4-pro) are not real model
-# names and caused 400 "Invalid model" errors on every request.
+# DeepSeek OpenAI-compatible model identifiers. On 2026-07-24 DeepSeek RETIRED
+# the deepseek-chat / deepseek-reasoner aliases (they had mapped internally to
+# V4 Flash); deepseek-v4-flash and deepseek-v4-pro are the CURRENT valid ids and
+# both support tool-calling + JSON output. Defaults MUST stay current so the
+# product never silently runs on an obsolete/retired primary model.
+DEEPSEEK_DEFAULT_PRIMARY = "deepseek-v4-flash"
+DEEPSEEK_DEFAULT_FALLBACK = "deepseek-v4-pro"
 DEEPSEEK_PRIMARY_MODEL = (
     os.getenv("RICO_DEEPSEEK_MODEL")
     or os.getenv("DEEPSEEK_MODEL")
-    or "deepseek-chat"
+    or DEEPSEEK_DEFAULT_PRIMARY
 )
-DEEPSEEK_FALLBACK_MODEL = os.getenv("DEEPSEEK_FALLBACK_MODEL", "deepseek-reasoner")
-# DEEPSEEK_MODEL_CHAIN overrides the model list entirely (comma-separated).
-# When unset the chain is built from PRIMARY + FALLBACK + hardcoded "deepseek-chat"
-# so the stable canonical name is always the last resort even if env vars change.
+DEEPSEEK_FALLBACK_MODEL = os.getenv("DEEPSEEK_FALLBACK_MODEL", DEEPSEEK_DEFAULT_FALLBACK)
+# DEEPSEEK_MODEL_CHAIN is ADDITIVE, never a verbatim replacement: whatever the
+# operator lists is trimmed and de-duplicated in order, then the two current
+# valid anchors are appended if absent — so an override listing only a junk or
+# retired id can never leave the chain without a working model.
 _DEEPSEEK_MODEL_CHAIN_ENV = os.getenv("DEEPSEEK_MODEL_CHAIN", "").strip()
 
 _FALLBACK_TEXT = (
@@ -175,20 +178,28 @@ def _provider_models(provider: str) -> tuple[str, str]:
 def _deepseek_model_chain() -> list[str]:
     """Return the ordered list of DeepSeek models to attempt.
 
-    Priority:
-      1. DEEPSEEK_MODEL_CHAIN env var (comma-separated override)
-      2. Primary → Fallback → hardcoded "deepseek-chat" safe anchor
-    The safe anchor ensures at least one well-known stable alias is always tried
-    even when env-configured model names are invalid or stale.
+    DEEPSEEK_MODEL_CHAIN is ADDITIVE, not a verbatim replacement: the operator's
+    list is trimmed and de-duplicated in order, then the two current valid
+    anchors (deepseek-v4-flash, deepseek-v4-pro) are appended if absent. This
+    guarantees a non-empty chain that always ends with a working model, so an
+    override that lists only a junk or retired id can never zero out the fallback.
     """
+    chain: list[str] = []
+
+    def _add(model: str) -> None:
+        model = (model or "").strip()
+        if model and model not in chain:
+            chain.append(model)
+
     if _DEEPSEEK_MODEL_CHAIN_ENV:
-        return [m.strip() for m in _DEEPSEEK_MODEL_CHAIN_ENV.split(",") if m.strip()]
-    chain: list[str] = [DEEPSEEK_PRIMARY_MODEL]
-    if DEEPSEEK_FALLBACK_MODEL and DEEPSEEK_FALLBACK_MODEL != DEEPSEEK_PRIMARY_MODEL:
-        chain.append(DEEPSEEK_FALLBACK_MODEL)
-    # Always include the stable canonical alias as a last-resort safe anchor.
-    if "deepseek-chat" not in chain:
-        chain.append("deepseek-chat")
+        for m in _DEEPSEEK_MODEL_CHAIN_ENV.split(","):
+            _add(m)
+    else:
+        _add(DEEPSEEK_PRIMARY_MODEL)
+        _add(DEEPSEEK_FALLBACK_MODEL)
+    # Always guarantee both current valid anchors as a last resort.
+    _add(DEEPSEEK_DEFAULT_PRIMARY)
+    _add(DEEPSEEK_DEFAULT_FALLBACK)
     return chain
 
 

@@ -69,7 +69,7 @@ class TestFailurePayloadObservability:
         assert h["reachable"] is False
         assert h["last_status_code"] == 400
         assert h["last_provider_error_code"] == "model_not_found"
-        assert h["last_model_attempted"] in ("deepseek-chat", "deepseek-reasoner")
+        assert h["last_model_attempted"] in ("deepseek-v4-flash", "deepseek-v4-pro")
         assert "not found" in (h["last_error_message"] or "").lower()
         assert h["degraded"] is True  # primary unusable + no HF fallback
 
