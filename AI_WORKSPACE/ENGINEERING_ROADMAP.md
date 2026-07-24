@@ -1,229 +1,333 @@
 # Engineering Roadmap
 
-The single map of the whole project: where Rico is, where it is going, what is
-blocked, what is completed, and what comes next. Any agent or contributor should
-be able to read this file and orient in under a minute.
-
-This is the **top-level spine**. It sits above the other workspace docs:
-
-```text
-Vision          AI_WORKSPACE/PROJECT_BRIEF.md · CAREER_OS_VISION.md
-   ↓
-Architecture    AI_WORKSPACE/ARCHITECTURE.md  (how the system is / will be built)
-   ↓
-Roadmap         THIS FILE                     (phases 0–7, status, what's next)
-   ↓
-Epics           long-lived product themes (below)
-   ↓
-Milestones      shippable capability blocks
-   ↓
-PRs             one reviewable change each (GitHub)
-   ↓
-Releases        what actually reached production
-```
-
-Decisions that shape the roadmap live in `AI_WORKSPACE/DECISIONS.md`. The task
-ledger lives in `AI_WORKSPACE/TASKS.md`. The near-term execution gate is
-`AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md` — read it before
-starting any feature, redesign, worker, notification, or infrastructure work.
-
----
-
-## Where Rico is right now (2026-07-18)
-
-> This snapshot is authoritative alongside `PROJECT_STATUS.md` (the control panel);
-> if they ever disagree, `PROJECT_STATUS.md` + live `main` win. Snapshots dated
-> 2026-07-16 and earlier are **historical** (superseded).
+> The top-level map from Rico's product vision to the next safe engineering
+> increment. This roadmap records current sequencing, not every historical PR.
 >
-> **`main` `4ce678b`.** Job-Seeker-Workspace batch merged + deployed since #1145
-> (Phase 5 surfaces): #1153 English CV-vs-search routing (`14b2b2e`), #1152 `/profile`
-> editorial rebuild + **visual** section rail (`cee1d63`), #1156 profile-warning
-> **contrast** (`25f1944`), #1155 **Arabic** search routing (`6b62a11`, Render #389
-> verified), #1151 structured `/command` replies + motion (`965dd64`), #1157
-> plain-language terminology EN+AR (`4ce678b`). Per-PR detail: `TASKS.md`
-> TASK-20260718-001…006. **Owner production visual smoke pending** for #1155/#1151/#1157.
-> **Profile *true* section navigation is COMPLETE** — #1161 (`76e52984`, Profile
-> Phase 3). **Profile *actionable* warning workflow is COMPLETE** — #1164 Phase 4A
-> severity contract (`63e976d0`) + #1165 Phase 4B actionable UI (`ab707594`); plus
-> #1166 numeric-field clearing (`0da1c3e2`) and #1167 route-exit dirty-state
-> protection (`ae656787`) close the Profile Hardening track (2026-07-18).
-> **Still open — do NOT read as complete:**
-> the *full* cross-route authenticated audit (only the English routing defect fixed),
-> Command Workspace, Applications/Documents/Cover-letter workspaces, Dashboard #14,
-> `Sessions → Conversations`. Claude Design's UX prototype is design-only, not
-> repository/runtime-verified.
+> `PROJECT_STATUS.md` and live repository/deployment evidence win whenever this
+> file becomes stale.
 
-| Question | Answer |
-| --- | --- |
-| **Where is Rico?** | `main` `4194736f`+. `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
-| **Posture (owner 2026-07-16)?** | **CONTAINMENT.** Security-first → source-of-truth unification (#1068) → then resume. Only security + docs writing allowed now. |
-| **What is blocked / frozen?** | New-integration activation is frozen. #1062 (Atelier job cards — HELD, has logged colour/AR/test gaps), #1055 Gmail M0 (Draft, flag OFF, 3 P1 blockers), #1025 Memory M1 (Draft, flag OFF). Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets. |
-| **What is completed (recent)?** | Atelier `/command` (#1048/#1060/#1061), decision-regression harness (#1056), security hardening (#1058), attachment/SSE/transcript fixes, `DEC-20260716-001` (#1059), operational reconciliation (#1063). |
-| **What comes next?** | #1068 (this reconciliation) → owner secret rotation → #1066 (retire Stripe tooling / stale Render env) + #1067 (paid-plan promises vs limits) → then unfreeze Atelier completion + integrations as small provable PRs. |
+## Verified roadmap snapshot
 
-Production is stable: Render backend healthy (`/health` ok, providers configured),
-Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
+**Date:** 2026-07-25  
+**Live `main`:** `97c5f6f62e863fb97ed0e08c9e88a7f57d167b67`  
+**Current posture:** reliability, truthful execution, and control-plane cleanup
+before new feature expansion.
 
----
-
-## The hierarchy (how work is organized)
-
-Rico work nests so every PR traces up to a product reason:
+## Roadmap hierarchy
 
 ```text
-EPIC        Career Operating System
-  └ Milestone   Operational Memory
-      └ Phase       Lifecycle
-          └ PR          #885 — follow-up endpoint
-              └ Task        list applied jobs ready for follow-up
+Vision          AI Career Operating System
+   ↓
+Architecture    FastAPI + Next.js + Neon + provider abstraction
+   ↓
+Roadmap         this file
+   ↓
+Epic            long-lived product outcome
+   ↓
+Milestone       shippable capability block
+   ↓
+Phase           ordered execution stage
+   ↓
+PR              one reviewable objective
+   ↓
+Task            concrete work tracked in TASKS.md
+   ↓
+Release         exact commit verified in production
 ```
 
-- **Epic** — a long-lived product theme (months). Rarely changes.
-- **Milestone** — a shippable capability block within an epic.
-- **Phase** — an ordered stage of hardening/build within a milestone (maps to the 0–7 phases below).
-- **PR** — one reviewable change on GitHub. Small, single-objective.
-- **Task** — the concrete unit inside a PR, tracked in `TASKS.md`.
+Binding decisions live in `AI_WORKSPACE/DECISIONS.md`. Current operational truth
+lives in `PROJECT_STATUS.md`; active work lives in `TASKS.md`.
 
-Naming/branch/PR governance: see `AI_WORKSPACE/OPERATING_RULES.md` and
-`AI_WORKSPACE/PR_QUALITY_GATE_RULES.md`.
+## Product vision
+
+Rico is an **AI Career Operating System**, not a generic chatbot and not a set of
+disconnected job-search screens.
+
+The system must improve:
+
+- career memory and evidence;
+- trustworthy job discovery;
+- explainable matching;
+- application lifecycle operations;
+- user-controlled follow-up and career execution;
+- UAE/GCC career intelligence;
+- user trust through explicit provenance and persisted-state confirmation.
+
+## Governing engineering principles
+
+1. Production stability and user trust come before roadmap speed.
+2. Never claim a save, approval, application, subscription, or external action
+   succeeded unless canonical persisted state proves it.
+3. One objective per PR, with exact-head tests and a rollback path.
+4. Prefer current repository contracts over prototype code or stale documents.
+5. No architecture drift: evolve FastAPI, Next.js, Neon, workers, and the AI
+   provider abstraction rather than introducing parallel systems.
+6. An open PR or design proposal is not authorization to merge or implement.
+7. Deployment success is not equivalent to authenticated product smoke.
+
+## Current phase map
+
+Status legend: ✅ delivered · 🔵 active · 🟡 gated/planned · ⬜ deferred
+
+### Phase 0 — Governance and control plane 🔵
+
+**Goal:** keep AI_WORKSPACE, PR ownership, deployment evidence, and task
+traceability synchronized.
+
+**Delivered**
+
+- Repository operating rules, decision records, task ledger, and PR governance.
+- Trust-first CEO decision `DEC-20260723-001`.
+- Current docs-only reconciliation of `PROJECT_STATUS.md` and this roadmap,
+  supported by a dated evidence record.
+
+**Current gap**
+
+- `CURRENT_STATE.md` and the large historical `TASKS.md` still contain stale
+  active-state headers. They are retained to avoid destructive history loss and
+  require a dedicated append-only or structure-preserving reconciliation pass.
+- Until then, `PROJECT_STATUS.md` is the mandatory current control panel.
+
+**Exit gate**
+
+- Docs reconciliation PR reviewed and merged.
+- No unresolved conflict between live state and the mandatory control panel.
+- Structure-preserving reconciliation of `CURRENT_STATE.md` and `TASKS.md`
+  completed in a separate docs-only change.
 
 ---
 
-## Phases 0–7
+### Phase 1 — Trust, provenance, and canonical context ✅
 
-Status legend: ✅ completed · 🔵 in progress · ⬜ planned (not started)
+**Goal:** Rico must know where information came from and must not invent or
+misattribute job, CV, attachment, or search state.
 
-### Phase 0 — Architecture & Governance ✅
+**Verified delivered work**
 
-The workspace, roadmap, audit gate, operational-memory strategy, branch/PR
-governance, and naming standards that let multiple agents work without drift.
+- `#1364` — latest-attachment-wins continuation and redemption guard.
+- `#1365` — canonical latest-attachment context and type clarification.
+- `#1366` — explicit per-attempt search provenance.
+- `#1367` — job-result deduplication using canonical identity with source
+  provenance retained.
+- `#1368` — OCR content cannot independently trigger discrimination-safety
+  refusals.
 
-- Delivered: AI Workspace, `ARCHITECTURE.md`, DEC-20260707-001, the 2026-07-08
-  production hardening audit gate, this roadmap.
-- PRs: #881 (roadmap + audit reconciliation, merged).
+**Ongoing rule**
 
-### Phase 1 — Operational Memory Foundation ✅
+Any new search, CV, document, or reasoning feature must preserve source,
+confidence, unknown/unverified handling, and user-visible honesty.
 
-Rico must never forget what it found, opened, applied to, or needs to follow up.
+---
 
-- Delivered: `user_job_context` persistence (migrations 018–022), operational
-  memory readiness helper, follow-up readiness selection, read-only lifecycle
-  follow-ups endpoint, Audit Phase 2 verification (persistence proven sound).
-- PRs: #883 (readiness helper, merged), #885 (follow-ups endpoint, merged).
+### Phase 2 — Application lifecycle truth 🔵
 
-### Phase 2 — Hardening 🔵 (current)
+**Goal:** every user-visible lifecycle action resolves through the canonical
+application state and only confirms what persistence proves.
 
-Not features, not UI. Robustness, resilience, regression protection, operational
-safety. Each finding becomes a small, scoped hardening PR — verify-first, and
-fix only proven gaps (synthetic data only).
+**Verified delivered work**
 
-- Delivered: #887 — batch-row-isolation in `upsert_matches` (one malformed row
-  no longer drops the whole apply-link batch); proven against real Postgres.
-- Delivered, awaiting release verification: #969/#960 exact document dedupe and #975/#963
-  onboarding confirmation persistence with real-Postgres coverage.
-- Next candidates: any gap surfaced by continued Audit Phase 2–9 verification.
+- `#1369` — chat Save and Prepare route to canonical Applications persistence.
+- `#1373` — Applications board and `/queue` accessibility polish.
+- `#1373` — approval receipt is gated on explicit persisted backend status;
+  ambiguous outcomes stay unconfirmed and do not repeat the mutation.
 
-### Phase 3 — Chat Integration 🔵 (current)
+**Current work**
 
-Wire chat to what is already persisted — almost no new logic, just connection.
+- Production verification remains narrower than the full lifecycle. A broad
+  authenticated smoke of save → prepare → approve/reject → board visibility was
+  not run in this reconciliation.
 
-- Delivered: #891 — "what should I follow up?" / "which jobs are due for
-  follow-up?" (EN + AR) → reuses the merged readiness logic
-  (`get_by_status("applied")` → `select_revisit_candidates`).
-- Already in chat before this phase: "show my applications", "show saved jobs",
-  "what did I open but not apply to?", follow-up timing advice.
-- Next candidates: a combined job-search status digest; any other lifecycle view
-  not yet reachable from chat.
-- Constraint: reuse existing lifecycle reads; verify-first; synthetic data only.
+**Exit gate**
 
-### Phase 4 — Lifecycle Intelligence 🔵 (Gmail M0 in build)
+- Canonical application records are visible across chat and board surfaces.
+- No false success language.
+- Authenticated production smoke covers the full lifecycle.
 
-Rico stops being only a keeper and starts following up with the user, e.g.
-"You applied 6 days ago — prepare a follow-up email?" / "You opened this job
-three times — want to apply?"
+---
 
-- In build: **#1055** — Gmail read-only connector M0 (first-party OAuth,
-  `gmail.readonly` scope, Fernet-encrypted refresh tokens, bounded inbox sync,
-  propose-only review items, `RICO_ENABLE_GMAIL_SYNC=false`).
-  Design doc: `docs/integrations/gmail-readonly-connector.md`.
-  Milestone: Email Integration. M1 = AI-drafted follow-ups (no `gmail.compose`).
-  M2 = Outlook via Microsoft Graph.
+### Phase 3 — Secure product access and operator surfaces 🔵
+
+**Goal:** expose necessary account/operator views without weakening identity,
+authorization, or billing truth.
+
+**Verified delivered work**
+
+- `#1372` — owner-only, read-only subscriber administration surface.
+- Authorization is based on immutable canonical user id via
+  `RICO_OWNER_USER_ID`, not email.
+
+**Current blocker**
+
+- The frontend reads `/api/v1/me`, while `#1372` exposed `is_owner` on
+  `/api/v1/auth/me`.
+- `#1375` is the focused activation fix for the canonical endpoint.
+
+**Next exact milestone**
 
 ```text
-EPIC        Career Operating System
-  └ Milestone   Email Integration
-      └ Phase       Lifecycle Intelligence (Phase 4)
-          └ PR          #1055 — Gmail read-only connector M0
-              └ Task        Gmail-M0-connector
+Review #1375
+→ authorized merge
+→ deploy exact commit
+→ owner /me.is_owner=true
+→ Subscribers nav visible
+→ /admin/subscribers loads
+→ non-owner remains false and blocked
 ```
 
-### Phase 5 — UX Facelift ⬜
+**Related gated work**
 
-Only after the system is stable. Atelier, Rico Alive, Nocturne, and the new
-design language. (Corresponds to DEC-20260707-001 "UI redesign / PR G".)
-The approved target is `/design-preview` per DEC-20260710-002; migration remains
-per-route and owner-gated, and resumes after the #963 release gate.
-
-### Phase 6 — Notifications ⬜
-
-After lifecycle exists: email, WhatsApp, reminders, weekly reports. Must honor
-the Telegram audience rules (admin/dev vs user channels).
-
-### Phase 7 — Infrastructure Evolution ⬜ (last)
-
-Not now. Railway, worker split, queue, Redis, background processing. Render
-stays the production backend until a Railway target passes full production
-smoke. (Corresponds to DEC-20260707-001 PRs D/E.)
+- `#1370` proposes a public, read-only `/pricing` route reusing the current
+  authoritative plan catalog. It must be rebased to current `main`, rerun, and
+  reviewed after the activation defect is closed.
 
 ---
 
-## How this maps to the other roadmaps
+### Phase 4 — Explainable career intelligence 🟡
 
-This product-level roadmap (phases 0–7) and the architecture-level roadmap in
-`DECISIONS.md` → DEC-20260707-001 (PRs A–G) are two lenses on the same work,
-not competing plans:
+**Goal:** explain matches, missing requirements, evidence, and uncertainty using
+real profile/CV/job sources.
 
-| Engineering phase | Architecture-level (DEC-20260707-001) |
-| --- | --- |
-| 1 Operational Memory Foundation | PR A (persist job context + apply links) |
-| 2 Hardening | robustness layer over PR A/B (verify-first) |
-| 3 Chat Integration | consumes persisted lifecycle (no infra change) |
-| 4 Lifecycle Intelligence | builds on PR B (application lifecycle) |
-| 5 UX Facelift | PR G (UI redesign) |
-| 6 Notifications | notifications-only layer |
-| 7 Infrastructure Evolution | PRs D/E (worker separation, Render→Railway) |
+**Current state**
 
-The 2026-07-08 production hardening audit remains the **near-term execution
-gate**: it controls immediate stabilization (Phases 1–2) and must be read
-before feature/redesign/worker/notification/infra work.
+- Existing modules and provenance foundations support parts of this direction.
+- `#1374` is a docs-only competitive-differentiation gap analysis.
+- `#1374` is a proposal, not implementation authorization.
 
----
+**Required first implementation contract**
 
-## Releases (what reached production)
+When approved, the smallest safe slice should:
 
-| Date | Commit | What went live |
-| --- | --- | --- |
-| 2026-07-18 | `4ce678b` | #1157 — plain-language terminology in user-facing copy (EN+AR). Deploy-to-Production #997 green; **owner visual smoke pending** |
-| 2026-07-18 | `965dd64` | #1151 — structured safe-markdown `/command` replies + motion. Deploy-to-Production #996 green; **owner visual smoke pending** |
-| 2026-07-18 | `6b62a11` | #1155 — explicit Arabic job search reaches the search router. Render backend deploy #389 verified serving `6b62a11`; **owner AR smoke pending** |
-| 2026-07-18 | `25f1944` | #1156 — profile guardrail-warnings contrast/legibility (editorial `/profile`) |
-| 2026-07-18 | `cee1d63` | #1152 — `/profile` editorial rebuild + real-data wiring (visual section rail only) |
-| 2026-07-18 | `14b2b2e` | #1153 — English "find jobs that match my CV" routed to job search (not job-doc scoring) |
-| 2026-07-08 | `7d167dd` | #887 — batch-row-isolation hardening (apply-link batch resilience) |
+- extract required vs. preferred job requirements;
+- compare against profile and active CV evidence;
+- cite source text and confidence;
+- mark unknown/unverified facts;
+- avoid negative inference merely because evidence is absent;
+- add one focused PR and evaluation set.
 
-_Merged to `main` (`80e246b`), deploy verification pending: #885 (follow-ups
-endpoint) and #891 (chat follow-up readiness). Promote each to a release row once
-`/version.commit` on Render reads `80e246b…` and `/health` is ok._
+**Gate**
 
-_Add a row when a runtime change is deployed and verified (`/version.commit`
-matches `main`, `/health` ok). Docs-only merges are not releases._
+No implementation begins until the current reliability/control-plane queue is
+resolved and the owner approves a scoped task.
 
 ---
 
-## How to update this file
+### Phase 5 — UX and accessibility hardening 🔵
 
-- Move a phase to ✅ only when its milestone's PRs are merged **and** any runtime
-  change is deployed + verified.
-- When a phase becomes current, mark it 🔵 and list delivered PRs + next candidates.
-- Record each production deploy in the Releases table.
-- Keep phase names stable; this file is the map contributors trust.
+**Goal:** improve usability without changing business logic or introducing a
+second design system.
+
+**Current open work**
+
+- `#1376` — focused Profile UX/accessibility polish.
+- `#1362` — Command quick-action category hints; needs rebase and priority
+  reassessment.
+- `#1359` — warning contrast plus workspace theme persistence; mixed scope must
+  be split or explicitly accepted before review.
+- `#1371` — mixed design-reference branch; production Applications/queue work
+  was extracted into merged `#1373`, so the branch must not merge as-is.
+
+**Rules**
+
+- Atelier/current production components remain authoritative.
+- Design references may guide implementation but are not copied into runtime.
+- No fabricated data, progress, agent steps, or capabilities.
+- Accessibility and mobile/RTL evidence are part of acceptance, not polish after
+  merge.
+
+---
+
+### Phase 6 — Notifications, inbox, and proactive follow-up ⬜
+
+**Goal:** provide user-controlled reminders and job-related inbox intelligence
+only after lifecycle truth and privacy controls are proven.
+
+**Current state**
+
+Not active in this roadmap snapshot. Historical Gmail/notification work exists,
+but production activation and current feature-flag state were not verified here.
+Do not resume or expand it from stale documentation.
+
+**Required gates**
+
+- explicit user consent;
+- least-privilege read scopes;
+- review-before-write behavior;
+- duplicate/rate guards;
+- clear retention and privacy contract;
+- canonical application lifecycle integration.
+
+---
+
+### Phase 7 — Infrastructure evolution ⬜
+
+**Goal:** evolve deployment, workers, queues, caching, and observability only
+when measured product load requires it.
+
+**Current verified facts**
+
+- Vercel production is `READY` on `main` commit `97c5f6f`.
+- GitHub reports successful Vercel and Railway service statuses.
+- This reconciliation did not query the live backend `/version` or independently
+  confirm the current production backend host.
+
+**Decision**
+
+No infrastructure migration or redesign is authorized by this roadmap snapshot.
+Repository evidence and full production smoke must precede any change.
+
+## Current milestones
+
+| Epic | Milestone | State | Next evidence gate |
+| --- | --- | --- | --- |
+| Trust Engine | Search and attachment provenance | ✅ delivered | Preserve in every new feature |
+| Career Operations | Canonical application lifecycle | 🔵 active | Full authenticated lifecycle smoke |
+| Operations | Owner subscriber visibility | 🔵 blocked on `#1375` | Owner/non-owner production smoke |
+| Commercial Surface | Public pricing transparency | 🟡 PR `#1370` gated | Current-main rebase, exact-head CI, owner review |
+| Career Intelligence | Explainable matching and missing requirements | 🟡 proposal | Scoped owner-approved PR + eval set |
+| Experience | Incremental UX/accessibility | 🔵 active | Small PRs, no mixed scope, EN/AR/mobile evidence |
+| Proactive Operations | Inbox/notifications | ⬜ deferred | Consent/privacy/lifecycle gates |
+| Infrastructure | Scaling evolution | ⬜ deferred | Measured need and production plan |
+
+## Release record — latest verified `main` sequence
+
+| Commit | PR | Release content |
+| --- | ---: | --- |
+| `97c5f6f` | `#1372` | Owner-only subscriber administration surface; activation defect tracked in `#1375` |
+| `8ddc0f9` | `#1373` | Applications/queue accessibility and persisted approval proof |
+| `8fd87e9` | `#1368` | OCR discrimination-safety trigger correction |
+| `b84d527` | `#1365` | Attachment provenance slice 2 |
+| `335fc24` | `#1364` | Attachment provenance slice 1 |
+| `34f8cb1` | `#1369` | Canonical chat Save/Prepare persistence |
+| `c044053` | `#1367` | Search deduplication and provenance |
+| `7603c8e` | `#1366` | Per-attempt search provenance |
+
+Vercel production is confirmed `READY` on `97c5f6f`. Broader authenticated
+production behavior remains unverified in this reconciliation and must not be
+inferred from this release table.
+
+## Next execution sequence
+
+```text
+1. Merge this docs-only workspace reconciliation after review.
+2. Review #1375 on exact head.
+3. Obtain explicit merge authorization for #1375.
+4. Deploy and perform owner/non-owner production smoke.
+5. Triage #1371 as reference-only/superseded; do not merge as-is.
+6. Rebase and review #1370, #1359, #1362, and #1376 independently.
+7. Run the broader authenticated application/profile/CV/AR/mobile smoke gate.
+8. Complete structure-preserving CURRENT_STATE.md and TASKS.md reconciliation.
+9. Only then approve the next product capability or explainability slice.
+```
+
+## Roadmap maintenance contract
+
+Update this file when:
+
+- a phase materially changes;
+- a milestone reaches production or becomes blocked;
+- an owner decision changes priority;
+- infrastructure or billing truth changes;
+- a proposal becomes an approved task.
+
+Do not add another contradictory active snapshot. Replace current state and rely
+on Git history for historical versions.
