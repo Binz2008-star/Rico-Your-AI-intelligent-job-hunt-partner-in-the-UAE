@@ -1914,16 +1914,21 @@ async def rico_upload_cv(
                 if not is_valid_public_user_id(resolved_user_id):
                     try:
                         from src.rico_memory import RicoMemoryStore
+                        from src.services.attachment_analysis_factory import build_last_uploaded_context
                         _mem = RicoMemoryStore()
                         _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
-                        _rctx["last_uploaded_document"] = {
-                            "document_type": text_classification.document_type,
-                            "display_label": text_classification.display_label,
-                            "filename": safe_name,
-                            "source": "image",
-                            "extracted_text": extracted[:4000],
-                            "suggested_actions": list(text_classification.suggested_actions or []),
-                        }
+                        # Atomic latest-attachment swap: the newer record fully
+                        # replaces any older one (canonical context, slice 2).
+                        _rctx["last_uploaded_document"] = build_last_uploaded_context(
+                            filename=safe_name,
+                            document_type=text_classification.document_type,
+                            display_label=text_classification.display_label,
+                            confidence=getattr(text_classification, "confidence", 0.0),
+                            extracted_text=extracted[:4000],
+                            source="image",
+                            source_turn_id=request_ref,
+                            suggested_actions=list(text_classification.suggested_actions or []),
+                        )
                         _mem.set_context(resolved_user_id, "recent_context", _rctx)
                     except Exception:
                         pass
@@ -1965,33 +1970,31 @@ async def rico_upload_cv(
                 )
             except Exception:
                 pass
-            # Finding 4 (review correction): this branch previously updated ONLY
-            # the durable store above, never `recent_context` — so a PRIOR
-            # attachment (e.g. an identity document, which DOES get written to
-            # recent_context on its own success path just above) stayed the
-            # "latest" one seen by `_get_last_uploaded_document` (which reads
-            # recent_context first). "What was that?" after this OCR failure
-            # answered about the STALE OLDER attachment, not this newest upload
-            # — the exact "answered from an older context" defect this PR's own
-            # transcript describes. #1364 must deliver this without depending
-            # on another PR, so this newer (OCR-failed) upload now fully
-            # replaces recent_context's last_uploaded_document too, same as the
-            # successful-classification branch above.
+            # Atomic latest-attachment replacement (slice 2): also refresh the
+            # canonical recent-context record so this newer (OCR-failed) image
+            # fully SUPERSEDES any older attachment. Without this, the durable
+            # store above holds the new image but recent-context still holds the
+            # previous one — and _get_last_uploaded_document reads recent-context
+            # first, so "what was that?" would answer about the stale older file.
+            # (#1364, now merged, independently closed this same gap with a
+            # plain-dict write when developed without #1365; superseded here by
+            # #1365's canonical builder, a strict superset of that fix's fields.)
             if not is_valid_public_user_id(resolved_user_id):
                 try:
                     from src.rico_memory import RicoMemoryStore
+                    from src.services.attachment_analysis_factory import build_last_uploaded_context
                     _mem = RicoMemoryStore()
                     _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
-                    _rctx["last_uploaded_document"] = {
-                        "document_type": "image",
-                        "display_label": classification.display_label or "Image",
-                        "filename": safe_name,
-                        "source": "image",
-                        "confidence": 0.0,
-                        "is_sensitive": False,
-                        "extracted_text": "",
-                        "suggested_actions": [],
-                    }
+                    _rctx["last_uploaded_document"] = build_last_uploaded_context(
+                        filename=safe_name,
+                        document_type="image",
+                        display_label=classification.display_label or "Image",
+                        confidence=getattr(classification, "confidence", 0.0),
+                        extracted_text="",
+                        extraction_available=False,
+                        source="image",
+                        source_turn_id=request_ref,
+                    )
                     _mem.set_context(resolved_user_id, "recent_context", _rctx)
                 except Exception:
                     pass
@@ -2094,15 +2097,18 @@ async def rico_upload_cv(
             if not is_valid_public_user_id(resolved_user_id):
                 try:
                     from src.rico_memory import RicoMemoryStore
+                    from src.services.attachment_analysis_factory import build_last_uploaded_context
                     _mem = RicoMemoryStore()
                     _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
-                    _rctx["last_uploaded_document"] = {
-                        "document_type": doc_type,
-                        "display_label": classification.display_label,
-                        "filename": safe_name,
-                        "confidence": round(confidence, 3),
-                        "suggested_actions": list(classification.suggested_actions or []),
-                    }
+                    _rctx["last_uploaded_document"] = build_last_uploaded_context(
+                        filename=safe_name,
+                        document_type=doc_type,
+                        display_label=classification.display_label,
+                        confidence=confidence,
+                        source="document",
+                        source_turn_id=request_ref,
+                        suggested_actions=list(classification.suggested_actions or []),
+                    )
                     _mem.set_context(resolved_user_id, "recent_context", _rctx)
                 except Exception:
                     pass
@@ -2259,15 +2265,18 @@ async def rico_upload_cv(
         if not is_valid_public_user_id(resolved_user_id):
             try:
                 from src.rico_memory import RicoMemoryStore
+                from src.services.attachment_analysis_factory import build_last_uploaded_context
                 _mem = RicoMemoryStore()
                 _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
-                _rctx["last_uploaded_document"] = {
-                    "document_type": doc_type or "cv",
-                    "display_label": "Resume / CV",
-                    "filename": safe_name,
-                    "confidence": round(confidence, 3),
-                    "suggested_actions": [],
-                }
+                _rctx["last_uploaded_document"] = build_last_uploaded_context(
+                    filename=safe_name,
+                    document_type=doc_type or "cv",
+                    display_label="Resume / CV",
+                    confidence=confidence,
+                    extraction_available=True,  # CV was parsed in this branch
+                    source="document",
+                    source_turn_id=request_ref,
+                )
                 _mem.set_context(resolved_user_id, "recent_context", _rctx)
             except Exception:
                 pass

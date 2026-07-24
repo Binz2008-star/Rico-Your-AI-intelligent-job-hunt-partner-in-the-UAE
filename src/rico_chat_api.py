@@ -8169,6 +8169,15 @@ class RicoChatAPI:
         if file_list_result is not None:
             return self._finalize(file_list_result, self.SOURCE_KEYWORD, profile=None)
 
+        # ── Attachment-type clarification ("this is my ID" / "هذه هويتي") ─────
+        # The user correcting what the latest attachment IS updates that
+        # attachment's confirmed type in session context ONLY — it never mutates
+        # the profile or the active CV. Runs before the meta-query/search paths so
+        # a clarification is never misread as a search or a profile edit.
+        _clar = self._handle_attachment_type_clarification(user_id, message)
+        if _clar is not None:
+            return self._finalize(_clar, self.SOURCE_KEYWORD, profile=None)
+
         # ── Recent-upload document meta-query ─────────────────────────────────
         # "what did I upload?" / "what type is the document?" — answers from the
         # session context (set by the upload route) without an AI call.
@@ -13549,6 +13558,104 @@ class RicoChatAPI:
         except Exception:
             pass
         return None
+
+    # ── Attachment-type clarification (Task 3 slice 2) ───────────────────────
+    # The user telling Rico what the just-uploaded file actually IS. This updates
+    # the confirmed type of the LATEST attachment in session context only — never
+    # the profile or the active CV. Kept narrow: it must name identity/CV/job as
+    # the corrected type, so ordinary chat is never misread as a clarification.
+    # Review correction: the contraction alternative only covered "that's",
+    # so "it's my ID" / "it's my CV" (an equally natural contraction of "it
+    # is") silently fell through to normal routing instead of being
+    # recognized as a clarification. Both "this/it/that" now take the
+    # contracted form too, mirroring the full form's coverage above.
+    _ID_CLARIFICATION_RE = re.compile(
+        r"\b(?:this|it|that)\s+is\s+(?:my\s+)?(?:an?\s+)?(?:id|identity|emirates\s*id|passport)\b"
+        r"|\b(?:this|it|that)'?s\s+(?:my\s+)?(?:id|identity|passport)\b"
+        r"|هذ[ها]\s+(?:هويت|بطاقة\s*(?:ال)?هوية|جواز)"
+        r"|ه[اأ]?د\s+(?:هويت|الهوية)",
+        re.IGNORECASE,
+    )
+    _CV_CLARIFICATION_RE = re.compile(
+        r"\b(?:this|it|that)\s+is\s+(?:my\s+)?(?:cv|resume|r[eé]sum[eé])\b"
+        r"|\b(?:this|it|that)'?s\s+(?:my\s+)?(?:cv|resume|r[eé]sum[eé])\b"
+        r"|هذ[ها]\s+(?:سيرت|السيرة\s*الذاتية|ال?سي\s*في)",
+        re.IGNORECASE,
+    )
+
+    def _handle_attachment_type_clarification(
+        self, user_id: str, message: str
+    ) -> dict[str, Any] | None:
+        """Apply a user clarification of the latest attachment's type ("this is
+        my ID" / "هذه هويتي"). Updates the attachment's confirmed type in
+        recent-context ONLY — never the profile or active CV. Returns ``None``
+        when the message is not a clarification or no attachment is on record, so
+        normal routing is unaffected.
+        """
+        msg = message or ""
+        wants_id = bool(self._ID_CLARIFICATION_RE.search(msg))
+        wants_cv = bool(self._CV_CLARIFICATION_RE.search(msg))
+        if not (wants_id or wants_cv):
+            return None
+        try:
+            ctx = self._get_recent_context(user_id) or {}
+        except Exception:
+            return None
+        doc = ctx.get("last_uploaded_document")
+        if not isinstance(doc, dict) or not (doc.get("filename") or doc.get("extracted_text")):
+            return None
+        is_ar = self._is_arabic_text(msg)
+        # Update this attachment's confirmed type in place — nothing else.
+        if wants_id:
+            doc["detected_type"] = "identity_document"
+            doc["document_type"] = "identity_document"
+            doc["display_label"] = "Identity Document"
+            doc["is_sensitive"] = True
+        else:
+            doc["detected_type"] = "cv"
+            doc["document_type"] = "cv"
+            doc["display_label"] = "Resume / CV"
+            doc["is_sensitive"] = False
+        doc["confirmed_by_user"] = True
+        doc["requires_confirmation"] = False
+        ctx["last_uploaded_document"] = doc
+        # Failure truth: only claim the clarification was recorded if the store
+        # actually persisted it. If _store_recent_context fails, tell the user
+        # honestly rather than reporting a success that didn't happen.
+        try:
+            self._store_recent_context(user_id, ctx)
+        except Exception:
+            logger.warning("attachment_type_clarification_store_failed user=%s", user_id)
+            reply = (
+                "لم أتمكّن من حفظ هذا التوضيح الآن — لم أُغيّر ملفك الشخصي أو سيرتك. "
+                "من فضلك حاول مرة أخرى بعد قليل."
+                if is_ar else
+                "I couldn't save that clarification just now — I didn't change your profile or CV. "
+                "Please try again in a moment."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply, "success": False}
+        filename = doc.get("filename") or ("ملفك" if is_ar else "your file")
+        if wants_id:
+            reply = (
+                f"شكراً على التوضيح — سجّلت **{filename}** كـ **وثيقة هوية**. "
+                "سأتعامل مع تفاصيلها كبيانات حسّاسة ولن أغيّر ملفك الشخصي أو سيرتك الذاتية بناءً عليها. "
+                "إن أردت تحديث حقل معيّن في ملفك، أخبرني بالحقل والقيمة وسأطلب تأكيدك أولاً."
+                if is_ar else
+                f"Thanks for clarifying — I've recorded **{filename}** as an **identity document**. "
+                "I'll treat its details as sensitive and won't change your profile or CV from it. "
+                "If you want to update a specific profile field, tell me the field and value and I'll ask you to confirm first."
+            )
+        else:
+            reply = (
+                f"تمام — سجّلت **{filename}** كـ **سيرة ذاتية**. "
+                "لن أغيّر سيرتك النشطة أو ملفك تلقائياً؛ أخبرني بما تريد فعله به."
+                if is_ar else
+                f"Got it — I've recorded **{filename}** as a **CV/résumé**. "
+                "I won't change your active CV or profile automatically — tell me what you'd like to do with it."
+            )
+        self._append_chat(user_id, "assistant", reply)
+        return {"type": "document_context", "message": reply, "success": True}
 
     # ── Recent-upload document context (TASK-030) ────────────────────────────
 
