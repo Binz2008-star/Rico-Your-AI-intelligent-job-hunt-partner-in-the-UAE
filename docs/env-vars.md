@@ -87,6 +87,17 @@ RICO_ENABLE_ANALYTICS_PURGE=false
 # python3 -c "import secrets; print(secrets.token_hex(32))"
 GUEST_CAPABILITY_SECRET=
 
+# Owner account for the owner-only subscriber admin surface
+# (/admin/subscribers UI, GET /api/v1/admin/subscribers[/summary]).
+# Value is the immutable canonical users.id (BIGSERIAL primary key) of the
+# owner account — NOT an email. Authorization compares the authenticated
+# account's users.id against this value server-side; email is never the sole
+# key. Server-side only: the id is never returned to the browser (the /me
+# endpoint exposes only a computed is_owner boolean). Fails CLOSED: when unset,
+# no account is treated as owner and every admin/subscribers request returns
+# 403. Find the id with: SELECT id FROM users WHERE email = '<owner-email>';
+RICO_OWNER_USER_ID=
+
 RICO_REDIS_URL=
 REDIS_URL=
 

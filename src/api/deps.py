@@ -5,12 +5,15 @@ FastAPI dependency injection for authentication and authorization.
 from __future__ import annotations
 
 import hmac
+import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, Request
 
 from src.api.auth import decode_access_token
+
+logger = logging.getLogger(__name__)
 
 
 def _env_auth_fallback_allowed() -> bool:
@@ -143,6 +146,71 @@ def require_admin(request: Request) -> Dict[str, Any]:
     user = get_current_user(request)
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin role required")
+    return user
+
+
+def _owner_user_id() -> str:
+    """The configured owner's immutable canonical user id (``users.id``).
+
+    Read from ``RICO_OWNER_USER_ID`` (server-side only — NEVER returned to the
+    browser). Empty when unset; callers must fail closed in that case so an
+    unconfigured environment grants owner access to nobody.
+    """
+    return (os.getenv("RICO_OWNER_USER_ID") or "").strip()
+
+
+def _resolve_canonical_user_id(user: Dict[str, Any]) -> Optional[str]:
+    """Resolve the authenticated user's immutable numeric ``users.id``.
+
+    Authorization for the owner surface is keyed on this id, not on email:
+    email is only the JWT subject/lookup key, while ``users.id`` is the stable
+    canonical identity that cannot be reassigned. Returns None when the id
+    cannot be established (env-auth token with no DB account, DB unavailable,
+    or account not found) so callers fail closed.
+    """
+    email = (user or {}).get("email")
+    if not email:
+        return None
+    from src.db import is_db_available
+    if not is_db_available():
+        return None
+    try:
+        from src.repositories.users_repo import get_user_by_email
+        row = get_user_by_email(email)
+    except Exception:
+        logger.warning("owner_id_resolve_failed", exc_info=True)
+        return None
+    return str(row.id) if row else None
+
+
+def is_owner(user: Dict[str, Any]) -> bool:
+    """Whether ``user`` is Rico's owner account.
+
+    True only when ``RICO_OWNER_USER_ID`` is configured AND the authenticated
+    account's immutable ``users.id`` matches it. Fails closed (returns False)
+    when the owner id is unset or the canonical id cannot be resolved. The
+    owner id itself is never returned to callers — only this boolean.
+    """
+    owner_id = _owner_user_id()
+    if not owner_id:
+        return False
+    canonical_id = _resolve_canonical_user_id(user)
+    return canonical_id is not None and hmac.compare_digest(canonical_id, owner_id)
+
+
+def require_owner(request: Request) -> Dict[str, Any]:
+    """Validate the JWT cookie AND require the authenticated account to be the owner.
+
+    Authorization is server-side only and keyed on the immutable canonical
+    ``users.id`` (compared against ``RICO_OWNER_USER_ID``), never on email
+    alone. Raises 401 when unauthenticated and 403 for any authenticated
+    non-owner (including when the owner id is unconfigured — fail closed).
+
+    Usage: route(owner: dict = Depends(require_owner))
+    """
+    user = get_current_user(request)  # raises 401 when unauthenticated
+    if not is_owner(user):
+        raise HTTPException(status_code=403, detail="Owner access required")
     return user
 
 
