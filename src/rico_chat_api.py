@@ -4826,6 +4826,7 @@ class RicoChatAPI:
         "what's next", "whats next", "what next", "what now",
         "what can you do", "what can i do", "help", "options", "menu",
         "show options", "show menu", "next steps",
+        "what should i do next", "ماذا يجب أن أفعل بعد ذلك", "ما التالي",
     ])
 
     # Phrases users type when selecting a help-menu option or expressing generic
@@ -6296,7 +6297,169 @@ class RicoChatAPI:
             # so let the new message route normally through intent classification.
             return None
 
+        # ── Confirm active-CV switch (structured pending action) ─────────────
+        # Rico must never ask "should I change the active CV?" and then let a
+        # bare "yes"/"نعم" be redeemed by something else (a stale pending job
+        # search, bare-role classification, generic intent). Checked here,
+        # inside _resolve_pending_field, which already runs before pending
+        # job-search continuation, bare-role classification, generic intent
+        # classification, and the starter-action fallback (see the call order
+        # in _handle_active_user_inner) — so this priority falls out of the
+        # existing dispatch order for free, no separate priority plumbing.
+        if pending_field == "confirm_set_active_cv":
+            pending_action = ctx.get("_pending_active_cv") or {}
+            # One-shot: clear regardless of outcome so it can never linger and
+            # silently re-fire on a later, unrelated turn (mirrors
+            # confirm_profile_update's one-shot semantics above).
+            ctx.pop("_pending_field", None)
+            ctx.pop("_pending_active_cv", None)
+            self._store_recent_context(user_id, ctx)
+            arabic = self._is_arabic_text(msg)
+            target_id = pending_action.get("target_document_id")
+
+            if self._is_affirmative(msg) and target_id:
+                activated = self._activate_cv_document(user_id, target_id)
+                # State truth (#1361 pattern): the response is composed from
+                # the canonical read-back after the write, never from the
+                # pre-write intended filename — a rejected/failed write must
+                # never be reported as a success.
+                if activated and str(activated.get("id")) == str(target_id):
+                    filename = (
+                        activated.get("filename")
+                        or activated.get("original_filename")
+                        or pending_action.get("target_filename")
+                    )
+                    reply = (
+                        f"تم تغيير السيرة النشطة إلى {filename}.\n"
+                        "سأستخدمها في تحليلات السيرة وعمليات البحث القادمة."
+                        if arabic else
+                        f"Active CV changed to {filename}.\n"
+                        "I'll use it for CV analysis and future job searches."
+                    )
+                    self._append_chat(user_id, "assistant", reply)
+                    return {
+                        "type": "active_cv_changed",
+                        "message": reply,
+                        "active_cv": activated,
+                    }
+                # Failed or rejected write — read back whatever IS canonically
+                # active right now so the failure message names a real,
+                # current document, never the (unapplied) intended one.
+                current = self._current_active_cv_document(user_id)
+                current_name = (
+                    (current or {}).get("filename")
+                    or (current or {}).get("original_filename")
+                    or pending_action.get("target_filename")
+                    or ("لا توجد سيرة نشطة" if arabic else "no active CV")
+                )
+                reply = (
+                    f"لم أتمكن من تغيير السيرة النشطة، لذلك ما زالت {current_name} هي السيرة المستخدمة."
+                    if arabic else
+                    f"I couldn't change the active CV, so {current_name} is still the one in use."
+                )
+                self._append_chat(user_id, "assistant", reply)
+                return {"type": "info", "message": reply}
+
+            if self._is_negative(msg):
+                reply = (
+                    "تمام — لن أغيّر السيرة النشطة."
+                    if arabic
+                    else "No problem — I won't change the active CV."
+                )
+                self._append_chat(user_id, "assistant", reply)
+                return {"type": "info", "message": reply}
+
+            # Neither yes nor no: pending is already cleared; let the new
+            # message route normally.
+            return None
+
         return None
+
+    def _activate_cv_document(self, user_id: str, doc_id: str) -> "dict[str, Any] | None":
+        """Set ``doc_id`` as the active (primary) CV and return the canonical
+        persisted document, or ``None`` if the write did not take.
+
+        Reuses ``RicoDB.set_primary_document`` — the SAME transactional
+        mutation the ``/files/{id}/set-primary`` REST route already uses
+        (src/api/routers/files.py) — so there is exactly one CV-activation
+        mutation path in the system; this does not create a second one for
+        chat. Deliberately does not resync profile fields (years_experience /
+        current_role / skills) the way the REST route does — this chat action
+        is scoped to the active-CV pointer only.
+        """
+        from src.rico_db import RicoDB as _RicoDB
+        _db = _RicoDB()
+        if not _db.available:
+            return None
+        if not _db.set_primary_document(user_id, doc_id):
+            return None
+        return _db.get_primary_document(user_id, doc_type="cv")
+
+    def _current_active_cv_document(self, user_id: str) -> "dict[str, Any] | None":
+        """Read-only: the canonical currently-active CV document, if any."""
+        from src.rico_db import RicoDB as _RicoDB
+        _db = _RicoDB()
+        if not _db.available:
+            return None
+        return _db.get_primary_document(user_id, doc_type="cv")
+
+    def _maybe_recommend_active_cv_switch(
+        self, user_id: str, profile: Any, message: str
+    ) -> "dict[str, Any] | None":
+        """Recommend activating a different stored CV ONLY when there is a
+        concrete, evidence-based reason (currently: a non-active CV with
+        strictly more years of experience on file than the active one).
+        Arms the structured confirm_set_active_cv pending action so a
+        follow-up yes/نعم executes a real mutation — never a free-form AI
+        suggestion with no pending state behind it.
+
+        Returns None when no such candidate exists, so the caller falls
+        through to whatever already handles a generic "what next" message.
+        """
+        try:
+            docs = self._collect_documents_detailed(user_id, profile)
+        except Exception:
+            return None
+        cvs = [d for d in docs if d.get("doc_type") == "cv"]
+        if len(cvs) < 2:
+            return None
+        active = next((d for d in cvs if d.get("is_primary")), None)
+        if active is None:
+            return None
+
+        def _years(d: "dict[str, Any]") -> float:
+            try:
+                return float(d.get("years_experience") or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        candidates = [d for d in cvs if not d.get("is_primary") and d.get("id")]
+        if not candidates:
+            return None
+        best = max(candidates, key=_years)
+        if _years(best) <= _years(active):
+            return None
+
+        filename = best.get("filename") or best.get("original_filename") or "your other CV"
+        arabic = self._is_arabic_text(message)
+        reply = (
+            f"لاحظت أن {filename} يُظهر خبرة أطول ({_years(best):.0f} سنوات مقابل "
+            f"{_years(active):.0f}). هل أفعّلها كسيرتك النشطة؟"
+            if arabic else
+            f"I noticed {filename} shows more experience ({_years(best):.0f} years vs "
+            f"{_years(active):.0f}). Should I make it your active CV?"
+        )
+        ctx = self._get_recent_context(user_id)
+        ctx["_pending_field"] = "confirm_set_active_cv"
+        ctx["_pending_active_cv"] = {
+            "action_type": "set_active_cv",
+            "target_document_id": best.get("id"),
+            "target_filename": filename,
+            "requires_confirmation": True,
+        }
+        self._store_recent_context(user_id, ctx)
+        self._append_chat(user_id, "assistant", reply)
+        return {"type": "cv_switch_recommendation", "message": reply}
 
     def _resolve_settings_command(
         self, user_id: str, message: str
@@ -8389,6 +8552,19 @@ class RicoChatAPI:
         settings_result = self._resolve_settings_command(user_id, message)
         if settings_result is not None:
             return self._finalize(settings_result, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Active-CV switch recommendation (arms a structured pending action) ─
+        # A generic "what should I do next?" is answered with a real,
+        # evidence-based recommendation ONLY when there is a genuinely better
+        # inactive CV on file (more years of experience than the current
+        # active one) — never a free-form AI suggestion. Arms the SAME
+        # structured pending action confirm_set_active_cv resolves, so a
+        # follow-up "yes"/"نعم" mutates for real (see _resolve_pending_field).
+        _whats_next_norm = re.sub(r"[\s.,!?;:؟]+$", "", message.strip().lower())
+        if _whats_next_norm in self._WHATS_NEXT_PHRASES:
+            cv_switch_result = self._maybe_recommend_active_cv_switch(user_id, profile, message)
+            if cv_switch_result is not None:
+                return self._finalize(cv_switch_result, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Application draft/send channel clarification ─────────────────────
         # Follow-ups like "go ahead", "send it", or Arabic "صيغ رسالة ... وارسلها"
