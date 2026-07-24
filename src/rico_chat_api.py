@@ -5966,6 +5966,19 @@ class RicoChatAPI:
         except Exception:
             pass
 
+    # `_pending_field` values that genuinely OWN a yes/no confirmation turn — a
+    # bare affirmative ("yes" / "نعم") belongs to these, so they outrank a
+    # stale/armed pending job search (priority 1 > priority 4). Only
+    # ``confirm_profile_update`` (the #1361 persisted-state mutation gate) is a
+    # true yes/no confirmation; the value-prompt fields
+    # (``preferred_cities`` / ``telegram_username`` / ``phone`` / ``email``)
+    # expect a VALUE, not a bare "yes", so an unrelated/stale one of those — or
+    # any unknown field — must NOT silently suppress a valid "yes, run the
+    # search" and drop the turn to a dead-end fallback. This is an explicit
+    # allowlist, not a generic truthiness check, precisely so a leftover
+    # non-confirmation pending field cannot block search redemption indefinitely.
+    _SEARCH_OUTRANKING_PENDING_FIELDS: frozenset[str] = frozenset({"confirm_profile_update"})
+
     def _pending_search_redemption_blocked(self, user_id: str, message: str) -> bool:
         """True when an armed pending job search must NOT be redeemed by the
         current turn, because a higher-priority intent owns it.
@@ -5979,15 +5992,20 @@ class RicoChatAPI:
         reaching the confirmation flow or the CV-analysis handler (the transcript
         نعم→search misfire, and #1360's documented known gap).
 
-        Deliberately narrow: it only blocks redemption when one of these
-        higher-priority owners is actually present, so the normal "yes, run the
-        search you offered" path is untouched.
+        Deliberately narrow on BOTH axes: it blocks only for a pending field that
+        actually owns a yes/no confirmation (the allowlist above — never a bare
+        "any pending field exists" check) or for an explicit higher-specificity
+        current-turn intent, so the normal "yes, run the search you offered" path
+        is untouched and a stale/unrelated pending field can never dead-end a
+        valid search.
         """
         msg = message or ""
-        # Priority 1 — an explicit pending mutation confirmation is armed.
+        # Priority 1 — an explicit pending mutation/confirmation that a bare
+        # affirmative belongs to is armed (allowlisted values only).
         try:
             ctx = self._get_recent_context(user_id) or {}
-            if ctx.get("_pending_field"):
+            pending_field = ctx.get("_pending_field") or ""
+            if pending_field in self._SEARCH_OUTRANKING_PENDING_FIELDS:
                 return True
         except Exception:
             pass

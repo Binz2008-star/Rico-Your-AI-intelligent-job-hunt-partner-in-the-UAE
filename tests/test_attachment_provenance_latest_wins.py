@@ -191,38 +191,50 @@ def test_nam_confirms_pending_mutation_not_job_search():
     assert h.profile(USER + ".confirm").years_experience == 8
 
 
-def test_pending_search_redemption_guard_blocks_on_armed_confirmation():
-    """Unit-level proof of the redemption guard: with a mutation confirmation
-    armed, a bare affirmative must be blocked from redeeming a pending search
-    (priority 1 > priority 4)."""
+def _guard_with_ctx(ctx: dict):
+    """Build a RicoChatAPI with _get_recent_context stubbed to `ctx` and return
+    its _pending_search_redemption_blocked bound method."""
     from unittest.mock import patch
     from src.rico_chat_api import RicoChatAPI
 
     api = RicoChatAPI()
-    with patch.object(api, "_get_recent_context", return_value={"_pending_field": "confirm_profile_update"}):
-        assert api._pending_search_redemption_blocked("u@test.com", "نعم") is True
-        assert api._pending_search_redemption_blocked("u@test.com", "yes") is True
+    patcher = patch.object(api, "_get_recent_context", return_value=ctx)
+    patcher.start()
+    return api._pending_search_redemption_blocked
 
 
-def test_pending_search_redemption_guard_blocks_on_cv_analysis():
-    """The guard also stands down a pending search for an explicit
-    higher-specificity CV-analysis intent (priority 3 > priority 4)."""
-    from unittest.mock import patch
-    from src.rico_chat_api import RicoChatAPI
-
-    api = RicoChatAPI()
-    with patch.object(api, "_get_recent_context", return_value={}):
-        assert api._pending_search_redemption_blocked("u@test.com", "analyze my CV") is True
+# (2) supported structured action (the profile-mutation confirmation) + stale
+# pending search + affirmative → the confirmation outranks the search.
+def test_guard_blocks_on_confirm_profile_update():
+    blocked = _guard_with_ctx({"_pending_field": "confirm_profile_update"})
+    assert blocked("u@test.com", "نعم") is True
+    assert blocked("u@test.com", "yes") is True
 
 
-def test_pending_search_redemption_guard_allows_plain_affirmative():
-    """Non-regression: with no confirmation armed and no higher-specificity
-    intent, a plain affirmative is NOT blocked — the normal 'yes, run the
-    search you offered' path is preserved."""
-    from unittest.mock import patch
-    from src.rico_chat_api import RicoChatAPI
+# (4) explicit CV-analysis intent + pending search → CV analysis outranks.
+def test_guard_blocks_on_cv_analysis_intent():
+    blocked = _guard_with_ctx({})
+    assert blocked("u@test.com", "analyze my CV") is True
 
-    api = RicoChatAPI()
-    with patch.object(api, "_get_recent_context", return_value={}):
-        assert api._pending_search_redemption_blocked("u@test.com", "yes") is False
-        assert api._pending_search_redemption_blocked("u@test.com", "نعم") is False
+
+# (5) only a pending search armed (no confirmation, no higher intent) → NOT
+# blocked, so a plain "yes" still redeems the search exactly once.
+def test_guard_allows_plain_affirmative_with_only_pending_search():
+    blocked = _guard_with_ctx({})
+    assert blocked("u@test.com", "yes") is False
+    assert blocked("u@test.com", "نعم") is False
+
+
+# (3) THE narrowing that this correction is about: an unrelated / stale /
+# unknown / non-confirmation _pending_field must NOT suppress a valid
+# "yes, run the search" — otherwise the turn silently dead-ends. Value-prompt
+# fields expect a value, not a bare "yes", so they never own the affirmative.
+def test_guard_does_not_block_on_unrelated_or_stale_pending_field():
+    for stale in ("preferred_cities", "telegram_username", "phone", "email",
+                  "some_unknown_legacy_field", ""):
+        blocked = _guard_with_ctx({"_pending_field": stale})
+        assert blocked("u@test.com", "yes") is False, (
+            f"a non-confirmation pending field ({stale!r}) must not block a valid search 'yes'"
+        )
+        # …but an explicit CV-analysis intent still outranks, regardless of the field.
+        assert _guard_with_ctx({"_pending_field": stale})("u@test.com", "analyze my CV") is True
