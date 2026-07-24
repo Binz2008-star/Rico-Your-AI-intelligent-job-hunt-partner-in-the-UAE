@@ -13614,10 +13614,22 @@ class RicoChatAPI:
         doc["confirmed_by_user"] = True
         doc["requires_confirmation"] = False
         ctx["last_uploaded_document"] = doc
+        # Failure truth: only claim the clarification was recorded if the store
+        # actually persisted it. If _store_recent_context fails, tell the user
+        # honestly rather than reporting a success that didn't happen.
         try:
             self._store_recent_context(user_id, ctx)
         except Exception:
-            pass
+            logger.warning("attachment_type_clarification_store_failed user=%s", user_id)
+            reply = (
+                "لم أتمكّن من حفظ هذا التوضيح الآن — لم أُغيّر ملفك الشخصي أو سيرتك. "
+                "من فضلك حاول مرة أخرى بعد قليل."
+                if is_ar else
+                "I couldn't save that clarification just now — I didn't change your profile or CV. "
+                "Please try again in a moment."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply, "success": False}
         filename = doc.get("filename") or ("ملفك" if is_ar else "your file")
         if wants_id:
             reply = (

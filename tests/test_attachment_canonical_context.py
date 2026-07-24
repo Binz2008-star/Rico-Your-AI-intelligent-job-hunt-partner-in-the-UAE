@@ -145,6 +145,46 @@ def test_clarification_without_attachment_is_ignored():
     assert not (r.get("type") == "document_context" and "identity document" in (r.get("message") or "").lower())
 
 
+def test_clarification_reports_failure_when_store_fails():
+    """Failure truth: if persisting the clarification fails, Rico must NOT claim
+    it was recorded — it returns success=False and an honest message, and does
+    not touch the profile/CV."""
+    from unittest.mock import patch
+    from src.rico_chat_api import RicoChatAPI
+
+    doc = build_last_uploaded_context(filename="synthetic_upload.png", document_type="cv", confidence=0.3)
+    ctx = {"last_uploaded_document": doc}
+    api = RicoChatAPI()
+    with patch.object(api, "_get_recent_context", return_value=ctx), \
+         patch.object(api, "_store_recent_context", side_effect=RuntimeError("store down")), \
+         patch.object(api, "_append_chat"):
+        r = api._handle_attachment_type_clarification("u@test.com", "this is my ID")
+    assert isinstance(r, dict)
+    assert r.get("success") is False, "a failed store must not be reported as a successful clarification"
+    assert "identity document" not in (r.get("message") or "").lower() or "couldn't save" in (r.get("message") or "").lower()
+
+
+def test_two_consecutive_uploads_latest_wins_at_context_level():
+    """Two uploads in a row: the second canonical record fully replaces the
+    first in recent-context, so a follow-up resolves against the newest."""
+    h = ChatHarness()
+    u = USER + ".twoup"
+    h.seed(u, cv_status="parsed", cv_filename="cv.pdf", target_roles=["Environmental Manager"])
+    h._rctx.setdefault(u, {})
+    # First upload: an identity document.
+    h._rctx[u]["last_uploaded_document"] = build_last_uploaded_context(
+        filename="first_id.png", document_type="identity_document", confidence=0.9,
+    )
+    # Second upload arrives and replaces it wholesale (as the write-site does).
+    h._rctx[u]["last_uploaded_document"] = build_last_uploaded_context(
+        filename="second_screenshot.png", document_type="unknown", confidence=0.0,
+    )
+    doc = h._rctx[u]["last_uploaded_document"]
+    assert doc["filename"] == "second_screenshot.png"
+    assert doc["detected_type"] == "unknown"
+    assert doc["is_sensitive"] is False, "no stale sensitive flag from the older attachment"
+
+
 def test_this_is_my_cv_clarification_updates_type_not_profile():
     h = ChatHarness()
     u = USER + ".cvclar"
