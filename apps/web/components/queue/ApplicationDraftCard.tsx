@@ -4,78 +4,78 @@ import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { ApplicationDraft } from "@/lib/api";
+import type { ApplicationDraft, ApplyActionResponse } from "@/lib/api";
 import { useTranslation } from "@/lib/translations";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 interface ApplicationDraftCardProps {
     draft: ApplicationDraft;
-    /** STEP 1 — perform the approval mutation. Resolves when the mutation call
-     *  succeeds; rejects if it failed (nothing persisted). */
-    onApprove: (id: string) => Promise<void>;
-    /** STEP 2 — canonical read-back. Resolves true only when the persisted
-     *  approved state is confirmed against the authoritative source. Performs
-     *  no mutation, so it is safe to retry. */
-    onConfirm: (id: string) => Promise<boolean>;
-    /** Fired once when approval is confirmed, so the parent can reconcile
-     *  counts without unmounting this card's verified end-state. */
+    /** Perform the approval mutation and return the server's persisted status
+     *  envelope. The canonical proof of approval is `ok === true &&
+     *  status === "approved"` — nothing else (never absence from the pending
+     *  queue) may render the verified receipt. Rejects when the request could
+     *  not be completed (network / timeout / non-2xx); such a rejection is
+     *  AMBIGUOUS — the mutation may still have persisted server-side. */
+    onApprove: (id: string) => Promise<ApplyActionResponse>;
+    /** Fired once when approval is canonically confirmed, so the parent can
+     *  reconcile counts without unmounting this card's verified end-state. */
     onResolved?: (id: string) => void;
+    /** Reload the whole queue from the authoritative source. Used ONLY to
+     *  refresh the list after an unconfirmed approval — never as approval proof,
+     *  and it never repeats the approval mutation. */
+    onReloadQueue?: () => void;
     onReject: (id: string) => Promise<void>;
 }
 
 type Tab = "cover_letter" | "cv";
 
-// idle → approving → verifying → approved  (happy path)
-//                  → verifying → verifyFailed  (mutation ok, read-back not confirmed / errored)
-//        → error  (mutation itself failed — nothing persisted)
+// idle → approving → approved     (response { ok: true, status: "approved" })
+//                  → unconfirmed  (rejected request OR resolved-but-not-approved)
 type Phase =
     | "idle"
     | "approving"
-    | "verifying"
     | "approved"
-    | "verifyFailed"
-    | "error"
+    | "unconfirmed"
     | "rejecting"
     | "rejected";
 
-// Surface-local strings for the read-back states, following this surface's
+// Surface-local strings for the approval states, following this surface's
 // existing local-COPY idiom (see QueueAtelier). Shared keys stay in t().
 const COPY = {
     en: {
-        confirming: "Confirming…",
-        verifyFailedTitle: "Approved — but not yet confirmed",
-        verifyFailedBody:
-            "Your approval was sent, but we couldn't confirm it saved. Retry the check — this will not re-send the approval.",
-        retryCheck: "Retry check",
-        errorTitle: "Approval didn't go through",
-        errorBody: "Nothing was changed. You can try approving again.",
-        retryApprove: "Try again",
+        // Ambiguous / unconfirmed: a rejected request may have persisted
+        // server-side, and the pending-only queue cannot positively prove
+        // "approved" vs "rejected". So we never claim failure and never repeat
+        // the mutation — the only offered action re-reads the queue.
+        unconfirmedTitle: "Approval status could not be confirmed",
+        unconfirmedBody:
+            "Your approval may have been saved, but we couldn't confirm it. Reload the queue to see the current status — this will not re-send the approval.",
+        reloadQueue: "Reload queue",
         savedNote: "Saved to your applications.",
     },
     ar: {
-        confirming: "جارٍ التأكيد…",
-        verifyFailedTitle: "تمت الموافقة — لكن دون تأكيد بعد",
-        verifyFailedBody:
-            "أُرسلت موافقتك، لكن تعذّر تأكيد حفظها. أعد المحاولة للتحقق — لن تُعاد الموافقة.",
-        retryCheck: "إعادة التحقق",
-        errorTitle: "لم تكتمل الموافقة",
-        errorBody: "لم يتغيّر شيء. يمكنك المحاولة مجددًا.",
-        retryApprove: "إعادة المحاولة",
+        unconfirmedTitle: "تعذّر تأكيد حالة الموافقة",
+        unconfirmedBody:
+            "قد تكون موافقتك قد حُفظت، لكن تعذّر تأكيد ذلك. أعد تحميل القائمة لمعرفة الحالة الحالية — لن تُعاد الموافقة.",
+        reloadQueue: "إعادة تحميل القائمة",
         savedNote: "حُفظت في طلباتك.",
     },
 } as const;
 
-export function ApplicationDraftCard({ draft, onApprove, onConfirm, onResolved, onReject }: ApplicationDraftCardProps) {
+export function ApplicationDraftCard({ draft, onApprove, onResolved, onReloadQueue, onReject }: ApplicationDraftCardProps) {
     const [tab, setTab] = useState<Tab>("cover_letter");
     const [phase, setPhase] = useState<Phase>("idle");
+    // Guards against a synchronous double-click sending the mutation twice:
+    // the second invocation returns before touching onApprove.
+    const inFlight = useRef(false);
     const { language } = useLanguage();
     const t = useTranslation(language);
     const c = useWorkspaceTheme();
     const copy = COPY[language];
 
     const approved = phase === "approved";
-    const busy = phase === "approving" || phase === "verifying" || phase === "rejecting";
+    const busy = phase === "approving" || phase === "rejecting";
 
     // Approved is a "verified receipt" end-state: use the Atelier moss success
     // hue (theme-correct per island), not a raw green. Kept local since the
@@ -85,33 +85,41 @@ export function ApplicationDraftCard({ draft, onApprove, onConfirm, onResolved, 
     const mossBg = c.dark ? "rgba(111,190,143,0.10)" : "rgba(60,122,82,0.08)";
 
     async function runApprove() {
-        // STEP 1 — mutation
+        // Exactly-once guard — a re-entrant click while a mutation is already
+        // in flight is ignored, so double-click never double-submits.
+        if (inFlight.current) return;
+        inFlight.current = true;
         setPhase("approving");
         try {
-            await onApprove(draft.id);
-        } catch {
-            setPhase("error"); // mutation failed — nothing persisted
-            return;
-        }
-        // STEP 2 — canonical read-back
-        await runConfirm();
-    }
-
-    // Read-back only. Reachable from the happy path AND from a "Retry check"
-    // after verifyFailed — it never re-invokes the approval mutation.
-    async function runConfirm() {
-        setPhase("verifying");
-        try {
-            const confirmed = await onConfirm(draft.id);
-            if (confirmed) {
+            let res: ApplyActionResponse;
+            try {
+                res = await onApprove(draft.id);
+            } catch {
+                // Ambiguous: the request did not complete cleanly. It MAY have
+                // persisted server-side, so we must NOT claim failure and must
+                // NOT auto-repeat the mutation.
+                setPhase("unconfirmed");
+                return;
+            }
+            // Canonical positive proof — the server's explicit persisted status.
+            if (res.ok === true && res.status === "approved") {
                 setPhase("approved");
                 onResolved?.(draft.id);
             } else {
-                setPhase("verifyFailed"); // mutation ok, persisted state not confirmed
+                // Clean response, but not an approved confirmation → no receipt.
+                setPhase("unconfirmed");
             }
-        } catch {
-            setPhase("verifyFailed"); // read-back errored — do NOT claim verified
+        } finally {
+            inFlight.current = false;
         }
+    }
+
+    // Re-read the queue from the authoritative source. Never repeats the
+    // approval mutation. If the draft is no longer pending it leaves the list;
+    // if it is still pending the card returns to idle for a fresh decision.
+    function reloadQueue() {
+        setPhase("idle");
+        onReloadQueue?.();
     }
 
     async function handleReject() {
@@ -126,10 +134,7 @@ export function ApplicationDraftCard({ draft, onApprove, onConfirm, onResolved, 
 
     if (phase === "rejected") return null;
 
-    const approveLabel =
-        phase === "approving" ? t("draftApproving")
-            : phase === "verifying" ? copy.confirming
-                : t("draftApprove");
+    const approveLabel = phase === "approving" ? t("draftApproving") : t("draftApprove");
 
     return (
         <article
@@ -200,44 +205,19 @@ export function ApplicationDraftCard({ draft, onApprove, onConfirm, onResolved, 
                     <MaterialIcon icon="verified" size={16} style={{ color: moss }} />
                     <p className="text-xs font-medium" style={{ color: moss }}>{copy.savedNote}</p>
                 </div>
-            ) : phase === "verifyFailed" ? (
+            ) : phase === "unconfirmed" ? (
                 <div className="border-t px-4 py-4 sm:px-5" style={{ borderColor: c.hair }} role="status" aria-live="polite">
-                    <p className="text-sm font-semibold" style={{ color: c.ink }}>{copy.verifyFailedTitle}</p>
-                    <p className="mt-1 text-xs leading-5" style={{ color: c.ink55 }}>{copy.verifyFailedBody}</p>
+                    <p className="text-sm font-semibold" style={{ color: c.ink }}>{copy.unconfirmedTitle}</p>
+                    <p className="mt-1 text-xs leading-5" style={{ color: c.ink55 }}>{copy.unconfirmedBody}</p>
                     <button
                         type="button"
-                        onClick={runConfirm}
+                        onClick={reloadQueue}
                         className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-[4px] border px-4 py-2 text-sm font-semibold transition-transform hover:-translate-y-0.5"
                         style={{ borderColor: c.ink, color: c.ink, background: c.panel }}
                     >
                         <MaterialIcon icon="refresh" size={15} />
-                        {copy.retryCheck}
+                        {copy.reloadQueue}
                     </button>
-                </div>
-            ) : phase === "error" ? (
-                <div className="border-t px-4 py-4 sm:px-5" style={{ borderColor: c.hair }} role="alert">
-                    <p className="text-sm font-semibold" style={{ color: c.ink }}>{copy.errorTitle}</p>
-                    <p className="mt-1 text-xs leading-5" style={{ color: c.ink55 }}>{copy.errorBody}</p>
-                    <div className="mt-3 flex gap-2">
-                        <button
-                            type="button"
-                            onClick={runApprove}
-                            className="inline-flex min-h-10 items-center gap-1.5 rounded-[4px] px-4 py-2 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5"
-                            style={{ background: c.red }}
-                        >
-                            <MaterialIcon icon="task_alt" size={15} />
-                            {copy.retryApprove}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleReject}
-                            className="inline-flex min-h-10 items-center gap-1.5 rounded-[4px] border px-3 py-2 text-sm font-semibold transition-transform hover:-translate-y-0.5"
-                            style={{ borderColor: c.hair, color: c.ink70, background: c.panel }}
-                        >
-                            <MaterialIcon icon="close" size={15} />
-                            {t("draftDecline")}
-                        </button>
-                    </div>
                 </div>
             ) : (
                 <footer className="flex flex-col gap-3 border-t px-4 py-4 sm:flex-row sm:items-center sm:px-5" style={{ borderColor: c.hair }}>

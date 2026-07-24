@@ -73,21 +73,19 @@ export function QueueAtelier() {
         return () => ctrl.abort();
     }, [reloadKey, t]);
 
-    // STEP 1 — mutation only. Does NOT mutate local list state, so a failed
-    // read-back can never leave the UI implying success. Never called on retry
-    // after the mutation already succeeded (see ApplicationDraftCard).
-    const handleApprove = useCallback(async (id: string) => {
-        await approveApplication(id);
-    }, []);
+    // Approval mutation. Returns the server's persisted status envelope so the
+    // card can validate the canonical proof (ok === true && status ===
+    // "approved") — the only thing that renders the verified receipt. Does NOT
+    // mutate local list state, so an ambiguous/unconfirmed result can never
+    // leave the UI implying success.
+    const handleApprove = useCallback((id: string) => approveApplication(id), []);
 
-    // STEP 2 — canonical read-back. Re-fetches the same authoritative source
-    // the surface loads from (getApplicationQueue). An approved draft leaves
-    // the review queue server-side, so absence after approval is the persisted
-    // proof. Returns true only when the draft is confirmed gone. This performs
-    // NO mutation, so retrying it is always safe.
-    const confirmApproved = useCallback(async (id: string): Promise<boolean> => {
-        const queue = await getApplicationQueue();
-        return !queue.some((draft) => draft.id === id);
+    // List refresh only — offered after an unconfirmed approval. Re-reads the
+    // authoritative queue; it never repeats the approval mutation and is never
+    // used as proof of approval (a pending-only queue cannot positively prove
+    // "approved" vs "rejected").
+    const handleReloadQueue = useCallback(() => {
+        setReloadKey((key) => key + 1);
     }, []);
 
     const handleResolved = useCallback((id: string) => {
@@ -205,8 +203,8 @@ export function QueueAtelier() {
                                 key={draft.id}
                                 draft={draft}
                                 onApprove={handleApprove}
-                                onConfirm={confirmApproved}
                                 onResolved={handleResolved}
+                                onReloadQueue={handleReloadQueue}
                                 onReject={handleReject}
                             />
                         ))}
