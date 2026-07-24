@@ -201,7 +201,9 @@ _DISPLAY_LABELS: dict[str, str] = {
     "invoice":           "Invoice",
     "image":             "Image",
     "no_text":           "Unreadable / Image-only Document",
-    "unknown":           "Document",
+    # Not "Document" — that reads as a confirmed classification when this is
+    # the OCR-extracted-but-unmatched-any-type case (0.0 confidence).
+    "unknown":           "Unrecognized Document",
 }
 
 _SUGGESTED_ACTIONS: dict[str, list[dict[str, str]]] = {

@@ -45,12 +45,26 @@ def test_build_returns_valid_model():
     assert a.id.startswith("att-")
 
 
-def test_low_confidence_and_unknown_emit_warnings():
+def test_low_confidence_and_unknown_emit_a_single_warning():
     c = _FakeClassification("mystery", 0.2, "Document")
     a = build_attachment_analysis(c, "x.pdf")
     assert a.purpose == RicoAttachmentPurpose.unknown_document
-    # both the unknown-purpose and low-confidence warnings should be present
-    assert len(a.warnings) == 2
+    # The unknown-purpose warning already states the uncertainty; a separate
+    # low-confidence warning would just repeat the same fact, so exactly one
+    # warning is emitted (previously both fired, producing a duplicate).
+    assert len(a.warnings) == 1
+    assert "not sure" in a.warnings[0].lower()
+
+
+def test_low_confidence_known_type_still_warns():
+    """A recognized type (not unknown_document) with low confidence still
+    gets the low-confidence warning — only the unknown-document case
+    suppresses it as redundant."""
+    c = _FakeClassification("job_description", 0.3, "Job Description")
+    a = build_attachment_analysis(c, "role.pdf")
+    assert a.purpose == RicoAttachmentPurpose.job_post
+    assert len(a.warnings) == 1
+    assert "low classification confidence" in a.warnings[0].lower()
 
 
 def test_dict_is_json_ready():
