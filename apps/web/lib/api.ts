@@ -2209,11 +2209,32 @@ export async function getApplicationQueue(
   });
 }
 
+/**
+ * Server envelope for an apply-queue lifecycle action. The backend performs an
+ * atomic status transition and echoes the persisted status, e.g. approve
+ * returns `{ ok: true, status: "approved" }`. This explicit persisted status is
+ * the ONLY canonical proof that the action took effect — callers must validate
+ * `ok === true && status === "<expected>"`. Absence from the pending-only
+ * `/apply/queue` proves a draft is merely "not pending", never specifically
+ * "approved", so it must not be used as approval proof.
+ */
+export interface ApplyActionResponse {
+  ok: boolean;
+  status: string;
+}
+
+/**
+ * Approve a prepared draft. Resolves with the persisted status envelope
+ * (`{ ok: true, status: "approved" }` on success). Rejects when the request
+ * could not be completed (network / timeout / non-2xx); such a rejection is
+ * AMBIGUOUS — the mutation may still have persisted server-side, so callers
+ * must not claim failure and must not auto-retry the mutation.
+ */
 export async function approveApplication(
   draftId: string,
   signal?: AbortSignal,
-): Promise<{ ok: boolean; status: string }> {
-  return requestJson<{ ok: boolean; status: string }>(
+): Promise<ApplyActionResponse> {
+  return requestJson<ApplyActionResponse>(
     `/api/v1/apply/approve/${draftId}`,
     { method: "POST", signal },
   );
@@ -2222,8 +2243,8 @@ export async function approveApplication(
 export async function rejectApplication(
   draftId: string,
   signal?: AbortSignal,
-): Promise<{ ok: boolean; status: string }> {
-  return requestJson<{ ok: boolean; status: string }>(
+): Promise<ApplyActionResponse> {
+  return requestJson<ApplyActionResponse>(
     `/api/v1/apply/reject/${draftId}`,
     { method: "DELETE", signal },
   );
