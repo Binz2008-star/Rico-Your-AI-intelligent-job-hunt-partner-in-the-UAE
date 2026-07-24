@@ -183,19 +183,26 @@ class TestChatContextMirrorsFilesEndpoint:
         ctx = _build_chat_ctx([_other_doc()], {"cv_filename": "Roben_Parsed_Profile_CV.pdf"})
         docs = ctx["uploaded_documents"]
         assert len(docs) == 2
-        # synthetic active CV first, real upload kept
-        assert docs[0]["filename"] == "Roben_Parsed_Profile_CV.pdf"
+        # synthetic active CV first (legacy, parsed) — filename kept as an
+        # untrusted identifier (#P0 identity guard), real upload kept.
         assert docs[0]["doc_type"] == "cv"
         assert docs[0]["is_primary"] is True
         assert docs[0]["is_legacy"] is True
-        assert docs[1]["filename"] == "Roben_Edwan_VIP_Relationship_Manager_CV.pdf"
+        assert docs[0]["content_available"] is True
+        assert docs[0]["filename_untrusted"] == "Roben_Parsed_Profile_CV.pdf"
         assert docs[1]["doc_type"] == "other"
+        assert docs[1]["filename_untrusted"] == "Roben_Edwan_VIP_Relationship_Manager_CV.pdf"
+        assert docs[1]["content_available"] is False
+        assert all("filename" not in d and "label" not in d for d in docs)
 
     def test_real_primary_cv_means_no_synthetic_in_context(self):
         ctx = _build_chat_ctx([_primary_cv_doc(), _other_doc()], {"cv_filename": "Roben_Parsed_Profile_CV.pdf"})
-        filenames = [d["filename"] for d in ctx["uploaded_documents"]]
-        assert "Roben_Parsed_Profile_CV.pdf" not in filenames
-        assert len(filenames) == 2
+        docs = ctx["uploaded_documents"]
+        # Real primary CV present → no synthetic legacy fallback entry is added.
+        assert not any(d.get("is_legacy") for d in docs)
+        names = [d["filename_untrusted"] for d in docs]
+        assert "Roben_Parsed_Profile_CV.pdf" not in names
+        assert len(docs) == 2
 
     def test_non_primary_cv_doc_still_gets_profile_fallback(self):
         non_primary_cv = dict(_primary_cv_doc(), is_primary=False)

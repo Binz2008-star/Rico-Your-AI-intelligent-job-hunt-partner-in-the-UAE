@@ -214,3 +214,77 @@ class TestLanguageAndStylePolicy:
         src = pathlib.Path("src/rico_openai_runtime.py").read_text(encoding="utf-8")
         assert "Gulf Arabic" not in src
         assert "get_language_rule" in src
+
+
+class TestIdentityIntegrityGuard:
+    """#P0 identity hallucination: Rico asserted a false Emirates-ID name that
+    came from a stale, name-bearing *zero-byte* document filename leaking into
+    the LLM context. Two layers, both deterministic (no live LLM):
+
+      1. system prompt forbids reading a person's name/identity from a filename
+         or label, and requires ASKING rather than advising a name change;
+      2. the LLM document projection excludes zero-byte / failed artifacts and
+         exposes filenames only as an untrusted identifier beside safe fields.
+    """
+
+    def test_prompt_forbids_identity_from_filename(self):
+        prompt = get_rico_system_prompt()
+        low = prompt.lower()
+        assert "identity integrity" in low
+        assert "emirates id" in low
+        assert "filename_untrusted" in prompt
+        assert "change their name" in low       # never advise a rename…
+        assert "ask the user" in low            # …ASK instead
+
+    def test_prompt_documents_carry_structured_fields(self):
+        prompt = get_rico_system_prompt()
+        for field in ("document_id", "doc_type", "is_primary",
+                      "parse_status", "content_available", "filename_untrusted"):
+            assert field in prompt, f"system prompt missing {field!r}"
+
+    def test_zero_byte_artifact_excluded_from_llm_but_listed_in_my_files(self):
+        """The acceptance case: a 0-byte file named like an Emirates ID must
+        never reach the model (no identity claim possible), yet 'show my
+        uploaded files' must still list it as an account artifact."""
+        from unittest.mock import patch
+        from src.rico_chat_api import RicoChatAPI
+
+        entry = {
+            "id": "doc-empty-1",
+            "file_size": 0,
+            "filename": "Nehad_Zoher_Emirates_ID.pdf",
+            "doc_type": "cv",
+            "label": "Nehad_Zoher_Emirates_ID.pdf",
+            "is_primary": True,
+        }
+        # Layer 1 — the 0-byte artifact never reaches the model.
+        assert RicoChatAPI._documents_for_llm([entry]) == []
+
+        # …but the deterministic My Files handler still lists its filename.
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        with patch("src.rico_chat_api.get_profile", return_value=None), \
+             patch.object(api, "_collect_uploaded_documents", return_value=[entry]), \
+             patch.object(api, "_append_chat"):
+            result = api._handle_file_list_query("user@x.com", "check my uploaded files")
+        assert "Nehad_Zoher_Emirates_ID.pdf" in result["message"]
+
+    def test_valid_document_keeps_untrusted_filename_and_flags(self):
+        from src.rico_chat_api import RicoChatAPI
+
+        entries = [{
+            "id": "doc-cv-9", "file_size": 88000,
+            "filename": "Some_Person_CV.pdf", "doc_type": "cv",
+            "label": "Some_Person_CV.pdf", "is_primary": True,
+            "skills_count": 5, "years_experience": 6,
+        }]
+        llm = RicoChatAPI._documents_for_llm(entries)
+        assert len(llm) == 1
+        d = llm[0]
+        assert d["document_id"] == "doc-cv-9"
+        assert d["doc_type"] == "cv"
+        assert d["is_primary"] is True
+        assert d["content_available"] is True
+        assert d["parse_status"] == "parsed"
+        # filename retained for disambiguation — but only as an untrusted id.
+        assert d["filename_untrusted"] == "Some_Person_CV.pdf"
+        assert "filename" not in d and "label" not in d
