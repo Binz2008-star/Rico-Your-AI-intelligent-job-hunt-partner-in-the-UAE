@@ -5966,6 +5966,40 @@ class RicoChatAPI:
         except Exception:
             pass
 
+    def _pending_search_redemption_blocked(self, user_id: str, message: str) -> bool:
+        """True when an armed pending job search must NOT be redeemed by the
+        current turn, because a higher-priority intent owns it.
+
+        Continuation-truth priority order (attachment-provenance PR): an explicit
+        pending mutation confirmation (priority 1) and an explicit
+        higher-specificity current-turn intent (priority 3) both outrank a
+        saved/pending-search continuation (priority 4). Without this guard, a
+        bare affirmative — or a clear CV-analysis request — sent while a pending
+        search is armed is silently swallowed as search-continuation instead of
+        reaching the confirmation flow or the CV-analysis handler (the transcript
+        نعم→search misfire, and #1360's documented known gap).
+
+        Deliberately narrow: it only blocks redemption when one of these
+        higher-priority owners is actually present, so the normal "yes, run the
+        search you offered" path is untouched.
+        """
+        msg = message or ""
+        # Priority 1 — an explicit pending mutation confirmation is armed.
+        try:
+            ctx = self._get_recent_context(user_id) or {}
+            if ctx.get("_pending_field"):
+                return True
+        except Exception:
+            pass
+        # Priority 3 — the current turn is an explicit higher-specificity intent
+        # (CV analysis) that must never be consumed as a search continuation.
+        try:
+            if self._CV_ANALYZE_ASK_RE.search(msg):
+                return True
+        except Exception:
+            pass
+        return False
+
     def _resolve_pending_intent(self, user_id: str, message: str, profile: Any) -> dict[str, Any] | None:
         """If last Rico message offered a yes/no action and user affirms, execute it.
 
@@ -5976,7 +6010,7 @@ class RicoChatAPI:
         # Checked BEFORE the _is_affirmative guard because this method is called from
         # both the affirmative path (yes/ok) and the follow_up_confirmation path (تمام/نعم/كمل).
         pending_js = self._get_pending_job_search(user_id)
-        if pending_js and pending_js.get("role"):
+        if pending_js and pending_js.get("role") and not self._pending_search_redemption_blocked(user_id, message):
             self._clear_pending_job_search(user_id)
             pending_role = pending_js["role"]
             pending_loc = pending_js.get("location", "")
@@ -7968,7 +8002,7 @@ class RicoChatAPI:
                 if _pending_js.get("role") and (
                     self._is_affirmative(message)
                     or self._is_continuation_intent(message)
-                ):
+                ) and not self._pending_search_redemption_blocked(user_id, message):
                     self._append_chat(user_id, "user", message)
                     self._clear_pending_job_search(user_id)
                     self._discard_pending_role_confirmation(user_id)
@@ -13416,32 +13450,138 @@ class RicoChatAPI:
         re.IGNORECASE,
     )
 
-    def _get_recent_upload_document_reply(self, user_id: str, message: str) -> dict[str, Any] | None:
-        """Return a document-context reply when the user explicitly asks about their last upload.
+    # Attachment-provenance PR — "latest attachment wins" continuation phrases.
+    # Bare, deictic references to the just-uploaded file that the older
+    # _UPLOAD_DOC_QUERY_RE / _DOC_FOLLOWUP_RE never matched ("what was that?",
+    # "what did you extract?", the Arabic "شو هاد؟" / "ماذا استخرجت؟"). They must
+    # resolve against the LATEST attachment only when one is actually on record —
+    # never against an older subscription answer, an earlier job search, or an
+    # older attachment (the transcript's "answered from an older context" defect).
+    # Deliberately requires a recent attachment in context before firing, so a
+    # bare "what was that?" with no upload on record falls through to normal
+    # routing unchanged. A bare affirmative (yes/نعم) is intentionally NOT here:
+    # it must never consume attachment context unless Rico asked an explicit
+    # attachment-confirmation question.
+    _LATEST_ATTACHMENT_CONTINUATION_RE = re.compile(
+        r"\bwhat\s+was\s+(?:that|this|it)\b"
+        r"|\bwhat\s+did\s+you\s+(?:extract|read|find|get)\b"
+        r"|\bwhat\s+did\s+i\s+(?:just\s+)?(?:upload|send|share|attach)\b"
+        r"|\bwhat\s+is\s+(?:this|that)\s+(?:file|image|document|attachment)\b"
+        r"|\bwhat'?s\s+(?:this|that)\s+(?:file|image|document|attachment)\b"
+        r"|شو\s*ه[اأ]?د|ما\s*هذا|ما\s*هاد"
+        r"|م[اا]?ذا\s+(?:[اأ]رسلت|استخرجت|رفعت|شاركت)"
+        r"|شو\s*(?:ال)?ملف|شو\s*استخرجت",
+        re.IGNORECASE,
+    )
 
-        Only fires for unambiguous document-meta queries (e.g. 'what did I upload?').
-        Broader document analysis flows through the normal AI pipeline (TASK-030).
+    # Provenance boundary: a question that NAMES its source ("from my CV",
+    # "from my ID", "من سيرتي", "من هويتي") is NOT a bare latest-attachment
+    # continuation — it must be answered from that specific source, never
+    # cross-contaminated with the newest attachment. When this matches, the
+    # latest-attachment continuation stands down and normal source-specific
+    # routing (active CV / identity attachment) handles the turn.
+    _EXPLICIT_DOC_SOURCE_RE = re.compile(
+        r"\b(?:my\s+)?(?:cv|resume|r[eé]sum[eé]|profile)\b"
+        r"|\b(?:my\s+)?(?:id|identity|emirates\s*id|passport)\b"
+        r"|من\s+سيرت|من\s+هويت|من\s+(?:بطاقة|جواز)",
+        re.IGNORECASE,
+    )
+
+    # Document types whose extracted values (name, DOB, nationality, ID/card
+    # number, expiry, …) are sensitive PII — never repeated in a general summary,
+    # and never allowed to silently become canonical profile identity.
+    _SENSITIVE_DOC_TYPES = frozenset({"identity_document", "passport"})
+    # Below this classifier confidence a detected type is NOT treated as canonical
+    # document identity — Rico describes it as probable/uncertain and asks the
+    # user to confirm, rather than asserting a type it isn't sure of.
+    _LOW_CONFIDENCE_THRESHOLD = 0.5
+
+    def _describe_latest_attachment(self, doc: dict[str, Any], is_ar: bool) -> str:
+        """Honest, provenance-safe one-paragraph description of the latest
+        attachment. Never repeats sensitive identity values (name / DOB /
+        nationality / ID number / …); for a low-confidence classification it
+        describes the file as probable/uncertain and asks for confirmation
+        instead of asserting a type. Categories, not raw values.
         """
-        if not self._UPLOAD_DOC_QUERY_RE.search(message):
+        raw_type = str(doc.get("detected_type") or doc.get("document_type") or "unknown")
+        label = doc.get("display_label") or raw_type.replace("_", " ").title()
+        filename = doc.get("filename") or ("ملفك" if is_ar else "your file")
+        try:
+            confidence = float(doc.get("classification_confidence", doc.get("confidence", 0)) or 0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        pct = int(round(confidence * 100))
+        is_sensitive = bool(doc.get("is_sensitive")) or raw_type in self._SENSITIVE_DOC_TYPES
+        low_conf = confidence < self._LOW_CONFIDENCE_THRESHOLD
+
+        if is_sensitive:
+            # Categories only — never echo the extracted name/DOB/ID number here.
+            return (
+                f"آخر ملف رفعته هو **{filename}**، ويبدو أنه **وثيقة هوية**. "
+                "لأسباب تتعلّق بخصوصيتك، لا أكرّر تفاصيلها الحسّاسة (مثل الاسم أو الرقم أو تاريخ الميلاد) "
+                "في الملخّصات العامة، ولم أغيّر ملفك الشخصي بناءً عليها. "
+                "إن أردت أن أعرض حقلاً محدّداً منها، اطلبه صراحةً."
+                if is_ar else
+                f"The most recent file you uploaded was **{filename}**, which looks like an "
+                "**identity document**. For your privacy I don't repeat its sensitive details "
+                "(such as name, number, or date of birth) in general summaries, and I didn't "
+                "change your profile from it. If you want a specific field from it, just ask for that field."
+            )
+        if low_conf:
+            return (
+                f"آخر ملف رفعته هو **{filename}**. لست متأكّداً تماماً من نوعه "
+                f"(أفضل تخمين: **{label}**، بثقة {pct}٪ فقط). هل يمكنك تأكيد نوعه حتى أتعامل معه بشكل صحيح؟"
+                if is_ar else
+                f"The most recent file you uploaded was **{filename}**. I'm not fully sure what it is "
+                f"(my best guess is a **{label}**, but only {pct}% confidence). "
+                "Could you confirm what it is so I handle it correctly?"
+            )
+        # Normal, confident, non-sensitive document — safe to offer the
+        # classifier's suggested actions.
+        actions = doc.get("suggested_actions") or []
+        actions_str = ""
+        if actions:
+            labels = [a.get("label", str(a)) if isinstance(a, dict) else str(a) for a in actions[:4]]
+            header = "\n\nإليك ما يمكنني مساعدتك به:\n" if is_ar else "\n\nHere's what I can help you with:\n"
+            actions_str = header + "\n".join(f"- {lbl}" for lbl in labels)
+        return (
+            f"آخر ملف رفعته هو **{filename}**، وقد تعرّفت عليه كـ **{label}** (بثقة {pct}٪).{actions_str}\n\n"
+            "هل تريد أن أقوم بشيء محدّد به؟"
+            if is_ar else
+            f"The most recent file you uploaded was **{filename}**, which I identified as a "
+            f"**{label}** ({pct}% confidence).{actions_str}\n\n"
+            "Would you like me to do anything specific with it?"
+        )
+
+    def _get_recent_upload_document_reply(self, user_id: str, message: str) -> dict[str, Any] | None:
+        """Return a document-context reply when the user asks about their last upload.
+
+        Fires for explicit document-meta queries ('what did I upload?') AND for
+        bare "latest attachment wins" continuation phrases ('what was that?',
+        'شو هاد؟') — but the latter only when a recent attachment is actually on
+        record, so they resolve against the newest attachment rather than an
+        older subscription/search/CV context. Broader document analysis still
+        flows through the normal AI pipeline (TASK-030).
+        """
+        # A source-named question ("from my CV", "من هويتي") is never a bare
+        # latest-attachment continuation — it routes to that specific source.
+        if self._EXPLICIT_DOC_SOURCE_RE.search(message or ""):
+            return None
+        is_meta = bool(self._UPLOAD_DOC_QUERY_RE.search(message or ""))
+        is_continuation = bool(self._LATEST_ATTACHMENT_CONTINUATION_RE.search(message or ""))
+        if not (is_meta or is_continuation):
             return None
         try:
             ctx = self._get_recent_context(user_id)
             doc = ctx.get("last_uploaded_document")
             if not doc:
+                # A bare continuation phrase with no attachment on record must NOT
+                # be answered from here — let normal routing handle it. Only the
+                # explicit meta query is answered even when nothing is on record.
                 return None
-            label = doc.get("display_label") or doc.get("document_type", "document").replace("_", " ").title()
-            filename = doc.get("filename") or "your file"
-            pct = int(round(doc.get("confidence", 0) * 100))
-            actions = doc.get("suggested_actions") or []
-            actions_str = ""
-            if actions:
-                labels = [a.get("label", str(a)) if isinstance(a, dict) else str(a) for a in actions[:4]]
-                actions_str = "\n\nHere's what I can help you with:\n" + "\n".join(f"- {lbl}" for lbl in labels)
-            reply = (
-                f"The last document you uploaded was **{filename}**, "
-                f"which I identified as a **{label}** ({pct}% confidence).{actions_str}\n\n"
-                "Would you like to do anything specific with it?"
-            )
+            is_ar = (self._is_arabic_text(message)
+                     if hasattr(self, "_is_arabic_text") else bool(re.search(r"[؀-ۿ]", message or "")))
+            reply = self._describe_latest_attachment(doc, is_ar)
             self._append_chat(user_id, "assistant", reply)
             return {"type": "document_context", "message": reply}
         except Exception:
