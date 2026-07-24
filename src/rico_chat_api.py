@@ -6251,37 +6251,66 @@ class RicoChatAPI:
             arabic = self._is_arabic_text(msg)
 
             if self._is_affirmative(msg) and pending:
-                upsert_profile(user_id=user_id, updates=pending)
+                persisted = upsert_profile(user_id=user_id, updates=pending)
+                # State-truth fix (#1336-family): compose the confirmation from
+                # what was ACTUALLY persisted, never the pre-write intended
+                # dict. A field can be silently sanitized/dropped at the write
+                # boundary without raising (e.g. preferred_cities — #1336's
+                # fail-closed city sanitizer omits an invalid-only update
+                # entirely to avoid overwriting a valid existing value), so
+                # blindly echoing `pending` back can claim a save that never
+                # happened.
+                _actually_changed: dict[str, Any] = {}
+                _not_saved: list[str] = []
+                for _k, _intended in pending.items():
+                    if getattr(persisted, _k, None) == _intended:
+                        _actually_changed[_k] = _intended
+                    else:
+                        _not_saved.append(_k)
                 # When the target roles change, invalidate any cached "recent
                 # search role" so the very next bare "search for jobs now" uses
                 # the NEW targets instead of the stale role from an earlier
                 # search (TC-2: job_search_explicit prefers recent_search_role
                 # over profile target_roles).
-                if pending.get("target_roles"):
+                if _actually_changed.get("target_roles"):
                     _cleared = False
                     for _rk in ("recent_search_role", "recent_role", "recent_job"):
                         if ctx.pop(_rk, None) is not None:
                             _cleared = True
                     if _cleared:
                         self._store_recent_context(user_id, ctx)
-                _changes = self._format_pref_changes(pending)
+                _changes = self._format_pref_changes(_actually_changed)
+                _labels = {
+                    "target_roles": "Target role", "preferred_cities": "Preferred city",
+                    "years_experience": "Years of experience", "skills": "Skills",
+                    "industries": "Industry", "salary_expectation_aed": "Salary expectation",
+                    "employment_type": "Employment type", "visa_status": "Visa status",
+                    "nationality": "Nationality", "telegram_username": "Telegram username",
+                }
                 if arabic:
-                    reply = (
-                        "تم الحفظ:\n"
-                        + "\n".join(f"• {c}" for c in _changes)
-                        + "\n\nسأطبّق هذا على عمليات البحث القادمة."
-                    )
+                    parts = []
+                    if _changes:
+                        parts.append("تم الحفظ:\n" + "\n".join(f"• {c}" for c in _changes))
+                    if _not_saved:
+                        _rejected_labels = ", ".join(_labels.get(k, k) for k in _not_saved)
+                        parts.append(f"لم يتم حفظ: {_rejected_labels} — القيمة غير صالحة.")
+                    parts.append("سأطبّق هذا على عمليات البحث القادمة." if _changes else "")
+                    reply = "\n\n".join(p for p in parts if p)
                 else:
-                    reply = (
-                        "Saved:\n"
-                        + "\n".join(f"• {c}" for c in _changes)
-                        + "\n\nI'll apply this to future job searches."
-                    )
+                    parts = []
+                    if _changes:
+                        parts.append("Saved:\n" + "\n".join(f"• {c}" for c in _changes))
+                    if _not_saved:
+                        _rejected_labels = ", ".join(_labels.get(k, k) for k in _not_saved)
+                        parts.append(f"Not saved: {_rejected_labels} — invalid value.")
+                    parts.append("I'll apply this to future job searches." if _changes else "")
+                    reply = "\n\n".join(p for p in parts if p)
                 self._append_chat(user_id, "assistant", reply)
                 return {
                     "type": "preferences_updated",
                     "message": reply,
-                    "updated": pending,
+                    "updated": _actually_changed,
+                    "rejected": _not_saved,
                 }
 
             if self._is_negative(msg):
