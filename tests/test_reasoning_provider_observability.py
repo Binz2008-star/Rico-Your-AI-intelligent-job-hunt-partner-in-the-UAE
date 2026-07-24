@@ -192,3 +192,80 @@ class TestContextAssemblySmoke:
         up = ctx.get("uploaded_documents", [])
         # the 0-byte row (d2) is excluded from the LLM copy; d1 survives
         assert all(d["document_id"] != "d2" for d in up)
+
+
+# ── Stream path: walks the chain, hops on failure/timeout, honest on total fail ─
+
+class _Delta:
+    def __init__(self, content):
+        self.content = content
+
+
+class _Choice:
+    def __init__(self, content):
+        self.delta = _Delta(content)
+
+
+class _Chunk:
+    def __init__(self, content):
+        self.choices = [_Choice(content)]
+
+
+def _fake_stream(texts):
+    return iter([_Chunk(t) for t in texts])
+
+
+class TestStreamChainWalk:
+    def test_stream_hops_on_primary_failure(self):
+        attempts = []
+
+        def create(model, **kw):
+            attempts.append(model)
+            if len(attempts) == 1:
+                raise _FakeErr("Model not found", status_code=400, code="model_not_found")
+            return _fake_stream(["Hello ", "from ", "the fallback"])
+
+        client = MagicMock()
+        client.chat.completions.create.side_effect = create
+        with patch.object(rt, "_build_client", return_value=client):
+            out = "".join(rt.call_openai_stream("hi", provider="deepseek"))
+        # streamed a real answer from the second model — never the templated blob
+        assert out == "Hello from the fallback"
+        assert len(attempts) >= 2
+        assert rt._FALLBACK_TEXT not in out
+        assert rt.get_reasoning_health()["reachable"] is True
+
+    def test_stream_timeout_before_token_still_hops(self):
+        attempts = []
+
+        def create(model, **kw):
+            attempts.append(model)
+            if len(attempts) == 1:
+                raise TimeoutError("read timed out")  # a timeout BEFORE any token
+            return _fake_stream(["ok"])
+
+        client = MagicMock()
+        client.chat.completions.create.side_effect = create
+        with patch.object(rt, "_build_client", return_value=client):
+            out = "".join(rt.call_openai_stream("hi", provider="deepseek"))
+        # the primary timeout must trigger the hop — V4 Pro is not decorative
+        assert out == "ok"
+        assert len(attempts) >= 2
+
+    def test_stream_all_fail_yields_one_honest_fallback(self, monkeypatch):
+        monkeypatch.setenv("RICO_AI_PROVIDER", "deepseek")
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "fake-deepseek-key-for-tests")
+        monkeypatch.delenv("HF_TOKEN", raising=False)
+
+        def create(model, **kw):
+            raise _FakeErr("Model not found", status_code=400, code="model_not_found")
+
+        client = MagicMock()
+        client.chat.completions.create.side_effect = create
+        with patch.object(rt, "_build_client", return_value=client):
+            chunks = list(rt.call_openai_stream("hi", provider="deepseek"))
+        # exactly ONE honest fallback chunk — never a silent empty stream
+        assert chunks == [rt._FALLBACK_TEXT]
+        h = rt.get_reasoning_health()
+        assert h["reachable"] is False
+        assert h["degraded"] is True

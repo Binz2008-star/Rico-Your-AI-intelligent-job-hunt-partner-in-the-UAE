@@ -382,6 +382,15 @@ def _rate_limited_payload(
     return payload
 
 
+def _timeout_seconds(env_name: str, default: float) -> float:
+    """Positive float from env, else default. Backs the connect/read timeouts."""
+    try:
+        v = float((os.getenv(env_name) or "").strip())
+        return v if v > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
 def _build_client(provider: str):
     from openai import OpenAI
 
@@ -393,8 +402,14 @@ def _build_client(provider: str):
         kwargs["base_url"] = DEEPSEEK_BASE_URL
     # Disable SDK retries for chat requests - handle 429 explicitly instead
     kwargs["max_retries"] = 0
-    # Set explicit timeout to prevent 21-second hangs
-    kwargs["timeout"] = 15.0
+    # Separate connect vs read timeouts, env-configurable and sized so a heavy
+    # V4 Flash completion is not cut off mid-stream by a short read deadline (the
+    # old single 15s timeout truncated long answers). Connect stays short to fail
+    # fast on an unreachable provider.
+    from httpx import Timeout as _HttpxTimeout
+    _connect = _timeout_seconds("RICO_AI_CONNECT_TIMEOUT", 10.0)
+    _read = _timeout_seconds("RICO_AI_READ_TIMEOUT", 60.0)
+    kwargs["timeout"] = _HttpxTimeout(connect=_connect, read=_read, write=_read, pool=_connect)
     return OpenAI(**kwargs)
 
 
@@ -631,33 +646,77 @@ def call_openai_stream(
     messages.extend(safe_history)
     messages.append({"role": "user", "content": final_message})
 
-    model = primary_model
-    try:
-        if active_provider == "deepseek":
-            stream = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=_DEFAULT_MAX_OUTPUT_TOKENS,
-                stream=True,
-            )
-            for chunk in stream:
-                delta = chunk.choices[0].delta if chunk.choices else None
-                if delta and delta.content:
-                    yield delta.content
-        else:
-            # OpenAI Responses API streaming
-            stream = client.responses.create(
-                model=model,
-                input=messages,
-                max_output_tokens=_DEFAULT_MAX_OUTPUT_TOKENS,
-                stream=True,
-            )
-            for event in stream:
-                text = getattr(getattr(event, "delta", None), "text", None) or ""
-                if text:
-                    yield text
-    except Exception:
-        # Streaming failed — fall back to non-streaming
-        result = call_openai_minimal(user_message, profile_context, provider=provider,
-                                     conversation_history=conversation_history, language=language)
-        yield result.get("text", "")
+    import time
+
+    # Walk the SAME model chain the non-streaming path uses, streaming from each
+    # model in turn. A model that fails BEFORE emitting any token (retired id →
+    # 400, connect timeout, etc.) hops to the next model, still streaming. If
+    # every model fails, yield ONE honest, categorised fallback — never a silent
+    # empty stream, never a guaranteed-failed primary-only attempt.
+    model_attempts = (
+        _deepseek_model_chain() if active_provider == "deepseek"
+        else [m for m in (primary_model, fallback_model) if m]
+    )
+    last_error: Optional[Dict[str, Any]] = None
+    for model in model_attempts:
+        started = time.monotonic()
+        produced = False
+        try:
+            if active_provider == "deepseek":
+                stream = client.chat.completions.create(
+                    model=model, messages=messages,
+                    max_tokens=_DEFAULT_MAX_OUTPUT_TOKENS, stream=True,
+                )
+                for chunk in stream:
+                    delta = chunk.choices[0].delta if chunk.choices else None
+                    if delta and delta.content:
+                        produced = True
+                        yield delta.content
+            else:
+                stream = client.responses.create(
+                    model=model, input=messages,
+                    max_output_tokens=_DEFAULT_MAX_OUTPUT_TOKENS, stream=True,
+                )
+                for event in stream:
+                    text = getattr(getattr(event, "delta", None), "text", None) or ""
+                    if text:
+                        produced = True
+                        yield text
+            if produced:
+                _record_reasoning_outcome(active_provider, reachable=True, model_attempted=model)
+                return  # streamed a real answer
+            # Empty stream (no tokens) → treat as failure and hop to the next model.
+            last_error = {"error_type": "EmptyStream", "status_code": None,
+                          "provider_error_code": None, "message": "empty stream"}
+        except Exception as exc:
+            last_error = _safe_openai_error(exc)
+            last_error["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+            if produced:
+                # Tokens already sent to the client; we cannot cleanly restart on
+                # another model. Record the partial and stop.
+                _record_reasoning_outcome(
+                    active_provider, reachable=True, model_attempted=model,
+                    error_category=last_error.get("error_type"),
+                    status_code=last_error.get("status_code"),
+                )
+                return
+            # No tokens yet → a timeout/400/connection failure is safe to hop on.
+            continue
+
+    # Every model failed before producing a token → one honest, logged fallback
+    # (no silent empty stream).
+    _category = (last_error or {}).get("error_type") or "UnknownAIError"
+    _record_reasoning_outcome(
+        active_provider, reachable=False,
+        error_category=_category,
+        status_code=(last_error or {}).get("status_code"),
+        provider_error_code=(last_error or {}).get("provider_error_code"),
+        message=(last_error or {}).get("message"),
+        model_attempted=(model_attempts[-1] if model_attempts else None),
+    )
+    logger.error(
+        "reasoning_stream_unavailable provider=%s error_category=%s status_code=%s "
+        "models_tried=%s — streaming chain exhausted; served honest fallback",
+        active_provider, _category, (last_error or {}).get("status_code"), model_attempts,
+    )
+    yield _FALLBACK_TEXT
