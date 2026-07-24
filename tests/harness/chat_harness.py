@@ -187,17 +187,36 @@ class ChatHarness:
                 d["is_primary"] = (str(d.get("id")) == str(doc_id))
         return dict(target)
 
+    def _provider_items(self, role: str) -> list[dict[str, Any]]:
+        """What a (stubbed) provider call returns for ``role``.
+
+        Single override point for both search mechanisms below — override in
+        a subclass (e.g. to return ``[]`` on the first call only) to exercise
+        a provider-failure/degraded scenario without either mechanism falling
+        through to a real network call.
+        """
+        return [{
+            "title": role or "Role",
+            "company": "ACME",
+            "apply_url": "https://acme.example/jobs/1",
+            "location": "Dubai, UAE",
+        }]
+
     def _search(self, role: str, location: str = "", **_kw: Any) -> FetchResult:
         self.searched_roles.append(role)
-        return FetchResult(
-            items=[{
-                "title": role or "Role",
-                "company": "ACME",
-                "apply_url": "https://acme.example/jobs/1",
-                "location": "Dubai, UAE",
-            }],
-            provider="jsearch",
-        )
+        items = self._provider_items(role)
+        return FetchResult(items=items, provider="jsearch" if items else "none")
+
+    def _run_for_profile(self, profile: Any, limit: Optional[int] = None) -> dict[str, Any]:
+        """Stub for the separate legacy ``RicoSystem.run_for_profile`` search
+        mechanism (job_search_profile_match's non-ambiguous branch uses this,
+        not ``_search_jsearch_meta``) — without this, an empty/degraded
+        ``_provider_items`` override makes this fall through to the real
+        job_agent pipeline (live Bayt/LinkedIn scraping, #1336 PR3 finding)."""
+        role = (getattr(profile, "target_roles", None) or [""])[0]
+        self.searched_roles.append(role)
+        items = self._provider_items(role)
+        return {"status": "completed", "matches": items}
 
     def _ai_respond(self, prompt: Any, user_context: Any = None,
                     language: Any = None, **_kw: Any) -> dict[str, Any]:
@@ -254,6 +273,7 @@ class ChatHarness:
             p(patch("src.rico_chat_api.RicoChatAPI._search_jsearch_meta", side_effect=self._search))
             p(patch("src.rico_chat_api.RicoChatAPI._collect_documents_detailed", side_effect=self._collect_documents))
             p(patch("src.rico_chat_api.RicoChatAPI._activate_cv_document", side_effect=self._activate_cv))
+            p(patch("src.rico_repo_adapter.RicoSystem.run_for_profile", side_effect=self._run_for_profile))
             p(patch("src.rico_openai_agent.RicoOpenAIAgent.respond", side_effect=self._ai_respond))
             p(patch("src.rico_chat_api.RicoChatAPI._get_recent_context", _get_rctx))
             p(patch("src.rico_chat_api.RicoChatAPI._store_recent_context", _store_rctx))

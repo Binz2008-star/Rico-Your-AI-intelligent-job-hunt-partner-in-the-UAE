@@ -52,6 +52,13 @@ class _Harness(ChatHarness):
             result.items = []
         return result
 
+    def _run_for_profile(self, profile: Any, limit: "int | None" = None) -> dict[str, Any]:
+        # Keep the legacy scraper fallback empty and untracked here — this
+        # class's assertions are about what role the PRIMARY search mechanism
+        # received, not the fallback (see the shared harness's own
+        # _run_for_profile for the tracked-fallback behavior other tests use).
+        return {"status": "completed", "matches": []}
+
 
 def _seed(h: ChatHarness, user: str = "u@test") -> None:
     h.seed(
@@ -349,7 +356,6 @@ def test_classify_intent_is_deterministic_for_the_guard():
 # recent_search_role is written only on a completed outcome — never on
 # bool(matches) alone.
 # ===========================================================================
-from unittest.mock import patch  # noqa: E402
 from src.jsearch_client import FetchResult  # noqa: E402
 
 
@@ -390,10 +396,14 @@ class _OutcomeHarness(ChatHarness):
             return FetchResult(items=[], provider="none", error="no_providers_configured")
         raise AssertionError(f"unknown outcome {oc!r}")
 
-    def say(self, user_id: str, message: str, language=None):
-        with patch("src.rico_repo_adapter.RicoSystem.run_for_profile",
-                   return_value={"matches": []}):
-            return super().say(user_id, message, language=language)
+    def _run_for_profile(self, profile: Any, limit: "int | None" = None) -> dict[str, Any]:
+        # The legacy scraper fallback is stubbed empty so EMPTY/DEGRADED
+        # outcomes above are not masked by it (see class docstring). Uses
+        # the shared harness's own override hook (ChatHarness patches this
+        # method internally in say()) rather than a second, redundant
+        # external patch — an outer patch here would be shadowed by the
+        # base class's own patch of the same target and silently ignored.
+        return {"status": "completed", "matches": []}
 
 
 def _recent_role(h: ChatHarness, user: str = "u@test"):
