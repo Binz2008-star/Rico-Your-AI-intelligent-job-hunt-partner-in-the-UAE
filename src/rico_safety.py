@@ -61,8 +61,8 @@ class RicoSafetyGuard:
         r"only\s+(men|women|male|female)",
         r"reject\s+(men|women|male|female)",
         r"avoid\s+.*nationality",
-        r"religion",
-        r"race",
+        r"\breligion\b",
+        r"\brace\b",
     ]
 
     HIGH_IMPACT_ACTIONS = {

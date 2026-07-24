@@ -277,7 +277,15 @@ _DOC_FOLLOWUP_RE = re.compile(
     r"|\bwhat\s+(?:does|did)\b.{0,30}\b(image|picture|photo|screenshot|document|file|attachment|it)\b.{0,20}\b(say|says|said|contain|contained)\b"
     r"|\bextract\b.{0,40}\b(text|information|info|details)\b"
     r"|\bsummari[sz]e\b.{0,30}\b(this|the|image|document|file|attachment|content|key|it)\b"
-    r"|\b(read|ocr)\b.{0,30}\b(image|picture|photo|screenshot|document|file|attachment|text|it)\b",
+    r"|\b(read|ocr)\b.{0,30}\b(image|picture|photo|screenshot|document|file|attachment|text|it)\b"
+    # Arabic equivalents: استخرج (extract) / لخص (summarize) / صف (describe) /
+    # اقرأ (read) applied to الصورة/المستند/الملف/المرفق/الوثيقة (image/document/
+    # file/attachment), plus "استخرج المعلومات" (extract the information) and
+    # "ماذا يقول/تقول" (what does it say) — the doc-noun is required, mirroring
+    # the English patterns above, so a bare verb elsewhere in a sentence
+    # ("استخرج راتبي" — "extract my salary") does not falsely route here.
+    r"|(?:استخرج|لخص|صف|اقرأ)\s*(?:لي\s*)?(?:هذا\s*|هذه\s*)?(?:الصورة|المستند|الملف|المرفق|الوثيقة|المعلومات)"
+    r"|ماذا\s*(?:يقول|تقول|يحتوي|تحتوي)\s*(?:هذا\s*|هذه\s*)?(?:الصورة|المستند|الملف|المرفق|الوثيقة)",
     re.IGNORECASE,
 )
 
@@ -7931,8 +7939,15 @@ class RicoChatAPI:
         if isinstance(user_context, dict):
             user_context["blocked_questions"] = blocked_questions
 
+        # Safety always evaluates the user's ORIGINAL message, never an
+        # augmented prompt embedding untrusted document/OCR content — a
+        # malformed OCR excerpt must never independently trigger a refusal
+        # the user never asked for.
         ai_response = self._get_openai_agent().respond(
-            prompt_override or message, user_context=user_context, language=language
+            prompt_override or message,
+            user_context=user_context,
+            language=language,
+            safety_check_message=message,
         )
         raw_ai_message = ai_response.get("message", "")
         filtered_ai_message = self._preserve_ai_message(raw_ai_message, blocked_questions)

@@ -76,8 +76,11 @@ def build_attachment_analysis(classification: Any, filename: str | None = None) 
             "Paste the text directly into the chat if you want Rico to work with it."
         )
     elif purpose == RicoAttachmentPurpose.unknown_document:
+        # Already states the uncertainty; a separate "low confidence" warning
+        # underneath would repeat the same fact, so it deliberately does not
+        # also fire below.
         warnings.append("Rico is not sure what this document is — confirm before acting on it.")
-    if confidence < 0.5:
+    elif confidence < 0.5:
         warnings.append("Low classification confidence.")
 
     return RicoAttachmentAnalysis(
