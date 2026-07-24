@@ -14,6 +14,7 @@ path actually uses them", found on ricohunt.com/command:
         must not trigger the company search.
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -70,6 +71,12 @@ class _CtxHarness:
              patch.object(api, "_store_recent_context"), \
              patch.object(api, "_append_chat"), \
              patch("src.rico_chat_api.upsert_profile") as mock_upsert:
+            # Simulate a successful write: the persisted profile returned by
+            # upsert_profile carries the same values as the intended update
+            # (state-truth fix in #1361 composes the confirmation — and the
+            # cache-invalidation decision — from this return value, not from
+            # `prefs` directly, so the mock must reflect a real write).
+            mock_upsert.return_value = SimpleNamespace(**prefs)
             result = api._resolve_pending_field(
                 user_id="test@example.com", message=message, profile=MagicMock(),
             )
