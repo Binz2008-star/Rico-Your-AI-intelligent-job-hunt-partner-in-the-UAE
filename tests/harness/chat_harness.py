@@ -102,6 +102,10 @@ class ChatHarness:
         self.searched_roles: list[str] = []
         #: prompt strings handed to the (stubbed) AI provider, most-recent last.
         self.ai_prompts: list[str] = []
+        #: user_id -> list of document dicts (id, doc_type, is_primary,
+        #: filename, years_experience, ...). Empty for every existing test
+        #: that never calls seed_documents(), so this is purely additive.
+        self._documents: dict[str, list[dict[str, Any]]] = {}
 
     # -- seeding -----------------------------------------------------------------
 
@@ -124,6 +128,16 @@ class ChatHarness:
 
     def profile(self, user_id: str) -> Optional[RicoProfile]:
         return self._profiles.get(user_id)
+
+    def seed_documents(self, user_id: str, docs: "list[dict[str, Any]]") -> None:
+        """Seed synthetic ``user_documents`` rows (id, doc_type, is_primary,
+        filename, years_experience, ...) for the active-CV switch tests.
+        Each dict is stored as-is (mutated in place by _set_primary_document
+        to flip is_primary), so pass fresh dicts per test."""
+        self._documents[user_id] = list(docs)
+
+    def documents(self, user_id: str) -> "list[dict[str, Any]]":
+        return list(self._documents.get(user_id, []))
 
     # -- patched dependency implementations -------------------------------------
 
@@ -153,6 +167,25 @@ class ChatHarness:
     # recent-context store (bound-style: patched onto the class, so ``self`` here
     # is the RicoChatAPI instance, not the harness — we route to harness state via
     # the closure captured in :meth:`_patches`).
+
+    def _collect_documents(self, user_id: str, _profile: Any) -> "list[dict[str, Any]]":
+        return list(self._documents.get(user_id, []))
+
+    def _activate_cv(self, user_id: str, doc_id: str) -> "dict[str, Any] | None":
+        """Mirrors RicoDB.set_primary_document's exclusivity contract:
+        exactly one CV row is_primary=True per user after a successful call,
+        None if doc_id doesn't match a stored CV for this user."""
+        docs = self._documents.get(user_id, [])
+        target = next(
+            (d for d in docs if str(d.get("id")) == str(doc_id) and d.get("doc_type") == "cv"),
+            None,
+        )
+        if target is None:
+            return None
+        for d in docs:
+            if d.get("doc_type") == "cv":
+                d["is_primary"] = (str(d.get("id")) == str(doc_id))
+        return dict(target)
 
     def _search(self, role: str, location: str = "", **_kw: Any) -> FetchResult:
         self.searched_roles.append(role)
@@ -219,6 +252,8 @@ class ChatHarness:
             p(patch("src.repositories.profile_repo.upsert_profile", side_effect=self._upsert_profile))
             p(patch("src.rico_chat_api.is_onboarding_complete", side_effect=self._onboarding_complete))
             p(patch("src.rico_chat_api.RicoChatAPI._search_jsearch_meta", side_effect=self._search))
+            p(patch("src.rico_chat_api.RicoChatAPI._collect_documents_detailed", side_effect=self._collect_documents))
+            p(patch("src.rico_chat_api.RicoChatAPI._activate_cv_document", side_effect=self._activate_cv))
             p(patch("src.rico_openai_agent.RicoOpenAIAgent.respond", side_effect=self._ai_respond))
             p(patch("src.rico_chat_api.RicoChatAPI._get_recent_context", _get_rctx))
             p(patch("src.rico_chat_api.RicoChatAPI._store_recent_context", _store_rctx))
