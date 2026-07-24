@@ -378,6 +378,9 @@ export const MeResponseSchema = z.object({
     authenticated: z.boolean(),
     guest: z.boolean().optional(),
     name: z.string().nullable().optional(),
+    // Server-computed owner flag (immutable users.id vs RICO_OWNER_USER_ID).
+    // The owner id itself is never sent to the browser — only this boolean.
+    is_owner: z.boolean().optional(),
 });
 
 // GET /api/v1/onboarding/status — the canonical onboarding-completion signal.

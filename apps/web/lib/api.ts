@@ -203,6 +203,8 @@ export interface MeResponse {
   authenticated: boolean;
   guest?: boolean;
   name?: string | null;
+  // Server-computed owner flag; the owner id is never exposed to the browser.
+  is_owner?: boolean;
 }
 
 export async function fetchMe(signal?: AbortSignal): Promise<MeResponse> {
@@ -2444,4 +2446,98 @@ export async function createPaddleCheckoutSession(
     method: "POST",
     body: JSON.stringify({ plan, billing_cycle: billingCycle }),
   });
+}
+
+// ── Owner-only subscriber administration (/admin/subscribers) ───────────────
+// Read-only. All identifiers arrive already masked from the server; the owner
+// user id is never sent to the browser.
+
+export interface AdminUsagePair {
+  used: number | null;
+  allowance: number | null;
+}
+
+export interface AdminSubscriberRow {
+  name: string | null;
+  email: string | null;
+  user_id_masked: string | null;
+  plan: string;
+  status: string;
+  paddle_customer_ref: string | null;
+  paddle_subscription_ref: string | null;
+  subscription_start: string | null;
+  next_renewal: string | null;
+  cancellation_effective: string | null;
+  canceled_at: string | null;
+  usage: {
+    ai_messages: AdminUsagePair;
+    saved_jobs: AdminUsagePair;
+    cv_documents: AdminUsagePair;
+    other_documents: AdminUsagePair;
+  };
+  last_activity: string | null;
+  last_billing_sync: string | null;
+  reconciliation: "ok" | "needs_review";
+}
+
+export interface AdminSubscribersSummary {
+  summary: {
+    total_users: number;
+    free_users: number;
+    active_subscribers: number;
+    trialing_subscribers: number;
+    past_due_subscribers: number;
+    canceling_subscribers: number;
+    canceled_subscribers: number;
+    expired_subscribers: number;
+    payment_failed_subscribers: number;
+    needs_reconciliation: number;
+    new_subscriptions_this_month: number;
+    cancellations_this_month: number;
+    approximate_mrr_usd: number;
+    currency: string;
+    mrr_is_approximate: boolean;
+  };
+  last_billing_sync: string | null;
+  generated_at: string | null;
+  truncated: boolean;
+  usage_available: boolean;
+}
+
+export interface AdminSubscribersList {
+  subscribers: AdminSubscriberRow[];
+  total: number;
+  filtered_total: number;
+  limit: number;
+  offset: number;
+  filter: string;
+  last_billing_sync: string | null;
+  generated_at: string | null;
+  truncated: boolean;
+  usage_available: boolean;
+}
+
+export async function fetchSubscribersSummary(
+  signal?: AbortSignal,
+): Promise<AdminSubscribersSummary> {
+  return requestJson<AdminSubscribersSummary>(
+    "/api/v1/admin/subscribers/summary",
+    { method: "GET", signal },
+  );
+}
+
+export async function fetchSubscribers(
+  params: { filter?: string; search?: string; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+): Promise<AdminSubscribersList> {
+  return requestJson<AdminSubscribersList>(
+    "/api/v1/admin/subscribers",
+    { method: "GET", signal },
+    {
+      filter: params.filter ?? "all",
+      search: params.search ?? "",
+      limit: params.limit ?? 100,
+      offset: params.offset ?? 0,
+    },
+  );
 }
