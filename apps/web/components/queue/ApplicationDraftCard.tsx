@@ -66,8 +66,10 @@ const COPY = {
 export function ApplicationDraftCard({ draft, onApprove, onResolved, onReloadQueue, onReject }: ApplicationDraftCardProps) {
     const [tab, setTab] = useState<Tab>("cover_letter");
     const [phase, setPhase] = useState<Phase>("idle");
-    // Guards against a synchronous double-click sending the mutation twice:
-    // the second invocation returns before touching onApprove.
+    // Exactly-once guard shared by BOTH mutating actions (approve + reject): a
+    // re-entrant click while a request is already in flight returns before
+    // touching the network, so a synchronous double-click can never double-submit
+    // and approve/reject can never race each other.
     const inFlight = useRef(false);
     const { language } = useLanguage();
     const t = useTranslation(language);
@@ -85,8 +87,6 @@ export function ApplicationDraftCard({ draft, onApprove, onResolved, onReloadQue
     const mossBg = c.dark ? "rgba(111,190,143,0.10)" : "rgba(60,122,82,0.08)";
 
     async function runApprove() {
-        // Exactly-once guard — a re-entrant click while a mutation is already
-        // in flight is ignored, so double-click never double-submits.
         if (inFlight.current) return;
         inFlight.current = true;
         setPhase("approving");
@@ -123,12 +123,19 @@ export function ApplicationDraftCard({ draft, onApprove, onResolved, onReloadQue
     }
 
     async function handleReject() {
+        // Same exactly-once guard as approve: a double-click on Decline must not
+        // send two DELETE /reject calls (nor set state after the first success
+        // unmounts the card).
+        if (inFlight.current) return;
+        inFlight.current = true;
         setPhase("rejecting");
         try {
             await onReject(draft.id);
             setPhase("rejected");
         } catch {
             setPhase("idle");
+        } finally {
+            inFlight.current = false;
         }
     }
 

@@ -42,13 +42,14 @@ const APPROVED: ApplyActionResponse = { ok: true, status: "approved" };
 type Overrides = Partial<{
     onApprove: (id: string) => Promise<ApplyActionResponse>;
     onReloadQueue: () => void;
+    onReject: (id: string) => Promise<void>;
 }>;
 
 function setup(over: Overrides = {}) {
     const onApprove = over.onApprove ?? vi.fn().mockResolvedValue(APPROVED);
     const onReloadQueue = over.onReloadQueue ?? vi.fn();
     const onResolved = vi.fn();
-    const onReject = vi.fn().mockResolvedValue(undefined);
+    const onReject = over.onReject ?? vi.fn().mockResolvedValue(undefined);
     render(
         <ApplicationDraftCard
             draft={draft}
@@ -61,6 +62,7 @@ function setup(over: Overrides = {}) {
     return { onApprove, onReloadQueue, onResolved, onReject };
 }
 const clickApprove = () => fireEvent.click(screen.getByRole("button", { name: "draftApprove" }));
+const clickDecline = () => fireEvent.click(screen.getByRole("button", { name: "draftDecline" }));
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -153,5 +155,36 @@ describe("ApplicationDraftCard — canonical approval confirmation", () => {
         resolveApprove(APPROVED);
         await waitFor(() => expect(screen.getByText("draftApproved")).toBeInTheDocument());
         expect(onApprove).toHaveBeenCalledTimes(1);
+    });
+
+    it("double click on Decline sends exactly one reject request", async () => {
+        let resolveReject!: (v: void) => void;
+        const onReject = vi.fn().mockImplementation(
+            () => new Promise<void>((resolve) => { resolveReject = resolve; }),
+        );
+        setup({ onReject });
+        // Two synchronous clicks before the in-flight reject resolves.
+        clickDecline();
+        clickDecline();
+        expect(onReject).toHaveBeenCalledTimes(1);
+
+        resolveReject();
+        await waitFor(() => expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument());
+        expect(onReject).toHaveBeenCalledTimes(1);
+    });
+
+    it("unconfirmed state exposes NO control that repeats the approval mutation", async () => {
+        const onApprove = vi.fn().mockRejectedValue(new Error("timeout"));
+        setup({ onApprove });
+        clickApprove();
+        await waitFor(() =>
+            expect(screen.getByText("Approval status could not be confirmed")).toBeInTheDocument(),
+        );
+        // The only actionable control is the read-only refresh; there is no
+        // Approve / Decline / Try-again button that could re-fire a mutation.
+        const buttons = screen.getAllByRole("button");
+        expect(buttons).toHaveLength(1);
+        expect(buttons[0]).toHaveAccessibleName(/Reload queue/i);
+        expect(screen.queryByRole("button", { name: "draftApprove" })).not.toBeInTheDocument();
     });
 });
