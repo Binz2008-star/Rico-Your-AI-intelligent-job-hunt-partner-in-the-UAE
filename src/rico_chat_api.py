@@ -11323,19 +11323,27 @@ class RicoChatAPI:
             except Exception:
                 pass
 
-            # Also write to rico_job_recommendations so prepared jobs appear on /flow board.
-            # Capture whether the board write actually landed so the reply only claims
-            # "Prepared" when persistence succeeded (otherwise warn the user).
+            # Canonical board write so prepared jobs appear on /applications, with an
+            # explicit read-back — the reply only claims "Prepared" when the board
+            # actually reflects it. Shares the ONE canonical writer with Save, keyed
+            # on the same lifecycle job key so a Save→Prepare transition lands on the
+            # same record and no downgrade is applied.
             _board_persisted = False
             try:
-                _board_persisted = self._persist_application_lifecycle_event(
-                    user_id=user_id,
-                    title=title,
-                    company=company,
-                    status="prepared",
-                    url=_apply_url or _source_url,
-                    location=_location,
+                from src.services.application_board import persist_job_action as _persist_board
+                _pa_board = _persist_board(
+                    user_id,
+                    {
+                        "title": title,
+                        "company": company,
+                        "apply_url": _apply_url,
+                        "source_url": _source_url,
+                        "location": _location,
+                    },
+                    "prepared",
+                    save_key=_job_key,
                 )
+                _board_persisted = _pa_board.ok
             except Exception:
                 _board_persisted = False
 
@@ -11901,19 +11909,43 @@ class RicoChatAPI:
                 # Stable job_key (title+company) keeps runtime idempotency correct
                 # and lets the runtime stamp record_interaction + set_lifecycle_status.
                 job_key = self._derive_lifecycle_job_key(title, company)
-                result = agent_runtime.handle_action(
-                    user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
-                )
-                if result.ok:
+
+                # Canonical board persistence FIRST — write to applications_repo
+                # (the store /applications reads) and confirm by read-back, so a
+                # card Save actually shows up on the board. Previously this path
+                # persisted only through the runtime save tool (legacy JSON, no
+                # user_id) and never reached the board, yet still claimed "Saved".
+                # Mirrors _save_job_by_ordinal's proven pattern.
+                from src.services.application_board import persist_job_action
+                board = persist_job_action(user_id, job_dict, "saved", save_key=job_key)
+
+                # Best-effort side-effects only (audit log, learning signals,
+                # career memory, user_job_context) — never the source of truth for
+                # the save. A side-effect failure must not turn a confirmed board
+                # save into an error.
+                result = None
+                try:
+                    result = agent_runtime.handle_action(
+                        user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
+                    )
+                except Exception:
+                    logger.debug("rico_chat: card save side-effects failed", exc_info=True)
+
+                if board.ok:
                     success_msg = f"Saved — {title} at {company}. I'll keep it in your [tracked jobs](/flow)."
+                elif board.error == "quota_exceeded":
+                    success_msg = board.quota_message or (
+                        "You've reached your saved-jobs limit. Upgrade to save more, "
+                        "or remove a saved job first."
+                    )
                 else:
                     logger.warning(
-                        "rico_chat: save action not ok user=%s title=%s err=%s",
-                        user_ref(user_id), title, result.error,
+                        "rico_chat: card save not persisted user=%s title=%s err=%s",
+                        user_ref(user_id), title, board.error,
                     )
                     # Honest failure — never claim the job was saved when the
-                    # write reported failure (#764 mutation-confirmation contract;
-                    # mirrors the Skip handler).
+                    # canonical write/read-back did not confirm (#764 mutation-
+                    # confirmation contract; mirrors the Skip handler).
                     success_msg = (
                         f"I couldn't save {title} at {company} just now — please try again."
                     )
@@ -11956,14 +11988,27 @@ class RicoChatAPI:
                         "verification_status": "lead_needs_verification",
                     }
                     job_key = self._derive_lifecycle_job_key(title, company)
-                    result = agent_runtime.handle_action(
-                        user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
-                    )
-                    success_msg = (
-                        f"Saved — {title} at {company}. I'll keep it in your [tracked jobs](/flow)."
-                        if result.ok else
-                        f"I couldn't save {title} at {company} just now — please try again."
-                    )
+                    # Canonical board write + read-back (same as the card path above).
+                    from src.services.application_board import persist_job_action
+                    board = persist_job_action(user_id, job_dict, "saved", save_key=job_key)
+                    result = None
+                    try:
+                        result = agent_runtime.handle_action(
+                            user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
+                        )
+                    except Exception:
+                        logger.debug("rico_chat: recent-context save side-effects failed", exc_info=True)
+                    if board.ok:
+                        success_msg = f"Saved — {title} at {company}. I'll keep it in your [tracked jobs](/flow)."
+                    elif board.error == "quota_exceeded":
+                        success_msg = board.quota_message or (
+                            "You've reached your saved-jobs limit. Upgrade to save more, "
+                            "or remove a saved job first."
+                        )
+                    else:
+                        success_msg = (
+                            f"I couldn't save {title} at {company} just now — please try again."
+                        )
                     response = {
                         "type": "save_job",
                         "intent": "save_job",

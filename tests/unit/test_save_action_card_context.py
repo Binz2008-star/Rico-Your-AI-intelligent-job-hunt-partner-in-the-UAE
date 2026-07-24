@@ -58,9 +58,17 @@ def _runtime_ok() -> MagicMock:
     return result
 
 
-def _save_via_chat(api: RicoChatAPI, message: str, context: dict, *, runtime=None):
+def _save_via_chat(api: RicoChatAPI, message: str, context: dict, *, runtime=None, board_ok=True):
     """Drive process_message through the save_job handler with a given recent
-    context. Returns (result, captured_handle_action_kwargs)."""
+    context. Returns (result, captured_handle_action_kwargs).
+
+    The canonical board write (application_board.persist_job_action) is mocked to
+    succeed by default — these tests cover job RESOLUTION + copy, not the board
+    persistence contract (that lives in test_application_board_persistence.py and
+    test_chat_card_save_board_visibility.py). Set ``board_ok=False`` to simulate a
+    failed board write."""
+    from src.services.application_board import BoardResult
+
     runtime = runtime or _runtime_ok()
     captured: dict = {}
 
@@ -71,12 +79,16 @@ def _save_via_chat(api: RicoChatAPI, message: str, context: dict, *, runtime=Non
     mock_runtime = MagicMock()
     mock_runtime.handle_action.side_effect = _capture
 
+    board = BoardResult(ok=board_ok, status="saved" if board_ok else "",
+                        error="" if board_ok else "persist_failed")
+
     with (
         patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
         patch.object(api, "_resolve_profile", return_value=_make_profile()),
         patch.object(api, "_append_chat"),
         patch.object(api, "_get_recent_context", return_value=dict(context)),
         patch.object(api, "_store_recent_context"),
+        patch("src.services.application_board.persist_job_action", return_value=board),
         patch("src.rico_chat_api.agent_runtime", mock_runtime),
     ):
         result = api.process_message(USER, message)

@@ -114,7 +114,18 @@ def skip_job(job: Dict[str, Any]) -> ToolExecutionResult:
 
 
 def save_job(job: Dict[str, Any]) -> ToolExecutionResult:
-    """Save a job without applying — marks as 'saved' in the tracker."""
+    """Save a job without applying — marks as 'saved' in the tracker.
+
+    DEPRECATED as the record of truth for authenticated chat saves. This tool
+    receives only the job dict (no ``user_id``), so it writes the legacy JSON
+    store via ``mark_applied`` WITHOUT a user scope — that store is NOT the one
+    the ``/applications`` board reads (``applications_repo``). Authenticated chat
+    Save/Prepare now persist canonically through
+    ``src.services.application_board.persist_job_action`` and only call this tool
+    for best-effort side-effects (audit/learning/memory). The legacy JSON path
+    remains ONLY for guest/pipeline-managed (no-user) contexts; do not rely on it
+    for board visibility or add a user-scoped write here without a ``user_id``.
+    """
     from src.applications import mark_applied
     start = time.monotonic()
     try:
