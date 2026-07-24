@@ -44,6 +44,10 @@ export function QueueAtelier() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [reloadKey, setReloadKey] = useState(0);
+    // Drafts whose approval has been CONFIRMED against the canonical queue
+    // read-back. Used only to keep the header count honest while the confirmed
+    // card remains mounted to show its verified end-state.
+    const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         const ctrl = new AbortController();
@@ -69,15 +73,39 @@ export function QueueAtelier() {
         return () => ctrl.abort();
     }, [reloadKey, t]);
 
+    // STEP 1 — mutation only. Does NOT mutate local list state, so a failed
+    // read-back can never leave the UI implying success. Never called on retry
+    // after the mutation already succeeded (see ApplicationDraftCard).
     const handleApprove = useCallback(async (id: string) => {
         await approveApplication(id);
-        setDrafts((current) => current.filter((draft) => draft.id !== id));
+    }, []);
+
+    // STEP 2 — canonical read-back. Re-fetches the same authoritative source
+    // the surface loads from (getApplicationQueue). An approved draft leaves
+    // the review queue server-side, so absence after approval is the persisted
+    // proof. Returns true only when the draft is confirmed gone. This performs
+    // NO mutation, so retrying it is always safe.
+    const confirmApproved = useCallback(async (id: string): Promise<boolean> => {
+        const queue = await getApplicationQueue();
+        return !queue.some((draft) => draft.id === id);
+    }, []);
+
+    const handleResolved = useCallback((id: string) => {
+        setResolvedIds((current) => {
+            const next = new Set(current);
+            next.add(id);
+            return next;
+        });
     }, []);
 
     const handleReject = useCallback(async (id: string) => {
         await rejectApplication(id);
         setDrafts((current) => current.filter((draft) => draft.id !== id));
     }, []);
+
+    // Header count reflects only drafts still awaiting a decision; a confirmed
+    // card stays mounted (showing its verified state) but no longer counts.
+    const readyCount = drafts.filter((draft) => !resolvedIds.has(draft.id)).length;
 
     return (
         <main
@@ -105,10 +133,10 @@ export function QueueAtelier() {
                     <div>
                         <Mono style={{ color: c.ink40 }}>{copy.reviewLabel}</Mono>
                         <h2 id="queue-review-heading" className="mt-1 text-xl font-semibold" style={{ color: c.ink }}>
-                            {drafts.length} {drafts.length === 1 ? t("queueReadyCount") : t("queueReadyCountPlural")}
+                            {readyCount} {readyCount === 1 ? t("queueReadyCount") : t("queueReadyCountPlural")}
                         </h2>
                     </div>
-                    {!loading && !error && drafts.length > 0 && (
+                    {!loading && !error && readyCount > 0 && (
                         <p className="text-xs" style={{ color: c.ink40 }}>{t("queueApproveToSend")}</p>
                     )}
                 </div>
@@ -131,7 +159,7 @@ export function QueueAtelier() {
                         <button
                             type="button"
                             onClick={() => setReloadKey((key) => key + 1)}
-                            className="mt-5 rounded-[4px] border px-4 py-2 text-sm font-semibold transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2"
+                            className="mt-5 rounded-[4px] border px-4 py-2 text-sm font-semibold transition-transform hover:-translate-y-0.5"
                             style={{ borderColor: c.ink, color: c.ink, background: c.panel }}
                         >
                             {t("queueRetry")}
@@ -156,7 +184,7 @@ export function QueueAtelier() {
                         </p>
                         <Link
                             href="/command"
-                            className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-[4px] px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2"
+                            className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-[4px] px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5"
                             style={{ background: c.red }}
                         >
                             <MaterialIcon icon="auto_awesome" size={16} />
@@ -177,6 +205,8 @@ export function QueueAtelier() {
                                 key={draft.id}
                                 draft={draft}
                                 onApprove={handleApprove}
+                                onConfirm={confirmApproved}
+                                onResolved={handleResolved}
                                 onReject={handleReject}
                             />
                         ))}
