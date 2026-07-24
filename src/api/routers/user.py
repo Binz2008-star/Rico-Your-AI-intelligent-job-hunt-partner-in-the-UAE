@@ -44,7 +44,7 @@ def me(request: Request) -> Dict[str, Any]:
     # Full verification (auth_version / is_active / DB role). A revoked or
     # deactivated token must render as logged-out here, not as the account;
     # a store outage stays a retryable 503 — never an identity guess.
-    from src.api.deps import get_current_user
+    from src.api.deps import get_current_user, is_owner
     try:
         user = get_current_user(request)
     except HTTPException as exc:
@@ -58,4 +58,9 @@ def me(request: Request) -> Dict[str, Any]:
         "role":          user.get("role", "user"),
         "authenticated": True,
         "name":          _fetch_display_name(email),
+        # Server-computed owner flag on the canonical identity endpoint the
+        # frontend actually reads (fetchMe -> /api/v1/me). Keyed on the
+        # immutable users.id vs RICO_OWNER_USER_ID (deps.is_owner); the owner
+        # id is never exposed, only this boolean. Fails closed when unset.
+        "is_owner":      is_owner(user),
     }
