@@ -342,6 +342,86 @@ def test_no_duplicate_mutation_path_added():
     assert mock_upsert.call_count == 1
 
 
+# ── Finding 3 (final reconciliation): verify the acknowledged limitation —
+# _resolve_pending_intent's OLDER last-assistant-message search heuristic
+# (job_search_signals / cv_improve_signals, keyed on Rico's last sent message
+# containing search-related phrases + a bare affirmative) is a THIRD,
+# independent redemption mechanism that does not read `_pending_job_search`
+# at all, so it was never covered by `_pending_search_redemption_blocked`.
+# Verified here that it is nonetheless SAFE: it requires `_is_affirmative(message)`
+# to proceed past its own first check — the EXACT SAME predicate
+# `_resolve_pending_field`'s confirm_profile_update/confirm_set_active_cv
+# branches use to decide whether to persist. Since `_resolve_pending_field`
+# always runs first and intercepts any message it judges affirmative for an
+# armed structured confirmation, this heuristic is only ever reached for a
+# message _resolve_pending_field already decided was NOT affirmative for that
+# confirmation — meaning `_is_affirmative(message)` was already False, so this
+# heuristic's own identical check also fails, and it can never run instead.
+# Documented as verified-safe below — not broadened, not touched, per the
+# review's explicit instruction. ──────────────────────────────────────────
+
+def test_older_search_heuristic_cannot_hijack_confirm_profile_update():
+    """Realistic case: confirm_profile_update armed normally (with a genuine
+    pending_profile_update payload) and Rico's last assistant message happens
+    to contain job-search-signal phrasing (job_search_signals / the
+    _POST_CV_CONTINUATION_SIGNALS list). A bare "yes" must still persist the
+    profile update, never redeem a search via this heuristic."""
+    api = RicoChatAPI(persist=False)
+    from types import SimpleNamespace
+    ctx = {
+        "_pending_field": "confirm_profile_update",
+        "_pending_profile_update": {"years_experience": 8},
+    }
+    with (
+        patch.object(RicoChatAPI, "_get_recent_context", return_value=dict(ctx)),
+        patch.object(RicoChatAPI, "_store_recent_context"),
+        patch.object(RicoChatAPI, "_append_chat"),
+        patch.object(
+            RicoChatAPI, "_get_last_assistant_message",
+            return_value="Shall I search for jobs now? Want me to search for roles based on your CV?",
+        ),
+        patch.object(RicoChatAPI, "_get_pending_job_search", return_value={}),
+        patch("src.rico_chat_api.upsert_profile") as mock_upsert,
+        patch.object(RicoChatAPI, "_classified_role_search") as mock_search,
+    ):
+        mock_upsert.return_value = SimpleNamespace(years_experience=8)
+        result = api._resolve_pending_field("u@test", "yes", SimpleNamespace(years_experience=6))
+        if result is None:
+            result = api._resolve_pending_intent("u@test", "yes", SimpleNamespace(years_experience=6))
+    mock_search.assert_not_called()
+    assert result is not None and result.get("type") == "preferences_updated"
+    mock_upsert.assert_called_once()
+
+
+def test_older_search_heuristic_cannot_hijack_confirm_set_active_cv():
+    """Same heuristic, same stale job-search-signal last message, for the
+    confirm_set_active_cv pending field."""
+    api = RicoChatAPI(persist=False)
+    ctx = {
+        "_pending_field": "confirm_set_active_cv",
+        "_pending_active_cv": {"target_document_id": "doc-123"},
+    }
+    with (
+        patch.object(RicoChatAPI, "_get_recent_context", return_value=dict(ctx)),
+        patch.object(RicoChatAPI, "_store_recent_context"),
+        patch.object(RicoChatAPI, "_append_chat"),
+        patch.object(
+            RicoChatAPI, "_get_last_assistant_message",
+            return_value="Shall I search for jobs now? Want me to search for roles based on your CV?",
+        ),
+        patch.object(RicoChatAPI, "_get_pending_job_search", return_value={}),
+        patch.object(RicoChatAPI, "_activate_cv_document", return_value={"id": "doc-123", "filename": "new_cv.pdf"}),
+        patch.object(RicoChatAPI, "_classified_role_search") as mock_search,
+    ):
+        from types import SimpleNamespace
+        profile = SimpleNamespace()
+        result = api._resolve_pending_field("u@test", "yes", profile)
+        if result is None:
+            result = api._resolve_pending_intent("u@test", "yes", profile)
+    mock_search.assert_not_called()
+    assert result is not None and result.get("type") == "active_cv_changed"
+
+
 # ── Finding 4: end-to-end, real-store regression for the OCR-failure
 #    "answered from an older context" transcript — #1364 ALONE ──────────────
 
