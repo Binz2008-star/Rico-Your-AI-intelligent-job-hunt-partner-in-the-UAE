@@ -10,6 +10,7 @@ import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { OwnerNavEntry } from "../admin/OwnerNavEntry";
 import { MaterialIcon } from "../ui/MaterialIcon";
 import { mainNavSections, navMeta } from "./app-nav";
 
@@ -266,6 +267,9 @@ export function AppSidebar({ className, user, onLogout, loading }: AppSidebarPro
                     ))}
 
                 </nav>
+
+                {/* Owner-only entry — self-gates on /me.is_owner, renders null otherwise */}
+                <OwnerNavEntry />
 
                 {/* Quick support — reuses existing WhatsApp helper, no extra data */}
                 {enabled && (
