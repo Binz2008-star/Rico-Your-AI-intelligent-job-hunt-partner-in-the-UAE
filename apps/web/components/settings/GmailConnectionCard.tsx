@@ -195,8 +195,11 @@ export function GmailConnectionCard({
     const solidBtn: React.CSSProperties = {
         background: palette.ink,
         color: palette.bg,
-        opacity: busy || !syncEnabled ? 0.55 : 1,
-        cursor: busy || !syncEnabled ? "default" : "pointer",
+        // When the feature is unavailable (sync off / "coming soon") or busy, the
+        // button is disabled — dim it clearly and show a not-allowed cursor so it
+        // no longer reads as an active, clickable control.
+        opacity: busy || !syncEnabled ? 0.4 : 1,
+        cursor: busy || !syncEnabled ? "not-allowed" : "pointer",
     };
     const outlineBtn: React.CSSProperties = {
         background: "transparent",

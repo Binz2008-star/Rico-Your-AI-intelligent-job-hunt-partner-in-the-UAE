@@ -532,7 +532,7 @@ describe("profile editorial — dirty draft save flow", () => {
         await renderLoaded();
         await gotoSection(user, "career");
 
-        const years = screen.getByLabelText("Experience");
+        const years = screen.getByLabelText(/^Experience/);
         await user.clear(years);
         const savebar = await screen.findByTestId("profile-ed-savebar");
         // the refreshed authoritative profile reflects the cleared value
@@ -544,7 +544,7 @@ describe("profile editorial — dirty draft save flow", () => {
         expect(updateProfileMock).toHaveBeenCalledTimes(1);
         // refreshed profile matches the cleared draft → the bar clears
         await waitFor(() => expect(screen.queryByTestId("profile-ed-savebar")).toBeNull());
-        expect(screen.getByLabelText("Experience")).toHaveValue("");
+        expect(screen.getByLabelText(/^Experience/)).toHaveValue("");
     });
 
     it("zero is a valid numeric value, saved as 0 — not treated as a clear", async () => {
@@ -552,7 +552,7 @@ describe("profile editorial — dirty draft save flow", () => {
         await renderLoaded();
         await gotoSection(user, "career");
 
-        const years = screen.getByLabelText("Experience");
+        const years = screen.getByLabelText(/^Experience/);
         await user.clear(years);
         await user.type(years, "0");
         const savebar = await screen.findByTestId("profile-ed-savebar");
@@ -567,7 +567,7 @@ describe("profile editorial — dirty draft save flow", () => {
         await renderLoaded();
         await gotoSection(user, "career");
 
-        const years = screen.getByLabelText("Experience");
+        const years = screen.getByLabelText(/^Experience/);
         await user.clear(years);
         await user.type(years, "six");
         const savebar = await screen.findByTestId("profile-ed-savebar");

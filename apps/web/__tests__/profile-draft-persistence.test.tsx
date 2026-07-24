@@ -273,7 +273,7 @@ describe("restore on return (route-exit protection)", () => {
         expect(screen.getByTestId("profile-ed-savebar")).toBeInTheDocument();
 
         await user.selectOptions(screen.getByRole("combobox", { name: "Sections" }), "career");
-        expect(screen.getByLabelText("Experience")).toHaveValue("12");
+        expect(screen.getByLabelText(/^Experience/)).toHaveValue("12");
 
         fetchProfileMock.mockResolvedValue({ ...BASE_PROFILE, years_experience: 12 });
         const savebar = screen.getByTestId("profile-ed-savebar");
