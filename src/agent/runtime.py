@@ -74,6 +74,7 @@ class AgentRuntime:
         dry_run: bool = False,
         pre_approved: bool = False,
         actor_is_admin: bool = False,
+        persist: bool = True,
     ) -> RuntimeResult:
         """
         Execute a single named action on behalf of a user.
@@ -91,6 +92,15 @@ class AgentRuntime:
                           sentinel so apply_to_job bypasses the approval gate. This flag
                           must never be set by untrusted callers — only the
                           /actions/execute endpoint (which derives user_id from JWT) sets it.
+            persist:      When False, the registered persistence TOOL is NOT invoked
+                          — only the safe secondary side-effects run (audit log,
+                          user_job_context, learning signals, career memory,
+                          analytics). Authenticated chat Save/Prepare set this after
+                          persisting canonically to ``applications_repo`` themselves,
+                          so the legacy no-``user_id`` save tool (``job_tools.save_job``
+                          → ``mark_applied``, which appends a user-scopeless shared
+                          JSON row) never runs for them. Default True preserves the
+                          Telegram/API behaviour unchanged.
 
         Returns:
             RuntimeResult — always returned, never raises.
@@ -194,36 +204,52 @@ class AgentRuntime:
                         duration_ms=elapsed,
                     )
 
-        # 6. Execute tool
+        # 6. Execute tool.
+        #    When persist=False the caller has already persisted canonically
+        #    (e.g. chat Save/Prepare → applications_repo). Skip the registered
+        #    persistence tool entirely so the legacy no-user_id save path
+        #    (job_tools.save_job → mark_applied, which appends a shared JSON row)
+        #    NEVER runs for authenticated chat actions — while still running the
+        #    safe secondary side-effects below.
         tool_name = ACTION_TO_TOOL[action]
-        try:
-            tool_def = tool_registry.get(tool_name)
-        except KeyError as exc:
-            return RuntimeResult(
-                ok=False, message="Tool not available.",
-                action=action, job_key=job_key, source=source, user_id=user_id,
-                error=str(exc),
-                duration_ms=int((time.monotonic() - wall_start) * 1000),
+        if not persist:
+            logger.info(
+                "runtime_side_effects_only action=%s user=%s source=%s job=%r",
+                action, user_id, source, resolved_job.get("title", ""),
+            )
+            elapsed = int((time.monotonic() - wall_start) * 1000)
+            tool_ok = True
+            tool_data = {}
+            error_str = None
+        else:
+            try:
+                tool_def = tool_registry.get(tool_name)
+            except KeyError as exc:
+                return RuntimeResult(
+                    ok=False, message="Tool not available.",
+                    action=action, job_key=job_key, source=source, user_id=user_id,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - wall_start) * 1000),
+                )
+
+            logger.info(
+                "runtime_execute action=%s tool=%s user=%s source=%s job=%r",
+                action, tool_name, user_id, source, resolved_job.get("title", ""),
             )
 
-        logger.info(
-            "runtime_execute action=%s tool=%s user=%s source=%s job=%r",
-            action, tool_name, user_id, source, resolved_job.get("title", ""),
-        )
+            try:
+                sig = inspect.signature(tool_def.fn)
+                tool_result = tool_def.fn() if len(sig.parameters) == 0 else tool_def.fn(resolved_job)
+            except Exception as exc:
+                logger.exception("runtime_tool_error action=%s tool=%s", action, tool_name)
+                tool_result = None
+                error_str = str(exc)
+            else:
+                error_str = tool_result.error if tool_result and not tool_result.success else None
 
-        try:
-            sig = inspect.signature(tool_def.fn)
-            tool_result = tool_def.fn() if len(sig.parameters) == 0 else tool_def.fn(resolved_job)
-        except Exception as exc:
-            logger.exception("runtime_tool_error action=%s tool=%s", action, tool_name)
-            tool_result = None
-            error_str = str(exc)
-        else:
-            error_str = tool_result.error if tool_result and not tool_result.success else None
-
-        elapsed = int((time.monotonic() - wall_start) * 1000)
-        tool_ok = bool(tool_result and tool_result.success)
-        tool_data = dict((tool_result.data or {}) if tool_result else {})
+            elapsed = int((time.monotonic() - wall_start) * 1000)
+            tool_ok = bool(tool_result and tool_result.success)
+            tool_data = dict((tool_result.data or {}) if tool_result else {})
 
         # 6a. When apply is gated (approval_required), attach a PermissionRequest payload
         #     so any caller (chat router, API layer) can surface the PermissionRequestCard

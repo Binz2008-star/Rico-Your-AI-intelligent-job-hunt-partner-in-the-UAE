@@ -11331,18 +11331,20 @@ class RicoChatAPI:
             _board_persisted = False
             try:
                 from src.services.application_board import persist_job_action as _persist_board
-                _pa_board = _persist_board(
-                    user_id,
-                    {
-                        "title": title,
-                        "company": company,
-                        "apply_url": _apply_url,
-                        "source_url": _source_url,
-                        "location": _location,
-                    },
-                    "prepared",
-                    save_key=_job_key,
-                )
+                _prep_job = {
+                    "title": title,
+                    "company": company,
+                    "apply_url": _apply_url,
+                    "source_url": _source_url,
+                    "location": _location,
+                }
+                # Carry #1367 provenance so Prepare does not discard it.
+                if _ctx_row:
+                    for _pk in ("sources", "duplicate_count", "provider", "source",
+                                "verification_status", "link"):
+                        if _ctx_row.get(_pk) not in (None, "", [], {}):
+                            _prep_job.setdefault(_pk, _ctx_row.get(_pk))
+                _pa_board = _persist_board(user_id, _prep_job, "prepared", save_key=_job_key)
                 _board_persisted = _pa_board.ok
             except Exception:
                 _board_persisted = False
@@ -11372,7 +11374,7 @@ class RicoChatAPI:
                 "_(Existing pending draft found — showing that one.)_\n\n" if _reused else ""
             )
             _board_note = (
-                "\n\n_Tracked as **Prepared** on your board (/flow)._"
+                "\n\n_Tracked as **Prepared** on your board (/applications)._"
                 if _board_persisted
                 else "\n\n_Your draft is saved, but I couldn't update your board status just "
                 "now — it may still show the previous stage. Try again shortly._"
@@ -11898,6 +11900,10 @@ class RicoChatAPI:
                 if not apply_url and effective_source:
                     verification_status = "needs_source_verification"
 
+                # Carry #1367 provenance through the save so it is not discarded
+                # (URL/verification persist to the board where the schema supports
+                # them; sources/duplicate_count/provider ride along for the
+                # secondary side-effects and future use).
                 job_dict = {
                     "title": title,
                     "company": company,
@@ -11906,6 +11912,10 @@ class RicoChatAPI:
                     "alt_url": alt_url,
                     "verification_status": verification_status,
                 }
+                if resolved:
+                    for _pk in ("sources", "duplicate_count", "provider", "source", "location", "link"):
+                        if resolved.get(_pk) not in (None, "", [], {}):
+                            job_dict.setdefault(_pk, resolved.get(_pk))
                 # Stable job_key (title+company) keeps runtime idempotency correct
                 # and lets the runtime stamp record_interaction + set_lifecycle_status.
                 job_key = self._derive_lifecycle_job_key(title, company)
@@ -11919,20 +11929,21 @@ class RicoChatAPI:
                 from src.services.application_board import persist_job_action
                 board = persist_job_action(user_id, job_dict, "saved", save_key=job_key)
 
-                # Best-effort side-effects only (audit log, learning signals,
-                # career memory, user_job_context) — never the source of truth for
-                # the save. A side-effect failure must not turn a confirmed board
-                # save into an error.
                 result = None
-                try:
-                    result = agent_runtime.handle_action(
-                        user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
-                    )
-                except Exception:
-                    logger.debug("rico_chat: card save side-effects failed", exc_info=True)
-
                 if board.ok:
-                    success_msg = f"Saved — {title} at {company}. I'll keep it in your [tracked jobs](/flow)."
+                    # Secondary side-effects ONLY (audit, learning, career memory,
+                    # user_job_context, analytics) — persist=False so the legacy
+                    # no-user save tool never runs for an authenticated save. Runs
+                    # only after the canonical write confirmed; a side-effect
+                    # failure never downgrades a confirmed board save.
+                    try:
+                        result = agent_runtime.handle_action(
+                            user_id=user_id, action="save", job=job_dict,
+                            job_key=job_key, source="chat", persist=False,
+                        )
+                    except Exception:
+                        logger.debug("rico_chat: card save side-effects failed", exc_info=True)
+                    success_msg = f"Saved — {title} at {company}. I'll keep it in your [tracked jobs](/applications)."
                 elif board.error == "quota_exceeded":
                     success_msg = board.quota_message or (
                         "You've reached your saved-jobs limit. Upgrade to save more, "
@@ -11987,19 +11998,24 @@ class RicoChatAPI:
                         "source_url": source_url,
                         "verification_status": "lead_needs_verification",
                     }
+                    for _pk in ("sources", "duplicate_count", "provider", "source", "location", "link"):
+                        if _recent_resolved.get(_pk) not in (None, "", [], {}):
+                            job_dict.setdefault(_pk, _recent_resolved.get(_pk))
                     job_key = self._derive_lifecycle_job_key(title, company)
                     # Canonical board write + read-back (same as the card path above).
                     from src.services.application_board import persist_job_action
                     board = persist_job_action(user_id, job_dict, "saved", save_key=job_key)
                     result = None
-                    try:
-                        result = agent_runtime.handle_action(
-                            user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
-                        )
-                    except Exception:
-                        logger.debug("rico_chat: recent-context save side-effects failed", exc_info=True)
                     if board.ok:
-                        success_msg = f"Saved — {title} at {company}. I'll keep it in your [tracked jobs](/flow)."
+                        # Side-effects only (persist=False) — no legacy no-user write.
+                        try:
+                            result = agent_runtime.handle_action(
+                                user_id=user_id, action="save", job=job_dict,
+                                job_key=job_key, source="chat", persist=False,
+                            )
+                        except Exception:
+                            logger.debug("rico_chat: recent-context save side-effects failed", exc_info=True)
+                        success_msg = f"Saved — {title} at {company}. I'll keep it in your [tracked jobs](/applications)."
                     elif board.error == "quota_exceeded":
                         success_msg = board.quota_message or (
                             "You've reached your saved-jobs limit. Upgrade to save more, "
@@ -12018,22 +12034,24 @@ class RicoChatAPI:
                     self._append_chat(user_id, "assistant", success_msg)
                     return self._finalize(response, self.SOURCE_KEYWORD, profile=profile, runtime_result=result)
 
-            # Could not identify a job from the card or recent context — fall back to the tool router.
-            context = self._build_router_context(user_id, profile)
-            routed = _route(message, user_id=user_id, context=context)
-            if routed.tool_name:
-                job_key = routed.tool_args.get("job_key", "")
-                result = agent_runtime.handle_action(
-                    user_id=user_id, action="save", job_key=job_key, source="chat",
-                )
-                response = {
-                    "type": "save_job",
-                    "intent": "save_job",
-                    "message": result.message,
-                    "entities": routed.entities,
-                }
-                self._append_chat(user_id, "assistant", result.message)
-                return self._finalize(response, routed.source, profile=profile, runtime_result=result)
+            # Could not identify a concrete job from the card, recent context, or
+            # user_job_context. Do NOT invoke the legacy no-user save tool here —
+            # with only a job_key (no title/company) it cannot be persisted to the
+            # canonical board, and the legacy path would append a user-scopeless
+            # shared JSON row while falsely claiming "Saved". Ask the user to
+            # identify the job instead of persisting or claiming a phantom save.
+            msg = (
+                "I couldn't tell which job to save. Search for a role first, then say "
+                "\"save the first job\", or tell me the exact job title and company."
+            )
+            response = {
+                "type": "save_job",
+                "intent": "save_job",
+                "message": msg,
+                "entities": {},
+            }
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Explain match
         if legacy_intent == "explain_match":
@@ -12797,12 +12815,14 @@ class RicoChatAPI:
                 "entities": {"title": title, "company": company},
             }
 
-        # Best-effort side-effects (audit log, learning signals, career memory).
-        # Never let a side-effect failure turn a successful save into an error.
+        # Best-effort side-effects ONLY (audit log, learning signals, career
+        # memory, user_job_context). persist=False so the legacy no-user save tool
+        # never runs — the canonical write to applications_repo above is the record
+        # of truth; this must not append a user-scopeless shared JSON row.
         try:
             agent_runtime.handle_action(
                 user_id=user_id, action="save", job=job_dict,
-                job_key=decision.save_key, source="chat",
+                job_key=decision.save_key, source="chat", persist=False,
             )
         except Exception:
             logger.debug("rico_chat: ordinal save side-effects failed", exc_info=True)
@@ -12818,12 +12838,12 @@ class RicoChatAPI:
 
         if confirmed:
             if decision.verified:
-                msg = f"Saved {_label} to your pipeline. [View your pipeline →](/flow)"
+                msg = f"Saved {_label} to your pipeline. [View your pipeline →](/applications)"
             else:
                 msg = (
                     f"Saved {_label} to your pipeline as a lead. I don't have a verified apply "
                     "link for it yet — open the role on the source site to confirm it's live "
-                    "before applying. [View your pipeline →](/flow)"
+                    "before applying. [View your pipeline →](/applications)"
                 )
             response = {
                 "type": "save_job", "intent": "save_job", "message": msg,
