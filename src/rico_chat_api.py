@@ -13622,6 +13622,21 @@ class RicoChatAPI:
         r"|من\s+سيرت|سيرتي\s*(?:الذاتية)?",
         re.IGNORECASE,
     )
+    # A DECLARATIVE clarification ("this is my ID", "that's my CV") is a
+    # different speech act from a source-named QUESTION ("what did you
+    # extract from my ID?", "from my CV") — the former corrects what the
+    # latest attachment IS (a separate concern, e.g. #1365's attachment-type
+    # clarification handler) and must never be answered here as if it asked
+    # to be told about that source. Without this exclusion, "this is my ID"
+    # with no attachment on record still matched _EXPLICIT_ID_SOURCE_RE and
+    # produced a "no ID on record" reply instead of standing down cleanly for
+    # whatever clarification-handling exists upstream.
+    _ATTACHMENT_CLARIFICATION_SHAPE_RE = re.compile(
+        r"^\s*(?:this|that|it)\s*(?:'s|is)\s+(?:my\s+)?"
+        r"(?:id|identity|emirates\s*id|passport|cv|resume|r[eé]sum[eé])\b"
+        r"|^\s*هذ[ها]\s+(?:هويت|بطاقة|جواز|سيرت)",
+        re.IGNORECASE,
+    )
 
     # Document types whose extracted values (name, DOB, nationality, ID/card
     # number, expiry, …) are sensitive PII — never repeated in a general summary,
@@ -13794,9 +13809,14 @@ class RicoChatAPI:
         msg = message or ""
         is_ar = (self._is_arabic_text(msg)
                  if hasattr(self, "_is_arabic_text") else bool(re.search(r"[؀-ۿ]", msg)))
+        # A declarative clarification ("this is my ID") is not a source-named
+        # QUESTION — never answered here (whatever clarification handling
+        # exists upstream owns it; with none on record, normal routing
+        # proceeds unchanged).
+        is_clarification = bool(self._ATTACHMENT_CLARIFICATION_SHAPE_RE.search(msg))
         # A source-named question ("from my ID", "من هويتي") reaches its own
         # deterministic, privacy-safe handler — never the generic AI fallback.
-        if self._EXPLICIT_ID_SOURCE_RE.search(msg):
+        if not is_clarification and self._EXPLICIT_ID_SOURCE_RE.search(msg):
             try:
                 reply = self._describe_identity_source_document(user_id, is_ar)
                 self._append_chat(user_id, "assistant", reply)
@@ -13805,7 +13825,7 @@ class RicoChatAPI:
                 return None
         # A source-named question ("from my CV", "من سيرتي") reaches the real
         # CV record, never the latest (possibly unrelated) attachment.
-        if self._EXPLICIT_CV_SOURCE_RE.search(msg):
+        if not is_clarification and self._EXPLICIT_CV_SOURCE_RE.search(msg):
             try:
                 profile = self._resolve_profile(user_id)
                 reply = self._describe_cv_source_document(user_id, profile, is_ar)
