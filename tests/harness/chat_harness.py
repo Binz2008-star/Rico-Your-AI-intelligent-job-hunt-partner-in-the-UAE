@@ -187,12 +187,6 @@ class ChatHarness:
                 d["is_primary"] = (str(d.get("id")) == str(doc_id))
         return dict(target)
 
-    def _current_active_cv(self, user_id: str) -> "dict[str, Any] | None":
-        for d in self._documents.get(user_id, []):
-            if d.get("doc_type") == "cv" and d.get("is_primary"):
-                return dict(d)
-        return None
-
     def _search(self, role: str, location: str = "", **_kw: Any) -> FetchResult:
         self.searched_roles.append(role)
         return FetchResult(
@@ -260,7 +254,6 @@ class ChatHarness:
             p(patch("src.rico_chat_api.RicoChatAPI._search_jsearch_meta", side_effect=self._search))
             p(patch("src.rico_chat_api.RicoChatAPI._collect_documents_detailed", side_effect=self._collect_documents))
             p(patch("src.rico_chat_api.RicoChatAPI._activate_cv_document", side_effect=self._activate_cv))
-            p(patch("src.rico_chat_api.RicoChatAPI._current_active_cv_document", side_effect=self._current_active_cv))
             p(patch("src.rico_openai_agent.RicoOpenAIAgent.respond", side_effect=self._ai_respond))
             p(patch("src.rico_chat_api.RicoChatAPI._get_recent_context", _get_rctx))
             p(patch("src.rico_chat_api.RicoChatAPI._store_recent_context", _store_rctx))

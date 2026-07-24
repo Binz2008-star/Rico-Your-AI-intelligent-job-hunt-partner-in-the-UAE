@@ -6317,24 +6317,33 @@ class RicoChatAPI:
             arabic = self._is_arabic_text(msg)
             target_id = pending_action.get("target_document_id")
 
+            import time as _time
+            _expires_at = pending_action.get("expires_at")
+            if _expires_at is not None and _time.time() > float(_expires_at):
+                # Expired pending action: cleared above, must not execute.
+                # Report honestly rather than silently ignoring the turn.
+                reply = (
+                    "انتهت صلاحية طلب تغيير السيرة النشطة. اسألني مجددًا إذا أردت المتابعة."
+                    if arabic else
+                    "That request to change the active CV has expired. Ask me again if you'd still like to."
+                )
+                self._append_chat(user_id, "assistant", reply)
+                return {"type": "info", "message": reply}
+
             if self._is_affirmative(msg) and target_id:
                 activated = self._activate_cv_document(user_id, target_id)
                 # State truth (#1361 pattern): the response is composed from
                 # the canonical read-back after the write, never from the
                 # pre-write intended filename — a rejected/failed write must
-                # never be reported as a success.
+                # never be reported as a success, and must never NAME an
+                # unverified document as "current" either (a failed
+                # read-back is not evidence of what's actually active).
                 if activated and str(activated.get("id")) == str(target_id):
-                    filename = (
-                        activated.get("filename")
-                        or activated.get("original_filename")
-                        or pending_action.get("target_filename")
-                    )
+                    filename = activated.get("filename") or activated.get("original_filename")
                     reply = (
-                        f"تم تغيير السيرة النشطة إلى {filename}.\n"
-                        "سأستخدمها في تحليلات السيرة وعمليات البحث القادمة."
+                        f"تم تغيير السيرة النشطة إلى {filename}."
                         if arabic else
-                        f"Active CV changed to {filename}.\n"
-                        "I'll use it for CV analysis and future job searches."
+                        f"Active CV changed to {filename}."
                     )
                     self._append_chat(user_id, "assistant", reply)
                     return {
@@ -6342,20 +6351,14 @@ class RicoChatAPI:
                         "message": reply,
                         "active_cv": activated,
                     }
-                # Failed or rejected write — read back whatever IS canonically
-                # active right now so the failure message names a real,
-                # current document, never the (unapplied) intended one.
-                current = self._current_active_cv_document(user_id)
-                current_name = (
-                    (current or {}).get("filename")
-                    or (current or {}).get("original_filename")
-                    or pending_action.get("target_filename")
-                    or ("لا توجد سيرة نشطة" if arabic else "no active CV")
-                )
+                # Failed write, or the read-back didn't confirm the target —
+                # do NOT name any document as "current" from unverified data
+                # (neither the failed target nor a best-effort read-back);
+                # say plainly that verification failed.
                 reply = (
-                    f"لم أتمكن من تغيير السيرة النشطة، لذلك ما زالت {current_name} هي السيرة المستخدمة."
+                    "لم أتمكن من تأكيد تغيير السيرة النشطة. لم يتم تطبيق أي تغيير — يمكنك المحاولة مرة أخرى."
                     if arabic else
-                    f"I couldn't change the active CV, so {current_name} is still the one in use."
+                    "I couldn't verify the active-CV change. No change was applied — you can try again."
                 )
                 self._append_chat(user_id, "assistant", reply)
                 return {"type": "info", "message": reply}
@@ -6395,71 +6398,79 @@ class RicoChatAPI:
             return None
         return _db.get_primary_document(user_id, doc_type="cv")
 
-    def _current_active_cv_document(self, user_id: str) -> "dict[str, Any] | None":
-        """Read-only: the canonical currently-active CV document, if any."""
-        from src.rico_db import RicoDB as _RicoDB
-        _db = _RicoDB()
-        if not _db.available:
-            return None
-        return _db.get_primary_document(user_id, doc_type="cv")
+    #: How long a "should I activate this CV?" offer stays valid. An expired
+    #: pending action is cleared and must not execute (PR review requirement).
+    _SET_ACTIVE_CV_PENDING_TTL_SECONDS = 300
 
-    def _maybe_recommend_active_cv_switch(
-        self, user_id: str, profile: Any, message: str
-    ) -> "dict[str, Any] | None":
-        """Recommend activating a different stored CV ONLY when there is a
-        concrete, evidence-based reason (currently: a non-active CV with
-        strictly more years of experience on file than the active one).
-        Arms the structured confirm_set_active_cv pending action so a
-        follow-up yes/نعم executes a real mutation — never a free-form AI
-        suggestion with no pending state behind it.
+    # Explicit activation intent only — "more years of experience" is
+    # deliberately NOT a trigger (PR review: do not treat "more years" as
+    # "better CV"). No production-approved role-fit selector exists yet to
+    # pick a candidate automatically, so this PR requires the user to name
+    # the document themselves.
+    _CV_ACTIVATE_INTENT_RE = re.compile(
+        r"\b(?:activate|switch\s+to|make\s+.*\bactive\b|set\s+.*\b(?:active|primary|default)\b|"
+        r"use\s+.*\bas\s+(?:my\s+)?(?:active|primary|main)\s+cv)\b"
+        r"|فعّل|فعل|اجعل.{0,20}(?:نشط|الرئيسي)|استخدم.{0,20}كسيرت|اعتمد",
+        re.IGNORECASE,
+    )
 
-        Returns None when no such candidate exists, so the caller falls
-        through to whatever already handles a generic "what next" message.
-        """
-        try:
-            docs = self._collect_documents_detailed(user_id, profile)
-        except Exception:
-            return None
-        cvs = [d for d in docs if d.get("doc_type") == "cv"]
-        if len(cvs) < 2:
-            return None
-        active = next((d for d in cvs if d.get("is_primary")), None)
-        if active is None:
-            return None
-
-        def _years(d: "dict[str, Any]") -> float:
-            try:
-                return float(d.get("years_experience") or 0)
-            except (TypeError, ValueError):
-                return 0.0
-
-        candidates = [d for d in cvs if not d.get("is_primary") and d.get("id")]
-        if not candidates:
-            return None
-        best = max(candidates, key=_years)
-        if _years(best) <= _years(active):
-            return None
-
-        filename = best.get("filename") or best.get("original_filename") or "your other CV"
-        arabic = self._is_arabic_text(message)
-        reply = (
-            f"لاحظت أن {filename} يُظهر خبرة أطول ({_years(best):.0f} سنوات مقابل "
-            f"{_years(active):.0f}). هل أفعّلها كسيرتك النشطة؟"
-            if arabic else
-            f"I noticed {filename} shows more experience ({_years(best):.0f} years vs "
-            f"{_years(active):.0f}). Should I make it your active CV?"
-        )
+    def _arm_set_active_cv_pending(self, user_id: str, doc_id: Any, filename: str) -> None:
+        """Build and store the structured pending-action contract in one
+        place, so every arming site (today: only explicit selection) gets
+        the same complete metadata — including the expiry an armed-but-never
+        confirmed offer needs so it cannot execute after going stale."""
+        import time as _time
+        now = _time.time()
         ctx = self._get_recent_context(user_id)
         ctx["_pending_field"] = "confirm_set_active_cv"
         ctx["_pending_active_cv"] = {
             "action_type": "set_active_cv",
-            "target_document_id": best.get("id"),
+            "target_document_id": doc_id,
             "target_filename": filename,
+            "source_turn_id": uuid.uuid4().hex,
+            "created_at": now,
+            "expires_at": now + self._SET_ACTIVE_CV_PENDING_TTL_SECONDS,
             "requires_confirmation": True,
         }
         self._store_recent_context(user_id, ctx)
+
+    def _maybe_arm_explicit_cv_selection(
+        self, user_id: str, profile: Any, message: str
+    ) -> "dict[str, Any] | None":
+        """Arm the confirm_set_active_cv pending action ONLY when the user
+        explicitly names a specific stored CV and asks to make it active.
+        Never an automatic recommendation — see class-level note on
+        _CV_ACTIVATE_INTENT_RE.
+
+        Returns None when the message doesn't clearly name a specific,
+        currently-inactive, stored CV with activation intent, so the caller
+        falls through to whatever already handles the message.
+        """
+        if not self._CV_ACTIVATE_INTENT_RE.search(message):
+            return None
+        try:
+            docs = self._collect_documents_detailed(user_id, profile)
+        except Exception:
+            return None
+        cvs = [d for d in docs if d.get("doc_type") == "cv" and d.get("id")]
+        if not cvs:
+            return None
+        matched = self._match_stored_document(cvs, message)
+        if matched is None or matched.get("is_primary"):
+            # No specific document named, or it's already the active one —
+            # nothing to confirm.
+            return None
+
+        filename = matched.get("filename") or matched.get("original_filename") or "that CV"
+        arabic = self._is_arabic_text(message)
+        reply = (
+            f"سأجعل {filename} سيرتك النشطة. هل أكمل؟"
+            if arabic else
+            f"I'll make {filename} your active CV. Should I proceed?"
+        )
+        self._arm_set_active_cv_pending(user_id, matched.get("id"), filename)
         self._append_chat(user_id, "assistant", reply)
-        return {"type": "cv_switch_recommendation", "message": reply}
+        return {"type": "cv_switch_confirmation_prompt", "message": reply}
 
     def _resolve_settings_command(
         self, user_id: str, message: str
@@ -8553,18 +8564,16 @@ class RicoChatAPI:
         if settings_result is not None:
             return self._finalize(settings_result, self.SOURCE_KEYWORD, profile=profile)
 
-        # ── Active-CV switch recommendation (arms a structured pending action) ─
-        # A generic "what should I do next?" is answered with a real,
-        # evidence-based recommendation ONLY when there is a genuinely better
-        # inactive CV on file (more years of experience than the current
-        # active one) — never a free-form AI suggestion. Arms the SAME
-        # structured pending action confirm_set_active_cv resolves, so a
-        # follow-up "yes"/"نعم" mutates for real (see _resolve_pending_field).
-        _whats_next_norm = re.sub(r"[\s.,!?;:؟]+$", "", message.strip().lower())
-        if _whats_next_norm in self._WHATS_NEXT_PHRASES:
-            cv_switch_result = self._maybe_recommend_active_cv_switch(user_id, profile, message)
-            if cv_switch_result is not None:
-                return self._finalize(cv_switch_result, self.SOURCE_KEYWORD, profile=profile)
+        # ── Explicit active-CV selection (arms a structured pending action) ──
+        # ONLY when the user explicitly names a specific stored CV and asks
+        # to make it active — never an automatic "better CV" recommendation.
+        # Arms confirm_set_active_cv so a follow-up "yes"/"نعم" mutates for
+        # real (see _resolve_pending_field). Checked unconditionally (not
+        # gated to _WHATS_NEXT_PHRASES) since the trigger is the message's own
+        # activation intent + a named document, not a generic "what next".
+        cv_switch_result = self._maybe_arm_explicit_cv_selection(user_id, profile, message)
+        if cv_switch_result is not None:
+            return self._finalize(cv_switch_result, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Application draft/send channel clarification ─────────────────────
         # Follow-ups like "go ahead", "send it", or Arabic "صيغ رسالة ... وارسلها"
