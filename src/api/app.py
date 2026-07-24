@@ -393,6 +393,18 @@ def health_check() -> Dict[str, Any]:
     except Exception:
         # Health must never fail because of the provider indicator.
         pass
+    try:
+        # Reasoning-provider (core AI) health — names/categories/status codes and
+        # model identifiers only, never secret values. A dead core AI with no
+        # fallback flips the whole platform to "degraded" so it can't hide behind
+        # healthy job providers.
+        from src.rico_openai_runtime import get_reasoning_health
+        reasoning = get_reasoning_health()
+        payload["reasoning_provider"] = reasoning
+        if reasoning.get("degraded"):
+            payload["status"] = "degraded"
+    except Exception:
+        pass
     return payload
 
 

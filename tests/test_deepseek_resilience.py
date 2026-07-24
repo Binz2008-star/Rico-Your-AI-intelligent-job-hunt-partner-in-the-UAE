@@ -150,7 +150,9 @@ class TestDeepSeekInvalidModel:
         assert result["text"]  # non-empty
         assert "Something went wrong" not in result["text"]
 
-    def test_all_models_fail_message_is_user_friendly(self, monkeypatch):
+    def test_all_models_fail_message_is_honest_not_cosy(self, monkeypatch):
+        # reasoning-observability: a dead core AI must be surfaced honestly, not
+        # dressed up as a soft reassurance that still promises reasoning.
         import src.rico_openai_runtime as m
 
         fake_client = MagicMock()
@@ -161,10 +163,14 @@ class TestDeepSeekInvalidModel:
         with patch.object(m, "_build_client", return_value=fake_client):
             result = m.call_openai_minimal("Hello", provider="deepseek")
 
-        msg = result.get("text", "")
-        assert "job search" in msg.lower() or "help" in msg.lower(), (
-            f"Fallback message must be user-friendly, got: {msg!r}"
-        )
+        msg = result.get("text", "").lower()
+        # Honest: names the core AI as unavailable and invites a retry…
+        assert "unavailable" in msg
+        assert "try again" in msg
+        # …and does NOT falsely claim it can still reason (e.g. CV review).
+        assert "cv review" not in msg
+        # Distinct machine-readable code is present for observability.
+        assert result.get("error_code") == "reasoning_provider_unavailable"
 
 
 class TestDeepSeekEmptyResponse:

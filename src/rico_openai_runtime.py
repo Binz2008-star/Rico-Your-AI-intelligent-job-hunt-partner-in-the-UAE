@@ -50,9 +50,9 @@ DEEPSEEK_FALLBACK_MODEL = os.getenv("DEEPSEEK_FALLBACK_MODEL", "deepseek-reasone
 _DEEPSEEK_MODEL_CHAIN_ENV = os.getenv("DEEPSEEK_MODEL_CHAIN", "").strip()
 
 _FALLBACK_TEXT = (
-    "I'm here to help with your UAE job search. I can still assist with your profile, "
-    "job search, CV review, and applications. The AI reasoning provider is temporarily "
-    "unavailable — please try again in a moment."
+    "Rico's core AI reasoning is temporarily unavailable, so I can't analyze your "
+    "profile or advise on your search right now. Your saved data — files, jobs, and "
+    "applications — is unaffected, and you can try again in a few minutes."
 )
 _RATE_LIMITED_TEXT = (
     "Rico's AI provider is currently rate-limited. "
@@ -93,6 +93,73 @@ def _deepseek_key_present() -> bool:
 def _provider_name(provider: Optional[str]) -> str:
     selected = (provider or "openai").strip().lower()
     return "deepseek" if selected == "deepseek" else "openai"
+
+
+# ── Reasoning-provider health (reasoning-observability) ───────────────────────
+# In-memory record of the most recent reasoning-provider outcome so /health can
+# report whether the core AI is actually USABLE — not merely whether a key
+# exists. Names and categories ONLY, never a key value or partial key. Resets on
+# process restart, which is acceptable: /health reflects the live process.
+_LAST_REASONING_OUTCOME: Dict[str, Any] = {
+    "reachable": None,             # True after success, False after hard failure, None until first call
+    "error_category": None,        # exception class category (e.g. "BadRequestError") — never a key
+    "status_code": None,           # upstream HTTP status (e.g. 400/401/429/503)
+    "provider_error_code": None,   # provider's own error code (e.g. "model_not_found") — a category
+    "message": None,               # short, secret-redacted upstream message
+    "model_attempted": None,       # the model identifier we sent (a name, never a credential)
+    "provider": None,
+}
+
+
+def _record_reasoning_outcome(
+    provider: str,
+    *,
+    reachable: bool,
+    error_category: Optional[str] = None,
+    status_code: Optional[int] = None,
+    provider_error_code: Optional[str] = None,
+    message: Optional[str] = None,
+    model_attempted: Optional[str] = None,
+) -> None:
+    """Record the most recent reasoning outcome. On success the error fields clear.
+    ``message`` is passed through ``_redact_secrets`` defensively before storing.
+    """
+    _LAST_REASONING_OUTCOME.update({
+        "provider": provider,
+        "reachable": reachable,
+        "model_attempted": model_attempted,
+        "error_category": None if reachable else (error_category or "UnknownAIError"),
+        "status_code": None if reachable else status_code,
+        "provider_error_code": None if reachable else provider_error_code,
+        "message": None if reachable else (_redact_secrets(message)[:_ERROR_MESSAGE_MAX_CHARS] if message else None),
+    })
+
+
+def get_reasoning_health() -> Dict[str, Any]:
+    """Reasoning-provider status for /health. Names, categories, status codes, and
+    model identifiers ONLY — never a key value or partial key (the message is
+    secret-redacted at record time).
+
+    ``reachable`` is None until the first call this process. ``degraded`` is True
+    only with positive evidence the primary is unusable AND no secondary provider
+    is configured — so a healthy-looking platform can't hide a dead core AI.
+    """
+    provider = _provider_name(os.getenv("RICO_AI_PROVIDER"))
+    fallback_available = bool((os.getenv("HF_TOKEN") or "").strip())
+    last = _LAST_REASONING_OUTCOME
+    reachable = last["reachable"]
+    return {
+        "provider": provider,
+        "configured": _provider_key_present(provider),
+        "reachable": reachable,
+        "last_error_category": last["error_category"],
+        "last_status_code": last["status_code"],
+        "last_provider_error_code": last["provider_error_code"],
+        "last_model_attempted": last["model_attempted"],
+        "last_error_message": last["message"],
+        "fallback_available": fallback_available,
+        "degraded": (reachable is False) and not fallback_available,
+    }
 
 
 def _provider_key_present(provider: str) -> bool:
@@ -151,10 +218,22 @@ def _safe_openai_error(exc: Exception) -> Dict[str, Any]:
             except Exception:
                 pass
 
+    # The provider's own machine error code (e.g. "model_not_found",
+    # "invalid_request_error") — a category, never a credential. OpenAI-compatible
+    # SDKs expose it as exc.code; some wrap it in a body dict.
+    provider_error_code = getattr(exc, "code", None)
+    if provider_error_code is None:
+        body = getattr(exc, "body", None)
+        if isinstance(body, dict):
+            err = body.get("error")
+            if isinstance(err, dict):
+                provider_error_code = err.get("code") or err.get("type")
+
     return {
         "error_type": exc.__class__.__name__,
         "message": _redact_secrets(str(exc))[:_ERROR_MESSAGE_MAX_CHARS],
         "status_code": status_code,
+        "provider_error_code": provider_error_code,
         "request_id": request_id,
     }
 
@@ -223,12 +302,16 @@ def _failure_payload(
     *,
     models_tried: Optional[list] = None,
 ) -> Dict[str, Any]:
+    error_category = last_error.get("error_type") if last_error else "UnknownAIError"
     payload = {
         "success": False,
         "type": f"{provider}_error_fallback",
         "response_source": "fallback",
+        # Distinct, machine-readable code so a dead core AI is never mistaken for
+        # a benign keyword/free-mode fallback (reasoning-observability).
+        "error_code": "reasoning_provider_unavailable",
         "provider_state": "degraded",
-        "error": last_error.get("error_type") if last_error else "UnknownAIError",
+        "error": error_category,
         "error_detail": last_error,
         "text": _FALLBACK_TEXT,
         "fallback_model": fallback_model,
@@ -240,6 +323,29 @@ def _failure_payload(
         payload["deepseek_model"] = primary_model
     else:
         payload["openai_model"] = primary_model
+    # Record + log loudly: the core reasoning capability is DOWN. Names,
+    # categories, status codes and model identifiers only — the message is
+    # secret-redacted, never a key value.
+    _status = (last_error or {}).get("status_code")
+    _provider_err = (last_error or {}).get("provider_error_code")
+    _msg = (last_error or {}).get("message")
+    _model_attempted = (models_tried or [primary_model])[-1]
+    _record_reasoning_outcome(
+        provider,
+        reachable=False,
+        error_category=error_category,
+        status_code=_status,
+        provider_error_code=_provider_err,
+        message=_msg,
+        model_attempted=_model_attempted,
+    )
+    logger.error(
+        "reasoning_provider_unavailable provider=%s status_code=%s provider_error_code=%s "
+        "error_category=%s model_attempted=%s models_tried=%s message=%s "
+        "— core AI reasoning is DOWN; served honest fallback",
+        provider, _status, _provider_err, error_category, _model_attempted,
+        models_tried or [primary_model], _redact_secrets(_msg) if _msg else None,
+    )
     return payload
 
 
@@ -414,6 +520,7 @@ def call_openai_minimal(
             if not text:
                 raise RuntimeError(f"{active_provider} response returned empty text")
 
+            _record_reasoning_outcome(active_provider, reachable=True, model_attempted=model)
             return {
                 "success": True,
                 "response_source": active_provider,
@@ -453,6 +560,11 @@ def call_openai_minimal(
                 payload = _rate_limited_payload(last_error, active_provider, model)
                 payload["profile_context_present"] = profile_present
                 payload["is_rate_limited"] = True
+                # Rate-limited = reachable (auth OK, throttled), not "unusable".
+                _record_reasoning_outcome(
+                    active_provider, reachable=True,
+                    error_category="RateLimitError", model_attempted=model,
+                )
                 return payload
             # For non-429 errors (including 400 invalid model, 401, 500, timeout)
             # continue to next model in chain.
