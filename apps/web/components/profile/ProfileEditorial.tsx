@@ -487,7 +487,7 @@ function ChipEditor({
                             commit();
                             setAdding(false);
                         }}
-                        className="h-[34px] min-w-[140px] rounded-full px-3 text-[12.5px] outline-none"
+                        className="profile-ed-chip-input h-[34px] min-w-[140px] rounded-full px-3 text-[12.5px] outline-none"
                         style={{ border: `1px solid ${tone.palette.red}`, background: tone.palette.inset, color: tone.palette.ink }}
                     />
                 ) : (
@@ -1114,6 +1114,7 @@ export function ProfileEditorial({
                 .profile-editorial .profile-ed-action:hover { border-color: ${palette.red} !important; color: ${palette.red} !important; }
                 .profile-editorial .profile-ed-action:focus-visible,
                 .profile-editorial .profile-ed-ghost:focus-visible { outline: 2px solid ${palette.red}; outline-offset: 2px; }
+                .profile-editorial .profile-ed-chip-input:focus-visible { outline: 2px solid ${palette.red}; outline-offset: 1px; }
                 .profile-editorial .profile-ed-rail-link { transition: background .12s ease, color .12s ease; }
                 .profile-editorial .profile-ed-warn-action { transition: border-color .12s ease, color .12s ease; }
                 .profile-editorial .profile-ed-warn-action:hover { border-color: ${palette.red} !important; }
@@ -1341,7 +1342,7 @@ export function ProfileEditorial({
                                 <TextInput id="profile-ed-company" tone={tone} value={draft.current_company} onChange={(v) => set("current_company", v)} />
                             </div>
                             <div>
-                                <FieldLabel tone={tone} htmlFor="profile-ed-years">{t("profileExperience")}</FieldLabel>
+                                <FieldLabel tone={tone} htmlFor="profile-ed-years">{t("profileExperience")} · {t("profileEdYearsUnit")}</FieldLabel>
                                 <TextInput id="profile-ed-years" tone={tone} value={draft.years_experience} onChange={(v) => set("years_experience", v)} inputMode="numeric" />
                                 {errors.years_experience && <FieldError tone={tone}>{t(errors.years_experience)}</FieldError>}
                             </div>
@@ -1534,7 +1535,7 @@ export function ProfileEditorial({
                             </div>
                             <div>
                                 <FieldLabel tone={tone} htmlFor="profile-ed-notice">{t("profileNotice")}</FieldLabel>
-                                <TextInput id="profile-ed-notice" tone={tone} value={draft.notice_period} onChange={(v) => set("notice_period", v)} />
+                                <TextInput id="profile-ed-notice" tone={tone} value={draft.notice_period} onChange={(v) => set("notice_period", v)} placeholder={t("profileEdNoticePlaceholder")} />
                             </div>
                         </div>
                     </SectionCard>
