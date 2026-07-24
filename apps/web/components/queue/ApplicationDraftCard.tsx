@@ -26,6 +26,14 @@ export function ApplicationDraftCard({ draft, onApprove, onReject }: Application
     const t = useTranslation(language);
     const c = useWorkspaceTheme();
 
+    // Approved is a "verified receipt" end-state: use the Atelier moss success
+    // hue (theme-correct per island), not a raw green. Kept local since the
+    // workspace palette has no success token.
+    const approved = done === "approved";
+    const moss = c.dark ? "#6FBE8F" : "#3A754F";
+    const mossBorder = c.dark ? "rgba(111,190,143,0.38)" : "rgba(60,122,82,0.38)";
+    const mossBg = c.dark ? "rgba(111,190,143,0.10)" : "rgba(60,122,82,0.08)";
+
     async function handleApprove() {
         setApproving(true);
         try {
@@ -50,9 +58,9 @@ export function ApplicationDraftCard({ draft, onApprove, onReject }: Application
 
     return (
         <article
-            className={cn("overflow-hidden rounded-[6px] border transition-opacity", done === "approved" && "opacity-60")}
+            className={cn("overflow-hidden rounded-[6px] border transition-opacity", approved && "opacity-60")}
             style={{
-                borderColor: done === "approved" ? "rgba(34,197,94,0.35)" : c.hair,
+                borderColor: approved ? mossBorder : c.hair,
                 background: c.panel,
                 color: c.ink,
                 fontFamily: ATELIER_FONT.body,
@@ -68,13 +76,13 @@ export function ApplicationDraftCard({ draft, onApprove, onReject }: Application
                 <span
                     className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
                     style={{
-                        borderColor: done === "approved" ? "rgba(34,197,94,0.35)" : c.hair,
-                        color: done === "approved" ? "rgb(34,197,94)" : c.red,
-                        background: done === "approved" ? "rgba(34,197,94,0.08)" : c.activeBg,
+                        borderColor: approved ? mossBorder : c.hair,
+                        color: approved ? moss : c.red,
+                        background: approved ? mossBg : c.activeBg,
                     }}
                 >
-                    <MaterialIcon icon={done === "approved" ? "task_alt" : "schedule"} size={13} />
-                    {done === "approved" ? t("draftApproved") : t("draftAwaitingReview")}
+                    <MaterialIcon icon={approved ? "task_alt" : "schedule"} size={13} />
+                    {approved ? t("draftApproved") : t("draftAwaitingReview")}
                 </span>
             </header>
 
@@ -85,10 +93,12 @@ export function ApplicationDraftCard({ draft, onApprove, onReject }: Application
                         <button
                             type="button"
                             role="tab"
+                            id={`tab-${tabKey}-${draft.id}`}
                             aria-selected={selected}
+                            aria-controls={`panel-${draft.id}`}
                             key={tabKey}
                             onClick={() => setTab(tabKey)}
-                            className="me-5 border-b-2 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2"
+                            className="me-5 border-b-2 py-3 text-sm font-medium transition-colors"
                             style={{ borderColor: selected ? c.red : "transparent", color: selected ? c.ink : c.ink40 }}
                         >
                             {tabKey === "cover_letter" ? t("draftCoverLetter") : t("draftTailoredCv")}
@@ -97,7 +107,14 @@ export function ApplicationDraftCard({ draft, onApprove, onReject }: Application
                 })}
             </div>
 
-            <div className="max-h-64 overflow-y-auto px-4 py-5 sm:px-5" style={{ background: c.activeBg }}>
+            <div
+                id={`panel-${draft.id}`}
+                role="tabpanel"
+                aria-labelledby={`tab-${tab}-${draft.id}`}
+                tabIndex={0}
+                className="max-h-64 overflow-y-auto px-4 py-5 sm:px-5"
+                style={{ background: c.activeBg }}
+            >
                 <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-6" style={{ color: c.ink70 }}>
                     {tab === "cover_letter" ? draft.cover_letter : draft.tailored_cv}
                 </pre>
@@ -122,7 +139,7 @@ export function ApplicationDraftCard({ draft, onApprove, onReject }: Application
                             onClick={handleReject}
                             disabled={rejecting || approving}
                             aria-label={t("draftDecline")}
-                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-[4px] border px-3 py-2 text-sm font-semibold transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-40 sm:flex-none"
+                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-[4px] border px-3 py-2 text-sm font-semibold transition-transform hover:-translate-y-0.5 disabled:opacity-40 sm:flex-none"
                             style={{ borderColor: c.hair, color: c.ink70, background: c.panel }}
                         >
                             <MaterialIcon icon="close" size={15} />
@@ -133,7 +150,7 @@ export function ApplicationDraftCard({ draft, onApprove, onReject }: Application
                             onClick={handleApprove}
                             disabled={approving || rejecting}
                             aria-label={t("draftApprove")}
-                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-[4px] px-4 py-2 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-40 sm:flex-none"
+                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-[4px] px-4 py-2 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-40 sm:flex-none"
                             style={{ background: c.red }}
                         >
                             <MaterialIcon icon="task_alt" size={15} />
