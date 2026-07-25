@@ -67,6 +67,12 @@ Three of three classes passed:
 
 Older Draft PRs (`#1374`, `#1370`, `#1362`, `#1359`) remain deferred under the trust-first freeze. An open PR is not permission to merge.
 
+**Exact-head CI, `#1401` at `d4bd5469`:** `postgres-integration` failed from a container-registry pull failure, with no test executed; re-run attempt #2 is pending. Every other job on that head passed, including both ratchet jobs.
+
+### CI evidence rule
+
+**A passing job on a different commit is not exact-head evidence and may never be cited as one.** Transience is established by the failed run's own annotation — here, a Docker pull failure retried with backoff, which is registry infrastructure and not the change — and it is settled only by a re-run recorded against the same head. This rule exists because that mistake was made in this lane's reporting and corrected by the owner.
+
 ### Drift found and corrected during this reconciliation
 
 Recorded because a control plane that hides its own corrections cannot be trusted:

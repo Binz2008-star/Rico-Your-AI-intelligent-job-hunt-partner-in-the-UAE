@@ -163,7 +163,8 @@ Update the block for your lane. Never duplicate one.
 - Allowed files: `design-handoffs/incoming/` only
 - Forbidden files: every production path — `apps/web/`, `src/`, `migrations/`, `.github/`
 - Tests: none apply; the extracted tree is inert — nothing imports it, it is outside the Next.js app root, and no test configuration collects it
-- Blocker: none. One CI job failed on an image-registry timeout with no test executed; it needs a re-run, not a change
+- Blocker: none for the change itself. **Exact-head CI status on `d4bd5469`: `postgres-integration` failed from a container-registry pull failure (`Docker pull failed with exit code 1`, retried with backoff), with no test executed; re-run attempt #2 is pending.** The branch is frozen at `d4bd5469` — the correct disposition is a re-run on that head, not a rebase, amend, or push
+- Evidence rule for this lane: a green on any other commit is **not** exact-head evidence and must never be cited as one. Only a `postgres-integration` conclusion recorded against `d4bd5469` itself settles this
 - Stop condition: stop if any non-design path appears in the diff
 - Next executable action: await review. `#1371` is superseded by this PR — **the owner closes it, not this lane**
 
