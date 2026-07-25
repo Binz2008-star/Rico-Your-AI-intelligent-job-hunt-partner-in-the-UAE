@@ -159,14 +159,14 @@ Update the block for your lane. Never duplicate one.
 - PR: `#1401` (Draft)
 - Base SHA: `e433c7d`
 - Expected remote HEAD: `d4bd5469`
-- Lease state: `WRITING`
+- Lease state: **`RELEASED`** at expected remote HEAD `d4bd5469`. Do not push to this branch again. `#1401` stays Draft and frozen; L6 triages it and merge authority stays with the owner
 - Allowed files: `design-handoffs/incoming/` only
 - Forbidden files: every production path — `apps/web/`, `src/`, `migrations/`, `.github/`
 - Tests: none apply; the extracted tree is inert — nothing imports it, it is outside the Next.js app root, and no test configuration collects it
-- Blocker: none for the change itself. **Exact-head CI status on `d4bd5469`: `postgres-integration` failed from a container-registry pull failure (`Docker pull failed with exit code 1`, retried with backoff), with no test executed; re-run attempt #2 is pending.** The branch is frozen at `d4bd5469` — the correct disposition is a re-run on that head, not a rebase, amend, or push
-- Evidence rule for this lane: a green on any other commit is **not** exact-head evidence and must never be cited as one. Only a `postgres-integration` conclusion recorded against `d4bd5469` itself settles this
+- Blocker: none. **Exact-head CI on `d4bd5469` is settled green.** `postgres-integration` failed once there from a container-registry pull failure (`Docker pull failed with exit code 1`, retried with backoff), with no test executed, and **passed on re-run attempt #2 at the same SHA**. All eleven checks green with no content change
+- Evidence rule for this lane: a green on any other commit is **not** exact-head evidence and must never be cited as one. Only a conclusion recorded against `d4bd5469` itself settles this — which is what the re-run provided
 - Stop condition: stop if any non-design path appears in the diff
-- Next executable action: await review. `#1371` is superseded by this PR — **the owner closes it, not this lane**
+- Next executable action: **none from this lane — the lease is released.** L6 triages; the owner holds merge authority. `#1371` is superseded by this PR and **the owner closes it, not this lane**
 
 ### Lanes holding no lease
 

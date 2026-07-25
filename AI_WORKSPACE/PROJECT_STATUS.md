@@ -67,11 +67,13 @@ Three of three classes passed:
 
 Older Draft PRs (`#1374`, `#1370`, `#1362`, `#1359`) remain deferred under the trust-first freeze. An open PR is not permission to merge.
 
-**Exact-head CI, `#1401` at `d4bd5469`:** `postgres-integration` failed from a container-registry pull failure, with no test executed; re-run attempt #2 is pending. Every other job on that head passed, including both ratchet jobs.
+**Exact-head CI, `#1401` at `d4bd5469`: settled green.** `postgres-integration` failed once on that head from a container-registry pull failure (`Docker pull failed with exit code 1`, retried with backoff), with no test executed, and **passed on re-run attempt #2 at the same SHA** (check-run `89728253310`, 22:19:56 → 22:21:09). All eleven checks are now green at `d4bd5469` **with no content change** — both ratchet jobs included. The transient-registry explanation is therefore proven on the head itself, not inferred from another commit.
 
 ### CI evidence rule
 
-**A passing job on a different commit is not exact-head evidence and may never be cited as one.** Transience is established by the failed run's own annotation — here, a Docker pull failure retried with backoff, which is registry infrastructure and not the change — and it is settled only by a re-run recorded against the same head. This rule exists because that mistake was made in this lane's reporting and corrected by the owner.
+**A passing job on a different commit is not exact-head evidence and may never be cited as one.** Transience is established by the failed run's own annotation — here, a Docker pull failure retried with backoff, which is registry infrastructure and not the change — and it is settled only by a re-run recorded against the same head. A re-run that goes green with no content change is the clean form of that proof: it isolates infrastructure from the diff.
+
+This rule is written down because this lane's reporting made exactly that mistake — citing a green from a later, different commit as if it settled a failure on `d4bd5469` — and the owner caught it.
 
 ### Drift found and corrected during this reconciliation
 

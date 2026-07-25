@@ -147,7 +147,7 @@ detail appear here.
 | `L4` | Workflow-trigger containment checker | `WRITING` | Must report which existing PR heads a stricter checker would break, before pushing further |
 | `L5` | Documents domain contract | `WRITING` | Direction approved. Traceability must map to a roadmap that exists in the workspace |
 | `L6` | Review | none | Read-only. Holds no lease and pushes nothing |
-| `L7` | Docs-only design extraction | `WRITING` | Reference material only; touches no production path. Its superseded source is closed by the owner, not by the lane |
+| `L7` | Docs-only design extraction | **`RELEASED`** at `d4bd5469` | Frozen at that head — no further push from this lane. Exact-head CI settled green there: one container-registry pull failure, then a pass on re-run attempt #2 at the same SHA with no content change. Reference material only; touches no production path. Its superseded source is closed by the owner, not by the lane |
 
 ## Control facts
 
