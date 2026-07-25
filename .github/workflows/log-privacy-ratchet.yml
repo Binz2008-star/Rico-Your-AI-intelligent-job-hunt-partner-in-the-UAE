@@ -36,7 +36,14 @@ jobs:
         # qa-tests.yml runs an explicit file list and does not include this
         # suite; that workflow is shared scope, so the gate's own tests run
         # here instead. A ratchet whose tests never execute is not a gate.
-        run: python -m pytest tests/test_log_privacy_ratchet.py -q
+        #
+        # --noconftest: tests/conftest.py imports src.api.auth, which pulls in
+        # the application's full dependency set. This suite needs none of it —
+        # it drives git and the scanner only — so skipping the repo conftest
+        # keeps this job to a single lightweight install instead of building
+        # the whole runtime just to parse files. Verified against a venv
+        # containing nothing but pytest.
+        run: python -m pytest tests/test_log_privacy_ratchet.py -q --noconftest
 
       - name: Resolve merge base
         id: base
