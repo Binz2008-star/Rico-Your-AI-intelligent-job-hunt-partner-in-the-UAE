@@ -2367,34 +2367,46 @@ def _resolve_trusted_cv_artifact(
     return artifact
 
 
-def _derive_parse_status(*, readable_text_saved: bool) -> str:
+def _derive_parse_status(
+    *, saved_cv_text: str | None, cv_structured: dict[str, Any] | None = None
+) -> str:
     """Derive the confirm response's parse status from CONTENT ACTUALLY SAVED.
 
-    ``parse_status`` is not a column on ``user_documents``; it is derived. It is
-    derived here from one thing only: whether the text this confirm persisted to
-    ``rico_profiles.cv_text`` passed the readability contract in
-    ``src.cv_parse_quality``. Document metadata — ``skills_count``,
-    ``years_experience``, ``is_primary`` — is deliberately NOT consulted: those
-    are counts recorded alongside a file, not evidence that its content was
-    extracted, and deriving a status from them is how a row's mere existence
-    starts asserting an extraction.
+    ``parse_status`` is not a column on ``user_documents``; it is derived from
+    the content this confirm actually persisted. Document metadata —
+    ``skills_count``, ``years_experience``, ``is_primary`` — is deliberately NOT
+    consulted: those are counts recorded alongside a file, not evidence that its
+    content was extracted, and deriving a status from them is how a row's mere
+    existence starts asserting an extraction.
 
     This endpoint never returns ``parsed``. That word conflates "a file arrived"
     with "its content is usable", which is exactly the conflation that put
     ``cv_status = "parsed"`` on production profiles whose ``cv_structured`` is an
-    empty object. Two honest values are available at this point in the pipeline:
+    empty object. The honest values are:
 
-      * ``text_extracted`` — the document and profile writes both succeeded and
-        readable text was saved with them.
+      * ``structured`` — a substantive structured document was saved.
+      * ``text_extracted`` — readable text was saved, structure was not.
       * ``metadata_only`` — the document was saved, but no readable content came
         with it, so only the file's metadata is available.
 
-    ``structured`` is deliberately NOT reachable here: nothing in this endpoint
-    writes ``cv_structured`` yet, so claiming it would be the same lie in a new
-    vocabulary. It becomes available only once the structured-CV pipeline is
-    wired, and this function must be revisited then rather than guessed at now.
+    ``structured`` became reachable once this endpoint started persisting
+    ``cv_structured``, and only on the same terms the rest of the product uses:
+    the document must pass ``cv_structured.is_substantive``. It is derived
+    through ``src.services.cv_state.derive_cv_state`` — the single deriver — so
+    the status this response reports and the state chat reads for the same
+    profile can never disagree.
     """
-    return "text_extracted" if readable_text_saved else "metadata_only"
+    from src.services.cv_state import derive_cv_state
+
+    # The text actually persisted is handed over, not a pre-computed verdict, so
+    # the deriver applies the cv_parse_quality contract itself. Agreement with
+    # the 409 gate is then structural rather than something this call site has to
+    # keep in step by hand.
+    return derive_cv_state(
+        cv_structured=cv_structured,
+        cv_text=saved_cv_text,
+        has_document=True,
+    )
 
 
 @router.post("/confirm-cv-profile")
@@ -2769,7 +2781,8 @@ async def confirm_cv_profile(
                 "doc_type": _doc_result["doc_type"],
                 "is_primary": _doc_result["is_primary"],
                 "parse_status": _derive_parse_status(
-                    readable_text_saved=_readable_text_saved
+                    saved_cv_text=confirmed_cv_text if _readable_text_saved else None,
+                    cv_structured=_cv_structured,
                 ),
                 "inserted": _doc_result["inserted"],
             }
