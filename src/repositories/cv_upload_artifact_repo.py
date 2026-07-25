@@ -31,6 +31,7 @@ manual/cron sweep if one is ever added.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -94,6 +95,55 @@ def purge_expired_cv_upload_artifacts(limit: int = _PURGE_BATCH) -> int:
         conn.close()
 
 
+def _triple_lock_key(user_id: str, doc_type: str, content_hash: str) -> int:
+    """A stable 64-bit advisory-lock key for one `(user_id, doc_type,
+    content_hash)`.
+
+    Serialises concurrent uploads of the SAME bytes by the same user without
+    locking any table or blocking unrelated uploads. Two different triples
+    could theoretically collide on this key; the only consequence would be one
+    upload briefly waiting for another, never a wrong result.
+    """
+    digest = hashlib.sha256(
+        f"{user_id}\x00{doc_type or 'cv'}\x00{content_hash}".encode("utf-8")
+    ).digest()
+    return int.from_bytes(digest[:8], "big", signed=True)
+
+
+def saved_document_exists(user_id: str, doc_type: str, content_hash: str) -> bool:
+    """Whether this exact CV is ALREADY a saved document for this user.
+
+    Answers the triple key `(user_id, doc_type, content_hash)` — the same
+    identity confirm writes and `get_latest_pending_cv_upload` derives
+    `already_saved` from, so the three cannot disagree about what "this CV"
+    means. Best-effort: a store that cannot be read returns False, because a
+    failed read is not evidence that a document exists.
+    """
+    if not (user_id and content_hash):
+        return False
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1 FROM user_documents
+                 WHERE user_id = %s AND doc_type = %s AND content_hash = %s
+                 LIMIT 1
+                """,
+                (user_id, doc_type or "cv", content_hash),
+            )
+            return cur.fetchone() is not None
+    except Exception:
+        logger.exception("cv_upload_artifact_repo_saved_lookup_failed user=%s", user_id)
+        return False
+    finally:
+        conn.close()
+
+
 def create_cv_upload_artifact(
     user_id: str,
     *,
@@ -120,17 +170,61 @@ def create_cv_upload_artifact(
         return None
     try:
         expires_at = datetime.now(_UTC) + timedelta(minutes=ttl_minutes)
+        _doc_type = doc_type or "cv"
         with conn.cursor() as cur:
+            # ONE artifact per (user_id, doc_type, content_hash), enforced here
+            # rather than by a unique index because adding one is a schema
+            # change and this table holds full CV text: re-uploading the same
+            # file — which users do while trying to make a stuck flow work —
+            # otherwise retains another complete copy of their CV per attempt.
+            #
+            # The advisory lock is what makes it correct under concurrency. A
+            # read-then-insert would let two simultaneous uploads of the same
+            # bytes both see "no existing row" and both insert; this serialises
+            # the whole decision for that one triple, and releases at commit or
+            # rollback (xact-scoped, so no leak on the error path). It blocks
+            # only other uploads of the SAME file by the SAME user.
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (_triple_lock_key(user_id, _doc_type, content_hash),))
+            # Refresh the newest existing artifact for this triple instead of
+            # adding a sibling. Returning its id keeps a confirm already issued
+            # against it valid, so a second tab is corrected rather than broken.
             cur.execute(
                 """
-                INSERT INTO cv_upload_artifacts
-                    (user_id, filename, doc_type, content_hash, file_size, cv_text, expires_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                UPDATE cv_upload_artifacts
+                   SET filename = %s, file_size = %s, cv_text = %s, expires_at = %s
+                 WHERE id = (
+                     SELECT id FROM cv_upload_artifacts
+                      WHERE user_id = %s AND doc_type = %s AND content_hash = %s
+                      ORDER BY created_at DESC
+                      LIMIT 1
+                 )
                 RETURNING id
                 """,
-                (user_id, filename, doc_type or "cv", content_hash, file_size or 0, cv_text, expires_at),
+                (filename, file_size or 0, cv_text, expires_at, user_id, _doc_type, content_hash),
             )
             row = cur.fetchone()
+            if row:
+                # Collapse any historical duplicates for this triple, so a table
+                # that already accumulated copies converges to one row as those
+                # files are re-uploaded.
+                cur.execute(
+                    """
+                    DELETE FROM cv_upload_artifacts
+                     WHERE user_id = %s AND doc_type = %s AND content_hash = %s AND id <> %s
+                    """,
+                    (user_id, _doc_type, content_hash, row[0]),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO cv_upload_artifacts
+                        (user_id, filename, doc_type, content_hash, file_size, cv_text, expires_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (user_id, filename, _doc_type, content_hash, file_size or 0, cv_text, expires_at),
+                )
+                row = cur.fetchone()
             # Opportunistic bounded cleanup of expired artifacts, in the SAME
             # transaction — the deletion mechanism that keeps this table
             # short-lived without a background worker (there is none on

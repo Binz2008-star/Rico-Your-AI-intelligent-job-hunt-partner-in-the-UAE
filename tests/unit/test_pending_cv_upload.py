@@ -855,3 +855,131 @@ class TestChatNeverTreatsPendingAsSaved:
             out = RicoChatAPI.process_message(api, "u@x.com", "find me jobs")
         assert out["cv_pending_review"] is True
         assert "not been saved" in out["message"].lower()
+
+
+# ── Re-uploading an already-saved CV ────────────────────────────────────────
+
+class TestAlreadySavedUploadCreatesNoArtifact:
+    """A user whose flow looks stuck re-uploads the same file. That file is
+    already a saved document, so there is nothing to confirm — and creating a
+    fresh confirmable artifact would both ask for a redundant confirmation and
+    retain a second full copy of their CV text for the whole window."""
+
+    def _upload(self, client, *, already_saved, created_id=_UPLOAD_ID):
+        import src.api.routers.rico_chat as mod
+
+        with (
+            patch("src.services.chat_service.parse_cv", return_value=_PARSED),
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
+            patch("src.api.routers.rico_chat.get_profile", return_value=None),
+            patch("src.cv_parser.CVParser", return_value=type(
+                "Parser", (), {"detect_document_type": lambda self, text: "cv"}
+            )()),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.saved_document_exists",
+                return_value=already_saved,
+            ),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.create_cv_upload_artifact",
+                return_value=created_id,
+            ) as create,
+            patch("src.repositories.cv_upload_artifact_repo.artifact_store_reachable", return_value=True),
+            patch.object(mod, "_is_production", lambda: False),
+        ):
+            r = client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("cv.pdf", __import__("io").BytesIO(_PDF), "application/pdf")},
+            )
+        return r, create
+
+    def test_already_saved_upload_creates_no_artifact_and_offers_no_confirm(self, client):
+        r, create = self._upload(client, already_saved=True)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "already_saved"
+        # No confirmable preview, and no second full-text copy retained.
+        assert "preview_ready" not in body.values()
+        assert body["upload_id"] is None
+        assert "preview" not in body
+        create.assert_not_called()
+        # It must read as "you already have this", never as a failure.
+        assert body["ok"] is True
+        assert "already saved" in body["message"].lower()
+
+    def test_a_new_file_is_unaffected(self, client):
+        r, create = self._upload(client, already_saved=False)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "preview_ready"
+        assert body["upload_id"] == _UPLOAD_ID
+        create.assert_called_once()
+
+    def test_an_unreadable_store_does_not_refuse_the_upload(self, client):
+        """A failed read is not evidence that a document exists — falling
+        through to the review path is the safe direction, since confirm is
+        idempotent and would answer already_saved anyway."""
+        import src.api.routers.rico_chat as mod
+
+        with (
+            patch("src.services.chat_service.parse_cv", return_value=_PARSED),
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
+            patch("src.api.routers.rico_chat.get_profile", return_value=None),
+            patch("src.cv_parser.CVParser", return_value=type(
+                "Parser", (), {"detect_document_type": lambda self, text: "cv"}
+            )()),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.saved_document_exists",
+                side_effect=RuntimeError("store down"),
+            ),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.create_cv_upload_artifact",
+                return_value=_UPLOAD_ID,
+            ),
+            patch("src.repositories.cv_upload_artifact_repo.artifact_store_reachable", return_value=True),
+            patch.object(mod, "_is_production", lambda: False),
+        ):
+            r = client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("cv.pdf", __import__("io").BytesIO(_PDF), "application/pdf")},
+            )
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "preview_ready"
+
+    def test_saved_document_exists_uses_the_triple_key(self):
+        """Same identity confirm writes and the pending read derives from, so
+        the three cannot disagree about what "this CV" means."""
+        from src.repositories import cv_upload_artifact_repo as repo
+
+        captured = {}
+
+        class _Cur:
+            def execute(self, sql, params=()):
+                captured["sql"] = " ".join(sql.split())
+                captured["params"] = params
+
+            def fetchone(self):
+                return (1,)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        class _Conn:
+            def cursor(self):
+                return _Cur()
+
+            def close(self):
+                pass
+
+        with patch("src.db.get_db_connection", return_value=_Conn()):
+            assert repo.saved_document_exists("u@x.com", "cv", "deadbeef") is True
+        assert "FROM user_documents" in captured["sql"]
+        assert captured["params"] == ("u@x.com", "cv", "deadbeef")
+
+    def test_saved_document_exists_is_false_when_the_store_cannot_be_read(self):
+        from src.repositories import cv_upload_artifact_repo as repo
+
+        with patch("src.db.get_db_connection", return_value=None):
+            assert repo.saved_document_exists("u@x.com", "cv", "deadbeef") is False

@@ -226,3 +226,114 @@ def test_create_already_expired_is_immediately_purged():
     assert upload_id
     assert _count() == 0
     assert resolve_cv_upload_artifact("alice@rico.test", upload_id) is None
+
+
+# ── duplicate amplification is bounded, including under concurrency ──────────
+#
+# This table stores the FULL parsed text of an unconfirmed CV, so a duplicate
+# row is a retained extra copy of someone's CV — not merely a wasted row. A
+# user whose flow looks stuck re-uploads the same file repeatedly, which is
+# exactly the behaviour that amplifies retention. The bound is "one artifact
+# per (user_id, doc_type, content_hash)", and it has to hold when two uploads
+# race, which no mocked cursor can prove.
+
+def test_repeated_identical_uploads_retain_exactly_one_copy():
+    ids = [
+        create_cv_upload_artifact(
+            "alice@rico.test", filename=f"cv_v{i}.pdf", doc_type="cv",
+            content_hash="2" * 64, file_size=10 + i, cv_text="same bytes",
+        )
+        for i in range(5)
+    ]
+    assert all(ids)
+    # One row, and every upload was handed the SAME id — so a confirm issued
+    # against an earlier attempt still resolves instead of being orphaned.
+    assert _count() == 1
+    assert len(set(ids)) == 1
+    # The newest metadata won.
+    artifact = resolve_cv_upload_artifact("alice@rico.test", ids[-1])
+    assert artifact is not None
+    assert artifact["filename"] == "cv_v4.pdf"
+
+
+def test_a_different_file_still_gets_its_own_artifact():
+    """The bound is per triple, not per user — it must not swallow a real
+    second document."""
+    first = create_cv_upload_artifact(
+        "alice@rico.test", filename="cv.pdf", doc_type="cv",
+        content_hash="3" * 64, file_size=10, cv_text="one",
+    )
+    second = create_cv_upload_artifact(
+        "alice@rico.test", filename="other.pdf", doc_type="cv",
+        content_hash="4" * 64, file_size=10, cv_text="two",
+    )
+    assert first and second and first != second
+    assert _count() == 2
+
+
+def test_same_bytes_under_a_different_doc_type_is_a_separate_artifact():
+    first = create_cv_upload_artifact(
+        "alice@rico.test", filename="doc.pdf", doc_type="cv",
+        content_hash="5" * 64, file_size=10, cv_text="x",
+    )
+    second = create_cv_upload_artifact(
+        "alice@rico.test", filename="doc.pdf", doc_type="cover_letter",
+        content_hash="5" * 64, file_size=10, cv_text="x",
+    )
+    assert first and second and first != second
+    assert _count() == 2
+
+
+def test_same_bytes_from_two_users_never_collide():
+    a = create_cv_upload_artifact(
+        "alice@rico.test", filename="cv.pdf", doc_type="cv",
+        content_hash="6" * 64, file_size=10, cv_text="x",
+    )
+    b = create_cv_upload_artifact(
+        "bob@rico.test", filename="cv.pdf", doc_type="cv",
+        content_hash="6" * 64, file_size=10, cv_text="x",
+    )
+    assert a and b and a != b
+    assert _count() == 2
+
+
+def test_concurrent_identical_uploads_do_not_both_insert():
+    """The property a read-then-insert cannot provide.
+
+    Without serialising the decision per triple, two simultaneous uploads of
+    the same bytes both observe "no existing artifact" and both insert, leaving
+    two full copies of the CV. Real threads against a real server, because that
+    interleaving does not exist at the mock layer.
+    """
+    import threading
+
+    barrier = threading.Barrier(8)
+    results: list = []
+    errors: list = []
+    lock = threading.Lock()
+
+    def _worker(i: int) -> None:
+        try:
+            barrier.wait(timeout=30)
+            got = create_cv_upload_artifact(
+                "race@rico.test", filename=f"cv_{i}.pdf", doc_type="cv",
+                content_hash="7" * 64, file_size=100 + i, cv_text="identical bytes",
+            )
+            with lock:
+                results.append(got)
+        except Exception as exc:  # pragma: no cover - surfaced via `errors`
+            with lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=_worker, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=60)
+
+    assert not errors, errors
+    assert len(results) == 8
+    assert all(results), results
+    # Every racer got the same artifact, and exactly one row exists.
+    assert len(set(results)) == 1, set(results)
+    assert _count() == 1

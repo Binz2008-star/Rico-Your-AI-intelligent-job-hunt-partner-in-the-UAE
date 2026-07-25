@@ -142,8 +142,12 @@ def _conn_with_cursor(cur):
 
 
 class TestCvUploadArtifactRepoCreate:
-    def test_create_returns_id_and_commits(self):
-        cur = _cursor_returning(["11111111-1111-1111-1111-111111111111"])
+    def test_first_upload_of_a_file_inserts_and_commits(self):
+        """No artifact exists for this triple yet, so one is inserted."""
+        cur = _cursor_returning(None)
+        # UPDATE ... RETURNING finds nothing, then INSERT ... RETURNING yields
+        # the new id. Ordered so the two write paths stay distinguishable.
+        cur.fetchone.side_effect = [None, ["11111111-1111-1111-1111-111111111111"]]
         conn = _conn_with_cursor(cur)
         with patch("src.db.get_db_connection", return_value=conn):
             artifact_id = create_cv_upload_artifact(
@@ -162,6 +166,33 @@ class TestCvUploadArtifactRepoCreate:
         # (Blocker 2: actual deletion, no background worker).
         assert "DELETE FROM CV_UPLOAD_ARTIFACTS" in all_sql
         assert "EXPIRES_AT < NOW()" in all_sql
+
+    def test_re_uploading_the_same_file_refreshes_one_row_instead_of_adding_another(self):
+        """This table holds full CV text, so a second copy per re-upload is
+        retained personal data, not just a duplicate row. The existing artifact
+        is refreshed and its id returned — which also keeps a confirm already
+        issued against that id valid."""
+        cur = _cursor_returning(["11111111-1111-1111-1111-111111111111"])
+        conn = _conn_with_cursor(cur)
+        with patch("src.db.get_db_connection", return_value=conn):
+            artifact_id = create_cv_upload_artifact(
+                "alice@rico.ai",
+                filename="cv.pdf",
+                doc_type="cv",
+                content_hash="abc123",
+                file_size=1024,
+                cv_text="Jane Doe CV text",
+            )
+        assert artifact_id == "11111111-1111-1111-1111-111111111111"
+        conn.commit.assert_called_once()
+        all_sql = " ".join(str(c.args[0]).upper() for c in cur.execute.call_args_list)
+        assert "UPDATE CV_UPLOAD_ARTIFACTS" in all_sql
+        assert "INSERT INTO CV_UPLOAD_ARTIFACTS" not in all_sql
+        # Read-then-insert would let two simultaneous uploads of the same bytes
+        # both miss and both insert. The decision is serialised per triple.
+        assert "PG_ADVISORY_XACT_LOCK" in all_sql
+        # Historical siblings for the same triple are collapsed.
+        assert "ID <> %S" in all_sql
 
     def test_create_returns_none_when_db_unavailable(self):
         with patch("src.db.get_db_connection", return_value=None):

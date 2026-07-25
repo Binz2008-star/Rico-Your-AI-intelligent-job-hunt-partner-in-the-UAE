@@ -2302,6 +2302,38 @@ async def rico_upload_cv(
             # the RicoMemoryStore "last_uploaded_cv_text" stash, which is a
             # no-op in production (RICO_MEMORY_BACKEND=postgres). The client
             # receives only the opaque id — never the hash or text directly.
+            # This exact CV may already BE a saved document. Re-uploading it is
+            # what a user does when a flow looks stuck, and answering with a
+            # fresh review card would ask them to confirm something already
+            # confirmed — while retaining a second full copy of their CV text
+            # for the whole window. Checked first, so no confirmable artifact is
+            # created for a file that needs no confirmation.
+            try:
+                from src.repositories.cv_upload_artifact_repo import saved_document_exists
+                _already_saved = saved_document_exists(
+                    resolved_user_id, doc_type or "cv", content_hash
+                )
+            except Exception:
+                # A failed read is not evidence that a document exists; fall
+                # through to the normal review path rather than refusing a CV.
+                _already_saved = False
+
+            if _already_saved:
+                logger.info(
+                    "cv_upload_already_saved user=%s request_ref=%s",
+                    user_ref(resolved_user_id), request_ref,
+                )
+                _metrics.record_request((time.time() - start_time) * 1000)
+                return {
+                    "ok": True,
+                    "status": "already_saved",
+                    "document_type": doc_type,
+                    "filename": safe_name,
+                    "message": "You've already saved this CV — you'll find it under My Files. Upload a different file if you want to replace it.",
+                    "user_id": None if is_valid_public_user_id(resolved_user_id) else resolved_user_id,
+                    "upload_id": None,
+                }
+
             try:
                 from src.repositories.cv_upload_artifact_repo import create_cv_upload_artifact
                 upload_id = create_cv_upload_artifact(
