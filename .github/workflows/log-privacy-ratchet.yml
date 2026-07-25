@@ -1,0 +1,127 @@
+name: Log Privacy Ratchet (advisory)
+
+# ADVISORY path. This must NOT be the Required check.
+#
+# It runs the PR's own scanner and rules, which is what lets a protection ADDED
+# by the change take effect in the same PR — useful, and the reason this job
+# exists. But it also means the change executes the policy that judges it, so
+# it cannot be trusted for enforcement: relaxing a rule here would relax the
+# check itself.
+#
+# Enforcement lives in log-privacy-ratchet-trusted.yml, which runs the BASE
+# branch's workflow, scanner and rules under pull_request_target and therefore
+# cannot be weakened by the change under judgement. That is the check to mark
+# Required.
+#
+# Even that one enforces nothing until it is configured as a Required status
+# check in branch protection — a repository setting, not part of any workflow.
+#
+# Action refs below are moving major tags (@v4/@v5), matching the convention
+# used by every other workflow in this repository for first-party actions.
+# They are NOT SHA-pinned; do not describe them as pinned.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history — merge base is required)
+        uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 is load-bearing. With the default shallow clone
+          # there is no merge base to compute and the gate cannot run.
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install scanner dependencies
+        # The rule module imports pytest; src/log_privacy.py is stdlib-only.
+        # Deliberately not the full requirements set — this job only parses.
+        run: python -m pip install --quiet pytest
+
+      - name: Self-test the ratchet itself
+        # qa-tests.yml runs an explicit file list and does not include this
+        # suite; that workflow is shared scope, so the gate's own tests run
+        # here instead. A ratchet whose tests never execute is not a gate.
+        #
+        # --noconftest: tests/conftest.py imports src.api.auth, which pulls in
+        # the application's full dependency set. This suite needs none of it —
+        # it drives git and the scanner only — so skipping the repo conftest
+        # keeps this job to a single lightweight install instead of building
+        # the whole runtime just to parse files. Verified against a venv
+        # containing nothing but pytest.
+        run: python -m pytest tests/test_log_privacy_ratchet.py -q --noconftest
+
+      - name: Resolve merge base
+        id: base
+        run: |
+          set -euo pipefail
+
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            echo "::error::CANNOT RUN (exit 2): repository is shallow; merge base cannot be computed"
+            exit 2
+          fi
+
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          if [ -z "$BASE_REF" ]; then
+            echo "::error::CANNOT RUN (exit 2): no base ref on this event; refusing to guess"
+            exit 2
+          fi
+
+          git fetch --no-tags --quiet origin "$BASE_REF"
+
+          # HEAD here is the PR merge commit actions/checkout produces, i.e.
+          # the tree that would actually land. Its merge base against the base
+          # branch is the correct comparison point, and it is recomputed on
+          # every run — so a force-push or a rebase simply produces a new base,
+          # and a base branch that moves under the PR is picked up as well.
+          if ! BASE_SHA="$(git merge-base "origin/${BASE_REF}" HEAD)"; then
+            echo "::error::CANNOT RUN (exit 2): git merge-base failed against origin/${BASE_REF}"
+            exit 2
+          fi
+          HEAD_SHA="$(git rev-parse HEAD)"
+
+          if [ -z "$BASE_SHA" ]; then
+            echo "::error::CANNOT RUN (exit 2): empty merge base; refusing to run with no baseline"
+            exit 2
+          fi
+
+          # The dangerous failure mode: a base that equals head makes the
+          # difference empty and lets every new violation through silently.
+          if [ "$BASE_SHA" = "$HEAD_SHA" ]; then
+            echo "::error::CANNOT RUN (exit 2): merge base equals head (${BASE_SHA}); the difference would be empty"
+            exit 2
+          fi
+
+          if ! git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"; then
+            echo "::error::CANNOT RUN (exit 2): resolved base ${BASE_SHA} is not an ancestor of head"
+            exit 2
+          fi
+
+          echo "base_sha=${BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "merge base: ${BASE_SHA}"
+          echo "head:       ${HEAD_SHA}"
+
+      - name: Materialise the base tree
+        run: |
+          set -euo pipefail
+          git worktree add --detach "${RUNNER_TEMP}/ratchet-base" "${{ steps.base.outputs.base_sha }}"
+          test -d "${RUNNER_TEMP}/ratchet-base/src" || {
+            echo "::error::CANNOT RUN (exit 2): base tree has no src/ directory"; exit 2; }
+
+      - name: Run the differential ratchet
+        run: |
+          python scripts/log_privacy_ratchet.py \
+            --base-tree "${RUNNER_TEMP}/ratchet-base" \
+            --head-tree "${GITHUB_WORKSPACE}" \
+            --base-sha "${{ steps.base.outputs.base_sha }}" \
+            --head-sha "${{ steps.base.outputs.head_sha }}"
