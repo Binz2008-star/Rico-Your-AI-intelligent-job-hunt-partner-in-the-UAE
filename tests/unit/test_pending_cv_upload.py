@@ -33,15 +33,15 @@ from src.services.cv_preview import build_cv_preview, build_preview_from_text
 
 _AUTH_UID = "owner@rico.ai"
 _UPLOAD_ID = "11111111-2222-3333-4444-555555555555"
-_CV_TEXT = """Roben Edwan
+_CV_TEXT = """Dana Merrick
 Head of Compliance
 
 WORK EXPERIENCE
-Head of Compliance, Emirates NBD    2019 - Present
+Head of Compliance, Northwind Financial    2019 - Present
 Led the AML programme across the GCC.
 
 EDUCATION
-BSc Computer Science, University of Dubai    2010 - 2014
+BSc Computer Science, Halcyon Institute of Technology    2010 - 2014
 
 SKILLS
 compliance, audit, risk assessment
@@ -62,7 +62,7 @@ def reset_rate_limiter():
     yield
 
 
-def _artifact(cv_text=_CV_TEXT, filename="Roben_Edwan_CV.pdf"):
+def _artifact(cv_text=_CV_TEXT, filename="Dana_Merrick_CV.pdf"):
     return {
         "upload_id": _UPLOAD_ID,
         "filename": filename,
@@ -100,7 +100,7 @@ class TestFourDistinctStates:
         assert body["pending"] is True
         assert body["preview_available"] is True
         assert body["upload_id"] == _UPLOAD_ID
-        assert body["filename"] == "Roben_Edwan_CV.pdf"
+        assert body["filename"] == "Dana_Merrick_CV.pdf"
         assert body["preview"]["current_role"] or body["preview"]["skills_detected"]
 
     def test_unrebuildable_preview_is_pending_true_not_false(self, client):
@@ -138,8 +138,8 @@ class TestNoInternalFieldsLeak:
         assert "file_size" not in body
         assert "user_id" not in body
         # The CV's own sentences must not appear anywhere in the payload.
-        assert "Emirates NBD" not in raw
-        assert "University of Dubai" not in raw
+        assert "Northwind Financial" not in raw
+        assert "Halcyon Institute of Technology" not in raw
 
     def test_cache_control_forbids_intermediary_storage(self, client):
         r = _get(client, pending=_artifact())
@@ -340,9 +340,9 @@ class TestUnparsedSectionsAreNotFabricated:
         doc = {"schema_version": 1, "skills": ["compliance", "audit", "risk assessment"]}
         if with_work:
             doc["work_experience"] = [
-                {"text": "Head of Compliance, Emirates NBD", "date_range": "2019 - Present"}
+                {"text": "Head of Compliance, Northwind Financial", "date_range": "2019 - Present"}
             ]
-            doc["work_experience_text"] = "Head of Compliance, Emirates NBD 2019 - Present"
+            doc["work_experience_text"] = "Head of Compliance, Northwind Financial 2019 - Present"
         if with_education:
             doc["education"] = [{"text": "BSc Computer Science", "date_range": "2010 - 2014"}]
             doc["education_text"] = "BSc Computer Science 2010 - 2014"
@@ -355,7 +355,7 @@ class TestUnparsedSectionsAreNotFabricated:
         api = RicoChatAPI.__new__(RicoChatAPI)
         api._append_chat = MagicMock()
         profile = {
-            "name": "Roben Edwan",
+            "name": "Dana Merrick",
             "current_role": "Head of Compliance",
             "years_experience": 10,
             "skills": ["compliance", "audit"],
@@ -405,7 +405,7 @@ class TestExpiredIsDistinctFromAbsent:
         body = r.json()
         assert body["pending"] is False
         assert body["state"] == "expired"
-        assert body["filename"] == "Roben_Edwan_CV.pdf"
+        assert body["filename"] == "Dana_Merrick_CV.pdf"
         assert "expired" in body["message"].lower()
         # Must never claim the user has no CV / never uploaded.
         assert "no cv" not in body["message"].lower()
@@ -421,7 +421,7 @@ class TestExpiredIsDistinctFromAbsent:
         body = r.json()
         assert "preview" not in body
         assert "cv_text" not in body
-        assert "Emirates NBD" not in r.text
+        assert "Northwind Financial" not in r.text
 
     def test_repository_reports_expiry_rather_than_hiding_it(self):
         import inspect
@@ -451,7 +451,7 @@ class TestSecondConfirmIsHonestNotAnError:
         from src.rico_chat_api import RicoChatAPI  # noqa: F401  (import parity)
 
         artifact = {
-            "filename": "Roben_Edwan_CV.pdf",
+            "filename": "Dana_Merrick_CV.pdf",
             "doc_type": "cv",
             "content_hash": "c82b6591" + "a" * 56,
             "file_size": 55519,
@@ -459,7 +459,7 @@ class TestSecondConfirmIsHonestNotAnError:
         }
         saved_row = {
             "id": "34a86f49-0000-0000-0000-000000000000",
-            "filename": "Roben_Edwan_CV.pdf",
+            "filename": "Dana_Merrick_CV.pdf",
             "doc_type": "cv",
             "is_primary": True,
             "skills_count": 3,
@@ -477,8 +477,8 @@ class TestSecondConfirmIsHonestNotAnError:
                 return dict(saved_row)
 
         payload = {
-            "preview": {"name": "Roben Edwan", "skills_detected": ["compliance"]},
-            "filename": "Roben_Edwan_CV.pdf",
+            "preview": {"name": "Dana Merrick", "skills_detected": ["compliance"]},
+            "filename": "Dana_Merrick_CV.pdf",
             "doc_type": "cv",
             "upload_id": _UPLOAD_ID,
         }
@@ -504,7 +504,7 @@ class TestSecondConfirmIsHonestNotAnError:
         body = r.json()
         assert body["document"]["inserted"] is False
         assert body["document"]["document_id"] == saved_row["id"]
-        assert body["document"]["filename"] == "Roben_Edwan_CV.pdf"
+        assert body["document"]["filename"] == "Dana_Merrick_CV.pdf"
         # Explicitly NOT an error, and not a denial of the CV.
         assert r.status_code != 409
         assert "cv_confirmation_required" not in r.text
@@ -606,14 +606,14 @@ _PDF = b"%PDF-1.4 fake"
 _PARSED = {
     "text": _CV_TEXT,
     "skills": ["compliance", "audit"],
-    "emails": ["roben@example.com"],
+    "emails": ["dana@example.test"],
     "phones": ["+971500000000"],
     "years_experience_hint": 10,
     "certifications": ["iso"],
     "languages": ["english"],
     "extraction_quality": "good",
     "extracted_chars": len(_CV_TEXT),
-    "name": "Roben Edwan",
+    "name": "Dana Merrick",
     "current_role": "Head of Compliance",
 }
 
@@ -747,10 +747,10 @@ class TestChatNeverTreatsPendingAsSaved:
     def test_the_note_carries_no_cv_content(self):
         """Existence only. Nothing from the artifact's text may reach the reply."""
         art = dict(_artifact())
-        art["cv_text"] = "Head of Compliance at Emirates NBD, roben@example.com"
+        art["cv_text"] = "Head of Compliance at Northwind Financial, dana@example.test"
         result = self._note({"message": "Upload your CV.", "next_action": "upload_cv"}, art)
         lowered = result["message"].lower()
-        for leaked in ("emirates nbd", "head of compliance", "roben@example.com"):
+        for leaked in ("northwind financial", "head of compliance", "dana@example.test"):
             assert leaked not in lowered
         # Not even the artifact's own identifiers.
         assert _UPLOAD_ID not in result["message"]

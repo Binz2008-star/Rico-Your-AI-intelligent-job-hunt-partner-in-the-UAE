@@ -32,7 +32,7 @@ function jsonResponse(body: JsonValue, status = 200): ResponseLike {
 }
 
 const PREVIEW = {
-  name: "Roben Edwan",
+  name: "Dana Merrick",
   email: "r@example.com",
   phone: null,
   current_role: "Head of Compliance",
@@ -92,7 +92,7 @@ describe("/command?cv=ready — the pending CV review", () => {
         state: "pending",
         preview_available: true,
         upload_id: "11111111-2222-3333-4444-555555555555",
-        filename: "Roben_Edwan_CV.pdf",
+        filename: "Dana_Merrick_CV.pdf",
         doc_type: "cv",
         expires_at: "2026-07-25T18:30:00+00:00",
         preview: PREVIEW,
@@ -119,7 +119,7 @@ describe("/command?cv=ready — the pending CV review", () => {
         state: "pending",
         preview_available: true,
         upload_id: "11111111-2222-3333-4444-555555555555",
-        filename: "Roben_Edwan_CV.pdf",
+        filename: "Dana_Merrick_CV.pdf",
         doc_type: "cv",
         preview: PREVIEW,
       },
@@ -150,7 +150,7 @@ describe("/command?cv=ready — the pending CV review", () => {
       body: {
         pending: false,
         state: "expired",
-        filename: "Roben_Edwan_CV.pdf",
+        filename: "Dana_Merrick_CV.pdf",
         message: "expired",
       },
     });
@@ -180,7 +180,7 @@ describe("/command?cv=ready — the pending CV review", () => {
         state: "pending",
         preview_available: true,
         upload_id: "11111111-2222-3333-4444-555555555555",
-        filename: "Roben_Edwan_CV.pdf",
+        filename: "Dana_Merrick_CV.pdf",
         doc_type: "cv",
         preview: PREVIEW,
       },
@@ -199,7 +199,7 @@ describe("/command?cv=ready — the pending CV review", () => {
   });
 
   it("shows the saved-profile panel only when the CV is actually saved", async () => {
-    installMock({ body: { pending: false, state: "already_saved", filename: "Roben_Edwan_CV.pdf" } });
+    installMock({ body: { pending: false, state: "already_saved", filename: "Dana_Merrick_CV.pdf" } });
     render(<CommandPage />);
 
     expect(await screen.findByText(/CV Profile Ready/i)).toBeInTheDocument();
