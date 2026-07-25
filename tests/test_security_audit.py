@@ -21,22 +21,46 @@ os.environ.setdefault("ADMIN_PASSWORD", "TestPass123")
 os.environ.setdefault("JWT_SECRET", "x" * 32)
 
 
-@pytest.fixture(autouse=True)
-def _no_jotform_webhook_secret(monkeypatch):
-    """Unset JOTFORM_WEBHOOK_SECRET so dev-mode pass-through works, per test.
+@pytest.fixture(scope="module", autouse=True)
+def _module_env():
+    """Scoped environment for this module — MODULE scope, deliberately.
 
-    This was previously ``os.environ.pop("JOTFORM_WEBHOOK_SECRET", None)`` at
-    module level. Because pytest imports every test module during collection,
-    that removal took effect before any test ran and was never undone, deleting
-    the variable process-wide for the rest of the session — the same
-    import-time-leak defect class as the ``RICO_ENV`` write in
-    ``tests/test_password_reset.py``, and equally capable of masking a test
-    elsewhere that needs the secret present.
+    Replaces ``os.environ.pop("JOTFORM_WEBHOOK_SECRET", None)`` at module level.
+    pytest imports every test module during collection, so that removal took
+    effect before any test ran and was never undone, deleting the variable
+    process-wide for the rest of the session — the same import-time-leak defect
+    class as the ``RICO_ENV`` write in ``tests/test_password_reset.py``.
 
-    ``monkeypatch`` restores the prior value after each test. The intent is
-    unchanged: every test in this module still runs with the secret unset.
+    Why MODULE scope and not the function-scoped ``monkeypatch`` fixture:
+    ``client`` and ``auth_client`` below are module-scoped, and pytest builds
+    higher-scoped fixtures first. A function-scoped env fixture would therefore
+    run *after* them — too late. ``auth_client`` calls ``create_access_token``,
+    which reaches ``_jwt_secret()``; that raises outright in production when
+    ``JWT_SECRET`` is shorter than 32 characters. Measured, not reasoned: with
+    ``RICO_ENV=production`` exported before pytest, a function-scoped version of
+    this fixture gave `12 failed, 44 passed, 6 errors`; this module-scoped one
+    gives a clean run.
+
+    ``RICO_ENV=development`` is set explicitly here because this module has
+    always needed a non-production environment but never said so — it inherited
+    one from the leak in ``tests/test_password_reset.py``, which ran first during
+    collection. That hidden cross-module dependency is now stated and scoped;
+    the behaviour is exactly what it was before, and the module no longer
+    depends on another module's side effects to pass.
+
+    (Note the ``os.environ.setdefault("JWT_SECRET", "x" * 32)`` above: because
+    ``setdefault`` yields to a value the environment already holds, a short
+    ``JWT_SECRET`` exported by the caller wins over it. That is the weaker,
+    second-order form of this same leak class, recorded as accepted debt in
+    ``tests/test_no_import_time_env_mutation.py``.)
+
+    ``pytest.MonkeyPatch.context()`` restores both variables when the module
+    finishes, so nothing escapes into the rest of the session.
     """
-    monkeypatch.delenv("JOTFORM_WEBHOOK_SECRET", raising=False)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("RICO_ENV", "development")
+        mp.delenv("JOTFORM_WEBHOOK_SECRET", raising=False)
+        yield
 
 
 @pytest.fixture(scope="module")
