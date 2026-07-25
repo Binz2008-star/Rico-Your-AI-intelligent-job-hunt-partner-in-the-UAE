@@ -52,9 +52,30 @@ _APPLICATION_STATUS_RE: Final[re.Pattern[str]] = re.compile(
 # Carve-out: uploaded-file / My Files questions must route to the legacy
 # classifier (which answers deterministically from user_documents), not to the
 # conversational AI handler — the model cannot be trusted to enumerate files.
+#
+# EVERY arm must carry an ownership qualifier. The bare
+# ``(what|which) (files|documents)`` arm this replaced carried none, so the
+# words "files"/"documents" alone were enough to hijack a message — regardless
+# of whether it was about the user's account at all. Live-verified on
+# production 2026-07-25: "What documents are required for a UAE work visa?",
+# "What files does an employer usually ask for?", "What documents do UAE
+# employers expect?" and "What files should I bring to an interview?" all
+# returned the same uploaded-CV filename listing with zero guidance content,
+# while "Which certificates do nurses need to work in Dubai?" reached the model
+# correctly — proving the trigger was the noun, not the topic. The Arabic arms
+# were never affected because possession is morphological there (ملفاتي,
+# مستنداتي, "التي رفعتها"), which is exactly the qualifier the English arm lacked.
 _FILE_LIST_RE: Final[re.Pattern[str]] = re.compile(
     r"\b(?:my|uploaded)\s+(?:files?|documents?|docs|uploads)\b"
-    r"|\b(?:what|which)\s+(?:files?|documents?)\b"
+    # "what files do I have?", "which documents are on my account?",
+    # "which CV files have I uploaded?" — the interrogative arm, now requiring
+    # an explicit first-person-possession tail. ``do i have`` excludes the
+    # obligation reading ("what documents do I have TO submit for a visa?"),
+    # which is a guidance question, not an inventory request.
+    r"|\b(?:what|which)\s+(?:\w+\s+){0,2}(?:files?|documents?|docs)\b.{0,40}?"
+    r"\b(?:do\s+i\s+have(?!\s+to\b)|have\s+i\s+(?:uploaded|got|added|sent)"
+    r"|did\s+i\s+(?:upload|send|add)|are\s+(?:on|in)\s+my\s+account"
+    r"|i\s+(?:have\s+)?uploaded)\b"
     r"|\bwhich\s+(?:cv|resume)\s+is\s+(?:the\s+)?(?:active|primary|current|main)\b"
     r"|\b(?:active|primary)\s+(?:cv|resume)\b"
     r"|ملفاتي|مستنداتي|الملفات\s+المرفوعة"
@@ -66,6 +87,84 @@ _FILE_LIST_RE: Final[re.Pattern[str]] = re.compile(
 def _is_file_list_question(text: str) -> bool:
     """Return True for My Files queries that need the DB, not the AI."""
     return bool(_FILE_LIST_RE.search(text))
+
+
+# Carve-out: requests for the user's OWN application records. These must reach
+# the deterministic tracking handler (which reads the database and reconciles
+# every status) instead of the conversational AI handler, which has no DB access
+# and answers them by inventing a number.
+#
+# Frame-based, NOT ownership-word-based, and that distinction is the whole
+# design. "my applications" appears in both "What are my applications?" (a data
+# request) and "Why are my applications ignored?" (career advice), so a bare
+# ownership token cannot separate them. Each arm below encodes a complete
+# request frame — an enumeration command, a first-person-completed count, or a
+# status readback — so advice frames ("how many ... should I send", "why are
+# ...", "how do I list ... on LinkedIn") are excluded by construction rather
+# than by a blocklist of topics. The imperative arm is anchored at the start so
+# a verb appearing mid-sentence ("Should I show my applications to a
+# recruiter?") cannot flip a question onto the deterministic path.
+_APPLICATION_DATA_REQUEST_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?:please\s+|can\s+you\s+|could\s+you\s+)?"
+    # End-anchored: "show my application history" / "... tracker" / "... list"
+    # are the applications-LIST handler's phrasings and must stay with it.
+    r"(?:show|list|display|view|see|check|track|open)\s+(?:me\s+)?my\s+"
+    r"(?:job\s+)?applications?\s*[?؟.!]*$"
+    r"|\bwhat\s+are\s+my\s+(?:job\s+)?applications?\b"
+    r"|\bhow\s+many\s+(?:job\s+)?applications?\s+(?:have|did)\s+i\b"
+    r"|\bwhat(?:'s|’s|\s+is)\s+my\s+(?:job\s+)?application\s+status\b"
+    r"|\bstatus\s+of\s+my\s+(?:job\s+)?applications?\b"
+    r"|^(?:اعرض|أعرض|عرض|اظهر|أظهر|ارني|أريني)\s+طلباتي"
+    r"|^طلباتي\s*[?؟.!]*$"
+    r"|كم\s+طلب(?:\s+وظيفة)?\s+قدمت"
+    r"|ما\s+حالة\s+طلباتي",
+    re.IGNORECASE | re.UNICODE,
+)
+
+
+def is_file_list_question(message: str) -> bool:
+    """Public form of the uploaded-file carve-out.
+
+    Exported for the same reason as ``is_application_data_request`` below: the
+    legacy handler chain owns a second copy of this vocabulary, and the two had
+    already drifted. Whatever this gate refuses to send to the model, the
+    handler chain must be able to answer.
+    """
+    return _is_file_list_question((message or "").strip())
+
+
+def _is_application_data_request(text: str, lowered: str) -> bool:
+    """True when the message asks for the user's own stored application records."""
+    return bool(
+        _APPLICATION_DATA_REQUEST_RE.search(lowered)
+        or _APPLICATION_DATA_REQUEST_RE.search(text)
+    )
+
+
+def is_application_data_request(message: str) -> bool:
+    """Public form of the application-records carve-out.
+
+    Exported so the legacy handler chain can reuse the SAME vocabulary instead
+    of growing another private copy of it — the status/label vocabulary in this
+    product is already duplicated across five places, and this boundary must not
+    add a sixth.
+    """
+    text = (message or "").strip()
+    return _is_application_data_request(text, text.lower())
+
+
+def _is_account_data_request(text: str, lowered: str) -> bool:
+    """True for any request that must be answered from the user's own records.
+
+    The single predicate every arm of ``is_open_ended_question`` consults, so a
+    message cannot be claimed by one arm and released by another purely because
+    of the shape of its opening words.
+    """
+    return (
+        _is_application_status_question(lowered)
+        or _is_application_data_request(text, lowered)
+        or _is_file_list_question(text)
+    )
 
 
 # Arabic conversational starters: greetings, open-ended question words, conversational openers.
@@ -209,9 +308,7 @@ def _is_advice_imperative(text: str, lowered: str) -> bool:
     if not _ADVICE_IMPERATIVE_RE.search(lowered):
         return False
     # Structured intents keep priority — never steal a deterministic lookup.
-    if _is_file_list_question(text):
-        return False
-    if _is_application_status_question(lowered):
+    if _is_account_data_request(text, lowered):
         return False
     if _is_imperative_job_request(lowered):
         return False
@@ -287,9 +384,7 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
     lowered = text.lower()
 
     if any(ch in text for ch in _QUESTION_CHARS):
-        if _is_application_status_question(lowered):
-            return False, "ok"
-        if _is_file_list_question(text):
+        if _is_account_data_request(text, lowered):
             return False, "ok"
         return True, "question_mark"
 
@@ -308,7 +403,9 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
 
     for phrase in _OPENING_PHRASES:
         if lowered == phrase or lowered.startswith(phrase + " "):
-            if _is_file_list_question(text):
+            # "Show me my applications" differs from "show my applications" by
+            # one interposed word and must not differ in where it lands.
+            if _is_account_data_request(text, lowered):
                 return False, "ok"
             return True, f"phrase:{phrase.replace(' ', '_')}"
 
@@ -318,15 +415,18 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
 
     first = tokens[0].strip(_FIRST_TOKEN_STRIP)
     if first in _OPENING_TOKENS:
-        if _is_application_status_question(lowered):
-            return False, "ok"
-        if _is_file_list_question(text):
+        if _is_account_data_request(text, lowered):
             return False, "ok"
         return True, f"token:{first}"
 
     # Arabic opening tokens (question/open-ended words)
     first_raw = text.split()[0].strip("،,.!?؟;:()/&+-") if text.split() else ""
     if first_raw in _ARABIC_OPENING_TOKENS:
+        # Same carve-out as the English arms: an Arabic question that asks for
+        # the user's own records ("ما حالة طلباتي", "كم طلب وظيفة قدمت") is a
+        # database lookup, not reasoning work.
+        if _is_account_data_request(text, lowered):
+            return False, "ok"
         return True, f"arabic_token:{first_raw}"
 
     # Imperative advice/explanation/comparison requests are reasoning work, not

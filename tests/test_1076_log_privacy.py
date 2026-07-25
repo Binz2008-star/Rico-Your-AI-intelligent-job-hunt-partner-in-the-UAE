@@ -309,12 +309,10 @@ class TestStaticRegressionGuard:
 # profile_update persistence-failure path) plus the no-fields warning in the
 # same function. Guards below are scoped to src/api/routers/rico_chat.py.
 #
-# The sweep of `user=%s` sites in other modules that this once deferred is now
-# done for seven modules, guarded name-independently by
-# TestSensitiveLogFieldsUseSanctionedRefs at the end of this file. The
-# remaining sites in rico_chat.py itself are owned by the CV workstream, which
-# has an open branch on that file; they are excluded from _SWEPT_MODULES and
-# tracked there rather than here.
+# Repository-wide coverage is owned by the differential ratchet
+# (scripts/log_privacy_ratchet.py), not by _SWEPT_MODULES, which stays a
+# narrow per-module list. This file is outside that list only to avoid a
+# concurrent ownership conflict with the workstream that holds it.
 
 _RICO_CHAT = pathlib.Path("src/api/routers/rico_chat.py")
 
