@@ -7,10 +7,11 @@
 ## Document contract
 
 - **Why it exists:** one current, evidence-backed operating snapshot for Rico.
-- **Update when:** `main`, production, active ownership, launch blockers, or priority order changes.
+- **Update when:** production, active ownership, launch blockers, or priority order changes materially.
 - **Source of truth:** this file for current control state; `AI_WORKSPACE/DECISIONS.md` for binding decisions; `AI_WORKSPACE/TASKS.md` for task-level continuity.
 - **Owner:** Rico owner, with the acting CTO/session responsible for evidence-backed reconciliation.
 - **History:** prior snapshots remain preserved in Git history. This file intentionally keeps current truth ahead of historical narrative.
+- **SHA rule:** never make this document self-stale by claiming its own commit is the permanent current `main`. Fetch `main` live. Record the application/runtime baseline separately from docs-only control commits.
 
 ## Reconciliation — 2026-07-25
 
@@ -21,13 +22,14 @@ The previous snapshot said `main=45fa80c4` and zero open PRs. Both claims were s
 | Field | Current verified value |
 | --- | --- |
 | Repository | `Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE` |
-| GitHub `main` | `e26548bb8d8bdb442de3d1b594e987eabb86d728` |
-| Latest merged work | `#1385` rate-limit configuration (`da5339c`), `#1387` first log-privacy sweep (`989f774`), `#1386` test-environment isolation (`e26548b`) |
-| Vercel production | READY on `main@e26548b`; no 5xx or warning/error runtime logs found in the inspected six-hour window |
+| GitHub control head | Fetch live at session start. `#1390` merged the control-plane reconciliation as docs-only commit `745e9714`; it does not change application runtime |
+| Application/runtime baseline | `e26548bb` is the latest application tree on `main` before the docs-only control reconciliation |
+| Latest application merges | `#1385` rate-limit configuration (`da5339c`), `#1387` first log-privacy sweep (`989f774`), `#1386` test-environment isolation (`e26548b`) |
+| Vercel production | READY on application tree `e26548b`; no 5xx or warning/error runtime logs found in the inspected six-hour window |
 | Render backend | Owner-verified at `989f774`; `#1386` is test-only, so a different backend runtime SHA is expected rather than deployment drift |
 | Neon production | Project ready. CV preview branch exists and has **zero schema diff** from production; the current CV work requires no migration |
 | Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired |
-| Current product P0 | One canonical CV upload/review/confirm/save journey across `/upload`, `/profile`, and `/command` |
+| Current product P0 | Issue `#1391`: one canonical CV upload/review/confirm/save journey across `/upload`, `/profile`, and `/command` |
 | Current CI/security P0/P1 | Make privacy ratchet sound, remove unintended external network from tests, then move toward a trustworthy full-suite gate |
 | Owner-only operations | Hosting account continuity/billing and database protection posture require owner review; sensitive configuration details are intentionally not recorded in this public repository |
 
@@ -40,20 +42,24 @@ Production evidence proves the backend parser can read the uploaded PDF and prod
 1. `/upload` can create a pending preview but historically retained only client state and discarded the authoritative handoff.
 2. `/profile` reports upload success before confirmation and reloads an empty document inventory.
 3. `/command` can render the preview while the generic chat path answers from different context and asks the user to upload again.
-4. The same real file was uploaded twice because the first pending operation was not recovered across surfaces.
+4. The same real file was uploaded repeatedly because the first pending operation was not recovered consistently across surfaces.
+
+A read-only aggregate production audit also found material amplification of duplicate short-lived artifact rows for identical uploads, with many artifacts already corresponding to a saved document. Exact operational counts are intentionally not published. This makes a retention increase unsafe until duplicate amplification and periodic purge are resolved.
 
 **Decision:** do not patch each surface independently. One server-authoritative pending-artifact contract must drive all three entry points. Explicit confirmation-before-save remains binding.
 
 ### CV work currently in flight
 
+- Tracker: `#1391`
 - Branch: `claude/cv-pending-artifact-confirm`
 - Observed head: `c3effbae02a0e2f8ae885b6a32a408b0bf817164`
 - Vercel preview: READY
 - Neon preview branch: READY; schema diff from production is empty
-- No GitHub PR opened yet
+- No implementation PR opened yet
 - Current branch comparison: broader than the reported four-commit summary; it must be audited before PR creation
 - Known blocker: the branch changes Command/Vault/backend state handling but does not yet prove the `/profile` upload entry uses the same orchestration
 - Functional preview smoke is still unverified; static route HTTP 200 is not acceptance evidence
+- TTL increase is blocked until duplicate-artifact amplification and scheduled purge are explicitly handled
 
 **Required acceptance before merge:**
 
@@ -63,6 +69,7 @@ Production evidence proves the backend parser can read the uploaded PDF and prod
 - chat never contradicts a visible preview or asks for a duplicate upload;
 - `pending`, `already_saved`, `expired`, `absent`, and `unavailable` remain distinct;
 - confirmation creates exactly one canonical document and is idempotent;
+- repeated identical uploads cannot amplify retained full CV text without a bounded contract;
 - My Files and Profile refresh from server read-back;
 - no identity/security tests are weakened;
 - authenticated preview smoke uses non-personal test data before production deployment;
@@ -97,13 +104,17 @@ No call-site remediation belongs in this mechanism PR.
 ### Neon
 
 - CV preview schema matches production exactly; no migration is justified for the current CV fix.
+- Read-only aggregate checks found no primary-CV uniqueness violation and no expired artifact backlog at inspection time.
+- Duplicate live artifacts exist and must be handled before longer retention is approved.
 - Preview-branch accumulation exists across old branches. Do not mass-delete blindly. First produce a dry-run inventory mapped to open PRs/deployments, TTL, and branch ownership, then remove only proven-orphaned branches.
 - Production branch protection and connection controls require an owner-only settings review. Exact posture is not published here.
+- No application query-performance blocker was found in the inspected query statistics; observed application queries were below the requested slow-query threshold.
 
 ### Vercel
 
 - Current production and the CV/ratchet previews are READY.
 - No inspected production 5xx/error/warning events were found in the scoped runtime-log query.
+- One isolated 404 was for `/design-preview`; no production 5xx pattern was found.
 - Static page success is not a functional smoke test for authenticated CV APIs.
 - CV preview build has one framework warning about edge runtime disabling static generation for a page; it is not currently a build failure but should be attributed before merge if the changed route caused it.
 
@@ -124,7 +135,7 @@ Required sequence:
 ## Current execution order
 
 1. **Owner:** resolve hosting account continuity/billing warning.
-2. **CV P0:** finish one canonical CV orchestration; audit branch commit history and add the missing Profile entry-point behavior before opening a Draft PR.
+2. **CV P0 / #1391:** finish one canonical CV orchestration; audit branch commit history, add the missing Profile entry-point behavior, and control duplicate artifact retention before opening a Draft PR.
 3. **Privacy gate:** fix the three `#1388` blockers; keep Draft and rerun exact-head checks.
 4. **Test trust:** create the external-network isolation PR, then deterministic DNS PR, then flake investigation.
 5. **Log privacy:** after the ratchet is sound and Required, continue remediation in functional batches plus a separate runtime egress sanitizer.
@@ -148,13 +159,14 @@ Stop and report instead of guessing when:
 ## Next exact action
 
 ```text
-CV owner: audit `e26548b..c3effba`, explain every commit, wire `/profile` into the
-same server-authoritative pending contract, run backend baselines against current
-main, and open a Draft PR only when the three entry points share one state machine.
+CV owner: work from #1391. Audit the branch range against current main, explain
+every commit, wire `/profile` into the same server-authoritative pending contract,
+control duplicate full-text artifact amplification, run backend baselines, and
+open a Draft PR only when all three entry points share one state machine.
 
 Privacy owner: address the three blocking findings recorded on #1388 and keep the
 PR Draft.
 
-No production merge, deploy, database mutation, real-CV upload, or bulk Neon
-branch deletion is authorized by this reconciliation PR.
+No production deploy, database mutation, real-CV upload, or bulk Neon branch
+deletion is authorized by this status document.
 ```
