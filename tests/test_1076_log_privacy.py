@@ -407,10 +407,37 @@ class TestFilenameRef:
         assert filename_ref("") == "f:none"
         assert filename_ref("resume").startswith("f:ext=none")
 
-    def test_separators_and_injection_characters_are_stripped(self):
-        # A crafted extension must not smuggle log-format or newline characters.
-        out = filename_ref("a.p df\nuser=admin")
+    def test_crafted_extension_collapses_to_a_fixed_sentinel(self):
+        """Sanitise-then-truncate is not enough.
+
+        Stripping "characters we dislike" and keeping the first N still lets a
+        chosen filename place N characters of arbitrary text into the field —
+        the newline is gone but the payload is not. The extension is therefore
+        validated against an allowed shape and replaced wholesale when it does
+        not match, so no caller-controlled substring survives.
+        """
+        crafted = "a.p df\nuser=admin"
+        out = filename_ref(crafted)
+        assert out == f"f:ext=other,len={len(crafted)}"
+        # No fragment of the crafted tail reaches the emitted extension VALUE.
+        ext_value = out.split(",")[0].split("=", 1)[1]
+        assert ext_value == "other"
+        for fragment in ("user", "admin", "df", "p d", "="):
+            assert fragment not in ext_value, f"{fragment!r} survived into ext"
         assert "\n" not in out and " " not in out
+
+    @pytest.mark.parametrize("crafted", [
+        "cv.pdf\nlevel=CRITICAL user=admin",
+        "cv." + "a" * 40,
+        "cv.p​df",
+        "cv.PDF%s",
+        "cv.таб",
+    ])
+    def test_only_short_alphanumeric_suffixes_are_echoed(self, crafted):
+        ext_field = filename_ref(crafted).split(",")[0]
+        assert ext_field in ("f:ext=other", "f:ext=none") or re.fullmatch(
+            r"f:ext=\.[a-z0-9]{1,8}", ext_field
+        ), ext_field
 
 
 # ── widened static guard: sensitive log FIELDS must carry a sanctioned ref ───
@@ -423,11 +450,13 @@ class TestFilenameRef:
 # requires the argument in that position to be a call to a sanctioned
 # log_privacy helper. What the variable is called is irrelevant.
 #
-# ``internal_id`` is deliberately NOT sensitive: log_privacy documents that
-# opaque internal ``rico_users.id`` values are safe to log directly. The
-# ambiguous ``user_id`` label on those internal-id sites was renamed to
-# ``internal_id`` so the distinction is visible at the log line rather than
-# inferred from a variable name.
+# ``internal_id`` is exempt because log_privacy documents that opaque internal
+# ``rico_users.id`` values are safe to log directly — but a label-based
+# exemption is itself an escape hatch: relabelling a field from ``user=`` to
+# ``internal_id=`` would silence this guard while still logging a raw email.
+# So the exemption is not granted by label, it is granted per site. Mirroring
+# _QUERY_ALLOWLIST above, the known internal-id sites are enumerated below; a
+# fourth cannot appear without a deliberate edit here that a reviewer sees.
 
 _SWEPT_MODULES = (
     "src/api/routers/files.py",
@@ -449,6 +478,25 @@ _SENSITIVE_LABELS = frozenset({
 
 _APPROVED_REFS = frozenset({
     "user_ref", "token_ref", "operation_ref", "filename_ref", "safe_fields",
+})
+
+# (module, log event name) pairs permitted to log a raw ``internal_id=``.
+# These three log ``getattr(user, "id", ...)`` — the opaque rico_users.id —
+# on best-effort post-registration paths. Adding an entry is a deliberate,
+# reviewable act; that is the entire point of enumerating them.
+_INTERNAL_ID_ALLOWLIST = frozenset({
+    ("src/api/auth.py", "verification_email_schedule_failed"),
+    ("src/api/auth.py", "signup_attribution_persist_failed"),
+    ("src/api/auth.py", "signup_notification_schedule_failed"),
+})
+
+# Identifiers that name an external identifier or user-supplied text. Rule 2
+# flags these when passed bare to a log call, whatever the format string says
+# — including format strings with no ``label=`` at all.
+_BARE_SENSITIVE_NAMES = frozenset({
+    "email", "user_email", "to_email", "address", "user_id", "uid",
+    "public_user_id", "phone", "recipient", "telegram_chat_id", "telegram_id",
+    "filename", "original_filename", "file_name", "cv_text", "resume_text",
 })
 
 _LOG_METHODS = frozenset({
@@ -480,8 +528,30 @@ def _is_sanctioned(node: ast.AST) -> bool:
         fn = node.func
         name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", None)
         return name in _APPROVED_REFS
-    # A literal is inherently safe (e.g. a fixed "unknown" sentinel).
+    # ``user_ref(uid) if uid else "anonymous"`` — safe only if BOTH branches
+    # are, so a raw fallback cannot ride in on a sanctioned-looking expression.
+    if isinstance(node, ast.IfExp):
+        return _is_sanctioned(node.body) and _is_sanctioned(node.orelse)
+    # A literal is inherently safe (e.g. a fixed "anonymous" sentinel).
     return isinstance(node, ast.Constant)
+
+
+def _log_calls(tree: ast.AST):
+    """Yield every ``logger.<level>(...)`` call node in a module."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            fn = node.func
+            if isinstance(fn, ast.Attribute) and fn.attr in _LOG_METHODS and node.args:
+                yield node
+
+
+def _bare_name(node: ast.AST) -> str | None:
+    """Identifier for a bare Name/Attribute argument, else None."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
 
 
 def _scan_module(path: pathlib.Path) -> list[str]:
@@ -527,11 +597,100 @@ def _scan_module(path: pathlib.Path) -> list[str]:
     return violations
 
 
+def _scan_bare_sensitive_names(path: pathlib.Path) -> list[str]:
+    """Rule 2 — label-independent, name-based.
+
+    Rule 1 requires a ``label=`` immediately before the conversion, so a
+    format string that names no field at all ("rejecting login for %r") slips
+    past it entirely. This rule ignores the format string and looks only at
+    what is handed to the logger: a bare identifier that names an external
+    identifier must be wrapped, wherever it appears in the call.
+
+    The two rules are complementary. Rule 1 catches a sanctioned NAME in an
+    unsanctioned POSITION; rule 2 catches an unsanctioned NAME in an
+    unlabelled position.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    violations: list[str] = []
+    for node in _log_calls(tree):
+        for arg in node.args[1:]:
+            name = _bare_name(arg)
+            if name and name.lower() in _BARE_SENSITIVE_NAMES:
+                violations.append(
+                    f"{path}:{node.lineno}: bare '{name}' passed to a log call; "
+                    f"wrap it in one of {sorted(_APPROVED_REFS)}"
+                )
+    return violations
+
+
+def _scan_internal_id_sites(path: pathlib.Path) -> list[tuple[str, str]]:
+    """Every ``internal_id=`` log site as (module, event name) pairs."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    sites: list[tuple[str, str]] = []
+    for node in _log_calls(tree):
+        fmt = node.args[0]
+        if isinstance(fmt, ast.Constant) and isinstance(fmt.value, str):
+            if "internal_id=" in fmt.value:
+                sites.append((str(path), fmt.value.split()[0]))
+    return sites
+
+
 class TestSensitiveLogFieldsUseSanctionedRefs:
     @pytest.mark.parametrize("module", _SWEPT_MODULES)
     def test_module_has_no_raw_sensitive_log_field(self, module):
         violations = _scan_module(pathlib.Path(module))
         assert violations == [], "raw identifier in a log field:\n" + "\n".join(violations)
+
+    @pytest.mark.parametrize("module", _SWEPT_MODULES)
+    def test_module_passes_no_bare_sensitive_identifier(self, module):
+        violations = _scan_bare_sensitive_names(pathlib.Path(module))
+        assert violations == [], "bare identifier in a log call:\n" + "\n".join(violations)
+
+    def test_rule_two_catches_an_unlabelled_sensitive_argument(self):
+        """The shape rule 1 is blind to: a format string with no ``label=``."""
+        src = 'logger.error("rejecting login for %r", email)\n'
+        tree = ast.parse(src)
+        call = tree.body[0].value
+        # Rule 1 sees nothing — there is no "label=" before the conversion.
+        assert _sensitive_positions(call.args[0].value) == {}
+        # Rule 2 catches it on the argument name alone.
+        assert _bare_name(call.args[1]) == "email"
+
+    def test_rule_two_accepts_a_wrapped_argument(self):
+        tree = ast.parse('logger.error("rejecting login for %s", user_ref(email))\n')
+        assert _bare_name(tree.body[0].value.args[1]) is None
+
+    def test_rule_two_reads_attributes_not_just_names(self):
+        tree = ast.parse('logger.info("x %s", req.email)\n')
+        assert _bare_name(tree.body[0].value.args[1]) == "email"
+
+    def test_conditional_is_sanctioned_only_when_both_branches_are(self):
+        safe = ast.parse('logger.info("user=%s", user_ref(u) if u else "anonymous")\n')
+        assert _is_sanctioned(safe.body[0].value.args[1])
+        unsafe = ast.parse('logger.info("user=%s", user_ref(u) if u else u)\n')
+        assert not _is_sanctioned(unsafe.body[0].value.args[1])
+
+
+class TestInternalIdExemptionIsEnumeratedNotLabelBased:
+    """A label-based exemption is an escape hatch; pin the sites instead."""
+
+    @pytest.mark.parametrize("module", _SWEPT_MODULES)
+    def test_no_unlisted_internal_id_site_appears(self, module):
+        found = set(_scan_internal_id_sites(pathlib.Path(module)))
+        unlisted = sorted(found - _INTERNAL_ID_ALLOWLIST)
+        assert unlisted == [], (
+            "new internal_id= log site(s) not in _INTERNAL_ID_ALLOWLIST — an "
+            "internal rico_users.id is safe to log raw, but relabelling a field "
+            "to internal_id= must not be a way to silence this guard:\n"
+            + "\n".join(f"{m}: {event}" for m, event in unlisted)
+        )
+
+    def test_allowlist_has_no_stale_entries(self):
+        found = set()
+        for module in _SWEPT_MODULES:
+            found |= set(_scan_internal_id_sites(pathlib.Path(module)))
+        stale = sorted(_INTERNAL_ID_ALLOWLIST - found)
+        assert stale == [], f"allowlist entries no longer present in source: {stale}"
 
     def test_rule_does_not_depend_on_the_variable_being_named_user_id(self):
         """The old guard keyed on the literal token ``user_id`` and missed this."""

@@ -276,7 +276,12 @@ def apply_to_job(
         }
 
     if not _auto_apply_globally_enabled():
-        logger.info("auto_apply_globally_disabled user=%s", user_ref(user_id or "anonymous"))
+        # "anonymous" identifies nobody, so fingerprinting it buys no privacy
+        # and costs a real operational distinction — keep it a plain literal.
+        logger.info(
+            "auto_apply_globally_disabled user=%s",
+            user_ref(user_id) if user_id else "anonymous",
+        )
         return _manual_required_response(job)
 
     if user_id:
