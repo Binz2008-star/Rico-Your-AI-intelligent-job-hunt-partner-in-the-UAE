@@ -223,6 +223,17 @@ fixed in `9a9ee9b`: reading CV grounding off a model that does not carry it.
 
 Restoring the confirm card without also closing this is not an acceptable fix.
 
+### A fourth entry point with the same false success: `/profile`
+
+`ProfileEditorial` uploaded a CV, announced "CV uploaded — Rico is reading it",
+reloaded the file list and refreshed the profile — all before confirmation had
+created any document. The success message asserted an outcome the upload
+response cannot know, and the list it reloaded was still empty.
+
+**There are three CV upload entry points — Command, Vault and Profile — and they
+must share one state machine.** Fixing two of them and leaving the third is how
+this class of defect survives: the user simply meets it somewhere else.
+
 ### A third, independent falsehood: a banner with no artifact behind it
 
 Observed in production. On the Vault surface, the pending-review banner ("CV
@@ -280,6 +291,33 @@ retention is only defensible if the person whose data it is can see its duration
 confirmed CV stops being pending the moment its document row exists, which also
 keeps confirm idempotent — a second confirm of the same `upload_id` returns
 `inserted: false` with the same document evidence, never a 409 and never "no CV".
+
+### One artifact per `(user_id, doc_type, content_hash)`
+
+This table stores the **full parsed text** of an unconfirmed CV, so a duplicate
+row is a retained extra copy of someone's CV — not merely a wasted row. The
+behaviour that amplifies it is ordinary: a user whose flow looks stuck uploads
+the same file again, and again.
+
+Two rules hold the bound:
+
+1. **A CV that is already a saved document gets no artifact at all.** The upload
+   answers `already_saved` and points at My Files. There is nothing to confirm,
+   so creating a confirmable full-text copy would be both a redundant question
+   and retained data with no purpose.
+2. **A repeated upload refreshes the existing artifact instead of adding a
+   sibling**, and returns the same `upload_id` — so a confirm already issued
+   against an earlier attempt still resolves rather than being orphaned.
+
+Rule 2 is serialised with a transaction-scoped **advisory lock keyed on the
+triple**. A read-then-insert is not sufficient and the difference is not
+theoretical: with the lock removed, eight concurrent uploads of the same bytes
+produced **four** artifacts against a real server — four retained copies of one
+CV. With it, exactly one. That is proven by a real-Postgres test, because the
+interleaving does not exist at the mock layer.
+
+No unique index was added: that is a schema change, and the lock gives the same
+guarantee at the one place that writes.
 
 ### Deferred: purge for expired artifacts (belongs with the TTL change)
 
