@@ -2232,21 +2232,14 @@ async def rico_upload_cv(
         cv_text = parsed.get("text", "")
         target_roles = _extract_roles_from_cv_text(cv_text)
 
-        # Build preview data with trust controls - separate detected from existing
-        detected_skills = parsed.get("skills", []) if parsed.get("skills") else []
-        preview = {
-            "name": parsed.get("name"),
-            "email": parsed.get("emails", [None])[0] if parsed.get("emails") else None,
-            "phone": parsed.get("phones", [None])[0] if parsed.get("phones") else None,
-            "current_role": parsed.get("current_role"),
-            "experience_years": parsed.get("years_experience_hint"),
-            "target_roles": target_roles if target_roles else [],
-            "skills_detected": detected_skills,
-            "existing_skills": existing_skills,
-            "skills": detected_skills if detected_skills else existing_skills,  # For backward compatibility
-            "certifications": parsed.get("certifications", []),
-            "languages": parsed.get("languages", []),
-        }
+        # Build preview data with trust controls — one shared builder, so the
+        # preview replayed for a pending upload is assembled by the same code.
+        # Two parallel constructions would drift.
+        from src.services.cv_preview import build_cv_preview
+
+        preview = build_cv_preview(
+            parsed, existing_skills=existing_skills, target_roles=target_roles
+        )
 
         cv_warnings = build_cv_quality_warnings(
             preview=preview,
@@ -2302,6 +2295,28 @@ async def rico_upload_cv(
                 )
             except Exception:
                 upload_id = None
+
+            if not upload_id:
+                # A preview with no artifact behind it is a promise that cannot
+                # be kept: confirm resolves by upload_id, so this upload could
+                # never be saved however the user answered. Returning
+                # preview_ready anyway is the false-success pattern that produced
+                # this whole class of defect — the user is shown their extracted
+                # CV and told to confirm, and the confirm can only ever fail.
+                logger.error(
+                    "cv_upload_artifact_unavailable user=%s filename_len=%d request_ref=%s",
+                    user_ref(resolved_user_id), len(safe_name or ""), request_ref,
+                )
+                _metrics.record_request((time.time() - start_time) * 1000)
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "ok": False,
+                        "status": "cv_storage_unavailable",
+                        "error_code": "upload_artifact_unavailable",
+                        "message": "We couldn't store your CV for review just now. Please try uploading again in a moment.",
+                    },
+                )
 
         return {
             "ok": True,
@@ -2408,6 +2423,113 @@ def _derive_parse_status(
         cv_text=saved_cv_text,
         has_document=True,
     )
+
+
+@router.get("/pending-cv-upload")
+# Rate limit deliberately REUSED, not newly defined: this is a read of personal
+# profile data, which is exactly what LIMIT_PROFILE classifies. A dedicated
+# constant would be more precise but lives in the rate-limit module, which is
+# owned by another change in flight — this is a considered reuse, not an
+# oversight.
+@limiter.limit(LIMIT_PROFILE)
+async def pending_cv_upload(
+    request: Request,
+    response: Response,
+    user_id: str | None = Query(None),
+) -> dict[str, Any]:
+    """Return the caller's pending (uploaded but unconfirmed) CV, if any.
+
+    Exists because an upload made outside the chat had no way to reach the
+    confirm card: the artifact lived server-side for its whole TTL while nobody
+    held its id, so the CV was never saved and was eventually purged.
+
+    Four outcomes, deliberately distinguishable — collapsing any two of them
+    reintroduces a lie:
+
+      * ``200 {"pending": false}`` — a definite absence, or the artifact expired.
+      * ``200 {"pending": true, ...}`` — a real pending upload with its preview.
+      * ``200 {"pending": true, "preview_available": false}`` — the upload exists
+        but its preview could not be rebuilt. NOT ``pending: false``: the file is
+        real and saying otherwise would tell the user their upload vanished.
+      * ``503`` — the store could not be read. Never claims the upload is absent.
+
+    Authentication failures propagate unchanged from ``_resolve_upload_user_id``:
+    an invalid or expired token is 401/403 with no fall back to a guest path.
+
+    The response carries NO raw CV text, NO content hash and no other internal
+    column — only what the confirm card needs to render.
+    """
+    from src.repositories.cv_upload_artifact_repo import (
+        ArtifactStoreUnavailable,
+        get_latest_pending_cv_upload,
+    )
+
+    resolved_user_id = _resolve_upload_user_id(request, user_id, None, response)
+    # Personal profile data: never cacheable by any intermediary.
+    response.headers["Cache-Control"] = "private, no-store"
+
+    if is_valid_public_user_id(resolved_user_id):
+        # Guests are never issued an artifact by upload-cv, so there is nothing
+        # pending by construction.
+        return {"pending": False}
+
+    try:
+        artifact = get_latest_pending_cv_upload(resolved_user_id)
+    except ArtifactStoreUnavailable:
+        logger.warning("pending_cv_upload_store_unavailable user=%s", user_ref(resolved_user_id))
+        return JSONResponse(
+            status_code=503,
+            headers={"Cache-Control": "private, no-store"},
+            content={
+                "ok": False,
+                "error_code": "pending_upload_unavailable",
+                "message": "We couldn't load your pending CV review. Please try again in a moment.",
+            },
+        )
+
+    if not artifact:
+        return {"pending": False}
+
+    if artifact.get("expired"):
+        # A distinct, honest outcome. NOT pending (it cannot be confirmed any
+        # more) and NOT the same as having nothing: the user did upload, and the
+        # preview lapsed. Saying "no CV" here would deny an upload that happened.
+        return {
+            "pending": False,
+            "expired": True,
+            "filename": artifact["filename"],
+            "message": "Your CV preview expired before it was confirmed. Please upload it again to save it.",
+        }
+
+    existing_profile = get_profile(resolved_user_id)
+    from src.services.cv_preview import build_preview_from_text
+
+    preview = build_preview_from_text(
+        artifact.get("cv_text") or "",
+        existing_skills=getattr(existing_profile, "skills", []) if existing_profile else [],
+        role_extractor=_extract_roles_from_cv_text,
+    )
+    if preview is None:
+        # Honest third state: the upload is real, the preview is not available.
+        logger.warning(
+            "pending_cv_upload_preview_unavailable user=%s", user_ref(resolved_user_id)
+        )
+        return {
+            "pending": True,
+            "preview_available": False,
+            "upload_id": artifact["upload_id"],
+            "filename": artifact["filename"],
+            "doc_type": artifact["doc_type"],
+        }
+
+    return {
+        "pending": True,
+        "preview_available": True,
+        "upload_id": artifact["upload_id"],
+        "filename": artifact["filename"],
+        "doc_type": artifact["doc_type"],
+        "preview": preview,
+    }
 
 
 @router.post("/confirm-cv-profile")

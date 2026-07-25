@@ -16361,8 +16361,30 @@ class RicoChatAPI:
         current_role = self._profile_value(profile, "current_role") or (target_roles[0] if target_roles else "")
 
         # Pull extended parsed-CV fields to check what sections are actually stored
-        work_experience = self._as_list(self._profile_value(profile, "work_experience"))
-        education = self._as_list(self._profile_value(profile, "education"))
+        # RicoProfile carries NEITHER of these fields, so reading them off the
+        # profile returned None for every user — and the template below then told
+        # everyone, unconditionally, that Work Experience and Education were "not
+        # yet available from your parsed CV" and asked them to paste their work
+        # history by hand. That is a fabricated claim asking for manual work to
+        # fix a gap that does not exist, and it fired even for a user whose CV was
+        # confirmed and fully structured. The sections live in cv_structured; the
+        # resolver is the only thing that can see them.
+        # A read failure is NOT evidence of absence — the same lesson as
+        # store_unavailable. When the resolver cannot see the structured CV,
+        # fall back to whatever the caller already holds rather than asserting
+        # the sections are missing, because asserting it is what produces the
+        # fabricated "paste your work history" demand.
+        _structured_cv = self._cv_context(user_id, profile).structured or {}
+        work_experience = self._as_list(
+            _structured_cv.get("work_experience")
+            or _structured_cv.get("work_experience_text")
+            or self._profile_value(profile, "work_experience")
+        )
+        education = self._as_list(
+            _structured_cv.get("education")
+            or _structured_cv.get("education_text")
+            or self._profile_value(profile, "education")
+        )
 
         # Identify genuinely missing fields that would improve the CV
         missing: list[str] = []

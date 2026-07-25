@@ -161,6 +161,87 @@ def create_cv_upload_artifact(
         conn.close()
 
 
+class ArtifactStoreUnavailable(Exception):
+    """The artifact store could not be read.
+
+    Distinct from "no pending upload" on purpose: a caller must be able to say
+    "we couldn't load your pending review" instead of "your upload doesn't
+    exist". Telling a user their upload is gone during an outage is the failure
+    this whole area exists to prevent.
+    """
+
+
+def get_latest_pending_cv_upload(user_id: str) -> Optional[dict[str, Any]]:
+    """Return the newest artifact that is still genuinely PENDING, or ``None``.
+
+    Pending is DERIVED, not stored: an artifact is pending only while no
+    ``user_documents`` row exists for the same ``(user_id, doc_type,
+    content_hash)``. All three, so a file saved under a DIFFERENT doc_type with
+    the same bytes cannot cancel a pending CV review, or the reverse. Once
+    confirm has saved the document, the artifact stops being pending
+    immediately — with no consumption step, no deletion, and no schema change.
+
+    Expired rows are RETURNED with ``expired=True`` rather than filtered away:
+    "your preview lapsed, upload again" and "you have no upload" are different
+    facts, and collapsing them tells a user who did upload that they never did.
+
+    That matters for two opposite failure modes at once. Without it, a user who
+    already confirmed would be shown a "review required — not saved yet" card for
+    a CV that IS saved: the inverse of the lie this work removes. And deleting or
+    expiring the artifact instead would break confirm's idempotency, because
+    ``resolve_cv_upload_artifact`` requires an unexpired row — a second confirm
+    would be told to upload again rather than "already saved".
+
+    Raises ``ArtifactStoreUnavailable`` when the store cannot be read. Returns
+    ``None`` only for a definite absence.
+    """
+    if not user_id:
+        return None
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        raise ArtifactStoreUnavailable("database unavailable")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT a.id, a.filename, a.doc_type, a.cv_text,
+                       (a.expires_at <= NOW()) AS is_expired
+                  FROM cv_upload_artifacts a
+                 WHERE a.user_id = %s
+                   AND NOT EXISTS (
+                         SELECT 1 FROM user_documents d
+                          WHERE d.user_id = a.user_id
+                            AND d.doc_type = a.doc_type
+                            AND d.content_hash = a.content_hash
+                       )
+                 ORDER BY a.created_at DESC
+                 LIMIT 1
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "upload_id": str(row[0]),
+            "filename": row[1],
+            "doc_type": row[2] or "cv",
+            # Internal-only: used to rebuild the preview, never returned to a client.
+            "cv_text": row[3] or "",
+            # Expiry is reported, not filtered out: an expired upload is a
+            # DIFFERENT fact from no upload, and the user needs to be told their
+            # preview lapsed rather than that they never had one.
+            "expired": bool(row[4]),
+        }
+    except Exception as exc:
+        logger.exception("cv_upload_artifact_repo_pending_failed user=%s", user_id)
+        raise ArtifactStoreUnavailable(str(exc)) from exc
+    finally:
+        conn.close()
+
+
 def resolve_cv_upload_artifact(user_id: str, upload_id: str) -> Optional[dict[str, Any]]:
     """Return the artifact for `upload_id` scoped to `user_id`, or ``None``.
 
