@@ -71,15 +71,21 @@ class Finding(NamedTuple):
         return f"{self.module} :: {self.scope} :: {self.rule} :: {self.name}"
 
 
-def load_rules(repo_root: pathlib.Path):
-    """Import the rule predicates from the guard that owns them."""
+def load_rules(repo_root: pathlib.Path, *, tag: str = "head", required: bool = True):
+    """Import the rule predicates from the guard that owns them.
+
+    Loaded per tree, under a distinct module name, so the base tree's rules and
+    the head tree's rules can both be held at once without clobbering.
+    """
     rules_path = repo_root / _RULES_RELPATH
     if not rules_path.is_file():
+        if not required:
+            return None
         raise RatchetError(f"rule module not found at {rules_path}")
     # src.log_privacy is imported at module scope by the guard.
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
-    spec = importlib.util.spec_from_file_location("_log_privacy_rules", rules_path)
+    spec = importlib.util.spec_from_file_location(f"_log_privacy_rules_{tag}", rules_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     for attr in (
@@ -176,6 +182,11 @@ def scan_tree(rules, tree_root: pathlib.Path) -> collections.Counter:
     for path in files:
         relpath = path.relative_to(tree_root).as_posix()
         counts.update(scan_file(rules, path, relpath))
+    # NOTE: an empty multiset is a legitimate result, not an error. A tree with
+    # no findings is what full remediation looks like, and refusing it would
+    # mean the gate breaks precisely when the work succeeds. The structural
+    # checks above (src/ present, files found, strict decode, parseable) are
+    # what distinguish a broken checkout from a clean one.
     return counts
 
 
@@ -202,36 +213,64 @@ def run(base_tree: pathlib.Path, head_tree: pathlib.Path,
         if not tree.is_dir():
             raise RatchetError(f"{label} tree {tree} is not a directory")
 
-    rules = load_rules(head_tree)
-    base_counts = scan_tree(rules, base_tree)
-    head_counts = scan_tree(rules, head_tree)
+    # TWO comparisons, because one is not enough.
+    #
+    # Judging both trees only by the HEAD checkout's rules lets a change edit
+    # the rules it is judged by: drop a label or a predicate and both scans go
+    # blind together, so a violation the old policy forbade slips through with
+    # an empty difference.
+    #
+    #   (a) BASE rules over base vs head — the existing policy still applies to
+    #       this change, so weakening the vocabulary cannot licence a new site.
+    #   (b) HEAD rules over base vs head — protections ADDED by this change take
+    #       effect immediately rather than one PR later.
+    #
+    # A regression under either comparison fails the gate.
+    head_rules = load_rules(head_tree, tag="head", required=True)
+    base_rules = load_rules(base_tree, tag="base", required=False)
 
-    # A base that scanned zero findings across the whole tree is far more
-    # likely to be a broken checkout than a clean repository.
-    if not base_counts:
-        raise RatchetError(
-            "base scan produced no findings at all — treating this as a broken "
-            "base checkout rather than a clean baseline"
-        )
-
-    regressions = new_violations(base_counts, head_counts)
+    comparisons: list[tuple[str, list]] = []
+    if base_rules is not None:
+        comparisons.append((
+            "existing policy (base rules)",
+            new_violations(
+                scan_tree(base_rules, base_tree),
+                scan_tree(base_rules, head_tree),
+            ),
+        ))
+    else:
+        # Only legitimate when the base predates the guard entirely.
+        print("note: base tree has no rule module; existing-policy comparison skipped")
+    comparisons.append((
+        "current policy (head rules)",
+        new_violations(
+            scan_tree(head_rules, base_tree),
+            scan_tree(head_rules, head_tree),
+        ),
+    ))
 
     # Deliberately no totals, ratios or baseline figures are printed. CI logs
     # on a public repository are public, and a repository-wide count of
     # unresolved sites is exactly the posture measurement this design exists to
     # avoid publishing. Only violations introduced BY THIS CHANGE are named —
     # those lines are already in the PR diff, and the author needs them to act.
-    if not regressions:
+    if not any(regressions for _label, regressions in comparisons):
         print("OK — no log-privacy violation introduced by this change.")
         return 0
 
-    print(f"\nFAIL — {len(regressions)} newly introduced log-privacy violation(s):\n")
-    for finding, was, now in regressions:
-        print(f"  {finding.describe()}   (base {was} -> head {now})")
+    print("\nFAIL — newly introduced log-privacy violation(s):")
+    for label, regressions in comparisons:
+        if not regressions:
+            continue
+        print(f"\n  under {label}:")
+        for finding, was, now in regressions:
+            print(f"    {finding.describe()}   (base {was} -> head {now})")
     print(
         "\nEach line logs a user identifier without a sanctioned helper.\n"
         "Wrap the argument with a helper from src/log_privacy.py "
         "(user_ref / token_ref / operation_ref / filename_ref / safe_fields).\n"
+        "A failure under the existing policy but not the current one means this "
+        "change relaxed the rules; restore the rule rather than the exemption.\n"
         "Pre-existing findings elsewhere are not reported here by design: this "
         "gate only forbids ADDING to them."
     )

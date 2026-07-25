@@ -189,6 +189,91 @@ class TestRatchetGoesRedOnNewDebt:
         assert _ratchet(repo, tmp_path) == 1
 
 
+class TestRatchetResistsRuleWeakening:
+    """A change must not be able to edit the rules it is judged by.
+
+    Judging both trees only by the HEAD checkout's rule module lets a PR drop a
+    label or predicate so that both scans go blind together — the new site
+    produces no finding on either side and the difference is empty. The base
+    tree's rules are therefore applied as well, so the policy in force before
+    the change still binds it.
+    """
+
+    def _weaken_head_vocabulary(self, repo: pathlib.Path, label: str) -> None:
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        for variant in (f'"{label}", ', f'"{label}",', f'"{label}"'):
+            if variant in text:
+                text = text.replace(variant, "", 1)
+                break
+        else:  # pragma: no cover - guards the fixture, not the product
+            raise AssertionError(f"could not remove {label!r} from the rule vocabulary")
+        rules.write_text(text, encoding="utf-8")
+
+    def test_dropping_a_label_cannot_licence_a_new_site(self, repo, tmp_path):
+        _git(repo, "checkout", "-q", "-b", "feature")
+        # Remove 'email' from BOTH rule vocabularies in the head checkout, then
+        # add a site that only that label would have caught.
+        self._weaken_head_vocabulary(repo, "email")   # _SENSITIVE_LABELS
+        self._weaken_head_vocabulary(repo, "email")   # _BARE_SENSITIVE_NAMES
+        (repo / "src" / "added.py").write_text(
+            'import logging\n\nlogger = logging.getLogger(__name__)\n\n\n'
+            'def added_path(email):\n'
+            '    logger.info("added_event email=%s", email)\n',
+            encoding="utf-8",
+        )
+        _commit(repo, "relax the rule vocabulary and add a site it no longer sees")
+        assert _ratchet(repo, tmp_path) == 1
+
+    def test_the_weakened_head_rules_alone_would_have_passed_it(self, repo, tmp_path):
+        """Proves the base-rules comparison is what rejects it, not luck."""
+        from log_privacy_ratchet import load_rules, new_violations, scan_tree
+
+        _git(repo, "checkout", "-q", "-b", "feature")
+        self._weaken_head_vocabulary(repo, "email")
+        self._weaken_head_vocabulary(repo, "email")
+        (repo / "src" / "added.py").write_text(
+            'import logging\n\nlogger = logging.getLogger(__name__)\n\n\n'
+            'def added_path(email):\n'
+            '    logger.info("added_event email=%s", email)\n',
+            encoding="utf-8",
+        )
+        _commit(repo, "relax the rule vocabulary and add a site it no longer sees")
+        base_tree, _base_sha, _head_sha = _base_tree(repo, tmp_path)
+
+        head_rules = load_rules(repo, tag="w_head")
+        assert new_violations(
+            scan_tree(head_rules, base_tree), scan_tree(head_rules, repo)
+        ) == [], "head rules should be blind here — that is the bypass"
+
+        base_rules = load_rules(base_tree, tag="w_base")
+        assert new_violations(
+            scan_tree(base_rules, base_tree), scan_tree(base_rules, repo)
+        ) != [], "base rules must still catch it"
+
+    def test_a_protection_added_by_this_change_takes_effect_immediately(
+        self, repo, tmp_path
+    ):
+        """The head-rules comparison is what makes a NEW rule bite now."""
+        _git(repo, "checkout", "-q", "-b", "feature")
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        text = text.replace(
+            '_BARE_SENSITIVE_NAMES = frozenset({\n',
+            '_BARE_SENSITIVE_NAMES = frozenset({\n    "passport_no",\n',
+            1,
+        )
+        rules.write_text(text, encoding="utf-8")
+        (repo / "src" / "added.py").write_text(
+            'import logging\n\nlogger = logging.getLogger(__name__)\n\n\n'
+            'def added_path(passport_no):\n'
+            '    logger.info("added_event ref=%s", passport_no)\n',
+            encoding="utf-8",
+        )
+        _commit(repo, "add a protection and a site it forbids")
+        assert _ratchet(repo, tmp_path) == 1
+
+
 class TestRatchetStaysGreenWithoutNewDebt:
     def test_a_branch_that_changes_nothing_relevant_is_accepted(self, repo, tmp_path):
         _git(repo, "checkout", "-q", "-b", "feature")
@@ -216,6 +301,30 @@ class TestRatchetStaysGreenWithoutNewDebt:
         (repo / "src" / "legacy.py").write_text(_CLEAN_MODULE, encoding="utf-8")
         _commit(repo, "remediate the pre-existing site")
         assert _ratchet(repo, tmp_path) == 0
+
+    def test_a_fully_remediated_tree_is_a_valid_clean_state(self, repo, tmp_path):
+        """Zero findings is what success looks like, not a broken checkout.
+
+        Refusing an empty baseline would mean the gate breaks at exactly the
+        moment the remediation work finishes.
+        """
+        # Remove the only debt in the base, on the base itself.
+        (repo / "src" / "legacy.py").write_text(_CLEAN_MODULE, encoding="utf-8")
+        _commit(repo, "remediate every site — the baseline is now clean")
+
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / "src" / "another.py").write_text(_CLEAN_MODULE, encoding="utf-8")
+        _commit(repo, "add another compliant module on a clean baseline")
+        assert _ratchet(repo, tmp_path) == 0
+
+    def test_a_clean_baseline_still_rejects_a_new_violation(self, repo, tmp_path):
+        (repo / "src" / "legacy.py").write_text(_CLEAN_MODULE, encoding="utf-8")
+        _commit(repo, "remediate every site")
+
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / "src" / "added.py").write_text(_NEW_VIOLATION, encoding="utf-8")
+        _commit(repo, "regress on a clean baseline")
+        assert _ratchet(repo, tmp_path) == 1
 
     def test_moving_a_site_down_the_file_is_not_a_new_violation(self, repo, tmp_path):
         """Descriptors carry no line number, so inserting lines above a

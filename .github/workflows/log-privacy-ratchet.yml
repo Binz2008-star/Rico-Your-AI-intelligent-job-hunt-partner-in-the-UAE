@@ -4,6 +4,14 @@ name: Log Privacy Ratchet
 # fail if a violation exists in head that does not exist in base. Pre-existing
 # findings are never reported, so nothing about where they live is published;
 # the gate only forbids adding to them.
+#
+# DETECTION, NOT ENFORCEMENT: a failing run here blocks nothing on its own.
+# Merge enforcement begins only when this check is marked Required in branch
+# protection, which is a repository setting and not part of this workflow.
+#
+# Action refs below are moving major tags (@v4/@v5), matching the convention
+# used by every other workflow in this repository for first-party actions.
+# They are NOT SHA-pinned; do not describe them as pinned.
 
 on:
   pull_request:
