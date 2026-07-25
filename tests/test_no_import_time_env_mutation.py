@@ -35,13 +35,35 @@ environment already held:
 
     os.environ["X"] = ...        del os.environ["X"]
     os.environ.update(...)       os.environ.pop("X")        os.environ.clear()
+    os.environ |= {...}          os.environ["X"] += ...
     os.putenv("X", ...)          os.unsetenv("X")
+
+``os.environ |= {...}`` is ``os.environ.update(...)`` written as an operator, so
+it is forbidden on identical terms — banning one spelling and not the other would
+make the rule inconsistent rather than merely incomplete.
 
 ``os.putenv`` / ``os.unsetenv`` are included because they change the real
 process environment while leaving the ``os.environ`` mapping untouched. That
 makes them strictly worse than an ``os.environ`` write: the leak is invisible to
 any code that inspects ``os.environ``, including this detector's own subject
 matter. They were considered, not overlooked.
+
+KNOWN LIMIT OF A STATIC RULE
+----------------------------
+This detector sees only *direct* mutation written at module level. Mutation
+reached through a call is invisible to it, because the rule prunes at
+``def``/``lambda`` and cannot follow a call target::
+
+    def _setup():
+        os.environ["X"] = "y"    # not flagged: inside a function body
+
+    _setup()                     # runs at import — the leak still happens
+
+Solving that needs call-graph analysis, which is out of proportion to the
+problem. State it plainly rather than let a future reader infer coverage that
+does not exist: **passing this guard means no direct import-time mutation, not
+that a module is free of import-time side effects.** The same applies to a
+helper imported from another module and called at module level.
 
 Use a fixture instead, so the change is scoped and restored::
 
@@ -154,6 +176,14 @@ def _violations(tree: ast.Module) -> list[str]:
             for target in node.targets:
                 if isinstance(target, ast.Subscript) and _is_environ(target.value):
                     found.append(f"line {node.lineno}: os.environ[...] = ...")
+        elif isinstance(node, ast.AugAssign):
+            # `os.environ |= {...}` is `.update(...)` spelled as an operator;
+            # `os.environ["X"] += ...` mutates a single entry in place.
+            target = node.target
+            if _is_environ(target):
+                found.append(f"line {node.lineno}: os.environ |= ... (in-place update)")
+            elif isinstance(target, ast.Subscript) and _is_environ(target.value):
+                found.append(f"line {node.lineno}: os.environ[...] op= ...")
         elif isinstance(node, ast.Delete):
             for target in node.targets:
                 if isinstance(target, ast.Subscript) and _is_environ(target.value):
@@ -205,6 +235,20 @@ def _class_body_is_flagged() -> None:
     assert len(_violations(tree)) == 1
 
 
+def _augmented_assignment_is_flagged() -> None:
+    """Self-check: ``|=`` is ``.update(...)`` by another spelling.
+
+    ``os.environ |= {...}`` is an ``ast.AugAssign``, not an ``ast.Assign`` or an
+    ``ast.Call``, so a detector that only inspects assignment, deletion and calls
+    lets the identical forbidden operation through on a syntax technicality.
+    """
+    tree = ast.parse("import os\nos.environ |= {'X': 'y'}\n")
+    assert len(_violations(tree)) == 1
+
+    tree = ast.parse("import os\nos.environ['X'] += 'y'\n")
+    assert len(_violations(tree)) == 1
+
+
 def _putenv_is_flagged() -> None:
     """Self-check: os.putenv / os.unsetenv bypass the os.environ mapping."""
     tree = ast.parse("import os\nos.putenv('X', 'y')\nos.unsetenv('Z')\n")
@@ -231,6 +275,7 @@ def test_detector_is_calibrated():
     _module_level_walk_stops_at_functions()
     _module_level_walk_finds_nested_control_flow()
     _class_body_is_flagged()
+    _augmented_assignment_is_flagged()
     _putenv_is_flagged()
 
 
