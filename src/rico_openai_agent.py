@@ -43,6 +43,7 @@ from src.rico_openai_runtime import (
     DEEPSEEK_PRIMARY_MODEL,
     OPENAI_FALLBACK_MODEL,
     OPENAI_PRIMARY_MODEL,
+    REASONING_UNAVAILABLE_TEXT,
     call_openai_minimal,
 )
 from src.rico_safety import RicoSafetyGuard
@@ -156,7 +157,12 @@ class RicoOpenAIAgent:
                 hf_result = self._hf_fallback_with_record(user_message, user_context, language=language)
                 if hf_result:
                     return hf_result
-            return self._fallback_response(language=language, user_message=user_message)
+            # No usable reasoning provider. `respond()` is only ever reached on
+            # the conversational-AI path — the router already decided this
+            # request needs the model — so the ONLY honest answer here is that
+            # reasoning is unavailable. Returning a cosy capability blurb makes a
+            # dead provider look like a deliberate reply and hides the outage.
+            return self._reasoning_unavailable_response(language=language, user_message=user_message)
 
         # Premium path: RICO_AI_PROVIDER=openai|deepseek explicitly set
         provider = "deepseek" if self._use_deepseek else "openai"
@@ -201,10 +207,11 @@ class RicoOpenAIAgent:
         if result.get("is_rate_limited"):
             return {
                 "type": f"{provider}_rate_limited",
-                "message": result.get("text"),
+                "message": result.get("text") or REASONING_UNAVAILABLE_TEXT,
                 "provider": provider,
                 "provider_state": "rate_limited",
                 "response_source": "rate_limited",
+                "error_category": result.get("error_category") or "rate_limited",
             }
 
         model_key = "deepseek_model" if provider == "deepseek" else "openai_model"
@@ -213,14 +220,26 @@ class RicoOpenAIAgent:
             or (DEEPSEEK_FALLBACK_MODEL if provider == "deepseek" else OPENAI_FALLBACK_MODEL)
         )
 
+        # `_failure_payload` already marks a dead provider with a distinct,
+        # machine-readable `error_code`, a `degraded` provider_state and a
+        # canonical `error_category`. Dropping them here collapsed an honest
+        # "reasoning is down" reply into the same SOURCE_FALLBACK bucket as a
+        # benign keyword fallback (`_source_for_openai_response`), so nothing
+        # downstream — envelope, analytics, or the owner reading a reply — could
+        # tell an outage from a normal answer. Forward them instead.
+        #
+        # The message default is REASONING_UNAVAILABLE_TEXT, the same honest wording the
+        # payload carries, so a missing/blank `text` can never degrade into a
+        # capability blurb that reads like a real answer.
         return {
             "type": f"{provider}_error_fallback",
-            "message": result.get(
-                "text",
-                "Free mode is active. Rico can help set up your profile and guide your job search.",
-            ),
+            "message": result.get("text") or REASONING_UNAVAILABLE_TEXT,
             "error": result.get("error"),
             "error_detail": result.get("error_detail"),
+            "error_code": result.get("error_code") or "reasoning_provider_unavailable",
+            "error_category": result.get("error_category"),
+            "provider_state": result.get("provider_state") or "degraded",
+            "response_source": result.get("response_source") or "fallback",
             model_key: result.get(model_key) or self.model,
             "fallback_model": fallback_model,
             "provider": "fallback",
@@ -345,23 +364,45 @@ class RicoOpenAIAgent:
             "model": model,
         }
 
-    def _fallback_response(
+    def _reasoning_unavailable_response(
         self, language: Optional[str] = None, user_message: Optional[str] = None
     ) -> Dict[str, Any]:
+        """Honest reply when NO reasoning provider is usable at all.
+
+        Reached when the active provider has no key AND HuggingFace is absent or
+        returned nothing — i.e. Rico cannot reason about this request. Since
+        ``respond()`` is only called on the conversational-AI path, the router
+        has already decided the request needs the model, so silence about the
+        outage is a lie about the answer.
+
+        This previously returned a capability blurb ("I'm here to help with your
+        UAE job search. Upload your CV to get started…") carrying no error_code
+        and no provider_state. During a provider outage that reads as a real —
+        if unhelpful — answer rather than a failure, which is precisely how such
+        an incident stays invisible to the owner. It now says what is true and
+        carries the same machine-readable markers ``_failure_payload`` uses, so
+        the honest degraded state is visible to the envelope and to analytics.
+
+        The English wording is imported from the runtime rather than restated,
+        so this path and the configured-but-failing path can never drift into
+        telling the user two different stories about the same outage.
+        """
         if _wants_arabic(language, user_message):
             message = (
-                "أنا هنا لمساعدتك في البحث عن وظيفة في الإمارات. "
-                "ارفع سيرتك الذاتية للبدء، أو اسألني عن الوظائف أو الطلبات أو التحضير للمقابلة."
+                "قدرة الاستدلال الأساسية في ريكو غير متاحة مؤقتاً، لذا لا أستطيع "
+                "تحليل ملفك أو تقديم نصيحة بشأن بحثك الآن. بياناتك المحفوظة — "
+                "الملفات والوظائف والطلبات — لم تتأثر، ويمكنك المحاولة مرة أخرى بعد دقائق."
             )
         else:
-            message = (
-                "I'm here to help with your UAE job search. "
-                "Upload your CV to get started, or ask me about jobs, applications, or interview prep."
-            )
+            message = REASONING_UNAVAILABLE_TEXT
         return {
-            "type": "fallback_response",
+            "type": "reasoning_unavailable",
             "message": message,
             "provider": "fallback",
+            "response_source": "fallback",
+            "error_code": "reasoning_provider_unavailable",
+            "error_category": "not_configured",
+            "provider_state": "degraded",
         }
 
     def _tool_schemas(self) -> List[Dict[str, Any]]:

@@ -178,7 +178,9 @@ def test_missing_key_reports_fallback_source(chat_api, monkeypatch):
     resp = chat_api._handle_active_user("carol@rico.ai", "tell me about the market")
 
     _assert_metadata(resp, source="fallback", openai_available=False, profile_present=True, hf_available=False)
-    assert resp["type"] == "fallback_response"
+    # No usable reasoning provider is an OUTAGE, not a capability blurb — the
+    # reply says so and is marked as degraded.
+    assert resp["type"] == "reasoning_unavailable"
 
 
 # ── 4. Greetings ("hi") fall through to OpenAI, not to a hidden keyword ───────

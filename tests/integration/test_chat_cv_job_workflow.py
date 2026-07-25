@@ -340,11 +340,11 @@ class TestRoleSelectionHandling:
             # Unknown role should NOT call job search (may fall through to AI but not job search)
             mock_sys.run_for_profile.assert_not_called()
             # Response should be clarification/nonsense or an AI reply. When no AI
-            # provider key is configured (as in CI), the AI path degrades to
-            # fallback_response — still a non-search response.
+            # provider key is configured (as in CI), the AI path degrades to the
+            # honest reasoning_unavailable reply — still a non-search response.
             assert response["type"] in [
                 "clarification", "nonsense", "deepseek_response", "openai_response",
-                "fallback_response",
+                "reasoning_unavailable",
             ]
 
 
