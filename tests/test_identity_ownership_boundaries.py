@@ -30,6 +30,8 @@ from src.models.principal import (
 
 ACCOUNT_A = "account-a@synthetic.test"
 ACCOUNT_B = "account-b@synthetic.test"
+from datetime import datetime, timezone
+_WINDOW_START = datetime(2026, 1, 1, tzinfo=timezone.utc)
 GUEST = f"{PUBLIC_PRINCIPAL_PREFIX}g-SYNTHETIC0000000000"
 
 
@@ -461,3 +463,231 @@ def test_declared_and_enforced_trusted_identity_sets_cannot_drift():
         "the set the write boundary drops must equal the declared set exactly; "
         f"declared={sorted(TRUSTED_IDENTITY_FIELDS)} dropped={sorted(dropped)}"
     )
+
+
+# ── classified false-not-found paths ──────────────────────────────────────────
+#
+# Three sites where a swallowed refusal reached the caller as absence of data.
+# Independent classification labelled the first a user-visible false not-found and
+# the other two mutation guards. Each is driven behaviourally; none is satisfied by
+# a log line, because a warning does not change what the caller returns.
+
+def test_me_never_answers_200_when_identity_resolution_refuses(monkeypatch):
+    """`/me` must not present an ownership refusal as an account with no data.
+
+    The endpoint's own contract is that a store outage stays a retryable error and
+    identity is never guessed. A refusal answered as ``200 {"name": null}`` breaks
+    that in the most consequential direction: every consumer of `/me` reads it as
+    "this account exists and simply has no name", and a client that writes the field
+    back then persists that emptiness over the stored value.
+    """
+    from fastapi.testclient import TestClient
+
+    from src.api import deps
+    from src.api.app import app
+    from src.api.auth import create_access_token
+    from src.api.rate_limit import limiter
+    import src.rico_db as rico_db_module
+
+    limiter.reset()
+    prev_enabled = limiter.enabled
+    limiter.enabled = False
+
+    class _RefusingDB:
+        def __init__(self, *a, **k):
+            self.available = True
+
+        def get_user_bundle(self, *a, **k):
+            raise IdentityOwnershipAmbiguous(2)
+
+    monkeypatch.setattr(
+        deps, "get_current_user", lambda request: {"email": ACCOUNT_A, "role": "user"}
+    )
+    monkeypatch.setattr("src.db.is_db_available", lambda: True)
+    monkeypatch.setattr(rico_db_module, "RicoDB", _RefusingDB)
+
+    try:
+        client = TestClient(app)
+        client.cookies.set("access_token", create_access_token({"sub": ACCOUNT_A, "role": "user"}))
+        response = client.get("/api/v1/me")
+    finally:
+        limiter.enabled = prev_enabled
+
+    assert response.status_code != 200, (
+        f"a refusal must never be answered as a successful identity read: {response.text}"
+    )
+    assert response.status_code == 409, (
+        f"expected the ownership conflict, got {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    assert body.get("error") == "ambiguous_account_ownership"
+    # And specifically not the empty-data success shape.
+    assert "name" not in body and body.get("authenticated") is not True
+
+
+def test_delete_profile_refuses_rather_than_reporting_a_failed_delete(_boundary):
+    """Mutation guard: a refusal must not read as "delete failed" or "nothing there".
+
+    Unreachable today — `delete_profile` has no production caller — which is exactly
+    why it is cheap to pin now. The moment it gains one, the broad handler's
+    ``return False`` would turn a refusal into a silent failed delete, and a caller
+    that retries or reports success on ``False`` would act on a row it does not own.
+    """
+    from src.repositories import profile_repo
+
+    _client, conn, mirror = _boundary
+
+    with pytest.raises(IdentityOwnershipAmbiguous):
+        profile_repo.delete_profile(ACCOUNT_A)
+
+    conn.cursor.assert_not_called()  # no DELETE issued
+    mirror.delete_profile.assert_not_called()
+
+
+# ── quota gating: fail closed, and reach the client as one explicit contract ───
+#
+# The quota path is the one place where a refusal answered as absence is worse than
+# an outage: falling back to the in-process counter under-counts, so an ambiguous
+# account is granted messages it has not paid for. Fail-open on quota and cost.
+
+def _refusing_db():
+    class _DB:
+        available = True
+
+        def get_user_bundle(self, *a, **k):
+            raise IdentityOwnershipAmbiguous(2)
+
+    return _DB()
+
+
+def test_quota_never_falls_back_to_the_in_process_counter_on_a_refusal(monkeypatch):
+    """Four negatives in one call: no memory fallback, no count, no send, no write."""
+    from src.rico_memory import RicoMemoryStore
+    from src.services import subscription_gating
+
+    memory_reads: list[str] = []
+    monkeypatch.setattr(
+        RicoMemoryStore,
+        "load_chat_history",
+        lambda self, uid, *a, **k: memory_reads.append(uid) or [],
+    )
+    monkeypatch.setattr(subscription_gating, "RicoDB", _refusing_db, raising=False)
+    monkeypatch.setattr("src.rico_db.RicoDB", lambda *a, **k: _refusing_db())
+
+    with pytest.raises(IdentityOwnershipAmbiguous):
+        subscription_gating.count_monthly_ai_messages(ACCOUNT_A, _WINDOW_START)
+
+    assert memory_reads == [], (
+        "the in-process counter must not be consulted for an ambiguous account: "
+        "it under-counts, which grants messages the account has not paid for"
+    )
+
+
+def test_quota_refusal_does_not_allow_the_request_or_restate_the_plan(monkeypatch):
+    """No send enablement, and no plan claim that could read as a downgrade."""
+    from src.services import subscription_gating
+
+    monkeypatch.setattr("src.rico_db.RicoDB", lambda *a, **k: _refusing_db())
+
+    with pytest.raises(IdentityOwnershipAmbiguous):
+        subscription_gating.check_ai_message_allowed_for_user(ACCOUNT_A)
+
+    # The refusal contract carries no usage, no limit, no remaining, no plan —
+    # nothing a client could render as consumption or as a tier.
+    payload = subscription_gating.account_conflict_response()
+    for forbidden in ("usage", "limit", "remaining", "plan", "reset_at"):
+        assert forbidden not in payload, (
+            f"the conflict contract must not carry {forbidden!r}: a refusal knows "
+            "neither the consumption nor the tier"
+        )
+    assert payload["type"] == "account_conflict"
+    assert payload["error"] == "ambiguous_account_ownership"
+
+
+def test_quota_refusal_reaches_the_client_as_the_explicit_conflict_contract(monkeypatch):
+    """It must not land in the generic chat handler.
+
+    Both top-level chat handlers answer 200 with "I couldn't process your request",
+    which is indistinguishable from a transient fault. The preflight resolves the
+    refusal into the typed contract itself, so the generic handler is never reached.
+    """
+    from src.schemas.chat import RicoSessionContext
+    from src.services import chat_service
+
+    def _refuse(_ctx):
+        raise IdentityOwnershipAmbiguous(2)
+
+    monkeypatch.setattr(chat_service, "check_ai_message_allowed", _refuse, raising=False)
+    monkeypatch.setattr(
+        "src.services.subscription_gating.check_ai_message_allowed", _refuse
+    )
+
+    ctx = RicoSessionContext(user_id=ACCOUNT_A, auth_type="authenticated")
+    pre = chat_service.run_chat_preflight(ctx, "how many messages do I have left?")
+
+    assert pre.terminal is not None, "the refusal must resolve to a terminal response"
+    assert pre.terminal["type"] == "account_conflict", (
+        f"expected the explicit conflict contract, got {pre.terminal.get('type')!r}"
+    )
+    assert pre.terminal["error"] == "ambiguous_account_ownership"
+    assert pre.gate is None, "no gate decision may be carried forward from a refusal"
+    # No usage figure may reach the client.
+    for forbidden in ("usage", "limit", "remaining"):
+        assert forbidden not in pre.terminal
+
+
+def test_provisioning_never_creates_a_row_for_an_ambiguous_identity(monkeypatch):
+    """`_provision_db_user_id` auto-creates a user row when resolution returns nothing.
+
+    A refusal must never reach that call: creating a row for an identity that already
+    resolves ambiguously adds another candidate and deepens the ambiguity.
+    """
+    from src.repositories import applications_repo
+
+    upserts: list[dict] = []
+
+    class _DB:
+        available = True
+
+        def get_user_bundle(self, *a, **k):
+            raise IdentityOwnershipAmbiguous(2)
+
+        def upsert_user(self, payload, *a, **k):
+            upserts.append(payload)
+            return {"id": "should-never-be-created"}
+
+    with pytest.raises(IdentityOwnershipAmbiguous):
+        applications_repo._provision_db_user_id(_DB(), ACCOUNT_A)
+
+    assert upserts == [], "a refused identity must never be auto-provisioned"
+
+
+def test_quota_refusal_writes_no_usage_and_never_enables_the_send(monkeypatch):
+    """The fourth negative, proven at the send boundary rather than inferred.
+
+    Usage is counted from persisted chat rows, so "no usage write" means no turn is
+    appended. Driving `send_message` proves the refusal is terminal: the contract is
+    returned, the provider is never reached, and nothing is recorded that a later
+    count would bill for.
+    """
+    from src.schemas.chat import RicoSessionContext
+    from src.services import chat_service
+
+    appended: list[tuple] = []
+    monkeypatch.setattr(
+        chat_service, "db_append_chat", lambda *a, **k: appended.append(a), raising=False
+    )
+
+    def _refuse(_ctx):
+        raise IdentityOwnershipAmbiguous(2)
+
+    monkeypatch.setattr("src.services.subscription_gating.check_ai_message_allowed", _refuse)
+
+    ctx = RicoSessionContext(user_id=ACCOUNT_A, auth_type="authenticated")
+    result = chat_service.send_message(ctx, "how many messages do I have left?")
+
+    assert result["type"] == "account_conflict", "the send must terminate on the contract"
+    assert appended == [], "a refused turn must not be recorded as consumption"
+    # No send enablement: nothing that reads as an allowance decision came back.
+    for forbidden in ("usage", "limit", "remaining", "plan"):
+        assert forbidden not in result

@@ -30,6 +30,8 @@ from src.applications import (
     update_application_status as _update_status,
 )
 
+from src.models.principal import IdentityOwnershipAmbiguous
+
 logger = logging.getLogger(__name__)
 
 # ── Rico DB helpers ────────────────────────────────────────────────────────────
@@ -151,6 +153,13 @@ def _provision_db_user_id(db: Any, user_id: str) -> str:
         )
         return str(row["id"])
     except HTTPException:
+        raise
+    except IdentityOwnershipAmbiguous:
+        # Must not be reshaped into a retryable database error. The auto-provision
+        # branch above creates a rico_users row whenever resolution yields nothing;
+        # an ambiguous identity that reached it would gain another candidate row and
+        # deepen the ambiguity. Propagating keeps that branch unreachable by contract
+        # rather than by ordering.
         raise
     except Exception:
         logger.exception(

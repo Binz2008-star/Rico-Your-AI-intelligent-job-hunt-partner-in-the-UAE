@@ -11,6 +11,7 @@ from src.schemas.subscription import SubscriptionTier
 from src.subscription_plans import resolve_effective_user_plan
 
 from src.log_privacy import user_ref
+from src.models.principal import IdentityOwnershipAmbiguous
 
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -113,6 +114,34 @@ def _build_gate_check(user_id: str, feature: str, usage: int, resolved: Any | No
     )
 
 
+ACCOUNT_CONFLICT_TYPE = "account_conflict"
+ACCOUNT_CONFLICT_ERROR = "ambiguous_account_ownership"
+
+
+def account_conflict_response() -> dict[str, Any]:
+    """The single typed shape for a quota decision refused on ownership ambiguity.
+
+    Deliberately the same channel as ``GateCheck.to_response`` — a terminal chat
+    response the transports already return — rather than a second error path. What it
+    does NOT carry is the point: no ``usage``, ``limit``, ``remaining``, ``plan`` or
+    ``reset_at``. A refusal knows neither the consumption nor the tier, and rendering
+    either would state a figure nobody computed. It also never reaches the generic
+    chat handler, whose "I couldn't process your request" is indistinguishable from a
+    transient fault and invites a retry that must not succeed.
+    """
+    return {
+        "type": ACCOUNT_CONFLICT_TYPE,
+        "intent": ACCOUNT_CONFLICT_TYPE,
+        "message": (
+            "This account could not be resolved unambiguously, so it cannot be "
+            "used right now. Please contact support."
+        ),
+        "response_source": "subscription_gate",
+        "error": ACCOUNT_CONFLICT_ERROR,
+        "next_action": "contact_support",
+    }
+
+
 def _db_user_uuid(user_id: str) -> str | None:
     try:
         from src.rico_db import RicoDB
@@ -122,6 +151,12 @@ def _db_user_uuid(user_id: str) -> str | None:
             return None
         bundle = db.get_user_bundle(user_id)
         return str(bundle["id"]) if bundle else None
+    except IdentityOwnershipAmbiguous:
+        # Fail closed on the quota path. `None` here reads as "no rico_users row",
+        # and the caller then counts usage from the in-process store — which under-
+        # counts, so an ambiguous account is granted messages it has not paid for.
+        # Failing open on quota and cost is the wrong direction; propagate instead.
+        raise
     except Exception:
         logger.debug("subscription_gating: db user lookup failed user=%s", user_ref(user_id), exc_info=True)
         return None
