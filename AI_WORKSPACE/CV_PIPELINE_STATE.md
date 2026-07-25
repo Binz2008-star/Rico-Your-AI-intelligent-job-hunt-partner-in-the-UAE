@@ -222,6 +222,65 @@ Restoring the confirm card without also closing this is not an acceptable fix.
 
 ---
 
+## 8b. The pending-upload endpoint contract
+
+`GET /api/v1/rico/pending-cv-upload` answers with exactly one of **five named
+states**. They are named, not inferred, because every pair that gets collapsed
+becomes a lie the product tells:
+
+| State | Meaning |
+|---|---|
+| `pending` | A real, retrievable, unconfirmed upload. Carries the preview and the expiry timestamp. |
+| `already_saved` | A `user_documents` row matches on `(user_id, doc_type, content_hash)`. The user is told their CV **is saved**, with a pointer to My Files — never "nothing pending", which reads as "your upload went nowhere". |
+| `expired` | The upload happened and its preview lapsed. Never reported as "no CV". |
+| `absent` | No artifact at all. |
+| `unavailable` | The store could not be read. Never reported as an absence. |
+
+The pending card **must show the user when their preview expires.** Temporary
+retention is only defensible if the person whose data it is can see its duration.
+
+"Pending" is derived from the triple key, never stored and never consumed. A
+confirmed CV stops being pending the moment its document row exists, which also
+keeps confirm idempotent — a second confirm of the same `upload_id` returns
+`inserted: false` with the same document evidence, never a 409 and never "no CV".
+
+### Deferred: purge for expired artifacts (belongs with the TTL change)
+
+`expires_at` only blocks **reading**. Physical deletion today is opportunistic —
+it happens when someone uploads again. In a low-upload account an expired CV's
+full text therefore lingers in the table far longer than the advertised window,
+which turns the stated retention period into a promise that is not kept. The TTL
+PR must ship a **daily purge on a protected cron, in bounded batches, logging
+counts only** — never filenames, CV text, or content hashes.
+
+### Constraint, documented not built: re-processing is an explicit operation
+
+Re-analysing an already-saved CV with a better parser needs a deliberate
+`reprocess` / `parser_version` operation. It must never be achieved by asking the
+user to silently re-upload: the triple key will correctly answer `already_saved`.
+That is the contract working, not a defect to route around.
+
+## 8c. Queued, not started
+
+A separate small documentation batch, after the confirm PR opens:
+
+1. **Fix duplicate task identifiers in `AI_WORKSPACE/TASKS.md`.** Two ids are each
+   used twice for unrelated tasks. The test that detects this is correct and
+   states a true fact — the fix belongs in the data, and the test must not be
+   weakened to accommodate it.
+2. **A cross-track decision log**, so today's rulings are not reopened: the
+   file-ownership map and what counts as shared scope that stops at first
+   contact; the five artifact states; the retention decision with its privacy
+   rationale and the purge requirement; "a read failure is not evidence of
+   absence"; how a failed write differs from an unusable store and what each
+   returns; the `reprocess` constraint; and the rule that a new guard must be
+   shown to fail before it is accepted.
+
+Discipline for that batch: this repository is public. Engineering description
+only — no environment configuration state, no counts of weak or unreviewed
+areas, no names of absent configuration values, and no reproduction steps for any
+defect.
+
 ## 9. Approved execution order
 
 1. Any ownership or identity gap, if one is found — highest priority

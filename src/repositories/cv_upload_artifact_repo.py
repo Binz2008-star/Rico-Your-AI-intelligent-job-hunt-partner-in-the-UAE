@@ -229,16 +229,16 @@ def get_latest_pending_cv_upload(user_id: str) -> Optional[dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT a.id, a.filename, a.doc_type, a.cv_text,
-                       (a.expires_at <= NOW()) AS is_expired
-                  FROM cv_upload_artifacts a
-                 WHERE a.user_id = %s
-                   AND NOT EXISTS (
+                SELECT a.id, a.filename, a.doc_type, a.cv_text, a.expires_at,
+                       (a.expires_at <= NOW()) AS is_expired,
+                       EXISTS (
                          SELECT 1 FROM user_documents d
                           WHERE d.user_id = a.user_id
                             AND d.doc_type = a.doc_type
                             AND d.content_hash = a.content_hash
-                       )
+                       ) AS is_saved
+                  FROM cv_upload_artifacts a
+                 WHERE a.user_id = %s
                  ORDER BY a.created_at DESC
                  LIMIT 1
                 """,
@@ -253,10 +253,15 @@ def get_latest_pending_cv_upload(user_id: str) -> Optional[dict[str, Any]]:
             "doc_type": row[2] or "cv",
             # Internal-only: used to rebuild the preview, never returned to a client.
             "cv_text": row[3] or "",
-            # Expiry is reported, not filtered out: an expired upload is a
-            # DIFFERENT fact from no upload, and the user needs to be told their
-            # preview lapsed rather than that they never had one.
-            "expired": bool(row[4]),
+            # Deliberately part of the contract: temporary retention is only
+            # acceptable if the person whose data it is can see how long it lasts.
+            "expires_at": row[4],
+            # Reported, never filtered away. "Your preview lapsed" and "you never
+            # uploaded" are different facts.
+            "expired": bool(row[5]),
+            # The triple key decides this, so "saved" and "nothing pending" can
+            # never be collapsed into one answer.
+            "already_saved": bool(row[6]),
         }
     except Exception as exc:
         logger.exception("cv_upload_artifact_repo_pending_failed user=%s", user_id)

@@ -67,7 +67,9 @@ def _artifact(cv_text=_CV_TEXT, filename="Roben_Edwan_CV.pdf"):
         "filename": filename,
         "doc_type": "cv",
         "cv_text": cv_text,
+        "expires_at": None,
         "expired": False,
+        "already_saved": False,
     }
 
 
@@ -88,7 +90,7 @@ class TestFourDistinctStates:
     def test_definite_absence_is_200_pending_false(self, client):
         r = _get(client, pending=None)
         assert r.status_code == 200, r.text
-        assert r.json() == {"pending": False}
+        assert r.json() == {"pending": False, "state": "absent"}
 
     def test_real_pending_upload_returns_the_preview(self, client):
         r = _get(client, pending=_artifact())
@@ -132,7 +134,6 @@ class TestNoInternalFieldsLeak:
         body = r.json()
         assert "cv_text" not in body
         assert "content_hash" not in body
-        assert "expires_at" not in body
         assert "file_size" not in body
         assert "user_id" not in body
         # The CV's own sentences must not appear anywhere in the payload.
@@ -173,7 +174,7 @@ class TestAuthIsNotDowngraded:
         ) as pending:
             r = client.get("/api/v1/rico/pending-cv-upload")
         assert r.status_code == 200
-        assert r.json() == {"pending": False}
+        assert r.json() == {"pending": False, "state": "absent"}
         pending.assert_not_called()
 
 
@@ -202,8 +203,9 @@ class TestConfirmedCvIsNoLongerPending:
             def fetchone(self):
                 # The query itself excludes already-saved hashes; the fake mirrors
                 # that by returning nothing when a matching document exists.
-                return None if saved_hashes else (
-                    _UPLOAD_ID, "cv.pdf", "cv", _CV_TEXT, None
+                # id, filename, doc_type, cv_text, expires_at, is_expired, is_saved
+                return (
+                    _UPLOAD_ID, "cv.pdf", "cv", _CV_TEXT, None, False, bool(saved_hashes)
                 )
 
             def __enter__(self):
@@ -224,10 +226,12 @@ class TestConfirmedCvIsNoLongerPending:
                 result = repo.get_latest_pending_cv_upload(_AUTH_UID)
         return result, captured
 
-    def test_query_excludes_artifacts_whose_content_is_already_saved(self):
+    def test_query_reports_saved_state_instead_of_hiding_the_artifact(self):
+        """Hiding a saved artifact is what collapsed already_saved into absent."""
         _result, captured = self._run_sql(saved_hashes=False)
         sql = captured["sql"].upper()
-        assert "NOT EXISTS" in sql
+        assert "EXISTS (" in sql
+        assert "NOT EXISTS" not in sql
         assert "USER_DOCUMENTS" in sql
         assert "CONTENT_HASH" in sql
 
@@ -239,15 +243,20 @@ class TestConfirmedCvIsNoLongerPending:
         assert "EXPIRES_AT <= NOW()" in sql
         assert "AND A.EXPIRES_AT > NOW()" not in sql
 
-    def test_saved_document_means_nothing_is_pending(self):
+    def test_saved_document_is_visible_so_it_can_be_reported(self):
+        """It must NOT vanish: the endpoint needs it to say already_saved."""
         result, _ = self._run_sql(saved_hashes=True)
-        assert result is None
+        assert result is not None
+        assert result["already_saved"] is True
 
     def test_endpoint_shows_no_card_once_the_cv_is_saved(self, client):
-        """End of the chain: confirmed user reopens cv=ready and sees nothing."""
-        r = _get(client, pending=None)
+        """End of the chain: a confirmed user reopens cv=ready and sees no card,
+        and is told the CV is saved rather than that nothing was pending."""
+        r = _get(client, pending=dict(_artifact(), already_saved=True))
         assert r.status_code == 200
-        assert r.json() == {"pending": False}
+        body = r.json()
+        assert body["pending"] is False
+        assert body["state"] == "already_saved"
         assert "not saved" not in r.text.lower()
 
 
@@ -394,7 +403,7 @@ class TestExpiredIsDistinctFromAbsent:
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["pending"] is False
-        assert body["expired"] is True
+        assert body["state"] == "expired"
         assert body["filename"] == "Roben_Edwan_CV.pdf"
         assert "expired" in body["message"].lower()
         # Must never claim the user has no CV / never uploaded.
@@ -403,7 +412,7 @@ class TestExpiredIsDistinctFromAbsent:
 
     def test_absent_is_not_reported_as_expired(self, client):
         body = _get(client, pending=None).json()
-        assert body == {"pending": False}
+        assert body == {"pending": False, "state": "absent"}
         assert "expired" not in body
 
     def test_expired_response_carries_no_preview_and_no_internal_fields(self, client):
@@ -499,3 +508,92 @@ class TestSecondConfirmIsHonestNotAnError:
         assert r.status_code != 409
         assert "cv_confirmation_required" not in r.text
         assert "upload the CV again" not in r.text
+
+
+# ── Five named states: "saved" is never reported as "nothing pending" ────────
+
+class TestFiveNamedStates:
+    """`absent` used to swallow `already_saved`.
+
+    A user who uploaded and confirmed got the same answer as one who never
+    uploaded: "nothing pending". Technically true, practically a lie — it reads
+    as "your upload went nowhere". The triple key knows the difference, so
+    collapsing them was never justified.
+    """
+
+    def test_saved_artifact_reports_already_saved_not_absent(self, client):
+        r = _get(client, pending=dict(_artifact(), already_saved=True))
+        body = r.json()
+        assert body["state"] == "already_saved"
+        assert body["pending"] is False
+        assert "My Files" in body["message"]
+        # The two answers it must never be confused with.
+        assert body["state"] != "absent"
+        assert "nothing pending" not in body["message"].lower()
+
+    def test_never_uploaded_reports_absent(self, client):
+        assert _get(client, pending=None).json()["state"] == "absent"
+
+    def test_pending_reports_pending(self, client):
+        assert _get(client, pending=_artifact()).json()["state"] == "pending"
+
+    def test_expired_reports_expired(self, client):
+        assert _get(client, pending=dict(_artifact(), expired=True)).json()["state"] == "expired"
+
+    def test_store_failure_reports_unavailable(self, client):
+        r = _get(client, raises=ArtifactStoreUnavailable("down"))
+        assert r.json()["state"] == "unavailable"
+
+    def test_saved_wins_over_expired(self, client):
+        """A saved CV whose preview also lapsed is SAVED — that is what matters."""
+        r = _get(client, pending=dict(_artifact(), already_saved=True, expired=True))
+        assert r.json()["state"] == "already_saved"
+
+    def test_all_five_states_are_distinct_values(self, client):
+        seen = {
+            _get(client, pending=None).json()["state"],
+            _get(client, pending=_artifact()).json()["state"],
+            _get(client, pending=dict(_artifact(), expired=True)).json()["state"],
+            _get(client, pending=dict(_artifact(), already_saved=True)).json()["state"],
+            _get(client, raises=ArtifactStoreUnavailable("x")).json()["state"],
+        }
+        assert seen == {"absent", "pending", "expired", "already_saved", "unavailable"}
+
+
+class TestTripleKeyDistinguishesReuploads:
+    def test_same_bytes_same_type_is_already_saved(self):
+        import inspect
+
+        from src.repositories import cv_upload_artifact_repo as repo
+
+        sql = inspect.getsource(repo.get_latest_pending_cv_upload)
+        # EXISTS with all three columns is what makes already_saved possible.
+        assert "EXISTS (" in sql
+        assert "d.user_id = a.user_id" in sql
+        assert "d.doc_type = a.doc_type" in sql
+        assert "d.content_hash = a.content_hash" in sql
+        # The old NOT EXISTS filter hid saved artifacts entirely.
+        assert "NOT EXISTS" not in sql
+
+    def test_edited_copy_with_a_different_hash_stays_pending(self, client):
+        """A different hash means no matching document, so it is independently
+        pending — the triple key does not spill across versions."""
+        r = _get(client, pending=dict(_artifact(), already_saved=False))
+        assert r.json()["state"] == "pending"
+
+
+class TestPendingCardDisclosesExpiry:
+    """Temporary retention is only acceptable if its owner can see its duration."""
+
+    def test_pending_response_carries_the_expiry_timestamp(self, client):
+        from datetime import datetime, timezone
+
+        when = datetime(2026, 7, 25, 18, 30, tzinfo=timezone.utc)
+        r = _get(client, pending=dict(_artifact(), expires_at=when))
+        body = r.json()
+        assert body["expires_at"] == when.isoformat()
+
+    def test_missing_expiry_degrades_to_null_not_an_error(self, client):
+        r = _get(client, pending=_artifact())
+        assert r.status_code == 200
+        assert r.json()["expires_at"] is None

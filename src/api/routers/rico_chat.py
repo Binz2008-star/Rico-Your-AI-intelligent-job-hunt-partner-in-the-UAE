@@ -2420,6 +2420,14 @@ def _resolve_trusted_cv_artifact(
     return artifact
 
 
+def _iso_or_none(value: Any) -> str | None:
+    """ISO-8601 for a timestamp, or None. Never raises on an odd type."""
+    try:
+        return value.isoformat() if value is not None else None
+    except Exception:
+        return None
+
+
 def _derive_parse_status(
     *, saved_cv_text: str | None, cv_structured: dict[str, Any] | None = None
 ) -> str:
@@ -2508,7 +2516,7 @@ async def pending_cv_upload(
     if is_valid_public_user_id(resolved_user_id):
         # Guests are never issued an artifact by upload-cv, so there is nothing
         # pending by construction.
-        return {"pending": False}
+        return {"pending": False, "state": "absent"}
 
     try:
         artifact = get_latest_pending_cv_upload(resolved_user_id)
@@ -2519,21 +2527,32 @@ async def pending_cv_upload(
             headers={"Cache-Control": "private, no-store"},
             content={
                 "ok": False,
+                "state": "unavailable",
                 "error_code": "pending_upload_unavailable",
                 "message": "We couldn't load your pending CV review. Please try again in a moment.",
             },
         )
 
     if not artifact:
-        return {"pending": False}
+        return {"pending": False, "state": "absent"}
 
-    if artifact.get("expired"):
-        # A distinct, honest outcome. NOT pending (it cannot be confirmed any
-        # more) and NOT the same as having nothing: the user did upload, and the
-        # preview lapsed. Saying "no CV" here would deny an upload that happened.
+    if artifact.get("already_saved"):
+        # The triple key knows the difference, so there is no excuse for
+        # answering "nothing pending" to a user whose CV is saved. Telling them
+        # nothing is pending is technically true and practically a lie: it reads
+        # as "your upload went nowhere".
         return {
             "pending": False,
-            "expired": True,
+            "state": "already_saved",
+            "filename": artifact["filename"],
+            "message": "Your CV is already saved. You can find it in My Files.",
+        }
+
+    if artifact.get("expired"):
+        # Distinct from absent: the user did upload, and the preview lapsed.
+        return {
+            "pending": False,
+            "state": "expired",
             "filename": artifact["filename"],
             "message": "Your CV preview expired before it was confirmed. Please upload it again to save it.",
         }
@@ -2553,18 +2572,24 @@ async def pending_cv_upload(
         )
         return {
             "pending": True,
+            "state": "pending",
             "preview_available": False,
             "upload_id": artifact["upload_id"],
             "filename": artifact["filename"],
             "doc_type": artifact["doc_type"],
+            "expires_at": _iso_or_none(artifact.get("expires_at")),
         }
 
     return {
         "pending": True,
+        "state": "pending",
         "preview_available": True,
         "upload_id": artifact["upload_id"],
         "filename": artifact["filename"],
         "doc_type": artifact["doc_type"],
+        # Shown to the user on the card: temporary retention is only acceptable
+        # if the person whose data it is can see how long it lasts.
+        "expires_at": _iso_or_none(artifact.get("expires_at")),
         "preview": preview,
     }
 
