@@ -2,8 +2,8 @@
 src/api/rate_limit.py
 Central rate-limiter configuration for the Rico API.
 
-Uses Redis when REDIS_URL is set; falls back to in-process MemoryStorage
-so the server starts cleanly even without Redis.
+Uses Redis when REDIS_URL (or RICO_REDIS_URL) is set; falls back to in-process
+MemoryStorage so the server starts cleanly even without Redis.
 
 Import `limiter` everywhere you need a @limiter.limit() decorator.
 Import `rate_limit_exceeded_handler` and register it on the FastAPI app.
@@ -23,12 +23,73 @@ logger = logging.getLogger(__name__)
 
 # ── Storage ───────────────────────────────────────────────────────────────────
 
+def _is_production_env() -> bool:
+    """Production check, duplicated locally on purpose.
+
+    ``src.api.auth._is_production`` is the canonical implementation, but auth.py
+    imports LIMIT_* from THIS module at import time, and ``_storage_uri()`` runs
+    while this module is still initializing (the ``limiter`` singleton below).
+    Importing auth here — at module scope or inside the function — would re-enter
+    a half-built rate_limit module and fail on the not-yet-defined LIMIT_LOGIN.
+    Keep this standalone and in sync with auth.py's variable precedence.
+    """
+    env = (
+        os.getenv("RICO_ENV")
+        or os.getenv("APP_ENV")
+        or os.getenv("ENV")
+        or os.getenv("ENVIRONMENT")
+        or ""
+    ).lower()
+    return env in ("production", "prod")
+
+
+def _resolve_redis_url() -> str:
+    """Resolve the Redis URL, distinguishing UNSET from SET-BUT-EMPTY.
+
+    Both REDIS_URL and RICO_REDIS_URL are documented as the rate-limiting
+    backend, so an environment that configured only the latter used to degrade
+    silently to per-process memory. RICO_REDIS_URL is therefore honoured — but
+    only as a fallback for a genuinely ABSENT REDIS_URL.
+
+    A REDIS_URL that is PRESENT is an explicit decision and is final, including
+    when it is empty. `.github/workflows/qa-tests.yml:33` sets ``REDIS_URL: ""``
+    on purpose so slowapi uses ``memory://`` instead of dialling a Redis that
+    does not exist in CI (without it, every rate-limited route returns 500).
+    Letting an empty REDIS_URL fall through would mean any environment that also
+    defines RICO_REDIS_URL starts dialling a real Redis inside a test run —
+    trading a silent misconfiguration for a considerably worse one.
+
+    An empty or whitespace-only value on either variable counts as "no URL";
+    for RICO_REDIS_URL that simply means absent.
+    """
+    if "REDIS_URL" in os.environ:
+        return os.environ["REDIS_URL"].strip()
+    return os.getenv("RICO_REDIS_URL", "").strip()
+
+
 def _storage_uri() -> str:
-    redis_url = os.getenv("REDIS_URL", "").strip()
+    """Resolve the limiter's storage backend.
+
+    Falls back to ``memory://`` when no Redis URL is configured. That fallback
+    is a WARNING in production, not an info line: with ``memory://`` every worker
+    keeps its own counters, so each configured limit is effectively multiplied by
+    the worker count and resets on every deploy. Outside production, in-process
+    memory storage is the normal local/CI setup and stays at info so test runs
+    are not spammed.
+    """
+    redis_url = _resolve_redis_url()
     if redis_url:
         logger.info("rate_limiter: using Redis storage")
         return redis_url
-    logger.info("rate_limiter: no REDIS_URL — using in-memory storage (single-process only)")
+    message = (
+        "rate_limiter: neither REDIS_URL nor RICO_REDIS_URL is set — "
+        "using in-memory storage (per-process counters, limits do not apply "
+        "across workers and reset on restart)"
+    )
+    if _is_production_env():
+        logger.warning(message)
+    else:
+        logger.info(message)
     return "memory://"
 
 

@@ -290,7 +290,7 @@ Full list with rationale/incident history: `docs/env-vars.md`. Summary (backend/
 - `RICO_ENABLE_USER_TELEGRAM_ALERTS`, `RICO_ENABLE_SCHEDULED_SEARCHES`, `RICO_ENABLE_ANALYTICS_PURGE` — scheduled-job kill switches, all fail-closed (default `false`)
 - `RICO_CRON_SECRET` — shared secret guarding cron-only pipeline endpoints
 - `GUEST_CAPABILITY_SECRET` — dedicated guest-session signing key; required in production, fails closed if missing; never share with `JWT_SECRET`
-- `RICO_REDIS_URL`, `REDIS_URL` — rate limiting backend
+- `REDIS_URL`, `RICO_REDIS_URL` — rate limiting backend. `src/api/rate_limit.py` uses `REDIS_URL` when it is set, and falls back to `RICO_REDIS_URL` only when `REDIS_URL` is entirely **unset**. A `REDIS_URL` that is present but empty is an explicit "force in-memory" opt-out and does *not* fall through — `qa-tests.yml` depends on that. With no URL resolved the limiter uses per-process memory, so limits stop applying across workers; in production that is logged as a warning, not an info line.
 - `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_TO` — outbound email
 
 Frontend/Vercel: `NEXT_PUBLIC_RICO_API=https://rico-job-automation-api.onrender.com`
