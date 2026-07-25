@@ -50,6 +50,19 @@ def _app(status: str, applied_days_ago: int, updated_days_ago: int, **kw) -> dic
     }
 
 
+
+def _stats(apps: list) -> dict:
+    """Collapse a row fixture the way the database's GROUP BY status does.
+
+    _build_tracking_message counts from this aggregate (which covers every row),
+    never from the row list it is handed for itemisation.
+    """
+    by_status: dict = {}
+    for a in apps:
+        by_status[a["status"]] = by_status.get(a["status"], 0) + 1
+    return {"total": len(apps), "by_status": by_status}
+
+
 # ── _enrich_applications ──────────────────────────────────────────────────────
 
 def test_enrich_follow_up_flag_set_when_applied_and_stale():
@@ -119,7 +132,7 @@ def test_build_message_empty_list():
 def test_build_message_single_applied_no_follow_up():
     api = _make_api()
     apps = api._enrich_applications([_app("applied", 3, 3, company="Noon")])
-    msg = api._build_tracking_message(apps, {})
+    msg = api._build_tracking_message(apps, _stats(apps))
     assert "1 tracked application" in msg
     assert "1 applied" in msg
     assert "follow-up" not in msg.lower()
@@ -135,7 +148,7 @@ def test_build_message_follow_up_callout():
         _app("applied", 15, 15, company="ADNOC"),
         _app("applied", 10, 10, company="Noon"),
     ])
-    msg = api._build_tracking_message(apps, {})
+    msg = api._build_tracking_message(apps, _stats(apps))
     assert "follow-up" in msg.lower()
     assert "ADNOC" in msg
     assert "Noon" in msg
@@ -147,7 +160,7 @@ def test_build_message_active_interview_highlighted():
         _app("interview", 5, 1, title="PM", company="Emirates"),
         _app("applied", 3, 3, company="Noon"),
     ])
-    msg = api._build_tracking_message(apps, {})
+    msg = api._build_tracking_message(apps, _stats(apps))
     assert "Active" in msg
     assert "Emirates" in msg
     assert "PM" in msg
@@ -158,7 +171,7 @@ def test_build_message_offer_highlighted():
     apps = api._enrich_applications([
         _app("offer", 20, 1, title="Lead Dev", company="Careem"),
     ])
-    msg = api._build_tracking_message(apps, {})
+    msg = api._build_tracking_message(apps, _stats(apps))
     assert "Active" in msg
     assert "Careem" in msg
     assert "1 offer" in msg
@@ -173,7 +186,7 @@ def test_build_message_mixed_stages_counts():
         _app("saved", 2, 2, company="D"),
         _app("rejected", 20, 20, company="E"),
     ])
-    msg = api._build_tracking_message(apps, {})
+    msg = api._build_tracking_message(apps, _stats(apps))
     assert "5 tracked applications" in msg
     assert "1 offer" in msg
     assert "1 interview" in msg
@@ -184,12 +197,22 @@ def test_build_message_mixed_stages_counts():
 
 # ── _handle_application_tracking response shape ───────────────────────────────
 
-def _mock_apps_repo(get_all_rv, get_stats_rv):
-    """Return a sys.modules patch dict for src.repositories.applications_repo."""
+def _mock_apps_repo(page_rows, get_stats_rv):
+    """Return a sys.modules patch dict for src.repositories.applications_repo.
+
+    The handler reads counts from get_stats (grouped over every row) and rows
+    from one bounded get_page call — never from an unbounded get_all.
+    """
     import sys
 
     mock = MagicMock()
-    mock.get_all.return_value = get_all_rv
+    mock.get_page.return_value = {
+        "applications": page_rows,
+        "total": get_stats_rv.get("total", len(page_rows)),
+        "page": 1,
+        "limit": 50,
+        "pages": 1,
+    }
     mock.get_stats.return_value = get_stats_rv
     return patch.dict(sys.modules, {"src.repositories.applications_repo": mock})
 
@@ -233,7 +256,7 @@ def test_opened_not_counted_as_applied():
         _app("opened", 1, 1, company="Careem"),
         _app("opened", 1, 1, company="Talabat"),
     ])
-    msg = api._build_tracking_message(apps, {})
+    msg = api._build_tracking_message(apps, _stats(apps))
     assert "1 applied" in msg, f"expected '1 applied', got: {msg}"
     assert "3 links opened" in msg or "links opened" in msg
     # Must NOT claim 4 applications were applied
@@ -249,7 +272,7 @@ def test_follow_up_due_status_shown_in_stage_line():
         _app("applied", 2, 2, company="A"),
         _app("follow_up_due", 2, 2, company="B"),
     ])
-    msg = api._build_tracking_message(apps, {})
+    msg = api._build_tracking_message(apps, _stats(apps))
     assert "1 follow-up due" in msg
 
 
@@ -259,7 +282,7 @@ def test_single_link_opened_singular_label():
     apps = api._enrich_applications([
         _app("opened", 1, 1, company="Solo"),
     ])
-    msg = api._build_tracking_message(apps, {})
+    msg = api._build_tracking_message(apps, _stats(apps))
     assert "1 link opened" in msg
     assert "1 links opened" not in msg
 
@@ -271,7 +294,7 @@ def test_multiple_offers_plural_label():
         _app("offer", 5, 1, company="A"),
         _app("offer", 5, 1, company="B"),
     ])
-    msg = api._build_tracking_message(apps, {})
+    msg = api._build_tracking_message(apps, _stats(apps))
     assert "2 offers" in msg
 
 
@@ -286,7 +309,8 @@ def test_smoke_103_tracked_accurate_summary():
         + [_app("opened", 1, 1, company=f"O{i}") for i in range(100)]
     )
     apps = api._enrich_applications(apps_data)
-    msg = api._build_tracking_message(apps, {"total": 103})
+    # The aggregate covers all 103 rows; only the first page is itemized.
+    msg = api._build_tracking_message(apps[:50], _stats(apps_data))
     assert "103 tracked applications" in msg
     assert "1 applied" in msg
     assert "1 follow-up due" not in msg or "2 follow-up due" in msg  # at least the plural
