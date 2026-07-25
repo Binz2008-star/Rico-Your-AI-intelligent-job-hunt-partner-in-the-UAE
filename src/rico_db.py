@@ -463,19 +463,40 @@ class RicoDB:
         )
 
     @staticmethod
+    def _row_field(row, key: str, index: int):
+        """Read one column from a dict-cursor row or a positional tuple row."""
+        return row[key] if isinstance(row, dict) else row[index]
+
+    @staticmethod
     def _document_row_to_dict(row, *, inserted: bool) -> Dict[str, Any]:
         """Normalize a user_documents row (dict-cursor or tuple) into the
-        get_or_create_user_document response shape."""
+        get_or_create_user_document response shape.
+
+        ``skills_count`` and ``years_experience`` are carried so callers can
+        decide whether the stored document actually has extracted content,
+        without a second query. Every value here comes from the row the
+        database returned, never from the arguments the caller passed in.
+        """
         return {
-            "id": str(row["id"] if isinstance(row, dict) else row[0]),
-            "filename": (row["filename"] if isinstance(row, dict) else row[1]),
-            "doc_type": (row["doc_type"] if isinstance(row, dict) else row[2]),
-            "is_primary": bool(row["is_primary"] if isinstance(row, dict) else row[3]),
+            "id": str(RicoDB._row_field(row, "id", 0)),
+            "filename": RicoDB._row_field(row, "filename", 1),
+            "doc_type": RicoDB._row_field(row, "doc_type", 2),
+            "is_primary": bool(RicoDB._row_field(row, "is_primary", 3)),
+            "skills_count": RicoDB._row_field(row, "skills_count", 4) or 0,
+            "years_experience": RicoDB._row_field(row, "years_experience", 5),
             "inserted": inserted,
         }
 
     @staticmethod
-    def _promote_if_requested(cur, existing_row, *, user_id: str, doc_type: str, is_primary: bool) -> Dict[str, Any]:
+    def _promote_if_requested(
+        cur,
+        existing_row,
+        *,
+        user_id: str,
+        doc_type: str,
+        is_primary: bool,
+        rename_to: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Return the get_or_create_user_document response for a found
         pre-existing row, honoring `is_primary=True` even for a deduped
         reupload — promotes the row (clearing any other primary first) if
@@ -487,9 +508,20 @@ class RicoDB:
         `is_primary=True` must be honored the same way regardless of which
         one happened to find the row, or the outcome would depend on lock
         race timing (exactly the class of bug this method exists to avoid).
+
+        ``rename_to`` (opt-in, see ``rename_on_match``) adopts the newly
+        uploaded filename onto the matched row. ``original_filename`` is never
+        touched, so the earliest name the user uploaded under is preserved.
         """
-        existing_id = existing_row["id"] if isinstance(existing_row, dict) else existing_row[0]
-        existing_is_primary = bool(existing_row["is_primary"] if isinstance(existing_row, dict) else existing_row[3])
+        existing_id = RicoDB._row_field(existing_row, "id", 0)
+        existing_filename = RicoDB._row_field(existing_row, "filename", 1)
+        existing_is_primary = bool(RicoDB._row_field(existing_row, "is_primary", 3))
+        if rename_to and rename_to != existing_filename:
+            cur.execute(
+                "UPDATE user_documents SET filename = %s, updated_at = now() WHERE id = %s",
+                (rename_to, existing_id),
+            )
+            existing_filename = rename_to
         if is_primary and not existing_is_primary:
             # Clear any other primary first — a redundant no-op if the
             # is_primary=True flow already cleared it earlier in this same
@@ -509,9 +541,11 @@ class RicoDB:
             existing_is_primary = True
         return {
             "id": str(existing_id),
-            "filename": (existing_row["filename"] if isinstance(existing_row, dict) else existing_row[1]),
-            "doc_type": (existing_row["doc_type"] if isinstance(existing_row, dict) else existing_row[2]),
+            "filename": existing_filename,
+            "doc_type": RicoDB._row_field(existing_row, "doc_type", 2),
             "is_primary": existing_is_primary,
+            "skills_count": RicoDB._row_field(existing_row, "skills_count", 4) or 0,
+            "years_experience": RicoDB._row_field(existing_row, "years_experience", 5),
             "inserted": False,
         }
 
@@ -585,10 +619,21 @@ class RicoDB:
         years_experience: Optional[float] = None,
         current_role: Optional[str] = None,
         is_primary: bool = False,
+        rename_on_match: bool = False,
     ) -> Dict[str, Any]:
         """Atomic get-or-create keyed by (user_id, doc_type, content_hash).
 
-        Returns ``{"id", "filename", "doc_type", "is_primary", "inserted"}``.
+        Returns ``{"id", "filename", "doc_type", "is_primary", "skills_count",
+        "years_experience", "inserted"}``.
+
+        ``rename_on_match`` (default OFF) adopts ``filename`` onto a matched
+        pre-existing row instead of keeping that row's older name. It is opt-in
+        because this helper is shared: the generic file-upload endpoint's
+        contract is "a duplicate changes nothing and reports the stored name",
+        and a shared default must not silently change behaviour for a caller
+        that did not ask for it. ``original_filename`` is never overwritten, so
+        the earliest name is always preserved, and ``inserted`` stays ``False``
+        — a rename is not a new document.
 
         ``inserted=False`` means a row with this exact hash already existed —
         either because a caller-side pre-check missed it, or because this
@@ -636,7 +681,7 @@ class RicoDB:
                 # Validate/check the target WITHOUT mutating anything yet.
                 cur.execute(
                     """
-                    SELECT id, filename, doc_type, is_primary
+                    SELECT id, filename, doc_type, is_primary, skills_count, years_experience
                       FROM user_documents
                      WHERE user_id = %s AND doc_type = %s AND content_hash = %s
                      LIMIT 1
@@ -646,7 +691,9 @@ class RicoDB:
                 existing = cur.fetchone()
                 if existing is not None:
                     return self._promote_if_requested(
-                        cur, existing, user_id=user_id, doc_type=doc_type, is_primary=is_primary
+                        cur, existing, user_id=user_id, doc_type=doc_type,
+                        is_primary=is_primary,
+                        rename_to=filename if rename_on_match else None,
                     )
 
                 if is_primary:
@@ -671,7 +718,7 @@ class RicoDB:
                     ON CONFLICT (user_id, doc_type, content_hash)
                         WHERE content_hash IS NOT NULL
                         DO NOTHING
-                    RETURNING id, filename, doc_type, is_primary
+                    RETURNING id, filename, doc_type, is_primary, skills_count, years_experience
                     """,
                     (user_id, filename, original_filename, doc_type, file_size,
                      label, is_primary, skills_count, Json(skills_json or []),
@@ -686,7 +733,7 @@ class RicoDB:
                 # winner's canonical row.
                 cur.execute(
                     """
-                    SELECT id, filename, doc_type, is_primary
+                    SELECT id, filename, doc_type, is_primary, skills_count, years_experience
                       FROM user_documents
                      WHERE user_id = %s AND doc_type = %s AND content_hash = %s
                      LIMIT 1
@@ -704,7 +751,9 @@ class RicoDB:
                         "matching row could be found"
                     )
                 return self._promote_if_requested(
-                    cur, erow, user_id=user_id, doc_type=doc_type, is_primary=is_primary
+                    cur, erow, user_id=user_id, doc_type=doc_type,
+                    is_primary=is_primary,
+                    rename_to=filename if rename_on_match else None,
                 )
 
     def list_user_documents(self, user_id: str) -> List[Dict[str, Any]]:

@@ -2365,6 +2365,36 @@ def _resolve_trusted_cv_artifact(
     return artifact
 
 
+def _derive_parse_status(*, readable_text_saved: bool) -> str:
+    """Derive the confirm response's parse status from CONTENT ACTUALLY SAVED.
+
+    ``parse_status`` is not a column on ``user_documents``; it is derived. It is
+    derived here from one thing only: whether the text this confirm persisted to
+    ``rico_profiles.cv_text`` passed the readability contract in
+    ``src.cv_parse_quality``. Document metadata — ``skills_count``,
+    ``years_experience``, ``is_primary`` — is deliberately NOT consulted: those
+    are counts recorded alongside a file, not evidence that its content was
+    extracted, and deriving a status from them is how a row's mere existence
+    starts asserting an extraction.
+
+    This endpoint never returns ``parsed``. That word conflates "a file arrived"
+    with "its content is usable", which is exactly the conflation that put
+    ``cv_status = "parsed"`` on production profiles whose ``cv_structured`` is an
+    empty object. Two honest values are available at this point in the pipeline:
+
+      * ``text_extracted`` — the document and profile writes both succeeded and
+        readable text was saved with them.
+      * ``metadata_only`` — the document was saved, but no readable content came
+        with it, so only the file's metadata is available.
+
+    ``structured`` is deliberately NOT reachable here: nothing in this endpoint
+    writes ``cv_structured`` yet, so claiming it would be the same lie in a new
+    vocabulary. It becomes available only once the structured-CV pipeline is
+    wired, and this function must be revisited then rather than guessed at now.
+    """
+    return "text_extracted" if readable_text_saved else "metadata_only"
+
+
 @router.post("/confirm-cv-profile")
 @limiter.limit(LIMIT_UPLOAD)
 async def confirm_cv_profile(
@@ -2384,10 +2414,26 @@ async def confirm_cv_profile(
     resolved_user_id = _resolve_upload_user_id(request, user_id, None, response)
 
     try:
+        # Principal-resolution telemetry. The deployed frontend sends
+        # ?user_id=public:web-... on EVERY confirm, including authenticated
+        # ones, so rejecting a mismatch with a 400 would turn this into an
+        # outage. It is ignored instead — a valid JWT is the only thing that can
+        # establish ownership here (_resolve_upload_user_id returns the JWT
+        # identity before the query parameter is ever read) — and the ignore is
+        # recorded rather than being silent.
+        #
+        # Deliberately free of personal data: a masked user reference, never the
+        # raw email, guest uuid, upload_id or filename.
+        _query_user_id = (user_id or "").strip()
+        _authenticated = not is_valid_public_user_id(resolved_user_id)
         logger.info(
-            "cv_profile_confirm user=%s filename=%s request_ref=%s",
-            resolved_user_id,
-            payload.filename,
+            "cv_profile_confirm principal=server_derived reason=%s user=%s "
+            "authenticated=%s query_present=%s query_mismatch=%s request_ref=%s",
+            "query_user_id_ignored" if _query_user_id else "no_query_user_id",
+            user_ref(resolved_user_id),
+            _authenticated,
+            bool(_query_user_id),
+            bool(_query_user_id) and _query_user_id != resolved_user_id,
             request_ref,
         )
 
@@ -2458,8 +2504,10 @@ async def confirm_cv_profile(
             artifact = _resolve_trusted_cv_artifact(resolved_user_id, payload)
             if artifact is None:
                 logger.warning(
-                    "cv_confirm_artifact_rejected user=%s upload_id=%s filename=%s request_ref=%s",
-                    resolved_user_id, payload.upload_id, payload.filename, request_ref,
+                    "cv_confirm_artifact_rejected user=%s upload_id_present=%s "
+                    "filename_len=%d request_ref=%s",
+                    user_ref(resolved_user_id), bool(payload.upload_id),
+                    len(payload.filename or ""), request_ref,
                 )
                 return JSONResponse(
                     status_code=409,
@@ -2482,14 +2530,22 @@ async def confirm_cv_profile(
         # matching with a CV they could not actually read. Guest confirms
         # (artifact is None) and non-CV documents keep the previous behaviour.
         _is_cv_artifact = artifact is not None and artifact.get("doc_type") == "cv"
+        # Whether readable text is being persisted alongside the document. This
+        # is the single signal the response's parse_status is derived from — the
+        # same verdict from the same contract that gates the 409 below, so the
+        # status can never disagree with the check that let the confirm through.
+        _readable_text_saved = False
         if confirmed_cv_text is not None or _is_cv_artifact:
             from src.cv_parse_quality import validate_artifact_quality
 
             quality_result = validate_artifact_quality(confirmed_cv_text)
+            _readable_text_saved = bool(quality_result.is_readable)
             if not quality_result.is_readable:
                 logger.warning(
-                    "cv_confirm_unreadable_artifact user=%s upload_id=%s filename=%s outcome=%s chars=%d printable_ratio=%.2f request_ref=%s",
-                    resolved_user_id, payload.upload_id, payload.filename,
+                    "cv_confirm_unreadable_artifact user=%s upload_id_present=%s "
+                    "filename_len=%d outcome=%s chars=%d printable_ratio=%.2f request_ref=%s",
+                    user_ref(resolved_user_id), bool(payload.upload_id),
+                    len(payload.filename or ""),
                     quality_result.outcome, quality_result.extracted_chars,
                     quality_result.printable_ratio, request_ref,
                 )
@@ -2517,6 +2573,7 @@ async def confirm_cv_profile(
         #
         # Guest/public sessions have no My Files and were never issued an
         # artifact, so they skip this block entirely (profile-only confirm).
+        _doc_result: dict[str, Any] | None = None
         if not is_valid_public_user_id(resolved_user_id):
             from src.rico_db import RicoDB as _RicoDB
             _doc_db = _RicoDB()
@@ -2546,7 +2603,17 @@ async def confirm_cv_profile(
                 artifact["doc_type"] if artifact["doc_type"] in _CONFIRMABLE_DOC_TYPES else "other"
             )
             try:
-                _doc_db.get_or_create_user_document(
+                # The returned row is the ONLY source of truth for what was
+                # actually persisted. Discarding it (the previous behaviour) is
+                # what left this endpoint unable to report a document_id, a
+                # canonical filename, or whether anything was inserted at all.
+                #
+                # rename_on_match=True implements the one-name rule for CV
+                # confirm specifically: an identical re-upload under a new name
+                # adopts the new name on the existing row rather than silently
+                # keeping the old one while the profile records the new one.
+                # The generic file-upload endpoint keeps the default (False).
+                _doc_result = _doc_db.get_or_create_user_document(
                     user_id=resolved_user_id,
                     filename=artifact["filename"],
                     original_filename=artifact["filename"],
@@ -2558,6 +2625,7 @@ async def confirm_cv_profile(
                     years_experience=profile_updates.get("years_experience"),
                     current_role=profile_updates.get("current_role"),
                     is_primary=(_resolved_doc_type == "cv"),
+                    rename_on_match=True,
                 )
             except Exception as _doc_exc:
                 # NEVER swallowed (the #975 blocker): fail the confirm with a
@@ -2586,6 +2654,17 @@ async def confirm_cv_profile(
         # the user retries instead of believing their profile saved. The retry
         # is safe: the My Files write above dedupes on content_hash, and this
         # upsert is a keyed UPSERT.
+        #
+        # One filename, one source of truth. rico_profiles.cv_filename and
+        # user_documents.filename must never disagree about the same file: a
+        # profile that says "Roben_Edwan_CV.pdf" while My Files says
+        # "Roben_Edwan_Executive_Leadership_CV" is two answers to one question,
+        # and the UI announced success from its own local copy of the name.
+        # The document row is written first (see the write-order note above), so
+        # by this point the canonical name is known and the profile adopts it.
+        if _doc_result is not None:
+            profile_updates["cv_filename"] = _doc_result["filename"]
+
         try:
             upsert_profile(
                 user_id=resolved_user_id,
@@ -2632,18 +2711,36 @@ async def confirm_cv_profile(
 
         _metrics.record_request((time.time() - start_time) * 1000)
         logger.info(
-            "cv_profile_confirmed user=%s fields=%d request_ref=%s",
-            resolved_user_id,
+            "cv_profile_confirmed user=%s fields=%d document_persisted=%s inserted=%s request_ref=%s",
+            user_ref(resolved_user_id),
             len(profile_updates),
+            _doc_result is not None,
+            None if _doc_result is None else _doc_result["inserted"],
             request_ref,
         )
 
-        return {
+        result: dict[str, Any] = {
             "ok": True,
             "status": "profile_updated",
             "message": "Profile confirmed. I can now use it for job matching.",
             "profile": profile_updates,
         }
+        if _doc_result is not None:
+            # Evidence of what was actually stored, read back from the row the
+            # database returned — never echoed from the request. A client can
+            # now verify the save instead of announcing success from its own
+            # local filename.
+            result["document"] = {
+                "document_id": _doc_result["id"],
+                "filename": _doc_result["filename"],
+                "doc_type": _doc_result["doc_type"],
+                "is_primary": _doc_result["is_primary"],
+                "parse_status": _derive_parse_status(
+                    readable_text_saved=_readable_text_saved
+                ),
+                "inserted": _doc_result["inserted"],
+            }
+        return result
     except HTTPException:
         raise
     except Exception as exc:

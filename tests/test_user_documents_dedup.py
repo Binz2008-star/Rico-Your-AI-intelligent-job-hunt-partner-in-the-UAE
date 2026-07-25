@@ -71,7 +71,7 @@ class TestGetOrCreateUserDocument:
         # 2nd fetchone: INSERT ... RETURNING.
         cur.fetchone.side_effect = [
             None,
-            {"id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False},
+            {"id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False, "skills_count": 0, "years_experience": None},
         ]
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
@@ -80,7 +80,7 @@ class TestGetOrCreateUserDocument:
                 doc_type="cv", file_size=10, content_hash="abc123",
             )
         assert result == {
-            "id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv",
+            "id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv", "skills_count": 0, "years_experience": None,
             "is_primary": False, "inserted": True,
         }
         sql = " ".join(str(c.args[0]).upper() for c in cur.execute.call_args_list)
@@ -98,7 +98,7 @@ class TestGetOrCreateUserDocument:
         cur = MagicMock()
         # Duplicate pre-check SELECT finds it immediately — no INSERT attempted.
         cur.fetchone.return_value = {
-            "id": "existing-uuid", "filename": "ORIGINAL-cv.pdf", "doc_type": "cv", "is_primary": True,
+            "id": "existing-uuid", "filename": "ORIGINAL-cv.pdf", "doc_type": "cv", "is_primary": True, "skills_count": 0, "years_experience": None,
         }
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
@@ -120,7 +120,7 @@ class TestGetOrCreateUserDocument:
         an exact duplicate — dedup is content-keyed, not filename-keyed."""
         cur = MagicMock()
         cur.fetchone.return_value = {
-            "id": "existing-uuid", "filename": "first-name.pdf", "doc_type": "cv", "is_primary": False,
+            "id": "existing-uuid", "filename": "first-name.pdf", "doc_type": "cv", "is_primary": False, "skills_count": 0, "years_experience": None,
         }
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
@@ -136,7 +136,7 @@ class TestGetOrCreateUserDocument:
         cur = MagicMock()
         cur.fetchone.side_effect = [
             None,
-            {"id": "new-uuid-2", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False},
+            {"id": "new-uuid-2", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False, "skills_count": 0, "years_experience": None},
         ]
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
@@ -152,7 +152,7 @@ class TestGetOrCreateUserDocument:
         primary — nothing to do."""
         cur = MagicMock()
         cur.fetchone.return_value = {
-            "id": "existing-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True,
+            "id": "existing-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True, "skills_count": 0, "years_experience": None,
         }
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
@@ -174,7 +174,7 @@ class TestGetOrCreateUserDocument:
         leaving zero primary documents for this doc_type."""
         cur = MagicMock()
         cur.fetchone.return_value = {
-            "id": "existing-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False,
+            "id": "existing-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": False, "skills_count": 0, "years_experience": None,
         }
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
@@ -198,7 +198,7 @@ class TestGetOrCreateUserDocument:
         cur = MagicMock()
         cur.fetchone.side_effect = [
             None,  # duplicate pre-check: not found
-            {"id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True},  # INSERT RETURNING
+            {"id": "new-uuid", "filename": "cv.pdf", "doc_type": "cv", "is_primary": True, "skills_count": 0, "years_experience": None},  # INSERT RETURNING
         ]
         db = _new_db()
         tx = _db_with_cursor(cur)
@@ -226,7 +226,7 @@ class TestGetOrCreateUserDocument:
         cur.fetchone.side_effect = [
             None,  # duplicate pre-check: not found (raced)
             None,  # INSERT ... ON CONFLICT DO NOTHING: lost the race, no row
-            {"id": "winner-uuid", "filename": "winner.pdf", "doc_type": "cv", "is_primary": False},  # fallback SELECT
+            {"id": "winner-uuid", "filename": "winner.pdf", "doc_type": "cv", "is_primary": False, "skills_count": 0, "years_experience": None},  # fallback SELECT
         ]
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
@@ -235,7 +235,7 @@ class TestGetOrCreateUserDocument:
                 doc_type="cv", file_size=10, content_hash="abc123",
             )
         assert result == {
-            "id": "winner-uuid", "filename": "winner.pdf", "doc_type": "cv",
+            "id": "winner-uuid", "filename": "winner.pdf", "doc_type": "cv", "skills_count": 0, "years_experience": None,
             "is_primary": False, "inserted": False,
         }
         statements = [str(c.args[0]).strip().upper().split()[0] for c in cur.execute.call_args_list]
@@ -250,7 +250,7 @@ class TestGetOrCreateUserDocument:
         cur.fetchone.side_effect = [
             None,  # duplicate pre-check: not found (raced)
             None,  # INSERT ... ON CONFLICT DO NOTHING: lost the race
-            {"id": "winner-uuid", "filename": "winner.pdf", "doc_type": "cv", "is_primary": False},  # fallback SELECT
+            {"id": "winner-uuid", "filename": "winner.pdf", "doc_type": "cv", "is_primary": False, "skills_count": 0, "years_experience": None},  # fallback SELECT
         ]
         db = _new_db()
         with patch.object(RicoDB, "_transaction", return_value=_db_with_cursor(cur)):
