@@ -152,7 +152,11 @@ class TestListFollowupFlow:
         api.memory.set_context.side_effect = _set_ctx
 
         with (
-            patch("src.repositories.applications_repo.get_all", return_value=[]),
+            patch(
+                "src.repositories.applications_repo.get_page",
+                return_value={"applications": [], "total": 0, "page": 1,
+                              "limit": 50, "pages": 1},
+            ),
             patch("src.repositories.applications_repo.get_stats", return_value={}),
         ):
             api._enrich_applications = lambda apps: []

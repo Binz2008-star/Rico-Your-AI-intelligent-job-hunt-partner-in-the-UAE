@@ -58,6 +58,11 @@ from src.repositories.onboarding_repo import (
     set_onboarding_status,
 )
 from src.repositories.profile_repo import get_profile, upsert_profile
+from src.services.application_status_display import (
+    UNCLASSIFIED as _UNCLASSIFIED_STATUS,
+    reconciliation_note as application_reconciliation_note,
+    summarize as summarize_application_statuses,
+)
 from src.services.profile_context_resolver import (
     evaluate_minimum_profile,
     resolve_profile_context,
@@ -4627,6 +4632,12 @@ class RicoChatAPI:
     SOURCE_HF = "huggingface"
     SOURCE_FALLBACK = "fallback"
     SOURCE_RATE_LIMITED = "rate_limited"
+
+    # Rows fetched to itemize an application-tracking reply. The reply shows 10
+    # and caches 20; the rest of the page is headroom for the derived
+    # follow-up signal. Counts never come from this slice — they come from the
+    # database's grouped aggregation over every row.
+    _TRACKING_ITEMISATION_LIMIT = 50
 
     # Patterns that indicate a promise-only reply (no actual search executed).
     # Used by _is_promise_only_reply() to guard against returning a hollow response.
@@ -15079,26 +15090,18 @@ class RicoChatAPI:
         return line
 
     def _build_tracking_message(self, apps: list[dict], stats: dict, arabic: bool = False) -> str:
-        """Build a summary header followed by an itemized list of applications."""
-        total = len(apps)
-        if total == 0:
-            # Honest fallback: if summary stats indicate applications exist but no
-            # detailed rows are available to itemize, say so and route to the page.
-            try:
-                summary_total = int((stats or {}).get("total") or 0)
-            except (TypeError, ValueError):
-                summary_total = 0
-            if summary_total > 0:
-                if arabic:
-                    return (
-                        f"لديك {summary_total} طلب تقديم مسجَّل، لكن لا يمكنني تحميل السجلات "
-                        "التفصيلية الآن. افتح صفحة **الطلبات** لرؤيتها."
-                    )
-                return (
-                    f"You have {summary_total} tracked application"
-                    f"{'s' if summary_total != 1 else ''}, but I can't load the detailed "
-                    "records right now. Open your **Applications** page to see them."
-                )
+        """Build a summary header followed by an itemized list of applications.
+
+        Bucket counts come from ``stats`` — the database's own GROUP BY over
+        EVERY row. ``apps`` is the bounded page used for itemisation only;
+        counting it would report one page as if it were the whole pipeline.
+        """
+        summary = summarize_application_statuses(
+            (stats or {}).get("by_status"), total=(stats or {}).get("total")
+        )
+        total = summary.total
+
+        if total == 0 and not apps:
             if arabic:
                 return (
                     "لا توجد طلبات تقديم مسجَّلة بعد. "
@@ -15111,61 +15114,88 @@ class RicoChatAPI:
                 "You can also say 'mark as applied' on any job."
             )
 
-        by_status: dict[str, list[dict]] = {}
-        for app in apps:
-            by_status.setdefault(app.get("status", "unknown"), []).append(app)
+        if total == 0:
+            # Rows came back but the aggregate is empty or unreadable. "You have
+            # no applications" would be a flat lie, and counting the page would
+            # present one page as the pipeline. Report only what is actually
+            # known: these rows, and no total.
+            lead = (
+                "تعذّر تحميل التوزيع الكامل لطلباتك، لذا لا أستطيع إعطاءك إجمالياً موثوقاً. "
+                f"هذه {len(apps)} من أحدث السجلات التي تمكنت من قراءتها:"
+                if arabic else
+                "I couldn't load the full breakdown of your applications, so I can't give "
+                f"you a reliable total. Here {'is' if len(apps) == 1 else 'are'} the "
+                f"{len(apps)} most recent record{'s' if len(apps) != 1 else ''} I could read:"
+            )
+            body = "\n".join(self._format_application_line(a) for a in apps[:10])
+            return f"{lead}\n\n{body}"
 
-        offers = by_status.get("offer", [])
-        interviews = by_status.get("interview", [])
-        applied = by_status.get("applied", [])
-        follow_up_due = by_status.get("follow_up_due", [])
-        prepared = by_status.get("prepared", [])
-        saved = by_status.get("saved", [])
-        rejected = by_status.get("rejected", [])
-        # "opened"/"opened_external" = user clicked through to the listing but has
-        # not yet marked the application as submitted — distinct from "applied".
-        opened = by_status.get("opened", []) + by_status.get("opened_external", [])
-        follow_up = [a for a in apps if a.get("needs_follow_up")]
+        if not apps:
+            # Honest fallback: the aggregate says rows exist but none came back
+            # to itemize. Report the real total and route to the page.
+            if arabic:
+                return (
+                    f"لديك {total} طلب تقديم مسجَّل، لكن لا يمكنني تحميل السجلات "
+                    "التفصيلية الآن. افتح صفحة **الطلبات** لرؤيتها."
+                )
+            return (
+                f"You have {total} tracked application"
+                f"{'s' if total != 1 else ''}, but I can't load the detailed "
+                "records right now. Open your **Applications** page to see them."
+            )
 
-        stage_parts = []
-        if offers:
-            stage_parts.append(f"{len(offers)} offer{'s' if len(offers) != 1 else ''}")
-        if interviews:
-            stage_parts.append(f"{len(interviews)} interview{'s' if len(interviews) != 1 else ''}")
-        if applied:
-            stage_parts.append(f"{len(applied)} applied")
-        if follow_up_due:
-            stage_parts.append(f"{len(follow_up_due)} follow-up due")
-        if prepared:
-            stage_parts.append(f"{len(prepared)} prepared")
-        if saved:
-            stage_parts.append(f"{len(saved)} saved")
-        if rejected:
-            stage_parts.append(f"{len(rejected)} rejected")
-        if opened:
-            stage_parts.append(f"{len(opened)} link{'s' if len(opened) != 1 else ''} opened")
-        stage_line = ", ".join(stage_parts) if stage_parts else f"{total} tracked"
+        separator = "، " if arabic else ", "
+        stage_line = separator.join(
+            f"{b.count} {b.label(arabic)}" for b in summary.buckets
+        )
 
         sentences = [
+            f"لديك {total} طلب تقديم مسجَّل: {stage_line}."
+            if arabic else
             f"You have {total} tracked application{'s' if total != 1 else ''}: {stage_line}."
         ]
 
-        active = offers + interviews
+        note = application_reconciliation_note(summary, arabic)
+        if note:
+            sentences.append(note)
+
+        active = [
+            a for a in apps
+            if str(a.get("status") or "").strip().lower() in ("offer", "interview")
+        ]
         if active:
             names = [
                 f"**{a.get('title', 'Unknown')}** at **{a.get('company', 'Unknown')}**"
                 for a in active[:3]
             ]
-            sentences.append(f"Active: {', '.join(names)}.")
+            sentences.append(
+                f"قيد التقدم: {'، '.join(names)}."
+                if arabic else
+                f"Active: {', '.join(names)}."
+            )
 
+        # Derived signal, deliberately distinguished from the stored
+        # "Follow-up due" bucket above: this is a time-based hint computed from
+        # the rows loaded for this reply, not a status anything wrote to the
+        # database. Printing both numbers without stating the relationship
+        # invites reading them as two counts of the same thing.
+        follow_up = [a for a in apps if a.get("needs_follow_up")]
         if follow_up:
             fu_companies = [f"**{a.get('company', 'Unknown')}**" for a in follow_up[:3]]
             suffix = f" (+{len(follow_up) - 3} more)" if len(follow_up) > 3 else ""
-            sentences.append(
-                f"{len(follow_up)} application{'s' if len(follow_up) != 1 else ''} "
-                f"may need a follow-up (no update in 7+ days): "
-                f"{', '.join(fu_companies)}{suffix}."
-            )
+            if arabic:
+                sentences.append(
+                    f"إشارة مُشتقّة (ليست حالة مسجَّلة): {len(follow_up)} من "
+                    f"{len(apps)} سجلاً حمّلته لم يطرأ عليها تحديث منذ 7 أيام أو أكثر "
+                    f"وقد تستحق متابعة — {'، '.join(fu_companies)}{suffix}."
+                )
+            else:
+                sentences.append(
+                    f"Derived signal (not a stored status): {len(follow_up)} of the "
+                    f"{len(apps)} record{'s' if len(apps) != 1 else ''} I loaded "
+                    f"{'have' if len(follow_up) != 1 else 'has'} had no update in 7+ days "
+                    f"and may be worth a follow-up — {', '.join(fu_companies)}{suffix}."
+                )
 
         header = " ".join(sentences)
 
@@ -15175,7 +15205,11 @@ class RicoChatAPI:
         lines = [self._format_application_line(a) for a in apps[:10]]
         body = "\n".join(lines)
         if total > 10:
-            body += f"\n_…and {total - 10} more. Open your **Applications** page to see all._"
+            body += (
+                f"\n_…و{total - 10} أخرى. افتح صفحة **الطلبات** لعرضها كاملة._"
+                if arabic else
+                f"\n_…and {total - 10} more. Open your **Applications** page to see all._"
+            )
         return f"{header}\n\n{body}"
 
     def _handle_subscription_plans(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
@@ -18631,33 +18665,44 @@ class RicoChatAPI:
         """
         arabic = self._is_arabic_text(message)
 
-        # Fetch application records
+        # Counts come from the database's own GROUP BY over EVERY row
+        # (RicoDB.get_application_stats), never from get_all(): a chat turn must
+        # not materialise a user's whole application table, and a count taken
+        # from one page is not a count.
         try:
             from src.repositories import applications_repo as _apps_repo
-            apps = _apps_repo.get_all(user_id) or []
+            stats = _apps_repo.get_stats(user_id) or {}
         except Exception:
-            apps = []
-
-        total = len(apps)
-
-        # Status breakdown
-        status_counts: dict[str, int] = {}
-        for app in apps:
-            status = (
-                getattr(app, "status", None)
-                or (app.get("status") if isinstance(app, dict) else None)
-                or "applied"
+            logger.exception(
+                "_handle_app_pipeline_summary: stats query failed for user_id=%s", user_id
             )
-            status_counts[status] = status_counts.get(status, 0) + 1
+            unavailable_msg = (
+                "تعذّر الوصول إلى بيانات طلباتك مؤقتاً. حاول مرة أخرى خلال لحظات، "
+                "أو افتح صفحة **الطلبات** مباشرة."
+                if arabic else
+                "I'm temporarily unable to reach your applications data. "
+                "Please try again in a moment, or open your **Applications** page directly."
+            )
+            self._append_chat(user_id, "assistant", unavailable_msg)
+            return {
+                "type": "app_pipeline_summary",
+                "unavailable": True,
+                "message": unavailable_msg,
+            }
 
-        applied    = status_counts.get("applied", 0)
-        saved      = status_counts.get("saved", 0)
-        interview  = status_counts.get("interview", 0) + status_counts.get("interviewing", 0)
-        offered    = status_counts.get("offered", 0) + status_counts.get("offer", 0)
-        rejected   = status_counts.get("rejected", 0) + status_counts.get("declined", 0)
-        skipped    = status_counts.get("skipped", 0)
+        summary = summarize_application_statuses(
+            stats.get("by_status"), total=stats.get("total")
+        )
+        total = summary.total
+        applied = summary.count("applied")
+        interview = summary.count("interview")
+        offered = summary.count("offer")
+        rejected = summary.count("rejected")
+        unclassified = summary.count(_UNCLASSIFIED_STATUS)
 
-        # Response rate (interviews + offers out of applied)
+        # Derived metric, not a stored status: share of the rows still sitting in
+        # the "applied" bucket that have reached an interview. The denominator is
+        # stated in the message so it is never read as a share of the pipeline.
         response_rate = f"{round(interview / applied * 100)}%" if applied > 0 else "N/A"
 
         if total == 0:
@@ -18667,21 +18712,50 @@ class RicoChatAPI:
                 "You haven't logged any applications yet. Start searching and I'll track your progress."
             )
         else:
-            lines = [
-                f"**Your Application Pipeline ({total} total):**\n",
-                f"• Applied: **{applied}**",
+            header = (
+                f"**مسار طلباتك ({total} إجمالاً):**\n"
+                if arabic else
+                f"**Your Application Pipeline ({total} total):**\n"
+            )
+            # Every bucket the data actually contains is printed — including
+            # unclassified — so the lines always account for the headline total.
+            lines = [header] + [
+                f"• {bucket.bullet_label(arabic)}: **{bucket.count}**"
+                for bucket in summary.buckets
             ]
-            if saved:      lines.append(f"• Saved / to apply: **{saved}**")
-            if interview:  lines.append(f"• Interview stage: **{interview}**")
-            if offered:    lines.append(f"• Offer received: **{offered}**")
-            if rejected:   lines.append(f"• Rejected / declined: **{rejected}**")
-            if skipped:    lines.append(f"• Skipped: **{skipped}**")
-            lines.append(f"\n📊 **Interview response rate:** {response_rate}")
+
+            note = application_reconciliation_note(summary, arabic)
+            if note:
+                lines.append(f"\n{note}")
+
+            rate_line = (
+                f"\n📊 **معدل الوصول إلى المقابلات:** {response_rate}"
+                if arabic else
+                f"\n📊 **Interview response rate:** {response_rate}"
+            )
+            if applied > 0:
+                rate_line += (
+                    f" ({interview} من {applied} في مرحلة التقديم)"
+                    if arabic else
+                    f" ({interview} of the {applied} still in the applied bucket)"
+                )
+            lines.append(rate_line)
 
             if interview == 0 and applied >= 5:
-                lines.append("\n💡 Low response rate — consider reviewing your CV keywords or broadening your search.")
-            elif offered > 0:
-                lines.append(f"\n🎉 You have {'an offer' if offered == 1 else f'{offered} offers'} — congratulations!")
+                lines.append(
+                    "\n💡 لا توجد مقابلات حتى الآن — راجع كلمات سيرتك الذاتية أو وسّع نطاق بحثك."
+                    if arabic else
+                    "\n💡 Low response rate — consider reviewing your CV keywords or broadening your search."
+                )
+            # A celebration must not headline a funnel it misrepresents: an offer
+            # among 194 rows that are mostly unopened links is not a success
+            # story. Only congratulate when the celebrated bucket is a majority.
+            elif offered > 0 and offered * 2 > total:
+                lines.append(
+                    f"\n🎉 لديك {'عرض عمل' if offered == 1 else f'{offered} عروض عمل'} — تهانينا!"
+                    if arabic else
+                    f"\n🎉 You have {'an offer' if offered == 1 else f'{offered} offers'} — congratulations!"
+                )
 
             msg = "\n".join(lines)
 
@@ -18693,6 +18767,13 @@ class RicoChatAPI:
             "interview": interview,
             "offered": offered,
             "rejected": rejected,
+            "unclassified": unclassified,
+            "unclassified_statuses": list(summary.unclassified_statuses),
+            "buckets": [
+                {"key": b.key, "label": b.label(arabic), "count": b.count}
+                for b in summary.buckets
+            ],
+            "reconciles": summary.reconciles,
             "response_rate": response_rate,
             "message": msg,
         }
@@ -22032,8 +22113,14 @@ class RicoChatAPI:
         """
         arabic = self._is_arabic_text(message)
         try:
-            from src.repositories.applications_repo import get_all, get_stats
-            apps = get_all(user_id=user_id)
+            from src.repositories.applications_repo import get_page, get_stats
+            # Counts come from the grouped aggregation over every row; rows come
+            # from one bounded page. A chat turn must never pull a user's whole
+            # application table into memory — that has to hold at 40k rows, not
+            # just at the couple of hundred a test account happens to have.
+            apps = get_page(
+                user_id, page=1, limit=self._TRACKING_ITEMISATION_LIMIT
+            ).get("applications") or []
             stats = get_stats(user_id=user_id)
         except Exception:
             logger.exception(

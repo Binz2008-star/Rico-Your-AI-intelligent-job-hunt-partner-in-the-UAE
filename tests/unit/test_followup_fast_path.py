@@ -2637,12 +2637,22 @@ class TestAppPipelineSummary:
         )
 
     def _run_with_apps(self, monkeypatch, message, profile, apps=None):
-        """Run _handle_app_pipeline_summary with mocked app repo."""
+        """Run _handle_app_pipeline_summary with a mocked grouped-stats query.
+
+        The handler aggregates in the database (GROUP BY status over every row),
+        so the fixture is collapsed the same way here rather than handed to the
+        handler as a list of rows to count in memory.
+        """
         from src.rico_chat_api import RicoChatAPI
         from unittest.mock import MagicMock, patch
         import src.rico_chat_api as mod
 
         _apps = apps if apps is not None else []
+        _by_status: dict = {}
+        for _app in _apps:
+            _status = _app.get("status")
+            _by_status[_status] = _by_status.get(_status, 0) + 1
+        _stats = {"total": len(_apps), "by_status": _by_status}
 
         mock_route = MagicMock()
         mock_route.tool_name = None; mock_route.entities = {}
@@ -2658,7 +2668,7 @@ class TestAppPipelineSummary:
         api._get_recent_context = lambda uid: {}
         api._append_chat = MagicMock()
 
-        with patch("src.repositories.applications_repo.get_all", return_value=_apps):
+        with patch("src.repositories.applications_repo.get_stats", return_value=_stats):
             return api._handle_active_user("test-user", message)
 
     def test_routes_to_app_pipeline_summary(self, monkeypatch):
