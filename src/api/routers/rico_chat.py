@@ -2299,24 +2299,61 @@ async def rico_upload_cv(
             if not upload_id:
                 # A preview with no artifact behind it is a promise that cannot
                 # be kept: confirm resolves by upload_id, so this upload could
-                # never be saved however the user answered. Returning
-                # preview_ready anyway is the false-success pattern that produced
-                # this whole class of defect — the user is shown their extracted
-                # CV and told to confirm, and the confirm can only ever fail.
-                logger.error(
-                    "cv_upload_artifact_unavailable user=%s filename_len=%d request_ref=%s",
+                # never be saved however the user answered. `preview_ready` must
+                # therefore never be returned here — that is the false-success
+                # pattern that produced this whole class of defect.
+                #
+                # But the CAUSE decides the response, not the location. Reusing
+                # `src.db.DB_ENABLED` (the store's own configuration flag) and the
+                # production check already defined in this module — deliberately,
+                # so "production" has exactly one definition and no copy of it.
+                from src.repositories.cv_upload_artifact_repo import artifact_store_reachable
+
+                _store_configured = artifact_store_reachable()
+                if _store_configured or _is_production():
+                    # (1) The store is configured and the write still failed, or
+                    # (3) the store is unconfigured IN PRODUCTION, which is a
+                    # deployment fault rather than an acceptable environment.
+                    logger.error(
+                        "cv_upload_artifact_unavailable user=%s store_configured=%s "
+                        "filename_len=%d request_ref=%s",
+                        user_ref(resolved_user_id), _store_configured,
+                        len(safe_name or ""), request_ref,
+                    )
+                    _metrics.record_request((time.time() - start_time) * 1000)
+                    return JSONResponse(
+                        status_code=503,
+                        content={
+                            "ok": False,
+                            "status": "cv_storage_unavailable",
+                            "error_code": "upload_artifact_unavailable",
+                            "message": "We couldn't store your CV for review just now. Please try uploading again in a moment.",
+                        },
+                    )
+
+                # (2) No store configured at all, outside production. The parse
+                # genuinely succeeded, so the extraction is returned — but as an
+                # honestly degraded state that says it cannot be saved. The
+                # `preview_ready` key is ABSENT, not false: nothing may read this
+                # as a confirmable preview.
+                logger.warning(
+                    "cv_upload_not_persistable user=%s filename_len=%d request_ref=%s",
                     user_ref(resolved_user_id), len(safe_name or ""), request_ref,
                 )
                 _metrics.record_request((time.time() - start_time) * 1000)
-                return JSONResponse(
-                    status_code=503,
-                    content={
-                        "ok": False,
-                        "status": "cv_storage_unavailable",
-                        "error_code": "upload_artifact_unavailable",
-                        "message": "We couldn't store your CV for review just now. Please try uploading again in a moment.",
-                    },
-                )
+                return {
+                    "ok": True,
+                    "status": "preview_not_persistable",
+                    "persistable": False,
+                    "document_type": doc_type,
+                    "extraction_quality": parsed.get("extraction_quality"),
+                    "extracted_chars": parsed.get("extracted_chars"),
+                    "filename": safe_name,
+                    "preview": preview,
+                    "message": "I read your CV, but I can't save it right now. Please try uploading again shortly.",
+                    "user_id": None if is_valid_public_user_id(resolved_user_id) else resolved_user_id,
+                    "upload_id": None,
+                }
 
         return {
             "ok": True,

@@ -161,6 +161,29 @@ def create_cv_upload_artifact(
         conn.close()
 
 
+def artifact_store_reachable() -> bool:
+    """Whether the artifact store can be reached at all.
+
+    Distinguishes "no usable store in this environment" from "a write was
+    attempted and failed" — the two must produce different answers, because only
+    the second is a broken promise. Called ONLY after a creation attempt has
+    already returned nothing, so it costs nothing on the normal path.
+
+    A configured DSN is not sufficient: a non-production platform routinely
+    carries a DSN pointing at no server, which is still "no usable store".
+    """
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        conn.close()
+    except Exception:
+        pass
+    return True
+
+
 class ArtifactStoreUnavailable(Exception):
     """The artifact store could not be read.
 
