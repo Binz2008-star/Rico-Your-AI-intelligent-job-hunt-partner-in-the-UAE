@@ -296,10 +296,12 @@ class TestRicoAgentHFPrimary:
             from src.rico_openai_agent import RicoOpenAIAgent
             agent = RicoOpenAIAgent()
             result = agent.respond("find me jobs")
-        assert result["type"] == "fallback_response"
+        assert result["type"] == "reasoning_unavailable"
         assert "message" in result
         assert "OpenAI advanced reasoning" not in result["message"]
-        assert "UAE job search" in result["message"] or "configured AI provider" in result["message"]
+        # No usable provider is an outage, and the reply must say so rather than
+        # offering a capability blurb that reads like a deliberate answer.
+        assert "reasoning is temporarily unavailable" in result["message"]
 
     def test_terminal_fallback_returns_arabic_for_arabic_message(self):
         """Arabic script in the user message must yield an Arabic terminal fallback."""
@@ -311,8 +313,8 @@ class TestRicoAgentHFPrimary:
             from src.rico_openai_agent import RicoOpenAIAgent
             agent = RicoOpenAIAgent()
             result = agent.respond("ابحث عن وظائف")
-        assert result["type"] == "fallback_response"
-        assert "أنا هنا" in result["message"]
+        assert result["type"] == "reasoning_unavailable"
+        assert "غير متاحة" in result["message"]
         assert "UAE job search" not in result["message"]
 
     def test_terminal_fallback_stays_english_for_english_or_unset_language(self):
@@ -327,9 +329,9 @@ class TestRicoAgentHFPrimary:
             result_unset = agent.respond("find me jobs")
             result_en = agent.respond("find me jobs", language="en")
         for result in (result_unset, result_en):
-            assert result["type"] == "fallback_response"
-            assert "UAE job search" in result["message"]
-            assert "أنا هنا" not in result["message"]
+            assert result["type"] == "reasoning_unavailable"
+            assert "reasoning is temporarily unavailable" in result["message"]
+            assert "غير متاحة" not in result["message"]
 
     def test_hf_system_prompt_includes_arabic_instruction_for_arabic(self):
         """The HF fallback's system prompt must instruct an Arabic reply when Arabic is detected."""

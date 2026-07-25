@@ -118,7 +118,7 @@ def test_missing_openai_key_returns_safe_fallback(chat_api, monkeypatch):
 
     assert "message" in result, "Fallback must still return a 'message' field"
     assert result["message"], "Fallback message must not be empty"
-    assert result["type"] == "fallback_response"
+    assert result["type"] == "reasoning_unavailable"
     assert result.get("provider") == "fallback"
 
 

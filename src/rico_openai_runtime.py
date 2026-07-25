@@ -61,6 +61,10 @@ _RATE_LIMITED_TEXT = (
     "Rico's AI provider is currently rate-limited. "
     "This is temporary — please try again in a minute."
 )
+#: Public alias. The agent layer reuses this exact wording for the
+#: no-provider-configured case so the two provider-failure paths can never drift
+#: into telling the user two different stories about the same outage.
+REASONING_UNAVAILABLE_TEXT = _FALLBACK_TEXT
 # Sized to fit profile essentials + uploaded_documents metadata + 8-turn
 # conversation history; 1200 predates documents/history and silently cut
 # the tail of the context JSON (uploaded_documents was serialized last).

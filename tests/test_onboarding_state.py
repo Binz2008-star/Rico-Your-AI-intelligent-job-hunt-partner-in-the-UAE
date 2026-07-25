@@ -250,7 +250,9 @@ class TestCompletedUserRouting:
 
     def test_generic_message_returns_assistant(self):
         r = self._completed("can you explain something")
-        assert r["type"] == "fallback_response"
+        # With no reasoning provider configured (as in CI) the AI path degrades
+        # to the honest reasoning-unavailable reply, not a capability blurb.
+        assert r["type"] == "reasoning_unavailable"
         assert "message" in r
 
     def test_completed_user_never_gets_onboarding_type(self):
