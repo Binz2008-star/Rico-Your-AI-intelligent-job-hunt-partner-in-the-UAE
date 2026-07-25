@@ -2365,32 +2365,34 @@ def _resolve_trusted_cv_artifact(
     return artifact
 
 
-def _derive_parse_status(doc_row: dict[str, Any]) -> str:
-    """Report ``parsed`` only when the STORED row carries extracted content.
+def _derive_parse_status(*, readable_text_saved: bool) -> str:
+    """Derive the confirm response's parse status from CONTENT ACTUALLY SAVED.
 
     ``parse_status`` is not a column on ``user_documents``; it is derived. It is
-    derived here from the same signals ``rico_chat_api`` uses when it tells the
-    model what it has on file (``doc_type``/``is_primary``/``skills_count``/
-    ``years_experience``), so confirm and chat cannot give two different answers
-    about the same document.
+    derived here from one thing only: whether the text this confirm persisted to
+    ``rico_profiles.cv_text`` passed the readability contract in
+    ``src.cv_parse_quality``. Document metadata — ``skills_count``,
+    ``years_experience``, ``is_primary`` — is deliberately NOT consulted: those
+    are counts recorded alongside a file, not evidence that its content was
+    extracted, and deriving a status from them is how a row's mere existence
+    starts asserting an extraction.
 
-    The existence of a row is deliberately NOT evidence of parsing. A production
-    read on 2026-07-25 found a profile carrying ``cv_status = "parsed"`` while
-    ``cv_structured`` was an empty object — a status asserting an extraction
-    that had not produced structured content. This response must not inherit
-    that: no extracted skills and no extracted years means ``metadata_only``,
-    however successful the upload itself was. (The empty-``cv_structured``
-    pipeline is a separate defect and is not addressed here.)
+    This endpoint never returns ``parsed``. That word conflates "a file arrived"
+    with "its content is usable", which is exactly the conflation that put
+    ``cv_status = "parsed"`` on production profiles whose ``cv_structured`` is an
+    empty object. Two honest values are available at this point in the pipeline:
+
+      * ``text_extracted`` — the document and profile writes both succeeded and
+        readable text was saved with them.
+      * ``metadata_only`` — the document was saved, but no readable content came
+        with it, so only the file's metadata is available.
+
+    ``structured`` is deliberately NOT reachable here: nothing in this endpoint
+    writes ``cv_structured`` yet, so claiming it would be the same lie in a new
+    vocabulary. It becomes available only once the structured-CV pipeline is
+    wired, and this function must be revisited then rather than guessed at now.
     """
-    content_available = (
-        doc_row.get("doc_type") == "cv"
-        and bool(doc_row.get("is_primary"))
-        and (
-            (doc_row.get("skills_count") or 0) > 0
-            or doc_row.get("years_experience") is not None
-        )
-    )
-    return "parsed" if content_available else "metadata_only"
+    return "text_extracted" if readable_text_saved else "metadata_only"
 
 
 @router.post("/confirm-cv-profile")
@@ -2528,10 +2530,16 @@ async def confirm_cv_profile(
         # matching with a CV they could not actually read. Guest confirms
         # (artifact is None) and non-CV documents keep the previous behaviour.
         _is_cv_artifact = artifact is not None and artifact.get("doc_type") == "cv"
+        # Whether readable text is being persisted alongside the document. This
+        # is the single signal the response's parse_status is derived from — the
+        # same verdict from the same contract that gates the 409 below, so the
+        # status can never disagree with the check that let the confirm through.
+        _readable_text_saved = False
         if confirmed_cv_text is not None or _is_cv_artifact:
             from src.cv_parse_quality import validate_artifact_quality
 
             quality_result = validate_artifact_quality(confirmed_cv_text)
+            _readable_text_saved = bool(quality_result.is_readable)
             if not quality_result.is_readable:
                 logger.warning(
                     "cv_confirm_unreadable_artifact user=%s upload_id_present=%s "
@@ -2727,7 +2735,9 @@ async def confirm_cv_profile(
                 "filename": _doc_result["filename"],
                 "doc_type": _doc_result["doc_type"],
                 "is_primary": _doc_result["is_primary"],
-                "parse_status": _derive_parse_status(_doc_result),
+                "parse_status": _derive_parse_status(
+                    readable_text_saved=_readable_text_saved
+                ),
                 "inserted": _doc_result["inserted"],
             }
         return result

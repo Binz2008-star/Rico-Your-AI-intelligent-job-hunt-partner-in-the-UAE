@@ -236,7 +236,7 @@ class TestPrincipalCompatibility:
             "filename": _NEW_FILENAME,
             "doc_type": "cv",
             "is_primary": True,
-            "parse_status": "parsed",
+            "parse_status": "text_extracted",
             "inserted": True,
         }
 
@@ -316,37 +316,66 @@ class TestArtifactRejectionUnchanged:
 # ── parse_status must never assert an extraction that did not happen ──────────
 
 class TestParseStatusHonesty:
-    def test_parsed_requires_real_extracted_content(self):
-        assert _derive_parse_status(
-            {"doc_type": "cv", "is_primary": True, "skills_count": 3, "years_experience": None}
-        ) == "parsed"
-        assert _derive_parse_status(
-            {"doc_type": "cv", "is_primary": True, "skills_count": 0, "years_experience": 8}
-        ) == "parsed"
+    """parse_status is derived from CONTENT SAVED, never from document metadata.
 
-    def test_row_existence_alone_is_never_parsed(self):
-        """A production profile carried cv_status="parsed" with an empty
-        cv_structured. This response must not inherit that shape of claim."""
-        assert _derive_parse_status(
-            {"doc_type": "cv", "is_primary": True, "skills_count": 0, "years_experience": None}
-        ) == "metadata_only"
+    The previous version of this endpoint derived it from `skills_count` /
+    `years_experience` / `is_primary` and could return "parsed" while
+    `cv_structured` was `{}` and `cv_text` empty. Those are counts recorded
+    alongside a file, not evidence its content was extracted, and "parsed"
+    conflates "a file arrived" with "its content is usable" — the exact
+    conflation that put `cv_status = "parsed"` on production profiles with an
+    empty `cv_structured`. Both are gone.
+    """
 
-    def test_non_primary_or_non_cv_is_metadata_only(self):
-        assert _derive_parse_status(
-            {"doc_type": "cv", "is_primary": False, "skills_count": 5, "years_experience": 8}
-        ) == "metadata_only"
-        assert _derive_parse_status(
-            {"doc_type": "cover_letter", "is_primary": True, "skills_count": 5, "years_experience": 8}
-        ) == "metadata_only"
+    def test_readable_saved_text_is_text_extracted(self):
+        assert _derive_parse_status(readable_text_saved=True) == "text_extracted"
 
-    def test_missing_keys_degrade_to_metadata_only(self):
-        assert _derive_parse_status({}) == "metadata_only"
+    def test_no_readable_content_is_metadata_only(self):
+        assert _derive_parse_status(readable_text_saved=False) == "metadata_only"
 
-    def test_endpoint_reports_metadata_only_for_a_contentless_row(self, client):
-        contentless = dict(_INSERTED_ROW, skills_count=0, years_experience=None)
-        r, _rec, _upsert, _resolve, _status = _post_confirm(client, doc_result=contentless)
+    def test_parsed_is_never_returned(self):
+        for readable in (True, False):
+            assert _derive_parse_status(readable_text_saved=readable) != "parsed"
+
+    def test_structured_is_never_returned_before_the_pipeline_exists(self):
+        """Nothing in this endpoint writes cv_structured yet.
+
+        Claiming `structured` here would be the same lie in a new vocabulary.
+        It becomes reachable only when the structured-CV pipeline is wired.
+        """
+        for readable in (True, False):
+            assert _derive_parse_status(readable_text_saved=readable) != "structured"
+
+    def test_document_metadata_cannot_influence_the_status(self):
+        """The signature admits no document row at all — by construction."""
+        import inspect
+
+        params = set(inspect.signature(_derive_parse_status).parameters)
+        assert params == {"readable_text_saved"}
+
+    def test_endpoint_reports_text_extracted_when_readable_text_is_saved(self, client):
+        r, _rec, upsert_mock, _resolve, _status = _post_confirm(client, doc_result=_INSERTED_ROW)
         assert r.status_code == 200, r.text
-        assert r.json()["document"]["parse_status"] == "metadata_only"
+        assert r.json()["document"]["parse_status"] == "text_extracted"
+        # The same text that produced the status is the text that was persisted.
+        assert upsert_mock.call_args.kwargs["cv_text"] == _ARTIFACT["cv_text"]
+
+    def test_rich_metadata_does_not_upgrade_a_contentless_confirm(self, client):
+        """A document row full of counts must not manufacture a content claim.
+
+        The artifact carries no readable text, so the endpoint rejects the
+        confirm outright — it never reaches a state where metadata could be
+        mistaken for extracted content.
+        """
+        no_text_artifact = dict(_ARTIFACT, cv_text="")
+        rich_row = dict(_INSERTED_ROW, skills_count=99, years_experience=25)
+        r, recorder, upsert_mock, _resolve, set_status_mock = _post_confirm(
+            client, doc_result=rich_row, resolve_return=no_text_artifact
+        )
+        assert r.status_code == 409, r.text
+        recorder.assert_not_called()
+        upsert_mock.assert_not_called()
+        set_status_mock.assert_not_called()
 
 
 # ── 4. Primary flip: exactly one demotion ────────────────────────────────────
@@ -472,10 +501,16 @@ class TestPrimaryFlipAndRename:
         )
         assert not [s for s, _ in cur.statements if "SET FILENAME" in s.upper()]
 
-    def test_returned_row_carries_the_content_signals(self):
+    def test_returned_row_carries_the_document_snapshot_columns(self):
+        """These are the document's own snapshot values, for display/provenance.
+
+        They are deliberately NOT what parse_status is derived from — see
+        TestParseStatusHonesty. They are carried because a caller may want to
+        show what the document recorded at analysis time, not because a count
+        beside a file is evidence that its content was extracted.
+        """
         result, _cur = _run_get_or_create(
             self._existing(is_primary=True), is_primary=True, rename_on_match=True
         )
         assert result["skills_count"] == 2
         assert result["years_experience"] == 10
-        assert _derive_parse_status(result) == "parsed"
