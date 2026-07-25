@@ -174,6 +174,52 @@ _JOB_SEARCH_INTENTS: Final[frozenset[str]] = frozenset({
 })
 
 
+# Imperative advice / explanation / comparison requests. These are genuine
+# model-bound reasoning asks that carry no question mark and no interrogative
+# opening token, so the question-shaped signals above miss them entirely and they
+# fall through to the legacy classifier — which answers them with a canned
+# template. Live-verified 2026-07-25 on production: "Give me one short tip to
+# improve my CV for UAE employers" returned the "your CV on file is X" deflection,
+# and "List exactly four interview questions a Dubai bank would ask a compliance
+# officer" returned an Interview Preparation Guide template that injected a role
+# the user never mentioned and ignored the requested count. Both are imperative,
+# both are unambiguously reasoning work, neither is a structured lookup.
+#
+# Anchored at the start so a verb appearing mid-sentence ("I need to list my
+# skills") does not flip an otherwise-structured message onto the AI path.
+ADVICE_IMPERATIVE_REASON: Final[str] = "advice_imperative"
+
+_ADVICE_IMPERATIVE_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?:please\s+|kindly\s+|can\s+you\s+|could\s+you\s+)?"
+    r"(?:give\s+me|list|write|draft|rewrite|reword|rephrase|suggest|recommend"
+    r"|compare|contrast|critique|review|improve|summarize|summarise|outline"
+    r"|walk\s+me\s+through|advise|help\s+me)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_advice_imperative(text: str, lowered: str) -> bool:
+    """True for imperative advice/explanation requests that must reach the model.
+
+    Deliberately conservative: every structured carve-out wins over this check, so
+    an imperative that is really a lookup ("list my files", "give me jobs in
+    Dubai", "show my applications") stays on its deterministic handler. Only
+    messages that survive all of those are treated as reasoning work.
+    """
+    if not _ADVICE_IMPERATIVE_RE.search(lowered):
+        return False
+    # Structured intents keep priority — never steal a deterministic lookup.
+    if _is_file_list_question(text):
+        return False
+    if _is_application_status_question(lowered):
+        return False
+    if _is_imperative_job_request(lowered):
+        return False
+    if _LISTING_REQUEST_STRONG_RE.search(lowered) or _LISTING_REQUEST_WEAK_RE.search(lowered):
+        return False
+    return True
+
+
 def _looks_like_question(text: str) -> bool:
     """True for the same question-shaped signals `is_open_ended_question` uses.
 
@@ -283,4 +329,33 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
     if first_raw in _ARABIC_OPENING_TOKENS:
         return True, f"arabic_token:{first_raw}"
 
+    # Imperative advice/explanation/comparison requests are reasoning work, not
+    # lookups. Checked LAST so every structured carve-out above already returned:
+    # only messages that no deterministic handler claimed can land here.
+    if _is_advice_imperative(text, lowered):
+        return True, ADVICE_IMPERATIVE_REASON
+
     return False, "ok"
+
+
+def is_advice_imperative_message(message: str) -> bool:
+    """True ONLY for messages newly routed to reasoning by the imperative-advice
+    branch — i.e. exactly the set whose classification this change altered.
+
+    Transport decoupling: correcting the SEMANTIC decision ("this needs the
+    model") must not simultaneously change the TRANSPORT decision ("this is safe
+    to stream"). ``should_stream_ai`` derives eligibility from the same gate, so
+    without this predicate the semantic fix would silently divert these prompts
+    onto ``call_openai_stream`` as a side effect. That path bypasses the
+    whole-text post-processing in ``respond()`` (``_preserve_ai_message``
+    blocked-question filtering and promise-only detection/substitution), so the
+    safety pass would be skipped for exactly the traffic we just started sending
+    to the model. These classes therefore stay BUFFERED here; enabling streaming
+    for them is a separate, deliberate change.
+
+    Precise by construction: a message that already qualified for any other
+    reason (question mark, opening token/phrase) returns that reason instead, so
+    this predicate is a guaranteed no-op for every previously-eligible message.
+    """
+    is_open, reason = is_open_ended_question(message)
+    return is_open and reason == ADVICE_IMPERATIVE_REASON

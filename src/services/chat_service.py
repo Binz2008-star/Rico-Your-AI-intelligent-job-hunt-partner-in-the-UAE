@@ -158,6 +158,15 @@ def should_stream_ai(ctx: RicoSessionContext, message: str, profile: Any | None)
     from src.rico.intent.gates import is_explicit_job_listing_request
     if is_explicit_job_listing_request(message):
         return False
+    # Transport hold: imperative advice requests are model-bound (semantic fix)
+    # but stay BUFFERED. The streaming branch skips the whole-text
+    # post-processing in respond() — _preserve_ai_message blocked-question
+    # filtering and promise-only detection — so newly model-bound classes must
+    # not be diverted onto it as a side effect of correcting the semantics.
+    # Enabling streaming for them is a separate, deliberate change.
+    from src.rico.intent.gates import is_advice_imperative_message
+    if is_advice_imperative_message(message):
+        return False
     decision = _intent_router.route(
         message=message,
         user_id=ctx.user_id,
