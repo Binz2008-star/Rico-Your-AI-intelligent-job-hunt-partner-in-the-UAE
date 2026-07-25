@@ -1,173 +1,160 @@
 # Project Status — Rico AI
 
-> **Mandatory control panel. Every Claude, Windsurf, Codex, Devin, Lovable, ChatGPT, or other agent must read this file before planning or writing.**
+> **Mandatory control panel.** Every agent must read this file before planning or writing.
 >
-> Live GitHub `main`, open PR heads, CI, deployed `/version`, and production smoke evidence override stale prose. If this file conflicts with live state, implementation stops until the control plane is reconciled.
+> Live GitHub `main`, exact PR heads, CI, Vercel/Render deployment evidence, Neon state, and production smoke evidence override prose. When this file conflicts with live evidence, stop implementation and reconcile this file first.
 
-## Reconciliation note (2026-07-23, later same day)
+## Document contract
 
-Superseding the "later same day" note below: the 3 open PRs that note
-described as "awaiting owner review" (`#1347`, `#1348`) plus this
-reconciliation PR itself (`#1349`) were all reviewed and merged by the
-owner's explicit direction the same day, alongside two more that opened in
-the interim — `#1350` (test-fixture fix) and `#1346` (claude-md-best-practices
-tooling install, which also carried a root `CLAUDE.md` split into
-`CLAUDE.md` + scoped `src/CLAUDE.md` + `apps/web/CLAUDE.md` + `docs/env-vars.md`,
-run via that plugin's `/refactor-claude-md` skill). **Zero open PRs remain**
-as of this note. Post-merge production verification done directly (not just
-CI): Render `deploy-render.yml` succeeded on the final merged SHA; live
-`GET /version` and `GET /health` both confirmed; a live
-`POST /api/v1/rico/chat/public` smoke call returned a normal DeepSeek
-response (`success: true`) — the #1347/#1348 chat-logic changes are
-confirmed live and functioning, not merely merged.
+- **Why it exists:** one current, evidence-backed operating snapshot for Rico.
+- **Update when:** `main`, production, active ownership, launch blockers, or priority order changes.
+- **Source of truth:** this file for current control state; `AI_WORKSPACE/DECISIONS.md` for binding decisions; `AI_WORKSPACE/TASKS.md` for task-level continuity.
+- **Owner:** Rico owner, with the acting CTO/session responsible for evidence-backed reconciliation.
+- **History:** prior snapshots remain preserved in Git history. This file intentionally keeps current truth ahead of historical narrative.
 
-## Reconciliation note (2026-07-23)
+## Reconciliation — 2026-07-25
 
-This file was last verified 2026-07-18 and had gone stale — it still described
-a "containment" freeze and listed 6 open PRs, none of which were actually
-open anymore (3 merged, 3 closed; verified individually via `gh pr view`
-below). Reconciled against live `main`, live open PRs, and live Render
-`/version` on 2026-07-23. **The old containment posture (2026-07-16) is
-superseded** — see `DEC-20260723-001` below, the current binding priority
-order.
+The previous snapshot said `main=45fa80c4` and zero open PRs. Both claims were stale. This reconciliation is based on direct GitHub, Vercel, Neon, CI, production screenshots, and owner-provided backend logs.
 
-## Verified control snapshot
+### Verified control snapshot
 
-| Field | Current value |
+| Field | Current verified value |
 | --- | --- |
 | Repository | `Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE` |
-| Snapshot date | 2026-07-23 (later same day) |
-| Live-main baseline | **`45fa80c4`** (fetched from `origin/main` 2026-07-23; agents must re-fetch and confirm the exact current SHA at session start — do not trust this number after today) |
-| Deployed (Render) | Confirmed matching — `GET /version` returned `commit=45fa80c47b2a885bf9680e9f92f978a13aa3c5ad`, `started_at=2026-07-23T18:49:50Z` (fresh boot, same session). `GET /health` = `ok`, all job providers configured/not degraded. Live `POST /api/v1/rico/chat/public` smoke returned a normal DeepSeek response. Backend and `main` are in sync and functionally verified. |
-| Governing strategy | **`DEC-20260723-001`** (`AI_WORKSPACE/DECISIONS.md`) — CEO verdict, trust-first commercial strategy: **no new features until trust/execution reliability is fixed.** #1336 (CV/search-integrity) is explicitly named as a Days 0–30 priority, not just an engineering preference. Full text: `docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md`. |
-| Merged 2026-07-23 (10 commits since the 2026-07-18 `96464b8e` baseline — see table below) | `#1343` #1336 PR1 (fail-closed city write-boundary), `#1345` Arabic CV-status-text city rejection, `#1340` #1075 atomic draft decisions, `#1341` #1096 billing quota fail-open→fail-closed, `#1342` #1074 atomic checkout attribution, `#1338` #1097 canonical safe job URLs, `#1339` #1095 scanner-safe email verification, `#1138` #1072 per-user `auth_version` JWT invalidation, `#1230` image-attachment CV-quota exemption, `#1344` DEC-20260723-001 doc. |
-| Open PRs (verified via `gh pr list --state open`, 2026-07-23 later same day) | **Zero.** `#1347`, `#1348`, `#1349` (this reconciliation), `#1350`, and `#1346` all merged same day, owner-approved, in that order. Merge order chosen to land docs-only work first, then the two `rico_chat_api.py`-touching fixes sequentially (re-checked mergeability between them — no conflict), then the two remaining draft PRs after un-drafting. |
-| #1336 status | **PR1 merged+deployed** (`956130d1`→`#1343`). **PR2 merged+deployed** (`#1348`, 2026-07-23) — CV/search-continuity defects from a new authenticated production transcript (role↔location bleed, unrecognized Arabic execute/broaden commands, CV-status-question routing), verified via the full transcript-replay regression test plus live production chat smoke. A related but separate fix landed same-day: `#1345` (Arabic CV-status text added to the city-rejection token bank in `city_validation.py` — complementary to, not a duplicate of, `#1348`'s role-noun rejection). |
-| #1314 status | All four known recurrences of the typed-YES pending-confirmation loop are now fixed on `main`: two earlier (`_resolve_pending_intent`, `answer_conversationally`), two more in `#1347` (acknowledgement-replies fast path, `follow_up_confirmation` legacy-intent dispatch) — merged+deployed 2026-07-23. |
-| CLAUDE.md tooling (`#1346`) | Merged 2026-07-23 — installs the `claude-md-best-practices` plugin (`.claude/skills/refresh-guidelines,refactor-claude-md,scaffold-claude-md`), generates `docs/CLAUDE-MD-SOTA.md`, and splits root `CLAUDE.md` (498→349 lines) into root + scoped `src/CLAUDE.md` (backend-internal detail) + `apps/web/CLAUDE.md` (frontend-internal detail) + `docs/env-vars.md` (env-var rationale). Root `CLAUDE.md` deliberately kept over the generic 300-line SOTA budget: `AGENTS.md` promises non-Claude-Code agent tools (Windsurf, Codex, Devin, Lovable) that auth rules/safety rules/AI provider routing live in root, and those tools may not support Claude Code's on-demand subdirectory-CLAUDE.md loading — verified this explicitly before moving anything, kept those sections in root unchanged. No application/runtime code touched. |
-| Billing (Paddle) | Merged (#1008 + follow-ups), **still NOT activated in production** (`NEXT_PUBLIC_BILLING_MODE=""`). Single plan "Rico Monthly," USD 21.50/mo authoritative. `#1341`/`#1342` (2026-07-23) hardened quota fail-closed behavior and checkout-attribution atomicity — architecture debt (hardcoded fallbacks) not yet addressed in a dedicated PR. |
-| Design system | Atelier V3 remains the sole production system (`DEC-20260716-001`). `#1062` (MATCH job cards) is now **merged** — no longer held. |
-| Gmail M0 (`#1055`) | **Merged** (previously listed as draft/held under containment). Flag/activation state (`RICO_ENABLE_GMAIL_SYNC`) **not independently re-verified in this pass** — do not assume live-active without checking Render env directly. |
-| Memory Engine M1 (`#1025`) | **Closed, not merged.** Superseded in direction (as the old snapshot itself anticipated) — do not resume from the closed branch without owner direction. |
-| Journey state (`#965`) | **Merged** (previously listed as a stale "close candidate" draft). |
+| GitHub `main` | `e26548bb8d8bdb442de3d1b594e987eabb86d728` |
+| Latest merged work | `#1385` rate-limit configuration (`da5339c`), `#1387` first log-privacy sweep (`989f774`), `#1386` test-environment isolation (`e26548b`) |
+| Vercel production | READY on `main@e26548b`; no 5xx or warning/error runtime logs found in the inspected six-hour window |
+| Render backend | Owner-verified at `989f774`; `#1386` is test-only, so a different backend runtime SHA is expected rather than deployment drift |
+| Neon production | Project ready. CV preview branch exists and has **zero schema diff** from production; the current CV work requires no migration |
+| Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired |
+| Current product P0 | One canonical CV upload/review/confirm/save journey across `/upload`, `/profile`, and `/command` |
+| Current CI/security P0/P1 | Make privacy ratchet sound, remove unintended external network from tests, then move toward a trustworthy full-suite gate |
+| Owner-only operations | Hosting account continuity/billing and database protection posture require owner review; sensitive configuration details are intentionally not recorded in this public repository |
 
-## Current priority (DEC-20260723-001 — supersedes the 2026-07-16 containment plan below)
+## Production evidence that changes the plan
 
-```text
-GOVERNING RULE: no new features until trust + execution reliability is fixed.
-Trust engine is the moat: no invented jobs, no false execution claims, one
-canonical active CV, consistent profile state, explicit approval before
-external actions.
+### CV upload is parsed but the product journey is split
 
-Days 0–30 (current window, 2026-07-23 start): close #1336 slices (PR1 done,
-PR2 open #1348), canonical CV inventory, eliminate ungrounded generation,
-fail-closed billing/quota (in progress: #1341/#1342 merged), atomic checkout
-attribution (#1342 merged), analytics, smoke tests, AI_WORKSPACE sync
-(this reconciliation).
+Production evidence proves the backend parser can read the uploaded PDF and produce a good preview. The failure is the product state machine:
 
-Days 31–60: founder cohort of 50-100 users proves payment.
-Days 61–90: repeatable acquisition — only after retention is proven.
+1. `/upload` can create a pending preview but historically retained only client state and discarded the authoritative handoff.
+2. `/profile` reports upload success before confirmation and reloads an empty document inventory.
+3. `/command` can render the preview while the generic chat path answers from different context and asks the user to upload again.
+4. The same real file was uploaded twice because the first pending operation was not recovered across surfaces.
 
-Full text and scale/margin gates: docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md
-Decision record: AI_WORKSPACE/DECISIONS.md → DEC-20260723-001
-```
+**Decision:** do not patch each surface independently. One server-authoritative pending-artifact contract must drive all three entry points. Explicit confirmation-before-save remains binding.
 
-### Follow-ups DEC-20260723-001 itself flagged, not yet done
+### CV work currently in flight
 
-- `AI_WORKSPACE/CURRENT_STATE.md` narrative is also stale (last header
-  2026-07-18) — this reconciliation only covers `PROJECT_STATUS.md`
-  (this file). A separate pass is still needed for `CURRENT_STATE.md`,
-  `ROADMAP`, and `TASKS.md` to fully agree.
-- Concrete Free/Pro/Premium pricing points — owner decision still pending;
-  implemented billing remains single-plan Rico Monthly USD 21.50.
+- Branch: `claude/cv-pending-artifact-confirm`
+- Observed head: `c3effbae02a0e2f8ae885b6a32a408b0bf817164`
+- Vercel preview: READY
+- Neon preview branch: READY; schema diff from production is empty
+- No GitHub PR opened yet
+- Current branch comparison: broader than the reported four-commit summary; it must be audited before PR creation
+- Known blocker: the branch changes Command/Vault/backend state handling but does not yet prove the `/profile` upload entry uses the same orchestration
+- Functional preview smoke is still unverified; static route HTTP 200 is not acceptance evidence
 
-## Superseded — 2026-07-16 containment plan (historical, do not resume from this)
+**Required acceptance before merge:**
 
-Everything below this line was the active plan as of 2026-07-16 evening. All
-of its numbered steps completed or were overtaken by events; it is kept only
-as history. **Do not treat any of it as current instruction** — see
-`DEC-20260723-001` above instead.
+- one upload from each entry point produces the same server-backed pending contract;
+- no `user_documents` row before confirmation;
+- pending state survives navigation and refresh;
+- chat never contradicts a visible preview or asks for a duplicate upload;
+- `pending`, `already_saved`, `expired`, `absent`, and `unavailable` remain distinct;
+- confirmation creates exactly one canonical document and is idempotent;
+- My Files and Profile refresh from server read-back;
+- no identity/security tests are weakened;
+- authenticated preview smoke uses non-personal test data before production deployment;
+- the owner's real CV is uploaded only once after merge, deploy, and `/version` verification.
 
-```text
-ACTIVE NOW (owner containment plan, 2026-07-16 evening — sequence, do not skip)
-1. SECURITY CONTAINMENT (owner action): rotate ALL credentials in the local
-   `rico-job-automation-api.env` — status not re-verified in this pass.
-2. SOURCE-OF-TRUTH UNIFICATION — superseded by this 2026-07-23 reconciliation.
-3. FREEZE new-integration activation — LIFTED. #1062, #1055, #965 all merged
-   since; #1025 closed. DEC-20260723-001 is the current governing rule.
-```
+## Open PR occupancy — verified 2026-07-25
 
-## Open PR control (live, 2026-07-23 later same day)
+| PR | State | Ownership / decision |
+| --- | --- | --- |
+| `#1388` differential log-privacy ratchet | Draft, CI green | **Blocked.** CTO review comment records three correctness/governance findings; keep Draft until resolved |
+| `#1382` account-data routing | Draft | Stale base and overlaps trust-routing work; rebase and re-audit after current P0 |
+| `#1374` differentiation proposal | Draft, docs-only | Defer; strategy already governed by trust-first decision |
+| `#1371` design + production polish | Draft, currently non-mergeable | Mixed concerns and stale; split or close after P0 |
+| `#1370` public pricing | Ready | Defer under feature freeze and unresolved billing activation/operations |
+| `#1362` Command prompt hints | Draft | Cosmetic; defer until trust P0 closes |
+| `#1359` warnings palette + theme persistence | Ready | Mixed objectives; split/rebase/review later |
 
-**Zero open PRs.** `#1348`, `#1347`, `#1349`, `#1350`, `#1346` all merged same day with explicit owner approval ("merge/PRs all of them ... take the lead on that as CTO"), after an individual per-PR review (scope, CI status, mergeability, diff read) — not a blind bulk merge. Detail in the reconciliation note above.
+An open PR is not permission to merge. Exact-head review, CI, overlap, production impact, rollback, and documentation must be re-verified before every merge.
 
-An open PR is not permission to merge or resume it without the owner. This still applies to any PR opened after this snapshot.
+## #1388 — merge blockers
 
-## Launch path (carried forward from the 2026-07-18 snapshot — NOT re-verified in this pass)
+The current head is green, but green CI does not prove the ratchet is sound.
 
-The previous snapshot tracked these as still-open. This reconciliation did
-**not** independently verify their current state — do not assume any of them
-are done without checking live evidence first (Paddle dashboard, `gh`,
-production smoke):
+1. **Rule weakening:** HEAD rules are used to scan both base and head. Weakening the rule vocabulary can blind both scans. Required design: base-rule comparison to prevent weakening plus head-rule comparison to activate new protections.
+2. **Zero-debt end state:** a base scan with zero findings must be valid, not `CANNOT RUN`, provided source discovery and strict parse/decode checks succeeded.
+3. **Truthful governance:** major action tags are not immutable SHA pins; documentation must not claim pinned refs unless exact SHAs are used. Detection and Required-check merge enforcement must be stated separately.
 
-```text
-[unverified] billing verification — full payment/webhook/entitlement test on
-                                     isolated staging track; then owner
-                                     decision on live activation
-[unverified] architecture debt      — remove hardcoded Paddle fallbacks,
-                                     fail-closed on missing env vars
-                                     (#1341/#1342 2026-07-23 improved
-                                     fail-closed behavior for quota/checkout
-                                     specifically — may partially cover this)
-[unverified] invitations            — branded secure email invitations
-[unverified] launch smoke           — full production smoke after billing
-                                     verification
-```
+No call-site remediation belongs in this mechanism PR.
 
-## Mandatory session behavior
+## Newly verified infrastructure and test risks
 
-Every session follows `AI_WORKSPACE/DAILY_AUTOPILOT.md` after the canonical `OPERATING_RULES.md` boot sequence.
+### Neon
 
-It must:
+- CV preview schema matches production exactly; no migration is justified for the current CV fix.
+- Preview-branch accumulation exists across old branches. Do not mass-delete blindly. First produce a dry-run inventory mapped to open PRs/deployments, TTL, and branch ownership, then remove only proven-orphaned branches.
+- Production branch protection and connection controls require an owner-only settings review. Exact posture is not published here.
 
-1. complete the canonical document read order;
-2. fetch exact live `main` (do not trust the SHA in this file beyond today);
-3. inspect open PR ownership and overlap — verify each listed PR's actual state via `gh pr view`, not just this table;
-4. build an occupancy table;
-5. declare authority role and activity pass;
-6. choose the highest-priority safe unowned task, weighted by `DEC-20260723-001` (reliability/trust work over new features);
-7. claim the task before writing;
-8. avoid generic "what would you like me to do?" openings when repository state provides the answer.
+### Vercel
+
+- Current production and the CV/ratchet previews are READY.
+- No inspected production 5xx/error/warning events were found in the scoped runtime-log query.
+- Static page success is not a functional smoke test for authenticated CV APIs.
+- CV preview build has one framework warning about edge runtime disabling static generation for a page; it is not currently a build failure but should be attributed before merge if the changed route caused it.
+
+### Test network isolation
+
+Measured full-suite evidence found unintended outbound calls to job providers and integration APIs. Some tests remain green even when those calls fail, so they generate traffic without test signal. A third-party Indeed adapter also disables TLS verification on a reachable path.
+
+Required sequence:
+
+1. block external TCP/HTTP by default while temporarily allowing DNS needed by SSRF tests;
+2. mock JobSpy/Bayt/Telegram/Hugging Face at service boundaries;
+3. make link-verifier DNS deterministic with an injected resolver;
+4. then block external DNS too;
+5. isolate any deliberate live integration into a scheduled/manual non-blocking workflow;
+6. resolve the known Arabic test flake independently — network evidence shows it performs no external calls;
+7. run the complete suite as a shadow gate before making it Required.
+
+## Current execution order
+
+1. **Owner:** resolve hosting account continuity/billing warning.
+2. **CV P0:** finish one canonical CV orchestration; audit branch commit history and add the missing Profile entry-point behavior before opening a Draft PR.
+3. **Privacy gate:** fix the three `#1388` blockers; keep Draft and rerun exact-head checks.
+4. **Test trust:** create the external-network isolation PR, then deterministic DNS PR, then flake investigation.
+5. **Log privacy:** after the ratchet is sound and Required, continue remediation in functional batches plus a separate runtime egress sanitizer.
+6. **Database operations:** review protection settings privately and create a non-destructive preview-branch cleanup inventory.
+7. **Backlog:** rebase, split, close, or defer older PRs; do not merge cosmetic/new-feature work ahead of trust P0.
+8. **Production acceptance:** full authenticated EN/AR/mobile smoke only after exact deployment SHAs are known.
 
 ## Stop conditions
 
 Stop and report instead of guessing when:
 
-- live state conflicts with this file;
-- another writer owns the objective or branch (this repo has repeatedly shown concurrent agents committing to the same branch in the same session — check `git reflog` / `git log` for commits you didn't make before assuming a clean state);
-- an unclassified PR overlaps the proposed files;
-- work expands into billing, auth, email, database, deployment, or production smoke outside the approved task;
-- a migration number or contract conflicts;
-- production mutation, merge, deploy, or opening access is required without owner approval;
-- the session approaches a context/tool/time limit without updating continuity.
+- another writer owns the same objective or files;
+- a branch contains commits not explained by its continuity record;
+- a PR scope expands across unrelated objectives;
+- a schema diff appears where no migration was approved;
+- a check is green only because the relevant test is outside CI;
+- production mutation, billing, access-control, secret, migration, merge, or deployment action lacks explicit owner authorization;
+- a UI claim is not derived from a current server read;
+- a user-data workflow would require another real upload merely to test an unverified fix.
 
 ## Next exact action
 
 ```text
-Per DEC-20260723-001, Days 0-30 reliability sequence:
-1. DONE (2026-07-23 later same day): #1348 and #1347 merged + deployed +
-   production-smoke-verified. #1349 (this file's reconciliation) and #1350
-   (test-fixture fix) also merged. #1346 (CLAUDE.md tooling/refactor) merged
-   — docs/tooling only, no runtime change.
-2. Canonical CV inventory work (named in DEC-20260723-001, not yet started as
-   a tracked PR as of this snapshot) — still open.
-3. Eliminate ungrounded generation elsewhere in the router (same defect class
-   as #1336; #1348 fixed the transcript-specific instances, not necessarily
-   all instances repo-wide) — still open.
-4. CURRENT_STATE.md / TASKS.md reconciliation — DONE in this same pass (see
-   their 2026-07-23 headers/entries). ROADMAP still not reconciled.
-5. Full production smoke gate (CV, login persistence, attachments,
-   applications, billing sandbox, AR + mobile) — still not started beyond the
-   narrow #1347/#1348 chat smoke done in this pass; do not assume broader
-   coverage without re-verifying.
+CV owner: audit `e26548b..c3effba`, explain every commit, wire `/profile` into the
+same server-authoritative pending contract, run backend baselines against current
+main, and open a Draft PR only when the three entry points share one state machine.
+
+Privacy owner: address the three blocking findings recorded on #1388 and keep the
+PR Draft.
+
+No production merge, deploy, database mutation, real-CV upload, or bulk Neon
+branch deletion is authorized by this reconciliation PR.
 ```
