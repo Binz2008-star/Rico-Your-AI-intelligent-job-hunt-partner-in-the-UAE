@@ -124,3 +124,70 @@ Revert the PR. No deploy or migration involved.
 
 1. Owner review + merge of the test-repair PR (branch above).
 2. Owner decision on F1/F2 removal PR and on adding the focused test set to CI (F4).
+
+---
+
+# Control dashboard — 2026-07-25 (evening)
+
+Appended to the latest dated handoff rather than opened as a new file, so the
+control plane keeps one place to look. Everything below was verified from the API
+when it was written.
+
+Lanes are referred to by alias only. This repository is public: no session
+identifiers, no session or browser links, no personal data, and no per-account
+detail appear here.
+
+## Lane state
+
+| Lane | Objective | Lease | State |
+| --- | --- | --- | --- |
+| `L1` | Identity ownership | `WRITING` | **Blocked by the owner** on five conditions; nothing merges ahead of it |
+| `L2` | CV and documents | `WRITING`, sole writer | Active. Quota ruling recorded: a repeated confirm of the same server-verified saved artifact is an idempotent retry and consumes no quota |
+| `L3` | Routing | none | **Closed and merged.** Deploy fired and verified |
+| `L4` | Workflow-trigger containment checker | `WRITING` | Must report which existing PR heads a stricter checker would break, before pushing further |
+| `L5` | Documents domain contract | `WRITING` | Direction approved. Traceability must map to a roadmap that exists in the workspace |
+| `L6` | Review | none | Read-only. Holds no lease and pushes nothing |
+| `L7` | Docs-only design extraction | `WRITING` | Reference material only; touches no production path. Its superseded source is closed by the owner, not by the lane |
+
+## Control facts
+
+- `main` and the deployed backend agree on the same commit.
+- Backend health reports all three job providers healthy and the reasoning
+  provider non-degraded.
+- Production smoke passed three of three classes: an ownership-qualified account
+  question answered from the database with reconciled counts; a CV file-list
+  question answered deterministically from the file store; and a general
+  documents question answered by the model without listing any personal file.
+  **Evidence class: owner-verified in a browser session through the proxy, with
+  no automated artifact.** It is real evidence of live behaviour and it is not a
+  regression gate.
+- Two merges this cycle. One touched no runtime path and correctly fired no
+  deploy; the other changed request handling, fired a deploy, and was verified.
+
+## What this reconciliation corrected
+
+A control plane that hides its own corrections cannot be trusted, so the drift is
+recorded rather than quietly overwritten:
+
+- One lane carried a branch name without its actual suffix.
+- The same lane carried an expected head that is not the branch tip; a lease check
+  against it would have compared the wrong commit and reported agreement that did
+  not exist.
+- One lane carried no PR number at all.
+
+Each is now the live value.
+
+## Standing rule that came out of this cycle
+
+Two sessions wrote to one branch concurrently. Nothing was lost — the collision
+was resolved by merge — but the outcome was luck, not design. The **Writer Lease
+Protocol** in `AI_WORKSPACE/OPERATING_RULES.md` is the mechanism that replaces the
+bare instruction: one `WRITING` lease per branch, verified against the remote
+before every push, and an unexpected commit means stop and report rather than
+overwrite.
+
+## Next action
+
+Per lane: read the continuity block in `AI_WORKSPACE/TASKS.md`, confirm the lease
+is yours, fetch the remote, and compare the remote head against the expected head
+before any push. No merge and no deploy is authorized by this handoff.

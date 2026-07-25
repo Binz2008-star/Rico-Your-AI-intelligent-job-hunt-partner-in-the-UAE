@@ -38,6 +38,58 @@ Use one role per pass. Do not mix planning, coding, reviewing, and deployment ve
 - Do not include unrelated formatting, renames, refactors, or generated churn.
 - If a branch contains unrelated files, stop and report the scope issue before merging.
 
+## Writer Lease Protocol
+
+"One writer per branch" is a rule that has already been broken once, because it
+was stated without a mechanism. Two sessions wrote to the same branch at the same
+time; the collision was resolved by merge and nothing was lost, but that outcome
+was luck rather than design. The lease is the mechanism.
+
+### The lease
+
+**Exactly one `WRITING` lease exists per branch.** It is recorded in that lane's
+continuity block in `AI_WORKSPACE/TASKS.md` and carries seven fields:
+
+| Field | Meaning |
+| --- | --- |
+| Lane alias | `L1` … `L7` — the stable identifier for the lane |
+| Branch | The exact branch name, as it exists on the remote |
+| PR | The pull request number, once one is open |
+| Base SHA | The commit the branch was taken from |
+| Expected remote HEAD | The commit the holder believes is on the remote right now |
+| Lease state | `WRITING`, `RELEASED`, or `BLOCKED` |
+| Last confirmed | When the holder last verified all of the above against the API |
+
+### Before every push, in this order
+
+1. **Confirm you hold the lease.** Not that you held it earlier in the session — that you hold it now.
+2. **Fetch the remote.**
+3. **Compare the remote head against the expected remote HEAD.**
+
+**Any unexpected commit means stop and report. Never overwrite.** An unexpected
+commit is information — someone else is working, or the branch moved for a reason
+you do not yet know — and discarding it destroys the one piece of evidence that
+would explain it. Integrate it or hand back; do not erase it.
+
+A branch name is not a lease. Being the last session to touch a branch is not a
+lease. Only the recorded `WRITING` state is a lease.
+
+### Transfer
+
+Ownership transfers **only** after the holder records `RELEASED`. A lease that has
+gone quiet has not been released — an inactive holder still holds it, and taking
+it silently is exactly the collision this protocol exists to prevent. Ask the owner
+to reassign it.
+
+### Force-push
+
+- **Never where ownership is uncertain or shared.**
+- `--force-with-lease` only, and only on the lane's own branch.
+- **Never on `main`**, under any circumstance, for any reason.
+
+`--force-with-lease` protects against a remote that moved; it does not establish
+that the branch is yours to rewrite. Both conditions must hold.
+
 ## Product Generalization Rule
 
 Rico is a global SaaS product for all users. Smoke-test findings are evidence of product behavior; they are not product logic.

@@ -27,28 +27,33 @@ If any source disagrees, do not guess from conversation history. Declare `REVIEW
 
 ## Current execution lock
 
-```text
-ACTIVE NOW (2026-07-16 evening; main 4194736f+ — see PROJECT_STATUS.md for detail)
-POSTURE = CONTAINMENT. Only security + docs/reconciliation writing is allowed;
-feature/design/integration writing is FROZEN. Sequence (do not skip):
-1. #1068 — finish the source-of-truth reconciliation (docs only).
-2. Owner: rotate ALL credentials in the local rico-job-automation-api.env
-   (treat as exposed); build a fresh Paddle env from .env.example. Never deploy
-   from the stale Stripe file.
-3. #1066 (retire old Stripe tooling + stale Render env) + #1067 (paid-plan
-   promises vs implemented limits) — after secret rotation.
-Then unfreeze: finish Atelier + integrations as small provable PRs.
+> **The 2026-07-16 containment lock that stood here is SUPERSEDED and must not be
+> acted on.** It named `main 4194736f+`, a credential-rotation sequence, and PRs
+> `#1068`, `#1066`, `#1067`, `#1062`, `#1055` and `#1025` — all long resolved or
+> reprioritised. It is removed rather than archived in place, because a stale lock
+> sitting under a "Current" heading is worse than no lock: a cold session reads it
+> as an instruction. The Git history holds it if it is ever needed.
 
-FROZEN / HELD (do NOT merge or activate without owner review):
-- #1062 Atelier job cards (CI-green; owner logged colour/AR/test gaps)
-- #1055 Gmail M0 (Draft, flag OFF, 3 P1 blockers — TASK-20260716-001)
-- #1025 Memory M1 (Draft, flag OFF — TASK-20260716-002)
+**There is no static execution lock in this file any more, by design.** A lock
+written here goes stale the moment the work moves, and this file is read first by
+every session — so it is the worst place to keep a fact that changes daily.
 
-DONE (in main): /command is full Atelier (paper + Atelier at Night, editorial
-serif replies) — DEC-20260716-001 merged; the old "Command Obsidian" acid-lime
-is retired. Slice-4a composer #1028 merged long ago and is superseded by the
-full Atelier /command. Merges, deploys, Neon, billing activation stay owner-gated.
-```
+Read the live control state instead, in this order:
+
+1. **`AI_WORKSPACE/PROJECT_STATUS.md`** — the verified control snapshot: current
+   `main`, deployed `/version`, what merged and whether it deployed, the active
+   PR table with heads verified from the API, and the merge order.
+2. **The lane continuity blocks in `AI_WORKSPACE/TASKS.md`** — one block per
+   active lane (`L1`–`L7`), each carrying its branch, PR, base SHA, expected
+   remote head, lease state, allowed and forbidden files, blocker, stop condition
+   and next executable action.
+3. **`AI_WORKSPACE/OPERATING_RULES.md` → Writer Lease Protocol** — before you push
+   anything, confirm you hold the lease, fetch the remote, and compare the remote
+   head against the expected head. An unexpected commit means stop and report.
+
+If any of those disagree with GitHub or the deployed `/version`, **the live
+evidence wins and the workspace is reconciled first.** Do not begin implementation
+on top of a contradiction.
 
 ## Required daily opening
 

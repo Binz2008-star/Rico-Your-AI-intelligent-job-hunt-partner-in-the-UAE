@@ -76,6 +76,102 @@ existing entry if one already exists for the task, never duplicating it)
 before continuing further — see "Session continuity / limit-approach
 handoff" in `AGENT_OPERATING_MODEL.md`.
 
+## Lane continuity blocks — verified 2026-07-25 (evening)
+
+One block per active lane. **These are the authoritative per-lane records**; the
+dated task entries below remain as history. Every SHA here was verified from the
+API when this section was written — see the Rule of authority in
+`AI_WORKSPACE/PROJECT_STATUS.md` and the Writer Lease Protocol in
+`AI_WORKSPACE/OPERATING_RULES.md`.
+
+Update the block for your lane. Never duplicate one.
+
+### L1 — identity ownership
+
+- Lane alias: `L1`
+- Branch: `fix/identity-ownership-resolution`
+- PR: `#1398` (Draft)
+- Base SHA: `e433c7d`
+- Expected remote HEAD: `63749d3d`
+- Lease state: `WRITING`
+- Allowed files: identity resolution and its repository layer, plus that lane's tests
+- Forbidden files: the CV/documents surfaces (L2), the documents domain contract (L5), workflow configuration (L4), and `AI_WORKSPACE/CV_PIPELINE_STATE.md`
+- Tests: the lane's own suites, plus exact-head CI
+- Blocker: **BLOCKED by the owner.** All five must hold before it moves:
+  1. the typed re-raise in `upsert_profile` has landed;
+  2. the no-mirror-success and HTTP 409 tests pass;
+  3. trusted-field source drift is closed;
+  4. a fresh independent review is complete;
+  5. exact-head CI is green on the new SHA.
+- Stop condition: do not push, rebase or re-open the objective while any of the five is unmet; report instead
+- Next executable action: satisfy the five conditions in order, then request re-review — nothing merges ahead of this lane
+
+### L2 — CV and documents
+
+- Lane alias: `L2`
+- Branch: `claude/cv-pending-artifact-confirm`
+- PR: `#1389` (Draft)
+- Base SHA: `e433c7d`
+- Expected remote HEAD: `878c5944` (recorded as "`7e707c8` or newer"; live is `878c5944`)
+- Lease state: `WRITING` — **sole writer.** Two sessions wrote to this branch concurrently; the collision was resolved by merge with nothing lost, and the lease now sits with one holder. This lane is the reason the Writer Lease Protocol exists
+- Allowed files: the CV/documents pipeline, its three upload entry points, and its own tests
+- Forbidden files: identity resolution (L1), the documents domain contract (L5), workflow configuration (L4)
+- Tests: the lane's backend suites, the frontend suite, and the real-Postgres integration job
+- Owner ruling, binding: **a repeated confirm of the same server-verified saved artifact is an idempotent retry and consumes no quota.** It is not a new purchase, and it must not be refused
+- Blocker: none recorded
+- Stop condition: stop on an unexpected commit on the branch, or on any change that would make a confirm non-idempotent
+- Next executable action: continue to green on the exact head; do not merge
+
+### L4 — workflow-trigger containment checker
+
+- Lane alias: `L4`
+- Branch: `claude/workflow-guard-pr-target`
+- PR: `#1400` (Draft)
+- Base SHA: `e433c7d`
+- Expected remote HEAD: `0548e424`
+- Lease state: `WRITING`
+- Allowed files: the workflow-security checker and its own tests
+- Forbidden files: everything owned by L1, L2, L5 and L7; `src/`
+- Tests: the checker's own suite, plus exact-head CI
+- Blocker: **must report which existing PR heads a stricter checker would break, before pushing further.** A checker that is tightened without that list turns every open lane red at once and the cause is not visible from the failure
+- Stop condition: do not push a stricter rule until the breakage list is reported and accepted
+- Next executable action: produce the breakage list against the current open PR heads, then report
+
+### L5 — documents domain contract
+
+- Lane alias: `L5`
+- Branch: `claude/arch-v2-phase1-contract-6mqzlv` — note the suffix; a shorter name was previously carried and is wrong
+- PR: `#1399` (Draft)
+- Base SHA: `e433c7d`
+- Expected remote HEAD: `3705d1eb` — previously carried as `c2a4dbf`, which is not the tip; a lane check against it would have compared the wrong commit
+- Lease state: `WRITING`
+- Allowed files: the documents domain contract and its own tests
+- Forbidden files: L1, L2, L4 and L7 territory
+- Tests: the lane's own suites, plus exact-head CI
+- Blocker: **traceability must map to a roadmap that exists in `AI_WORKSPACE/`.** A contract that traces to a document nobody can open is not traceable
+- Stop condition: stop if traceability resolves to a roadmap that is not present in the repository
+- Next executable action: bind each contract item to a roadmap entry that exists, then request review
+
+### L7 — docs-only design extraction
+
+- Lane alias: `L7`
+- Branch: `claude/design-handoffs-incoming-extract`
+- PR: `#1401` (Draft)
+- Base SHA: `e433c7d`
+- Expected remote HEAD: `d4bd5469`
+- Lease state: `WRITING`
+- Allowed files: `design-handoffs/incoming/` only
+- Forbidden files: every production path — `apps/web/`, `src/`, `migrations/`, `.github/`
+- Tests: none apply; the extracted tree is inert — nothing imports it, it is outside the Next.js app root, and no test configuration collects it
+- Blocker: none. One CI job failed on an image-registry timeout with no test executed; it needs a re-run, not a change
+- Stop condition: stop if any non-design path appears in the diff
+- Next executable action: await review. `#1371` is superseded by this PR — **the owner closes it, not this lane**
+
+### Lanes holding no lease
+
+- **L3 — routing.** `CLOSED` and merged as `e433c7d`, with the deploy fired and verified.
+- **L6 — review.** Read-only. Holds no lease and pushes nothing.
+
 ## Active tasks
 
 ### TASK-20260723-004 — CLAUDE.md best-practices tooling + full open-PR backlog merge & production verification
