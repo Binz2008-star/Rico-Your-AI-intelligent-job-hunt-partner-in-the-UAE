@@ -75,6 +75,10 @@ jobs:
             tests/test_attachment_ocr_pipeline.py \
             tests/test_uploaded_document_durable_context.py \
             tests/test_attachment_analysis_factory.py \
+            tests/test_deepseek_resilience.py \
+            tests/test_reasoning_provider_observability.py \
+            tests/test_reasoning_provider_hardening.py \
+            tests/test_sse_stream_quota_enforcement.py \
             tests/decision_regression/ \
             -v --tb=short
 
