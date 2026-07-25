@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""Differential log-privacy ratchet.
+
+Scans every module under ``src/`` in two trees — the merge base and the PR
+head — and fails when a violation exists in HEAD that does not exist in base.
+
+Why differential rather than a checked-in manifest:
+
+* it forbids NEW debt without publishing where the existing debt is;
+* it catches a swap (one site fixed, another introduced) that a numeric
+  ceiling cannot, because the new site is absent from the base set whatever
+  the total;
+* a newly added file arrives protected, since every violation in it is by
+  definition absent from base;
+* there is no stored inventory to drift out of step with the code. The code
+  plus this scanner are the only source of truth, and the unresolved
+  inventory is generated on demand rather than kept in the repository.
+
+The detection predicates are NOT reimplemented here. They are imported from
+``tests/test_1076_log_privacy.py``, which owns the two rules and their proofs:
+
+  rule 1 — a sensitive field label in a log format must receive a sanctioned
+           ``log_privacy`` helper call in that argument position;
+  rule 2 — a bare identifier naming an external identifier must not be handed
+           to a logger, whatever the format string says.
+
+This module adds only a stable DESCRIPTOR for each finding so two trees can be
+compared. Line numbers are deliberately excluded: inserting a line above a
+site would otherwise register as a new violation on every subsequent site.
+
+Exit codes: 0 clean, 1 new violations, 2 the ratchet could not run safely.
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import importlib.util
+import pathlib
+import sys
+from typing import Iterable, NamedTuple
+
+# The scanner always runs the HEAD checkout's copy of the rules against BOTH
+# trees. Loading the base tree's own rules would let a PR weaken detection and
+# still compare clean.
+_RULES_RELPATH = pathlib.Path("tests") / "test_1076_log_privacy.py"
+
+
+class RatchetError(RuntimeError):
+    """The ratchet cannot run safely — never reported as 'clean'."""
+
+
+class Finding(NamedTuple):
+    module: str      # repo-relative posix path
+    scope: str       # enclosing qualified name, stable across edits above it
+    rule: str        # which rule fired
+    name: str        # the field label or identifier involved
+
+    def describe(self) -> str:
+        return f"{self.module} :: {self.scope} :: {self.rule} :: {self.name}"
+
+
+def load_rules(repo_root: pathlib.Path):
+    """Import the rule predicates from the guard that owns them."""
+    rules_path = repo_root / _RULES_RELPATH
+    if not rules_path.is_file():
+        raise RatchetError(f"rule module not found at {rules_path}")
+    # src.log_privacy is imported at module scope by the guard.
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    spec = importlib.util.spec_from_file_location("_log_privacy_rules", rules_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for attr in (
+        "_log_calls_with_scope", "_sensitive_positions", "_is_sanctioned",
+        "_bare_name", "_rule_two_candidates", "_SENSITIVE_LABELS",
+        "_BARE_SENSITIVE_NAMES",
+    ):
+        if not hasattr(module, attr):
+            raise RatchetError(
+                f"rule module is missing '{attr}' — the ratchet and the guard "
+                f"have diverged; fix the guard rather than loosening this check"
+            )
+    return module
+
+
+def scan_file(rules, path: pathlib.Path, relpath: str) -> list[Finding]:
+    """Apply both rules to one module, yielding stable descriptors."""
+    import ast
+
+    try:
+        # utf-8-sig, not utf-8: at least one module in this repository carries
+        # a UTF-8 BOM. Python's own tokenizer strips it when compiling from
+        # disk, but a BOM left at the head of a decoded string makes
+        # ast.parse raise on line 1. Reading it as utf-8 would make the
+        # scanner fail on a file that is perfectly valid Python.
+        tree = ast.parse(path.read_text(encoding="utf-8-sig", errors="replace"))
+    except SyntaxError as exc:
+        # A tree that does not parse cannot be compared; report it loudly
+        # rather than silently contributing zero findings.
+        raise RatchetError(f"could not parse {relpath}: {exc.msg} (line {exc.lineno})")
+
+    findings: list[Finding] = []
+    for scope, node in rules._log_calls_with_scope(tree):
+        fmt = node.args[0]
+
+        # Rule 1 — sensitive field label must receive a sanctioned helper.
+        if isinstance(fmt, ast.Constant) and isinstance(fmt.value, str):
+            supplied = node.args[1:]
+            for index, label in rules._sensitive_positions(fmt.value).items():
+                if index < len(supplied) and not rules._is_sanctioned(supplied[index]):
+                    findings.append(Finding(relpath, scope, "labelled-field", label))
+        elif isinstance(fmt, ast.JoinedStr):
+            rendered = "".join(
+                part.value for part in fmt.values
+                if isinstance(part, ast.Constant) and isinstance(part.value, str)
+            )
+            for label in rules._SENSITIVE_LABELS:
+                if f"{label}=" in rendered:
+                    findings.append(Finding(relpath, scope, "fstring-format", label))
+                    break
+
+        # Rule 2 — bare identifier naming an external identifier.
+        for arg in rules._rule_two_candidates(node):
+            name = rules._bare_name(arg)
+            if name and name.lower() in rules._BARE_SENSITIVE_NAMES:
+                findings.append(Finding(relpath, scope, "bare-identifier", name))
+
+    return findings
+
+
+def scan_tree(rules, tree_root: pathlib.Path) -> collections.Counter:
+    """Scan every module under ``<tree_root>/src`` into a multiset.
+
+    A multiset, not a set: two identical descriptors in one function are two
+    sites, and introducing a second must not hide behind the first.
+    """
+    src_root = tree_root / "src"
+    if not src_root.is_dir():
+        raise RatchetError(f"no src/ directory under {tree_root}")
+
+    counts: collections.Counter = collections.Counter()
+    files = sorted(src_root.rglob("*.py"))
+    if not files:
+        raise RatchetError(
+            f"scanned {src_root} and found no Python files — refusing to treat "
+            f"an empty scan as a clean result"
+        )
+    for path in files:
+        relpath = path.relative_to(tree_root).as_posix()
+        counts.update(scan_file(rules, path, relpath))
+    return counts
+
+
+def new_violations(base: collections.Counter, head: collections.Counter):
+    """Descriptors occurring more often in HEAD than in base."""
+    regressions = []
+    for finding, head_count in sorted(head.items()):
+        base_count = base.get(finding, 0)
+        if head_count > base_count:
+            regressions.append((finding, base_count, head_count))
+    return regressions
+
+
+def run(base_tree: pathlib.Path, head_tree: pathlib.Path,
+        base_sha: str | None, head_sha: str | None) -> int:
+    # The dangerous failure is a base that silently equals HEAD: the diff is
+    # then empty and every new violation passes. Refuse that outright.
+    if base_sha and head_sha and base_sha == head_sha:
+        raise RatchetError(
+            f"base and head resolve to the same commit ({base_sha[:12]}). The "
+            f"difference would be empty and every new violation would pass."
+        )
+    for label, tree in (("base", base_tree), ("head", head_tree)):
+        if not tree.is_dir():
+            raise RatchetError(f"{label} tree {tree} is not a directory")
+
+    rules = load_rules(head_tree)
+    base_counts = scan_tree(rules, base_tree)
+    head_counts = scan_tree(rules, head_tree)
+
+    # A base that scanned zero findings across the whole tree is far more
+    # likely to be a broken checkout than a clean repository.
+    if not base_counts:
+        raise RatchetError(
+            "base scan produced no findings at all — treating this as a broken "
+            "base checkout rather than a clean baseline"
+        )
+
+    regressions = new_violations(base_counts, head_counts)
+
+    # Deliberately no totals, ratios or baseline figures are printed. CI logs
+    # on a public repository are public, and a repository-wide count of
+    # unresolved sites is exactly the posture measurement this design exists to
+    # avoid publishing. Only violations introduced BY THIS CHANGE are named —
+    # those lines are already in the PR diff, and the author needs them to act.
+    if not regressions:
+        print("OK — no log-privacy violation introduced by this change.")
+        return 0
+
+    print(f"\nFAIL — {len(regressions)} newly introduced log-privacy violation(s):\n")
+    for finding, was, now in regressions:
+        print(f"  {finding.describe()}   (base {was} -> head {now})")
+    print(
+        "\nEach line logs a user identifier without a sanctioned helper.\n"
+        "Wrap the argument with a helper from src/log_privacy.py "
+        "(user_ref / token_ref / operation_ref / filename_ref / safe_fields).\n"
+        "Pre-existing findings elsewhere are not reported here by design: this "
+        "gate only forbids ADDING to them."
+    )
+    return 1
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base-tree", required=True, type=pathlib.Path)
+    parser.add_argument("--head-tree", required=True, type=pathlib.Path)
+    parser.add_argument("--base-sha", default=None)
+    parser.add_argument("--head-sha", default=None)
+    args = parser.parse_args(list(argv) if argv is not None else None)
+    try:
+        return run(args.base_tree, args.head_tree, args.base_sha, args.head_sha)
+    except RatchetError as exc:
+        print(f"log-privacy ratchet ERROR: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

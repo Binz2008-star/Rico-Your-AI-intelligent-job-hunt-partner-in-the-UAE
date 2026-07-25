@@ -233,6 +233,10 @@ Use this matrix after relevant merges/deploys.
   token-logging flag (e.g. `RESET_TOKEN_LOG`). Sentry events pass through the
   shared `sentry_before_send` scrubber. The static guard in
   `tests/test_1076_log_privacy.py` enforces the denylist repo-wide.
+- **Log-privacy ratchet:** the differential gate is enabled repository-wide over
+  `src/`. The detailed inventory of unresolved sites is generated on demand from
+  the scanner rather than published in this repository. Public CI rejects every
+  newly introduced violation.
 - Do not call live third-party APIs from unit tests.
 
 ## No Dead UI Rule

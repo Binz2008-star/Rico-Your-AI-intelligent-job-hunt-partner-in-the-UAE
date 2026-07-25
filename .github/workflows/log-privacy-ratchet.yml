@@ -1,0 +1,105 @@
+name: Log Privacy Ratchet
+
+# Differential gate: scan src/ at the merge base and at this PR's head, then
+# fail if a violation exists in head that does not exist in base. Pre-existing
+# findings are never reported, so nothing about where they live is published;
+# the gate only forbids adding to them.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history — merge base is required)
+        uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 is load-bearing. With the default shallow clone
+          # there is no merge base to compute and the gate cannot run.
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install scanner dependencies
+        # The rule module imports pytest; src/log_privacy.py is stdlib-only.
+        # Deliberately not the full requirements set — this job only parses.
+        run: python -m pip install --quiet pytest
+
+      - name: Self-test the ratchet itself
+        # qa-tests.yml runs an explicit file list and does not include this
+        # suite; that workflow is shared scope, so the gate's own tests run
+        # here instead. A ratchet whose tests never execute is not a gate.
+        run: python -m pytest tests/test_log_privacy_ratchet.py -q
+
+      - name: Resolve merge base
+        id: base
+        run: |
+          set -euo pipefail
+
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            echo "::error::repository is shallow; merge base cannot be computed"
+            exit 1
+          fi
+
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          if [ -z "$BASE_REF" ]; then
+            echo "::error::no base ref on this event; refusing to guess"
+            exit 1
+          fi
+
+          git fetch --no-tags --quiet origin "$BASE_REF"
+
+          # HEAD here is the PR merge commit actions/checkout produces, i.e.
+          # the tree that would actually land. Its merge base against the base
+          # branch is the correct comparison point, and it is recomputed on
+          # every run — so a force-push or a rebase simply produces a new base,
+          # and a base branch that moves under the PR is picked up as well.
+          if ! BASE_SHA="$(git merge-base "origin/${BASE_REF}" HEAD)"; then
+            echo "::error::git merge-base failed against origin/${BASE_REF}"
+            exit 1
+          fi
+          HEAD_SHA="$(git rev-parse HEAD)"
+
+          if [ -z "$BASE_SHA" ]; then
+            echo "::error::empty merge base; refusing to run with no baseline"
+            exit 1
+          fi
+
+          # The dangerous failure mode: a base that equals head makes the
+          # difference empty and lets every new violation through silently.
+          if [ "$BASE_SHA" = "$HEAD_SHA" ]; then
+            echo "::error::merge base equals head (${BASE_SHA}); the difference would be empty"
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"; then
+            echo "::error::resolved base ${BASE_SHA} is not an ancestor of head"
+            exit 1
+          fi
+
+          echo "base_sha=${BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "merge base: ${BASE_SHA}"
+          echo "head:       ${HEAD_SHA}"
+
+      - name: Materialise the base tree
+        run: |
+          set -euo pipefail
+          git worktree add --detach "${RUNNER_TEMP}/ratchet-base" "${{ steps.base.outputs.base_sha }}"
+          test -d "${RUNNER_TEMP}/ratchet-base/src" || {
+            echo "::error::base tree has no src/ directory"; exit 1; }
+
+      - name: Run the differential ratchet
+        run: |
+          python scripts/log_privacy_ratchet.py \
+            --base-tree "${RUNNER_TEMP}/ratchet-base" \
+            --head-tree "${GITHUB_WORKSPACE}" \
+            --base-sha "${{ steps.base.outputs.base_sha }}" \
+            --head-sha "${{ steps.base.outputs.head_sha }}"
