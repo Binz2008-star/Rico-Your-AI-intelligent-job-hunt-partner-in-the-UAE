@@ -384,3 +384,67 @@ defect.
 
 Nothing merges without the owner. No autonomous merge, no deploy, no writes to the
 production database for testing, no monitoring loops.
+
+## 8d. The universal-claim audit: what this PR actually covers
+
+The PR was originally titled as stopping *every* surface from claiming a CV it
+does not have. An enumeration of the surfaces that can report CV state does not
+support that word, so the claim has been narrowed to what is covered and tested,
+and the remainder is recorded here as named follow-up rather than left implied.
+
+### Covered, and pinned by a test
+
+Three upload entry points, all now deriving their claim from
+`GET /api/v1/rico/pending-cv-upload` at render time:
+
+| Surface | Test that pins it |
+|---|---|
+| `/command` — pending card, saved panel, `?cv=ready` lifecycle | `command-pending-cv-review.test.tsx` (8 cases) |
+| `/upload` — Vault pending-review banner | `upload-pending-cv-banner.test.tsx` (6 cases) |
+| `/profile` — upload notification and profile refresh | `profile-pending-cv-review.test.tsx` (7 cases) |
+| `GET /pending-cv-upload` — five states, no field leakage, auth not downgraded | `tests/unit/test_pending_cv_upload.py` |
+| `POST /confirm-cv-profile` — idempotent, quota-safe, real save evidence | `tests/unit/test_pending_cv_upload.py`, `tests/integration/test_cv_upload_artifacts_postgres.py` |
+| Chat replies asking for an upload (`next_action == "upload_cv"`) | `TestChatNeverTreatsPendingAsSaved` (10 cases) |
+
+### Not covered — the reason the title was narrowed
+
+The chat-side CV-first profile path in `src/rico_chat_api.py` writes
+`cv_filename` and a pending `cv_status` to the profile through `upsert_profile`
+without any document row and without an artifact. Three surfaces read raw
+`cv_filename` rather than querying the document store, so each will report a CV
+on the strength of that write alone:
+
+| Surface | Source | Why it is not in this PR |
+|---|---|---|
+| `/dashboard` — `cv_uploaded` milestone | `mission_service.py:120` → `bool(cv_filename)` | Different lane; `mission_service` is not a CV-pipeline file |
+| Mission context bar — "Upload CV" prompt | same `/mission` payload | same |
+| `GET /api/v1/files` — synthesised legacy `profile-cv` record | `files.py:113` | Legacy fallback with its own compatibility contract |
+
+Also uncovered: the `cv_analysis` "nothing on file" reply in
+`src/rico_chat_api.py`. The pending-upload note is applied at the single
+response exit point but keyed on `next_action == "upload_cv"`, and that reply
+returns no `next_action`, so the note never reaches it. A user with a pending
+unconfirmed artifact is told they have not uploaded a CV. The fix is to give
+that branch the `next_action` the existing chokepoint already keys on — one
+line, blocked only on the `rico_chat_api.py` write-lock held by #1382.
+
+**The governing rule, restated for these surfaces:** `cv_filename` is a flag,
+not a query. It may gate a claim; it may not be sufficient to draw one. Every
+surface above needs the same treatment the three entry points received, in a
+PR that owns those files.
+
+### Observation, not a defect in this PR
+
+`confirm-cv-profile` deliberately strips `email` and `phone` from CV-parsed text
+before `upsert_profile` (so a referee's or a previous employer's contact detail
+can never overwrite the account's identity), and the identity-ownership
+chokepoint now rejects those two fields as well — belt and braces, from two
+independent directions.
+
+`name` is not stripped and is not in that rejected set, and the `upsert_profile`
+call on the confirm path is not guarded by principal type. CV-parsed text can
+therefore still set `users.name`, including for a public principal. This is not
+a security break — `name` was assessed and deliberately left out of the
+enforced set — but whether a CV's text should be able to rename an account is an
+open product question. Out of scope for this PR and for the identity PR; recorded
+so it is decided rather than inherited.
