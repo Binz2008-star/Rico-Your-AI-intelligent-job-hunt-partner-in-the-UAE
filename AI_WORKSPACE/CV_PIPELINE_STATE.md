@@ -6,16 +6,33 @@ This file exists because context was lost once already. It is written for someon
 who has never seen this work before. It records what is true, what was decided,
 and what must not be changed without the owner's explicit permission.
 
-Last updated: 2026-07-25. Production head at time of writing: **`e26548b`**
-(`9a9ee9b` plus the two changes merged after it).
+Last updated: 2026-07-25.
+
+**Two different "where main is" numbers, and they are not interchangeable:**
+
+| | Commit | Use it for |
+|---|---|---|
+| Live `main` head | `3c5879f` | Branching, rebasing, "am I current?" |
+| Application/runtime baseline | `e26548b` | Test-suite baselines, behaviour comparisons |
+
+They differ because `745e971` and `3c5879f` are **documentation-only control
+commits** — together they change exactly one file, `AI_WORKSPACE/PROJECT_STATUS.md`,
+and no application code, no tests and no workflow. A suite baseline measured on
+`e26548b` therefore remains valid at `3c5879f`, and that claim is checkable with
+`git diff --stat e26548b..main` rather than taken on trust.
+
+The distinction matters in both directions: quoting the runtime baseline as the
+head makes a branch look stale when it is current, and quoting the head as the
+baseline invites a re-measurement that changes nothing. Verify which one moved
+before re-running anything.
 
 ---
 
 ## 1. Where production is
 
-`main` is at **`e26548b`**. Three CV-related changes shipped in sequence, followed
-by two unrelated merges (#1387, #1386) that moved the head without touching the CV
-path — measure any baseline against the current head, never against `9a9ee9b`:
+Three CV-related changes shipped in sequence, followed by merges that moved the
+head without touching the CV path (see the two-number table above before
+measuring anything):
 
 | Commit | What it did |
 |---|---|
