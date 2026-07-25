@@ -1148,3 +1148,150 @@ class TestRepeatConfirmIsARetryNotAPurchase:
         assert "_resolve_trusted_cv_artifact" in source
         # The hash fed to the check is read off the artifact, never off payload.
         assert 'payload.content_hash' not in source
+
+
+class TestQuotaRulingIsImplementedExactly:
+    """The owner's ruling, pinned behaviourally.
+
+        "A repeated confirm of the same server-verified saved artifact is an
+        idempotent retry and must not consume quota. The idempotency key must
+        be the server-verified identity of the saved artifact — never a
+        client-supplied token, never a request id the caller can forge, never a
+        timestamp window. If the server cannot verify the artifact is the same
+        saved artifact, it is not a retry and the normal quota rule applies.
+        This is not a bypass: no flag, no env switch, no client-controlled path
+        that turns quota off."
+
+    Three cases, each of which fails if the change is reverted or widened.
+    """
+
+    _SAVED_ROW = {
+        "id": "34a86f49-0000-0000-0000-000000000000",
+        "filename": "cv.pdf",
+        "doc_type": "cv",
+        "is_primary": True,
+        "skills_count": 1,
+        "years_experience": None,
+        "inserted": False,
+    }
+
+    def _confirm(self, client, *, artifact, already_saved, enforce, record, inserted=False):
+        row = dict(self._SAVED_ROW, inserted=inserted)
+        created = []
+
+        class _FakeRicoDB:
+            available = True
+
+            def __init__(self, *a, **kw):
+                pass
+
+            def get_or_create_user_document(self, **kwargs):
+                created.append(kwargs)
+                return dict(row)
+
+        resolve = MagicMock(return_value=artifact)
+        with (
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
+            patch("src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact", resolve),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.saved_document_exists",
+                return_value=already_saved,
+            ),
+            patch("src.services.subscription_gating.enforce_profile_optimization_allowed", enforce),
+            patch("src.services.subscription_gating.record_profile_optimization_usage", record),
+            patch("src.api.routers.rico_chat.upsert_profile", MagicMock()),
+            patch("src.api.routers.rico_chat.get_profile", return_value=None),
+            patch("src.services.profile_context_resolver.evaluate_minimum_profile", return_value=(True, [])),
+            patch("src.repositories.onboarding_repo.set_onboarding_status"),
+            patch("src.rico_db.RicoDB", _FakeRicoDB),
+        ):
+            r = client.post(
+                "/api/v1/rico/confirm-cv-profile",
+                json={
+                    "preview": {"name": "A", "skills": ["compliance"]},
+                    "filename": "cv.pdf",
+                    "doc_type": "cv",
+                    "upload_id": _UPLOAD_ID,
+                },
+            )
+        return r, created
+
+    @staticmethod
+    def _artifact():
+        return {
+            "filename": "cv.pdf",
+            "doc_type": "cv",
+            "content_hash": "f" * 64,
+            "file_size": 10,
+            "cv_text": _CV_TEXT,
+        }
+
+    def test_a_repeat_of_the_same_saved_artifact_charges_nothing_and_duplicates_nothing(self, client):
+        """Case 1: quota counter unchanged, and no duplicate record created."""
+        from fastapi import HTTPException
+
+        def _refuse(*a, **k):
+            raise HTTPException(status_code=402, detail="quota exhausted")
+
+        record = MagicMock()
+        r, created = self._confirm(
+            client, artifact=self._artifact(), already_saved=True,
+            enforce=_refuse, record=record, inserted=False,
+        )
+        assert r.status_code == 200, r.text
+        # The counter never moves: the gate did not refuse it (it never ran)…
+        assert r.status_code != 402
+        # …and nothing was recorded on the way out.
+        record.assert_not_called()
+        # No duplicate record: the persistence layer answered "already there".
+        assert r.json()["document"]["inserted"] is False
+        assert len(created) == 1, "exactly one write attempt, deduped by the store"
+        assert r.json()["document"]["document_id"] == self._SAVED_ROW["id"]
+
+    def test_a_new_artifact_consumes_quota_exactly_once(self, client):
+        """Case 2: a different or newly uploaded CV is a purchase, charged once."""
+        enforce = MagicMock()
+        record = MagicMock()
+        art = dict(self._artifact(), content_hash="a" * 64)
+        r, created = self._confirm(
+            client, artifact=art, already_saved=False,
+            enforce=enforce, record=record, inserted=True,
+        )
+        assert r.status_code == 200, r.text
+        assert enforce.call_count == 1, "the gate must run for a CV that is not already saved"
+        assert record.call_count == 1, "and the allowance must be consumed exactly once"
+        assert r.json()["document"]["inserted"] is True
+
+    def test_an_unverifiable_artifact_is_refused_and_consumes_nothing(self, client):
+        """Case 3: no server-verified saved artifact -> not a retry, and not a sale.
+
+        `resolve_cv_upload_artifact` returning None is the server saying it
+        cannot vouch for this upload. The confirm is refused outright, and the
+        allowance is untouched — a refused confirm must never be billed.
+        """
+        enforce = MagicMock()
+        record = MagicMock()
+        r, created = self._confirm(
+            client, artifact=None, already_saved=False,
+            enforce=enforce, record=record,
+        )
+        assert r.status_code == 409, r.text
+        assert r.json()["status"] == "cv_confirmation_required"
+        record.assert_not_called()
+        assert created == [], "no document row may be written for an unverifiable confirm"
+
+    def test_no_flag_or_env_switch_can_turn_the_gate_off(self, client):
+        """The ruling forbids a bypass. The only thing that skips the gate is the
+        server-verified repeat; nothing reads configuration to decide it."""
+        import inspect
+
+        import src.api.routers.rico_chat as mod
+
+        source = inspect.getsource(mod.confirm_cv_profile)
+        gate_region = source.split("enforce_profile_optimization_allowed")[0]
+        for forbidden in ("os.environ", "os.getenv", "getenv("):
+            assert forbidden not in gate_region, (
+                f"the quota decision must not consult configuration ({forbidden})"
+            )
+        # And the decision is derived from the server-resolved artifact only.
+        assert "_repeat_confirm = saved_document_exists(" in source
