@@ -11,6 +11,8 @@ import json
 import logging
 import os
 import uuid
+
+from src.models.principal import IdentityOwnershipAmbiguous, is_public_principal
 from contextlib import contextmanager
 from datetime import datetime
 from threading import Lock
@@ -1052,6 +1054,34 @@ class RicoDB:
     def upsert_user(self, payload: Dict[str, Any], conn=None) -> Dict[str, Any]:
         external_user_id = payload.get("external_user_id") or payload.get("email") or payload.get("telegram_username") or str(uuid.uuid4())
 
+        # ── Trusted-identity write boundary (enforcing copy) ──────────────────
+        # Every write to rico_users passes through here, which is why the
+        # invariant is enforced at this point rather than only at one caller.
+        # A guard placed at a single caller enforces a property the codebase
+        # does not actually have: other writers reach this function directly.
+        #
+        # The principal is the row's own external_user_id. When that is a
+        # public/guest principal, the contact columns are dropped: they are how
+        # an authenticated caller is later resolved, so a guest row carrying an
+        # account's contact value would make ownership ambiguous.
+        #
+        # external_user_id itself is NOT dropped -- it is the row's identity,
+        # and for a guest row it is the guest principal. What must never happen
+        # is a guest row carrying somebody else's contact details.
+        if is_public_principal(external_user_id):
+            _dropped = sorted(
+                k for k in ("email", "phone", "telegram_username", "telegram_chat_id")
+                if payload.get(k) is not None
+            )
+            if _dropped:
+                logger.warning(
+                    "trusted_identity_write_rejected reason=%s principal_kind=%s fields=%s",
+                    "public_principal",
+                    "public",
+                    ",".join(_dropped),  # field NAMES only, never values
+                )
+                payload = {k: v for k, v in payload.items() if k not in _dropped}
+
         should_close = conn is None
         if conn is None:
             conn = self.connect()
@@ -1200,6 +1230,8 @@ class RicoDB:
                 # For email-authenticated web users, apply canonical selection rule
                 # For non-email identifiers (UUID, telegram_username), prefer exact match
                 is_email = "@" in user_id
+                # Explicit guest resolution: a guest asking for its own row.
+                caller_is_guest = is_public_principal(user_id)
                 if is_email:
                     cur.execute(
                         """
@@ -1208,23 +1240,30 @@ class RicoDB:
                         FROM rico_users u
                         LEFT JOIN rico_profiles p ON p.user_id = u.id
                         LEFT JOIN rico_agent_settings s ON s.user_id = u.id
-                        WHERE LOWER(u.email) = LOWER(%s) OR LOWER(u.external_user_id) = LOWER(%s)
+                        -- Ownership is established by the authenticated identifier the
+                        -- caller presented (external_user_id), not by the mutable
+                        -- contact column. `email` remains in the predicate only so
+                        -- pre-existing accounts whose external_user_id was never
+                        -- populated still resolve; it can no longer, on its own,
+                        -- select a row belonging to someone else.
+                        --
+                        -- Guest rows are excluded outright: a public principal must
+                        -- never be a candidate for authenticated resolution.
+                        -- The guest exclusion applies to AUTHENTICATED ownership
+                        -- resolution only. When the caller's own principal is a guest,
+                        -- it is explicitly resolving its own public row and must still
+                        -- get it -- excluding it there would break guest flows.
+                        WHERE (LOWER(u.external_user_id) = LOWER(%s) OR LOWER(u.email) = LOWER(%s))
+                          AND (%s OR u.external_user_id IS NULL OR u.external_user_id NOT LIKE 'public:%%')
                         ORDER BY
-                            -- 1. Prefer rows with the email stored in the email column.
-                            CASE WHEN LOWER(u.email) = LOWER(%s) THEN 0 ELSE 1 END,
-                            -- 2. Prefer rows where external_user_id != email (canonical UUID rows)
-                            CASE WHEN LOWER(u.external_user_id) = LOWER(u.email) THEN 1 ELSE 0 END,
-                            -- 3. Prefer UUID-like external_user_id
-                            CASE WHEN u.external_user_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN 0 ELSE 1 END,
-                            -- 4. Prefer row with existing profile
-                            CASE WHEN p.id IS NOT NULL THEN 0 ELSE 1 END,
-                            -- 5. Prefer most recently updated
-                            u.updated_at DESC,
-                            -- 6. Deterministic id tie-breaker
+                            -- Prefer the row whose authenticated identifier matches.
+                            CASE WHEN LOWER(u.external_user_id) = LOWER(%s) THEN 0 ELSE 1 END,
                             u.id ASC
-                        LIMIT 1
+                        LIMIT 2
                         """,
-                        (user_id, user_id, user_id),
+                        # Positional order must match the placeholders above:
+                        # external_user_id, email, guest-scope flag, ORDER BY match.
+                        (user_id, user_id, caller_is_guest, user_id),
                     )
                 else:
                     # Non-email identifiers: prefer exact match (id, external_user_id, telegram_username)
@@ -1235,7 +1274,12 @@ class RicoDB:
                         FROM rico_users u
                         LEFT JOIN rico_profiles p ON p.user_id = u.id
                         LEFT JOIN rico_agent_settings s ON s.user_id = u.id
-                        WHERE u.id::text = %s OR u.external_user_id = %s OR u.telegram_username = %s
+                        -- Same guest exclusion as the branch above. A non-email
+                        -- identifier (internal id, telegram handle) must not be able
+                        -- to resolve to a public/guest row either -- the exclusion is
+                        -- a property of authenticated resolution, not of one branch.
+                        WHERE (u.id::text = %s OR u.external_user_id = %s OR u.telegram_username = %s)
+                          AND (%s OR u.external_user_id IS NULL OR u.external_user_id NOT LIKE 'public:%%')
                         ORDER BY
                             -- 1. Prefer exact id match
                             CASE WHEN u.id::text = %s THEN 0 ELSE 1 END,
@@ -1247,11 +1291,30 @@ class RicoDB:
                             u.updated_at DESC,
                             -- 5. Deterministic id tie-breaker
                             u.id ASC
-                        LIMIT 1
+                        -- Two rows are read here for the same reason as the branch
+                        -- above: external_user_id carries no uniqueness guarantee, so
+                        -- ambiguity must be detectable rather than silently resolved.
+                        LIMIT 2
                         """,
-                        (user_id, user_id, user_id, user_id, user_id, user_id),
+                        # Positional order must match the placeholders above: id,
+                        # external_user_id, telegram_username, guest-scope flag, then
+                        # the three ORDER BY matches.
+                        (user_id, user_id, user_id, caller_is_guest, user_id, user_id, user_id),
                     )
-                row = cur.fetchone()
+                rows = cur.fetchmany(2)
+                # Fail closed, regardless of how the identifier was classified. Two
+                # candidate rows mean ownership is ambiguous, and returning either one
+                # risks serving or mutating a row this caller does not own. Not gated on
+                # the identifier kind: external_user_id carries no uniqueness guarantee
+                # either, so a non-email identifier can be just as ambiguous.
+                if len(rows) > 1:
+                    logger.warning(
+                        "identity_ownership_ambiguous reason=%s candidates=%d",
+                        "multiple_owner_rows",
+                        len(rows),
+                    )
+                    raise IdentityOwnershipAmbiguous(len(rows))
+                row = rows[0] if rows else None
             return dict(row) if row else None
         finally:
             if should_close:
@@ -1262,7 +1325,7 @@ class RicoDB:
         identifier, using the SAME predicate as get_user_bundle.
 
         >1 is the duplicate-identity condition: get_user_bundle then picks
-        one row by ORDER BY heuristics (rule 5: updated_at DESC), so
+        refuses to pick between them (it raises rather than ranking), so
         row-scoped values (profile years, name) are ambiguous. Readers use
         this to expose an explicit ambiguous_identity state instead of
         silently trusting the floating row. Returns None when the store is
@@ -1275,13 +1338,15 @@ class RicoDB:
                 if "@" in user_id:
                     cur.execute(
                         "SELECT COUNT(*) AS cnt FROM rico_users u "
-                        "WHERE LOWER(u.email) = LOWER(%s) OR LOWER(u.external_user_id) = LOWER(%s)",
+                        "WHERE (LOWER(u.external_user_id) = LOWER(%s) OR LOWER(u.email) = LOWER(%s)) "
+                        "AND (u.external_user_id IS NULL OR u.external_user_id NOT LIKE 'public:%%')",
                         (user_id, user_id),
                     )
                 else:
                     cur.execute(
                         "SELECT COUNT(*) AS cnt FROM rico_users u "
-                        "WHERE u.id::text = %s OR u.external_user_id = %s OR u.telegram_username = %s",
+                        "WHERE (u.id::text = %s OR u.external_user_id = %s OR u.telegram_username = %s) "
+                        "AND (u.external_user_id IS NULL OR u.external_user_id NOT LIKE 'public:%%')",
                         (user_id, user_id, user_id),
                     )
                 row = cur.fetchone()

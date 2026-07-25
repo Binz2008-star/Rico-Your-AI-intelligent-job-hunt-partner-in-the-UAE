@@ -23,6 +23,7 @@ from contextlib import contextmanager
 
 from psycopg2.extras import Json
 
+from src.models.principal import IdentityOwnershipAmbiguous, rejected_trusted_identity_fields
 from src.rico_agent import RicoAgentSettings, RicoProfile
 from src.rico_db import RicoDB
 from src.rico_memory import RicoMemoryStore
@@ -244,6 +245,11 @@ def get_cv_grounding(user_id: str) -> CVGrounding | None:
         return None
     try:
         bundle = db.get_user_bundle(user_id)
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error(
             "profile_repo: get_cv_grounding DB failed user=%s err=%s",
@@ -284,6 +290,11 @@ def get_profile(user_id: str) -> RicoProfile | None:
                     user_ref(user_id), safe_fields(bundle.get("profile") or {}),
                 )
                 profile = _bundle_to_profile(bundle)
+        except IdentityOwnershipAmbiguous:
+            # Fail-closed must survive the broad handler below. Ambiguous ownership is
+            # not a transient fault to fall back from: answering from the JSON mirror,
+            # or reporting "not found", is precisely what this change prevents.
+            raise
         except Exception as e:
             logger.error(
                 "profile_repo: get_profile DB failed user=%s err=%s",
@@ -386,6 +397,27 @@ def upsert_profile(
         k: v for k, v in updates.items()
         if (k in _PROFILE_FIELDS or k in _SETTINGS_FIELDS) and v is not None
     }
+
+    # ── Trusted-identity write boundary ───────────────────────────────────────
+    # A public/guest principal may write ordinary profile data, but never a trusted
+    # identity field. Those columns are how an authenticated caller is later resolved,
+    # so a guest row carrying an account's contact value makes ownership ambiguous.
+    #
+    # Applied here, before any branch, so it holds on EVERY path through this function
+    # rather than only the path where a user row is being created. Scoping it to one
+    # branch would leave the invariant true by coincidence rather than by construction.
+    _rejected_identity = rejected_trusted_identity_fields(user_id, filtered_updates)
+    if _rejected_identity:
+        logger.warning(
+            "trusted_identity_write_rejected reason=%s principal_kind=%s fields=%s",
+            "public_principal",
+            "public",
+            ",".join(sorted(_rejected_identity)),  # field NAMES only, never values
+        )
+        filtered_updates = {
+            k: v for k, v in filtered_updates.items() if k not in _rejected_identity
+        }
+        updates = {k: v for k, v in updates.items() if k not in _rejected_identity}
 
     # ── Write-boundary sanitization for preferred_cities (#1336) ──────────────
     # Defense-in-depth: even if a caller forgets to sanitize, the write
@@ -594,6 +626,11 @@ def delete_profile(user_id: str) -> bool:
         logger.info("profile_repo: deleted profile user=%s", user_ref(user_id))
         return True
 
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error("profile_repo: delete_profile failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return False
@@ -611,6 +648,11 @@ def get_preferences(user_id: str) -> dict[str, Any]:
             bundle = db.get_user_bundle(user_id)
             if bundle and bundle.get("settings"):
                 return dict(bundle["settings"])
+        except IdentityOwnershipAmbiguous:
+            # Fail-closed must survive the broad handler below. Ambiguous ownership is
+            # not a transient fault to fall back from: answering from the JSON mirror,
+            # or reporting "not found", is precisely what this change prevents.
+            raise
         except Exception as e:
             logger.error("profile_repo: get_preferences DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
 
@@ -793,6 +835,11 @@ def list_saved_searches(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
 
         return searches
 
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error("profile_repo: list_saved_searches DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return []
@@ -826,6 +873,11 @@ def delete_search(user_id: str, search_id: str) -> bool:
 
         return deleted
 
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error("profile_repo: delete_search DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return False
@@ -908,6 +960,11 @@ def get_search_by_id(user_id: str, search_id: str) -> dict[str, Any] | None:
 
         return None
 
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error("profile_repo: get_search_by_id failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return None

@@ -14,6 +14,7 @@ from src.models.onboarding import (
     ONBOARDING_PENDING,
     OnboardingState,
 )
+from src.models.principal import is_public_principal
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,22 @@ def set_onboarding_status(user_id: str, status: str, *, require_db: bool = False
     caller can return a retryable non-2xx rather than claiming a completion
     state that was never persisted (#764).
     """
+    # Onboarding completion is an account-level state: other surfaces gate on it, so a
+    # public/guest principal must not be able to hold it. The routes already decline to
+    # update it for a guest, but that is a route-level control -- this repository is the
+    # boundary every caller passes through, so the invariant belongs here.
+    if is_public_principal(user_id) and status == ONBOARDING_COMPLETED:
+        logger.warning(
+            "onboarding_completion_rejected reason=%s principal_kind=%s",
+            "public_principal",
+            "public",
+        )
+        if require_db:
+            raise OnboardingStateUnavailable(
+                "authenticated onboarding completion is not available to a public principal"
+            )
+        return
+
     conn = _get_conn()
     if not conn:
         if require_db:

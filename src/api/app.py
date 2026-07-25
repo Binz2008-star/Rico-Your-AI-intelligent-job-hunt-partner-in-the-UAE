@@ -22,6 +22,8 @@ from typing import Any, Dict
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+from src.models.principal import IdentityOwnershipAmbiguous
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
@@ -300,6 +302,34 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+
+def identity_ownership_ambiguous_handler(request, exc):
+    """Map ambiguous account ownership to one deterministic, non-identifying response.
+
+    Identity resolution fails closed rather than guessing between candidate rows. That
+    refusal must not surface as an unhandled 500, and it must not look like "no user
+    found" — several call paths respond to a missing user by creating one, which would
+    turn the refusal into an additional ambiguous row.
+
+    409 Conflict with a stable reason code. No address, no identifier, no row content.
+    """
+    logger.warning(
+        "identity_ownership_conflict reason=%s candidates=%s",
+        "ambiguous_account_ownership",
+        getattr(exc, "candidate_count", "unknown"),
+    )
+    return JSONResponse(
+        status_code=409,
+        content={
+            "ok": False,
+            "error": "ambiguous_account_ownership",
+            "message": "This account could not be resolved unambiguously. Please contact support.",
+        },
+    )
+
+
+app.add_exception_handler(IdentityOwnershipAmbiguous, identity_ownership_ambiguous_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # Ingress request-body cap (#1080): rejects oversized declared lengths before
