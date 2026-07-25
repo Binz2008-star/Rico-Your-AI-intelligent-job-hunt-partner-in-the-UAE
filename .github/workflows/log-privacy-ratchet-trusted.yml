@@ -1,0 +1,115 @@
+name: Log Privacy Ratchet (trusted)
+
+# ENFORCEMENT path. This is the check intended to be marked Required.
+#
+# Why pull_request_target: a `pull_request` workflow runs the workflow file,
+# the scanner and the rules AS THEY EXIST IN THE PR. A change can therefore
+# edit the policy that judges it — relax a rule in one PR (nothing in src/
+# changes, so every source diff is empty and it passes), and the relaxed rule
+# becomes the merge base for the next one. A source-only comparison delays that
+# bypass by one PR rather than preventing it.
+#
+# pull_request_target runs the BASE branch's copy of this workflow, this
+# scanner and these rules, so the change cannot alter what judges it.
+#
+# ── SAFETY PROPERTIES OF THIS FILE — do not weaken ──────────────────────────
+# pull_request_target is dangerous precisely because it is privileged and the
+# PR head is untrusted. This job is safe only while ALL of the following hold:
+#
+#   1. permissions is contents: read, and nothing else is ever added.
+#   2. actions/checkout runs WITHOUT a `ref:`, so the workspace is the BASE
+#      branch. The PR head is never checked out into the workspace.
+#   3. The PR head is fetched into a detached worktree and read as DATA only.
+#      The scanner parses it; it never imports it, never executes it, and no
+#      step runs a command, script, hook or dependency file from it.
+#   4. Dependencies come from PyPI by name — never `-r` a requirements file
+#      from the head tree, and never `pip install .` anything from it.
+#   5. No secret is exposed to this job, and no step interpolates untrusted
+#      PR data (title, branch name, body) into a shell command.
+#
+# A change to any of the above turns this into a remote code execution path.
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+jobs:
+  trusted-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the BASE branch (trusted scanner and rules)
+        uses: actions/checkout@v4
+        with:
+          # No `ref:` on purpose — this must be the base branch, never the PR
+          # head. fetch-depth: 0 because a merge base is required.
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install scanner dependencies from PyPI
+        # By name, never from a file in the PR head tree.
+        run: python -m pip install --quiet pytest
+
+      - name: Fetch the PR head as data
+        id: trees
+        run: |
+          set -euo pipefail
+
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          if [ -z "$PR_NUMBER" ] || [ -z "$BASE_REF" ] || [ -z "$HEAD_SHA" ]; then
+            echo "::error::CANNOT RUN (exit 2): incomplete pull_request_target payload"
+            exit 2
+          fi
+
+          git fetch --no-tags --quiet origin "$BASE_REF"
+          git fetch --no-tags --quiet origin "pull/${PR_NUMBER}/head"
+
+          if ! git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+            echo "::error::CANNOT RUN (exit 2): PR head ${HEAD_SHA} not found after fetch"
+            exit 2
+          fi
+
+          if ! BASE_SHA="$(git merge-base "origin/${BASE_REF}" "$HEAD_SHA")"; then
+            echo "::error::CANNOT RUN (exit 2): git merge-base failed against origin/${BASE_REF}"
+            exit 2
+          fi
+
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "$HEAD_SHA" ]; then
+            echo "::error::CANNOT RUN (exit 2): unusable merge base '${BASE_SHA}'"
+            exit 2
+          fi
+
+          # Both trees are detached worktrees, inert on disk. Nothing in either
+          # is executed; the scanner in the workspace reads them.
+          git worktree add --detach --quiet "${RUNNER_TEMP}/rt-base" "$BASE_SHA"
+          git worktree add --detach --quiet "${RUNNER_TEMP}/rt-head" "$HEAD_SHA"
+
+          for d in rt-base rt-head; do
+            test -d "${RUNNER_TEMP}/${d}/src" || {
+              echo "::error::CANNOT RUN (exit 2): ${d} has no src/ directory"; exit 2; }
+          done
+
+          echo "base_sha=${BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "merge base: ${BASE_SHA}"
+          echo "pr head:    ${HEAD_SHA}"
+
+      - name: Enforce with the base branch's policy
+        # --rules-tree is the trusted workspace: the ONLY rules executed.
+        # --head-tree is parsed, never imported.
+        run: |
+          python scripts/log_privacy_ratchet.py \
+            --trusted \
+            --rules-tree "${GITHUB_WORKSPACE}" \
+            --base-tree "${RUNNER_TEMP}/rt-base" \
+            --head-tree "${RUNNER_TEMP}/rt-head" \
+            --base-sha "${{ steps.trees.outputs.base_sha }}" \
+            --head-sha "${{ steps.trees.outputs.head_sha }}"

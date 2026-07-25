@@ -14,6 +14,7 @@ violation is introduced, and it stays green on a branch that introduces none.
 from __future__ import annotations
 
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -26,7 +27,10 @@ sys.path.insert(0, str(_REPO_ROOT / "scripts"))
 from log_privacy_ratchet import (  # noqa: E402
     RatchetError,
     main as ratchet_main,
+    policy_surface,
+    policy_weakened,
     run as ratchet_run,
+    run_trusted as ratchet_run_trusted,
 )
 
 # A pre-existing site, so the baseline carries debt exactly as the real
@@ -124,7 +128,11 @@ def _base_tree(repo: pathlib.Path, tmp_path: pathlib.Path) -> tuple[pathlib.Path
     head_sha = _git(repo, "rev-parse", "HEAD")
     base_sha = _git(repo, "merge-base", "main", "HEAD")
     worktree = tmp_path / f"base-{base_sha[:8]}"
-    _git(repo, "worktree", "add", "--detach", "-q", str(worktree), base_sha)
+    # Idempotent: a test may resolve the base more than once (e.g. to compare
+    # the advisory and trusted paths on the same commit), and re-adding an
+    # existing worktree is an error.
+    if not worktree.exists():
+        _git(repo, "worktree", "add", "--detach", "-q", str(worktree), base_sha)
     return worktree, base_sha, head_sha
 
 
@@ -272,6 +280,141 @@ class TestRatchetResistsRuleWeakening:
         )
         _commit(repo, "add a protection and a site it forbids")
         assert _ratchet(repo, tmp_path) == 1
+
+
+class TestTrustedEnforcementResistsSelfModification:
+    """The enforcement path must not execute the policy the change can edit.
+
+    The advisory dual-pass rejects "weaken AND add a site" but cannot see
+    "weaken only": such a change leaves src/ identical on both sides, so every
+    source diff is empty. It would land, and its relaxed rule would become the
+    merge-base policy for the next change — the bypass delayed by one PR, not
+    prevented. These cases model that two-PR sequence against the trusted path,
+    which executes only the base branch's rules.
+    """
+
+    _EXPOSED_SITE = (
+        'import logging\n\nlogger = logging.getLogger(__name__)\n\n\n'
+        'def added_path(email):\n'
+        '    logger.info("added_event email=%s", email)\n'
+    )
+
+    def _drop_label(self, repo: pathlib.Path, label: str, times: int = 2) -> None:
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        for _ in range(times):
+            for variant in (f'"{label}", ', f'"{label}",', f'"{label}"'):
+                if variant in text:
+                    text = text.replace(variant, "", 1)
+                    break
+        rules.write_text(text, encoding="utf-8")
+
+    def test_pr_a_weakening_only_is_rejected(self, repo, tmp_path):
+        """PR A: relax the policy, change no source. src/ diffs are empty."""
+        trusted = repo / "tests" / "test_1076_log_privacy.py"
+        assert trusted.is_file()
+
+        _git(repo, "checkout", "-q", "-b", "pr-a")
+        self._drop_label(repo, "email")
+        _commit(repo, "relax the policy vocabulary only")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+
+        # The source-only comparison sees nothing: src/ is byte-identical.
+        assert _ratchet(repo, tmp_path) == 0
+        # The trusted path rejects it on the policy surface alone.
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_pr_b_cannot_inherit_a_weakened_baseline(self, repo, tmp_path):
+        """PR B: with PR A merged, exploit the now-weakened baseline.
+
+        Trusted enforcement is anchored to the base branch's rules, so this is
+        only safe because PR A was stopped. Modelled here by keeping a trusted
+        rules tree that never saw PR A's weakening.
+        """
+        trusted_rules_tree = tmp_path / "trusted"
+        shutil.copytree(repo, trusted_rules_tree)
+
+        # PR A lands (as it would have, without the trusted gate).
+        _git(repo, "checkout", "-q", "-b", "pr-a")
+        self._drop_label(repo, "email")
+        _commit(repo, "PR A: relax the policy vocabulary")
+        _git(repo, "checkout", "-q", "main")
+        _git(repo, "merge", "-q", "--no-ff", "-m", "merge PR A", "pr-a")
+
+        # PR B adds a site that only the dropped label would have caught.
+        _git(repo, "checkout", "-q", "-b", "pr-b")
+        (repo / "src" / "added.py").write_text(self._EXPOSED_SITE, encoding="utf-8")
+        _commit(repo, "PR B: add a site the weakened policy no longer sees")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+
+        # Judged by the inherited (weakened) policy, PR B looks clean.
+        assert _ratchet(repo, tmp_path) == 0
+        # Judged by a policy PR A never touched, it is caught.
+        assert ratchet_run_trusted(base_tree, repo, trusted_rules_tree) == 1
+
+    def test_trusted_path_passes_an_honest_change(self, repo, tmp_path):
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / "src" / "added.py").write_text(_CLEAN_MODULE, encoding="utf-8")
+        _commit(repo, "add a compliant module")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 0
+
+    def test_trusted_path_still_rejects_an_ordinary_new_violation(self, repo, tmp_path):
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / "src" / "added.py").write_text(_NEW_VIOLATION, encoding="utf-8")
+        _commit(repo, "introduce a violation without touching policy")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_widening_the_approved_helper_set_counts_as_weakening(self, repo, tmp_path):
+        """Growing "already safe" is weakening by another route."""
+        _git(repo, "checkout", "-q", "-b", "feature")
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        text = text.replace(
+            '_APPROVED_REFS = frozenset({\n',
+            '_APPROVED_REFS = frozenset({\n    "str",\n', 1,
+        )
+        rules.write_text(text, encoding="utf-8")
+        _commit(repo, "treat str() as a sanctioned helper")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_removing_a_policy_set_outright_is_refused(self, repo, tmp_path):
+        _git(repo, "checkout", "-q", "-b", "feature")
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        text = re.sub(
+            r"_BARE_SENSITIVE_NAMES = frozenset\(\{.*?\}\)\n",
+            "_BARE_SENSITIVE_NAMES = frozenset()\n",
+            text, count=1, flags=re.S,
+        )
+        rules.write_text(text, encoding="utf-8")
+        _commit(repo, "empty a policy vocabulary")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_policy_surface_is_read_without_importing(self, repo):
+        """The head rule module is untrusted data in the enforcement path."""
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        rules.write_text(
+            rules.read_text(encoding="utf-8")
+            + '\nraise SystemExit("importing the head policy must never happen")\n',
+            encoding="utf-8",
+        )
+        surface = policy_surface(rules)          # parses; must not execute
+        assert "email" in surface["_BARE_SENSITIVE_NAMES"]
+
+    def test_policy_weakened_reports_both_directions(self):
+        base = {n: frozenset({"a"}) for n in
+                ("_SENSITIVE_LABELS", "_BARE_SENSITIVE_NAMES", "_LOG_METHODS",
+                 "_SWEPT_MODULES", "_APPROVED_REFS", "_INTERNAL_ID_ALLOWLIST")}
+        head = dict(base)
+        head["_SENSITIVE_LABELS"] = frozenset()
+        head["_APPROVED_REFS"] = frozenset({"a", "b"})
+        complaints = policy_weakened(base, head)
+        assert any("lost" in c for c in complaints)
+        assert any("gained" in c for c in complaints)
 
 
 class TestRatchetStaysGreenWithoutNewDebt:

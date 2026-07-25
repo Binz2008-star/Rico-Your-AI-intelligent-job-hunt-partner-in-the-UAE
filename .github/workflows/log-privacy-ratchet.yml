@@ -1,13 +1,20 @@
-name: Log Privacy Ratchet
+name: Log Privacy Ratchet (advisory)
 
-# Differential gate: scan src/ at the merge base and at this PR's head, then
-# fail if a violation exists in head that does not exist in base. Pre-existing
-# findings are never reported, so nothing about where they live is published;
-# the gate only forbids adding to them.
+# ADVISORY path. This must NOT be the Required check.
 #
-# DETECTION, NOT ENFORCEMENT: a failing run here blocks nothing on its own.
-# Merge enforcement begins only when this check is marked Required in branch
-# protection, which is a repository setting and not part of this workflow.
+# It runs the PR's own scanner and rules, which is what lets a protection ADDED
+# by the change take effect in the same PR — useful, and the reason this job
+# exists. But it also means the change executes the policy that judges it, so
+# it cannot be trusted for enforcement: relaxing a rule here would relax the
+# check itself.
+#
+# Enforcement lives in log-privacy-ratchet-trusted.yml, which runs the BASE
+# branch's workflow, scanner and rules under pull_request_target and therefore
+# cannot be weakened by the change under judgement. That is the check to mark
+# Required.
+#
+# Even that one enforces nothing until it is configured as a Required status
+# check in branch protection — a repository setting, not part of any workflow.
 #
 # Action refs below are moving major tags (@v4/@v5), matching the convention
 # used by every other workflow in this repository for first-party actions.

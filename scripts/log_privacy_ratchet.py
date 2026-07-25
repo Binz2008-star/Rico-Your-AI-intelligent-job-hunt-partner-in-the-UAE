@@ -51,10 +51,27 @@ import pathlib
 import sys
 from typing import Iterable, NamedTuple
 
-# The scanner always runs the HEAD checkout's copy of the rules against BOTH
-# trees. Loading the base tree's own rules would let a PR weaken detection and
-# still compare clean.
+# Which rules are executed depends on the mode:
+#
+#   advisory (--trusted absent) — both the base tree's and the head tree's
+#       rules are executed, so a protection added by the change is exercised
+#       in the same PR. This mode imports code from the head tree and is
+#       therefore only safe on a `pull_request` trigger with no privileges.
+#
+#   trusted (--trusted) — ONLY the rules from --rules-tree are executed. The
+#       head tree is never imported, only read as data, so this mode is safe
+#       under `pull_request_target` where the workflow, the scanner and the
+#       rules all come from the base branch and the change cannot alter what
+#       judges it.
 _RULES_RELPATH = pathlib.Path("tests") / "test_1076_log_privacy.py"
+
+# Vocabulary sets that define the policy surface. Extracted by parsing, never
+# by importing, so an untrusted head tree is only ever read as data.
+#   shrinking a "must not shrink" set removes protection;
+#   growing a "must not grow" set widens what counts as already-safe.
+_POLICY_MUST_NOT_SHRINK = ("_SENSITIVE_LABELS", "_BARE_SENSITIVE_NAMES",
+                           "_LOG_METHODS", "_SWEPT_MODULES")
+_POLICY_MUST_NOT_GROW = ("_APPROVED_REFS", "_INTERNAL_ID_ALLOWLIST")
 
 
 class RatchetError(RuntimeError):
@@ -99,6 +116,66 @@ def load_rules(repo_root: pathlib.Path, *, tag: str = "head", required: bool = T
                 f"have diverged; fix the guard rather than loosening this check"
             )
     return module
+
+
+def _literal_strings(node: "ast.AST") -> frozenset:
+    """Every string literal reachable inside an expression, flattened.
+
+    Handles a set/tuple of strings and a set of tuples of strings alike, which
+    is all the policy vocabularies use.
+    """
+    import ast
+
+    return frozenset(
+        n.value for n in ast.walk(node)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str)
+    )
+
+
+def policy_surface(rules_path: pathlib.Path) -> dict:
+    """Extract the policy vocabularies from a rule module BY PARSING IT.
+
+    Never imports. In trusted mode the head tree's rule module is written by
+    the change under judgement, so it is read strictly as data.
+    """
+    import ast
+
+    if not rules_path.is_file():
+        raise RatchetError(f"rule module not found at {rules_path}")
+    try:
+        tree = ast.parse(rules_path.read_text(encoding="utf-8-sig", errors="strict"))
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise RatchetError(f"could not read policy surface from {rules_path}: {exc}")
+
+    wanted = set(_POLICY_MUST_NOT_SHRINK) | set(_POLICY_MUST_NOT_GROW)
+    surface: dict = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or not node.targets:
+            continue
+        target = node.targets[0]
+        if isinstance(target, ast.Name) and target.id in wanted:
+            surface[target.id] = _literal_strings(node.value)
+    missing = wanted - set(surface)
+    if missing:
+        raise RatchetError(
+            "policy vocabularies missing from the head rule module: "
+            f"{sorted(missing)} — a policy set cannot be removed outright"
+        )
+    return surface
+
+
+def policy_weakened(base_surface: dict, head_surface: dict) -> list[str]:
+    """Ways the head policy is weaker than the base policy."""
+    complaints: list[str] = []
+    for name in _POLICY_MUST_NOT_SHRINK:
+        removed = sorted(base_surface[name] - head_surface[name])
+        if removed:
+            complaints.append(f"{name} lost {removed}")
+    for name in _POLICY_MUST_NOT_GROW:
+        added = sorted(head_surface[name] - base_surface[name])
+        if added:
+            complaints.append(f"{name} gained {added}")
+    return complaints
 
 
 def scan_file(rules, path: pathlib.Path, relpath: str) -> list[Finding]:
@@ -200,6 +277,57 @@ def new_violations(base: collections.Counter, head: collections.Counter):
     return regressions
 
 
+def run_trusted(base_tree: pathlib.Path, head_tree: pathlib.Path,
+                rules_tree: pathlib.Path) -> int:
+    """Enforcement path: only the trusted tree's rules are ever executed.
+
+    The change under judgement cannot alter what judges it. Two things are
+    checked, both driven entirely by the trusted checkout:
+
+      1. the policy surface may not be weakened — a set of protections may not
+         shrink, and the set of already-safe helpers may not grow. This is what
+         rejects a weakening-only change, which no source-tree diff can see
+         because such a change leaves src/ identical on both sides;
+      2. no violation exists in head that is absent from base, judged by the
+         TRUSTED rules.
+
+    The head tree is read as data only: parsed, never imported.
+    """
+    trusted_rules = load_rules(rules_tree, tag="trusted", required=True)
+
+    complaints = policy_weakened(
+        policy_surface(rules_tree / _RULES_RELPATH),
+        policy_surface(head_tree / _RULES_RELPATH),
+    )
+    regressions = new_violations(
+        scan_tree(trusted_rules, base_tree),
+        scan_tree(trusted_rules, head_tree),
+    )
+
+    if not complaints and not regressions:
+        print("OK — policy not weakened, and no violation introduced by this change.")
+        return 0
+
+    if complaints:
+        print("\nFAIL — this change weakens the log-privacy policy:\n")
+        for complaint in complaints:
+            print(f"    {complaint}")
+        print(
+            "\nA change may not relax the rules that judge it. Weakening must go "
+            "through the governance path for policy files, not an ordinary PR."
+        )
+    if regressions:
+        print("\nFAIL — newly introduced log-privacy violation(s), "
+              "judged by the trusted policy:\n")
+        for finding, was, now in regressions:
+            print(f"    {finding.describe()}   (base {was} -> head {now})")
+        print(
+            "\nWrap the argument with a helper from src/log_privacy.py "
+            "(user_ref / token_ref / operation_ref / filename_ref / safe_fields)."
+        )
+    return 1
+
+
 def run(base_tree: pathlib.Path, head_tree: pathlib.Path,
         base_sha: str | None, head_sha: str | None) -> int:
     # The dangerous failure is a base that silently equals HEAD: the diff is
@@ -283,8 +411,30 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--head-tree", required=True, type=pathlib.Path)
     parser.add_argument("--base-sha", default=None)
     parser.add_argument("--head-sha", default=None)
+    parser.add_argument(
+        "--trusted", action="store_true",
+        help="enforcement mode: execute only --rules-tree's rules, never the "
+             "head tree's, and reject a change that weakens the policy",
+    )
+    parser.add_argument(
+        "--rules-tree", type=pathlib.Path, default=None,
+        help="trusted checkout supplying the rules (required with --trusted)",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
+        for label, tree in (("base", args.base_tree), ("head", args.head_tree)):
+            if not tree.is_dir():
+                raise RatchetError(f"{label} tree {tree} is not a directory")
+        if args.trusted:
+            if args.rules_tree is None:
+                raise RatchetError("--trusted requires --rules-tree")
+            if not args.rules_tree.is_dir():
+                raise RatchetError(f"rules tree {args.rules_tree} is not a directory")
+            if args.base_sha and args.head_sha and args.base_sha == args.head_sha:
+                raise RatchetError(
+                    f"base and head resolve to the same commit ({args.base_sha[:12]})"
+                )
+            return run_trusted(args.base_tree, args.head_tree, args.rules_tree)
         return run(args.base_tree, args.head_tree, args.base_sha, args.head_sha)
     except RatchetError as exc:
         print(f"log-privacy ratchet ERROR: {exc}", file=sys.stderr)

@@ -234,11 +234,18 @@ Use this matrix after relevant merges/deploys.
   shared `sentry_before_send` scrubber. The static guard in
   `tests/test_1076_log_privacy.py` enforces the denylist repo-wide.
 - **Log-privacy ratchet:** the differential gate runs repository-wide over `src/`
-  and **detects** every newly introduced violation, failing its own check. The
-  detailed inventory of unresolved sites is generated on demand from the scanner
-  rather than published in this repository. **Detection is not enforcement:**
-  the gate blocks a merge only once it is configured as a Required status check
-  in branch protection. Until then a failing run is advisory.
+  and **detects** every newly introduced violation. The detailed inventory of
+  unresolved sites is generated on demand from the scanner rather than published
+  in this repository. There are two paths, and they are not interchangeable:
+  the **trusted** check runs the base branch's workflow, scanner and rules under
+  `pull_request_target`, so a change cannot relax the policy that judges it —
+  this is the one to mark Required; the **advisory** check runs the PR's own
+  policy so newly added protections are exercised in the same PR, and must never
+  be the Required check. **Detection is not enforcement:** a merge is blocked
+  only once the trusted check is configured as a Required status check in branch
+  protection. Until then every failing run is advisory. Policy files
+  (`tests/test_1076_log_privacy.py`, `scripts/log_privacy_ratchet.py`) are
+  governance-controlled: weakening them is rejected by the trusted check.
 - Do not call live third-party APIs from unit tests.
 
 ## No Dead UI Rule
