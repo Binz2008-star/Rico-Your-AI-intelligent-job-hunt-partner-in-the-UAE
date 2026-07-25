@@ -6,13 +6,16 @@ This file exists because context was lost once already. It is written for someon
 who has never seen this work before. It records what is true, what was decided,
 and what must not be changed without the owner's explicit permission.
 
-Last updated: 2026-07-25. Production head at time of writing: **`9a9ee9b`**.
+Last updated: 2026-07-25. Production head at time of writing: **`e26548b`**
+(`9a9ee9b` plus the two changes merged after it).
 
 ---
 
 ## 1. Where production is
 
-`main` is at **`9a9ee9b`**. Three CV-related changes shipped in sequence:
+`main` is at **`e26548b`**. Three CV-related changes shipped in sequence, followed
+by two unrelated merges (#1387, #1386) that moved the head without touching the CV
+path — measure any baseline against the current head, never against `9a9ee9b`:
 
 | Commit | What it did |
 |---|---|
@@ -219,6 +222,30 @@ structured. This is the same class of defect as the `cv_text`/`cv_structured` ga
 fixed in `9a9ee9b`: reading CV grounding off a model that does not carry it.
 
 Restoring the confirm card without also closing this is not an acceptable fix.
+
+### A third, independent falsehood: a banner with no artifact behind it
+
+Observed in production. On the Vault surface, the pending-review banner ("CV
+preview ready — complete the review in the chat to save it to My Files")
+rendered directly above the empty state ("No files yet — upload your CV to get
+started"), in one frame. The product told one person, at one moment, that their
+preview was ready and that they had no files.
+
+The banner was **client state, not a query**: a boolean set once by the upload
+animation's completion callback, with no path back to false and nothing to
+re-derive it. It therefore outlived the artifact it described and survived a
+full delete cycle.
+
+**Standing rule that comes out of this:** a claim about stored data is drawn
+from a query of that data, at the moment of rendering. A flag, a URL parameter
+or a browser-stored value may gate a claim, but none of them may be sufficient
+to draw one — anything that can render the claim on its own will eventually
+render it after the thing it describes is gone.
+
+The empty state carries the second half of the rule. An empty list is a true
+fact, but "upload your CV to get started" is the wrong *instruction* for someone
+whose CV is uploaded and awaiting confirmation, and telling them to upload the
+same file again is how two true-sounding lines came to contradict each other.
 
 ---
 
