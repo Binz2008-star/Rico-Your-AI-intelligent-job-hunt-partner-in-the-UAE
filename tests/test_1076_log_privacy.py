@@ -480,14 +480,20 @@ _APPROVED_REFS = frozenset({
     "user_ref", "token_ref", "operation_ref", "filename_ref", "safe_fields",
 })
 
-# (module, log event name) pairs permitted to log a raw ``internal_id=``.
-# These three log ``getattr(user, "id", ...)`` — the opaque rico_users.id —
-# on best-effort post-registration paths. Adding an entry is a deliberate,
-# reviewable act; that is the entire point of enumerating them.
+# Call sites permitted to log a raw ``internal_id=``, keyed by
+# (module, enclosing qualified name, full format literal). All three log
+# ``getattr(user, "id", ...)`` — the opaque rico_users.id — on best-effort
+# post-registration paths. All three also live in the same function, which is
+# precisely why the key carries the whole format literal rather than its first
+# token: a prefix would collapse them into one exemption. Adding an entry is a
+# deliberate, reviewable act; that is the entire point of enumerating them.
 _INTERNAL_ID_ALLOWLIST = frozenset({
-    ("src/api/auth.py", "verification_email_schedule_failed"),
-    ("src/api/auth.py", "signup_attribution_persist_failed"),
-    ("src/api/auth.py", "signup_notification_schedule_failed"),
+    ("src/api/auth.py", "register",
+     "verification_email_schedule_failed internal_id=%s"),
+    ("src/api/auth.py", "register",
+     "signup_attribution_persist_failed internal_id=%s"),
+    ("src/api/auth.py", "register",
+     "signup_notification_schedule_failed internal_id=%s"),
 })
 
 # Identifiers that name an external identifier or user-supplied text. Rule 2
@@ -538,20 +544,71 @@ def _is_sanctioned(node: ast.AST) -> bool:
 
 def _log_calls(tree: ast.AST):
     """Yield every ``logger.<level>(...)`` call node in a module."""
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            fn = node.func
-            if isinstance(fn, ast.Attribute) and fn.attr in _LOG_METHODS and node.args:
-                yield node
+    for _scope, node in _log_calls_with_scope(tree):
+        yield node
+
+
+def _log_calls_with_scope(node: ast.AST, scope: tuple[str, ...] = ()):
+    """Yield (enclosing qualified name, log call node) pairs.
+
+    The qualified name is part of a call site's durable identity: unlike a line
+    number it survives edits above it, and unlike the first format-string token
+    it distinguishes two sites that happen to share a prefix.
+    """
+    for child in ast.iter_child_nodes(node):
+        child_scope = scope
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            child_scope = scope + (child.name,)
+        elif isinstance(child, ast.Call):
+            fn = child.func
+            if isinstance(fn, ast.Attribute) and fn.attr in _LOG_METHODS and child.args:
+                yield ".".join(scope) or "<module>", child
+        yield from _log_calls_with_scope(child, child_scope)
 
 
 def _bare_name(node: ast.AST) -> str | None:
-    """Identifier for a bare Name/Attribute argument, else None."""
+    """Identifier naming the value an expression yields, else None.
+
+    Name and Attribute are the obvious shapes, but an identifier reaches a
+    logger just as easily through a subscript (``row["email"]``) or a getattr
+    (``getattr(user, "email", "")``). Both were invisible here, and the second
+    shape is exactly what the internal-id sites use — so a raw address could
+    have been logged there under an allowlisted exemption.
+    """
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
         return node.attr
+    if isinstance(node, ast.Subscript):
+        key = node.slice
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            return key.value
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "getattr"
+        and len(node.args) >= 2
+        and isinstance(node.args[1], ast.Constant)
+        and isinstance(node.args[1].value, str)
+    ):
+        return node.args[1].value
     return None
+
+
+def _rule_two_candidates(node: ast.Call):
+    """Expressions rule 2 inspects for one log call.
+
+    An f-string is ``args[0]``, so scanning only ``args[1:]`` never sees its
+    interpolations: ``logger.info(f"login failed {email}")`` was invisible to
+    both rules. Its FormattedValue nodes are inspected wherever they appear.
+    """
+    for index, arg in enumerate(node.args):
+        if isinstance(arg, ast.JoinedStr):
+            for part in ast.walk(arg):
+                if isinstance(part, ast.FormattedValue):
+                    yield part.value
+        elif index > 0:
+            yield arg
 
 
 def _scan_module(path: pathlib.Path) -> list[str]:
@@ -613,7 +670,7 @@ def _scan_bare_sensitive_names(path: pathlib.Path) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     violations: list[str] = []
     for node in _log_calls(tree):
-        for arg in node.args[1:]:
+        for arg in _rule_two_candidates(node):
             name = _bare_name(arg)
             if name and name.lower() in _BARE_SENSITIVE_NAMES:
                 violations.append(
@@ -623,15 +680,22 @@ def _scan_bare_sensitive_names(path: pathlib.Path) -> list[str]:
     return violations
 
 
-def _scan_internal_id_sites(path: pathlib.Path) -> list[tuple[str, str]]:
-    """Every ``internal_id=`` log site as (module, event name) pairs."""
+def _scan_internal_id_sites(path: pathlib.Path) -> list[tuple[str, str, str]]:
+    """Every ``internal_id=`` log site, keyed by durable identity.
+
+    (module, enclosing qualified name, full format literal). The first
+    whitespace-delimited token is not an identity: two sites in one module
+    whose formats share a prefix collapse to a single key, and a new site can
+    then be introduced under an existing exemption without the set difference
+    noticing.
+    """
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    sites: list[tuple[str, str]] = []
-    for node in _log_calls(tree):
+    sites: list[tuple[str, str, str]] = []
+    for scope, node in _log_calls_with_scope(tree):
         fmt = node.args[0]
         if isinstance(fmt, ast.Constant) and isinstance(fmt.value, str):
             if "internal_id=" in fmt.value:
-                sites.append((str(path), fmt.value.split()[0]))
+                sites.append((str(path), scope, fmt.value))
     return sites
 
 
@@ -691,6 +755,23 @@ class TestInternalIdExemptionIsEnumeratedNotLabelBased:
             found |= set(_scan_internal_id_sites(pathlib.Path(module)))
         stale = sorted(_INTERNAL_ID_ALLOWLIST - found)
         assert stale == [], f"allowlist entries no longer present in source: {stale}"
+
+    def test_no_allowlist_key_covers_more_than_one_site(self):
+        """An exemption must cover exactly one call site.
+
+        If one key matches two sites, a second raw-id line has been introduced
+        under an existing exemption and the unlisted-set difference stays
+        empty — the allowlist would silently cover it.
+        """
+        counts: dict[tuple[str, str, str], int] = {}
+        for module in _SWEPT_MODULES:
+            for site in _scan_internal_id_sites(pathlib.Path(module)):
+                counts[site] = counts.get(site, 0) + 1
+        ambiguous = sorted(k for k, n in counts.items() if n > 1)
+        assert ambiguous == [], (
+            "one allowlist key matches multiple call sites — the exemption is "
+            f"no longer per-site:\n{ambiguous}"
+        )
 
     def test_rule_does_not_depend_on_the_variable_being_named_user_id(self):
         """The old guard keyed on the literal token ``user_id`` and missed this."""
