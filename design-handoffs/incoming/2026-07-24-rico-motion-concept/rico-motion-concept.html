@@ -1,0 +1,1022 @@
+<!--
+  Rico — Motion Concept · Spotlight Reveal + Career-Transformation Scrub
+  Branch: claude/command-visual-polish-51dq2z
+  Self-contained, CSP-safe. Body-only so it doubles as a Claude Artifact page and
+  opens directly in any browser.
+
+  Motion techniques extracted from two references (Lithos cursor spotlight reveal;
+  Mainframe pointer-scrub video + typewriter) and reinterpreted in Rico's Atelier
+  identity. TRUTH: no fake counts / employers / statuses / verification / providers /
+  progress. Every scenario is labelled "Sample scenario — not live account data".
+  The reveal shows CLARITY (organised career state), not a decorative second image.
+-->
+<style>
+  :root{
+    --paper:#F1EADD; --panel:#F7F1E6; --inset:#EAE1D0; --card:#FBF7EE;
+    --ink:#1F1B15; --ink70:rgba(31,27,21,.70); --ink52:rgba(31,27,21,.52);
+    --ink38:rgba(31,27,21,.38); --ink22:rgba(31,27,21,.22);
+    --hair:rgba(31,27,21,.14); --hair2:rgba(31,27,21,.09);
+    --clay:#C6492E; --clay-deep:#A63A22; --clay-soft:#F3DCD1; --clayText:#B23E24;
+    --moss:#3C7A52; --mossText:#367049; --moss-soft:#DCE8D8;
+    --electric:#3A5F7D; --electric-soft:#D9E3EB;
+    --amber:#D99C4E; --amberText:#8A5A20; --amber-soft:#F0E1C6;
+    --shadow-1:0 1px 2px rgba(31,27,21,.06), 0 1px 1px rgba(31,27,21,.04);
+    --shadow-2:0 2px 4px rgba(31,27,21,.06), 0 8px 18px rgba(31,27,21,.08);
+    --shadow-3:0 10px 24px rgba(31,27,21,.12), 0 26px 50px rgba(31,27,21,.12);
+    --serif:"Fraunces","Hoefler Text",Georgia,"Times New Roman",serif;
+    --body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --r-sm:7px; --r-md:11px; --r-lg:16px; --r-xl:22px;
+    --ease:cubic-bezier(.2,.7,.2,1); --ease-out:cubic-bezier(.16,1,.3,1);
+    --maxw:1240px;
+  }
+  :root[data-theme="dark"]{
+    --paper:#1A1712; --panel:#221D17; --inset:#141109; --card:#26201A;
+    --ink:#EFE7D6; --ink70:rgba(239,231,214,.72); --ink52:rgba(239,231,214,.54);
+    --ink38:rgba(239,231,214,.40); --ink22:rgba(239,231,214,.24);
+    --hair:rgba(239,231,214,.16); --hair2:rgba(239,231,214,.09);
+    --clay:#E0703A; --clay-deep:#C6492E; --clay-soft:#3a251a; --clayText:#F0A277;
+    --moss:#6FBE8F; --mossText:#9FD3B2; --moss-soft:#22301f;
+    --electric:#7FA9C7; --electric-soft:#1e2833; --amber:#E6B872; --amberText:#E6B872; --amber-soft:#33291a;
+    --shadow-2:0 2px 6px rgba(0,0,0,.4), 0 10px 22px rgba(0,0,0,.34);
+    --shadow-3:0 12px 28px rgba(0,0,0,.5);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --paper:#1A1712; --panel:#221D17; --inset:#141109; --card:#26201A;
+    --ink:#EFE7D6; --ink70:rgba(239,231,214,.72); --ink52:rgba(239,231,214,.54);
+    --ink38:rgba(239,231,214,.40); --ink22:rgba(239,231,214,.24);
+    --hair:rgba(239,231,214,.16); --hair2:rgba(239,231,214,.09);
+    --clay:#E0703A; --clay-deep:#C6492E; --clay-soft:#3a251a; --clayText:#F0A277;
+    --moss:#6FBE8F; --mossText:#9FD3B2; --moss-soft:#22301f;
+    --electric:#7FA9C7; --electric-soft:#1e2833; --amber:#E6B872; --amberText:#E6B872; --amber-soft:#33291a;
+    --shadow-2:0 2px 6px rgba(0,0,0,.4), 0 10px 22px rgba(0,0,0,.34);
+    --shadow-3:0 12px 28px rgba(0,0,0,.5);
+  }}
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0}
+  .doc{background:var(--paper); color:var(--ink); font-family:var(--body); font-size:15px; line-height:1.55;
+    -webkit-font-smoothing:antialiased; min-height:100vh; letter-spacing:-.005em;
+    background-image:radial-gradient(1100px 640px at 8% -10%, rgba(198,73,46,.05), transparent 60%),
+      radial-gradient(900px 560px at 106% 2%, rgba(58,95,125,.04), transparent 55%);}
+  .grain{position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5; mix-blend-mode:multiply}
+  :root[data-theme="dark"] .grain{mix-blend-mode:screen; opacity:.16}
+  .wrap{position:relative; z-index:1; max-width:var(--maxw); margin:0 auto; padding:0 22px}
+  h1,h2,h3,h4{font-family:var(--serif); font-weight:600; letter-spacing:-.02em; text-wrap:balance; margin:0}
+  .mono{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase}
+  .eyebrow{font-family:var(--mono); font-size:10.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--clayText)}
+  button{font-family:inherit; cursor:pointer}
+  ::selection{background:var(--clay-soft); color:var(--clay-deep)}
+
+  /* header */
+  .topbar{position:sticky; top:0; z-index:60; backdrop-filter:blur(10px);
+    background:color-mix(in srgb,var(--paper) 82%, transparent); border-bottom:1px solid var(--hair)}
+  .topbar-in{max-width:var(--maxw); margin:0 auto; padding:11px 22px; display:flex; align-items:center; gap:16px}
+  .brand{display:flex; align-items:center; gap:11px; font-family:var(--serif); font-size:17px; font-weight:600}
+  .brand .mk{width:26px;height:26px;flex:0 0 auto}
+  .brand small{font-family:var(--mono); font-size:9.5px; letter-spacing:.18em; color:var(--ink52); text-transform:uppercase; display:block; margin-top:2px}
+  .nav{display:flex; gap:2px; margin-left:6px; flex-wrap:wrap}
+  .nav a{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink52);
+    text-decoration:none; padding:6px 9px; border-radius:999px; transition:all var(--ease)}
+  .nav a:hover{color:var(--ink); background:var(--inset)}
+  .spacer{flex:1}
+  .iconbtn{border:1px solid var(--hair); background:var(--card); color:var(--ink70); height:34px; padding:0 12px;
+    border-radius:9px; display:inline-flex; align-items:center; gap:8px; box-shadow:var(--shadow-1); font-family:var(--mono);
+    font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; transition:all var(--ease)}
+  .iconbtn:hover{color:var(--ink); border-color:var(--ink22)} .iconbtn svg{width:15px;height:15px}
+  .iconbtn[aria-pressed="true"]{color:var(--clayText); border-color:color-mix(in srgb,var(--clay) 40%,transparent); background:var(--clay-soft)}
+
+  /* sample-data truth chip */
+  .sample{display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:9px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--amberText); background:var(--amber-soft);
+    border:1px solid color-mix(in srgb,var(--amber) 42%,transparent); border-radius:999px; padding:4px 10px}
+  .sample::before{content:""; width:6px;height:6px;border-radius:50%; background:var(--amber)}
+
+  section.band{padding:60px 0 8px; scroll-margin-top:64px}
+  .band-head{display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:24px; flex-wrap:wrap}
+  .band-head h2{font-size:clamp(25px,3.3vw,37px); line-height:1.04}
+  .band-head p{margin:8px 0 0; color:var(--ink70); max-width:58ch; font-size:14.5px}
+  .num{font-family:var(--mono); font-size:11px; letter-spacing:.2em; color:var(--clayText)}
+  .rule{height:1px; background:linear-gradient(90deg,var(--ink22),transparent); margin-top:16px}
+  .paper{background:var(--card); border:1px solid var(--hair); border-radius:var(--r-lg); box-shadow:var(--shadow-2)}
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  .grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:18px}
+
+  /* device frame */
+  .device{position:relative; border-radius:18px; background:var(--panel); border:1px solid var(--hair); box-shadow:var(--shadow-3); overflow:hidden}
+  .device .chrome{display:flex; align-items:center; gap:8px; padding:9px 14px; border-bottom:1px solid var(--hair); background:color-mix(in srgb,var(--inset) 55%, var(--panel)); position:relative; z-index:2}
+  .device .chrome .dots{display:flex; gap:6px} .device .chrome .dots i{width:10px;height:10px;border-radius:50%;display:block;opacity:.7}
+  .device .chrome .url{flex:1; text-align:center; font-family:var(--mono); font-size:10.5px; color:var(--ink52); background:var(--card); border:1px solid var(--hair); border-radius:999px; padding:4px 12px; max-width:300px; margin:0 auto}
+  .device .chrome .tag{font-family:var(--mono); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink52)}
+
+  /* =================================================== SPOTLIGHT HERO ==== */
+  .hero{position:relative; height:560px; overflow:hidden; background:var(--paper); touch-action:pan-y}
+  .hero .scene{position:absolute; inset:0; width:100%; height:100%}
+  .hero .scene svg{width:100%; height:100%; display:block}
+  .hero .base{z-index:10}
+  /* the reveal layer masked by a moving radial gradient (CSS custom props, not canvas) */
+  .hero .reveal{z-index:30; --sx:-999px; --sy:-999px; --sr:230px;
+    -webkit-mask-image:radial-gradient(circle var(--sr) at var(--sx) var(--sy),
+      #000 0%, #000 40%, rgba(0,0,0,.75) 60%, rgba(0,0,0,.4) 75%, rgba(0,0,0,.12) 88%, transparent 100%);
+    mask-image:radial-gradient(circle var(--sr) at var(--sx) var(--sy),
+      #000 0%, #000 40%, rgba(0,0,0,.75) 60%, rgba(0,0,0,.4) 75%, rgba(0,0,0,.12) 88%, transparent 100%);
+    -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; will-change:mask-image}
+  /* soft clay ring that trails the cursor */
+  .hero .ring{position:absolute; z-index:31; width:calc(var(--sr,230px)*2); height:calc(var(--sr,230px)*2);
+    left:var(--sx,-999px); top:var(--sy,-999px); transform:translate(-50%,-50%); border-radius:50%;
+    pointer-events:none; box-shadow:0 0 0 1px color-mix(in srgb,var(--clay) 18%,transparent) inset,
+      0 0 60px 10px color-mix(in srgb,var(--clay) 8%,transparent); opacity:.0; transition:opacity .4s var(--ease)}
+  .hero.lit .ring{opacity:1}
+  .hero .glass{position:absolute; inset:0; z-index:40; pointer-events:none;
+    background:linear-gradient(180deg, transparent 40%, color-mix(in srgb,var(--ink) 22%, transparent) 100%)}
+  .hero .copy{position:absolute; z-index:50; left:0; right:0; top:12%; display:flex; flex-direction:column; align-items:center; text-align:center; padding:0 20px; pointer-events:none}
+  .hero .copy h1{color:var(--ink); line-height:.98; font-size:clamp(34px,6vw,74px)}
+  :root[data-theme="dark"] .hero .copy h1, .darkhero .copy h1{color:#F4ECDD}
+  .hero .copy h1 .l1{display:block; font-style:italic; font-weight:500; letter-spacing:-.03em}
+  .hero .copy h1 .l2{display:block; font-weight:600; letter-spacing:-.04em; margin-top:-2px}
+  .hero .copy .sub{margin-top:16px; max-width:42ch; font-size:clamp(13px,1.6vw,16px); color:var(--ink70)}
+  :root[data-theme="dark"] .hero .copy .sub{color:rgba(244,236,221,.8)}
+  .hero .hint{position:absolute; z-index:50; left:50%; bottom:20px; transform:translateX(-50%);
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink52);
+    display:flex; align-items:center; gap:9px; pointer-events:none}
+  .hero .hint .dot{width:7px;height:7px;border-radius:50%;background:var(--clay)}
+  .hero .corner{position:absolute; z-index:50; bottom:22px; max-width:250px; font-size:12.5px; color:var(--ink70); line-height:1.5}
+  .hero .corner.l{left:26px} .hero .corner.r{right:26px; text-align:right}
+  .hero .cta{position:absolute; z-index:50; bottom:56px; left:50%; transform:translateX(-50%); display:flex; gap:10px}
+  .hero .sample-tag{position:absolute; z-index:52; top:14px; left:14px}
+
+  .btn{border:1px solid var(--hair); background:var(--card); color:var(--ink); font-size:13.5px; font-weight:500;
+    padding:10px 18px; border-radius:999px; box-shadow:var(--shadow-1); transition:transform var(--ease), box-shadow var(--ease), background var(--ease), border-color var(--ease); display:inline-flex; align-items:center; gap:8px}
+  .btn:hover{border-color:var(--ink22); transform:translateY(-1px)} .btn:active{transform:translateY(0) scale(.97)}
+  .btn svg{width:15px;height:15px}
+  .btn.primary{background:linear-gradient(180deg,var(--clay),var(--clay-deep)); color:#fff; border-color:var(--clay-deep); box-shadow:var(--shadow-2)}
+  .btn.primary:hover{transform:translateY(-1px) scale(1.02); box-shadow:0 8px 20px color-mix(in srgb,var(--clay) 30%,transparent)}
+  .btn.ghost{background:transparent; box-shadow:none; color:var(--ink70)}
+  .btn.sm{padding:7px 13px; font-size:12.5px}
+
+  /* entrance animations (GPU: transform+opacity+filter) */
+  @keyframes blurRise{0%{opacity:0; transform:translateY(26px); filter:blur(12px)} 100%{opacity:1; transform:none; filter:blur(0)}}
+  @keyframes fadeUp{0%{opacity:0; transform:translateY(18px)} 100%{opacity:1; transform:none}}
+  @keyframes slowZoom{0%{transform:scale(1.1)} 100%{transform:scale(1)}}
+  .anim{opacity:0; animation-fill-mode:forwards; animation-timing-function:var(--ease-out)}
+  .a-blur{animation-name:blurRise; animation-duration:1.05s}
+  .a-fade{animation-name:fadeUp; animation-duration:.9s}
+  .a-zoom{animation:slowZoom 2s var(--ease-out) forwards; transform-origin:60% 45%}
+  .doc[data-motion="off"] .anim,.doc[data-motion="off"] .a-zoom{animation:none !important; opacity:1 !important; transform:none !important; filter:none !important}
+  @media (prefers-reduced-motion:reduce){ .anim,.a-zoom{animation:none !important; opacity:1 !important; transform:none !important; filter:none !important}
+    .hero .reveal{-webkit-mask-image:none !important; mask-image:none !important} }
+
+  /* mini scenes for before/after/frames */
+  .scene-box{position:relative; border-radius:var(--r-md); overflow:hidden; border:1px solid var(--hair); background:var(--paper)}
+  .scene-box svg{width:100%; height:100%; display:block}
+  .scene-box .lab{position:absolute; top:10px; left:10px; z-index:3}
+  .phone{width:330px; max-width:100%; margin:0 auto}
+  .phone .device{border-radius:32px; border:8px solid #12100c}
+  :root[data-theme="dark"] .phone .device{border-color:#000}
+  .rtl{direction:rtl}
+
+  /* =============================================== SCRUB (pointer wipe) === */
+  .scrub{position:relative; height:400px; overflow:hidden; background:var(--paper); touch-action:pan-y; cursor:ew-resize}
+  .scrub .scene{position:absolute; inset:0} .scrub .scene svg{width:100%;height:100%;display:block}
+  .scrub .wipe{z-index:20; --edge:8%;
+    -webkit-mask-image:linear-gradient(90deg, #000 calc(var(--edge) - 13%), rgba(0,0,0,.45) var(--edge), transparent calc(var(--edge) + 7%));
+    mask-image:linear-gradient(90deg, #000 calc(var(--edge) - 13%), rgba(0,0,0,.45) var(--edge), transparent calc(var(--edge) + 7%));
+    -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; will-change:mask-image}
+  .scrub .seam{position:absolute; z-index:22; top:0; bottom:44px; left:var(--edge,8%); width:2px; transform:translateX(-1px);
+    background:linear-gradient(180deg,transparent, var(--clay) 20%, var(--clay) 80%, transparent);
+    box-shadow:0 0 22px 5px color-mix(in srgb,var(--clay) 14%,transparent); pointer-events:none}
+  .scrub .seam::after{content:""; position:absolute; left:50%; top:50%; width:30px;height:30px; transform:translate(-50%,-50%);
+    border-radius:50%; background:var(--card); border:1px solid var(--clay); box-shadow:var(--shadow-2);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30'%3E%3Cpath d='M11 9l-4 6 4 6M19 9l4 6-4 6' fill='none' stroke='%23C6492E' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E")}
+  .scrub .track{position:absolute; z-index:23; left:20px; right:20px; bottom:16px; height:20px; display:flex; align-items:center; gap:0; pointer-events:none}
+  .scrub .track .bar{position:relative; flex:1; height:4px; border-radius:4px; background:var(--inset)}
+  .scrub .track .bar i{position:absolute; left:0; top:0; height:100%; width:var(--edge,8%); border-radius:4px; background:linear-gradient(90deg,var(--ink38),var(--clay))}
+  .scrub .track .lbl{font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink52); white-space:nowrap; padding:0 10px}
+  .scrub .stgtag{position:absolute; z-index:24; top:14px; left:50%; transform:translateX(-50%); font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink70); background:var(--card); border:1px solid var(--hair); border-radius:999px; padding:5px 13px; box-shadow:var(--shadow-1)}
+
+  /* =============================================== TYPEWRITER + PILLS === */
+  @keyframes blink{50%{opacity:0}}
+  .tw-wrap{min-height:120px}
+  .tw{font-family:var(--serif); font-size:clamp(20px,2.6vw,30px); font-weight:500; letter-spacing:-.02em; color:var(--ink); line-height:1.25}
+  .tw-cursor{display:inline-block; width:2px; height:1.05em; background:var(--clay); vertical-align:-3px; margin-left:3px}
+  .doc:not([data-motion="off"]) .tw-cursor.on{animation:blink 1s step-end infinite}
+  .pills{display:flex; flex-wrap:wrap; gap:9px; margin-top:20px}
+  .pill{opacity:0; transform:translateY(9px); transition:transform var(--ease), background var(--ease), color var(--ease), border-color var(--ease), box-shadow var(--ease);
+    display:inline-flex; align-items:center; gap:8px; background:var(--card); color:var(--ink); border:1px solid var(--hair);
+    border-radius:999px; font-size:13.5px; font-weight:500; padding:9px 16px; box-shadow:var(--shadow-1); cursor:pointer}
+  .pills.in .pill{opacity:1; transform:none}
+  .pill svg{width:14px;height:14px; color:var(--clayText)}
+  .pill:hover{background:var(--ink); color:var(--paper); border-color:var(--ink); transform:translateY(-1px); box-shadow:var(--shadow-2)}
+  .pill:hover svg{color:var(--paper)}
+  .pill:active{transform:translateY(0) scale(.96)}
+  .pill.primary{background:linear-gradient(180deg,var(--clay),var(--clay-deep)); color:#fff; border-color:var(--clay-deep)}
+  .pill.primary svg{color:#fff} .pill.primary:hover{filter:brightness(1.05)}
+  .pill.outline{background:transparent; border-color:color-mix(in srgb,var(--clay) 40%,transparent); color:var(--clayText)}
+  .pill.outline:hover{background:var(--clay-soft); color:var(--clay-deep)}
+  .pill.copied{background:var(--moss-soft); color:var(--mossText); border-color:color-mix(in srgb,var(--moss) 40%,transparent)}
+  .pill.copied svg{color:var(--mossText)}
+  .pill .route{font-family:var(--mono); font-size:9px; letter-spacing:.06em; color:var(--ink38); margin-left:2px}
+  .pill:hover .route{color:rgba(244,236,221,.6)}
+
+  /* =============================================== COMMAND CONTEXT REVEAL === */
+  .cmd-empty{position:relative; min-height:360px; padding:26px; overflow:hidden; --cx:50%; --cy:40%}
+  .cmd-empty .halo{position:absolute; z-index:1; width:360px;height:360px; left:var(--cx); top:var(--cy); transform:translate(-50%,-50%);
+    border-radius:50%; background:radial-gradient(circle, color-mix(in srgb,var(--clay) 10%,transparent), transparent 68%); opacity:0; transition:opacity .4s var(--ease); pointer-events:none}
+  .cmd-empty.lit .halo{opacity:1}
+  .cmd-empty .ce-head{position:relative; z-index:3; text-align:center; margin-bottom:22px}
+  .cmd-empty .ce-head h3{font-size:24px; font-style:italic; font-weight:500}
+  .cmd-empty .ce-head p{margin:7px 0 0; color:var(--ink70); font-size:13.5px}
+  .cmd-empty .sugs{position:relative; z-index:3; display:grid; grid-template-columns:repeat(3,1fr); gap:11px; max-width:720px; margin:0 auto}
+  .sug{display:flex; gap:11px; align-items:flex-start; padding:13px; border:1px solid var(--hair); border-radius:var(--r-md); background:var(--card);
+    box-shadow:var(--shadow-1); transition:transform var(--ease), box-shadow var(--ease), border-color var(--ease); text-align:left; cursor:pointer}
+  .sug:hover,.sug.near{transform:translateY(-2px); box-shadow:var(--shadow-2); border-color:color-mix(in srgb,var(--clay) 34%,transparent)}
+  .sug .si{width:30px;height:30px;flex:0 0 auto;border-radius:8px; background:var(--inset); display:grid; place-items:center; transition:background var(--ease)}
+  .sug .si svg{width:16px;height:16px; color:var(--ink70)}
+  .sug.near .si{background:var(--clay-soft)} .sug.near .si svg{color:var(--clay-deep)}
+  .sug h6{font-size:13.5px; font-weight:600; margin:0} .sug p{margin:3px 0 0; font-size:11.5px; color:var(--ink52); line-height:1.4}
+  .sug .rt{font-family:var(--mono); font-size:8.5px; letter-spacing:.06em; color:var(--ink38); margin-top:5px; display:block}
+  .cmd-empty .ce-foot{position:relative; z-index:3; text-align:center; margin-top:18px; font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink38)}
+
+  /* =============================================== SOFT-REVEAL CARDS === */
+  .rcards{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  .rcard{position:relative; border:1px solid var(--hair); border-radius:var(--r-lg); background:var(--card); box-shadow:var(--shadow-2); overflow:hidden; --cx:50%; --cy:50%}
+  .rcard .glow{position:absolute; inset:0; z-index:0; opacity:0; transition:opacity .35s var(--ease); pointer-events:none;
+    background:radial-gradient(200px 200px at var(--cx) var(--cy), color-mix(in srgb,var(--clay) 9%,transparent), transparent 70%)}
+  .rcard.lit .glow{opacity:1}
+  .rcard .rc-in{position:relative; z-index:1; padding:15px 16px}
+  .rcard .rc-top{display:flex; gap:12px; align-items:flex-start}
+  .rcard .logo{width:38px;height:38px;flex:0 0 auto;border-radius:10px; display:grid; place-items:center; color:#fff; font-family:var(--serif); font-weight:600; font-size:17px}
+  .rcard .rc-top h5{font-size:15.5px; font-weight:600; letter-spacing:-.01em} .rcard .rc-top .m{font-family:var(--mono); font-size:9.5px; letter-spacing:.04em; color:var(--ink52); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap}
+  .rcard .vbadge{margin-left:auto; font-family:var(--mono); font-size:8.5px; letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:999px; white-space:nowrap}
+  .vbadge.live{background:var(--moss-soft); color:var(--mossText)} .vbadge.check{background:var(--clay-soft); color:var(--clayText)}
+  /* essentials ALWAYS visible; soft-reveal only deepens emphasis */
+  .rcard .facts{display:flex; flex-direction:column; gap:8px; margin-top:13px; padding-top:13px; border-top:1px solid var(--hair2)}
+  .fact{display:flex; gap:9px; align-items:flex-start; font-size:12.5px}
+  .fact .fk{flex:0 0 96px; font-family:var(--mono); font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink52); padding-top:2px}
+  .fact .fv{flex:1; color:var(--ink)} .fact .fv .why{color:var(--mossText)} .fact .fv .gap{color:var(--clayText)}
+  .fact .prov{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:9px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink52); background:var(--inset); border:1px solid var(--hair); border-radius:999px; padding:2px 8px}
+  .rcard .rc-actions{display:flex; gap:8px; margin-top:13px}
+
+  /* component map */
+  .cmap{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:13px}
+  .comp{border:1px solid var(--hair); border-radius:var(--r-md); background:var(--card); box-shadow:var(--shadow-1); overflow:hidden}
+  .comp .ch{display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--hair2); background:var(--panel)}
+  .comp .ch code{font-family:var(--mono); font-size:12px; color:var(--clayText); font-weight:500}
+  .comp .cb{padding:11px 12px; font-size:12px; color:var(--ink70); line-height:1.5}
+  .comp .cb .tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:9px}
+  .comp .cb .tg{font-family:var(--mono); font-size:8px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink52); background:var(--inset); border-radius:999px; padding:2px 7px}
+  .codeblk{background:var(--footer,#1A1712); color:#EFE7D6; border-radius:var(--r-md); padding:15px 17px; overflow-x:auto; font-family:var(--mono); font-size:12px; line-height:1.65; box-shadow:var(--shadow-2)}
+  :root[data-theme="dark"] .codeblk{background:#0f0d09; border:1px solid var(--hair)}
+  .codeblk .k{color:#E0A07A} .codeblk .c{color:rgba(239,231,214,.45)} .codeblk .s{color:#9FD3B2}
+
+  /* perf/a11y checklist */
+  .checks{display:grid; grid-template-columns:1fr 1fr; gap:9px}
+  .chk{display:flex; gap:9px; align-items:flex-start; padding:11px 13px; border:1px solid var(--hair); border-radius:var(--r-md); background:var(--card); box-shadow:var(--shadow-1)}
+  .chk svg{width:16px;height:16px;color:var(--moss); flex:0 0 auto; margin-top:1px} .chk b{font-weight:600} .chk span{font-size:12.5px; color:var(--ink70)}
+
+  /* asset board */
+  .board{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px}
+  .asset{border:1px solid var(--hair); border-radius:var(--r-md); background:var(--card); box-shadow:var(--shadow-1); overflow:hidden}
+  .asset .at{height:96px; display:grid; place-items:center; border-bottom:1px solid var(--hair2); background:linear-gradient(135deg,var(--panel),var(--inset))}
+  .asset .ab{padding:10px 12px} .asset .ab h6{font-size:12.5px; font-weight:600} .asset .ab p{margin:3px 0 0; font-size:11px; color:var(--ink52); line-height:1.4}
+
+  .foot{margin-top:56px; border-top:1px solid var(--hair); padding:28px 0 56px; color:var(--ink52); font-size:12.5px}
+  @media (max-width:900px){ .grid-2,.grid-3,.rcards,.checks{grid-template-columns:1fr} .cmd-empty .sugs{grid-template-columns:1fr} }
+  @media (max-width:720px){ .wrap{padding:0 15px} .nav{display:none} .topbar-in{gap:10px} .band-head h2{font-size:24px} }
+  <!--CSS-->
+</style>
+
+<div class="doc" data-motion="on" id="doc">
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><filter id="gr"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#gr)" opacity="0.5"/></svg>
+
+  <!-- ================= REUSABLE SCENES + ICONS (original Rico assets) ===== -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <!-- icon set -->
+      <!-- Rico mark — two interlocking motion rings (clay + ink), "career in motion" -->
+      <symbol id="i-mark" viewBox="0 0 48 48">
+        <g fill="none" stroke-width="5.4" stroke-linecap="round">
+          <path d="M30.5 12.2 A11.5 11.5 0 1 1 16 15" stroke="var(--ink,#1F1B15)"/>
+          <path d="M17.5 35.8 A11.5 11.5 0 1 1 32 33" stroke="var(--clay,#C6492E)"/>
+        </g>
+        <path d="M30.5 12.2 l-6.7 -0.4 6.1 4.9 0.6 -4.5Z" fill="var(--ink,#1F1B15)"/>
+        <path d="M17.5 35.8 l6.7 0.4 -6.1 -4.9 -0.6 4.5Z" fill="var(--clay,#C6492E)"/>
+      </symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 2.5v2.5M12 19v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2.5 12H5M19 12h2.5M4.2 19.8 6 18M18 6l1.8-1.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+      <symbol id="i-motion" viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 14 2-8h6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arr" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-clip" viewBox="0 0 24 24"><path d="M20 11.5 12 19a4.5 4.5 0 0 1-6.4-6.4l7.7-7.7a3 3 0 0 1 4.3 4.3l-7.6 7.6a1.5 1.5 0 0 1-2.2-2.1l6.9-6.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m20 20-4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+      <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M14 3v4h4M9 12h6M9 15.5h6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+      <symbol id="i-brief" viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="17" height="12" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5M3.5 12h17" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 20c1-4 4.2-5.5 7-5.5s6 1.5 7 5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v5m0 8v5m9-9h-5M8 12H3m10-6.5-3 3m-2 5-3 3m8 0-3-3m-2-5-3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l12-7L7 5Z" fill="currentColor"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 15V5a1 1 0 0 1 1-1h9" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></symbol>
+      <symbol id="i-seal" viewBox="0 0 24 24"><path d="M12 2.5 14 4l2.4-.6.9 2.3 2.3.9L21 9l1.5 2-1.5 2 .5 2.4-2.3.9-.9 2.3L15.9 20 12 21.5 8.1 20l-2.4.4-.9-2.3-2.3-.9L3 13l-1.5-2L3 9l-.5-2.4 2.3-.9.9-2.3L8 4l4-1.5Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="m8.5 12 2.3 2.3L16 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+
+      <!-- ===== SCENE A · CHAOS (base layer): scattered / fragmented / unclear ===== -->
+      <symbol id="scene-chaos" viewBox="0 0 1200 620">
+        <rect width="1200" height="620" fill="var(--paper,#F1EADD)"/>
+        <!-- left zone: fragmented documents + unfinished profile -->
+        <g transform="rotate(-7 250 300)" opacity="0.9">
+          <rect x="120" y="200" width="150" height="190" rx="8" fill="var(--card,#FBF7EE)" stroke="var(--ink22,#ccc)"/>
+          <rect x="138" y="222" width="70" height="9" rx="4" fill="var(--ink22,#bbb)"/>
+          <rect x="138" y="244" width="110" height="6" rx="3" fill="var(--hair,#ddd)"/>
+          <rect x="138" y="258" width="110" height="6" rx="3" fill="var(--hair,#ddd)"/>
+          <rect x="138" y="272" width="70" height="6" rx="3" fill="var(--hair,#ddd)"/>
+        </g>
+        <!-- torn CV: two offset halves with a jagged split -->
+        <g transform="rotate(5 230 380)">
+          <path d="M175 300 h150 v60 l-150 8 Z" fill="var(--card,#FBF7EE)" stroke="var(--ink22,#ccc)"/>
+          <path d="M175 372 l150 -8 v70 h-150 Z" fill="var(--card,#FBF7EE)" stroke="var(--ink22,#ccc)"/>
+          <rect x="192" y="316" width="60" height="8" rx="4" fill="var(--ink22,#bbb)"/>
+          <rect x="192" y="392" width="100" height="6" rx="3" fill="var(--hair,#ddd)"/>
+          <rect x="192" y="406" width="80" height="6" rx="3" fill="var(--hair,#ddd)"/>
+        </g>
+        <!-- unfinished profile ring -->
+        <g transform="translate(120 90)">
+          <circle cx="34" cy="34" r="30" fill="none" stroke="var(--ink22,#ccc)" stroke-width="6" stroke-dasharray="60 130" stroke-linecap="round"/>
+          <circle cx="34" cy="27" r="9" fill="none" stroke="var(--ink38,#aaa)" stroke-width="3"/>
+          <path d="M20 48c2-7 8-10 14-10s12 3 14 10" fill="none" stroke="var(--ink38,#aaa)" stroke-width="3"/>
+        </g>
+        <!-- center zone: unclear matches (tilted tiles with ?) -->
+        <g transform="rotate(-9 560 250)"><rect x="470" y="150" width="180" height="96" rx="10" fill="var(--card,#FBF7EE)" stroke="var(--ink22,#ccc)"/><rect x="490" y="172" width="90" height="9" rx="4" fill="var(--ink22,#bbb)"/><rect x="490" y="192" width="130" height="6" rx="3" fill="var(--hair,#ddd)"/><text x="612" y="228" font-family="Georgia, serif" font-size="34" fill="var(--ink22,#bbb)">?</text></g>
+        <g transform="rotate(8 640 400)"><rect x="520" y="330" width="180" height="96" rx="10" fill="var(--card,#FBF7EE)" stroke="var(--ink22,#ccc)"/><rect x="540" y="352" width="70" height="9" rx="4" fill="var(--ink22,#bbb)"/><rect x="540" y="372" width="120" height="6" rx="3" fill="var(--hair,#ddd)"/><text x="662" y="408" font-family="Georgia, serif" font-size="34" fill="var(--ink22,#bbb)">?</text></g>
+        <g transform="rotate(-4 560 500)"><rect x="470" y="452" width="150" height="70" rx="10" fill="var(--card,#FBF7EE)" stroke="var(--ink22,#ccc)"/><rect x="488" y="472" width="60" height="8" rx="4" fill="var(--ink22,#bbb)"/><rect x="488" y="490" width="100" height="6" rx="3" fill="var(--hair,#ddd)"/></g>
+        <!-- right zone: scattered applications, random angles -->
+        <g transform="rotate(11 950 200)"><rect x="860" y="140" width="170" height="88" rx="10" fill="var(--card,#FBF7EE)" stroke="var(--ink22,#ccc)"/><rect x="878" y="160" width="80" height="8" rx="4" fill="var(--ink22,#bbb)"/><rect x="878" y="180" width="120" height="6" rx="3" fill="var(--hair,#ddd)"/><rect x="878" y="196" width="60" height="6" rx="3" fill="var(--hair,#ddd)"/></g>
+        <g transform="rotate(-6 1000 330)"><rect x="915" y="270" width="170" height="88" rx="10" fill="var(--card,#FBF7EE)" stroke="var(--ink22,#ccc)"/><rect x="933" y="290" width="70" height="8" rx="4" fill="var(--ink22,#bbb)"/><rect x="933" y="310" width="120" height="6" rx="3" fill="var(--hair,#ddd)"/></g>
+        <g transform="rotate(7 940 460)"><rect x="855" y="410" width="160" height="82" rx="10" fill="var(--card,#FBF7EE)" stroke="var(--ink22,#ccc)"/><rect x="873" y="430" width="60" height="8" rx="4" fill="var(--ink22,#bbb)"/><rect x="873" y="450" width="110" height="6" rx="3" fill="var(--hair,#ddd)"/></g>
+      </symbol>
+
+      <!-- ===== SCENE B · CLARITY (reveal layer): organised / active / verified ===== -->
+      <symbol id="scene-clarity" viewBox="0 0 1200 620">
+        <rect width="1200" height="620" fill="var(--paper,#F1EADD)"/>
+        <!-- left zone: active CV + complete profile -->
+        <g transform="translate(110 175)">
+          <rect x="0" y="0" width="200" height="240" rx="14" fill="var(--card,#FBF7EE)" stroke="var(--hair,#ddd)"/>
+          <rect x="0" y="0" width="5" height="240" rx="2" fill="var(--clay,#C6492E)"/>
+          <rect x="24" y="26" width="70" height="16" rx="4" fill="var(--clay,#C6492E)"/>
+          <text x="24" y="70" font-family="Georgia, serif" font-size="20" font-style="italic" fill="var(--ink,#1F1B15)">Active CV</text>
+          <rect x="24" y="92" width="150" height="7" rx="3.5" fill="var(--ink22,#bbb)"/>
+          <rect x="24" y="108" width="150" height="7" rx="3.5" fill="var(--hair,#ddd)"/>
+          <rect x="24" y="124" width="110" height="7" rx="3.5" fill="var(--hair,#ddd)"/>
+          <g transform="translate(24 150)"><circle cx="11" cy="11" r="11" fill="var(--moss,#3C7A52)"/><path d="m6 11 3.4 3.4L16 7.6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><text x="30" y="16" font-family="var(--mono), monospace" font-size="12" fill="var(--mossText,#367049)">Parsed &amp; ready</text></g>
+        </g>
+        <g transform="translate(118 92)"><circle cx="34" cy="34" r="30" fill="none" stroke="var(--moss,#3C7A52)" stroke-width="6"/><path d="M22 34l8 8 16-17" fill="none" stroke="var(--moss,#3C7A52)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <!-- center zone: verified job matches, aligned list -->
+        <g transform="translate(430 150)">
+          <rect x="0" y="0" width="340" height="330" rx="16" fill="var(--card,#FBF7EE)" stroke="var(--hair,#ddd)"/>
+          <text x="24" y="40" font-family="var(--mono), monospace" font-size="12" letter-spacing="2" fill="var(--ink52,#888)">MATCHES</text>
+          <g transform="translate(20 58)">
+            <rect x="0" y="0" width="300" height="76" rx="11" fill="var(--panel,#F7F1E6)" stroke="var(--hair,#ddd)"/>
+            <rect x="0" y="0" width="4" height="76" rx="2" fill="var(--clay,#C6492E)"/>
+            <rect x="20" y="18" width="120" height="11" rx="5" fill="var(--ink,#1F1B15)"/>
+            <rect x="20" y="40" width="180" height="7" rx="3.5" fill="var(--ink38,#aaa)"/>
+            <g transform="translate(238 24)"><rect x="0" y="0" width="46" height="20" rx="10" fill="var(--moss-soft,#DCE8D8)"/><path d="M9 10l3 3 6-7" fill="none" stroke="var(--mossText,#367049)" stroke-width="2" stroke-linecap="round"/><text x="22" y="14" font-family="var(--mono),monospace" font-size="9" fill="var(--mossText,#367049)">LIVE</text></g>
+          </g>
+          <g transform="translate(20 148)">
+            <rect x="0" y="0" width="300" height="76" rx="11" fill="var(--panel,#F7F1E6)" stroke="var(--hair,#ddd)"/>
+            <rect x="0" y="0" width="4" height="76" rx="2" fill="var(--clay,#C6492E)"/>
+            <rect x="20" y="18" width="150" height="11" rx="5" fill="var(--ink,#1F1B15)"/>
+            <rect x="20" y="40" width="160" height="7" rx="3.5" fill="var(--ink38,#aaa)"/>
+            <g transform="translate(238 24)"><rect x="0" y="0" width="46" height="20" rx="10" fill="var(--moss-soft,#DCE8D8)"/><path d="M9 10l3 3 6-7" fill="none" stroke="var(--mossText,#367049)" stroke-width="2" stroke-linecap="round"/><text x="22" y="14" font-family="var(--mono),monospace" font-size="9" fill="var(--mossText,#367049)">LIVE</text></g>
+          </g>
+          <g transform="translate(20 238)">
+            <rect x="0" y="0" width="300" height="72" rx="11" fill="var(--panel,#F7F1E6)" stroke="var(--hair,#ddd)"/>
+            <rect x="20" y="16" width="110" height="11" rx="5" fill="var(--ink,#1F1B15)"/>
+            <rect x="20" y="38" width="150" height="7" rx="3.5" fill="var(--ink38,#aaa)"/>
+            <g transform="translate(222 22)"><rect x="0" y="0" width="62" height="20" rx="10" fill="var(--clay-soft,#F3DCD1)"/><text x="31" y="14" text-anchor="middle" font-family="var(--mono),monospace" font-size="9" fill="var(--clayText,#B23E24)">CHECK LINK</text></g>
+          </g>
+        </g>
+        <!-- right zone: structured applications board + next action -->
+        <g transform="translate(820 150)">
+          <rect x="0" y="0" width="300" height="270" rx="16" fill="var(--card,#FBF7EE)" stroke="var(--hair,#ddd)"/>
+          <text x="20" y="36" font-family="var(--mono), monospace" font-size="12" letter-spacing="2" fill="var(--ink52,#888)">PIPELINE</text>
+          <g transform="translate(18 50)">
+            <g><rect x="0" y="0" width="64" height="200" rx="9" fill="var(--panel,#F7F1E6)" stroke="var(--hair,#ddd)"/><text x="32" y="18" text-anchor="middle" font-family="var(--mono),monospace" font-size="8" fill="var(--ink52,#888)">LEAD</text><rect x="8" y="28" width="48" height="26" rx="6" fill="var(--clay-soft,#F3DCD1)"/><rect x="8" y="60" width="48" height="26" rx="6" fill="var(--card,#FBF7EE)" stroke="var(--hair,#ddd)"/></g>
+            <g transform="translate(72 0)"><rect x="0" y="0" width="64" height="200" rx="9" fill="var(--panel,#F7F1E6)" stroke="var(--hair,#ddd)"/><text x="32" y="18" text-anchor="middle" font-family="var(--mono),monospace" font-size="8" fill="var(--ink52,#888)">APPLIED</text><rect x="8" y="28" width="48" height="26" rx="6" fill="var(--card,#FBF7EE)" stroke="var(--hair,#ddd)"/></g>
+            <g transform="translate(144 0)"><rect x="0" y="0" width="64" height="200" rx="9" fill="var(--panel,#F7F1E6)" stroke="var(--hair,#ddd)"/><text x="32" y="18" text-anchor="middle" font-family="var(--mono),monospace" font-size="8" fill="var(--electric,#3A5F7D)">INTERVIEW</text><rect x="8" y="28" width="48" height="26" rx="6" fill="var(--electric-soft,#D9E3EB)"/></g>
+            <g transform="translate(216 0)"><rect x="0" y="0" width="64" height="200" rx="9" fill="var(--panel,#F7F1E6)" stroke="var(--hair,#ddd)"/><text x="32" y="18" text-anchor="middle" font-family="var(--mono),monospace" font-size="8" fill="var(--ink52,#888)">OUTCOME</text></g>
+          </g>
+        </g>
+        <!-- clear next action -->
+        <g transform="translate(890 450)"><rect x="0" y="0" width="205" height="52" rx="26" fill="var(--clay,#C6492E)"/><text x="30" y="33" font-family="var(--body), sans-serif" font-size="16" font-weight="600" fill="#fff">See top match</text><path d="M170 26h14m-5-5 5 5-5 5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- ================================ HEADER ============================= -->
+  <header class="topbar">
+    <div class="topbar-in">
+      <div class="brand">
+        <svg class="mk" viewBox="0 0 24 24" style="color:var(--clay)"><use href="#i-mark"/></svg>
+        <div>Rico · Motion<small>Spotlight reveal + career scrub</small></div>
+      </div>
+      <nav class="nav" aria-label="Sections">
+        <a href="#analysis">Analysis</a>
+        <a href="#hero">Hero</a>
+        <a href="#beforeafter">Before / After</a>
+        <a href="#frames">Frames</a>
+        <a href="#scrub">Scrub</a>
+        <a href="#typewriter">Typewriter</a>
+        <a href="#command">Command</a>
+        <a href="#cards">Cards</a>
+        <a href="#components">Components</a>
+        <a href="#perf">Perf · A11y</a>
+        <a href="#assets">Assets</a>
+      </nav>
+      <span class="spacer"></span>
+      <button class="iconbtn" id="motionBtn" aria-pressed="false" onclick="toggleMotion()" title="Preview reduced motion"><svg><use href="#i-motion"/></svg> Motion</button>
+      <button class="iconbtn" onclick="toggleTheme(this)" aria-label="Toggle theme" title="Light / dark"><svg><use href="#i-moon"/></svg></button>
+    </div>
+  </header>
+
+  <div class="wrap">
+
+    <!-- ============================== ANALYSIS ============================ -->
+    <section class="band" id="analysis">
+      <div class="band-head">
+        <div>
+          <div class="eyebrow">Motion study · reinterpreted for Rico</div>
+          <h2>Two references, one honest idea:<br><em style="font-style:italic;color:var(--clay-deep)">reveal the clarity that's already there.</em></h2>
+          <p>The Lithos spotlight and the Mainframe pointer-scrub are motion techniques, not templates. Extracted and rebuilt in Rico's Atelier identity — warm paper, ink, clay — the spotlight reveals an <b>organised career state</b> beneath a scattered one, and the scrub walks that same transformation. No neon, no glassmorphism, no geology, no fake data.</p>
+        </div>
+        <span class="sample" style="align-self:flex-start">Sample scenario — not live account data</span>
+      </div>
+
+      <div class="grid-2">
+        <div class="paper" style="padding:17px">
+          <div class="mono" style="color:var(--ink52); margin-bottom:12px">What we took</div>
+          <div style="display:flex; flex-direction:column; gap:11px">
+            <div style="display:flex; gap:11px"><span style="flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--clay-soft);color:var(--clay-deep);display:grid;place-items:center"><svg style="width:15px;height:15px"><use href="#i-search"/></svg></span><div><b>Lithos → spotlight reveal.</b> Cursor-following soft radial mask over two stacked layers; smoothed pointer via RAF + lerp; slow Ken-Burns zoom; staggered blur-rise type.</div></div>
+            <div style="display:flex; gap:11px"><span style="flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--electric-soft);color:var(--electric);display:grid;place-items:center"><svg style="width:15px;height:15px"><use href="#i-play"/></svg></span><div><b>Mainframe → pointer scrub.</b> Horizontal pointer scrubs a short transformation sequence; one active seek + queued latest target; typewriter intro; staggered action-pill entrance; minimal nav.</div></div>
+          </div>
+        </div>
+        <div class="paper" style="padding:17px">
+          <div class="mono" style="color:var(--clayText); margin-bottom:12px">What we changed for Rico</div>
+          <div style="display:flex; flex-direction:column; gap:9px; font-size:13.5px; color:var(--ink70)">
+            <div>· The reveal shows <b style="color:var(--ink)">clarity</b> (active CV, verified matches, a structured board) — never a decorative second image.</div>
+            <div>· CSS radial-gradient mask via custom properties — <b style="color:var(--ink)">not</b> <code style="font-family:var(--mono);font-size:11px">canvas.toDataURL()</code> per frame.</div>
+            <div>· Pointer events (not mouse-only), touch fallback, keyboard-safe, reduced-motion static fallback.</div>
+            <div>· The scrub is a truthful SVG keyframe sequence, not fake dashboard footage.</div>
+            <div>· Atelier palette + editorial type; every sample carries the “not live account data” label.</div>
+          </div>
+        </div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== SPOTLIGHT HERO ====================== -->
+    <section class="band" id="hero">
+      <div class="band-head">
+        <div>
+          <div class="num">01 · Landing hero</div>
+          <h2>Spotlight reveal — desktop</h2>
+          <p>Move the light across the surface. Under the cursor, a scattered career comes into focus. The mask is a live CSS radial-gradient driven by smoothed pointer tracking; on touch and reduced-motion it settles to the clear state.</p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center">
+          <button class="btn ghost sm" onclick="sweepHero()"><svg><use href="#i-play"/></svg> Auto-sweep</button>
+        </div>
+      </div>
+
+      <div class="device">
+        <div class="chrome">
+          <div class="dots"><i style="background:var(--clay)"></i><i style="background:var(--amber)"></i><i style="background:var(--moss)"></i></div>
+          <div class="url">ricohunt.com</div><span class="tag">Desktop</span>
+        </div>
+        <div class="hero" id="heroMain" tabindex="0" role="img" aria-label="Rico landing hero: a scattered career state that resolves into an organised search, active CV, verified matches and a structured applications board as you move the cursor. Sample scenario, not live account data.">
+          <span class="sample-tag sample">Sample scenario — not live account data</span>
+          <div class="scene base a-zoom"><svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-chaos"/></svg></div>
+          <div class="scene reveal" id="heroReveal"><svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-clarity"/></svg></div>
+          <div class="ring" id="heroRing"></div>
+          <div class="copy">
+            <div class="eyebrow anim a-fade" style="animation-delay:.12s; margin-bottom:14px; display:flex; align-items:center; gap:9px; justify-content:center"><svg style="width:16px;height:16px"><use href="#i-mark"/></svg> AI Career OS — Search. Apply. Track. Follow up.</div>
+            <h1><span class="l1 anim a-blur" style="animation-delay:.25s">Your career has more</span><span class="l2 anim a-blur" style="animation-delay:.42s">beneath the surface.</span></h1>
+            <p class="sub anim a-fade" style="animation-delay:.7s">Rico brings it into focus — turning scattered applications and unclear matches into an active CV, verified matches, and a structured board.</p>
+          </div>
+          <div class="corner l anim a-fade" style="animation-delay:.85s">Before Rico: applications scattered across tabs, half-finished profile, matches you can't tell apart.</div>
+          <div class="cta anim a-fade" style="animation-delay:.95s">
+            <button class="btn primary">Start with Rico <svg><use href="#i-arr"/></svg></button>
+            <button class="btn">Upload your CV</button>
+          </div>
+          <div class="hint" id="heroHint"><span class="dot"></span> Move your cursor to reveal clarity</div>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="paper" style="padding:13px 15px"><div class="mono" style="color:var(--ink52);margin-bottom:6px">Base layer</div><div style="font-size:13px;color:var(--ink70)">Scattered applications · fragmented documents · unfinished profile · unclear matches.</div></div>
+        <div class="paper" style="padding:13px 15px"><div class="mono" style="color:var(--mossText);margin-bottom:6px">Reveal layer</div><div style="font-size:13px;color:var(--ink70)">Organised search · active CV · verified matches · structured Applications board · a clear next action.</div></div>
+        <div class="paper" style="padding:13px 15px"><div class="mono" style="color:var(--clayText);margin-bottom:6px">Technique</div><div style="font-size:13px;color:var(--ink70)"><code style="font-family:var(--mono);font-size:11px">mask-image: radial-gradient(circle var(--sr) at var(--sx) var(--sy), …)</code> · RAF-lerped pointer.</div></div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== BEFORE / AFTER ===================== -->
+    <section class="band" id="beforeafter">
+      <div class="band-head">
+        <div><div class="num">02 · The idea</div><h2>Before → after</h2>
+          <p>The two layers of the reveal, shown flat. The spotlight simply lets the second exist inside the first — clarity you move a light across, not a slide that flips.</p></div>
+        <span class="sample" style="align-self:flex-start">Sample scenario — not live account data</span>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px"><span class="mono" style="color:var(--ink52)">Before · base layer</span><span class="mono" style="font-size:8.5px;background:var(--inset);color:var(--ink52);padding:2px 7px;border-radius:999px">scattered</span></div>
+          <div class="scene-box" style="height:300px"><svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-chaos"/></svg></div>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px"><span class="mono" style="color:var(--mossText)">After · reveal layer</span><span class="mono" style="font-size:8.5px;background:var(--moss-soft);color:var(--mossText);padding:2px 7px;border-radius:999px">in focus</span></div>
+          <div class="scene-box" style="height:300px"><svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-clarity"/></svg></div>
+        </div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== FRAMES ============================= -->
+    <section class="band" id="frames">
+      <div class="band-head">
+        <div><div class="num">03 · Every context</div><h2>Mobile · Arabic · reduced motion</h2>
+          <p>On touch and reduced-motion the hero settles to the clear state — the honest end, no spotlight required. Arabic mirrors layout and the wipe direction; the meaning is identical.</p></div>
+      </div>
+      <div class="grid-3" style="align-items:start">
+        <!-- MOBILE (static clarity, touch) -->
+        <div>
+          <div class="mono" style="color:var(--ink52); margin-bottom:11px">Mobile · touch → static</div>
+          <div class="phone"><div class="device">
+            <div class="chrome"><div class="dots"><i style="background:var(--clay)"></i><i style="background:var(--amber)"></i><i style="background:var(--moss)"></i></div><div class="url" style="max-width:150px">ricohunt.com</div></div>
+            <div class="hero" style="height:440px">
+              <span class="sample-tag sample" style="font-size:8px; padding:3px 8px">Sample — not live data</span>
+              <div class="scene base"><svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-clarity"/></svg></div>
+              <div class="glass"></div>
+              <div class="copy" style="top:9%"><h1 style="font-size:34px"><span class="l1">Your career has more</span><span class="l2">beneath the surface.</span></h1><p class="sub" style="font-size:12.5px">Rico brings it into focus.</p></div>
+              <div class="cta" style="bottom:20px; flex-direction:column; width:calc(100% - 40px)"><button class="btn primary" style="width:100%; justify-content:center">Start with Rico</button><button class="btn" style="width:100%; justify-content:center">Upload your CV</button></div>
+            </div>
+          </div></div>
+        </div>
+        <!-- ARABIC / RTL -->
+        <div>
+          <div class="mono" style="color:var(--mossText); margin-bottom:11px">Arabic · RTL</div>
+          <div class="device rtl" dir="rtl" lang="ar">
+            <div class="chrome"><span class="tag">RTL</span><div class="url">ricohunt.com</div><div class="dots"><i style="background:var(--moss)"></i><i style="background:var(--amber)"></i><i style="background:var(--clay)"></i></div></div>
+            <div class="hero" style="height:392px">
+              <span class="sample-tag sample" style="right:14px;left:auto">عيّنة — ليست بيانات حساب فعلية</span>
+              <div class="scene base"><svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-clarity"/></svg></div>
+              <div class="glass"></div>
+              <div class="copy" style="top:12%"><h1 style="font-size:30px; font-family:var(--serif)"><span class="l1" style="font-style:normal">حياتك المهنية</span><span class="l2">أعمق مما تظهر.</span></h1><p class="sub" style="font-size:12.5px">ريكو يجعلها واضحة.</p></div>
+              <div class="cta" style="bottom:20px"><button class="btn primary">ابدأ مع ريكو</button><button class="btn">ارفع سيرتك</button></div>
+            </div>
+          </div>
+        </div>
+        <!-- REDUCED MOTION -->
+        <div>
+          <div class="mono" style="color:var(--clayText); margin-bottom:11px">Reduced motion · static fallback</div>
+          <div class="device">
+            <div class="chrome"><div class="dots"><i style="background:var(--clay)"></i><i style="background:var(--amber)"></i><i style="background:var(--moss)"></i></div><span class="tag">prefers-reduced-motion</span></div>
+            <div class="hero" style="height:392px">
+              <span class="sample-tag sample" style="font-size:8px;padding:3px 8px">Sample — not live data</span>
+              <div class="scene base"><svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-clarity"/></svg></div>
+              <div class="glass"></div>
+              <div class="copy" style="top:12%"><h1 style="font-size:30px"><span class="l1">Your career has more</span><span class="l2">beneath the surface.</span></h1><p class="sub" style="font-size:12.5px">No animation — the clear state is shown directly.</p></div>
+              <div class="cta" style="bottom:20px"><button class="btn primary">Start with Rico</button></div>
+            </div>
+          </div>
+          <div style="font-size:12px; color:var(--ink70); margin-top:10px">No spotlight, no zoom, no blur-rise. Entrances resolve instantly to their final position; the reveal layer is fully shown. Nothing essential depends on motion.</div>
+        </div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== SCRUB ============================== -->
+    <section class="band" id="scrub">
+      <div class="band-head">
+        <div><div class="num">04 · Pointer scrub</div><h2>Scrub the transformation</h2>
+          <p>Drag horizontally — chaos wipes into clarity along a soft seam. A single eased target, one update per frame (no seek-flooding), pointer events with a touch fallback. It's an SVG keyframe transform, never fake footage.</p></div>
+        <button class="btn ghost sm" onclick="scrubDemo()"><svg><use href="#i-play"/></svg> Auto-scrub</button>
+      </div>
+      <div class="device">
+        <div class="chrome"><div class="dots"><i style="background:var(--clay)"></i><i style="background:var(--amber)"></i><i style="background:var(--moss)"></i></div><div class="url">ricohunt.com — career transformation</div><span class="tag">Drag ↔</span></div>
+        <div class="scrub" id="scrub" tabindex="0" role="slider" aria-label="Scrub from a scattered career to an organised one. Sample scenario, not live account data." aria-valuemin="0" aria-valuemax="100" aria-valuenow="8">
+          <span class="sample-tag sample" style="position:absolute;top:12px;left:14px;z-index:25">Sample scenario — not live account data</span>
+          <div class="scene"><svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-chaos"/></svg></div>
+          <div class="scene wipe" id="scrubWipe"><svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-clarity"/></svg></div>
+          <div class="seam" id="scrubSeam"></div>
+          <div class="stgtag" id="scrubStage">Scattered</div>
+          <div class="track"><span class="lbl" style="color:var(--ink52)">Chaos</span><span class="bar"><i id="scrubBar"></i></span><span class="lbl" style="color:var(--mossText)">Clarity</span></div>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="paper" style="padding:15px">
+          <div class="mono" style="color:var(--clayText); margin-bottom:10px">Storyboard · what the seam crosses</div>
+          <div style="display:flex; flex-direction:column; gap:7px; font-size:12.5px; color:var(--ink70)">
+            <div>· <b style="color:var(--ink)">0–20%</b> — scattered applications, tilted, unlabelled.</div>
+            <div>· <b style="color:var(--ink)">20–45%</b> — a fragmented CV re-joins; profile ring completes.</div>
+            <div>· <b style="color:var(--ink)">45–75%</b> — unclear “?” matches resolve into verified rows.</div>
+            <div>· <b style="color:var(--ink)">75–100%</b> — a structured Applications board and one clear next step.</div>
+          </div>
+        </div>
+        <div class="paper" style="padding:15px">
+          <div class="mono" style="color:var(--ink52); margin-bottom:10px">Fallbacks (required)</div>
+          <div style="display:flex; flex-direction:column; gap:7px; font-size:12.5px; color:var(--ink70)">
+            <div>· Touch → tap-to-advance stages (no continuous seeking).</div>
+            <div>· Reduced motion → static poster at the clarity end.</div>
+            <div>· Keyboard → ← / → arrows step the seam; <code style="font-family:var(--mono);font-size:11px">role="slider"</code> + <code style="font-family:var(--mono);font-size:11px">aria-valuenow</code>.</div>
+            <div>· No autoplay, muted, no CPU-heavy re-seeking, no fake data in frames.</div>
+          </div>
+        </div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== TYPEWRITER + PILLS ================= -->
+    <section class="band" id="typewriter">
+      <div class="band-head">
+        <div><div class="num">05 · Command opener</div><h2>Typewriter intro, then real actions</h2>
+          <p>One short line types in; the action pills appear on their own timer (400 ms), never waiting for typing to finish. The line runs once per session; under reduced motion it's shown whole. Every pill maps to a real Rico route or chat intent.</p></div>
+        <button class="btn ghost sm" onclick="replayTypewriter()"><svg><use href="#i-play"/></svg> Replay</button>
+      </div>
+      <div class="device">
+        <div class="chrome"><div class="dots"><i style="background:var(--clay)"></i><i style="background:var(--amber)"></i><i style="background:var(--moss)"></i></div><div class="url">ricohunt.com/command</div><span class="tag">Empty state</span></div>
+        <div style="padding:44px 34px 40px; background:var(--paper); position:relative">
+          <span class="sample-tag sample" style="position:absolute;top:14px;left:14px">Sample scenario — not live account data</span>
+          <div style="display:flex; align-items:center; gap:11px; margin-bottom:8px"><svg style="width:22px;height:22px;color:var(--clay)"><use href="#i-mark"/></svg><span class="mono" style="color:var(--ink52)">Rico is ready</span></div>
+          <div class="tw-wrap"><div class="tw" id="twLine" aria-live="polite"></div></div>
+          <div class="pills" id="twPills">
+            <button class="pill primary"><svg><use href="#i-search"/></svg> Find jobs <span class="route">/jobs</span></button>
+            <button class="pill"><svg><use href="#i-doc"/></svg> Review my CV <span class="route">/profile · cv</span></button>
+            <button class="pill"><svg><use href="#i-user"/></svg> Improve my profile <span class="route">/profile</span></button>
+            <button class="pill"><svg><use href="#i-brief"/></svg> Check my applications <span class="route">/applications</span></button>
+            <button class="pill"><svg><use href="#i-spark"/></svg> Prepare for an interview <span class="route">chat intent</span></button>
+            <button class="pill"><svg><use href="#i-clip"/></svg> Upload a document <span class="route">/upload</span></button>
+            <button class="pill outline" id="copyPill" onclick="copyRico(this)"><svg><use href="#i-copy"/></svg> Share ricohunt.com <span class="route">copy link</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="paper" style="padding:13px 15px"><div class="mono" style="color:var(--ink52);margin-bottom:6px">Typewriter spec</div><div style="font-size:12.5px;color:var(--ink70)">38 ms/char · 600 ms start delay · blinking clay caret, hidden when done · runs once (sessionStorage) · full text under reduced motion.</div></div>
+        <div class="paper" style="padding:13px 15px"><div class="mono" style="color:var(--ink52);margin-bottom:6px">Pill entrance</div><div style="font-size:12.5px;color:var(--ink70)">Fade-up + 9 px rise, staggered, visible 400 ms after mount — independent of typing. Transform/opacity only.</div></div>
+        <div class="paper" style="padding:13px 15px"><div class="mono" style="color:var(--clayText);margin-bottom:6px">States</div><div style="font-size:12.5px;color:var(--ink70)">Rest → hover (invert to ink / clay) → active (press 0.96) → the outline pill copies + turns moss “Copied”. Real routes only; no auto-apply.</div></div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== COMMAND CONTEXT REVEAL ============= -->
+    <section class="band" id="command">
+      <div class="band-head">
+        <div><div class="num">06 · Command empty state</div><h2>A restrained spotlight</h2>
+          <p>The same light, dialled down. It warms the suggestion nearest the cursor to guide the eye — then switches off after your first interaction so it never competes with a live conversation, text selection, or the keyboard. Every suggestion is a real, focusable action, present with or without the light.</p></div>
+      </div>
+      <div class="device">
+        <div class="chrome"><div class="dots"><i style="background:var(--clay)"></i><i style="background:var(--amber)"></i><i style="background:var(--moss)"></i></div><div class="url">ricohunt.com/command</div><span class="tag" id="ceState">Spotlight active</span></div>
+        <div class="cmd-empty" id="cmdEmpty">
+          <div class="halo" id="ceHalo"></div>
+          <span class="sample-tag sample" style="position:absolute;top:14px;left:14px;z-index:4">Sample scenario — not live account data</span>
+          <div class="ce-head"><h3>What would you like to work on?</h3><p>Pick a starting point, or just tell Rico in your own words.</p></div>
+          <div class="sugs" id="ceSugs">
+            <button class="sug"><span class="si"><svg><use href="#i-search"/></svg></span><div><h6>Find jobs</h6><p>Search live roles that fit your CV.</p><span class="rt">/jobs</span></div></button>
+            <button class="sug"><span class="si"><svg><use href="#i-doc"/></svg></span><div><h6>Review my CV</h6><p>See what's parsed and what's missing.</p><span class="rt">/profile · cv</span></div></button>
+            <button class="sug"><span class="si"><svg><use href="#i-user"/></svg></span><div><h6>Improve my profile</h6><p>Fill the gaps that weaken matches.</p><span class="rt">/profile</span></div></button>
+            <button class="sug"><span class="si"><svg><use href="#i-brief"/></svg></span><div><h6>Check applications</h6><p>Where each opportunity stands.</p><span class="rt">/applications</span></div></button>
+            <button class="sug"><span class="si"><svg><use href="#i-spark"/></svg></span><div><h6>Prepare for interview</h6><p>Practise for a specific role.</p><span class="rt">chat intent</span></div></button>
+            <button class="sug"><span class="si"><svg><use href="#i-clip"/></svg></span><div><h6>Upload a document</h6><p>CV, offer letter, or job post.</p><span class="rt">/upload</span></div></button>
+          </div>
+          <div class="ce-foot" id="ceFoot">Spotlight guides the nearest suggestion · turns off on first interaction</div>
+        </div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== CARDS ============================== -->
+    <section class="band" id="cards">
+      <div class="band-head">
+        <div><div class="num">07 · Cards</div><h2>Soft reveal, nothing hidden</h2>
+          <p>The glow follows the cursor to add warmth and depth — but source, provenance, why-it-fits, honest gaps, active CV, and saved state are always on the card. Motion deepens emphasis; it never gates essential information.</p></div>
+        <span class="sample" style="align-self:flex-start">Sample scenario — not live account data</span>
+      </div>
+      <div class="rcards" id="rcards">
+        <!-- job match card -->
+        <div class="rcard" data-reveal>
+          <div class="glow"></div>
+          <div class="rc-in">
+            <div class="rc-top">
+              <span class="logo" style="background:var(--electric)">M</span>
+              <div><h5>QA Engineer</h5><div class="m"><span>Meridian Bank</span><span>·</span><span>Dubai, UAE</span></div></div>
+              <span class="vbadge live">Live · verified</span>
+            </div>
+            <div class="facts">
+              <div class="fact"><span class="fk">Source</span><span class="fv"><span class="prov"><svg style="width:11px;height:11px"><use href="#i-check"/></svg> Direct careers page</span></span></div>
+              <div class="fact"><span class="fk">Why it fits</span><span class="fv why">6 yrs QA · CI-gated automation · Dubai-based — matches your active CV.</span></div>
+              <div class="fact"><span class="fk">Honest gap</span><span class="fv gap">Asks for ISTQB; yours isn't listed.</span></div>
+              <div class="fact"><span class="fk">Screened vs</span><span class="fv">Active CV — Amina_K_QA.pdf</span></div>
+            </div>
+            <div class="rc-actions"><button class="btn primary sm">Save to board</button><button class="btn ghost sm">Why this match</button></div>
+          </div>
+        </div>
+        <!-- document card -->
+        <div class="rcard" data-reveal>
+          <div class="glow"></div>
+          <div class="rc-in">
+            <div class="rc-top">
+              <span class="logo" style="background:var(--amber)"><svg style="width:19px;height:19px;color:#fff"><use href="#i-doc"/></svg></span>
+              <div><h5>Amina_K_QA.pdf</h5><div class="m"><span>PDF · 2 pages</span><span>·</span><span>added today</span></div></div>
+              <span class="vbadge check">Active CV</span>
+            </div>
+            <div class="facts">
+              <div class="fact"><span class="fk">Detected</span><span class="fv">CV / résumé · <b>high confidence</b></span></div>
+              <div class="fact"><span class="fk">Sensitivity</span><span class="fv"><span class="prov" style="color:var(--amberText);background:var(--amber-soft)">Contains contact details</span></span></div>
+              <div class="fact"><span class="fk">Parsed</span><span class="fv why">34 fields · used to screen every match.</span></div>
+              <div class="fact"><span class="fk">Saved state</span><span class="fv">Canonical · this is your active CV.</span></div>
+            </div>
+            <div class="rc-actions"><button class="btn sm">Set as active</button><button class="btn ghost sm">Replace</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== COMPONENTS ========================= -->
+    <section class="band" id="components">
+      <div class="band-head">
+        <div><div class="num">08 · Reusable code</div><h2>Component map</h2>
+          <p>Built as small, composable React 18 + TypeScript pieces — not one static demo. Source ships alongside this reference in <code style="font-family:var(--mono);font-size:12px">./components</code>. Each owns its cleanup (RAF, listeners, ResizeObserver) and its reduced-motion / touch fallback.</p></div>
+      </div>
+      <div class="cmap">
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-target"/></svg><code>useSmoothPointer</code></div><div class="cb">Pointer events → RAF-lerped {x,y}. One loop, auto-parks when idle. Skips touch &amp; reduced-motion.<div class="tags"><span class="tg">RAF</span><span class="tg">lerp</span><span class="tg">cleanup</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-motion"/></svg><code>MotionSafe</code></div><div class="cb">Context + hook exposing <code>reduced</code>. Wrap once; children opt into motion honestly.<div class="tags"><span class="tg">matchMedia</span><span class="tg">context</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-search"/></svg><code>CursorSpotlight</code></div><div class="cb">Writes <code>--spotlight-x/y/r</code> on a target from smoothed pointer. Optional disable-after-interaction.<div class="tags"><span class="tg">pointer</span><span class="tg">CSS vars</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-doc"/></svg><code>MaskedReveal</code></div><div class="cb">Base + reveal layers; radial-gradient mask (WebKit fallback). No per-frame <code>toDataURL</code>.<div class="tags"><span class="tg">mask</span><span class="tg">GPU</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-spark"/></svg><code>HeroEntrance</code></div><div class="cb">Staggered blur-rise / fade-up. Transform + opacity only; instant under reduced motion.<div class="tags"><span class="tg">stagger</span><span class="tg">a11y</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-target"/></svg><code>LayeredAsset</code></div><div class="cb">Stacks scene layers with slow-zoom / parallax; renders any nodes (Rico SVG scenes here).<div class="tags"><span class="tg">compose</span><span class="tg">zoom</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-play"/></svg><code>ScrubbedMedia</code></div><div class="cb">Pointer-scrub over frames/&lt;video&gt;. Raw target, eased current, one active seek, queued latest.<div class="tags"><span class="tg">ResizeObserver</span><span class="tg">no-flood</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-mark"/></svg><code>HeroTypewriter</code></div><div class="cb">One short line, speed + startDelay, blinking caret, runs once; full text under reduced motion.<div class="tags"><span class="tg">interval</span><span class="tg">once</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-arr"/></svg><code>HeroActionPills</code></div><div class="cb">Staggered pills on a 400 ms timer, independent of typing. Real routes; copy-to-clipboard variant.<div class="tags"><span class="tg">timer</span><span class="tg">routes</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-spark"/></svg><code>ContextReveal</code></div><div class="cb">Restrained spotlight highlighting the nearest suggestion; disables after first interaction.<div class="tags"><span class="tg">nearest</span><span class="tg">disable-once</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-user"/></svg><code>MobileNavigation</code></div><div class="cb">Hamburger + overlay in Atelier identity; Escape closes, focus-safe, <code>pointerEvents</code> toggled.<div class="tags"><span class="tg">a11y</span><span class="tg">escape</span></div></div></div>
+        <div class="comp"><div class="ch"><svg style="width:15px;height:15px;color:var(--clay)"><use href="#i-mark"/></svg><code>CareerTransformationHero</code></div><div class="cb">Composes the whole hero from the pieces above; accepts base/reveal scenes as props.<div class="tags"><span class="tg">compose</span><span class="tg">Rico</span></div></div></div>
+      </div>
+
+      <div style="margin-top:16px" class="grid-2">
+        <div>
+          <div class="mono" style="color:var(--ink52); margin-bottom:9px">The core mask — CSS vars, not canvas</div>
+          <div class="codeblk"><span class="c">/* MaskedReveal — updated via useSmoothPointer, GPU-friendly */</span><br>.reveal <span class="k">{</span><br>&nbsp;&nbsp;-webkit-mask-image: <span class="k">radial-gradient(</span><br>&nbsp;&nbsp;&nbsp;&nbsp;circle <span class="s">var(--spotlight-r)</span> at <span class="s">var(--spotlight-x) var(--spotlight-y)</span>,<br>&nbsp;&nbsp;&nbsp;&nbsp;#000 0%, #000 40%, rgba(0,0,0,.75) 60%,<br>&nbsp;&nbsp;&nbsp;&nbsp;rgba(0,0,0,.4) 75%, rgba(0,0,0,.12) 88%, transparent 100%<br>&nbsp;&nbsp;<span class="k">)</span>; <span class="c">/* mask-image mirror for spec compliance */</span><br>&nbsp;&nbsp;will-change: mask-image;<br><span class="k">}</span></div>
+        </div>
+        <div>
+          <div class="mono" style="color:var(--ink52); margin-bottom:9px">The RAF lerp — one loop, self-parking</div>
+          <div class="codeblk"><span class="c">// useSmoothPointer (abridged)</span><br><span class="k">const</span> tick = () <span class="k">=&gt;</span> <span class="k">{</span><br>&nbsp;&nbsp;sm.x += (raw.x - sm.x) * <span class="s">0.12</span>;<br>&nbsp;&nbsp;sm.y += (raw.y - sm.y) * <span class="s">0.12</span>;<br>&nbsp;&nbsp;el.style.setProperty(<span class="s">'--spotlight-x'</span>, sm.x + <span class="s">'px'</span>);<br>&nbsp;&nbsp;el.style.setProperty(<span class="s">'--spotlight-y'</span>, sm.y + <span class="s">'px'</span>);<br>&nbsp;&nbsp;raf = active ? requestAnimationFrame(tick) : <span class="s">0</span>;<br><span class="k">}</span>;<br><span class="c">// cleanup: cancelAnimationFrame(raf); remove listeners</span></div>
+        </div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== PERF / A11Y ======================== -->
+    <section class="band" id="perf">
+      <div class="band-head"><div><div class="num">09 · Non-negotiable</div><h2>Performance &amp; accessibility</h2>
+        <p>Motion is a finish, not a gate. Everything degrades cleanly and nothing essential is locked behind a pointer.</p></div></div>
+      <div class="checks">
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>GPU-only animation.</b> Transform, opacity, and mask position — no layout thrash, <code style="font-family:var(--mono);font-size:11px">will-change</code> scoped.</span></div>
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>No per-frame <code style="font-family:var(--mono);font-size:11px">toDataURL()</code>.</b> The mask is a CSS gradient moved by custom properties.</span></div>
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>Pointer events, not mouse-only.</b> <code style="font-family:var(--mono);font-size:11px">pointermove/leave/cancel</code>; touch gets the static clear state.</span></div>
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>Reduced motion honoured.</b> Media query + a manual switch; RAF loops don't start.</span></div>
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>Keyboard-safe.</b> Hero/scrub are focusable with descriptive labels; arrows drive the seam; spotlight never traps focus.</span></div>
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>Text stays selectable.</b> Overlays are <code style="font-family:var(--mono);font-size:11px">pointer-events:none</code>; the Command spotlight disables on first interaction.</span></div>
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>RAF self-parks.</b> The loop cancels when idle and on unmount; no background CPU burn.</span></div>
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>Mobile-safe height.</b> <code style="font-family:var(--mono);font-size:11px">100dvh</code> so browser chrome never clips the hero.</span></div>
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>SSR-safe.</b> All <code style="font-family:var(--mono);font-size:11px">window</code>/<code style="font-family:var(--mono);font-size:11px">matchMedia</code> reads are guarded for Next.js.</span></div>
+        <div class="chk"><svg><use href="#i-check"/></svg><span><b>Truthful throughout.</b> No fake counts, employers, statuses, verification, or progress; samples labelled.</span></div>
+      </div>
+      <div class="rule"></div>
+    </section>
+
+    <!-- ============================== ASSETS ============================= -->
+    <section class="band" id="assets">
+      <div class="band-head"><div><div class="num">10 · Asset board</div><h2>Original Rico media</h2>
+        <p>All hand-built inline SVG in the Atelier palette — no photos, no stock, no external media, no geology. Self-contained and theme-aware; the “media” for the scrub is a keyframe transform of the same two scenes.</p></div></div>
+      <div class="board">
+        <div class="asset"><div class="at"><svg width="120" height="70" viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-chaos"/></svg></div><div class="ab"><h6>Scene · Chaos</h6><p>Scattered apps, torn CV, unclear matches, unfinished profile.</p></div></div>
+        <div class="asset"><div class="at"><svg width="120" height="70" viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice"><use href="#scene-clarity"/></svg></div><div class="ab"><h6>Scene · Clarity</h6><p>Active CV, verified matches, structured board, next step.</p></div></div>
+        <div class="asset"><div class="at"><svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="21" fill="none" stroke="var(--moss)" stroke-width="1.4"/><path d="m16 23 5 5 10-11" fill="none" stroke="var(--moss)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="ab"><h6>Verified seal</h6><p>Moss letterpress mark — real completion only.</p></div></div>
+        <div class="asset"><div class="at"><svg width="40" height="50" viewBox="0 0 34 44"><rect width="34" height="44" rx="3" fill="#fff" stroke="var(--hair)"/><rect x="5" y="6" width="14" height="3" rx="1.5" fill="var(--clay)"/><rect x="5" y="13" width="24" height="2" rx="1" fill="#d9cfbe"/><rect x="5" y="18" width="24" height="2" rx="1" fill="#d9cfbe"/><rect x="5" y="26" width="9" height="2" rx="1" fill="var(--ink52)"/></svg></div><div class="ab"><h6>CV thumbnail</h6><p>Document page fragment for rails &amp; cards.</p></div></div>
+        <div class="asset"><div class="at"><svg width="60" height="60" viewBox="0 0 24 24" style="color:var(--clay)"><use href="#i-search"/></svg></div><div class="ab"><h6>Line-icon set</h6><p>17 symbols — search, doc, verify, target, seal…</p></div></div>
+        <div class="asset"><div class="at"><div style="width:70px;height:70px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--clay) 22%,transparent),transparent 70%);border:1px solid color-mix(in srgb,var(--clay) 22%,transparent)"></div></div><div class="ab"><h6>Spotlight ring</h6><p>Soft clay halo that trails the cursor.</p></div></div>
+      </div>
+    </section>
+
+    <!-- ============================== FOOTER ============================= -->
+    <footer class="foot">
+      <div style="display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap; align-items:flex-end">
+        <div>
+          <div class="brand" style="font-size:16px; margin-bottom:8px"><svg class="mk" style="width:22px;height:22px;color:var(--clay)"><use href="#i-mark"/></svg> Rico · Motion Concept</div>
+          <div class="mono" style="color:var(--ink38)">Spotlight reveal + career-transformation scrub · branch claude/command-visual-polish-51dq2z</div>
+        </div>
+        <div class="mono" style="color:var(--ink38); text-align:right; line-height:1.9">
+          Techniques from Lithos &amp; Mainframe · rebuilt for Rico<br>
+          Reusable components in ./components · TSX<br>
+          Sample scenarios only — never live account data
+        </div>
+      </div>
+    </footer>
+
+  </div><!-- /.wrap -->
+</div>
+<script>
+  (function(){
+    var doc = document.getElementById('doc');
+    function reduced(){ return doc.getAttribute('data-motion')==='off' || window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    function fineHover(){ return window.matchMedia('(hover: hover) and (pointer: fine)').matches; }
+
+    window.toggleMotion = function(){
+      var off = doc.getAttribute('data-motion')==='off';
+      doc.setAttribute('data-motion', off ? 'on':'off');
+      document.getElementById('motionBtn').setAttribute('aria-pressed', String(!off));
+      // refresh every spotlight surface to its correct static/live state
+      window.__spots && window.__spots.forEach(function(s){ s.refresh(); });
+    };
+    window.toggleTheme = function(btn){
+      var root = document.documentElement, cur = root.getAttribute('data-theme'), isDark;
+      if(cur){ isDark = cur==='dark'; root.setAttribute('data-theme', isDark?'light':'dark'); isDark=!isDark; }
+      else { isDark = !window.matchMedia('(prefers-color-scheme: dark)').matches; root.setAttribute('data-theme', isDark?'dark':'light'); }
+      btn.querySelector('use').setAttribute('href', isDark?'#i-sun':'#i-moon');
+    };
+
+    /* ---- reusable spotlight (mirrors the CursorSpotlight/MaskedReveal components) ---- */
+    window.__spots = [];
+    function initSpotlight(host, reveal, ring, opts){
+      opts = opts || {};
+      var baseR = opts.radius || 230, lerp = opts.lerp || 0.12;
+      var raw = {x:-999, y:-999}, sm = {x:-999, y:-999}, r = 0, tr = 0;
+      var active = false, raf = 0, hostFocus = false;
+      function staticClear(){ // reduced-motion / touch / keyboard: show reveal fully, no spotlight
+        reveal.style.maskImage = reveal.style.webkitMaskImage = 'none';
+        host.classList.remove('lit');
+      }
+      function liveMode(){ reveal.style.maskImage = reveal.style.webkitMaskImage = ''; }
+      function frame(){
+        sm.x += (raw.x - sm.x) * lerp; sm.y += (raw.y - sm.y) * lerp;
+        r += (tr - r) * 0.14;
+        reveal.style.setProperty('--sx', sm.x.toFixed(1)+'px');
+        reveal.style.setProperty('--sy', sm.y.toFixed(1)+'px');
+        reveal.style.setProperty('--sr', r.toFixed(1)+'px');
+        if(ring){ ring.style.setProperty('--sx', sm.x.toFixed(1)+'px'); ring.style.setProperty('--sy', sm.y.toFixed(1)+'px'); ring.style.setProperty('--sr', r.toFixed(1)+'px'); }
+        if(active || r > 0.5 || Math.abs(tr-r) > 0.5){ raf = requestAnimationFrame(frame); } else { raf = 0; }
+      }
+      function kick(){ if(!raf) raf = requestAnimationFrame(frame); }
+      function onMove(e){
+        if(reduced() || !fineHover()) return;
+        if(e.pointerType === 'touch') return;
+        var b = host.getBoundingClientRect();
+        raw.x = e.clientX - b.left; raw.y = e.clientY - b.top;
+        if(!active){ active = true; sm.x = raw.x; sm.y = raw.y; host.classList.add('lit'); liveMode(); }
+        tr = baseR; kick();
+      }
+      function onLeave(){ active = false; tr = 0; host.classList.remove('lit'); kick(); }
+      host.addEventListener('pointermove', onMove);
+      host.addEventListener('pointerleave', onLeave);
+      host.addEventListener('pointercancel', onLeave);
+      // keyboard focus (not pointer) → reveal the meaningful state for AT users
+      host.addEventListener('focus', function(){ hostFocus = true; if(!fineHover() || reduced()) staticClear(); });
+      host.addEventListener('blur', function(){ hostFocus = false; refresh(); });
+      function refresh(){
+        if(reduced() || !fineHover()){ staticClear(); }
+        else if(!active){ liveMode(); tr = 0; kick(); }
+      }
+      // programmatic sweep for demo / screenshot
+      function sweep(){
+        if(reduced()){ staticClear(); return; }
+        liveMode(); host.classList.add('lit'); active = true;
+        var b = host.getBoundingClientRect(), W = b.width, H = b.height, t0 = performance.now(), dur = 2600;
+        sm.x = W*0.12; sm.y = H*0.5; tr = baseR;
+        function s(now){
+          var p = Math.min(1,(now-t0)/dur);
+          var ease = p<.5 ? 2*p*p : 1-Math.pow(-2*p+2,2)/2;
+          raw.x = W*(0.12 + ease*0.76); raw.y = H*(0.5 + Math.sin(ease*Math.PI*1.4)*0.14);
+          kick();
+          if(p<1){ requestAnimationFrame(s); } else { active=false; tr=0; kick(); }
+        }
+        requestAnimationFrame(s);
+      }
+      var api = { refresh:refresh, sweep:sweep };
+      window.__spots.push(api);
+      refresh();
+      // hint visibility
+      var hint = host.querySelector('.hint');
+      if(hint && (!fineHover() || reduced())) hint.style.display = 'none';
+      return api;
+    }
+
+    // wire the main hero
+    var heroApi = null;
+    var heroEl = document.getElementById('heroMain');
+    if(heroEl){ heroApi = initSpotlight(heroEl, document.getElementById('heroReveal'), document.getElementById('heroRing'), {radius:230}); }
+    window.sweepHero = function(){ heroApi && heroApi.sweep(); };
+
+    window.__initSpotlight = initSpotlight; // reused by other frames
+
+    /* ================= SCRUB (ScrubbedMedia — one eased target, no flooding) === */
+    (function(){
+      var host = document.getElementById('scrub'); if(!host) return;
+      var wipe = document.getElementById('scrubWipe'), seam = document.getElementById('scrubSeam'),
+          bar = document.getElementById('scrubBar'), stage = document.getElementById('scrubStage');
+      var target = 0.08, cur = 0.08, raf = 0, driving = false;
+      function stageName(p){ return p<0.2?'Scattered':p<0.45?'Documents rejoin':p<0.75?'Matches verified':'Organised'; }
+      function apply(){
+        var pct = (cur*100).toFixed(1)+'%';
+        wipe.style.setProperty('--edge', pct); seam.style.setProperty('--edge', pct);
+        bar.style.setProperty('--edge', pct); stage.textContent = stageName(cur);
+        host.setAttribute('aria-valuenow', Math.round(cur*100));
+      }
+      function loop(){ cur += (target-cur)*0.16; apply();
+        if(Math.abs(target-cur) > 0.001){ raf = requestAnimationFrame(loop); } else { cur=target; apply(); raf=0; } }
+      function kick(){ if(!raf) raf = requestAnimationFrame(loop); }
+      function setTarget(t){ target = Math.max(0, Math.min(1, t)); if(reduced()){ cur=target; apply(); return; } kick(); }
+      host.addEventListener('pointermove', function(e){
+        if(e.pointerType==='touch' || reduced()) return;
+        var b = host.getBoundingClientRect(); setTarget((e.clientX-b.left)/b.width);
+      });
+      // touch → tap advances through 4 stages (no continuous seek)
+      host.addEventListener('pointerdown', function(e){ if(e.pointerType!=='touch') return;
+        var stages=[0.08,0.35,0.6,0.92], i = stages.findIndex(function(s){return s>cur+0.02;}); setTarget(stages[i<0?0:i]); });
+      host.addEventListener('keydown', function(e){
+        if(e.key==='ArrowRight'){ setTarget(target+0.06); e.preventDefault(); }
+        else if(e.key==='ArrowLeft'){ setTarget(target-0.06); e.preventDefault(); }
+        else if(e.key==='Home'){ setTarget(0); } else if(e.key==='End'){ setTarget(1); } });
+      window.scrubDemo = function(){ if(reduced()){ setTarget(1); return; }
+        var t0=performance.now(); (function s(now){ var p=Math.min(1,(now-t0)/2600); setTarget(0.06+p*0.9); if(p<1) requestAnimationFrame(s); })(performance.now()); };
+      if(reduced()){ setTarget(1); } else { apply(); }
+    })();
+
+    /* ================= TYPEWRITER (once per session) + PILLS (independent) === */
+    var TW_TEXT = "Tell Rico what kind of work you're looking for.";
+    function typeLine(force){
+      var el = document.getElementById('twLine'); if(!el) return;
+      var seen = false; try{ seen = sessionStorage.getItem('rico_tw_seen')==='1'; }catch(e){}
+      el.innerHTML = '';
+      if(reduced() || (seen && !force)){ el.textContent = TW_TEXT; return; }
+      var span = document.createElement('span'); var cur = document.createElement('span');
+      cur.className = 'tw-cursor on'; el.appendChild(span); el.appendChild(cur);
+      var i = 0; setTimeout(function tick(){
+        if(i <= TW_TEXT.length){ span.textContent = TW_TEXT.slice(0,i); i++; setTimeout(tick, 38); }
+        else { cur.classList.remove('on'); cur.style.display='none'; try{ sessionStorage.setItem('rico_tw_seen','1'); }catch(e){} }
+      }, 600);
+    }
+    window.replayTypewriter = function(){ try{ sessionStorage.removeItem('rico_tw_seen'); }catch(e){} typeLine(true); showPills(true); };
+    function showPills(reset){
+      var wrap = document.getElementById('twPills'); if(!wrap) return;
+      var pills = wrap.querySelectorAll('.pill');
+      pills.forEach(function(p,idx){ p.style.transitionDelay = (idx*55)+'ms'; });
+      if(reset) wrap.classList.remove('in');
+      // independent 400ms timer, regardless of typing
+      setTimeout(function(){ wrap.classList.add('in'); }, reset?60:400);
+    }
+    window.copyRico = function(btn){
+      var use = btn.querySelector('svg use');
+      var textNode = [].slice.call(btn.childNodes).find(function(n){ return n.nodeType===3 && n.textContent.trim(); });
+      var done = function(){ btn.classList.add('copied'); if(use) use.setAttribute('href','#i-check');
+        if(textNode) textNode.textContent=' Copied ';
+        setTimeout(function(){ btn.classList.remove('copied'); if(use) use.setAttribute('href','#i-copy'); if(textNode) textNode.textContent=' Share ricohunt.com '; }, 1600); };
+      try{ (navigator.clipboard && navigator.clipboard.writeText('ricohunt.com') || Promise.reject()).then(done, done); }catch(e){ done(); }
+    };
+    typeLine(false); showPills(false);
+
+    /* ================= COMMAND CONTEXT REVEAL (disables after 1st interaction) === */
+    (function(){
+      var host = document.getElementById('cmdEmpty'); if(!host) return;
+      var halo = document.getElementById('ceHalo'), sugs = [].slice.call(document.querySelectorAll('#ceSugs .sug'));
+      var stateTag = document.getElementById('ceState'), foot = document.getElementById('ceFoot');
+      var on = fineHover() && !reduced(), used = false, raf=0, rx=0, ry=0;
+      function disable(){ if(used) return; used=true; on=false; host.classList.remove('lit');
+        sugs.forEach(function(s){ s.classList.remove('near'); });
+        if(stateTag) stateTag.textContent='Spotlight off · you’re driving';
+        if(foot) foot.textContent='You interacted — the spotlight stepped aside'; }
+      function frame(){
+        var b=host.getBoundingClientRect(); halo.style.left=rx+'px'; halo.style.top=ry+'px';
+        // nearest suggestion
+        var best=null, bd=1e9; sugs.forEach(function(s){ var r=s.getBoundingClientRect();
+          var cx=r.left-b.left+r.width/2, cy=r.top-b.top+r.height/2, d=Math.hypot(cx-rx,cy-ry);
+          if(d<bd){ bd=d; best=s; } });
+        sugs.forEach(function(s){ s.classList.toggle('near', s===best && bd<220); });
+        raf=0;
+      }
+      host.addEventListener('pointermove', function(e){ if(!on || e.pointerType==='touch') return;
+        var b=host.getBoundingClientRect(); rx=e.clientX-b.left; ry=e.clientY-b.top; host.classList.add('lit');
+        if(!raf) raf=requestAnimationFrame(frame); });
+      host.addEventListener('pointerleave', function(){ if(!on) return; host.classList.remove('lit'); sugs.forEach(function(s){s.classList.remove('near');}); });
+      sugs.forEach(function(s){ s.addEventListener('click', disable); s.addEventListener('focus', function(){ if(!fineHover()) return; disable(); }); });
+      host.addEventListener('pointerdown', function(e){ if(e.pointerType==='touch') disable(); });
+      if(!on && stateTag){ stateTag.textContent = reduced()? 'Reduced motion · no spotlight' : 'Touch · no spotlight'; if(foot) foot.textContent='Every suggestion is a real, tappable action'; }
+    })();
+
+    /* ================= SOFT-REVEAL CARDS (essentials always visible) === */
+    [].slice.call(document.querySelectorAll('.rcard[data-reveal]')).forEach(function(card){
+      var raf=0, rx=0, ry=0;
+      function frame(){ card.style.setProperty('--cx', rx+'px'); card.style.setProperty('--cy', ry+'px'); raf=0; }
+      card.addEventListener('pointermove', function(e){ if(e.pointerType==='touch' || reduced()) return;
+        var b=card.getBoundingClientRect(); rx=e.clientX-b.left; ry=e.clientY-b.top; card.classList.add('lit');
+        if(!raf) raf=requestAnimationFrame(frame); });
+      card.addEventListener('pointerleave', function(){ card.classList.remove('lit'); });
+    });
+    /*MORE*/
+  })();
+</script>
