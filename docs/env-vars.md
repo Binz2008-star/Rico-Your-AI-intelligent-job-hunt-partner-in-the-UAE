@@ -98,8 +98,16 @@ GUEST_CAPABILITY_SECRET=
 # 403. Find the id with: SELECT id FROM users WHERE email = '<owner-email>';
 RICO_OWNER_USER_ID=
 
-RICO_REDIS_URL=
+# Rate-limiter storage. src/api/rate_limit.py uses REDIS_URL when set, and
+# falls back to RICO_REDIS_URL only when REDIS_URL is entirely UNSET. Setting
+# REDIS_URL to an empty string is an explicit "force in-memory" opt-out and does
+# NOT fall through to RICO_REDIS_URL — qa-tests.yml relies on this so CI never
+# dials a Redis that does not exist there. With no URL resolved the limiter uses
+# per-process memory: counters are not shared between workers and reset on
+# restart, so the configured limits stop holding. Production logs that fallback
+# as a warning.
 REDIS_URL=
+RICO_REDIS_URL=
 
 EMAIL_USER=
 EMAIL_PASS=

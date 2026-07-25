@@ -24,6 +24,8 @@ from typing import Optional
 
 from src.repositories.profile_repo import get_profile, upsert_profile
 
+from src.log_privacy import user_ref
+
 logger = logging.getLogger(__name__)
 
 _VALID_FREQUENCIES = frozenset({"daily", "weekly"})
@@ -42,7 +44,7 @@ def is_opted_in(user_id: str) -> bool:
         settings = getattr(profile, "settings", None)
         return bool(getattr(settings, "can_receive_email_alerts", False)) if settings else False
     except Exception:
-        logger.debug("email_notifications.is_opted_in failed user=%s", user_id, exc_info=True)
+        logger.debug("email_notifications.is_opted_in failed user=%s", user_ref(user_id), exc_info=True)
         return False
 
 
@@ -76,10 +78,10 @@ def opt_in(user_id: str, frequency: str | None = None) -> bool:
         # Best-effort token mint — an opt-in must still succeed if the token
         # table is missing (e.g. migration 033 not yet applied).
         ensure_unsubscribe_token(user_id)
-        logger.info("email_notifications.opt_in user=%s frequency=%s", user_id, frequency)
+        logger.info("email_notifications.opt_in user=%s frequency=%s", user_ref(user_id), frequency)
         return True
     except Exception:
-        logger.exception("email_notifications.opt_in failed user=%s", user_id)
+        logger.exception("email_notifications.opt_in failed user=%s", user_ref(user_id))
         return False
 
 
@@ -93,10 +95,10 @@ def opt_out(user_id: str) -> bool:
         # Opt-out MUST persist durably; a mirror-only write would leave the
         # persisted roster opted-in and still deliver later (#1082).
         upsert_profile(user_id=user_id, updates={"can_receive_email_alerts": False}, require_db=True)
-        logger.info("email_notifications.opt_out user=%s", user_id)
+        logger.info("email_notifications.opt_out user=%s", user_ref(user_id))
         return True
     except Exception:
-        logger.exception("email_notifications.opt_out failed user=%s", user_id)
+        logger.exception("email_notifications.opt_out failed user=%s", user_ref(user_id))
         return False
 
 
@@ -143,7 +145,7 @@ def ensure_unsubscribe_token(user_id: str) -> Optional[str]:
         conn.commit()
         return minted
     except Exception:
-        logger.debug("email_notifications.ensure_unsubscribe_token failed user=%s", user_id, exc_info=True)
+        logger.debug("email_notifications.ensure_unsubscribe_token failed user=%s", user_ref(user_id), exc_info=True)
         try:
             conn.rollback()
         except Exception:
@@ -218,7 +220,7 @@ def was_email_alert_sent(user_id: str, job_key: str, alert_type: str = _EMAIL_AL
             )
             return cur.fetchone() is not None
     except Exception:
-        logger.debug("email_notifications.was_email_alert_sent failed user=%s", user_id, exc_info=True)
+        logger.debug("email_notifications.was_email_alert_sent failed user=%s", user_ref(user_id), exc_info=True)
         return False
     finally:
         conn.close()
@@ -247,7 +249,7 @@ def get_sent_job_keys(user_id: str, alert_type: str = _EMAIL_ALERT_TYPE) -> set[
             )
             return {row[0] for row in cur.fetchall()}
     except Exception:
-        logger.debug("email_notifications.get_sent_job_keys failed user=%s", user_id, exc_info=True)
+        logger.debug("email_notifications.get_sent_job_keys failed user=%s", user_ref(user_id), exc_info=True)
         return set()
     finally:
         conn.close()
@@ -276,7 +278,7 @@ def log_email_alert(user_id: str, job_key: str, alert_type: str = _EMAIL_ALERT_T
         conn.commit()
         return inserted
     except Exception:
-        logger.debug("email_notifications.log_email_alert failed user=%s", user_id, exc_info=True)
+        logger.debug("email_notifications.log_email_alert failed user=%s", user_ref(user_id), exc_info=True)
         try:
             conn.rollback()
         except Exception:
@@ -316,7 +318,7 @@ def emailed_within_hours(user_id: str, hours: int, alert_type: str = _EMAIL_ALER
             )
             return cur.fetchone() is not None
     except Exception:
-        logger.debug("email_notifications.emailed_within_hours failed user=%s", user_id, exc_info=True)
+        logger.debug("email_notifications.emailed_within_hours failed user=%s", user_ref(user_id), exc_info=True)
         return False
     finally:
         conn.close()
