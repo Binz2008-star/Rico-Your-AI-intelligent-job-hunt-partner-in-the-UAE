@@ -383,12 +383,23 @@ def test_ownership_refusal_surfaces_as_409_at_the_api_boundary(_boundary):
 
 
 def test_ownership_refusal_returns_no_mirror_success_and_writes_nothing(_boundary):
-    """Same call: no success shape, and no partial write anywhere."""
+    """Same call: no success shape, and no partial write anywhere.
+
+    The status is pinned exactly, not merely asserted to be outside 2xx. "Not 2xx" is
+    satisfied by any failure at all -- a 401 from a broken auth patch, a 422 from a
+    changed request model -- so a loose assertion here would keep passing while proving
+    nothing, and would quietly become the only surviving check if the 409 test above
+    were ever deleted on its own.
+    """
     client, conn, mirror = _boundary
     response = client.patch("/api/v1/rico/profile", json={"current_role": "Engineer"})
 
-    assert not (200 <= response.status_code < 300), "a refused write must not report success"
+    assert response.status_code == 409, (
+        "a refused write must be reported as the ownership conflict, not as any other "
+        f"failure: got {response.status_code}: {response.text}"
+    )
     body = response.json()
+    assert body.get("error") == "ambiguous_account_ownership"
     assert "profile" not in body and body.get("ok") is not True, (
         f"refusal must not carry a success payload: {body}"
     )
