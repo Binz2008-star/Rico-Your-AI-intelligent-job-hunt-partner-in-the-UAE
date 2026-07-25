@@ -17,8 +17,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("JWT_SECRET",     "x" * 32)
 os.environ.setdefault("ADMIN_EMAIL",    "admin@test.com")
 os.environ.setdefault("ADMIN_PASSWORD", "TestPass123")
-# Ensure production flag is off for most tests
-os.environ["RICO_ENV"] = "development"
 
 from fastapi.testclient import TestClient
 from src.api.app import app
@@ -37,6 +35,31 @@ _DB_USER = User(
 )
 
 client = TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture(autouse=True)
+def _development_env(monkeypatch):
+    """Non-production default for this module, scoped to a single test.
+
+    This was previously ``os.environ["RICO_ENV"] = "development"`` executed at
+    module level. pytest imports every test module during collection, so that
+    write landed before any test ran and was never undone — it applied to the
+    whole process for the rest of the session.
+
+    ``_is_production()`` (``src/api/auth.py``) resolves
+    ``RICO_ENV -> APP_ENV -> ENV -> ENVIRONMENT`` and takes the first non-empty
+    value. The leaked ``RICO_ENV=development`` therefore *shadowed* every other
+    module that marks production through a lower-precedence variable, so five
+    production fail-closed guards (guest capability secret, Telegram / Jotform /
+    GitHub webhook secrets) silently returned 200 instead of 503 in a full-suite
+    run while still passing in isolation.
+
+    ``monkeypatch`` restores the prior value after each test, so this default
+    can no longer escape this module. Tests that need production still override
+    it locally with ``patch.dict(os.environ, {"RICO_ENV": "production"})``,
+    which nests correctly inside this fixture.
+    """
+    monkeypatch.setenv("RICO_ENV", "development")
 
 
 @pytest.fixture(autouse=True)
