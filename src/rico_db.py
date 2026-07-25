@@ -1103,22 +1103,40 @@ class RicoDB:
             if should_close:
                 conn.close()
 
-    def upsert_profile(self, user_id: str, profile: Dict[str, Any], cv_file_url: Optional[str] = None, cv_text: Optional[str] = None, cv_structured: Optional[Dict[str, Any]] = None, conn=None) -> Dict[str, Any]:
+    def upsert_profile(self, user_id: str, profile: Dict[str, Any], cv_file_url: Optional[str] = None, cv_text: Optional[str] = None, cv_structured: Optional[Dict[str, Any]] = None, replace_cv_structured: bool = False, conn=None) -> Dict[str, Any]:
+        """Upsert the profile row.
+
+        ``replace_cv_structured`` switches ``cv_structured`` from MERGE to
+        REPLACE, and confirming a CV must use it. The merge
+        (``rico_profiles.cv_structured || EXCLUDED.cv_structured``) is correct for
+        incremental profile edits but wrong for a new document: passing ``None``
+        merges ``{}``, which is a no-op, so a PREVIOUS CV's structure survived
+        while ``cv_text`` was replaced with the NEW CV's text. State derivation
+        prefers structure over text, so Rico would then answer from the old CV's
+        employers and education while believing it was reading the new one.
+
+        Default stays MERGE so every existing caller behaves exactly as before.
+        """
         should_close = conn is None
         if conn is None:
             conn = self.connect()
 
+        structured_clause = (
+            "cv_structured = EXCLUDED.cv_structured"
+            if replace_cv_structured
+            else "cv_structured = rico_profiles.cv_structured || EXCLUDED.cv_structured"
+        )
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    """
+                    f"""
                     INSERT INTO rico_profiles (user_id, profile, cv_file_url, cv_text, cv_structured)
                     VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (user_id) DO UPDATE SET
                         profile = rico_profiles.profile || EXCLUDED.profile,
                         cv_file_url = COALESCE(EXCLUDED.cv_file_url, rico_profiles.cv_file_url),
                         cv_text = COALESCE(EXCLUDED.cv_text, rico_profiles.cv_text),
-                        cv_structured = rico_profiles.cv_structured || EXCLUDED.cv_structured,
+                        {structured_clause},
                         updated_at = now()
                     RETURNING *
                     """,

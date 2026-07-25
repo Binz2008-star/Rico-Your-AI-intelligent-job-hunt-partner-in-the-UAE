@@ -15,7 +15,7 @@ Design principles:
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict, fields, is_dataclass
+from dataclasses import asdict, dataclass, fields, is_dataclass
 from datetime import datetime, timezone
 from collections.abc import Collection
 from typing import Any
@@ -200,6 +200,74 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
 # Profile CRUD Operations
 # ============================================================================
 
+@dataclass(frozen=True)
+class CVGrounding:
+    """The raw CV grounding columns, exactly as stored.
+
+    ``RicoProfile`` carries neither ``cv_text`` nor ``cv_structured`` —
+    ``_bundle_to_profile`` maps ``cv_filename``/``cv_status`` out of the profile
+    JSONB and drops the two top-level columns entirely. Anything that resolved CV
+    state through ``get_profile`` was therefore reading ``None`` for both and
+    could only ever conclude ``metadata_only``, no matter what was actually
+    stored. This is the read that returns the stored values.
+    """
+
+    cv_text: str | None = None
+    cv_structured: dict[str, Any] | None = None
+    cv_filename: str | None = None
+    cv_status: str | None = None
+    years_experience: float | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        """A confirmed-absent profile: read successfully, nothing on file."""
+        return not any(
+            (self.cv_text, self.cv_structured, self.cv_filename, self.cv_status)
+        )
+
+
+def get_cv_grounding(user_id: str) -> CVGrounding | None:
+    """Read the CV grounding fields. Three outcomes, deliberately distinguishable.
+
+    * ``None`` — the store could not be read. Callers MUST report this as
+      "unavailable", never as "no CV": telling a user their CV is missing during
+      an outage sends them to re-upload a file that is already stored.
+    * ``CVGrounding()`` with ``is_empty`` — read succeeded, nothing on file.
+    * a populated ``CVGrounding`` — the stored content.
+
+    One bundle read, no N+1: ``get_user_bundle`` already selects ``p.cv_text``
+    and ``p.cv_structured`` alongside the profile JSONB, so this costs the same
+    single query ``get_profile`` costs.
+    """
+    db = _db()
+    if not db:
+        return None
+    try:
+        bundle = db.get_user_bundle(user_id)
+    except Exception as e:
+        logger.error(
+            "profile_repo: get_cv_grounding DB failed user=%s err=%s",
+            user_ref(user_id), safe_exc(e),
+        )
+        return None
+    if not bundle:
+        # A definite answer: this user has no profile row.
+        return CVGrounding()
+
+    pdata: dict[str, Any] = bundle.get("profile") or {}
+    structured = bundle.get("cv_structured")
+    if not isinstance(structured, dict):
+        structured = None
+    cv_text = bundle.get("cv_text")
+    return CVGrounding(
+        cv_text=str(cv_text) if cv_text else None,
+        cv_structured=structured,
+        cv_filename=pdata.get("cv_filename"),
+        cv_status=pdata.get("cv_status"),
+        years_experience=_coerce_years_exp(pdata.get("years_experience")),
+    )
+
+
 def get_profile(user_id: str) -> RicoProfile | None:
     """Load profile: DB first, JSON fallback. Normalizes broad target_roles if needed."""
     db = _db()
@@ -266,6 +334,8 @@ def upsert_profile(
     updates: dict[str, Any],
     *,
     cv_text: str | None = None,
+    cv_structured: dict[str, Any] | None = None,
+    replace_cv_structured: bool = False,
     require_db: bool = False,
     clear_fields: Collection[str] = (),
 ) -> RicoProfile:
@@ -275,6 +345,16 @@ def upsert_profile(
     ``rico_profiles.cv_text`` with COALESCE semantics (a NULL never wipes an
     existing value) so chat and apply-tailoring flows can ground on the actual
     uploaded CV rather than only the structured summary.
+
+    ``cv_structured`` (optional) is the structured CV document built by
+    ``src.services.cv_structured.build_cv_structured``. It is persisted to
+    ``rico_profiles.cv_structured`` in the SAME statement as ``cv_text`` —
+    ``RicoDB.upsert_profile`` already accepted the argument and already merges
+    the column with ``cv_structured || EXCLUDED.cv_structured``; this parameter
+    was the one missing link, which is why the column stood at ``{}`` in
+    production while profiles claimed ``cv_status = "parsed"``. One statement
+    means text and structure can never be committed apart: there is no window in
+    which one landed and the other did not.
 
     ``require_db`` (default ``False`` — preserves every existing caller's
     behavior) makes the DB write MANDATORY: if the primary Postgres/Neon write
@@ -426,12 +506,20 @@ def upsert_profile(
             # JSON null — this is the only path that writes None into profile.
             for k in clears:
                 profile_data[k] = None
-            if profile_data or cv_text:
+            if profile_data or cv_text or cv_structured or replace_cv_structured:
                 logger.info(
-                    "profile_repo.upsert_profile: db_user_id=%s profile_data=%s cv_text_chars=%d",
+                    "profile_repo.upsert_profile: db_user_id=%s profile_data=%s "
+                    "cv_text_chars=%d cv_structured_keys=%d",
                     db_user_id, list(profile_data.keys()), len(cv_text or ""),
+                    len(cv_structured or {}),
                 )
-                db.upsert_profile(db_user_id, profile_data, cv_text=cv_text, conn=conn)
+                db.upsert_profile(
+                    db_user_id, profile_data,
+                    cv_text=cv_text,
+                    cv_structured=cv_structured,
+                    replace_cv_structured=replace_cv_structured,
+                    conn=conn,
+                )
 
             # 3. Upsert settings
             settings_data = {}

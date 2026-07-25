@@ -329,6 +329,8 @@ def upsert_profile(
     user_id: str,
     updates: dict[str, Any],
     cv_text: str | None = None,
+    cv_structured: dict[str, Any] | None = None,
+    replace_cv_structured: bool = False,
     require_db: bool = False,
     clear_fields: Collection[str] = (),
 ):
@@ -338,8 +340,9 @@ def upsert_profile(
     # didn't accept it, and the resulting TypeError surfaced as a 503 on EVERY
     # profile save (endpoint tests mock this symbol, so CI could not see it).
     return profile_repo.upsert_profile(
-        user_id=user_id, updates=updates, cv_text=cv_text, require_db=require_db,
-        clear_fields=clear_fields,
+        user_id=user_id, updates=updates, cv_text=cv_text,
+        cv_structured=cv_structured, replace_cv_structured=replace_cv_structured,
+        require_db=require_db, clear_fields=clear_fields,
     )
 
 
@@ -2365,34 +2368,46 @@ def _resolve_trusted_cv_artifact(
     return artifact
 
 
-def _derive_parse_status(*, readable_text_saved: bool) -> str:
+def _derive_parse_status(
+    *, saved_cv_text: str | None, cv_structured: dict[str, Any] | None = None
+) -> str:
     """Derive the confirm response's parse status from CONTENT ACTUALLY SAVED.
 
-    ``parse_status`` is not a column on ``user_documents``; it is derived. It is
-    derived here from one thing only: whether the text this confirm persisted to
-    ``rico_profiles.cv_text`` passed the readability contract in
-    ``src.cv_parse_quality``. Document metadata — ``skills_count``,
-    ``years_experience``, ``is_primary`` — is deliberately NOT consulted: those
-    are counts recorded alongside a file, not evidence that its content was
-    extracted, and deriving a status from them is how a row's mere existence
-    starts asserting an extraction.
+    ``parse_status`` is not a column on ``user_documents``; it is derived from
+    the content this confirm actually persisted. Document metadata —
+    ``skills_count``, ``years_experience``, ``is_primary`` — is deliberately NOT
+    consulted: those are counts recorded alongside a file, not evidence that its
+    content was extracted, and deriving a status from them is how a row's mere
+    existence starts asserting an extraction.
 
     This endpoint never returns ``parsed``. That word conflates "a file arrived"
     with "its content is usable", which is exactly the conflation that put
     ``cv_status = "parsed"`` on production profiles whose ``cv_structured`` is an
-    empty object. Two honest values are available at this point in the pipeline:
+    empty object. The honest values are:
 
-      * ``text_extracted`` — the document and profile writes both succeeded and
-        readable text was saved with them.
+      * ``structured`` — a substantive structured document was saved.
+      * ``text_extracted`` — readable text was saved, structure was not.
       * ``metadata_only`` — the document was saved, but no readable content came
         with it, so only the file's metadata is available.
 
-    ``structured`` is deliberately NOT reachable here: nothing in this endpoint
-    writes ``cv_structured`` yet, so claiming it would be the same lie in a new
-    vocabulary. It becomes available only once the structured-CV pipeline is
-    wired, and this function must be revisited then rather than guessed at now.
+    ``structured`` became reachable once this endpoint started persisting
+    ``cv_structured``, and only on the same terms the rest of the product uses:
+    the document must pass ``cv_structured.is_substantive``. It is derived
+    through ``src.services.cv_state.derive_cv_state`` — the single deriver — so
+    the status this response reports and the state chat reads for the same
+    profile can never disagree.
     """
-    return "text_extracted" if readable_text_saved else "metadata_only"
+    from src.services.cv_state import derive_cv_state
+
+    # The text actually persisted is handed over, not a pre-computed verdict, so
+    # the deriver applies the cv_parse_quality contract itself. Agreement with
+    # the 409 gate is then structural rather than something this call site has to
+    # keep in step by hand.
+    return derive_cv_state(
+        cv_structured=cv_structured,
+        cv_text=saved_cv_text,
+        has_document=True,
+    )
 
 
 @router.post("/confirm-cv-profile")
@@ -2655,6 +2670,36 @@ async def confirm_cv_profile(
         # is safe: the My Files write above dedupes on content_hash, and this
         # upsert is a keyed UPSERT.
         #
+        # ── Structured CV: extract, then save WITH the text, not after it ─────
+        # Derived from `confirmed_cv_text` — the exact text this confirm is about
+        # to persist — so cv_structured can never describe a different document
+        # than cv_text. `CVParser.parse_text` is the SAME function that built the
+        # upload preview, so the user is not shown one extraction and given
+        # another; running it here rather than carrying the result on the
+        # short-lived artifact also needs no schema change to that table.
+        #
+        # A failure to extract structure is NOT a failure to confirm: the text is
+        # still saved and the state falls back to text_extracted. Inventing an
+        # empty document instead would recreate the exact defect this fixes —
+        # cv_structured = {} beside a status claiming an extraction.
+        _cv_structured: dict[str, Any] | None = None
+        if _readable_text_saved and confirmed_cv_text:
+            try:
+                from src.cv_parser import CVParser
+                from src.services.cv_structured import build_cv_structured, is_substantive
+
+                _candidate = build_cv_structured(CVParser().parse_text(confirmed_cv_text))
+                _cv_structured = _candidate if is_substantive(_candidate) else None
+            except Exception as _struct_exc:
+                # Best-effort by design: never fail a confirm because structure
+                # could not be derived. The text is the fallback the product
+                # already relies on.
+                logger.warning(
+                    "cv_confirm_structured_extraction_failed user=%s err=%s request_ref=%s",
+                    user_ref(resolved_user_id), safe_exc(_struct_exc), request_ref,
+                )
+                _cv_structured = None
+
         # One filename, one source of truth. rico_profiles.cv_filename and
         # user_documents.filename must never disagree about the same file: a
         # profile that says "Roben_Edwan_CV.pdf" while My Files says
@@ -2670,6 +2715,15 @@ async def confirm_cv_profile(
                 user_id=resolved_user_id,
                 updates=profile_updates,
                 cv_text=confirmed_cv_text,
+                # `{}` rather than None when extraction produced nothing
+                # substantive: paired with replace_cv_structured this CLEARS a
+                # previous CV's structure instead of leaving it behind. Without
+                # that, cv_text would describe the new document while
+                # cv_structured still described the old one, and state
+                # derivation prefers structure — so Rico would answer from the
+                # previous CV's employers while believing it read the new one.
+                cv_structured=_cv_structured if _cv_structured else {},
+                replace_cv_structured=True,
                 require_db=True,
             )
         except Exception as _profile_exc:
@@ -2736,7 +2790,8 @@ async def confirm_cv_profile(
                 "doc_type": _doc_result["doc_type"],
                 "is_primary": _doc_result["is_primary"],
                 "parse_status": _derive_parse_status(
-                    readable_text_saved=_readable_text_saved
+                    saved_cv_text=confirmed_cv_text if _readable_text_saved else None,
+                    cv_structured=_cv_structured,
                 ),
                 "inserted": _doc_result["inserted"],
             }

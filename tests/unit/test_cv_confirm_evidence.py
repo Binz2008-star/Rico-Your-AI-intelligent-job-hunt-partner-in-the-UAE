@@ -327,31 +327,37 @@ class TestParseStatusHonesty:
     empty `cv_structured`. Both are gone.
     """
 
+    READABLE = "Professional Summary. Work Experience. Education. " * 20
+
     def test_readable_saved_text_is_text_extracted(self):
-        assert _derive_parse_status(readable_text_saved=True) == "text_extracted"
+        assert _derive_parse_status(saved_cv_text=self.READABLE) == "text_extracted"
 
     def test_no_readable_content_is_metadata_only(self):
-        assert _derive_parse_status(readable_text_saved=False) == "metadata_only"
+        assert _derive_parse_status(saved_cv_text=None) == "metadata_only"
 
     def test_parsed_is_never_returned(self):
-        for readable in (True, False):
-            assert _derive_parse_status(readable_text_saved=readable) != "parsed"
+        for text in (self.READABLE, None, ""):
+            assert _derive_parse_status(saved_cv_text=text) != "parsed"
 
-    def test_structured_is_never_returned_before_the_pipeline_exists(self):
-        """Nothing in this endpoint writes cv_structured yet.
-
-        Claiming `structured` here would be the same lie in a new vocabulary.
-        It becomes reachable only when the structured-CV pipeline is wired.
-        """
-        for readable in (True, False):
-            assert _derive_parse_status(readable_text_saved=readable) != "structured"
+    def test_structured_requires_a_substantive_document(self):
+        """`structured` is earned by content, not by passing a dict."""
+        assert _derive_parse_status(saved_cv_text=self.READABLE, cv_structured={}) == "text_extracted"
+        # A schema-valid document with nothing professional in it is the
+        # empty-cv_structured failure wearing a schema.
+        thin = {"schema_version": 1, "name": "Roben Edwan", "skills": []}
+        assert _derive_parse_status(saved_cv_text=self.READABLE, cv_structured=thin) == "text_extracted"
+        substantive = {
+            "schema_version": 1,
+            "work_experience": [{"text": "Head of Compliance, Emirates NBD", "date_range": "2019 - Present"}],
+        }
+        assert _derive_parse_status(saved_cv_text=self.READABLE, cv_structured=substantive) == "structured"
 
     def test_document_metadata_cannot_influence_the_status(self):
         """The signature admits no document row at all — by construction."""
         import inspect
 
         params = set(inspect.signature(_derive_parse_status).parameters)
-        assert params == {"readable_text_saved"}
+        assert params == {"saved_cv_text", "cv_structured"}
 
     def test_endpoint_reports_text_extracted_when_readable_text_is_saved(self, client):
         r, _rec, upsert_mock, _resolve, _status = _post_confirm(client, doc_result=_INSERTED_ROW)
