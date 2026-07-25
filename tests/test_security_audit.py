@@ -19,8 +19,24 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("ADMIN_EMAIL", "admin@test.com")
 os.environ.setdefault("ADMIN_PASSWORD", "TestPass123")
 os.environ.setdefault("JWT_SECRET", "x" * 32)
-# Ensure Jotform webhook secret is unset so dev-mode pass-through works
-os.environ.pop("JOTFORM_WEBHOOK_SECRET", None)
+
+
+@pytest.fixture(autouse=True)
+def _no_jotform_webhook_secret(monkeypatch):
+    """Unset JOTFORM_WEBHOOK_SECRET so dev-mode pass-through works, per test.
+
+    This was previously ``os.environ.pop("JOTFORM_WEBHOOK_SECRET", None)`` at
+    module level. Because pytest imports every test module during collection,
+    that removal took effect before any test ran and was never undone, deleting
+    the variable process-wide for the rest of the session — the same
+    import-time-leak defect class as the ``RICO_ENV`` write in
+    ``tests/test_password_reset.py``, and equally capable of masking a test
+    elsewhere that needs the secret present.
+
+    ``monkeypatch`` restores the prior value after each test. The intent is
+    unchanged: every test in this module still runs with the secret unset.
+    """
+    monkeypatch.delenv("JOTFORM_WEBHOOK_SECRET", raising=False)
 
 
 @pytest.fixture(scope="module")
