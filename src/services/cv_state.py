@@ -57,6 +57,11 @@ _STATES_WITH_CV = frozenset({
 #: States in which real CV content is available to ground an answer on.
 _STATES_WITH_CONTENT = frozenset({STATE_STRUCTURED, STATE_TEXT_EXTRACTED})
 
+#: States in which extraction has SETTLED — the document is a finished artifact,
+#: whether or not usable content came out of it. Excludes ``uploaded`` (still in
+#: flight) and ``parse_failed`` (finished, but produced nothing to stand behind).
+_STATES_SETTLED = frozenset({STATE_STRUCTURED, STATE_TEXT_EXTRACTED, STATE_METADATA_ONLY})
+
 
 def derive_cv_state(
     *,
@@ -86,14 +91,19 @@ def derive_cv_state(
     if status in _LEGACY_FAILED:
         return STATE_PARSE_FAILED
 
+    # An explicit "extraction has not finished" status wins over the generic
+    # metadata_only below, and must be checked BEFORE it: a file that is still
+    # in flight has a filename too, so testing `has_document` first would report
+    # a pending upload as a settled document with no content — which is how an
+    # in-flight upload gets presented to the user as their CV.
+    if status in _LEGACY_UPLOADED:
+        return STATE_UPLOADED
+
     # A legacy `parsed` with no readable content is exactly the production state
     # this module exists to describe honestly: the file is real, the content is
     # not available. It reports metadata_only, never text_extracted.
     if has_document or status == LEGACY_STATUS_PARSED:
         return STATE_METADATA_ONLY
-
-    if status in _LEGACY_UPLOADED:
-        return STATE_UPLOADED
 
     return STATE_NONE
 
@@ -131,3 +141,13 @@ def has_cv_content(state: str) -> bool:
     The predicate for call sites asking "can I actually read this CV?".
     """
     return state in _STATES_WITH_CONTENT
+
+
+def has_settled_cv(state: str) -> bool:
+    """True when extraction has finished and left a document worth resolving.
+
+    For call sites that must present a specific CV — not merely know one exists.
+    Excludes ``uploaded``, so a file still being processed is never shown as the
+    user's CV, and ``parse_failed``, which finished with nothing to stand behind.
+    """
+    return state in _STATES_SETTLED

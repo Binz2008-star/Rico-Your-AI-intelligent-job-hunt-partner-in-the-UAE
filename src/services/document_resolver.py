@@ -121,7 +121,20 @@ def resolve_user_cv(
     if profile is not None:
         cv_filename = _profile_get(profile, "cv_filename")
         cv_status = _profile_get(profile, "cv_status")
-        if cv_filename and cv_status == "parsed":
+        # A filename plus a SETTLED extraction — not the literal legacy status.
+        # A profile-only user whose cv_text is readable but whose status was
+        # never written to "parsed" has a CV, and declining to resolve it here is
+        # what makes the product act as though the file is absent. A file still
+        # being extracted stays excluded: `has_settled_cv` is False for
+        # `uploaded`, so an in-flight upload is never presented as the user's CV.
+        from src.services.cv_state import derive_cv_state, has_settled_cv
+
+        _state = derive_cv_state(
+            cv_text=_profile_get(profile, "cv_text"),
+            has_document=bool(cv_filename),
+            legacy_cv_status=cv_status,
+        )
+        if cv_filename and has_settled_cv(_state):
             return {
                 "filename": cv_filename,
                 "doc_type": "cv",

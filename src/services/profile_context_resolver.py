@@ -117,13 +117,24 @@ class ProfileContext:
 
     @property
     def has_cv(self) -> bool:
-        """True when the profile carries CV-derived data."""
-        return bool(
-            self.cv_filename
-            or self.cv_status == "parsed"
-            or self.skills
-            or self.years_experience is not None
+        """True when the profile carries CV-derived data.
+
+        The CV part of the question is delegated to
+        ``src.services.cv_state.has_cv_on_file`` so a legacy ``parsed`` status is
+        read the same way here as everywhere else: as evidence a CV exists, never
+        as evidence its content is available. Skills / years remain independent
+        evidence of a filled profile, unchanged.
+        """
+        from src.services.cv_state import derive_cv_state, has_cv_on_file
+
+        cv_present = has_cv_on_file(
+            derive_cv_state(
+                cv_text=getattr(self, "cv_text", None),
+                has_document=bool(self.cv_filename),
+                legacy_cv_status=self.cv_status,
+            )
         )
+        return bool(cv_present or self.skills or self.years_experience is not None)
 
     @property
     def completion_score(self) -> float:
@@ -207,8 +218,16 @@ def evaluate_minimum_profile(ctx: ProfileContext) -> tuple[bool, List[str]]:
     if ctx.years_experience is None:
         missing.append("years_experience")
 
+    from src.services.cv_state import derive_cv_state, has_cv_on_file
+
     has_skills = bool(ctx.skills)
-    has_cv_evidence = bool(ctx.cv_filename or ctx.cv_status == "parsed")
+    has_cv_evidence = has_cv_on_file(
+        derive_cv_state(
+            cv_text=getattr(ctx, "cv_text", None),
+            has_document=bool(ctx.cv_filename),
+            legacy_cv_status=ctx.cv_status,
+        )
+    )
     if not has_skills and not has_cv_evidence:
         missing.append("skills")
 
