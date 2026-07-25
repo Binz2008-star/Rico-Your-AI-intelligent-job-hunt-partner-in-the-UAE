@@ -480,3 +480,225 @@ class TestTheShippedTrustedWorkflowIsHeldByTheseRules:
         assert mutated != shipped
         assert any("author controls" in v
                    for v in self._violations(mutated, tmp_path))
+
+
+_SAFE_PR_TARGET_WITH_SERVICES = """\
+name: fixture
+on:
+  pull_request_target:
+permissions:
+  contents: read
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.11
+      env:
+        SAFE_CONTAINER: "static"
+    services:
+      first:
+        image: postgres:16
+        env:
+          SAFE_FIRST: "static"
+      second:
+        image: redis:7
+        env:
+          SAFE_SECOND: "static"
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "${{ github.event.pull_request.head.sha }}"
+"""
+
+
+class TestContainerAndServiceValuesAreReached:
+    """``container`` and ``services`` are expression positions too.
+
+    A job's container and its service containers are configured from the same
+    workflow expressions as a step, so a secret or an author-controlled field
+    reaches them by exactly the same route. A traversal that stops at steps
+    leaves that route unguarded, and the rules that depend on it are only as
+    complete as what it yields.
+
+    Every case below breaks one property inside a container or a service and
+    proves the checker rejects it. The second service and the non-first key
+    matter on their own: a traversal that visits one service, or that matches
+    only a name it expects to see, would pass these fixtures while leaving the
+    rest of the block unread.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _yaml(self):
+        pytest.importorskip("yaml")
+
+    def _violations(self, text: str, tmp_path: pathlib.Path) -> list[str]:
+        from check_workflow_security import check_workflow
+
+        wf = tmp_path / "fixture.yml"
+        wf.write_text(text, encoding="utf-8")
+        violations, _warnings = check_workflow(wf)
+        return violations
+
+    def test_the_safe_fixture_is_accepted(self, tmp_path):
+        """Guards every case below: they must fail for their own reason."""
+        assert self._violations(_SAFE_PR_TARGET_WITH_SERVICES, tmp_path) == []
+
+    # the job's own container
+
+    def test_secret_in_container_credentials_password_is_rejected(self, tmp_path):
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            "      image: python:3.11\n",
+            "      image: python:3.11\n"
+            "      credentials:\n"
+            "        username: static\n"
+            "        password: ${{ secrets.REGISTRY_TOKEN }}\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("references a secret" in v
+                   for v in self._violations(text, tmp_path))
+
+    def test_secret_in_container_credentials_username_is_rejected(self, tmp_path):
+        """username carries a secret exactly as well as password does."""
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            "      image: python:3.11\n",
+            "      image: python:3.11\n"
+            "      credentials:\n"
+            "        username: ${{ secrets.REGISTRY_USER }}\n"
+            "        password: static\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("references a secret" in v
+                   for v in self._violations(text, tmp_path))
+
+    def test_secret_in_container_env_is_rejected(self, tmp_path):
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            '        SAFE_CONTAINER: "static"\n',
+            "        SAFE_CONTAINER: ${{ secrets.SOME_TOKEN }}\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("references a secret" in v
+                   for v in self._violations(text, tmp_path))
+
+    def test_untrusted_field_in_container_env_is_rejected(self, tmp_path):
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            '        SAFE_CONTAINER: "static"\n',
+            "        SAFE_CONTAINER: ${{ github.head_ref }}\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("author controls" in v
+                   for v in self._violations(text, tmp_path))
+
+    # the first service
+
+    def test_secret_in_first_service_credentials_is_rejected(self, tmp_path):
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            "        image: postgres:16\n",
+            "        image: postgres:16\n"
+            "        credentials:\n"
+            "          username: static\n"
+            "          password: ${{ secrets.REGISTRY_TOKEN }}\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("references a secret" in v
+                   for v in self._violations(text, tmp_path))
+
+    def test_secret_in_first_service_env_is_rejected(self, tmp_path):
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            '          SAFE_FIRST: "static"\n',
+            "          SAFE_FIRST: ${{ secrets.SOME_TOKEN }}\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("references a secret" in v
+                   for v in self._violations(text, tmp_path))
+
+    # the SECOND service — a traversal that stops at the first misses these
+
+    def test_secret_in_second_service_credentials_password_is_rejected(self, tmp_path):
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            "        image: redis:7\n",
+            "        image: redis:7\n"
+            "        credentials:\n"
+            "          username: static\n"
+            "          password: ${{ secrets.REGISTRY_TOKEN }}\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("references a secret" in v
+                   for v in self._violations(text, tmp_path))
+
+    def test_secret_in_second_service_credentials_username_is_rejected(self, tmp_path):
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            "        image: redis:7\n",
+            "        image: redis:7\n"
+            "        credentials:\n"
+            "          username: ${{ secrets.REGISTRY_USER }}\n"
+            "          password: static\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("references a secret" in v
+                   for v in self._violations(text, tmp_path))
+
+    def test_secret_in_second_service_env_is_rejected(self, tmp_path):
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            '          SAFE_SECOND: "static"\n',
+            "          SAFE_SECOND: ${{ secrets.SOME_TOKEN }}\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("references a secret" in v
+                   for v in self._violations(text, tmp_path))
+
+    def test_untrusted_field_in_second_service_env_is_rejected(self, tmp_path):
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            '          SAFE_SECOND: "static"\n',
+            "          SAFE_SECOND: ${{ github.event.pull_request.title }}\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("author controls" in v
+                   for v in self._violations(text, tmp_path))
+
+    # every value, not only the keys a narrow matcher expects
+
+    def test_an_unexpected_credentials_key_is_still_read(self, tmp_path):
+        """The rule reads values, not a fixed list of key names."""
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            "        image: redis:7\n",
+            "        image: redis:7\n"
+            "        credentials:\n"
+            "          registry: ${{ secrets.REGISTRY_HOST }}\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert any("references a secret" in v
+                   for v in self._violations(text, tmp_path))
+
+    def test_a_string_container_is_not_a_crash(self, tmp_path):
+        """``container: image`` is legal shorthand and has nothing to traverse."""
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            "    container:\n"
+            "      image: python:3.11\n"
+            "      env:\n"
+            '        SAFE_CONTAINER: "static"\n',
+            "    container: python:3.11\n",
+            1,
+        )
+        assert text != _SAFE_PR_TARGET_WITH_SERVICES
+        assert self._violations(text, tmp_path) == []
+
+    def test_the_violation_names_the_service_it_came_from(self, tmp_path):
+        """A finding that cannot be located is a finding nobody can act on."""
+        text = _SAFE_PR_TARGET_WITH_SERVICES.replace(
+            '          SAFE_SECOND: "static"\n',
+            "          SAFE_SECOND: ${{ secrets.SOME_TOKEN }}\n",
+            1,
+        )
+        found = [v for v in self._violations(text, tmp_path) if "references a secret" in v]
+        assert found, "expected the secret to be reported"
+        assert any("second" in v for v in found), found

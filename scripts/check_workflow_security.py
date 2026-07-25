@@ -187,16 +187,41 @@ def _expression_sources(doc: dict):
     ``run:`` is evaluated by the shell; ``env:`` and ``with:`` are handed to
     the shell or to an action. Values that are only ever displayed, such as
     ``name:``, are excluded — interpolating there executes nothing.
+
+    A job's ``container`` and each of its ``services`` are configured from the
+    same expressions, so they are the same kind of position and are walked the
+    same way. Both ``credentials`` and ``env`` are yielded in full: every
+    service rather than the first, and every key rather than a fixed list of
+    the names one expects to find. ``username`` carries a secret exactly as
+    well as ``password`` does, and a rule that reads only the keys it predicts
+    is complete only against the inputs it predicted.
     """
     def _walk_env(env, where):
         if isinstance(env, dict):
             for key, value in env.items():
                 yield f"{where} env '{key}'", str(value)
 
+    def _walk_container(block, where):
+        # ``container: image`` is legal shorthand and holds no expressions.
+        if not isinstance(block, dict):
+            return
+        credentials = block.get("credentials")
+        if isinstance(credentials, dict):
+            for key, value in credentials.items():
+                yield f"{where} credentials '{key}'", str(value)
+        yield from _walk_env(block.get("env"), where)
+
     yield from _walk_env(doc.get("env"), "workflow")
     for job_name, job in (doc.get("jobs") or {}).items():
         job = job or {}
         yield from _walk_env(job.get("env"), f"job '{job_name}'")
+        yield from _walk_container(
+            job.get("container"), f"job '{job_name}' container")
+        services = job.get("services")
+        if isinstance(services, dict):
+            for service_name, service in services.items():
+                yield from _walk_container(
+                    service, f"job '{job_name}' service '{service_name}'")
         for index, step in enumerate(job.get("steps") or []):
             step = step or {}
             where = f"job '{job_name}' step {index + 1}"
