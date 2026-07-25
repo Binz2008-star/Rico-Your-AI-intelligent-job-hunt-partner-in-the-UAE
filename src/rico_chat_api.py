@@ -3317,28 +3317,40 @@ class RicoChatAPI:
             return profile.get(key, default)
         return getattr(profile, key, default)
 
-    @staticmethod
-    def _cv_state(profile: Any) -> str:
+    def _cv_context(self, user_id: str, profile: Any = None):
+        """The user's CV context — resolved ONCE per request instance.
+
+        Must not read ``cv_text``/``cv_structured`` off a ``RicoProfile``: that
+        model carries neither, so a profile-derived answer can only ever conclude
+        ``metadata_only`` however much content is actually stored. The resolver
+        reads the grounding columns from the repository instead.
+
+        Memoised on the instance because ``RicoChatAPI`` is constructed per
+        request (see ``chat_service._legacy_send_message``), so this is one read
+        per turn no matter how many call sites ask — the alternative is an N+1
+        across the handler chain. It deliberately does NOT outlive the request.
+        """
+        from src.services.cv_context_resolver import resolve_cv_context
+
+        cached = getattr(self, "_cv_ctx_memo", None)
+        if cached is not None and cached[0] == user_id:
+            return cached[1]
+        ctx = resolve_cv_context(user_id, profile)
+        self._cv_ctx_memo = (user_id, ctx)
+        return ctx
+
+    def _cv_state(self, user_id: str, profile: Any = None) -> str:
         """The user's CV state, from the one deriver in src.services.cv_state.
 
         Every place in this module that used to ask ``cv_status == "parsed"``
         asks through here instead. Those checks each carried their own copy of
         the question, so they could disagree about the same profile — and all of
         them trusted a status that production writes beside an empty
-        ``cv_structured``. Routing them through one deriver means the answer is
-        computed from stored content, once.
+        ``cv_structured``.
         """
-        from src.services.cv_state import derive_cv_state
+        return self._cv_context(user_id, profile).state
 
-        return derive_cv_state(
-            cv_structured=RicoChatAPI._profile_value(profile, "cv_structured"),
-            cv_text=RicoChatAPI._profile_value(profile, "cv_text"),
-            has_document=bool(RicoChatAPI._profile_value(profile, "cv_filename")),
-            legacy_cv_status=RicoChatAPI._profile_value(profile, "cv_status"),
-        )
-
-    @staticmethod
-    def _has_cv_on_file(profile: Any) -> bool:
+    def _has_cv_on_file(self, user_id: str, profile: Any = None) -> bool:
         """True when the user has a CV at all — content usable or not.
 
         Replaces ``cv_status == "parsed"`` at every site asking "does this user
@@ -3346,16 +3358,11 @@ class RicoChatAPI:
         real, and answering NO is what sends a user to re-upload a CV the
         product already holds.
         """
-        from src.services.cv_state import has_cv_on_file
+        return self._cv_context(user_id, profile).has_cv
 
-        return has_cv_on_file(RicoChatAPI._cv_state(profile))
-
-    @staticmethod
-    def _has_cv_content(profile: Any) -> bool:
+    def _has_cv_content(self, user_id: str, profile: Any = None) -> bool:
         """True only when the CV's content can actually be read and used."""
-        from src.services.cv_state import has_cv_content
-
-        return has_cv_content(RicoChatAPI._cv_state(profile))
+        return self._cv_context(user_id, profile).has_content
 
     @staticmethod
     def _has_cv_profile(profile: Any) -> bool:
@@ -8046,7 +8053,7 @@ class RicoChatAPI:
         if save_user_message:
             self._append_chat(user_id, "user", message)
         user_context = self._build_openai_context(profile, user_id=user_id)
-        blocked_questions = self._get_blocked_questions(profile)
+        blocked_questions = self._get_blocked_questions(profile, user_id=user_id)
         if isinstance(user_context, dict):
             user_context["blocked_questions"] = blocked_questions
 
@@ -10585,7 +10592,7 @@ class RicoChatAPI:
                 response = {"type": "account_delegation", "message": friend_cv_msg}
                 self._append_chat(user_id, "assistant", friend_cv_msg)
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
-            if self._has_cv_on_file(profile) or self._profile_value(profile, "manual_profile_wizard_disabled"):
+            if self._has_cv_on_file(user_id, profile) or self._profile_value(profile, "manual_profile_wizard_disabled"):
                 # If the user is actually asking to find jobs, search using their profile
                 # rather than telling them their CV is already set up.
                 _is_job_request = (
@@ -10623,12 +10630,26 @@ class RicoChatAPI:
                     return self._finalize(
                         _stored_cv_response, self.SOURCE_KEYWORD, profile=profile
                     )
-                response = {
-                    "type": "profile_summary",
-                    "message": (
+                # This wording asserted an analysis. The gate above is an
+                # existence check, so metadata_only / parse_failed / uploaded
+                # users reached it and were told their CV was "already parsed"
+                # when nothing readable had been stored. Claim the parse only
+                # when the content is actually there.
+                if self._has_cv_content(user_id, profile):
+                    _setup_msg = (
                         "Your CV is already parsed and your profile is set up. "
                         "You can say 'show my profile' to review it, or tell me a role to search."
-                    ),
+                    )
+                else:
+                    _setup_msg = (
+                        "Your profile is set up, and I have your CV on file — but I "
+                        "couldn't read its contents, so I'm not working from it yet.\n\n"
+                        "Re-upload it as a text-based PDF and I'll use it. You can also "
+                        "say 'show my profile' to review what I have, or tell me a role to search."
+                    )
+                response = {
+                    "type": "profile_summary",
+                    "message": _setup_msg,
                 }
                 self._append_chat(user_id, "assistant", response["message"])
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
@@ -10736,12 +10757,44 @@ class RicoChatAPI:
             _skills = self._as_list(self._profile_value(profile, "skills"))
             _certs = self._as_list(self._profile_value(profile, "certifications"))
             _exp = self._profile_value(profile, "years_experience")
-            _has_cv = bool(self._profile_value(profile, "has_cv")) or self._has_cv_on_file(profile)
-            if not _has_cv:
+            # "Review my CV" is a CONTENT question, not an existence question.
+            # Gating it on existence let a metadata_only / parse_failed /
+            # uploaded user through, and the branch below then produced "CV gaps
+            # and improvements" from profile fields alone — a review of a CV that
+            # was never read. Three explicit outcomes, no fourth:
+            # Through the per-request memo, not resolve_cv_context directly —
+            # other sites in this same turn ask the same question, and each
+            # direct call would be another grounding read.
+            _cv_ctx = self._cv_context(user_id, profile)
+            _arabic_cv = self._is_arabic_text(message)
+            if not (_cv_ctx.has_cv or bool(self._profile_value(profile, "has_cv"))):
+                # (3) Nothing on file — unchanged wording.
                 _cv_msg = (
                     "I can't review your CV yet — you haven't uploaded one.\n\n"
                     "Upload your CV and I'll identify weak areas, gaps, and improvements."
                 )
+            elif not _cv_ctx.has_content:
+                # (2) The file is real, its content is not available. Name the
+                # file so the user knows we have it, refuse to claim an
+                # analysis, and never say "you have no CV" — that would send
+                # them to re-upload while implying the first upload vanished.
+                _fname = _cv_ctx.filename
+                if _arabic_cv:
+                    _cv_msg = (
+                        f"سيرتك **{_fname}** محفوظة عندي"
+                        if _fname else "سيرتك الذاتية محفوظة عندي"
+                    ) + (
+                        "، لكن لم أتمكن من قراءة محتواها، فلا أستطيع مراجعتها بصدق.\n\n"
+                        "أعد رفعها كـ PDF نصي (لا صورة ممسوحة) وسأراجعها فوراً."
+                    )
+                else:
+                    _cv_msg = (
+                        f"I have your CV **{_fname}** on file"
+                        if _fname else "I have your CV on file"
+                    ) + (
+                        ", but I couldn't read its contents, so I can't honestly review it yet.\n\n"
+                        "Re-upload it as a text-based PDF (not a scanned image) and I'll review it right away."
+                    )
             else:
                 gaps = []
                 if not _skills:
@@ -16144,7 +16197,13 @@ class RicoChatAPI:
 
     def _handle_delegated_decision(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Handle 'you decide' / 'choose for me' by picking the strongest CV-aligned role."""
-        has_cv = bool(profile) and self._has_cv_on_file(profile)
+        # EXISTENCE question, deliberately. The branches below use it as a
+        # SAFETY guard: having a CV at all is what makes a stale saved role
+        # suspect (#732 — never assert an unevidenced role). If the CV's content
+        # cannot be read we still must not auto-search a stale role, so this
+        # stays an existence check; the suggestion path it guards derives from
+        # profile skills/certifications, not from CV text.
+        has_cv = bool(profile) and self._has_cv_on_file(user_id, profile)
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         arabic = self._is_arabic_text(message)
 
@@ -16203,7 +16262,13 @@ class RicoChatAPI:
         2. Profile has CV (or stale target_roles) → suggest roles and ask user to choose.
         3. No context → ask one concise question.
         """
-        has_cv = bool(profile) and self._has_cv_on_file(profile)
+        # EXISTENCE question, deliberately. The branches below use it as a
+        # SAFETY guard: having a CV at all is what makes a stale saved role
+        # suspect (#732 — never assert an unevidenced role). If the CV's content
+        # cannot be read we still must not auto-search a stale role, so this
+        # stays an existence check; the suggestion path it guards derives from
+        # profile skills/certifications, not from CV text.
+        has_cv = bool(profile) and self._has_cv_on_file(user_id, profile)
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
 
         if target_roles:
@@ -16735,7 +16800,7 @@ class RicoChatAPI:
         cities       = self._as_list(self._profile_value(profile, "preferred_cities"))
         industries   = self._as_list(self._profile_value(profile, "industries"))
         salary       = self._profile_value(profile, "salary_expectation_aed")
-        cv_ok        = self._has_cv_on_file(profile)
+        cv_ok        = self._has_cv_on_file(user_id, profile)
 
         if not target_roles and not skills and not exp and not cities:
             msg = (
@@ -22049,7 +22114,7 @@ class RicoChatAPI:
             if self._profile_value(profile, "years_experience") is None:
                 missing.append("years_experience")
             _has_skills = bool(self._as_list(self._profile_value(profile, "skills")))
-            _has_cv = self._has_cv_on_file(profile)
+            _has_cv = self._has_cv_on_file(user_id, profile)
             if not _has_skills and not _has_cv:
                 missing.append("skills")
             gate_ok = len(missing) == 0
@@ -22882,13 +22947,13 @@ class RicoChatAPI:
 
         return _sanitize_history_for_llm(raw)
 
-    def _get_blocked_questions(self, profile: Any) -> list[str]:
+    def _get_blocked_questions(self, profile: Any, user_id: str = "") -> list[str]:
         """Return list of question types that should not be asked based on profile data."""
         blocked = []
         if profile is None:
             return blocked
 
-        has_cv = self._has_cv_on_file(profile)
+        has_cv = self._has_cv_on_file(user_id, profile)
 
         # Check for years_experience (explicit value or any CV upload)
         if self._profile_value(profile, "years_experience") or has_cv:

@@ -19,8 +19,8 @@ reported as different facts.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Optional
 
 from src.services.cv_state import (
     STATE_METADATA_ONLY,
@@ -48,8 +48,25 @@ class CVContext:
     state: str
     structured: Optional[Dict[str, Any]] = None
     readable_text_fallback: Optional[str] = None
-    document_evidence: Dict[str, Any] = field(default_factory=dict)
     availability_reason: str = REASON_NONE_ON_FILE
+    #: The CV's filename, read from the profile — free, no database trip.
+    filename: Optional[str] = None
+    #: Loader for the document row. Deliberately NOT called during resolution.
+    _evidence_loader: Optional[Callable[[], Dict[str, Any]]] = None
+
+    @property
+    def document_evidence(self) -> Dict[str, Any]:
+        """The primary CV document row — fetched only when actually asked for.
+
+        Resolving a CV context happens on chat turns; listing a user's documents
+        is a database round trip. Doing it eagerly put that trip on every turn
+        for callers that only wanted the state. It is lazy instead, and
+        deliberately uncached: a caller that reads this twice pays twice, which
+        is the honest cost of not holding stale provenance.
+        """
+        if self._evidence_loader is None:
+            return {"document_id": None, "filename": self.filename, "is_primary": None}
+        return self._evidence_loader()
 
     @property
     def has_cv(self) -> bool:
@@ -90,12 +107,34 @@ def resolve_cv_context(user_id: str, profile: Any = None) -> CVContext:
 
 
 def _resolve(user_id: str, profile: Any) -> CVContext:
-    raw = _profile_mapping(profile)
+    # A ``RicoProfile`` can NEVER be trusted for grounding: it carries neither
+    # cv_text nor cv_structured (see profile_repo.CVGrounding), so reading state
+    # off one classifies a genuinely structured CV as metadata_only. Only a
+    # mapping that actually contains those keys counts as supplied grounding;
+    # everything else — including every RicoProfile — goes to the repository.
+    supplied = _profile_mapping(profile) or {}
+    raw = _supplied_grounding(profile)
     if raw is None:
-        raw = _load_profile_row(user_id)
+        raw = _load_grounding(user_id)
         if raw is None:
-            # Distinguishable from "no CV": the caller must say "unavailable".
+            # The store failed. That is NOT permission to say "no CV" — if the
+            # caller's own profile already shows a CV (a filename, or any status
+            # at all), report it as a CV whose content is unavailable. Erasing a
+            # file the caller can see is the exact failure this resolver exists
+            # to prevent, and it would send the user to re-upload during an
+            # outage. Only a caller who also knows of no CV gets `none`.
+            if supplied.get("cv_filename") or supplied.get("cv_status"):
+                return CVContext(
+                    state=STATE_METADATA_ONLY,
+                    filename=supplied.get("cv_filename"),
+                    availability_reason=REASON_UNAVAILABLE,
+                )
             return CVContext(state=STATE_NONE, availability_reason=REASON_UNAVAILABLE)
+        # Fields the grounding read does not carry may still come from a
+        # supplied profile; grounding always wins where both have a value.
+        for key, value in supplied.items():
+            if raw.get(key) is None and value is not None:
+                raw[key] = value
 
     structured = raw.get("cv_structured")
     if not isinstance(structured, dict):
@@ -105,8 +144,11 @@ def _resolve(user_id: str, profile: Any) -> CVContext:
     filename = raw.get("cv_filename") or None
     legacy_status = raw.get("cv_status") or None
 
-    document_evidence = _document_evidence(user_id, filename)
-    has_document = bool(document_evidence.get("document_id") or filename)
+    # State is derived from the profile alone — no database round trip. The
+    # document row adds provenance, not state, so fetching it here would put a
+    # query on every chat turn for callers that only want to know what they have.
+    has_document = bool(filename)
+    loader = _evidence_loader_for(user_id, filename)
 
     state = derive_cv_state(
         cv_structured=structured,
@@ -118,7 +160,8 @@ def _resolve(user_id: str, profile: Any) -> CVContext:
     if state == STATE_NONE:
         return CVContext(
             state=state,
-            document_evidence=document_evidence,
+            filename=filename,
+            _evidence_loader=loader,
             availability_reason=REASON_NONE_ON_FILE,
         )
 
@@ -130,7 +173,8 @@ def _resolve(user_id: str, profile: Any) -> CVContext:
             # caller can never read a thin document as if it were substantive.
             structured=structured if state == "structured" else None,
             readable_text_fallback=cv_text,
-            document_evidence=document_evidence,
+            filename=filename,
+            _evidence_loader=loader,
             availability_reason=reason,
         )
 
@@ -138,9 +182,39 @@ def _resolve(user_id: str, profile: Any) -> CVContext:
     return CVContext(
         state=state,
         readable_text_fallback=None,
-        document_evidence=document_evidence,
+        filename=filename,
+        _evidence_loader=loader,
         availability_reason=REASON_NO_CONTENT,
     )
+
+
+#: The two columns that make a supplied mapping usable as grounding.
+_GROUNDING_KEYS = ("cv_text", "cv_structured")
+
+
+def _supplied_grounding(profile: Any) -> Optional[Dict[str, Any]]:
+    """Return the caller's mapping ONLY if it really carries grounding columns.
+
+    A caller holding the actual ``cv_text``/``cv_structured`` values (a raw row,
+    a test fixture) should not be sent back to the database for them. A
+    ``RicoProfile`` never carries them, so it never qualifies here — which is
+    precisely the guarantee needed: no object-shaped profile can silently supply
+    ``None`` grounding and have it believed.
+    """
+    if not isinstance(profile, dict):
+        return None
+    mapping = _profile_mapping(profile) or {}
+    if any(key in mapping for key in _GROUNDING_KEYS):
+        return dict(mapping)
+    return None
+
+
+def _evidence_loader_for(user_id: str, filename: Optional[str]) -> Callable[[], Dict[str, Any]]:
+    """Bind the document lookup without performing it."""
+    def _load() -> Dict[str, Any]:
+        return _document_evidence(user_id, filename)
+
+    return _load
 
 
 def _profile_mapping(profile: Any) -> Optional[Dict[str, Any]]:
@@ -158,24 +232,38 @@ def _profile_mapping(profile: Any) -> Optional[Dict[str, Any]]:
         merged = dict(inner) if isinstance(inner, dict) else {}
         merged.update({k: v for k, v in source.items() if k != "profile"})
         return merged
-    keys = ("cv_structured", "cv_text", "cv_filename", "cv_status")
+    # years_experience belongs here: authoritative_years_experience reads its
+    # result, so omitting the key made that function return None for every
+    # object-shaped profile — silently discarding the one authoritative value it
+    # exists to protect.
+    keys = ("cv_structured", "cv_text", "cv_filename", "cv_status", "years_experience")
     if any(hasattr(profile, k) for k in keys):
         return {k: getattr(profile, k, None) for k in keys}
     return None
 
 
-def _load_profile_row(user_id: str) -> Optional[Dict[str, Any]]:
-    """Load the CV-relevant columns. ``None`` means the store could not be read."""
+def _load_grounding(user_id: str) -> Optional[Dict[str, Any]]:
+    """Read the stored CV grounding columns. ``None`` means the store failed.
+
+    One repository read per resolution, and one query inside it — the same
+    ``get_user_bundle`` that already selects ``cv_text`` and ``cv_structured``.
+    """
     try:
-        from src.repositories.profile_repo import get_profile
-        loaded = get_profile(user_id)
+        from src.repositories.profile_repo import get_cv_grounding
+        grounding = get_cv_grounding(user_id)
     except Exception as exc:
-        logger.warning("cv_context_profile_load_failed err=%s", type(exc).__name__)
+        logger.warning("cv_context_grounding_load_failed err=%s", type(exc).__name__)
         return None
-    if loaded is None:
-        # A confirmed absence of a profile row is a real answer, not an outage.
-        return {}
-    return _profile_mapping(loaded) or {}
+    if grounding is None:
+        # The store could not be read — an outage, not an absence.
+        return None
+    return {
+        "cv_structured": grounding.cv_structured,
+        "cv_text": grounding.cv_text,
+        "cv_filename": grounding.cv_filename,
+        "cv_status": grounding.cv_status,
+        "years_experience": grounding.years_experience,
+    }
 
 
 def _document_evidence(user_id: str, filename: Optional[str]) -> Dict[str, Any]:

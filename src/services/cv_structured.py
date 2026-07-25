@@ -111,6 +111,14 @@ def is_valid_schema(structured: Optional[Dict[str, Any]]) -> bool:
     for key in ("skills", "certifications", "languages", "work_experience", "education"):
         if key in structured and not isinstance(structured[key], (list, tuple)):
             return False
+    # Entry lists must contain entries, not scalars. A list of strings or Nones
+    # under work_experience/education would otherwise satisfy the type check and
+    # then earn `structured` in has_professional_content — a malformed blob
+    # passing as a CV, which is exactly what this function exists to prevent.
+    for key in ("work_experience", "education"):
+        for entry in structured.get(key) or []:
+            if not isinstance(entry, dict):
+                return False
     for key in ("name", "current_role", "work_experience_text", "education_text"):
         if key in structured and structured[key] is not None and not isinstance(structured[key], str):
             return False

@@ -210,13 +210,19 @@ class TestYearsExperienceSingleSource:
 
 class TestUnavailableIsNotAbsent:
     def test_profile_load_failure_reports_unavailable(self):
-        with patch("src.repositories.profile_repo.get_profile", side_effect=RuntimeError("neon down")):
+        with patch(
+            "src.repositories.profile_repo.get_cv_grounding", side_effect=RuntimeError("neon down")
+        ):
             ctx = resolve_cv_context("u@x.com", None)
         assert ctx.availability_reason == REASON_UNAVAILABLE
         assert ctx.is_unavailable is True
 
     def test_absent_profile_is_distinguishable_from_a_failure(self):
-        with _no_documents(), patch("src.repositories.profile_repo.get_profile", return_value=None):
+        from src.repositories.profile_repo import CVGrounding
+
+        with _no_documents(), patch(
+            "src.repositories.profile_repo.get_cv_grounding", return_value=CVGrounding()
+        ):
             ctx = resolve_cv_context("u@x.com", None)
         assert ctx.state == STATE_NONE
         assert ctx.availability_reason == REASON_NONE_ON_FILE
@@ -283,7 +289,8 @@ class TestAtomicPersistence:
             def get_user_bundle(self, *a, **kw):
                 return {"id": "1", "email": "u@x.com"}
 
-            def upsert_profile(self, db_user_id, profile_data, cv_text=None, cv_structured=None, conn=None):
+            def upsert_profile(self, db_user_id, profile_data, cv_text=None,
+                               cv_structured=None, replace_cv_structured=False, conn=None):
                 captured["cv_text"] = cv_text
                 captured["cv_structured"] = cv_structured
 
@@ -335,3 +342,437 @@ class TestAtomicPersistence:
             build(_Broken())
         # ...and the state derived from text alone is still honest.
         assert derive_cv_state(cv_structured=None, cv_text=_READABLE_TEXT) == STATE_TEXT_EXTRACTED
+
+
+# ── Review findings: content questions must not be answered from existence ────
+
+class TestContentQuestionsUseContentPredicate:
+    """A CV whose text was never readable cannot answer a content question.
+
+    Gating "review my CV" on existence let a metadata_only / parse_failed /
+    uploaded user through, and the branch behind the gate then produced "CV gaps
+    and improvements" from profile fields alone — a review of a CV nobody read.
+
+    Not every CV check is a content check. The stale-role guards
+    (_handle_delegated_decision / _handle_post_cv_continuation) deliberately stay
+    on existence: having a CV at all is what makes a stale saved role suspect,
+    and an unreadable CV must not re-enable auto-searching it (#732).
+    """
+
+    _METADATA_ONLY_PROFILE = {
+        "cv_filename": "Roben_Edwan_CV.pdf",
+        "cv_status": "parsed",
+        "cv_text": "",
+        "cv_structured": {},
+        "skills": ["compliance"],
+        "years_experience": 10,
+    }
+
+    def _api(self):
+        from src.rico_chat_api import RicoChatAPI
+
+        return RicoChatAPI.__new__(RicoChatAPI)
+
+    def test_metadata_only_profile_has_cv_but_no_content(self):
+        api = self._api()
+        assert api._has_cv_on_file("u@x.com", self._METADATA_ONLY_PROFILE) is True
+        assert api._has_cv_content("u@x.com", self._METADATA_ONLY_PROFILE) is False
+
+    @pytest.mark.parametrize("status", ["parse_failed", "received_pending_extraction"])
+    def test_failed_and_pending_states_have_no_content(self, status):
+        profile = dict(self._METADATA_ONLY_PROFILE, cv_status=status)
+        assert self._api()._has_cv_content("u@x.com", profile) is False
+
+    def test_readable_text_profile_has_content(self):
+        profile = dict(self._METADATA_ONLY_PROFILE, cv_text=_READABLE_TEXT)
+        assert self._api()._has_cv_content("u@x.com", profile) is True
+
+    def test_cv_review_refuses_to_review_unreadable_content(self):
+        """The honest middle branch: has the file, cannot review it."""
+        with _no_documents():
+            ctx = resolve_cv_context("u@x.com", self._METADATA_ONLY_PROFILE)
+        # The three facts the middle branch is built on.
+        assert ctx.has_cv is True
+        assert ctx.has_content is False
+        assert ctx.filename == "Roben_Edwan_CV.pdf"
+        # And the message must not claim an analysis, nor deny the CV exists.
+        assert self._api()._has_cv_content("u@x.com", self._METADATA_ONLY_PROFILE) is False
+
+
+# ── Review finding: the resolver must actually be used, and stay off the hot path ─
+
+class TestResolverIsWiredAndLazy:
+    def test_resolver_has_a_production_consumer(self):
+        """It was dead code: zero importers outside its own module and tests."""
+        import subprocess
+
+        out = subprocess.run(
+            ["grep", "-rln", "resolve_cv_context", "src/"],
+            capture_output=True, text=True,
+        ).stdout.split()
+        consumers = [
+            f for f in out
+            if "cv_context_resolver" not in f and "__pycache__" not in f
+        ]
+        assert consumers, "resolve_cv_context has no production consumer"
+
+    def test_resolution_performs_no_document_query(self):
+        """State comes from the profile alone — no round trip on a chat turn."""
+        with patch("src.services.cv_context_resolver._document_evidence") as ev:
+            ctx = resolve_cv_context(
+                "u@x.com",
+                {"cv_filename": "cv.pdf", "cv_status": "parsed", "cv_text": "", "cv_structured": {}},
+            )
+            ev.assert_not_called()
+            assert ctx.state == STATE_METADATA_ONLY
+            # ...and only pays for it when the evidence itself is asked for.
+            _ = ctx.document_evidence
+            ev.assert_called_once()
+
+    def test_evidence_falls_back_to_the_profile_filename(self):
+        ctx = resolve_cv_context(
+            "u@x.com",
+            {"cv_filename": "cv.pdf", "cv_status": "parsed", "cv_text": "", "cv_structured": {}},
+        )
+        with patch(
+            "src.services.cv_context_resolver._document_evidence",
+            return_value={"document_id": None, "filename": "cv.pdf", "is_primary": None},
+        ):
+            assert ctx.document_evidence["filename"] == "cv.pdf"
+
+
+# ── Review finding: years_experience must survive an object-shaped profile ────
+
+class TestYearsExperienceOnObjectProfiles:
+    """_profile_mapping omitted years_experience for the object path, so this
+    function returned None for every non-dict profile — silently discarding the
+    one authoritative value it exists to protect. Fails before the fix."""
+
+    class _ProfileObject:
+        def __init__(self, years, structured=None):
+            self.years_experience = years
+            self.cv_text = _READABLE_TEXT
+            self.cv_filename = "cv.pdf"
+            self.cv_status = "parsed"
+            self.cv_structured = structured or {}
+
+    def test_object_profile_returns_its_stored_value(self):
+        assert authoritative_years_experience(self._ProfileObject(8)) == 8.0
+
+    def test_object_profile_value_survives_a_conflicting_hint(self):
+        hinted = _structured("Roben\nWORK EXPERIENCE\n20 years of experience\nRole, Co  2005 - Present\n")
+        assert hinted["years_experience_hint"] == 20.0
+        assert authoritative_years_experience(self._ProfileObject(8, hinted)) == 8.0
+
+    def test_object_profile_without_a_value_returns_none(self):
+        assert authoritative_years_experience(self._ProfileObject(None)) is None
+
+
+# ── BLOCKER 1: stored grounding must reach the production consumer ────────────
+
+class TestGroundingReachesTheConsumer:
+    """RicoProfile carries neither cv_text nor cv_structured.
+
+    _bundle_to_profile maps cv_filename/cv_status out of the profile JSONB and
+    drops the two top-level columns, so anything resolving CV state through
+    get_profile read None for both and could only ever conclude metadata_only —
+    however much content was stored. These tests use the REAL bundle shape.
+    """
+
+    def _bundle(self, *, cv_text=None, cv_structured=None, cv_filename="cv.pdf", cv_status="parsed"):
+        return {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "external_user_id": "owner@rico.ai",
+            "name": "Roben Edwan",
+            "email": "owner@rico.ai",
+            "phone": None,
+            "telegram_username": None,
+            "telegram_chat_id": None,
+            "profile": {
+                "cv_filename": cv_filename,
+                "cv_status": cv_status,
+                "years_experience": 8,
+                "target_roles": ["Compliance Manager"],
+                "skills": ["compliance"],
+            },
+            "settings": {},
+            "cv_file_url": None,
+            "cv_text": cv_text,
+            "cv_structured": cv_structured,
+        }
+
+    def test_rico_profile_really_does_not_carry_the_grounding_fields(self):
+        """The root cause, asserted rather than assumed."""
+        from src.repositories.profile_repo import _bundle_to_profile
+
+        profile = _bundle_to_profile(self._bundle(cv_text=_READABLE_TEXT, cv_structured=_structured()))
+        assert getattr(profile, "cv_text", None) is None
+        assert getattr(profile, "cv_structured", None) is None
+        # ...while the values were present in the bundle all along.
+        assert self._bundle(cv_text=_READABLE_TEXT)["cv_text"] == _READABLE_TEXT
+
+    def _grounding_from_bundle(self, bundle):
+        from src.repositories import profile_repo
+
+        class _FakeDB:
+            available = True
+
+            def get_user_bundle(self, user_id, conn=None):
+                return bundle
+
+        return patch.object(profile_repo, "_db", return_value=_FakeDB())
+
+    def test_stored_structured_reaches_the_chat_consumer(self):
+        """The end-to-end claim: stored structure produces state=structured."""
+        from src.rico_chat_api import RicoChatAPI
+        from src.repositories.profile_repo import _bundle_to_profile
+
+        bundle = self._bundle(cv_text=_READABLE_TEXT, cv_structured=_structured())
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        with self._grounding_from_bundle(bundle), _no_documents():
+            # The consumer is handed the SAME incomplete RicoProfile production
+            # gives it — the grounding must come from the repository regardless.
+            state = api._cv_state("owner@rico.ai", _bundle_to_profile(bundle))
+            assert state == STATE_STRUCTURED
+            assert api._has_cv_content("owner@rico.ai", _bundle_to_profile(bundle)) is True
+
+    def test_stored_text_reaches_the_chat_consumer(self):
+        from src.rico_chat_api import RicoChatAPI
+        from src.repositories.profile_repo import _bundle_to_profile
+
+        bundle = self._bundle(cv_text=_READABLE_TEXT, cv_structured={})
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        with self._grounding_from_bundle(bundle), _no_documents():
+            assert api._cv_state("owner@rico.ai", _bundle_to_profile(bundle)) == STATE_TEXT_EXTRACTED
+
+    def test_grounding_distinguishes_absent_from_unavailable(self):
+        from src.repositories import profile_repo
+
+        # Store unavailable -> None
+        with patch.object(profile_repo, "_db", return_value=None):
+            assert profile_repo.get_cv_grounding("u@x.com") is None
+        # Confirmed absent -> empty grounding, not None
+        with self._grounding_from_bundle(None):
+            grounding = profile_repo.get_cv_grounding("u@x.com")
+        assert grounding is not None and grounding.is_empty is True
+
+    def test_resolution_is_one_read_per_request(self):
+        """Memoised per instance — no N+1 across the handler chain."""
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        with patch(
+            "src.services.cv_context_resolver.resolve_cv_context",
+            wraps=resolve_cv_context,
+        ) as spy, self._grounding_from_bundle(self._bundle(cv_text=_READABLE_TEXT)), _no_documents():
+            api._has_cv_on_file("owner@rico.ai", None)
+            api._has_cv_content("owner@rico.ai", None)
+            api._cv_state("owner@rico.ai", None)
+        assert spy.call_count == 1, f"resolved {spy.call_count}x — expected one read per request"
+
+
+# ── BLOCKER 2: a new CV must not inherit the previous CV's structure ──────────
+
+class TestStaleStructureIsReplaced:
+    """cv_structured was MERGED (`old || new`), so passing None merged {} — a
+    no-op that left CV A's structure in place while cv_text became CV B's text.
+    State derivation prefers structure, so Rico answered from the old CV."""
+
+    _CV_A = """Alice Alpha
+WORK EXPERIENCE
+Head of Audit, AlphaCorp    2010 - 2018
+EDUCATION
+BSc Accounting, Alpha University    2006 - 2010
+SKILLS
+audit, compliance, leadership
+"""
+    _CV_B = """Bob Beta
+WORK EXPERIENCE
+Safety Engineer, BetaWorks    2019 - Present
+EDUCATION
+BEng Safety, Beta Institute    2015 - 2019
+SKILLS
+hse, safety, risk assessment
+"""
+
+    def _captured_upsert(self):
+        from src.repositories import profile_repo
+
+        captured = {}
+
+        class _FakeDB:
+            def get_user_bundle(self, *a, **kw):
+                return {"id": "1", "email": "u@x.com"}
+
+            def upsert_profile(self, db_user_id, profile_data, cv_text=None,
+                               cv_structured=None, replace_cv_structured=False, conn=None):
+                captured["cv_text"] = cv_text
+                captured["cv_structured"] = cv_structured
+                captured["replace"] = replace_cv_structured
+
+            def upsert_settings(self, *a, **kw):
+                pass
+
+        class _Txn:
+            def __enter__(self):
+                return object()
+
+            def __exit__(self, *a):
+                return False
+
+        ctx = (
+            patch.object(profile_repo, "_db", return_value=_FakeDB()),
+            patch.object(profile_repo, "_db_transaction", return_value=_Txn()),
+            patch.object(profile_repo, "_memory"),
+        )
+        return captured, ctx
+
+    def test_failed_extraction_clears_the_previous_structure(self):
+        """CV A structured, CV B readable but unsplittable -> A must be cleared."""
+        from src.repositories import profile_repo
+
+        captured, ctx = self._captured_upsert()
+        for c in ctx:
+            c.start()
+        try:
+            profile_repo.upsert_profile(
+                user_id="u@x.com",
+                updates={},
+                cv_text=self._CV_B,
+                cv_structured={},          # nothing substantive from CV B
+                replace_cv_structured=True,
+            )
+        finally:
+            for c in ctx:
+                c.stop()
+        assert captured["replace"] is True
+        assert captured["cv_structured"] == {}
+        # And with structure cleared, the state falls back to the NEW text.
+        assert derive_cv_state(cv_structured={}, cv_text=self._CV_B * 10) == STATE_TEXT_EXTRACTED
+
+    def test_substantive_extraction_fully_replaces_the_previous_document(self):
+        from src.repositories import profile_repo
+
+        b_structured = _structured(self._CV_B)
+        captured, ctx = self._captured_upsert()
+        for c in ctx:
+            c.start()
+        try:
+            profile_repo.upsert_profile(
+                user_id="u@x.com", updates={}, cv_text=self._CV_B,
+                cv_structured=b_structured, replace_cv_structured=True,
+            )
+        finally:
+            for c in ctx:
+                c.stop()
+        assert captured["replace"] is True
+        written = captured["cv_structured"]
+        assert written == b_structured
+
+    def test_no_trace_of_the_old_cv_survives_replacement(self):
+        """No old employer, institution or skill may appear in the new document."""
+        a, b = _structured(self._CV_A), _structured(self._CV_B)
+        blob = repr(b)
+        for stale in ("AlphaCorp", "Alpha University", "Head of Audit", "BSc Accounting"):
+            assert stale not in blob
+        for fresh in ("BetaWorks", "Beta Institute"):
+            assert fresh in blob
+        assert set(a["skills"]).isdisjoint(set(b["skills"]))
+
+    def test_replace_is_off_by_default_for_unrelated_callers(self):
+        from src.repositories import profile_repo
+
+        captured, ctx = self._captured_upsert()
+        for c in ctx:
+            c.start()
+        try:
+            profile_repo.upsert_profile(user_id="u@x.com", updates={"skills": ["x"]})
+        finally:
+            for c in ctx:
+                c.stop()
+        assert captured.get("replace") is False
+
+    def test_sql_switches_between_merge_and_replace(self):
+        """The clause itself, not just the flag."""
+        from src.rico_db import RicoDB
+
+        seen = []
+
+        class _Cur:
+            def execute(self, sql, params=()):
+                seen.append(" ".join(sql.split()))
+
+            def fetchone(self):
+                return {"user_id": "1"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        class _Conn:
+            def cursor(self):
+                return _Cur()
+
+            def commit(self):
+                pass
+
+            def close(self):
+                pass
+
+        db = RicoDB.__new__(RicoDB)
+        db.connect = lambda: _Conn()
+        db.upsert_profile("1", {}, cv_structured={"a": 1}, replace_cv_structured=True)
+        assert "cv_structured = EXCLUDED.cv_structured" in seen[0]
+        assert "rico_profiles.cv_structured ||" not in seen[0]
+        seen.clear()
+        db.upsert_profile("1", {}, cv_structured={"a": 1})
+        assert "cv_structured = rico_profiles.cv_structured || EXCLUDED.cv_structured" in seen[0]
+
+
+class TestSchemaRejectsNonDictEntries:
+    @pytest.mark.parametrize("entries", [["a string"], [None], [42], [["nested"]]])
+    def test_non_dict_entries_are_invalid(self, entries):
+        assert is_substantive({"schema_version": 1, "work_experience": entries}) is False
+        assert is_substantive({"schema_version": 1, "education": entries}) is False
+
+    def test_dict_entries_remain_valid(self):
+        assert is_substantive({"schema_version": 1, "work_experience": [{"text": "Role, Co"}]}) is True
+
+
+class TestStoreFailureDoesNotEraseAKnownCV:
+    """A read failure must not turn a CV the caller can already see into "none".
+
+    The first cut of the grounding read returned state=none on any store failure,
+    which erased a CV whose filename the caller was holding — sending the user to
+    re-upload during an outage, the exact failure this resolver exists to prevent.
+    """
+
+    def _store_down(self):
+        return patch(
+            "src.repositories.profile_repo.get_cv_grounding",
+            side_effect=RuntimeError("neon down"),
+        )
+
+    def test_known_filename_survives_a_store_failure(self):
+        with self._store_down():
+            ctx = resolve_cv_context("u@x.com", {"cv_filename": "cv.pdf", "cv_status": "parsed"})
+        assert ctx.state == STATE_METADATA_ONLY
+        assert ctx.has_cv is True
+        assert ctx.has_content is False
+        assert ctx.availability_reason == REASON_UNAVAILABLE
+        assert ctx.filename == "cv.pdf"
+
+    def test_caller_that_knows_of_no_cv_still_gets_none(self):
+        with self._store_down():
+            ctx = resolve_cv_context("u@x.com", {"skills": ["compliance"]})
+        assert ctx.state == STATE_NONE
+        assert ctx.availability_reason == REASON_UNAVAILABLE
+
+    def test_store_failure_never_claims_content(self):
+        with self._store_down():
+            ctx = resolve_cv_context("u@x.com", {"cv_filename": "cv.pdf", "cv_status": "parsed"})
+        assert ctx.structured is None
+        assert ctx.readable_text_fallback is None
+        assert ctx.must_not_ask_user_to_retype is False

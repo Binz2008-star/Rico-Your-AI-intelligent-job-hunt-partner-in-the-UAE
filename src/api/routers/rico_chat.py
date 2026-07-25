@@ -330,6 +330,7 @@ def upsert_profile(
     updates: dict[str, Any],
     cv_text: str | None = None,
     cv_structured: dict[str, Any] | None = None,
+    replace_cv_structured: bool = False,
     require_db: bool = False,
     clear_fields: Collection[str] = (),
 ):
@@ -340,8 +341,8 @@ def upsert_profile(
     # profile save (endpoint tests mock this symbol, so CI could not see it).
     return profile_repo.upsert_profile(
         user_id=user_id, updates=updates, cv_text=cv_text,
-        cv_structured=cv_structured, require_db=require_db,
-        clear_fields=clear_fields,
+        cv_structured=cv_structured, replace_cv_structured=replace_cv_structured,
+        require_db=require_db, clear_fields=clear_fields,
     )
 
 
@@ -2714,7 +2715,15 @@ async def confirm_cv_profile(
                 user_id=resolved_user_id,
                 updates=profile_updates,
                 cv_text=confirmed_cv_text,
-                cv_structured=_cv_structured,
+                # `{}` rather than None when extraction produced nothing
+                # substantive: paired with replace_cv_structured this CLEARS a
+                # previous CV's structure instead of leaving it behind. Without
+                # that, cv_text would describe the new document while
+                # cv_structured still described the old one, and state
+                # derivation prefers structure — so Rico would answer from the
+                # previous CV's employers while believing it read the new one.
+                cv_structured=_cv_structured if _cv_structured else {},
+                replace_cv_structured=True,
                 require_db=True,
             )
         except Exception as _profile_exc:

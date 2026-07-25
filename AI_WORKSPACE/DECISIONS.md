@@ -1804,3 +1804,77 @@ All multi-model work must use `AI_WORKSPACE/` as the shared source of truth for 
 
 - [ ] Use the handoff template for the next implementation task.
 - [ ] Keep decisions short and tied to tasks.
+
+### DEC-20260725-001 — CV state vocabulary, legacy `parsed`, and structured-CV replacement semantics
+
+Status: accepted
+Date: 2026-07-25
+Owner: Roben (CTO decision) / Claude
+Related task: structured CV pipeline — "Rico actually understands and consistently uses the saved CV"
+
+#### Context
+
+`rico_profiles.cv_structured` existed as a JSONB column but was never wired to the
+live preview/confirm flow: `RicoDB.upsert_profile` accepted the argument and merged
+the column, `profile_repo.upsert_profile` never exposed it, and no reader consumed
+it anywhere. Production profiles therefore carry `cv_status = "parsed"` beside
+`cv_structured = {}` — a status asserting an extraction that had never been
+connected. `"parsed"` itself conflated two different facts: "a file arrived" and
+"its content is usable".
+
+#### Decision
+
+**1. State vocabulary.** CV state is one of `structured`, `text_extracted`,
+`metadata_only`, `parse_failed`, `uploaded`, `none`, derived in
+`src/services/cv_state.py` from stored content — never from a stored label.
+`structured` requires a valid schema AND substantive professional content (work
+experience, education, or a credible skill set); contact details are not a CV.
+`text_extracted` requires text that passes `src/cv_parse_quality.py`.
+
+**2. Legacy `parsed` is read-only.** It is accepted when reading, contributes only
+the fact that a CV exists, and is written by no path. It can never promote a row to
+`text_extracted` or `structured`. `metadata_only` still means the user HAS a CV: the
+product says the content is not available, never "you have no CV", and never claims
+the CV was analysed.
+
+**3. Replacement semantics.** Confirming a CV REPLACES `cv_structured`
+(`replace_cv_structured=True`): a substantive extraction writes the new document, a
+failed or thin extraction writes `{}`. The default stays MERGE for every unrelated
+caller. Rationale: the merge made `None` a no-op, so a previous CV's structure
+survived while `cv_text` became the new CV's text — and state derivation prefers
+structure, so Rico would answer from the old CV's employers believing it read the
+new one. After one transaction, `cv_text` and `cv_structured` describe the same
+document.
+
+**4. No migration, no backfill.** State is derived at read time, so no existing row
+needs rewriting to be read correctly. No column was added to `cv_upload_artifacts`
+and `migrations/038` is unmodified; the structured document is derived at confirm
+from the artifact's stored `cv_text` using the same `CVParser.parse_text` that built
+the upload preview. Any future schema need gets a NEW migration file.
+
+**5. One read path.** `src/services/cv_context_resolver.resolve_cv_context` is the
+single reader, returning `{state, structured, readable_text_fallback,
+document_evidence, availability_reason}`. It reads the grounding columns through
+`profile_repo.get_cv_grounding`, never through `get_profile` — `RicoProfile` carries
+neither `cv_text` nor `cv_structured`, so a profile-derived answer can only ever
+conclude `metadata_only`. A store failure reports `store_unavailable`, which is a
+different fact from `no_cv_on_file`.
+
+#### Consequences
+
+- Positive: the product can no longer claim an analysis it did not perform, and a
+  database outage can no longer render as "you have no CV".
+- Positive: existing users keep their CVs — legacy `parsed` still satisfies
+  "has a CV" by construction.
+- Trade-off: `parse_status` / state is computed per read rather than stored, and CV
+  context is memoised per request to avoid an N+1 across the handler chain.
+- Trade-off: years of experience now has a stated hierarchy — profile field is
+  authoritative, `cv_structured.years_experience_hint` is evidence,
+  `user_documents.years_experience` is a per-document snapshot for provenance.
+
+#### Follow-up
+
+- [ ] Frontend PR: unify CV upload surfaces on `.pdf` + `.docx` and align the copy
+      to "PDF or DOCX" (no `.doc` without a real fixture and a passing extraction).
+- [ ] Live verification of upload → confirm → document evidence → My Files → chat
+      continuity, performed by the owner.
