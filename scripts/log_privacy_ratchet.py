@@ -40,7 +40,16 @@ silence, and the remedy is cheap and in the right direction: sanitise the site
 you were already moving. Anyone who hits this and concludes the gate is broken
 should read this paragraph first — it is working as designed.
 
-Exit codes: 0 clean, 1 new violations, 2 the ratchet could not run safely.
+A source-only comparison is not enough on its own, because a change can edit
+the policy instead of the code. Nothing in ``src/`` moves, every diff is empty,
+and the relaxed rule becomes the next change's baseline — the bypass delayed by
+one pull request rather than prevented. The enforcement path (``--trusted``,
+driven by the base branch under ``pull_request_target``) therefore also refuses
+a change that deletes the gate's own files, weakens a policy vocabulary, or
+rewrites a detection predicate.
+
+Exit codes: 0 clean, 1 new violations or a policy change, 2 the ratchet could
+not run safely.
 """
 from __future__ import annotations
 
@@ -72,6 +81,40 @@ _RULES_RELPATH = pathlib.Path("tests") / "test_1076_log_privacy.py"
 _POLICY_MUST_NOT_SHRINK = ("_SENSITIVE_LABELS", "_BARE_SENSITIVE_NAMES",
                            "_LOG_METHODS", "_SWEPT_MODULES")
 _POLICY_MUST_NOT_GROW = ("_APPROVED_REFS", "_INTERNAL_ID_ALLOWLIST")
+
+# The vocabularies above say WHAT is sensitive. These say HOW it is detected,
+# and freezing only the vocabularies leaves the larger hole open: make
+# _is_sanctioned answer True for everything and every labelled-field finding
+# disappears with not one label moved and not one line of src/ changed. Both
+# source comparisons come back empty, the surface check stays silent, and the
+# blinded rule becomes the next change's baseline.
+#
+# So these are compared structurally and ANY difference is a policy change,
+# including one that strengthens detection. That asymmetry with the
+# vocabularies is deliberate. Whether a label belongs in a set is a judgement
+# the diff makes obvious; whether a rewritten predicate still catches what the
+# old one caught is not, and a gate cannot referee it. Adding a protection
+# therefore lands on the base branch first, through the governance path in
+# AI_WORKSPACE/OPERATING_RULES.md, and binds every pull request opened after.
+_POLICY_PREDICATES = ("_sensitive_positions", "_is_sanctioned", "_log_calls",
+                      "_log_calls_with_scope", "_bare_name",
+                      "_rule_two_candidates")
+# Module-level patterns those predicates read. Rule 1 finds a label only
+# through _TRAILING_LABEL, so relaxing the regex blinds it without touching a
+# single function body.
+_POLICY_PATTERNS = ("_CONVERSION", "_TRAILING_LABEL")
+
+# Without these three there is no gate. A change that deletes one is still
+# judged — the trusted job runs the base branch's copy — but it would pass,
+# merge, and take the check with it. From then on the job never reports, and a
+# Required check that never reports leaves every later pull request stuck on a
+# pending tick rather than protected by a green one. The deletion has to be
+# refused while there is still a gate to refuse it.
+_GATE_FILES = (
+    pathlib.Path("scripts") / "log_privacy_ratchet.py",
+    pathlib.Path(".github") / "workflows" / "log-privacy-ratchet-trusted.yml",
+    pathlib.Path("tests") / "test_1076_log_privacy.py",
+)
 
 
 class RatchetError(RuntimeError):
@@ -132,6 +175,85 @@ def _literal_strings(node: "ast.AST") -> frozenset:
     )
 
 
+def _parse_rule_module(rules_path: pathlib.Path) -> "ast.AST":
+    """Parse a rule module as DATA. Never imports it.
+
+    In trusted mode the head tree's rule module is written by the change under
+    judgement, so it is read strictly as bytes on disk.
+    """
+    import ast
+
+    if not rules_path.is_file():
+        raise RatchetError(f"rule module not found at {rules_path}")
+    try:
+        return ast.parse(rules_path.read_text(encoding="utf-8-sig", errors="strict"))
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise RatchetError(f"could not read policy surface from {rules_path}: {exc}")
+
+
+def predicate_fingerprints(rules_path: pathlib.Path) -> dict:
+    """A structural fingerprint of each detection predicate, by parsing.
+
+    ``ast.dump`` without attributes ignores comments, blank lines, formatting
+    and line numbers, and the docstring is dropped below, so prose around a
+    predicate stays free to change — a gate that froze the documentation is one
+    people would route around. What it does not ignore is a rewrite of what the
+    predicate computes.
+    """
+    import ast
+
+    tree = _parse_rule_module(rules_path)
+    wanted = set(_POLICY_PREDICATES) | set(_POLICY_PATTERNS)
+    prints: dict = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name not in wanted:
+                continue
+            body = node.body
+            # Drop a leading docstring so rewording it is not a policy change.
+            if (body and isinstance(body[0], ast.Expr)
+                    and isinstance(body[0].value, ast.Constant)
+                    and isinstance(body[0].value.value, str)):
+                body = body[1:]
+            if not body:
+                raise RatchetError(
+                    f"predicate '{node.name}' has no body — a rule cannot be "
+                    f"emptied; restore it rather than removing the check"
+                )
+            prints[node.name] = ast.dump(
+                ast.Module(body=body, type_ignores=[]), annotate_fields=True
+            )
+        elif isinstance(node, ast.Assign) and node.targets:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id in _POLICY_PATTERNS:
+                prints[target.id] = ast.dump(node.value, annotate_fields=True)
+
+    missing = wanted - set(prints)
+    if missing:
+        raise RatchetError(
+            f"detection predicates missing from the rule module: "
+            f"{sorted(missing)} — a predicate cannot be removed outright"
+        )
+    return prints
+
+
+def predicates_changed(base_prints: dict, head_prints: dict) -> list[str]:
+    """Predicates whose logic differs between the trusted and head modules."""
+    return [
+        f"{name} was rewritten"
+        for name in sorted(base_prints)
+        if head_prints.get(name) != base_prints[name]
+    ]
+
+
+def gate_files_missing(head_tree: pathlib.Path) -> list[str]:
+    """Gate files the change has deleted from the head tree."""
+    return [
+        path.as_posix() for path in _GATE_FILES
+        if not (head_tree / path).is_file()
+    ]
+
+
 def policy_surface(rules_path: pathlib.Path) -> dict:
     """Extract the policy vocabularies from a rule module BY PARSING IT.
 
@@ -140,12 +262,7 @@ def policy_surface(rules_path: pathlib.Path) -> dict:
     """
     import ast
 
-    if not rules_path.is_file():
-        raise RatchetError(f"rule module not found at {rules_path}")
-    try:
-        tree = ast.parse(rules_path.read_text(encoding="utf-8-sig", errors="strict"))
-    except (UnicodeDecodeError, SyntaxError) as exc:
-        raise RatchetError(f"could not read policy surface from {rules_path}: {exc}")
+    tree = _parse_rule_module(rules_path)
 
     wanted = set(_POLICY_MUST_NOT_SHRINK) | set(_POLICY_MUST_NOT_GROW)
     surface: dict = {}
@@ -281,23 +398,46 @@ def run_trusted(base_tree: pathlib.Path, head_tree: pathlib.Path,
                 rules_tree: pathlib.Path) -> int:
     """Enforcement path: only the trusted tree's rules are ever executed.
 
-    The change under judgement cannot alter what judges it. Two things are
-    checked, both driven entirely by the trusted checkout:
+    The change under judgement cannot alter what judges it. Four things are
+    checked, all driven entirely by the trusted checkout:
 
-      1. the policy surface may not be weakened — a set of protections may not
+      1. the gate's own files still exist in head — a change may not delete the
+         mechanism that judges it;
+      2. the policy surface may not be weakened — a set of protections may not
          shrink, and the set of already-safe helpers may not grow. This is what
          rejects a weakening-only change, which no source-tree diff can see
          because such a change leaves src/ identical on both sides;
-      2. no violation exists in head that is absent from base, judged by the
+      3. the detection predicates may not be rewritten, which is the same
+         bypass one level down: the vocabulary can stay untouched while the
+         code reading it is blinded;
+      4. no violation exists in head that is absent from base, judged by the
          TRUSTED rules.
 
     The head tree is read as data only: parsed, never imported.
     """
     trusted_rules = load_rules(rules_tree, tag="trusted", required=True)
 
+    # First, because the remaining checks need the files this one looks for,
+    # and "the gate is gone" is a clearer answer than whatever they would say
+    # about its absence.
+    deleted = gate_files_missing(head_tree)
+    if deleted:
+        print("\nFAIL — this change removes the log-privacy gate itself:\n")
+        for path in deleted:
+            print(f"    deleted: {path}")
+        print(
+            "\nRestore the file. Retiring the gate is a governance decision, "
+            "not something a pull request carries out on its own."
+        )
+        return 1
+
     complaints = policy_weakened(
         policy_surface(rules_tree / _RULES_RELPATH),
         policy_surface(head_tree / _RULES_RELPATH),
+    )
+    complaints += predicates_changed(
+        predicate_fingerprints(rules_tree / _RULES_RELPATH),
+        predicate_fingerprints(head_tree / _RULES_RELPATH),
     )
     regressions = new_violations(
         scan_tree(trusted_rules, base_tree),
@@ -309,12 +449,15 @@ def run_trusted(base_tree: pathlib.Path, head_tree: pathlib.Path,
         return 0
 
     if complaints:
-        print("\nFAIL — this change weakens the log-privacy policy:\n")
+        print("\nFAIL — this change alters the log-privacy policy that judges it:\n")
         for complaint in complaints:
             print(f"    {complaint}")
         print(
-            "\nA change may not relax the rules that judge it. Weakening must go "
-            "through the governance path for policy files, not an ordinary PR."
+            "\nA change may not edit the rules it is judged by, in either "
+            "direction: a gate cannot tell a strengthened predicate from a "
+            "blinded one. Land the policy change on the base branch through "
+            "the governance path in AI_WORKSPACE/OPERATING_RULES.md, and it "
+            "binds every pull request opened after it."
         )
     if regressions:
         print("\nFAIL — newly introduced log-privacy violation(s), "

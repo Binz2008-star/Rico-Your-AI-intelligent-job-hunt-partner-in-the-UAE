@@ -123,6 +123,16 @@ def repo(tmp_path: pathlib.Path) -> pathlib.Path:
     shutil.copy(_REPO_ROOT / "tests" / "test_1076_log_privacy.py", root / "tests")
     shutil.copy(_REPO_ROOT / "src" / "log_privacy.py", root / "src")
 
+    # The gate's own files travel with the tree too, because the enforcement
+    # path checks that a change has not deleted the mechanism judging it.
+    (root / "scripts").mkdir()
+    (root / ".github" / "workflows").mkdir(parents=True)
+    shutil.copy(_REPO_ROOT / "scripts" / "log_privacy_ratchet.py", root / "scripts")
+    shutil.copy(
+        _REPO_ROOT / ".github" / "workflows" / "log-privacy-ratchet-trusted.yml",
+        root / ".github" / "workflows",
+    )
+
     (root / "src" / "legacy.py").write_text(_BASELINE_DEBT, encoding="utf-8")
     _commit(root, "baseline with pre-existing debt")
     return root
@@ -410,6 +420,98 @@ class TestTrustedEnforcementResistsSelfModification:
         surface = policy_surface(rules)          # parses; must not execute
         assert "email" in surface["_BARE_SENSITIVE_NAMES"]
 
+    def test_gutting_a_predicate_body_is_rejected(self, repo, tmp_path):
+        """Vocabulary is WHAT is sensitive; predicates are HOW it is detected.
+
+        Freezing only the vocabulary leaves the larger hole open: make
+        ``_is_sanctioned`` answer True for everything and every labelled-field
+        finding disappears, with not one label moved and not one line of src/
+        changed. Both source comparisons are empty and the surface check is
+        silent, so the change lands and its blinded rule becomes the next
+        change's baseline.
+        """
+        _git(repo, "checkout", "-q", "-b", "feature")
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        text = text.replace(
+            "def _is_sanctioned(node: ast.AST) -> bool:\n",
+            "def _is_sanctioned(node: ast.AST) -> bool:\n    return True\n", 1,
+        )
+        rules.write_text(text, encoding="utf-8")
+        _commit(repo, "make every argument count as sanctioned")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+
+        # No vocabulary moved and src/ is byte-identical, so everything the
+        # gate checked before this test passes it.
+        assert _ratchet(repo, tmp_path) == 0
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_relaxing_a_policy_pattern_is_rejected(self, repo, tmp_path):
+        """A regex is policy too — rule 1 finds labels only through it."""
+        _git(repo, "checkout", "-q", "-b", "feature")
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        text = text.replace(
+            '_TRAILING_LABEL = re.compile(r"(\\w+)=$")',
+            '_TRAILING_LABEL = re.compile(r"(?!x)x(\\w+)=$")', 1,
+        )
+        rules.write_text(text, encoding="utf-8")
+        _commit(repo, "relax the label pattern so it never matches")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_removing_a_predicate_outright_is_refused(self, repo, tmp_path):
+        """Deleting a predicate is not a licence to skip comparing it."""
+        _git(repo, "checkout", "-q", "-b", "feature")
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        text = re.sub(
+            r"\ndef _bare_name\(node: ast\.AST\).*?\n(?=\ndef )",
+            "\ndef _bare_name(node):\n    return None\n",
+            text, count=1, flags=re.S,
+        )
+        rules.write_text(text, encoding="utf-8")
+        _commit(repo, "replace a predicate with a stub")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_recommenting_the_rule_module_is_not_a_policy_change(self, repo, tmp_path):
+        """The fingerprint is structural, so prose is free to change.
+
+        Freezing the predicates must not freeze the documentation around them,
+        or the gate becomes something people route around.
+        """
+        _git(repo, "checkout", "-q", "-b", "feature")
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        text = text.replace(
+            "def _is_sanctioned(node: ast.AST) -> bool:\n",
+            "# a newly added explanatory comment\ndef _is_sanctioned(node: ast.AST) -> bool:\n",
+            1,
+        )
+        text = text.replace(
+            '"""True if the argument expression is a sanctioned log_privacy call."""',
+            '"""Rewritten docstring saying the same thing in more words."""', 1,
+        )
+        rules.write_text(text, encoding="utf-8")
+        _commit(repo, "improve the prose around a predicate")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 0
+
+    def test_strengthening_the_vocabulary_is_still_allowed(self, repo, tmp_path):
+        """The ratchet turns one way: adding a protection must stay cheap."""
+        _git(repo, "checkout", "-q", "-b", "feature")
+        rules = repo / "tests" / "test_1076_log_privacy.py"
+        text = rules.read_text(encoding="utf-8")
+        text = text.replace(
+            "_SENSITIVE_LABELS = frozenset({\n",
+            '_SENSITIVE_LABELS = frozenset({\n    "passport_no",\n', 1,
+        )
+        rules.write_text(text, encoding="utf-8")
+        _commit(repo, "treat one more label as sensitive")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 0
+
     def test_policy_weakened_reports_both_directions(self):
         base = {n: frozenset({"a"}) for n in
                 ("_SENSITIVE_LABELS", "_BARE_SENSITIVE_NAMES", "_LOG_METHODS",
@@ -420,6 +522,46 @@ class TestTrustedEnforcementResistsSelfModification:
         complaints = policy_weakened(base, head)
         assert any("lost" in c for c in complaints)
         assert any("gained" in c for c in complaints)
+
+
+class TestTheGateCannotBeDeletedByTheChangeItJudges:
+    """Removing the mechanism is the cheapest bypass of all.
+
+    The trusted job runs the BASE branch's copy of everything, so a change that
+    deletes the scanner or the workflow is still judged — but it would pass,
+    merge, and take the check with it. From then on the job never reports, and
+    a Required check that never reports leaves every later pull request stuck
+    on a pending tick rather than protected by a green one. The deletion has to
+    be refused while there is still a gate to refuse it.
+    """
+
+    def test_deleting_the_scanner_is_rejected(self, repo, tmp_path):
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / "scripts" / "log_privacy_ratchet.py").unlink()
+        _commit(repo, "remove the scanner")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_deleting_the_enforcement_workflow_is_rejected(self, repo, tmp_path):
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / ".github" / "workflows" / "log-privacy-ratchet-trusted.yml").unlink()
+        _commit(repo, "remove the enforcement workflow")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_deleting_the_rule_module_is_rejected(self, repo, tmp_path):
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / "tests" / "test_1076_log_privacy.py").unlink()
+        _commit(repo, "remove the rule module")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 1
+
+    def test_an_intact_gate_passes(self, repo, tmp_path):
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / "src" / "added.py").write_text(_CLEAN_MODULE, encoding="utf-8")
+        _commit(repo, "add a compliant module, gate untouched")
+        base_tree, _b, _h = _base_tree(repo, tmp_path)
+        assert ratchet_run_trusted(base_tree, repo, base_tree) == 0
 
 
 class TestRatchetStaysGreenWithoutNewDebt:

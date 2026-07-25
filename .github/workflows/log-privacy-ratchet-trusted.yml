@@ -12,6 +12,15 @@ name: Log Privacy Ratchet (trusted)
 # pull_request_target runs the BASE branch's copy of this workflow, this
 # scanner and these rules, so the change cannot alter what judges it.
 #
+# On top of the source comparison, this path refuses a change that deletes a
+# gate file, weakens a policy vocabulary, or rewrites a detection predicate.
+# See scripts/log_privacy_ratchet.py::run_trusted and the governance path in
+# AI_WORKSPACE/OPERATING_RULES.md.
+#
+# NOTE: a pull_request_target result is computed against the base branch as it
+# stood when the event fired, so it goes stale if the base moves. Pair the
+# Required check with "Require branches to be up to date before merging".
+#
 # ── SAFETY PROPERTIES OF THIS FILE — do not weaken ──────────────────────────
 # pull_request_target is dangerous precisely because it is privileged and the
 # PR head is untrusted. This job is safe only while ALL of the following hold:

@@ -243,9 +243,23 @@ Use this matrix after relevant merges/deploys.
   policy so newly added protections are exercised in the same PR, and must never
   be the Required check. **Detection is not enforcement:** a merge is blocked
   only once the trusted check is configured as a Required status check in branch
-  protection. Until then every failing run is advisory. Policy files
-  (`tests/test_1076_log_privacy.py`, `scripts/log_privacy_ratchet.py`) are
-  governance-controlled: weakening them is rejected by the trusted check.
+  protection. Until then every failing run is advisory.
+- **Log-privacy policy is governance-controlled.** The trusted check rejects a
+  pull request that deletes any gate file (`scripts/log_privacy_ratchet.py`,
+  `.github/workflows/log-privacy-ratchet-trusted.yml`,
+  `tests/test_1076_log_privacy.py`), shrinks a protection vocabulary, grows an
+  already-safe helper set, or rewrites a detection predicate. The predicate
+  rule is symmetric on purpose — **strengthening** a predicate is refused too,
+  because a gate cannot tell a sharpened rule from a blinded one, and the
+  vocabulary asymmetry (adding a sensitive label is free) covers the common
+  case. Comments, docstrings and formatting around the predicates are compared
+  structurally and are free to change.
+  To change a predicate: open a policy-only pull request touching nothing else,
+  have the owner review the rule itself rather than the tick, and land it on the
+  base branch with an owner bypass of the Required check. From the next pull
+  request onward the new predicate is the trusted baseline. Do not add an
+  exemption path, an env override or a skip label to make this easier — the
+  friction is the control.
 - Do not call live third-party APIs from unit tests.
 
 ## No Dead UI Rule
