@@ -36,6 +36,7 @@ import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
     deleteUserFile,
+    fetchPendingCvUpload,
     getMySubscription,
     listUserFiles,
     setPrimaryFile,
@@ -912,14 +913,32 @@ export function ProfileEditorial({
     const [files, setFiles] = useState<UserDocument[]>([]);
     const [filesLoaded, setFilesLoaded] = useState(false);
     const [uploading, setUploading] = useState(false);
+    // Whether an uploaded CV is still awaiting confirmation. A server answer,
+    // re-read with the file list — never a local flag set by "the upload
+    // returned", which is not the same event as "the CV was saved".
+    const [cvPendingReview, setCvPendingReview] = useState(false);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [docBusyId, setDocBusyId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const loadFiles = useCallback(async () => {
         try {
-            const res = await listUserFiles();
+            // Same server-authoritative pair the Vault surface reads: the saved
+            // documents AND whether an unconfirmed upload is outstanding. Asked
+            // together and re-derived on every refresh, so this surface cannot
+            // hold a stale claim about either one.
+            const [res, pending] = await Promise.all([
+                listUserFiles(),
+                // Isolated on purpose: the pending banner is secondary
+                // information, and a failure to read it must never take the
+                // user's document list down with it. Unknown resolves to "not
+                // pending", which withholds a claim rather than inventing one.
+                Promise.resolve()
+                    .then(fetchPendingCvUpload)
+                    .catch(() => ({ pending: false, state: "unavailable" as const })),
+            ]);
             setFiles(res.files);
+            setCvPendingReview(pending.state === "pending");
         } catch {
             // list stays empty; the section still renders with the upload action
         } finally {
@@ -941,14 +960,37 @@ export function ProfileEditorial({
             setUploading(true);
             try {
                 await uploadCV(file);
-                notify(t("profileEdUploadDone"), "success");
+                // An upload is not a save. This surface used to announce success
+                // here, reload a file list that was still empty, and refresh the
+                // profile — before confirmation had created any document. The
+                // upload response cannot know the outcome, so ask the same
+                // server question the other two surfaces ask.
+                const pending = await fetchPendingCvUpload();
                 await loadFiles();
-                // CV parsing can update profile facts (skills, role, years).
-                try {
-                    await refresh();
-                } catch {
-                    notify(t("profileRefreshFailed"), "error");
+                if (pending.state === "pending") {
+                    // Truthful and actionable: read, not saved, one step left.
+                    notify(t("profileEdUploadPendingReview"), "success");
+                    return;
                 }
+                if (pending.state === "already_saved") {
+                    notify(t("profileEdUploadDone"), "success");
+                    // Only now can CV-derived profile facts have changed.
+                    try {
+                        await refresh();
+                    } catch {
+                        notify(t("profileRefreshFailed"), "error");
+                    }
+                    return;
+                }
+                // Anything else means no confirmable artifact came out of this
+                // upload. Never reported as success, and never as "your file is
+                // gone" when the store simply could not be read.
+                notify(
+                    t(pending.state === "unavailable"
+                        ? "profileEdUploadPendingUnknown"
+                        : "profileEdUploadNotSaved"),
+                    "error",
+                );
             } catch (err: unknown) {
                 notify(err instanceof Error ? err.message : t("profileEdUploadFailed"), "error");
             } finally {
@@ -1402,8 +1444,29 @@ export function ProfileEditorial({
                             </>
                         }
                     >
+                        {/* Uploaded, not saved. Drawn only by the server answer,
+                            so it cannot outlive the artifact, and it carries the
+                            one step that actually saves the CV. */}
+                        {cvPendingReview && (
+                            <div
+                                role="status"
+                                className="mb-3 flex flex-wrap items-center gap-2 rounded-[10px] px-3.5 py-2.5 text-[12.5px]"
+                                style={{ border: `1px solid ${palette.hair}`, background: palette.inset, color: palette.ink }}
+                            >
+                                <span className="font-semibold">{t("profileEdCvPendingTitle")}</span>
+                                <span style={{ color: palette.ink55 }}>{t("profileEdCvPendingBody")}</span>
+                                <a href="/command?cv=ready" style={{ color: palette.red, fontWeight: 600 }}>
+                                    {t("profileEdCvPendingAction")}
+                                </a>
+                            </div>
+                        )}
                         {filesLoaded && files.length === 0 ? (
-                            <p className="m-0 text-[13.5px]" style={{ color: palette.ink55 }}>{t("profileEdDocsEmpty")}</p>
+                            <p className="m-0 text-[13.5px]" style={{ color: palette.ink55 }}>
+                                {/* An empty list is true, but "upload your CV" is
+                                    the wrong instruction for someone whose CV is
+                                    already uploaded and awaiting confirmation. */}
+                                {t(cvPendingReview ? "profileEdDocsEmptyPending" : "profileEdDocsEmpty")}
+                            </p>
                         ) : (
                             <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
                                 {files.map((f) => {

@@ -112,6 +112,9 @@ vi.mock("@/lib/api", () => ({
     fetchProfile: fetchProfileMock,
     updateProfile: updateProfileMock,
     listUserFiles: listUserFilesMock,
+    // The documents section also asks whether a CV upload is awaiting
+    // confirmation; nothing is pending in these suites.
+    fetchPendingCvUpload: () => Promise.resolve({ pending: false, state: "absent" }),
     deleteUserFile: deleteUserFileMock,
     setPrimaryFile: setPrimaryFileMock,
     uploadCV: uploadCVMock,
