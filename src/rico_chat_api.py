@@ -3414,7 +3414,8 @@ class RicoChatAPI:
                 return
             artifact = get_latest_pending_cv_upload(user_id)
         except Exception:
-            logger.debug("pending_cv_note_skipped user=%s", user_id, exc_info=True)
+            from src.log_privacy import user_ref
+            logger.debug("pending_cv_note_skipped user=%s", user_ref(user_id), exc_info=True)
             return
         if not artifact or artifact.get("expired") or artifact.get("already_saved"):
             return

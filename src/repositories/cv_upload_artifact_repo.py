@@ -36,6 +36,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from src.log_privacy import user_ref
+
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 _DEFAULT_TTL_MINUTES = 180
@@ -138,7 +140,7 @@ def saved_document_exists(user_id: str, doc_type: str, content_hash: str) -> boo
             )
             return cur.fetchone() is not None
     except Exception:
-        logger.exception("cv_upload_artifact_repo_saved_lookup_failed user=%s", user_id)
+        logger.exception("cv_upload_artifact_repo_saved_lookup_failed user=%s", user_ref(user_id))
         return False
     finally:
         conn.close()
@@ -358,7 +360,7 @@ def get_latest_pending_cv_upload(user_id: str) -> Optional[dict[str, Any]]:
             "already_saved": bool(row[6]),
         }
     except Exception as exc:
-        logger.exception("cv_upload_artifact_repo_pending_failed user=%s", user_id)
+        logger.exception("cv_upload_artifact_repo_pending_failed user=%s", user_ref(user_id))
         raise ArtifactStoreUnavailable(str(exc)) from exc
     finally:
         conn.close()
