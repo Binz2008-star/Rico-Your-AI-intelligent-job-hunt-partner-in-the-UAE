@@ -63,6 +63,30 @@ def added_path(email):
     logger.info("added_event user=%s", email)
 '''
 
+# An f-string log call carrying ONE sensitive label, and the same call carrying
+# TWO. Both render one log statement, so a rule that stops at the first match
+# produces an identical descriptor for each and the difference between them is
+# empty — a newly introduced violation that the gate would pass.
+_FSTRING_ONE_LABEL = '''\
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def fstring_path(a, b):
+    logger.info(f"fstring_event user={a}")
+'''
+
+_FSTRING_TWO_LABELS = '''\
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def fstring_path(a, b):
+    logger.info(f"fstring_event user={a} email={b}")
+'''
+
 
 def _git(repo: pathlib.Path, *args: str) -> str:
     result = subprocess.run(
@@ -133,6 +157,23 @@ class TestRatchetGoesRedOnNewDebt:
         (repo / "src" / "legacy.py").write_text(_CLEAN_MODULE, encoding="utf-8")
         (repo / "src" / "added.py").write_text(_NEW_VIOLATION, encoding="utf-8")
         _commit(repo, "fix one site and introduce another")
+        assert _ratchet(repo, tmp_path) == 1
+
+    def test_a_second_sensitive_label_on_one_fstring_call_is_rejected(self, repo, tmp_path):
+        """One log call must be able to contribute more than one finding.
+
+        A rule that stops at the first matching label collapses every f-string
+        call to a single descriptor, so adding a second sensitive field to a
+        call that already violates leaves base and head identical and the
+        difference empty. That is the multiset argument defeated inside one
+        rule, and it passes a newly introduced violation.
+        """
+        (repo / "src" / "fstr.py").write_text(_FSTRING_ONE_LABEL, encoding="utf-8")
+        _commit(repo, "baseline f-string site with one sensitive label")
+
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / "src" / "fstr.py").write_text(_FSTRING_TWO_LABELS, encoding="utf-8")
+        _commit(repo, "add a second sensitive label to the same call")
         assert _ratchet(repo, tmp_path) == 1
 
     def test_a_second_identical_site_in_the_same_function_is_rejected(self, repo, tmp_path):
@@ -239,6 +280,32 @@ class TestRatchetFailsLoudlyRatherThanSilently:
         _commit(repo, "remove the rule module")
         base_tree, base_sha, head_sha = _base_tree(repo, tmp_path)
         with pytest.raises(RatchetError, match="rule module not found"):
+            ratchet_run(base_tree, repo, base_sha, head_sha)
+
+    def test_undecodable_bytes_are_refused_not_silently_mangled(self, repo, tmp_path):
+        """errors="replace" would substitute bytes and carry on.
+
+        Mangled source can still parse, and a format literal whose bytes were
+        substituted may no longer contain the label it used to — a silent
+        false negative in a gate whose contract is that it has none.
+        """
+        _git(repo, "checkout", "-q", "-b", "feature")
+        # Valid Python, invalid UTF-8: a latin-1 byte inside a string literal.
+        (repo / "src" / "broken.py").write_bytes(
+            b'import logging\nlogger = logging.getLogger(__name__)\n'
+            b'MSG = "caf\xe9 user=%s"\n'
+        )
+        _commit(repo, "add a module that is not valid utf-8")
+        base_tree, base_sha, head_sha = _base_tree(repo, tmp_path)
+        with pytest.raises(RatchetError, match="could not decode"):
+            ratchet_run(base_tree, repo, base_sha, head_sha)
+
+    def test_a_module_that_does_not_parse_is_refused(self, repo, tmp_path):
+        _git(repo, "checkout", "-q", "-b", "feature")
+        (repo / "src" / "bad.py").write_text("def (:\n", encoding="utf-8")
+        _commit(repo, "add a module that does not parse")
+        base_tree, base_sha, head_sha = _base_tree(repo, tmp_path)
+        with pytest.raises(RatchetError, match="could not parse"):
             ratchet_run(base_tree, repo, base_sha, head_sha)
 
     def test_cli_reports_two_for_an_unusable_baseline(self, repo, tmp_path):

@@ -51,14 +51,14 @@ jobs:
           set -euo pipefail
 
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-            echo "::error::repository is shallow; merge base cannot be computed"
-            exit 1
+            echo "::error::CANNOT RUN (exit 2): repository is shallow; merge base cannot be computed"
+            exit 2
           fi
 
           BASE_REF="${{ github.event.pull_request.base.ref }}"
           if [ -z "$BASE_REF" ]; then
-            echo "::error::no base ref on this event; refusing to guess"
-            exit 1
+            echo "::error::CANNOT RUN (exit 2): no base ref on this event; refusing to guess"
+            exit 2
           fi
 
           git fetch --no-tags --quiet origin "$BASE_REF"
@@ -69,26 +69,26 @@ jobs:
           # every run — so a force-push or a rebase simply produces a new base,
           # and a base branch that moves under the PR is picked up as well.
           if ! BASE_SHA="$(git merge-base "origin/${BASE_REF}" HEAD)"; then
-            echo "::error::git merge-base failed against origin/${BASE_REF}"
-            exit 1
+            echo "::error::CANNOT RUN (exit 2): git merge-base failed against origin/${BASE_REF}"
+            exit 2
           fi
           HEAD_SHA="$(git rev-parse HEAD)"
 
           if [ -z "$BASE_SHA" ]; then
-            echo "::error::empty merge base; refusing to run with no baseline"
-            exit 1
+            echo "::error::CANNOT RUN (exit 2): empty merge base; refusing to run with no baseline"
+            exit 2
           fi
 
           # The dangerous failure mode: a base that equals head makes the
           # difference empty and lets every new violation through silently.
           if [ "$BASE_SHA" = "$HEAD_SHA" ]; then
-            echo "::error::merge base equals head (${BASE_SHA}); the difference would be empty"
-            exit 1
+            echo "::error::CANNOT RUN (exit 2): merge base equals head (${BASE_SHA}); the difference would be empty"
+            exit 2
           fi
 
           if ! git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"; then
-            echo "::error::resolved base ${BASE_SHA} is not an ancestor of head"
-            exit 1
+            echo "::error::CANNOT RUN (exit 2): resolved base ${BASE_SHA} is not an ancestor of head"
+            exit 2
           fi
 
           echo "base_sha=${BASE_SHA}" >> "$GITHUB_OUTPUT"
@@ -101,7 +101,7 @@ jobs:
           set -euo pipefail
           git worktree add --detach "${RUNNER_TEMP}/ratchet-base" "${{ steps.base.outputs.base_sha }}"
           test -d "${RUNNER_TEMP}/ratchet-base/src" || {
-            echo "::error::base tree has no src/ directory"; exit 1; }
+            echo "::error::CANNOT RUN (exit 2): base tree has no src/ directory"; exit 2; }
 
       - name: Run the differential ratchet
         run: |

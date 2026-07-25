@@ -28,6 +28,18 @@ This module adds only a stable DESCRIPTOR for each finding so two trees can be
 compared. Line numbers are deliberately excluded: inserting a line above a
 site would otherwise register as a new violation on every subsequent site.
 
+The descriptor is (module, enclosing qualified name, rule, field), which has a
+known and ACCEPTED false positive: a pure refactor can trip the gate. Move a
+pre-existing violating call to another module, or rename the function that
+encloses it, and its descriptor changes — head then holds an entry base lacks,
+and the gate goes red on a change that introduced nothing new.
+
+This is deliberate and must not be "fixed" by loosening the descriptor or
+adding an escape hatch. The wrong direction to err in a privacy gate is
+silence, and the remedy is cheap and in the right direction: sanitise the site
+you were already moving. Anyone who hits this and concludes the gate is broken
+should read this paragraph first — it is working as designed.
+
 Exit codes: 0 clean, 1 new violations, 2 the ratchet could not run safely.
 """
 from __future__ import annotations
@@ -93,7 +105,17 @@ def scan_file(rules, path: pathlib.Path, relpath: str) -> list[Finding]:
         # disk, but a BOM left at the head of a decoded string makes
         # ast.parse raise on line 1. Reading it as utf-8 would make the
         # scanner fail on a file that is perfectly valid Python.
-        tree = ast.parse(path.read_text(encoding="utf-8-sig", errors="replace"))
+        #
+        # errors="strict", never "replace": mangled source can still parse,
+        # and a format literal whose bytes were substituted may no longer
+        # contain the label it used to — a silent false negative in a gate
+        # whose whole contract is that it has none.
+        source = path.read_text(encoding="utf-8-sig", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise RatchetError(f"could not decode {relpath} as utf-8: {exc}")
+
+    try:
+        tree = ast.parse(source)
     except SyntaxError as exc:
         # A tree that does not parse cannot be compared; report it loudly
         # rather than silently contributing zero findings.
@@ -114,10 +136,16 @@ def scan_file(rules, path: pathlib.Path, relpath: str) -> list[Finding]:
                 part.value for part in fmt.values
                 if isinstance(part, ast.Constant) and isinstance(part.value, str)
             )
-            for label in rules._SENSITIVE_LABELS:
+            # One finding PER matching label, and no early exit. Stopping at
+            # the first match would collapse every f-string call to a single
+            # descriptor, so adding a second sensitive field to a call that
+            # already violates would leave base and head identical and pass a
+            # newly introduced violation — the multiset defeated inside one
+            # rule. Sorted, because iterating the label set directly made the
+            # emitted descriptor depend on hash randomisation.
+            for label in sorted(rules._SENSITIVE_LABELS):
                 if f"{label}=" in rendered:
                     findings.append(Finding(relpath, scope, "fstring-format", label))
-                    break
 
         # Rule 2 — bare identifier naming an external identifier.
         for arg in rules._rule_two_candidates(node):
