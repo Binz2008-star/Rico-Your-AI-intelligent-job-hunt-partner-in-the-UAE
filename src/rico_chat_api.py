@@ -715,6 +715,21 @@ _PROFILE_PITCH_RE = re.compile(
     re.IGNORECASE,
 )
 
+
+def _gate_is_application_data_request(message: str) -> bool:
+    """Shared carve-out: does this message ask for the user's own application records?
+
+    Delegates to ``src.rico.intent.gates`` so the intent gate and the legacy
+    handler chain agree by construction — the gate decides whether the message
+    reaches this module at all, and this module decides where it lands. Two
+    copies of that vocabulary would drift, and a drift here is invisible: the
+    message simply gets answered by the wrong handler. Imported lazily, matching
+    every other gate import in this module.
+    """
+    from src.rico.intent.gates import is_application_data_request
+    return is_application_data_request(message)
+
+
 # Application list query: "list my applications", "what jobs did I apply to?",
 # "show my applied jobs", "how many applications do I have?",
 # "what are my applications?", "where are my applications?", "do I have any applications?"
@@ -5630,6 +5645,17 @@ class RicoChatAPI:
         # by _handle_resignation_letter — do not intercept them here.
         if _RESIGNATION_LETTER_RE.search(message):
             return None
+        # A request for the user's OWN application records is a data lookup, not
+        # a draft/send follow-up. _requests_application_send matches the Arabic
+        # send verbs by SUBSTRING, and "قدم" ("submit") is a substring of "قدمت"
+        # ("I submitted") — so "كم طلب وظيفة قدمت؟" ("how many applications have
+        # I submitted?") satisfies this predicate and would be answered with the
+        # send-channel script asking which job and which recruiter to send to.
+        # This guard runs before that, and before the tracking handler further
+        # down the chain, which is the only reason widening the intent gate can
+        # reach the tracking handler at all for this phrasing.
+        if _gate_is_application_data_request(message):
+            return None
 
         wants_draft = self._requests_application_draft(message)
         wants_send = self._requests_application_send(message)
@@ -8347,7 +8373,15 @@ class RicoChatAPI:
             # matching.  General chat (greetings, profile queries, application
             # history, etc.) routes directly to _handle_active_user so Rico stays
             # conversational for users with stale-but-partial "completed" rows.
-            if self._message_requires_job_profile(message):
+            # A request for the user's own application records is a lookup, not
+            # a job-matching request, so the minimum-profile gate must not stand
+            # in front of it. «كم طلب وظيفة قدمت؟» ("how many job applications
+            # have I submitted?") contains the noun وظيفة and is therefore read
+            # as job matching, which answers a question about existing records
+            # with a prompt to finish onboarding. Guarded here at the call site:
+            # _message_requires_job_profile is a job-search predicate and stays
+            # untouched, and every genuine search still gates normally.
+            if self._message_requires_job_profile(message) and not _gate_is_application_data_request(message):
                 _ctx = self._resolve_profile(user_id)
                 _gate_ok, _missing = evaluate_minimum_profile(_ctx)
                 # Recover a city the user named inline in the search request
@@ -9009,7 +9043,16 @@ class RicoChatAPI:
         # "show my applications", "my applications", "اعرض طلباتي", "طلباتي", etc.
         # are direct intents — route to application_tracking without requiring a
         # prior lifecycle context (which the list-followup block would need).
-        if RicoChatAPI._SHOW_MY_APPLICATIONS_RE.match(text):
+        #
+        # _SHOW_MY_APPLICATIONS_RE is fully anchored (^...$), so it answers only
+        # the bare command forms: "Show me my applications", "What are my
+        # applications?" and "What is my application status?" all miss it and
+        # fall through to a different handler with a different response shape.
+        # Two contracts for one question is invisible to the user, so the same
+        # request-frame vocabulary the intent gate uses to keep these messages
+        # off the AI path also decides where they land. One vocabulary, one
+        # handler, one reconciled answer.
+        if RicoChatAPI._SHOW_MY_APPLICATIONS_RE.match(text) or _gate_is_application_data_request(message):
             return self._finalize(
                 self._handle_application_tracking(user_id, intent="application_tracking", message=message),
                 self.SOURCE_KEYWORD,

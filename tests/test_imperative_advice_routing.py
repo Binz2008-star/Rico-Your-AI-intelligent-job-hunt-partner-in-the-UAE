@@ -155,7 +155,6 @@ class TestStructuredCarveOutsPreserved:
         assert is_open_ended_question(message)[0] is False, message
 
     @pytest.mark.parametrize("message", [
-        "what is my application status",
         "what is my visa status",
     ])
     def test_what_is_my_x_status_is_unchanged_by_this_pr(self, message):
@@ -163,14 +162,42 @@ class TestStructuredCarveOutsPreserved:
 
         These already routed to the model on `main` before this PR (reason
         "token:what" — `_APPLICATION_STATUS_RE` does not match this phrasing).
-        This PR must not alter them in either direction; whether
-        "what is my application status" *should* be a deterministic lookup is a
-        separate scope with its own evidence.
+        This PR must not alter them in either direction.
+
+        "what is my application status" used to be pinned here too, with the
+        note that whether it *should* be a deterministic lookup was "a separate
+        scope with its own evidence". That evidence now exists — a production
+        read of the status column across all users, plus live verification that
+        the phrasing returned a fabricated count — and the owner has ruled it a
+        data request. It moved to the test below rather than being deleted, and
+        the half of this test's intent that was about THIS branch (that the
+        advice-imperative rule must not be what reclassifies it) is asserted
+        there unchanged. A visa-status question stays model-bound: it is not a
+        question about the user's stored records at all.
         """
         is_open, reason = is_open_ended_question(message)
         assert is_open is True
         assert reason == "token:what"
         # NOT reclassified by the new branch.
+        assert reason != ADVICE_IMPERATIVE_REASON
+
+    @pytest.mark.parametrize("message", [
+        "what is my application status",
+        "What is my application status?",
+    ])
+    def test_application_status_is_now_a_deterministic_lookup(self, message):
+        """Reclassified deliberately, by the account-data carve-out — not by this branch.
+
+        Live-verified on production: this phrasing reached the model, which has
+        no database access, and answered a question about the user's own records
+        by inventing a number. It is now routed to the deterministic tracking
+        handler alongside every other ownership-qualified applications phrasing.
+        """
+        is_open, reason = is_open_ended_question(message)
+        assert is_open is False
+        assert reason == "ok"
+        # The original intent of the pin above, preserved verbatim: whatever
+        # reclassifies this message, it must not be the advice-imperative rule.
         assert reason != ADVICE_IMPERATIVE_REASON
 
 
