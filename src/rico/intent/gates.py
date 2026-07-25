@@ -52,12 +52,30 @@ _APPLICATION_STATUS_RE: Final[re.Pattern[str]] = re.compile(
 # Carve-out: uploaded-file / My Files questions must route to the legacy
 # classifier (which answers deterministically from user_documents), not to the
 # conversational AI handler — the model cannot be trusted to enumerate files.
+#
+# The `(?:what|which)\s+(?:files?|documents?)` alternative requires the noun to
+# follow the interrogative IMMEDIATELY, so a qualifier between them defeated it:
+# "Which CV files have I uploaded?" fell through to the question-mark branch of
+# `is_open_ended_question` and reached the model — which has no file inventory
+# and cannot answer it truthfully. "What files have I uploaded?" matched and was
+# answered from the DB, so the two phrasings disagreed about the same question.
+# Two narrow alternatives close that gap (verified 2026-07-25 against `fb2f382`):
+#
+#   * a CV/resume qualifier between the interrogative and the noun, restricted to
+#     document-type words — a general `\w+` gap would swallow advice questions
+#     like "what kind of documents should I prepare?", which are reasoning work
+#     and must keep reaching the model;
+#   * the trailing "… have/did I upload" form, which is an inventory question
+#     regardless of how the noun phrase opens.
 _FILE_LIST_RE: Final[re.Pattern[str]] = re.compile(
     r"\b(?:my|uploaded)\s+(?:files?|documents?|docs|uploads)\b"
     r"|\b(?:what|which)\s+(?:files?|documents?)\b"
+    r"|\b(?:what|which|how\s+many)\s+(?:cvs?|resumes?)\s+(?:files?|documents?|docs)\b"
+    r"|\b(?:files?|documents?|docs|uploads?|cvs?|resumes?)\s+(?:have|did)\s+i\s+(?:ever\s+)?upload"
     r"|\bwhich\s+(?:cv|resume)\s+is\s+(?:the\s+)?(?:active|primary|current|main)\b"
     r"|\b(?:active|primary)\s+(?:cv|resume)\b"
     r"|ملفاتي|مستنداتي|الملفات\s+المرفوعة"
+    r"|\bأي\s+(?:الملفات|ملفات|المستندات|مستندات)\b"
     r"|(?:الملفات|المستندات)\s+(?:اللي|التي)\s+(?:رافعه?ا|رفعته?ا|رفعها)",
     re.IGNORECASE | re.UNICODE,
 )
@@ -66,6 +84,15 @@ _FILE_LIST_RE: Final[re.Pattern[str]] = re.compile(
 def _is_file_list_question(text: str) -> bool:
     """Return True for My Files queries that need the DB, not the AI."""
     return bool(_FILE_LIST_RE.search(text))
+
+
+def is_file_inventory_question(message: str) -> bool:
+    """Public name for the file/CV inventory carve-out.
+
+    Exposed so the routing contract in ``routes.py`` can name this class as
+    ``SemanticRoute.GROUNDED_TOOL`` without reaching for a private helper.
+    """
+    return _is_file_list_question(message or "")
 
 
 # Arabic conversational starters: greetings, open-ended question words, conversational openers.
