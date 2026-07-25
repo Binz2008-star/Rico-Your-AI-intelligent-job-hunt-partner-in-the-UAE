@@ -102,7 +102,7 @@ def _git(repo: pathlib.Path, *args: str) -> str:
 
 def _commit(repo: pathlib.Path, message: str) -> str:
     _git(repo, "add", "-A")
-    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", message)
+    _git(repo, "commit", "-q", "-m", message)
     return _git(repo, "rev-parse", "HEAD")
 
 
@@ -113,6 +113,11 @@ def repo(tmp_path: pathlib.Path) -> pathlib.Path:
     (root / "src").mkdir(parents=True)
     (root / "tests").mkdir()
     _git(root.parent, "init", "-q", "-b", "main", str(root))
+    # Set the identity on the repository itself, not per-command: `git merge`
+    # also needs a committer when it creates a merge commit, and CI runners
+    # have no global git identity to fall back on.
+    _git(root, "config", "user.email", "ratchet-test@example.invalid")
+    _git(root, "config", "user.name", "ratchet test")
 
     # The rules travel with the head tree, exactly as in CI.
     shutil.copy(_REPO_ROOT / "tests" / "test_1076_log_privacy.py", root / "tests")
