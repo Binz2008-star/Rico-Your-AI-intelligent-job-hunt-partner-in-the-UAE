@@ -983,3 +983,89 @@ class TestAlreadySavedUploadCreatesNoArtifact:
 
         with patch("src.db.get_db_connection", return_value=None):
             assert repo.saved_document_exists("u@x.com", "cv", "deadbeef") is False
+
+
+# ── Confirm is idempotent, including against the plan quota ─────────────────
+
+class TestRepeatConfirmIsARetryNotAPurchase:
+    """A synthetic end-to-end smoke found this: the second confirm of the SAME
+    CV returned 402 Payment Required.
+
+    The quota gate ran before anything knew the document already existed, so a
+    double-click, a network retry or a reloaded review page was charged as a
+    new profile optimization — and refused once the allowance was spent. The
+    persistence layer was already idempotent (`inserted: false`); the gate in
+    front of it was not.
+    """
+
+    def _confirm(self, client, *, already_saved, enforce, record):
+        artifact = {
+            "filename": "cv.pdf",
+            "doc_type": "cv",
+            "content_hash": "f" * 64,
+            "file_size": 10,
+            "cv_text": _CV_TEXT,
+        }
+        with (
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact",
+                return_value=artifact,
+            ),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.saved_document_exists",
+                return_value=already_saved,
+            ),
+            patch("src.services.subscription_gating.enforce_profile_optimization_allowed", enforce),
+            patch("src.services.subscription_gating.record_profile_optimization_usage", record),
+        ):
+            return client.post(
+                "/api/v1/rico/confirm-cv-profile",
+                json={
+                    "preview": {"name": "A", "skills": ["compliance"]},
+                    "filename": "cv.pdf",
+                    "doc_type": "cv",
+                    "upload_id": _UPLOAD_ID,
+                },
+            )
+
+    def test_repeat_confirm_is_not_gated_by_the_plan_quota(self, client):
+        from fastapi import HTTPException
+
+        def _refuse(*a, **k):
+            raise HTTPException(status_code=402, detail="quota exhausted")
+
+        record = MagicMock()
+        r = self._confirm(client, already_saved=True, enforce=_refuse, record=record)
+        # The gate must not have run at all — a retry buys nothing.
+        assert r.status_code != 402, r.text
+        # …and it must not consume the allowance on the way out either, or a
+        # user could exhaust their plan by pressing Confirm twice.
+        record.assert_not_called()
+
+    def test_a_genuinely_new_cv_is_still_gated_and_still_recorded(self, client):
+        """The bypass is scoped to a retry. A new CV must stay behind the gate,
+        or this becomes a way to skip the plan entirely."""
+        from fastapi import HTTPException
+
+        calls = []
+
+        def _enforce(*a, **k):
+            calls.append(a)
+            raise HTTPException(status_code=402, detail="quota exhausted")
+
+        r = self._confirm(client, already_saved=False, enforce=_enforce, record=MagicMock())
+        assert r.status_code == 402, r.text
+        assert calls, "the quota gate must run for a CV that is not already saved"
+
+    def test_the_repeat_is_identified_by_the_server_side_hash_not_the_request(self, client):
+        """The triple key comes from the resolved artifact, so a client cannot
+        claim "already saved" to skip the gate."""
+        import inspect
+
+        import src.api.routers.rico_chat as mod
+
+        source = inspect.getsource(mod.confirm_cv_profile)
+        assert "_resolve_trusted_cv_artifact" in source
+        # The hash fed to the check is read off the artifact, never off payload.
+        assert 'payload.content_hash' not in source

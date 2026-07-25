@@ -2696,9 +2696,31 @@ async def confirm_cv_profile(
             enforce_profile_optimization_allowed,
             record_profile_optimization_usage,
         )
+        # A repeat confirm of a CV that is ALREADY saved is a RETRY, not a new
+        # optimization: a double-click, a network retry, a reloaded review page.
+        # Nothing new is created — the document row already exists and the
+        # persistence layer answers `inserted: false`. Charging the plan quota
+        # for it, or refusing on it, is what turns a harmless retry into
+        # "Payment Required" for a CV the user has already saved, and makes
+        # confirm non-idempotent. Identified by the same triple key everything
+        # else in this area uses, so it cannot be spoofed by a client: the hash
+        # comes from the server-side artifact, never from the request.
+        _repeat_confirm = False
+        _confirm_artifact: dict[str, Any] | None = None
+        if not is_valid_public_user_id(resolved_user_id):
+            _confirm_artifact = _resolve_trusted_cv_artifact(resolved_user_id, payload)
+            if _confirm_artifact is not None:
+                from src.repositories.cv_upload_artifact_repo import saved_document_exists
+                _repeat_confirm = saved_document_exists(
+                    resolved_user_id,
+                    _confirm_artifact.get("doc_type") or "cv",
+                    _confirm_artifact.get("content_hash") or "",
+                )
+
         # Allow the very first CV confirm unconditionally (new-user onboarding must never
         # be blocked). Subsequent uploads are gated against the plan's monthly limit.
-        enforce_profile_optimization_allowed(resolved_user_id, is_first_upload=True)
+        if not _repeat_confirm:
+            enforce_profile_optimization_allowed(resolved_user_id, is_first_upload=True)
 
         # Build profile updates from preview - use skills_detected if available, fallback to skills
         preview_skills = payload.preview.get("skills_detected") or payload.preview.get("skills", [])
@@ -2756,7 +2778,9 @@ async def confirm_cv_profile(
         # profile-only, exactly as before.
         artifact: dict[str, Any] | None = None
         if not is_valid_public_user_id(resolved_user_id):
-            artifact = _resolve_trusted_cv_artifact(resolved_user_id, payload)
+            # Already resolved above for the repeat-confirm check — same call,
+            # same rejection contract, reused rather than issued twice.
+            artifact = _confirm_artifact
             if artifact is None:
                 logger.warning(
                     "cv_confirm_artifact_rejected user=%s upload_id_present=%s "
@@ -2980,7 +3004,11 @@ async def confirm_cv_profile(
                     "message": "We couldn't save your CV. Please try again.",
                 },
             )
-        record_profile_optimization_usage(resolved_user_id)
+        # Symmetric with the gate above: a retry of an already-saved CV consumed
+        # no quota to get here and must not consume one on the way out, or a
+        # user could exhaust their allowance by pressing Confirm twice.
+        if not _repeat_confirm:
+            record_profile_optimization_usage(resolved_user_id)
 
         # Onboarding completion must reflect the SAME minimum-profile gate
         # onboarding/submit evaluates — never a blind side effect of
