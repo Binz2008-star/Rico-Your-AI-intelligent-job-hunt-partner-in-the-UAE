@@ -122,6 +122,17 @@ _APPLICATION_DATA_REQUEST_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
+def is_file_list_question(message: str) -> bool:
+    """Public form of the uploaded-file carve-out.
+
+    Exported for the same reason as ``is_application_data_request`` below: the
+    legacy handler chain owns a second copy of this vocabulary, and the two had
+    already drifted. Whatever this gate refuses to send to the model, the
+    handler chain must be able to answer.
+    """
+    return _is_file_list_question((message or "").strip())
+
+
 def _is_application_data_request(text: str, lowered: str) -> bool:
     """True when the message asks for the user's own stored application records."""
     return bool(

@@ -730,6 +730,17 @@ def _gate_is_application_data_request(message: str) -> bool:
     return is_application_data_request(message)
 
 
+def _gate_is_file_list_question(message: str) -> bool:
+    """Shared carve-out: does this message ask for the user's own uploaded files?
+
+    Same contract as ``_gate_is_application_data_request``: the gate decides
+    whether the message reaches this module, and this module decides where it
+    lands. Imported lazily, matching every other gate import here.
+    """
+    from src.rico.intent.gates import is_file_list_question
+    return is_file_list_question(message)
+
+
 # Application list query: "list my applications", "what jobs did I apply to?",
 # "show my applied jobs", "how many applications do I have?",
 # "what are my applications?", "where are my applications?", "do I have any applications?"
@@ -2570,6 +2581,19 @@ class RicoChatAPI:
         text = (message or "").strip()
         if not text:
             return False
+        # The intent gate keeps file-inventory questions OFF the AI path, and
+        # this predicate decides whether anything then answers them. They are
+        # two copies of one vocabulary and they had already drifted: the gate's
+        # interrogative arm tolerates a noun between the question word and the
+        # noun ("which CV files have I uploaded?"), while _FILE_LIST_EN_RE below
+        # still requires them adjacent. A message carved out by the gate but
+        # rejected here reaches no handler at all and the user gets the
+        # reasoning-unavailable fallback — strictly worse than the model answer
+        # it replaced. Union, not delegation: the local arms also match phrasings
+        # the gate never claims ("show me all documents"), and narrowing this
+        # predicate to the gate's vocabulary would drop those.
+        if _gate_is_file_list_question(text):
+            return True
         return bool(
             self._FILE_LIST_EN_RE.search(text) or self._FILE_LIST_AR_RE.search(text)
         )

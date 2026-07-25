@@ -311,3 +311,75 @@ class TestArabicSubmitVerbCollision:
         )
         assert result is not None
         assert result["type"] == "application_channel_clarification"
+
+
+# ── The gate and the handler chain must cover the same messages ───────────────
+
+class TestCarveOutIsAnswerable:
+    """Anything the gate refuses to send to the model must reach a handler.
+
+    The two carve-outs are enforced in two different modules: `gates.py` decides
+    whether a message reaches the legacy chain at all, and `rico_chat_api.py`
+    decides whether anything there answers it. They are two copies of one
+    vocabulary, and they had drifted. The gate's interrogative file arm tolerates
+    a noun between the question word and the noun ("which CV files have I
+    uploaded?"); `_FILE_LIST_EN_RE` still requires them adjacent, so that
+    phrasing was carved off the AI path and then answered by nobody — the user
+    got the reasoning-unavailable fallback, strictly worse than the model answer
+    it replaced.
+
+    A message reaching the legacy pipeline is therefore NOT the property worth
+    asserting; the tests above assert that, and they passed throughout. What has
+    to hold is that a deterministic handler actually claims it.
+    """
+
+    @pytest.mark.parametrize("message", FILE_INVENTORY)
+    def test_file_inventory_is_claimed_by_the_file_handler(self, message: str) -> None:
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        assert RicoChatAPI._is_file_list_query(api, message) is True, (
+            f"{message!r} is carved off the AI path by the gate but no file handler claims it"
+        )
+
+    @pytest.mark.parametrize("message", FILE_INVENTORY + MUST_REACH_MODEL)
+    def test_gate_file_carve_out_implies_handler_coverage(self, message: str) -> None:
+        """The invariant, not the instance: gate ⟹ handler, for every message."""
+        from src.rico.intent.gates import is_file_list_question
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        if is_file_list_question(message):
+            assert RicoChatAPI._is_file_list_query(api, message) is True, (
+                f"gate carves out {message!r} but the handler predicate rejects it"
+            )
+
+    @pytest.mark.parametrize("message", FILE_INVENTORY)
+    def test_file_inventory_never_falls_through_to_the_fallback(self, message: str) -> None:
+        """End-to-end form: the response is a file listing, not a fallback.
+
+        `_is_file_list_query` returning True is the mechanism; this is the
+        user-visible consequence, and it is what actually regressed.
+        """
+        from src.rico_chat_api import RicoChatAPI
+
+        with patch(
+            "src.repositories.profile_repo.get_profile", return_value={"cv_status": "parsed"}
+        ), patch(
+            "src.rico_chat_api.get_profile", return_value={"cv_status": "parsed"}
+        ), patch.object(
+            RicoChatAPI, "_get_recent_context", return_value={}
+        ), patch.object(
+            RicoChatAPI, "answer_conversationally", return_value={"message": "AI", "type": "ai"}
+        ) as ai_path:
+            # The real `_handle_file_list_query` runs. Stubbing it to a truthy
+            # value would make this test pass on a build where the handler
+            # declines the message — which is precisely the regression, so the
+            # handler has to be allowed to decline.
+            result = chat_service.send_message(ctx=_ctx_for(message), message=message)
+
+        rtype = result.get("type") if isinstance(result, dict) else getattr(result, "type", None)
+        assert rtype == "file_list", (
+            f"{message!r} was answered by {rtype!r}, not the deterministic file listing"
+        )
+        assert not ai_path.called, f"{message!r} reached the AI path"
