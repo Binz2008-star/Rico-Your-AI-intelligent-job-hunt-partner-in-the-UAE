@@ -460,7 +460,12 @@ class TestRicoCVUploadRouteExists:
             )
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
         body = r.json()
-        assert body["status"] == "preview_ready"
+        # No retrievable artifact can exist in this environment, so a confirmable
+        # preview must not be claimed. Stronger than the previous assertion: the
+        # honest degraded state BY NAME, and proof that the broken promise is
+        # absent from the body rather than merely falsy.
+        assert body["status"] == "preview_not_persistable"
+        assert "preview_ready" not in body.values()
         assert body["user_id"] == "alice@rico.ai"
 
     def test_invalid_auth_cookie_without_query_user_id_returns_401(self, client):
@@ -592,7 +597,12 @@ class TestRicoCVUploadSecurity:
             )
         assert r.status_code == 200
         body = r.json()
-        assert body["status"] == "preview_ready"
+        # No retrievable artifact can exist in this environment, so a confirmable
+        # preview must not be claimed. Stronger than the previous assertion: the
+        # honest degraded state BY NAME, and proof that the broken promise is
+        # absent from the body rather than merely falsy.
+        assert body["status"] == "preview_not_persistable"
+        assert "preview_ready" not in body.values()
         assert body["user_id"] == "alice@rico.ai"
         assert body["user_id"] != public_session_id
 

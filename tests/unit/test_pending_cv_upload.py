@@ -597,3 +597,95 @@ class TestPendingCardDisclosesExpiry:
         r = _get(client, pending=_artifact())
         assert r.status_code == 200
         assert r.json()["expires_at"] is None
+
+
+# ── Compensating happy-path cover, and the four cause branches ──────────────
+
+_PDF = b"%PDF-1.4 fake"
+_PARSED = {
+    "text": _CV_TEXT,
+    "skills": ["compliance", "audit"],
+    "emails": ["roben@example.com"],
+    "phones": ["+971500000000"],
+    "years_experience_hint": 10,
+    "certifications": ["iso"],
+    "languages": ["english"],
+    "extraction_quality": "good",
+    "extracted_chars": len(_CV_TEXT),
+    "name": "Roben Edwan",
+    "current_role": "Head of Compliance",
+}
+
+
+def _upload(client, *, created_id, reachable, production=False, raises_env=False):
+    """Drive POST /upload-cv with the artifact-creation outcome under control."""
+    import src.api.routers.rico_chat as mod
+
+    def _fake_is_production():
+        if raises_env:
+            raise RuntimeError("environment undeterminable")
+        return production
+
+    with (
+        patch("src.services.chat_service.parse_cv", return_value=_PARSED),
+        patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
+        patch("src.api.routers.rico_chat.get_profile", return_value=None),
+        patch("src.cv_parser.CVParser", return_value=type(
+            "Parser", (), {"detect_document_type": lambda self, text: "cv"}
+        )()),
+        patch("src.repositories.cv_upload_artifact_repo.create_cv_upload_artifact", return_value=created_id),
+        patch("src.repositories.cv_upload_artifact_repo.artifact_store_reachable", return_value=reachable),
+        patch.object(mod, "_is_production", _fake_is_production),
+    ):
+        return client.post(
+            "/api/v1/rico/upload-cv",
+            files={"file": ("cv.pdf", __import__("io").BytesIO(_PDF), "application/pdf")},
+        )
+
+
+class TestUploadArtifactBranches:
+    """Four branches, decided by CAUSE. The happy path is covered here because
+    the stale assertions it used to live behind were corrected in the route
+    tests — without this, an endpoint that never emits preview_ready would ship
+    unnoticed."""
+
+    def test_happy_path_emits_preview_ready_with_a_retrievable_upload_id(self, client):
+        r = _upload(client, created_id=_UPLOAD_ID, reachable=True)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "preview_ready"
+        # The id returned is the one actually created, and it is the key confirm
+        # resolves by — a preview whose id cannot be resolved is the whole defect.
+        assert body["upload_id"] == _UPLOAD_ID
+        assert body["preview"]["current_role"] == "Head of Compliance"
+
+    def test_write_failed_while_store_reachable_is_503(self, client):
+        r = _upload(client, created_id=None, reachable=True)
+        assert r.status_code == 503, r.text
+        body = r.json()
+        assert body["error_code"] == "upload_artifact_unavailable"
+        assert "preview_ready" not in body.values()
+        assert "preview" not in body
+
+    def test_no_usable_store_outside_production_is_degraded_200(self, client):
+        r = _upload(client, created_id=None, reachable=False, production=False)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "preview_not_persistable"
+        assert body["persistable"] is False
+        # Absent, not false.
+        assert "preview_ready" not in body.values()
+        assert body["upload_id"] is None
+        # The extraction is still returned — the parse genuinely succeeded.
+        assert body["preview"]["current_role"] == "Head of Compliance"
+
+    def test_no_usable_store_in_production_is_503(self, client):
+        r = _upload(client, created_id=None, reachable=False, production=True)
+        assert r.status_code == 503, r.text
+        assert "preview_ready" not in r.json().values()
+
+    def test_undeterminable_environment_fails_closed_to_503(self, client):
+        """The degraded 200 is a licence granted on proof, not the default."""
+        r = _upload(client, created_id=None, reachable=False, raises_env=True)
+        assert r.status_code == 503, r.text
+        assert "preview_ready" not in r.json().values()

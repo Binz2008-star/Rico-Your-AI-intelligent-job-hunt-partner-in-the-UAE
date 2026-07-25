@@ -2310,7 +2310,17 @@ async def rico_upload_cv(
                 from src.repositories.cv_upload_artifact_repo import artifact_store_reachable
 
                 _store_configured = artifact_store_reachable()
-                if _store_configured or _is_production():
+                # Fail-closed: the degraded 200 is a licence granted on PROOF that
+                # this is not production, never the default under uncertainty. A
+                # check that raises, or answers with anything other than a plain
+                # boolean, is not proof — it becomes 503. (An explicit absence of
+                # production markers IS a determinate answer, not ambiguity.)
+                try:
+                    _env = _is_production()
+                    _proven_non_production = _env is False
+                except Exception:
+                    _proven_non_production = False
+                if _store_configured or not _proven_non_production:
                     # (1) The store is configured and the write still failed, or
                     # (3) the store is unconfigured IN PRODUCTION, which is a
                     # deployment fault rather than an acceptable environment.
