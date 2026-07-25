@@ -205,8 +205,11 @@ No exploitable detail is recorded here — this repository is public.
   identifier cannot establish it.
 - **The standing risk is operational privacy in logs**: user identifiers and CV
   filenames are written to logs in raw form in a number of places in the CV router.
-  This is queued as its own PR and is deliberately not mixed into the pending-confirm
-  work.
+  The differential ratchet that forbids *adding* to that debt is now on `main`
+  (`scripts/log_privacy_ratchet.py`). This branch clears it in both modes: every
+  log line it adds routes its identifier through a sanctioned helper. Retiring
+  the pre-existing debt remains its own PR and is deliberately not mixed into the
+  pending-confirm work.
 
 ---
 

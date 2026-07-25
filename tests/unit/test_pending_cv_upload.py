@@ -856,6 +856,85 @@ class TestChatNeverTreatsPendingAsSaved:
         assert out["cv_pending_review"] is True
         assert "not been saved" in out["message"].lower()
 
+# ── The "review my CV" denial, the last surface on the wrong side ───────────
+
+class TestCvAnalysisDenialIsCorrectedToo:
+    """"You haven't uploaded one" is the same denial, from a different branch.
+
+    The exit-point note is keyed on ``next_action == "upload_cv"``. The CV
+    review answer built its own reply and returned no ``next_action`` at all,
+    so the note could never reach it: a user with a pending upload asking Rico
+    to review their CV was told they had not uploaded one.
+
+    These drive the REAL handler, not the note helper — the defect was never in
+    the note, it was that nothing routed this branch into it.
+    """
+
+    def _run(self, *, has_cv, has_content=False, filename=None, message="review my CV"):
+        from unittest.mock import MagicMock
+
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        profile = MagicMock()
+        profile.has_cv = has_cv
+        ctx = MagicMock()
+        ctx.has_cv = has_cv
+        ctx.has_content = has_content
+        ctx.filename = filename
+        with (
+            patch.object(RicoChatAPI, "_resolve_profile", return_value=profile),
+            patch.object(RicoChatAPI, "_cv_context", return_value=ctx),
+            patch.object(RicoChatAPI, "_profile_value", return_value=None),
+            patch.object(RicoChatAPI, "_append_chat", MagicMock()),
+            patch.object(RicoChatAPI, "_finalize", lambda self, r, *a, **k: r),
+            patch.object(RicoChatAPI, "_pending_search_redemption_blocked", return_value=False),
+            patch.object(RicoChatAPI, "_get_recent_context", return_value={}),
+        ):
+            return RicoChatAPI._handle_active_user_inner(api, "u@x.com", message)
+
+    def test_the_denial_now_carries_the_ask_the_note_is_keyed_on(self):
+        out = self._run(has_cv=False)
+        assert out["type"] == "cv_analysis"
+        assert out["next_action"] == "upload_cv"
+        assert "haven't uploaded one" in out["message"]
+
+    def test_a_user_whose_cv_is_unreadable_is_not_tagged(self):
+        """Branch (2): the file is real. Tagging it would append "not saved yet"
+        to an answer about a CV that IS saved — the opposite falsehood."""
+        out = self._run(has_cv=True, has_content=False, filename="Dana_Merrick_CV.pdf")
+        assert out["type"] == "cv_analysis"
+        assert "next_action" not in out
+
+    def test_a_readable_cv_is_not_tagged(self):
+        """Branch (1): a real review happened. Nothing to ask for."""
+        out = self._run(has_cv=True, has_content=True, filename="Dana_Merrick_CV.pdf")
+        assert out["type"] == "cv_analysis"
+        assert "next_action" not in out
+
+    def test_the_note_reaches_this_reply_end_to_end(self):
+        """The whole point: real handler -> real exit point -> corrected answer.
+
+        Nothing here patches the note or the branch that produces the denial.
+        Only the artifact store and the profile are stood in for.
+        """
+        from unittest.mock import MagicMock
+
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        denial = self._run(has_cv=False)
+        with patch(
+            "src.repositories.cv_upload_artifact_repo.get_latest_pending_cv_upload",
+            return_value=_artifact(),
+        ):
+            RicoChatAPI._note_pending_cv_review(api, "u@x.com", denial)
+        assert denial["cv_pending_review"] is True
+        assert "not been saved" in denial["message"].lower()
+        # Still existence only — the pending artifact's content never appears.
+        assert "northwind financial" not in denial["message"].lower()
+        assert _UPLOAD_ID not in denial["message"]
+
 
 # ── Re-uploading an already-saved CV ────────────────────────────────────────
 

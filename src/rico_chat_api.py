@@ -3453,7 +3453,7 @@ class RicoChatAPI:
                 return
             artifact = get_latest_pending_cv_upload(user_id)
         except Exception:
-            logger.debug("pending_cv_note_skipped user=%s", user_id, exc_info=True)
+            logger.debug("pending_cv_note_skipped user=%s", user_ref(user_id), exc_info=True)
             return
         if not artifact or artifact.get("expired") or artifact.get("already_saved"):
             return
@@ -10895,8 +10895,23 @@ class RicoChatAPI:
             # direct call would be another grounding read.
             _cv_ctx = self._cv_context(user_id, profile)
             _arabic_cv = self._is_arabic_text(message)
+            # Only branch (3) below asks for an upload, and only that branch may
+            # carry the ask. The pending-upload note at the response exit point
+            # is keyed on it, so tagging any other branch would append "your CV
+            # is not saved yet" to an answer about a CV that IS saved.
+            _cv_next_action: str | None = None
             if not (_cv_ctx.has_cv or bool(self._profile_value(profile, "has_cv"))):
                 # (3) Nothing on file — unchanged wording.
+                #
+                # `has_cv` is derived from the PROFILE, which an unconfirmed
+                # upload has deliberately not touched: the artifact is not a CV
+                # until it is confirmed, and grounding must never read it. So a
+                # user with a pending upload lands here and is told they have
+                # not uploaded one — the exact denial this area exists to
+                # remove, and the mirror of claiming a CV that was never saved.
+                # Carrying the ask lets the existing exit-point note correct it
+                # with existence only; nothing here reads the artifact.
+                _cv_next_action = "upload_cv"
                 _cv_msg = (
                     "I can't review your CV yet — you haven't uploaded one.\n\n"
                     "Upload your CV and I'll identify weak areas, gaps, and improvements."
@@ -10939,8 +10954,11 @@ class RicoChatAPI:
                     + "\n\nFor a full CV rewrite, say: **'Rewrite my CV'** and I'll generate an optimised version."
                 )
             self._append_chat(user_id, "assistant", _cv_msg)
+            _cv_result: dict[str, Any] = {"type": "cv_analysis", "message": _cv_msg}
+            if _cv_next_action:
+                _cv_result["next_action"] = _cv_next_action
             return self._finalize(
-                {"type": "cv_analysis", "message": _cv_msg},
+                _cv_result,
                 self.SOURCE_KEYWORD, profile=profile,
             )
 
