@@ -458,10 +458,15 @@ def upsert_profile(
     # state that a later DB-read outage could expose as if the mutation had
     # succeeded (#764). For those callers the mirror is updated only AFTER the
     # DB transaction commits.
+    # An ownership refusal must not be able to leave mirror state behind, so the
+    # mirror write happens only once the DB attempt has been made — for default
+    # callers too, not just mandatory ones. Every previously-reachable outcome
+    # still writes it (success, DB unavailable, ordinary DB failure); the one new
+    # outcome, an ownership refusal, deliberately does not.
     mem = _memory()
-    profile: RicoProfile | None = None
-    if not require_db:
-        profile = mem.upsert_profile_from_dict(
+
+    def _write_mirror() -> RicoProfile:
+        return mem.upsert_profile_from_dict(
             user_id=user_id, updates=filtered_updates, clear_fields=clears,
         )
 
@@ -470,14 +475,14 @@ def upsert_profile(
     if not db:
         if require_db:
             raise RuntimeError(f"profile DB unavailable (require_db) user={user_id}")
-        return profile
+        return _write_mirror()
 
     try:
         with _db_transaction() as conn:
             if not conn:
                 if require_db:
                     raise RuntimeError(f"profile DB connection unavailable (require_db) user={user_id}")
-                return profile
+                return _write_mirror()
 
             # 1. Resolve the DB user record.
             # Web users are identified by email (from JWT). Use the same bundle
@@ -575,6 +580,18 @@ def upsert_profile(
 
         logger.debug("profile_repo: upsert_profile DB success user=%s", user_ref(user_id))
 
+    except IdentityOwnershipAmbiguous:
+        # Ownership refusal, not a transient fault. The JSON fallback below is the
+        # right answer to "the database is unreachable" and the wrong answer to
+        # "this write does not belong to this caller": returning the mirror would
+        # hand back a success-shaped object for a write that must never land, and
+        # leave mirror state a later fallback read could serve as though it had.
+        # Propagates for every caller, whatever require_db says.
+        logger.warning(
+            "profile_repo: upsert_profile refused user=%s reason=%s",
+            user_ref(user_id), "ambiguous_account_ownership",
+        )
+        raise
     except Exception as e:
         logger.error("profile_repo: upsert_profile DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         # require_db callers must NOT get a false success masked by the JSON
@@ -583,15 +600,11 @@ def upsert_profile(
         if require_db:
             raise
         # Don't re-raise - we have JSON fallback
+        return _write_mirror()
 
-    if require_db:
-        # DB commit confirmed — now (and only now) reflect the change in the
-        # process-local mirror so fallback reads match committed state (#764).
-        profile = mem.upsert_profile_from_dict(
-            user_id=user_id, updates=filtered_updates, clear_fields=clears,
-        )
-
-    return profile
+    # DB attempt made and not refused — now (and only now) reflect the change in
+    # the process-local mirror so fallback reads match committed state (#764).
+    return _write_mirror()
 
 
 def delete_profile(user_id: str) -> bool:

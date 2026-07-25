@@ -12,7 +12,11 @@ import logging
 import os
 import uuid
 
-from src.models.principal import IdentityOwnershipAmbiguous, is_public_principal
+from src.models.principal import (
+    TRUSTED_IDENTITY_FIELDS,
+    IdentityOwnershipAmbiguous,
+    is_public_principal,
+)
 from contextlib import contextmanager
 from datetime import datetime
 from threading import Lock
@@ -1068,10 +1072,12 @@ class RicoDB:
         # external_user_id itself is NOT dropped -- it is the row's identity,
         # and for a guest row it is the guest principal. What must never happen
         # is a guest row carrying somebody else's contact details.
+        # The protected set is IMPORTED, never restated. A local copy can drift from
+        # the declaration, and a field that reads as protected while no site enforces
+        # it is worse than one that was never claimed.
         if is_public_principal(external_user_id):
             _dropped = sorted(
-                k for k in ("email", "phone", "telegram_username", "telegram_chat_id")
-                if payload.get(k) is not None
+                k for k in TRUSTED_IDENTITY_FIELDS if payload.get(k) is not None
             )
             if _dropped:
                 logger.warning(

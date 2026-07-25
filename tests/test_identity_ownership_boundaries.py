@@ -309,3 +309,144 @@ def test_authenticated_resolution_keeps_the_guest_exclusion_active():
     assert _guest_flag_binding(cur) is False, (
         "an authenticated caller must keep the guest exclusion active"
     )
+
+
+# ── behavioural evidence at the API boundary ──────────────────────────────────
+#
+# The unit checks above prove the repository refuses. These two prove what the
+# caller actually receives, driving the real ASGI app through the real
+# `profile_repo.upsert_profile` — the layer where a refusal could still be
+# converted into a mirrored success. No database is touched.
+
+@pytest.fixture
+def _boundary(monkeypatch):
+    """Real route + real profile_repo, with ownership resolution refusing."""
+    import contextlib
+
+    from fastapi.testclient import TestClient
+
+    from src.api.app import app
+    from src.api.rate_limit import limiter
+    import src.api.routers.rico_chat as rico_chat_router
+    from src.repositories import profile_repo
+
+    limiter.reset()
+    prev_enabled = limiter.enabled
+    limiter.enabled = False
+
+    def _mock_get_user(request):
+        user = {"email": ACCOUNT_A, "role": "user"}
+        request.state.current_user = user
+        request.state.user_id = ACCOUNT_A
+        return user
+
+    monkeypatch.setattr(rico_chat_router, "get_current_user", _mock_get_user)
+
+    db = MagicMock()
+    db.available = True
+    db.get_user_bundle.side_effect = IdentityOwnershipAmbiguous(2)
+    monkeypatch.setattr(profile_repo, "_db", lambda: db)
+
+    conn = MagicMock()
+
+    @contextlib.contextmanager
+    def _txn():
+        yield conn
+
+    monkeypatch.setattr(profile_repo, "_db_transaction", _txn)
+
+    mirror = MagicMock()
+    monkeypatch.setattr(profile_repo, "_memory", lambda: mirror)
+
+    try:
+        yield TestClient(app), conn, mirror
+    finally:
+        limiter.enabled = prev_enabled
+
+
+def test_ownership_refusal_surfaces_as_409_at_the_api_boundary(_boundary):
+    """The refusal must reach the caller as the contract's conflict response.
+
+    A 503 would read as "retry, the database is having a moment", and the client
+    would retry a write that must never succeed. A 2xx would be worse.
+    """
+    client, _conn, _mirror = _boundary
+    response = client.patch("/api/v1/rico/profile", json={"current_role": "Engineer"})
+
+    assert response.status_code == 409, (
+        f"ownership refusal must surface as 409, got {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    assert body.get("error") == "ambiguous_account_ownership"
+    # Safe to surface: no identifier, no row content.
+    assert ACCOUNT_A not in response.text
+
+
+def test_ownership_refusal_returns_no_mirror_success_and_writes_nothing(_boundary):
+    """Same call: no success shape, and no partial write anywhere."""
+    client, conn, mirror = _boundary
+    response = client.patch("/api/v1/rico/profile", json={"current_role": "Engineer"})
+
+    assert not (200 <= response.status_code < 300), "a refused write must not report success"
+    body = response.json()
+    assert "profile" not in body and body.get("ok") is not True, (
+        f"refusal must not carry a success payload: {body}"
+    )
+    mirror.upsert_profile_from_dict.assert_not_called()
+    conn.cursor.assert_not_called()
+
+
+def test_ownership_refusal_is_never_converted_into_a_mirrored_success(_boundary):
+    """The default (``require_db=False``) path is where the hazard actually lives.
+
+    That path answers from the JSON mirror when the database write fails, which is
+    correct for a transient fault and wrong for an ownership refusal: returning a
+    mirror here hands the caller a success-shaped object for a write that must never
+    land, and leaves mirror state a later fallback read can serve as though it did.
+
+    Driven through the real ``upsert_profile`` rather than a helper, because the
+    conversion happens inside that function's own exception handling.
+    """
+    from src.repositories import profile_repo
+
+    _client, conn, mirror = _boundary
+
+    with pytest.raises(IdentityOwnershipAmbiguous):
+        profile_repo.upsert_profile(ACCOUNT_A, {"current_role": "Engineer"})
+
+    mirror.upsert_profile_from_dict.assert_not_called()
+    conn.cursor.assert_not_called()
+
+
+# ── declaration/enforcement drift ─────────────────────────────────────────────
+
+def test_declared_and_enforced_trusted_identity_sets_cannot_drift():
+    """The declaration and what the write boundary actually drops must be equal.
+
+    Two failure directions, both silent without this test:
+
+    * declared but not enforced — a field is added to ``TRUSTED_IDENTITY_FIELDS``
+      and reads as protected while no site drops it. That is the worse direction:
+      the guarantee is claimed but absent.
+    * enforced but not declared — a site drops a field nobody declared, so the
+      declaration stops describing the system.
+
+    Measured behaviourally: drive the write chokepoint with a guest principal and
+    a value in every column it writes, then compare what survived against the
+    declared set. A restated local copy at any enforcement site fails this.
+    """
+    every_writable_column = {
+        "name": "Synthetic Name",
+        "email": "someone-else@synthetic.test",
+        "phone": "+000000000",
+        "telegram_username": "@someone",
+        "telegram_chat_id": "9999",
+        "source": "synthetic",
+    }
+    params = _capture_upsert_user({"external_user_id": GUEST, **every_writable_column})
+
+    dropped = {k for k, v in every_writable_column.items() if v not in params}
+    assert dropped == set(TRUSTED_IDENTITY_FIELDS), (
+        "the set the write boundary drops must equal the declared set exactly; "
+        f"declared={sorted(TRUSTED_IDENTITY_FIELDS)} dropped={sorted(dropped)}"
+    )
