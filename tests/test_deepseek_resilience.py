@@ -53,35 +53,38 @@ def _make_chat_response(text: str):
 # ---------------------------------------------------------------------------
 
 class TestDeepseekModelChain:
-    def test_default_chain_starts_with_deepseek_chat(self, monkeypatch):
+    def test_default_chain_is_v4_flash_then_v4_pro(self, monkeypatch):
         monkeypatch.delenv("RICO_DEEPSEEK_MODEL", raising=False)
         monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
         monkeypatch.delenv("DEEPSEEK_FALLBACK_MODEL", raising=False)
         monkeypatch.delenv("DEEPSEEK_MODEL_CHAIN", raising=False)
-        # Re-import with cleared env
         import importlib
         import src.rico_openai_runtime as m
         importlib.reload(m)
         chain = m._deepseek_model_chain()
-        assert chain[0] == "deepseek-chat", f"Primary must be deepseek-chat, got {chain[0]}"
-        assert "deepseek-chat" in chain
+        # V4 Flash then V4 Pro are the CURRENT valid ids; retired aliases purged.
+        assert chain == ["deepseek-v4-flash", "deepseek-v4-pro"], chain
 
-    def test_deepseek_chat_always_in_chain(self, monkeypatch):
-        monkeypatch.setenv("RICO_DEEPSEEK_MODEL", "deepseek-reasoner")
-        monkeypatch.setenv("DEEPSEEK_FALLBACK_MODEL", "deepseek-reasoner")
+    def test_v4_anchors_always_in_chain(self, monkeypatch):
+        monkeypatch.setenv("RICO_DEEPSEEK_MODEL", "some-custom-primary")
+        monkeypatch.setenv("DEEPSEEK_FALLBACK_MODEL", "some-custom-fallback")
         monkeypatch.delenv("DEEPSEEK_MODEL_CHAIN", raising=False)
         import importlib, src.rico_openai_runtime as m
         importlib.reload(m)
         chain = m._deepseek_model_chain()
-        # deepseek-chat must be appended as safe anchor even when not in env config
-        assert "deepseek-chat" in chain
+        # both current valid anchors appended even when env config omits them
+        assert chain[0] == "some-custom-primary"
+        assert "deepseek-v4-flash" in chain
+        assert "deepseek-v4-pro" in chain
 
-    def test_env_chain_override(self, monkeypatch):
-        monkeypatch.setenv("DEEPSEEK_MODEL_CHAIN", "model-a, model-b, model-c")
+    def test_env_chain_is_additive_with_anchors(self, monkeypatch):
+        # A junk/duplicate override still resolves with both anchors appended,
+        # trimmed and de-duplicated in order (merge-gate item 2).
+        monkeypatch.setenv("DEEPSEEK_MODEL_CHAIN", "model-a, model-b, model-a")
         import importlib, src.rico_openai_runtime as m
         importlib.reload(m)
         chain = m._deepseek_model_chain()
-        assert chain == ["model-a", "model-b", "model-c"]
+        assert chain == ["model-a", "model-b", "deepseek-v4-flash", "deepseek-v4-pro"], chain
 
 
 # ---------------------------------------------------------------------------
@@ -117,9 +120,10 @@ class TestDeepSeekInvalidModel:
 
         def fake_create(model, messages, max_tokens, **kwargs):
             calls.append(model)
-            if model != "deepseek-chat":
+            # the primary (V4 Flash) is rejected; the chain must hop to V4 Pro
+            if model == "deepseek-v4-flash":
                 raise _FakeAPIError("Model not found", status_code=400)
-            return _make_chat_response("Hello from deepseek-chat!")
+            return _make_chat_response("Hello from the fallback model!")
 
         fake_client = MagicMock()
         fake_client.chat.completions.create.side_effect = fake_create
@@ -128,8 +132,9 @@ class TestDeepSeekInvalidModel:
             result = m.call_openai_minimal("Hello", provider="deepseek")
 
         assert result["success"] is True
-        assert "deepseek-chat" in calls
-        assert result["text"] == "Hello from deepseek-chat!"
+        assert "deepseek-v4-flash" in calls   # primary attempted…
+        assert "deepseek-v4-pro" in calls      # …and the hop reached V4 Pro
+        assert result["text"] == "Hello from the fallback model!"
 
     def test_all_models_fail_returns_structured_fallback(self, monkeypatch):
         """When all models fail, result must be a safe structured dict with no exception."""
@@ -150,7 +155,9 @@ class TestDeepSeekInvalidModel:
         assert result["text"]  # non-empty
         assert "Something went wrong" not in result["text"]
 
-    def test_all_models_fail_message_is_user_friendly(self, monkeypatch):
+    def test_all_models_fail_message_is_honest_not_cosy(self, monkeypatch):
+        # reasoning-observability: a dead core AI must be surfaced honestly, not
+        # dressed up as a soft reassurance that still promises reasoning.
         import src.rico_openai_runtime as m
 
         fake_client = MagicMock()
@@ -161,10 +168,14 @@ class TestDeepSeekInvalidModel:
         with patch.object(m, "_build_client", return_value=fake_client):
             result = m.call_openai_minimal("Hello", provider="deepseek")
 
-        msg = result.get("text", "")
-        assert "job search" in msg.lower() or "help" in msg.lower(), (
-            f"Fallback message must be user-friendly, got: {msg!r}"
-        )
+        msg = result.get("text", "").lower()
+        # Honest: names the core AI as unavailable and invites a retry…
+        assert "unavailable" in msg
+        assert "try again" in msg
+        # …and does NOT falsely claim it can still reason (e.g. CV review).
+        assert "cv review" not in msg
+        # Distinct machine-readable code is present for observability.
+        assert result.get("error_code") == "reasoning_provider_unavailable"
 
 
 class TestDeepSeekEmptyResponse:
@@ -176,8 +187,8 @@ class TestDeepSeekEmptyResponse:
 
         def fake_create(model, messages, max_tokens, **kwargs):
             attempts.append(model)
-            if model != "deepseek-chat":
-                return _make_chat_response("")  # empty text
+            if model == "deepseek-v4-flash":
+                return _make_chat_response("")  # empty text → must hop
             return _make_chat_response("Useful reply")
 
         fake_client = MagicMock()

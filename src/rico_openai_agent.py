@@ -153,7 +153,7 @@ class RicoOpenAIAgent:
         # Default path: HF is the primary provider (zero OpenAI cost)
         if not self._use_openai and not self._use_deepseek:
             if self.hf_available:
-                hf_result = self._call_hf_free(user_message, user_context, language=language)
+                hf_result = self._hf_fallback_with_record(user_message, user_context, language=language)
                 if hf_result:
                     return hf_result
             return self._fallback_response(language=language, user_message=user_message)
@@ -189,9 +189,12 @@ class RicoOpenAIAgent:
                 "provider": provider,
             }
 
-        # Premium provider failed — cascade to HF
+        # Premium provider failed — cascade to HF. The cascade is now instrumented:
+        # whether the backup engaged and whether it produced usable text is
+        # recorded + logged, so a fallback that silently returns None can never
+        # degrade us to templated text without ringing an alarm (reasoning-observability).
         if self.hf_available:
-            hf_result = self._call_hf_free(user_message, user_context, language=language)
+            hf_result = self._hf_fallback_with_record(user_message, user_context, language=language)
             if hf_result:
                 return hf_result
 
@@ -243,6 +246,40 @@ class RicoOpenAIAgent:
     def _build_user_prompt(self, user_message: str, user_context: Optional[Dict[str, Any]]) -> str:
         context = json.dumps(user_context or {}, ensure_ascii=False, indent=2)
         return f"User message:\n{user_message}\n\nKnown Rico context:\n{context}"
+
+    def _hf_fallback_with_record(
+        self,
+        user_message: str,
+        user_context: Optional[Dict[str, Any]],
+        language: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Run the HuggingFace backup and RECORD whether it engaged and whether it
+        produced usable text.
+
+        A backup that fails invisibly is worse than no backup — it removes the
+        alarm. So a ``None``/empty result here yields a distinct, categorised
+        outcome and an explicit error log line (via ``record_fallback_outcome``)
+        instead of silently degrading to templated text. This only observes the
+        cascade — it does NOT repair the HF path and never runs inside
+        ``call_openai_minimal``.
+        """
+        from src.rico_openai_runtime import record_fallback_outcome
+
+        model = os.getenv("HF_TEXT_MODEL", "HuggingFaceH4/zephyr-7b-beta")
+        hf_result = self._call_hf_free(user_message, user_context, language=language)
+        if hf_result and hf_result.get("message"):
+            record_fallback_outcome(
+                provider="huggingface", engaged=True, succeeded=True,
+                model=hf_result.get("model") or model,
+            )
+            return hf_result
+        record_fallback_outcome(
+            provider="huggingface", engaged=True, succeeded=False,
+            error_category="response_contract",
+            message="huggingface fallback returned no usable text",
+            model=model,
+        )
+        return None
 
     def _call_hf_free(
         self,

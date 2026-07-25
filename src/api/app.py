@@ -270,6 +270,17 @@ async def lifespan(app: FastAPI):
     _apply_audit_helper_tables()
     _apply_uploaded_document_context()
     _apply_cv_upload_artifacts()
+
+    try:
+        # Kick the reasoning /models pre-check on a daemon thread: probes once now,
+        # then refreshes on a background interval. Non-blocking — it NEVER delays
+        # startup and no inbound request ever triggers an upstream probe.
+        from src.rico_openai_runtime import start_model_precheck_background
+        start_model_precheck_background()
+        logger.info("reasoning_models_precheck started")
+    except Exception as exc:
+        logger.warning("reasoning_models_precheck start skipped: %s", exc)
+
     yield
 
 
@@ -393,7 +404,47 @@ def health_check() -> Dict[str, Any]:
     except Exception:
         # Health must never fail because of the provider indicator.
         pass
+    try:
+        # Reasoning-provider (core AI) health — names/categories/status codes and
+        # model identifiers only, never secret values. A dead core AI with no
+        # fallback flips the whole platform to "degraded" so it can't hide behind
+        # healthy job providers.
+        from src.rico_openai_runtime import get_reasoning_health
+        reasoning = get_reasoning_health()
+        payload["reasoning_provider"] = reasoning
+        if reasoning.get("degraded"):
+            payload["status"] = "degraded"
+    except Exception:
+        pass
     return payload
+
+
+@app.get("/ready")
+@app.head("/ready")
+def readiness_check() -> JSONResponse:
+    """Readiness probe (distinct from /health, which is Render's liveness probe).
+
+    Returns HTTP 503 when core reasoning has NO reachable valid model (provider
+    not configured, or a fresh /models probe lists none of the resolved chain, or
+    a persistent unusable failure with no backup); HTTP 200 otherwise. /health
+    stays 200 always so a transient provider blip never restart-loops the process.
+
+    Cache-only: answers from the SAME cached provider state as /health and makes
+    NO per-request upstream call, so it cannot be looped to burn the provider
+    balance. The /models cache is refreshed only by the background daemon.
+    """
+    body: Dict[str, Any] = {"ready": True, "service": "Job Automation Platform API"}
+    status = 200
+    try:
+        from src.rico_openai_runtime import get_readiness
+        readiness = get_readiness()
+        body = readiness
+        status = 200 if readiness.get("ready") else 503
+    except Exception:
+        # Never crash the probe: a computation error is not evidence of unreadiness.
+        body = {"ready": True, "error": "readiness_indeterminate"}
+        status = 200
+    return JSONResponse(content=body, status_code=status)
 
 
 @app.get("/version")
