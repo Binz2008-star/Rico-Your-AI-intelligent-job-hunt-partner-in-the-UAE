@@ -236,6 +236,16 @@ becomes a lie the product tells:
 | `absent` | No artifact at all. |
 | `unavailable` | The store could not be read. Never reported as an absence. |
 
+**Two vocabularies exist here on purpose, and neither is a drift from the other.**
+The five words above are the `state` field of the READ endpoint — what a later
+reader finds about an artifact. `preview_ready` / `preview_not_persistable` /
+`cv_storage_unavailable` are the `status` field of the WRITE endpoint
+(`POST /upload-cv`) — what happened to the request being answered. They describe
+different things and never co-occur: `preview_not_persistable` hands the user a
+real, readable extraction and says it cannot be confirmed, while `unavailable`
+hands them nothing and says the store could not be read. Collapsing them would
+turn "I read your CV but can't save it" into "I couldn't read anything".
+
 The pending card **must show the user when their preview expires.** Temporary
 retention is only defensible if the person whose data it is can see its duration.
 

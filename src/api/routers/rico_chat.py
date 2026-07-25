@@ -113,6 +113,25 @@ def _is_production() -> bool:
     }
 
 
+def _proven_outside_production() -> bool:
+    """True ONLY when the environment check affirmatively answers "not production".
+
+    Callers use this to grant a degraded response, so the burden of proof runs
+    one way: an absence of production markers is a determinate answer and does
+    prove it, but a check that RAISES has answered nothing at all. An unknown
+    environment therefore returns False and the caller fails closed.
+
+    The failure is logged at error level and never swallowed silently — a
+    permanently broken environment check would otherwise look exactly like a
+    healthy production deployment from the outside.
+    """
+    try:
+        return _is_production() is False
+    except Exception:
+        logger.exception("environment_check_failed")
+        return False
+
+
 # ============================================================================
 # Pydantic Models
 # ============================================================================
@@ -2311,16 +2330,11 @@ async def rico_upload_cv(
 
                 _store_configured = artifact_store_reachable()
                 # Fail-closed: the degraded 200 is a licence granted on PROOF that
-                # this is not production, never the default under uncertainty. A
-                # check that raises, or answers with anything other than a plain
-                # boolean, is not proof — it becomes 503. (An explicit absence of
-                # production markers IS a determinate answer, not ambiguity.)
-                try:
-                    _env = _is_production()
-                    _proven_non_production = _env is False
-                except Exception:
-                    _proven_non_production = False
-                if _store_configured or not _proven_non_production:
+                # this is not production, never the default under uncertainty. An
+                # explicit absence of production markers IS proof; an environment
+                # check that raises is not, and becomes 503 (see
+                # `_proven_outside_production`, which logs rather than swallows).
+                if _store_configured or not _proven_outside_production():
                     # (1) The store is configured and the write still failed, or
                     # (3) the store is unconfigured IN PRODUCTION, which is a
                     # deployment fault rather than an acceptable environment.

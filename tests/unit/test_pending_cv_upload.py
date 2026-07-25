@@ -18,6 +18,7 @@ down, preview unrebuildable, bad auth.
 """
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from unittest.mock import MagicMock, patch
@@ -684,8 +685,21 @@ class TestUploadArtifactBranches:
         assert r.status_code == 503, r.text
         assert "preview_ready" not in r.json().values()
 
-    def test_undeterminable_environment_fails_closed_to_503(self, client):
-        """The degraded 200 is a licence granted on proof, not the default."""
-        r = _upload(client, created_id=None, reachable=False, raises_env=True)
+    def test_undeterminable_environment_fails_closed_to_503(self, client, caplog):
+        """The degraded 200 is a licence granted on proof, not the default.
+
+        The environment check RAISES here — it has answered nothing. That is a
+        different fact from "no production markers are set", which IS a
+        determinate answer and does earn the degraded 200 (covered above).
+        """
+        with caplog.at_level(logging.ERROR, logger="src.api.routers.rico_chat"):
+            r = _upload(client, created_id=None, reachable=False, raises_env=True)
         assert r.status_code == 503, r.text
         assert "preview_ready" not in r.json().values()
+        # Failing closed must not also fail silently: a permanently broken
+        # environment check would otherwise be indistinguishable from a healthy
+        # production deployment from the outside.
+        assert any(
+            rec.levelno >= logging.ERROR and "environment_check_failed" in rec.getMessage()
+            for rec in caplog.records
+        ), [r.getMessage() for r in caplog.records]

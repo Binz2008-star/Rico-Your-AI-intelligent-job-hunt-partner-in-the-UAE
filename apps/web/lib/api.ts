@@ -1311,6 +1311,59 @@ export interface UploadCVResponse {
   file_format?: string;
 }
 
+/**
+ * The five named states of a pending CV upload.
+ *
+ * They are named rather than inferred because every pair that gets collapsed
+ * becomes a lie: "already_saved" reported as "absent" reads to the user as
+ * "your upload went nowhere", and "unavailable" reported as "absent" tells
+ * someone their CV is missing during an outage.
+ */
+export type PendingCvState =
+  | "pending"
+  | "already_saved"
+  | "expired"
+  | "absent"
+  | "unavailable";
+
+export interface PendingCvUploadResponse {
+  pending: boolean;
+  state: PendingCvState;
+  preview_available?: boolean;
+  upload_id?: string | null;
+  filename?: string;
+  doc_type?: string;
+  /** When the pending preview lapses — shown to the user, never hidden. */
+  expires_at?: string | null;
+  preview?: ProfilePreview;
+  message?: string;
+  error_code?: string;
+}
+
+/**
+ * Read the caller's pending (uploaded but unconfirmed) CV.
+ *
+ * A 503 resolves to state "unavailable" rather than throwing, so the caller can
+ * say "we couldn't load your pending review" instead of "you have no upload".
+ * Any other failure resolves to "unavailable" for the same reason — a failed
+ * read must never be rendered as an absence.
+ */
+export async function fetchPendingCvUpload(): Promise<PendingCvUploadResponse> {
+  try {
+    const data = await requestJson<unknown>("/api/v1/rico/pending-cv-upload", {
+      method: "GET",
+    });
+    const body = (data ?? {}) as PendingCvUploadResponse;
+    if (!body.state) return { pending: false, state: "absent" };
+    return body;
+  } catch (err) {
+    if (err instanceof ApiError && err.statusCode === 503) {
+      return { pending: false, state: "unavailable" };
+    }
+    return { pending: false, state: "unavailable" };
+  }
+}
+
 export interface ConfirmCVProfileRequest {
   preview: ProfilePreview;
   filename: string;
