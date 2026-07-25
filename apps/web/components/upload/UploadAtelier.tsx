@@ -32,6 +32,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import {
     ApiError,
     deleteUserFile,
+    fetchPendingCvUpload,
     fetchProfile,
     listUserFiles,
     setPrimaryFile,
@@ -332,16 +333,29 @@ export function UploadAtelier() {
     const [docType, setDocType] = useState<DocTypeOption>("cv");
     const [isUploading, setIsUploading] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    // The pending-review banner. It is a SERVER answer, never a local flag:
+    // the previous boolean was set once by the upload animation's completion
+    // callback and had no way to become false again, so it survived deleting
+    // every file and could sit directly above "No files yet" — the product
+    // telling one user, in one frame, that their preview was ready and that
+    // they had no files. Re-derived on every list refresh, so it cannot outlive
+    // the artifact it describes.
     const [cvPendingConfirm, setCvPendingConfirm] = useState(false);
     const [roleMismatch, setRoleMismatch] = useState<{ cvRole: string; targetRoles: string[] } | null>(null);
 
     const loadFiles = useCallback(async () => {
         try {
-            const [res, profile] = await Promise.all([
+            const [res, profile, pending] = await Promise.all([
                 listUserFiles(),
                 fetchProfile().catch(() => null),
+                fetchPendingCvUpload(),
             ]);
             setFiles(res.files);
+            // Only a real, retrievable, unconfirmed artifact draws the banner.
+            // "already_saved", "expired", "absent" and an unreadable store all
+            // clear it — the last of those because a banner we cannot verify is
+            // a claim we cannot make.
+            setCvPendingConfirm(pending.state === "pending");
             const primaryCv = res.files.find((f) => f.doc_type === "cv" && f.is_primary && f.current_role);
             const targets = profile?.target_roles ?? [];
             if (primaryCv?.current_role && targets.length > 0) {
@@ -398,8 +412,12 @@ export function UploadAtelier() {
 
     const handleCvProcessingComplete = useCallback(() => {
         setIsProcessing(false);
-        setCvPendingConfirm(true);
-    }, []);
+        // Ask the server whether an artifact actually exists rather than
+        // asserting one because an animation finished. An upload that produced
+        // no retrievable artifact must not advertise a review that cannot be
+        // completed.
+        void loadFiles();
+    }, [loadFiles]);
 
     const handleSetPrimary = useCallback(async (id: string) => {
         try { await setPrimaryFile(id); await loadFiles(); } catch { /* silent */ }
@@ -527,8 +545,17 @@ export function UploadAtelier() {
                     ) : (
                         <MaterialIcon icon="folder_open" className="text-4xl" style={{ color: palette.ink40 }} />
                     )}
-                    <p className="font-semibold" style={{ color: palette.ink }}>{t("filesEmpty")}</p>
-                    <p className="text-sm" style={{ color: palette.ink70 }}>{t("filesEmptyHint")}</p>
+                    {/* An empty list is a true fact, but "No files yet — upload
+                        your CV to get started" is the wrong INSTRUCTION for
+                        someone whose CV is already uploaded and awaiting their
+                        confirmation. Sending them to upload the same file again
+                        is how the first copy contradicted the banner above it. */}
+                    <p className="font-semibold" style={{ color: palette.ink }}>
+                        {t(cvPendingConfirm ? "filesEmptyPendingReview" : "filesEmpty")}
+                    </p>
+                    <p className="text-sm" style={{ color: palette.ink70 }}>
+                        {t(cvPendingConfirm ? "filesEmptyPendingReviewHint" : "filesEmptyHint")}
+                    </p>
                     <button
                         onClick={() => setUploadOpen(true)}
                         className="mt-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
