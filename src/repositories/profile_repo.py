@@ -266,6 +266,7 @@ def upsert_profile(
     updates: dict[str, Any],
     *,
     cv_text: str | None = None,
+    cv_structured: dict[str, Any] | None = None,
     require_db: bool = False,
     clear_fields: Collection[str] = (),
 ) -> RicoProfile:
@@ -275,6 +276,16 @@ def upsert_profile(
     ``rico_profiles.cv_text`` with COALESCE semantics (a NULL never wipes an
     existing value) so chat and apply-tailoring flows can ground on the actual
     uploaded CV rather than only the structured summary.
+
+    ``cv_structured`` (optional) is the structured CV document built by
+    ``src.services.cv_structured.build_cv_structured``. It is persisted to
+    ``rico_profiles.cv_structured`` in the SAME statement as ``cv_text`` —
+    ``RicoDB.upsert_profile`` already accepted the argument and already merges
+    the column with ``cv_structured || EXCLUDED.cv_structured``; this parameter
+    was the one missing link, which is why the column stood at ``{}`` in
+    production while profiles claimed ``cv_status = "parsed"``. One statement
+    means text and structure can never be committed apart: there is no window in
+    which one landed and the other did not.
 
     ``require_db`` (default ``False`` — preserves every existing caller's
     behavior) makes the DB write MANDATORY: if the primary Postgres/Neon write
@@ -426,12 +437,19 @@ def upsert_profile(
             # JSON null — this is the only path that writes None into profile.
             for k in clears:
                 profile_data[k] = None
-            if profile_data or cv_text:
+            if profile_data or cv_text or cv_structured:
                 logger.info(
-                    "profile_repo.upsert_profile: db_user_id=%s profile_data=%s cv_text_chars=%d",
+                    "profile_repo.upsert_profile: db_user_id=%s profile_data=%s "
+                    "cv_text_chars=%d cv_structured_keys=%d",
                     db_user_id, list(profile_data.keys()), len(cv_text or ""),
+                    len(cv_structured or {}),
                 )
-                db.upsert_profile(db_user_id, profile_data, cv_text=cv_text, conn=conn)
+                db.upsert_profile(
+                    db_user_id, profile_data,
+                    cv_text=cv_text,
+                    cv_structured=cv_structured,
+                    conn=conn,
+                )
 
             # 3. Upsert settings
             settings_data = {}

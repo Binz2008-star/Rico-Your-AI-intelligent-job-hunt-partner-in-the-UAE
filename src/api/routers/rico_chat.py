@@ -329,6 +329,7 @@ def upsert_profile(
     user_id: str,
     updates: dict[str, Any],
     cv_text: str | None = None,
+    cv_structured: dict[str, Any] | None = None,
     require_db: bool = False,
     clear_fields: Collection[str] = (),
 ):
@@ -338,7 +339,8 @@ def upsert_profile(
     # didn't accept it, and the resulting TypeError surfaced as a 503 on EVERY
     # profile save (endpoint tests mock this symbol, so CI could not see it).
     return profile_repo.upsert_profile(
-        user_id=user_id, updates=updates, cv_text=cv_text, require_db=require_db,
+        user_id=user_id, updates=updates, cv_text=cv_text,
+        cv_structured=cv_structured, require_db=require_db,
         clear_fields=clear_fields,
     )
 
@@ -2655,6 +2657,36 @@ async def confirm_cv_profile(
         # is safe: the My Files write above dedupes on content_hash, and this
         # upsert is a keyed UPSERT.
         #
+        # ── Structured CV: extract, then save WITH the text, not after it ─────
+        # Derived from `confirmed_cv_text` — the exact text this confirm is about
+        # to persist — so cv_structured can never describe a different document
+        # than cv_text. `CVParser.parse_text` is the SAME function that built the
+        # upload preview, so the user is not shown one extraction and given
+        # another; running it here rather than carrying the result on the
+        # short-lived artifact also needs no schema change to that table.
+        #
+        # A failure to extract structure is NOT a failure to confirm: the text is
+        # still saved and the state falls back to text_extracted. Inventing an
+        # empty document instead would recreate the exact defect this fixes —
+        # cv_structured = {} beside a status claiming an extraction.
+        _cv_structured: dict[str, Any] | None = None
+        if _readable_text_saved and confirmed_cv_text:
+            try:
+                from src.cv_parser import CVParser
+                from src.services.cv_structured import build_cv_structured, is_substantive
+
+                _candidate = build_cv_structured(CVParser().parse_text(confirmed_cv_text))
+                _cv_structured = _candidate if is_substantive(_candidate) else None
+            except Exception as _struct_exc:
+                # Best-effort by design: never fail a confirm because structure
+                # could not be derived. The text is the fallback the product
+                # already relies on.
+                logger.warning(
+                    "cv_confirm_structured_extraction_failed user=%s err=%s request_ref=%s",
+                    user_ref(resolved_user_id), safe_exc(_struct_exc), request_ref,
+                )
+                _cv_structured = None
+
         # One filename, one source of truth. rico_profiles.cv_filename and
         # user_documents.filename must never disagree about the same file: a
         # profile that says "Roben_Edwan_CV.pdf" while My Files says
@@ -2670,6 +2702,7 @@ async def confirm_cv_profile(
                 user_id=resolved_user_id,
                 updates=profile_updates,
                 cv_text=confirmed_cv_text,
+                cv_structured=_cv_structured,
                 require_db=True,
             )
         except Exception as _profile_exc:

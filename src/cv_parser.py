@@ -10,7 +10,7 @@ from __future__ import annotations
 import io
 import logging
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -41,6 +41,18 @@ class ParsedCV:
     name: Optional[str] = None
     current_role: Optional[str] = None
     document_type: str = "unknown"
+    # Section text, verbatim from the CV, whenever the section could be located.
+    # Kept even when the entries below could not be split, because a readable
+    # section is real evidence and dropping it forces the user to retype what
+    # the file already said. Never synthesised.
+    work_experience_text: Optional[str] = None
+    education_text: Optional[str] = None
+    # Split entries. Empty means "could not be split with confidence", NOT
+    # "the CV has no experience/education" — the *_text fields above carry the
+    # evidence in that case. No company, title, institution or date is ever
+    # inferred: every value here is a substring of the source CV.
+    work_experience: List[Dict[str, Any]] = field(default_factory=list)
+    education: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -239,6 +251,10 @@ class CVParser:
         else:
             quality = "good"
 
+        # Sections come from the ORIGINAL text: `cleaned` has had its line
+        # structure collapsed, and section boundaries only exist in the lines.
+        sections = self._extract_sections(text)
+
         return ParsedCV(
             text=cleaned,
             skills=skills,
@@ -251,6 +267,10 @@ class CVParser:
             extracted_chars=char_count,
             name=self._extract_name(text),
             current_role=self._extract_current_role(text),
+            work_experience_text=sections["work_experience"],
+            education_text=sections["education"],
+            work_experience=self._split_section_entries(sections["work_experience"]),
+            education=self._split_section_entries(sections["education"]),
         )
 
     _NAME_SECTION_KEYWORDS = frozenset({
@@ -335,6 +355,133 @@ class CVParser:
         if not matches:
             return None
         return max(float(x) for x in matches)
+
+    # Section headings, English and Arabic. Matched on a line of their own (the
+    # heading line may carry trailing punctuation or a colon) so a passing
+    # mention of the word "experience" inside a sentence never starts a section.
+    _WORK_HEADINGS = (
+        "work experience", "professional experience", "employment history",
+        "career history", "work history", "experience", "employment",
+        "professional background", "career summary",
+        "الخبرة العملية", "الخبرات العملية", "الخبرة المهنية", "الخبرة", "الخبرات",
+        "التاريخ الوظيفي", "المسار المهني",
+    )
+    _EDUCATION_HEADINGS = (
+        "education", "education and training", "academic background",
+        "academic qualifications", "qualifications", "educational background",
+        "التعليم", "المؤهلات", "المؤهلات العلمية", "التعليم والتدريب",
+        "الشهادات العلمية", "الدراسة",
+    )
+    # Any heading that terminates the section currently being collected.
+    _ALL_HEADINGS = _WORK_HEADINGS + _EDUCATION_HEADINGS + (
+        "skills", "technical skills", "core competencies", "certifications",
+        "languages", "references", "declaration", "personal details",
+        "summary", "profile", "objective", "projects", "publications",
+        "awards", "interests", "hobbies", "contact",
+        "المهارات", "الشهادات", "اللغات", "المراجع", "الملخص", "الهدف",
+        "البيانات الشخصية", "المشاريع", "الدورات",
+    )
+
+    @staticmethod
+    def _heading_of(line: str) -> Optional[str]:
+        """Return the normalised heading a line *is*, or None if it isn't one.
+
+        A heading line is short and contains nothing but the heading (plus
+        optional punctuation). Requiring the whole line to match is what stops
+        "I have 10 years of experience in..." from opening an experience section.
+        """
+        stripped = (line or "").strip()
+        if not stripped or len(stripped) > 60:
+            return None
+        normalised = re.sub(r"[:\-–—_*#.]+$", "", stripped).strip().lower()
+        normalised = re.sub(r"\s+", " ", normalised)
+        return normalised or None
+
+    def _extract_sections(self, text: str) -> Dict[str, Optional[str]]:
+        """Return the verbatim text of the work-experience and education sections.
+
+        Operates on the ORIGINAL text, not the whitespace-collapsed copy, because
+        section boundaries only exist in the line structure. Returns ``None`` for
+        a section whose heading was never found — never a guess, and never an
+        empty string standing in for "not found".
+        """
+        lines = (text or "").split("\n")
+        found: Dict[str, Optional[str]] = {"work_experience": None, "education": None}
+        current: Optional[str] = None
+        buffer: List[str] = []
+
+        def _flush() -> None:
+            if current and buffer:
+                body = "\n".join(buffer).strip()
+                # Only keep the FIRST occurrence of each section: a later
+                # repeat of the heading is far more likely to be a page
+                # artefact than a second real section.
+                if body and found.get(current) is None:
+                    found[current] = body
+
+        for line in lines:
+            heading = self._heading_of(line)
+            if heading is not None and heading in self._ALL_HEADINGS:
+                _flush()
+                buffer = []
+                if heading in self._WORK_HEADINGS:
+                    current = "work_experience"
+                elif heading in self._EDUCATION_HEADINGS:
+                    current = "education"
+                else:
+                    current = None
+                continue
+            if current:
+                buffer.append(line)
+        _flush()
+        return found
+
+    # A dated entry line: "Senior Engineer, ADNOC — 2019-2024" / "2019 – Present".
+    # Used ONLY to decide where one entry ends and the next begins. Nothing is
+    # parsed out of the match; the entry keeps the source text verbatim.
+    _ENTRY_DATE_RE = re.compile(
+        r"(?:19|20)\d{2}\s*(?:[-–—/]|\bto\b|\bحتى\b)\s*(?:(?:19|20)\d{2}|present|current|now|الآن|حالياً|حاليا)"
+        r"|(?:19|20)\d{2}\s*[-–—/]\s*(?:19|20)\d{2}",
+        re.IGNORECASE,
+    )
+
+    def _split_section_entries(self, section_text: Optional[str]) -> List[Dict[str, Any]]:
+        """Split a section into entries, keeping each entry's text verbatim.
+
+        Splits on lines that carry a date range, which is the one structural
+        signal that reliably marks the start of a CV entry across layouts.
+        Returns ``[]`` when no such signal exists — the caller then falls back
+        to the whole section text. Deliberately does NOT try to identify which
+        part is the company, the title or the institution: guessing that is how
+        a parser starts inventing employers.
+        """
+        if not section_text:
+            return []
+        entries: List[Dict[str, Any]] = []
+        buffer: List[str] = []
+
+        def _flush() -> None:
+            body = "\n".join(buffer).strip()
+            if body:
+                entries.append({"text": body, "date_range": self._first_date_range(body)})
+
+        for line in section_text.split("\n"):
+            if self._ENTRY_DATE_RE.search(line) and buffer:
+                _flush()
+                buffer = [line]
+                continue
+            buffer.append(line)
+        _flush()
+        # A single entry with no date signal at all is not a split — report it as
+        # unsplit so the caller uses the section text instead.
+        if len(entries) == 1 and entries[0]["date_range"] is None:
+            return []
+        return entries
+
+    def _first_date_range(self, text: str) -> Optional[str]:
+        """Return the first date range found verbatim, or None."""
+        match = self._ENTRY_DATE_RE.search(text or "")
+        return match.group(0).strip() if match else None
 
     def _parse_pdf(self, data: bytes) -> str:
         try:
