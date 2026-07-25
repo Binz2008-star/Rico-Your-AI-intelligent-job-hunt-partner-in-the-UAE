@@ -703,3 +703,155 @@ class TestUploadArtifactBranches:
             rec.levelno >= logging.ERROR and "environment_check_failed" in rec.getMessage()
             for rec in caplog.records
         ), [r.getMessage() for r in caplog.records]
+
+
+# ── Chat and the pending artifact ───────────────────────────────────────────
+
+class TestChatNeverTreatsPendingAsSaved:
+    """The pending artifact is EXISTENCE to chat, never content.
+
+    Two opposite lies are possible here and both end the same way — the artifact
+    expires unconfirmed and the CV is lost. Answering from an unconfirmed upload
+    would claim a CV the user never approved; telling that same user to upload a
+    CV they already uploaded denies a file that genuinely arrived.
+    """
+
+    def _api(self):
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        return api
+
+    def _note(self, result, artifact, user_id="u@x.com"):
+        from src.rico_chat_api import RicoChatAPI
+
+        with patch(
+            "src.repositories.cv_upload_artifact_repo.get_latest_pending_cv_upload",
+            return_value=artifact,
+        ):
+            RicoChatAPI._note_pending_cv_review(self._api(), user_id, result)
+        return result
+
+    def test_upload_prompt_is_corrected_when_an_upload_is_pending(self):
+        result = self._note(
+            {"message": "Upload your CV and I'll find matching jobs.", "next_action": "upload_cv"},
+            _artifact(),
+        )
+        assert result["cv_pending_review"] is True
+        assert "not been saved" in result["message"].lower()
+        assert "confirm" in result["message"].lower()
+        # It must not send the user to upload the same file a second time — the
+        # original answer's only instruction is explicitly withdrawn.
+        assert "no need to upload it again" in result["message"].lower()
+
+    def test_the_note_carries_no_cv_content(self):
+        """Existence only. Nothing from the artifact's text may reach the reply."""
+        art = dict(_artifact())
+        art["cv_text"] = "Head of Compliance at Emirates NBD, roben@example.com"
+        result = self._note({"message": "Upload your CV.", "next_action": "upload_cv"}, art)
+        lowered = result["message"].lower()
+        for leaked in ("emirates nbd", "head of compliance", "roben@example.com"):
+            assert leaked not in lowered
+        # Not even the artifact's own identifiers.
+        assert _UPLOAD_ID not in result["message"]
+        assert art["filename"] not in result["message"]
+
+    def test_an_already_saved_artifact_adds_nothing(self):
+        """It is not pending, so there is nothing to confirm."""
+        result = self._note(
+            {"message": "Upload your CV.", "next_action": "upload_cv"},
+            dict(_artifact(), already_saved=True),
+        )
+        assert result["message"] == "Upload your CV."
+        assert "cv_pending_review" not in result
+
+    def test_an_expired_artifact_adds_nothing(self):
+        """Confirming it is no longer possible, so promising it would be a lie."""
+        result = self._note(
+            {"message": "Upload your CV.", "next_action": "upload_cv"},
+            dict(_artifact(), expired=True),
+        )
+        assert result["message"] == "Upload your CV."
+        assert "cv_pending_review" not in result
+
+    def test_an_unreadable_store_leaves_the_answer_untouched(self):
+        """A read failure is not evidence that something is pending."""
+        from src.rico_chat_api import RicoChatAPI
+
+        result = {"message": "Upload your CV.", "next_action": "upload_cv"}
+        with patch(
+            "src.repositories.cv_upload_artifact_repo.get_latest_pending_cv_upload",
+            side_effect=ArtifactStoreUnavailable("down"),
+        ):
+            RicoChatAPI._note_pending_cv_review(self._api(), "u@x.com", result)
+        assert result["message"] == "Upload your CV."
+        assert "cv_pending_review" not in result
+
+    def test_the_store_is_not_read_on_a_normal_answer(self):
+        """One extra query on the upload-prompt branch only — never per turn."""
+        from src.rico_chat_api import RicoChatAPI
+
+        with patch(
+            "src.repositories.cv_upload_artifact_repo.get_latest_pending_cv_upload"
+        ) as reader:
+            RicoChatAPI._note_pending_cv_review(
+                self._api(), "u@x.com", {"message": "Here are 5 jobs.", "type": "job_matches"}
+            )
+        reader.assert_not_called()
+
+    def test_a_guest_session_is_never_asked_about(self):
+        from src.rico_chat_api import RicoChatAPI
+
+        with patch(
+            "src.repositories.cv_upload_artifact_repo.get_latest_pending_cv_upload"
+        ) as reader:
+            RicoChatAPI._note_pending_cv_review(
+                self._api(),
+                "public:abc123",
+                {"message": "Upload your CV.", "next_action": "upload_cv"},
+            )
+        reader.assert_not_called()
+
+    def test_an_arabic_answer_is_corrected_in_arabic(self):
+        result = self._note(
+            {"message": "ارفع سيرتك الذاتية وسأبحث لك عن وظائف مناسبة.", "next_action": "upload_cv"},
+            _artifact(),
+        )
+        assert "لم تُحفظ بعد" in result["message"]
+        assert "not been saved" not in result["message"]
+
+    def test_chat_grounding_does_not_read_the_artifact_store(self):
+        """Locks the structural half: the resolver chat grounds on has no path
+        to `cv_upload_artifacts`, so an unconfirmed upload can never be answered
+        from. If a future change wires it in, this fails."""
+        import inspect
+
+        import src.services.cv_context_resolver as resolver
+        import src.services.cv_state as cv_state
+
+        for mod in (resolver, cv_state):
+            source = inspect.getsource(mod)
+            assert "cv_upload_artifact" not in source, mod.__name__
+            assert "pending_cv_upload" not in source, mod.__name__
+
+    def test_process_message_applies_the_note_to_a_real_reply(self):
+        """The guard is wired into the single response exit point.
+
+        A correction nothing calls is not a correction — this proves the note
+        reaches an actual chat reply, not just its own unit test.
+        """
+        from src.rico_chat_api import RicoChatAPI
+
+        api = self._api()
+        reply = {"message": "Upload your CV so I can match jobs.", "next_action": "upload_cv"}
+        with (
+            patch.object(RicoChatAPI, "_process_message_inner", return_value=reply),
+            patch.object(RicoChatAPI, "_record_last_turn", MagicMock()),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.get_latest_pending_cv_upload",
+                return_value=_artifact(),
+            ),
+        ):
+            out = RicoChatAPI.process_message(api, "u@x.com", "find me jobs")
+        assert out["cv_pending_review"] is True
+        assert "not been saved" in out["message"].lower()

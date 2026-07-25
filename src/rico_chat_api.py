@@ -3364,6 +3364,66 @@ class RicoChatAPI:
         """True only when the CV's content can actually be read and used."""
         return self._cv_context(user_id, profile).has_content
 
+    #: Appended to an "upload your CV" answer when an unconfirmed upload exists.
+    _PENDING_CV_NOTE_EN = (
+        "\n\nOne thing first: the CV you uploaded is still waiting for your "
+        "review, and it has NOT been saved yet. Open it from the chat and "
+        "confirm it, and I'll save it to your profile — no need to upload it "
+        "again."
+    )
+    _PENDING_CV_NOTE_AR = (
+        "\n\nقبل ذلك: السيرة التي رفعتها لا تزال بانتظار مراجعتك، ولم تُحفظ بعد. "
+        "افتحها من المحادثة وأكّدها وسأحفظها في ملفك — لا حاجة لرفعها مرة أخرى."
+    )
+
+    def _note_pending_cv_review(self, user_id: str, result: dict[str, Any]) -> None:
+        """Correct the one answer an unconfirmed upload makes false.
+
+        Telling a user to upload a CV they already uploaded is the mirror image
+        of the defect this area exists to remove: one direction claims a CV that
+        was never saved, the other denies a file that genuinely arrived. Both
+        end with the artifact expiring unconfirmed.
+
+        This adds EXISTENCE and nothing else. The pending artifact stays out of
+        grounding: no handler reads its text, it never reaches the profile, and
+        no answer is ever derived from it — the user is simply told the file is
+        here, is not saved, and needs one confirmation.
+
+        Deliberately keyed on ``next_action == "upload_cv"``, so the artifact
+        store is read only on a branch that has already decided to ask for an
+        upload, never on the normal path. Best-effort throughout: a store that
+        cannot be read leaves the original answer untouched, because a read
+        failure is not evidence that anything is pending.
+        """
+        if not isinstance(result, dict) or result.get("next_action") != "upload_cv":
+            return
+        text = str(result.get("message") or "")
+        if not text:
+            return
+        try:
+            from src.api.public_identity import is_valid_public_user_id
+            from src.repositories.cv_upload_artifact_repo import (
+                get_latest_pending_cv_upload,
+            )
+
+            # Guests are never issued an artifact, so there is nothing to check.
+            # The prefix is tested as well as the canonical form: a public id
+            # that fails validation is still not a real account, and the fix for
+            # a malformed one is never to query the store on its behalf.
+            if not user_id or user_id.startswith("public:") or is_valid_public_user_id(user_id):
+                return
+            artifact = get_latest_pending_cv_upload(user_id)
+        except Exception:
+            logger.debug("pending_cv_note_skipped user=%s", user_id, exc_info=True)
+            return
+        if not artifact or artifact.get("expired") or artifact.get("already_saved"):
+            return
+        note = self._PENDING_CV_NOTE_AR if self._is_arabic_text(text) else self._PENDING_CV_NOTE_EN
+        result["message"] = text + note
+        # Machine-readable, so a caller does not have to parse prose to know the
+        # ask changed from "upload" to "confirm".
+        result["cv_pending_review"] = True
+
     @staticmethod
     def _has_cv_profile(profile: Any) -> bool:
         """Check if profile has CV data."""
@@ -7960,6 +8020,7 @@ class RicoChatAPI:
                     error_response.setdefault("error", "empty_message")
                     return error_response
                 result.setdefault("success", True)
+                self._note_pending_cv_review(user_id, result)
                 # Update the canonical last-turn anchor so vague follow-ups
                 # ("make sure", "list them", "that one") can resolve reliably.
                 self._record_last_turn(user_id, message, result)
