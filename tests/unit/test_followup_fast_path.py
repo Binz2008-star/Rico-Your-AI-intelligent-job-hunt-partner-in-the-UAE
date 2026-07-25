@@ -2668,7 +2668,18 @@ class TestAppPipelineSummary:
         api._get_recent_context = lambda uid: {}
         api._append_chat = MagicMock()
 
-        with patch("src.repositories.applications_repo.get_stats", return_value=_stats):
+        # The tracking handler reads one bounded page for itemisation alongside
+        # the aggregate. Supplied here so a message routed to it has the data it
+        # needs; the pipeline-summary handler ignores it and is unaffected.
+        _page = {
+            "applications": list(_apps),
+            "total": len(_apps),
+            "page": 1,
+            "limit": 50,
+            "pages": 1,
+        }
+        with patch("src.repositories.applications_repo.get_stats", return_value=_stats), \
+             patch("src.repositories.applications_repo.get_page", return_value=_page):
             return api._handle_active_user("test-user", message)
 
     def test_routes_to_app_pipeline_summary(self, monkeypatch):
@@ -2676,11 +2687,28 @@ class TestAppPipelineSummary:
         assert result["type"] == "app_pipeline_summary"
 
     def test_zero_apps_returns_empty_message(self, monkeypatch):
+        """Zero applications → honest empty state with a reported total of 0.
+
+        The handler changed, the intent did not. "how many applications have I
+        sent?" is an ownership-qualified request for the user's own records, and
+        every such phrasing now lands on _handle_application_tracking so that
+        "show my applications" and "How many applications have I sent?" cannot
+        return two different response shapes for what is one question. The
+        reported total moved from a top-level ``total`` key to ``stats.total`` —
+        the same grouped aggregate, read from the same GROUP BY — so both
+        assertions below are the originals restated against the response
+        contract that now serves this phrasing, not relaxed versions of them.
+
+        Pipeline-summary routing itself is unchanged and still asserted by
+        test_routes_to_app_pipeline_summary above ("application summary"), which
+        is not an ownership-qualified records request.
+        """
         result = self._run_with_apps(
             monkeypatch, "how many applications have I sent?", _CVProfile()
         )
-        assert result["type"] == "app_pipeline_summary"
-        assert result["total"] == 0
+        assert result["type"] == "application_status"
+        assert result["stats"]["total"] == 0
+        assert "no tracked applications yet" in result["message"]
 
     def test_with_applications_shows_counts(self, monkeypatch):
         apps = [
