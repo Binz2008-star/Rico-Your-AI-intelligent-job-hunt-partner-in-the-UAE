@@ -101,6 +101,22 @@ def operation_ref(operation_id: Any) -> str:
     return _hmac_ref(str(operation_id), "op")
 
 
+def filename_ref(filename: Any) -> str:
+    """Log-safe reference for a user-supplied filename.
+
+    An uploaded CV is routinely named after its owner ("Ahmed Al Mansouri CV
+    2026.pdf"), so the stem is contact-grade PII in its own right. Truncation
+    does not solve that — a prefix still names the person — so the stem is
+    never emitted. Only the extension (low entropy, and the field actually
+    needed to triage a parser failure) and the original length survive.
+    """
+    if not filename:
+        return "f:none"
+    name = str(filename)
+    ext = re.sub(r"[^A-Za-z0-9.]", "", os.path.splitext(name)[1].lower())[:10]
+    return f"f:ext={ext or 'none'},len={len(name)}"
+
+
 def safe_fields(mapping: Mapping[str, Any] | None) -> str:
     """Field NAMES + count — never values."""
     if not mapping:

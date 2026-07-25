@@ -10,6 +10,7 @@ repo-wide.
 
 from __future__ import annotations
 
+import ast
 import logging
 import pathlib
 import re
@@ -19,6 +20,7 @@ import pytest
 
 from src.log_privacy import (
     enforce_production_log_safety,
+    filename_ref,
     safe_exc,
     safe_fields,
     scrub_text,
@@ -305,9 +307,14 @@ class TestStaticRegressionGuard:
 # The five residual sites found by the 2026-07-17 reconciliation (chat_stream,
 # chat_stream_public — where user_id is the PUBLIC session bearer id — and the
 # profile_update persistence-failure path) plus the no-fields warning in the
-# same function. Guards are scoped to src/api/routers/rico_chat.py; the
-# repo-wide sweep of remaining `user=%s` sites in other modules is tracked
-# follow-up hardening, mirroring _QUERY_ALLOWLIST.
+# same function. Guards below are scoped to src/api/routers/rico_chat.py.
+#
+# The sweep of `user=%s` sites in other modules that this once deferred is now
+# done for seven modules, guarded name-independently by
+# TestSensitiveLogFieldsUseSanctionedRefs at the end of this file. The
+# remaining sites in rico_chat.py itself are owned by the CV workstream, which
+# has an open branch on that file; they are excluded from _SWEPT_MODULES and
+# tracked there rather than here.
 
 _RICO_CHAT = pathlib.Path("src/api/routers/rico_chat.py")
 
@@ -376,3 +383,171 @@ class TestProfileUpdateFailurePathClean:
         assert "RuntimeError" in caplog.text
         _assert_clean(caplog.text)
         assert user_ref(EMAIL) in caplog.text
+
+
+# ── filename references ──────────────────────────────────────────────────────
+
+class TestFilenameRef:
+    """A CV filename is usually the owner's name, so the stem is PII itself.
+
+    Truncating it does not help — a prefix still names the person — so the rule
+    is extension + length only, never any part of the stem.
+    """
+
+    def test_stem_never_survives_even_when_it_is_a_full_name(self):
+        out = filename_ref("Sentinel Person 1076 Curriculum Vitae.PDF")
+        assert "Sentinel" not in out and "Person" not in out and "Vitae" not in out
+        assert out == "f:ext=.pdf,len=41"
+
+    def test_extension_is_kept_for_parser_triage(self):
+        assert filename_ref("x.docx").startswith("f:ext=.docx")
+
+    def test_missing_and_extensionless_names_are_handled(self):
+        assert filename_ref(None) == "f:none"
+        assert filename_ref("") == "f:none"
+        assert filename_ref("resume").startswith("f:ext=none")
+
+    def test_separators_and_injection_characters_are_stripped(self):
+        # A crafted extension must not smuggle log-format or newline characters.
+        out = filename_ref("a.p df\nuser=admin")
+        assert "\n" not in out and " " not in out
+
+
+# ── widened static guard: sensitive log FIELDS must carry a sanctioned ref ───
+#
+# The pre-existing delta guard keyed on the literal token ``user_id``, so it
+# only caught drift that happened to reuse that variable name — a site logging
+# ``user=%s`` with an argument called ``email``, ``uid`` or ``ctx.user`` passed
+# straight through. This rule is name-independent: it reads the log FORMAT
+# string, finds which %-placeholder each sensitive field label owns, and
+# requires the argument in that position to be a call to a sanctioned
+# log_privacy helper. What the variable is called is irrelevant.
+#
+# ``internal_id`` is deliberately NOT sensitive: log_privacy documents that
+# opaque internal ``rico_users.id`` values are safe to log directly. The
+# ambiguous ``user_id`` label on those internal-id sites was renamed to
+# ``internal_id`` so the distinction is visible at the log line rather than
+# inferred from a variable name.
+
+_SWEPT_MODULES = (
+    "src/api/routers/files.py",
+    "src/services/email_notifications.py",
+    "src/services/subscription_gating.py",
+    "src/services/application_board.py",
+    "src/services/jobs_service.py",
+    "src/services/apply_service.py",
+    "src/api/auth.py",
+)
+
+# Field labels whose logged value is an external identifier or user-supplied
+# text. Extend this tuple, not the call sites, when a new one appears.
+_SENSITIVE_LABELS = frozenset({
+    "user", "user_id", "public_user_id", "uid", "account",
+    "email", "to", "recipient", "phone", "telegram_chat_id", "telegram_id",
+    "filename", "original_filename", "file_name",
+})
+
+_APPROVED_REFS = frozenset({
+    "user_ref", "token_ref", "operation_ref", "filename_ref", "safe_fields",
+})
+
+_LOG_METHODS = frozenset({
+    "debug", "info", "warning", "warn", "error", "exception", "critical",
+})
+
+# One %-conversion. ``%%`` is an escape and consumes no argument.
+_CONVERSION = re.compile(r"%(?:%|[-#0 +]*[\d.*]*[hlL]?[a-zA-Z])")
+_TRAILING_LABEL = re.compile(r"(\w+)=$")
+
+
+def _sensitive_positions(fmt: str) -> dict[int, str]:
+    """Map argument index -> sensitive field label for one format string."""
+    positions: dict[int, str] = {}
+    arg_index = 0
+    for m in _CONVERSION.finditer(fmt):
+        if m.group() == "%%":
+            continue
+        label_match = _TRAILING_LABEL.search(fmt[: m.start()])
+        if label_match and label_match.group(1).lower() in _SENSITIVE_LABELS:
+            positions[arg_index] = label_match.group(1)
+        arg_index += 1
+    return positions
+
+
+def _is_sanctioned(node: ast.AST) -> bool:
+    """True if the argument expression is a sanctioned log_privacy call."""
+    if isinstance(node, ast.Call):
+        fn = node.func
+        name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", None)
+        return name in _APPROVED_REFS
+    # A literal is inherently safe (e.g. a fixed "unknown" sentinel).
+    return isinstance(node, ast.Constant)
+
+
+def _scan_module(path: pathlib.Path) -> list[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if not (isinstance(fn, ast.Attribute) and fn.attr in _LOG_METHODS):
+            continue
+        if not node.args:
+            continue
+        fmt_node = node.args[0]
+
+        # An f-string in a log call hides its interpolations from this check
+        # (and from %-style lazy formatting) — reject it outright when it
+        # mentions a sensitive label.
+        if isinstance(fmt_node, ast.JoinedStr):
+            rendered = "".join(
+                p.value for p in fmt_node.values if isinstance(p, ast.Constant)
+                and isinstance(p.value, str)
+            )
+            if any(f"{lbl}=" in rendered for lbl in _SENSITIVE_LABELS):
+                violations.append(
+                    f"{path}:{node.lineno}: f-string log format with a sensitive "
+                    f"field — use %-style formatting with a log_privacy ref"
+                )
+            continue
+
+        if not (isinstance(fmt_node, ast.Constant) and isinstance(fmt_node.value, str)):
+            continue
+
+        supplied = node.args[1:]
+        for arg_index, label in _sensitive_positions(fmt_node.value).items():
+            if arg_index >= len(supplied):
+                continue  # arity mismatch is a different bug, not a privacy one
+            if not _is_sanctioned(supplied[arg_index]):
+                violations.append(
+                    f"{path}:{node.lineno}: field '{label}=' logs a raw value; "
+                    f"wrap it in one of {sorted(_APPROVED_REFS)}"
+                )
+    return violations
+
+
+class TestSensitiveLogFieldsUseSanctionedRefs:
+    @pytest.mark.parametrize("module", _SWEPT_MODULES)
+    def test_module_has_no_raw_sensitive_log_field(self, module):
+        violations = _scan_module(pathlib.Path(module))
+        assert violations == [], "raw identifier in a log field:\n" + "\n".join(violations)
+
+    def test_rule_does_not_depend_on_the_variable_being_named_user_id(self):
+        """The old guard keyed on the literal token ``user_id`` and missed this."""
+        src = 'logger.info("x user=%s", whatever_it_is_called)\n'
+        tree = ast.parse(src)
+        call = tree.body[0].value
+        assert _sensitive_positions(call.args[0].value) == {0: "user"}
+        assert not _is_sanctioned(call.args[1])
+
+    def test_rule_accepts_a_sanctioned_ref_in_that_position(self):
+        tree = ast.parse('logger.info("x user=%s", user_ref(anything))\n')
+        assert _is_sanctioned(tree.body[0].value.args[1])
+
+    def test_escaped_percent_does_not_shift_argument_positions(self):
+        # "100%% done user=%s" must map user= to arg 0, not arg 1.
+        assert _sensitive_positions("100%% done user=%s") == {0: "user"}
+
+    def test_internal_id_label_is_not_treated_as_sensitive(self):
+        assert _sensitive_positions("failed internal_id=%s") == {}

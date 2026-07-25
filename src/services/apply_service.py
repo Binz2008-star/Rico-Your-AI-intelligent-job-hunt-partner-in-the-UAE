@@ -23,6 +23,8 @@ from typing import Any, Dict, Optional
 
 from src.rico_env import env_bool
 
+from src.log_privacy import user_ref
+
 logger = logging.getLogger(__name__)
 
 
@@ -274,7 +276,7 @@ def apply_to_job(
         }
 
     if not _auto_apply_globally_enabled():
-        logger.info("auto_apply_globally_disabled user=%s", user_id or "anonymous")
+        logger.info("auto_apply_globally_disabled user=%s", user_ref(user_id or "anonymous"))
         return _manual_required_response(job)
 
     if user_id:

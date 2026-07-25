@@ -29,6 +29,8 @@ from dataclasses import dataclass
 import logging
 from typing import Any
 
+from src.log_privacy import user_ref
+
 logger = logging.getLogger(__name__)
 
 # The only two user-visible chat states this module owns.
@@ -111,7 +113,7 @@ def persist_job_action(user_id: str, job: dict[str, Any], status: str, *, save_k
     try:
         existing = applications_repo.find_by_job_id(save_key, user_id=user_id)
     except Exception:
-        logger.warning("application_board: existing lookup failed user=%s", user_id, exc_info=True)
+        logger.warning("application_board: existing lookup failed user=%s", user_ref(user_id), exc_info=True)
         existing = None
     existing_status = str((existing or {}).get("status") or "") if existing else ""
 
@@ -158,17 +160,17 @@ def persist_job_action(user_id: str, job: dict[str, Any], status: str, *, save_k
                 detail = getattr(exc, "detail", None)
                 qmsg = detail.get("message") if isinstance(detail, dict) else ""
                 return BoardResult(ok=False, error="quota_exceeded", quota_message=str(qmsg or ""))
-            logger.warning("application_board: persist HTTPException user=%s", user_id, exc_info=True)
+            logger.warning("application_board: persist HTTPException user=%s", user_ref(user_id), exc_info=True)
             return BoardResult(ok=False, error="persist_failed")
         except Exception:
-            logger.warning("application_board: persist failed user=%s", user_id, exc_info=True)
+            logger.warning("application_board: persist failed user=%s", user_ref(user_id), exc_info=True)
             return BoardResult(ok=False, error="persist_failed")
 
     # 3. Canonical read-back — the ONLY thing that authorizes a success claim.
     try:
         row = applications_repo.find_by_job_id(save_key, user_id=user_id)
     except Exception:
-        logger.warning("application_board: read-back failed user=%s", user_id, exc_info=True)
+        logger.warning("application_board: read-back failed user=%s", user_ref(user_id), exc_info=True)
         row = None
     if not row:
         return BoardResult(ok=False, created=created, error="readback_failed")

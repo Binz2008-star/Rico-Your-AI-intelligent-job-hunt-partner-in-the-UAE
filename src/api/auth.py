@@ -231,7 +231,10 @@ def verify_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
     _is_prod = _is_production()
     _fallback_allowed = os.getenv("ALLOW_ENV_AUTH_FALLBACK", "").lower() in ("1", "true", "yes")
     if _db_error and _is_prod and not _fallback_allowed:
-        logger.error("db_auth_error in production — env fallback disabled; rejecting login for %r", email)
+        logger.error(
+            "db_auth_error in production — env fallback disabled; rejecting login user=%s",
+            user_ref(email),
+        )
         return None
 
     # 2. Env-var fallback (single admin; backward-compatible with existing deployments)
@@ -331,11 +334,17 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
             )
             if merged:
                 clear_guest_capability(response)
-                logger.info("public_profile_merged public_user_id=%s", req.public_user_id_to_merge)
+                logger.info("public_profile_merged public_user_id=%s", user_ref(req.public_user_id_to_merge))
             else:
-                logger.warning("public_profile_merge_skipped public_user_id=%s", req.public_user_id_to_merge)
+                logger.warning(
+                    "public_profile_merge_skipped public_user_id=%s",
+                    user_ref(req.public_user_id_to_merge),
+                )
         except Exception:
-            logger.exception("public_profile_merge_failed public_user_id=%s", req.public_user_id_to_merge)
+            logger.exception(
+                "public_profile_merge_failed public_user_id=%s",
+                user_ref(req.public_user_id_to_merge),
+            )
 
     logger.info("login_success user=%s role=%s", user_ref(user_info["email"]), user_info["role"])
     return LoginResponse(message="Logged in", email=user_info["email"])
@@ -553,7 +562,7 @@ def register(
         background_tasks.add_task(send_verification_email, user.email, verification_token)
     except Exception:
         logger.exception(
-            "verification_email_schedule_failed user_id=%s",
+            "verification_email_schedule_failed internal_id=%s",
             getattr(user, "id", "unknown"),
         )
 
@@ -571,11 +580,17 @@ def register(
             )
             if merged:
                 clear_guest_capability(response)
-                logger.info("public_profile_merged public_user_id=%s", req.public_user_id_to_merge)
+                logger.info("public_profile_merged public_user_id=%s", user_ref(req.public_user_id_to_merge))
             else:
-                logger.warning("public_profile_merge_skipped public_user_id=%s", req.public_user_id_to_merge)
+                logger.warning(
+                    "public_profile_merge_skipped public_user_id=%s",
+                    user_ref(req.public_user_id_to_merge),
+                )
         except Exception:
-            logger.exception("public_profile_merge_failed public_user_id=%s", req.public_user_id_to_merge)
+            logger.exception(
+                "public_profile_merge_failed public_user_id=%s",
+                user_ref(req.public_user_id_to_merge),
+            )
 
     # Signup attribution (issue #922): sanitize client-provided UTM/referrer data,
     # persist it, and surface the summary in the admin signup notification.
@@ -595,7 +610,7 @@ def register(
             set_signup_attribution(user.id, signup_source_summary, attribution)
     except Exception:
         logger.exception(
-            "signup_attribution_persist_failed user_id=%s",
+            "signup_attribution_persist_failed internal_id=%s",
             getattr(user, "id", "unknown"),
         )
 
@@ -668,7 +683,7 @@ def register(
         )
     except Exception:
         logger.exception(
-            "signup_notification_schedule_failed user_id=%s",
+            "signup_notification_schedule_failed internal_id=%s",
             getattr(user, "id", "unknown"),
         )
 

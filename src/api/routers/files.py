@@ -31,6 +31,8 @@ from src.services.subscription_gating import (
 )
 from src.subscription_plans import resolve_effective_user_plan
 
+from src.log_privacy import filename_ref, safe_exc, user_ref
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/user/files", tags=["files"])
@@ -129,7 +131,7 @@ def build_profile_cv_record(user_id: str) -> Optional[dict[str, Any]]:
             "updated_at": cv_extracted_at,
         }
     except Exception:
-        logger.debug("profile_cv_fallback_failed user=%s", user_id)
+        logger.debug("profile_cv_fallback_failed user=%s", user_ref(user_id))
         return None
 
 
@@ -223,7 +225,8 @@ async def upload_file(
     existing = _db.find_user_document_by_hash(user_id, doc_type, content_hash)
     if existing:
         logger.info(
-            "file_upload_duplicate user=%s doc_type=%s id=%s", user_id, doc_type, existing["id"]
+            "file_upload_duplicate user=%s doc_type=%s id=%s",
+            user_ref(user_id), doc_type, existing["id"],
         )
         return {
             "ok": True,
@@ -253,7 +256,8 @@ async def upload_file(
 
     logger.info(
         "file_uploaded user=%s filename=%s doc_type=%s id=%s duplicate=%s",
-        user_id, result["filename"], doc_type, result["id"], is_duplicate,
+        user_ref(user_id), filename_ref(result["filename"]), doc_type,
+        result["id"], is_duplicate,
     )
     # `filename` is always the canonical stored filename — the just-uploaded
     # name on a real insert, or the EXISTING row's name when this request lost
@@ -285,7 +289,7 @@ def delete_file(file_id: str, request: Request) -> dict[str, Any]:
     # data at all — a privacy defect (#1083).
     if file_id == "profile-cv":
         _db.clear_cv_grounding(user_id)
-        logger.info("file_deleted_profile_cv user=%s cleared_cv_grounding=True", user_id)
+        logger.info("file_deleted_profile_cv user=%s cleared_cv_grounding=True", user_ref(user_id))
         return {"ok": True, "cleared_cv_grounding": True}
 
     # Capture the document's type/primary flag before deletion so we can also
@@ -303,7 +307,9 @@ def delete_file(file_id: str, request: Request) -> dict[str, Any]:
     if target and target.get("doc_type") == "cv" and target.get("is_primary"):
         cleared = _db.clear_cv_grounding(user_id)
 
-    logger.info("file_deleted user=%s id=%s cleared_cv_grounding=%s", user_id, file_id, cleared)
+    logger.info(
+        "file_deleted user=%s id=%s cleared_cv_grounding=%s", user_ref(user_id), file_id, cleared
+    )
     return {"ok": True, "cleared_cv_grounding": cleared}
 
 
@@ -350,7 +356,7 @@ def set_primary(file_id: str, request: Request) -> dict[str, Any]:
     if not updated:
         raise HTTPException(status_code=404, detail="File not found or not a CV")
 
-    logger.info("file_set_primary user=%s id=%s", user_id, file_id)
+    logger.info("file_set_primary user=%s id=%s", user_ref(user_id), file_id)
 
     # Re-sync profile fields from the newly activated CV document.
     # Without this, switching active CVs leaves years_experience / skills / current_role
@@ -368,8 +374,13 @@ def set_primary(file_id: str, request: Request) -> dict[str, Any]:
                 resync["skills"] = list(skills)
             if resync:
                 upsert_profile(user_id, resync)
-                logger.info("file_set_primary_profile_resynced user=%s fields=%s", user_id, list(resync.keys()))
+                logger.info(
+                    "file_set_primary_profile_resynced user=%s fields=%s",
+                    user_ref(user_id), sorted(resync.keys()),
+                )
     except Exception as _exc:
-        logger.warning("file_set_primary_resync_failed user=%s error=%s", user_id, str(_exc))
+        logger.warning(
+            "file_set_primary_resync_failed user=%s error=%s", user_ref(user_id), safe_exc(_exc)
+        )
 
     return {"ok": True}
