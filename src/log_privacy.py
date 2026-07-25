@@ -60,6 +60,11 @@ _LONG_SECRET_RE = re.compile(r"\b[A-Za-z0-9_-]{24,}\b")
 
 _REDACTED = "[redacted]"
 
+# A real file extension: a dot plus 1-8 lowercase alphanumerics. Anything else
+# (spaces, newlines, unicode, over-long tails) is not narrowed — it is replaced
+# outright, so no caller-controlled text survives into a log field.
+_SAFE_EXT_RE = re.compile(r"\.[a-z0-9]{1,8}")
+
 
 def _fingerprint_key() -> bytes:
     # Server-keyed so fingerprints are not offline-reversible dictionaries.
@@ -99,6 +104,33 @@ def operation_ref(operation_id: Any) -> str:
     if not operation_id:
         return "op:none"
     return _hmac_ref(str(operation_id), "op")
+
+
+def filename_ref(filename: Any) -> str:
+    """Log-safe reference for a user-supplied filename.
+
+    An uploaded CV is routinely named after its owner ("Ahmed Al Mansouri CV
+    2026.pdf"), so the stem is contact-grade PII in its own right. Truncation
+    does not solve that — a prefix still names the person — so the stem is
+    never emitted. Only the extension and the original length survive.
+
+    The extension is validated against an allowed SHAPE, not stripped of
+    characters we happen to dislike: sanitise-then-truncate still lets an
+    attacker-chosen filename place arbitrary text into the field. Anything
+    that is not a short alphanumeric suffix collapses to a fixed sentinel, so
+    no caller-controlled substring can reach the log line.
+    """
+    if not filename:
+        return "f:none"
+    name = str(filename)
+    suffix = os.path.splitext(name)[1].lower()
+    if not suffix:
+        ext = "none"
+    elif _SAFE_EXT_RE.fullmatch(suffix):
+        ext = suffix
+    else:
+        ext = "other"
+    return f"f:ext={ext},len={len(name)}"
 
 
 def safe_fields(mapping: Mapping[str, Any] | None) -> str:

@@ -18,6 +18,8 @@ from src.repositories import jobs_repo
 from src.repositories.profile_repo import get_profile as get_user_profile
 from src.services.job_match_explanation import build_match_explanation
 
+from src.log_privacy import user_ref
+
 logger = logging.getLogger(__name__)
 _PERSONALIZED_DB_FETCH_FLOOR = 1000
 
@@ -169,7 +171,7 @@ def _load_profile_for_jobs(user_id: Optional[str]) -> Any | None:
     try:
         return get_user_profile(user_id)
     except Exception:
-        logger.exception("job match explanation profile lookup failed user_id=%s", user_id)
+        logger.exception("job match explanation profile lookup failed user_id=%s", user_ref(user_id))
         return None
 
 
@@ -319,7 +321,7 @@ def block_company(job: Dict[str, Any], user_id: Optional[str] = None) -> str:
         )
 
     _persist_blocked_company(user_id, company)
-    logger.info("block_company: user=%s blocked company=%r", user_id, company)
+    logger.info("block_company: user=%s blocked company=%r", user_ref(user_id), company)
 
     return company
 

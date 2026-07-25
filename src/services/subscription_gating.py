@@ -10,6 +10,8 @@ from src.schemas.chat import RicoSessionContext
 from src.schemas.subscription import SubscriptionTier
 from src.subscription_plans import resolve_effective_user_plan
 
+from src.log_privacy import user_ref
+
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 
@@ -121,7 +123,7 @@ def _db_user_uuid(user_id: str) -> str | None:
         bundle = db.get_user_bundle(user_id)
         return str(bundle["id"]) if bundle else None
     except Exception:
-        logger.debug("subscription_gating: db user lookup failed user=%s", user_id, exc_info=True)
+        logger.debug("subscription_gating: db user lookup failed user=%s", user_ref(user_id), exc_info=True)
         return None
 
 
@@ -154,7 +156,7 @@ def count_monthly_ai_messages(user_id: str, since: datetime) -> int:
             finally:
                 conn.close()
         except Exception:
-            logger.debug("subscription_gating: DB chat usage count failed user=%s", user_id, exc_info=True)
+            logger.debug("subscription_gating: DB chat usage count failed user=%s", user_ref(user_id), exc_info=True)
 
     try:
         from src.rico_memory import RicoMemoryStore
@@ -176,7 +178,7 @@ def count_monthly_ai_messages(user_id: str, since: datetime) -> int:
                 count += 1
         return count
     except Exception:
-        logger.debug("subscription_gating: memory chat usage count failed user=%s", user_id, exc_info=True)
+        logger.debug("subscription_gating: memory chat usage count failed user=%s", user_ref(user_id), exc_info=True)
         return 0
 
 
@@ -205,7 +207,7 @@ def count_saved_jobs(user_id: str) -> int:
             1 for app in apps if isinstance(app, dict) and app.get("status") == "saved"
         )
     except Exception:
-        logger.debug("subscription_gating: saved jobs count failed user=%s", user_id, exc_info=True)
+        logger.debug("subscription_gating: saved jobs count failed user=%s", user_ref(user_id), exc_info=True)
 
     # Fail open (#1096): when both DB and fallback are unavailable, return 0
     # so the quota check allows the request rather than blocking the user.
@@ -238,7 +240,7 @@ def count_profile_optimizations(user_id: str, since: datetime) -> int:
         finally:
             conn.close()
     except Exception:
-        logger.debug("subscription_gating: profile optimization count failed user=%s", user_id, exc_info=True)
+        logger.debug("subscription_gating: profile optimization count failed user=%s", user_ref(user_id), exc_info=True)
         return 0
 
 
@@ -314,7 +316,7 @@ def enforce_saved_job_allowed(user_id: str) -> None:
     try:
         check = _build_gate_check(user_id, "saved_jobs_limit", count_saved_jobs(user_id))
     except Exception:
-        logger.debug("subscription_gating: saved job gate failed open user=%s", user_id, exc_info=True)
+        logger.debug("subscription_gating: saved job gate failed open user=%s", user_ref(user_id), exc_info=True)
         return
     if not check.allowed:
         raise HTTPException(status_code=402, detail=check.to_response())
@@ -359,7 +361,7 @@ def record_profile_optimization_usage(user_id: str) -> None:
             metadata={"feature": "profile_optimization_limit"},
         )
     except Exception:
-        logger.debug("subscription_gating: profile optimization usage record failed user=%s", user_id, exc_info=True)
+        logger.debug("subscription_gating: profile optimization usage record failed user=%s", user_ref(user_id), exc_info=True)
 
 
 # ── Document storage quota ─────────────────────────────────────────────────────
@@ -388,7 +390,7 @@ def count_user_documents(user_id: str, doc_type: str) -> int:
     except Exception:
         logger.debug(
             "subscription_gating: document count failed user=%s doc_type=%s",
-            user_id,
+            user_ref(user_id),
             doc_type,
             exc_info=True,
         )
@@ -423,7 +425,7 @@ def enforce_document_quota(user_id: str, doc_type: str) -> None:
     try:
         check = check_document_quota(user_id, doc_type)
     except Exception:
-        logger.debug("subscription_gating: document quota gate failed open user=%s", user_id, exc_info=True)
+        logger.debug("subscription_gating: document quota gate failed open user=%s", user_ref(user_id), exc_info=True)
         return
     if check.allowed:
         return
