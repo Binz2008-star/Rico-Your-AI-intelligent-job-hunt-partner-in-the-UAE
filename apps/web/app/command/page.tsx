@@ -25,8 +25,8 @@ import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
-import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
-import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, DEFAULT_CHAT_SESSION_ID, executePermissionAction, fetchChatHistory, fetchChatSessions, fetchMe, getCvQuotaError, logout, mintChatSessionId, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
+import type { ChatApiResponse, JobMatch, NextAction, PendingCvUploadResponse, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
+import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, DEFAULT_CHAT_SESSION_ID, executePermissionAction, fetchChatHistory, fetchChatSessions, fetchMe, fetchPendingCvUpload, getCvQuotaError, logout, mintChatSessionId, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
@@ -413,6 +413,88 @@ function CvReadyOnboardingPanel({
                             </button>
                         );
                     })}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/** Substitute a single `{file}` placeholder. Kept trivial on purpose — these
+ *  strings are user-facing copy, not a template language. */
+function fillTemplate(text: string, file: string): string {
+    return text.replace("{file}", file);
+}
+
+/** Localized absolute expiry, or null when the server sent nothing usable.
+ *  Absolute rather than relative ("in 2 hours") because the user is being asked
+ *  to plan around it, and a relative string goes stale on a page left open. */
+function formatExpiry(iso: string | null | undefined, lang: "en" | "ar"): string | null {
+    if (!iso) return null;
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) return null;
+    try {
+        return at.toLocaleString(lang === "ar" ? "ar-AE" : "en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            day: "numeric",
+            month: "short",
+        });
+    } catch {
+        return at.toISOString();
+    }
+}
+
+/**
+ * Banner for a CV that is uploaded but NOT saved.
+ *
+ * It replaces the "CV Profile Ready" panel for this state. That panel told every
+ * `?cv=ready` visitor their profile had been built, whether or not any artifact
+ * existed — which is how a user could read "profile ready" on one page and
+ * "No files yet" on another. This one only renders when the server returned a
+ * real pending artifact, and it says the two things that are actually true: the
+ * file was read, and nothing is stored until the user confirms.
+ *
+ * It carries no action chips. Chips like "find jobs from my CV" presume a saved
+ * CV; offering them here would invite the user to act on a profile that does not
+ * exist yet. They return on the confirmed message once confirm succeeds.
+ */
+function CvPendingReviewPanel({ filename, expiresAt }: { filename: string; expiresAt?: string | null }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+    const expiry = formatExpiry(expiresAt, language);
+    return (
+        <div className="pb-4 animate-in fade-in motion-reduce:animate-none">
+            <div className="relative overflow-hidden rounded-2xl border border-border-subtle/70 bg-surface-elevated/60 p-5 backdrop-blur-sm sm:p-6">
+                <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-gold/[0.08] blur-2xl" aria-hidden="true" />
+                <div className="relative flex items-start gap-3">
+                    <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold/20 bg-gold/10 text-[15px] font-black text-gold"
+                        aria-hidden="true"
+                    >!</div>
+                    <div className="min-w-0">
+                        <p className="text-[14px] font-semibold leading-snug text-rico-text">
+                            {t("cmdCvPendingTitle")}
+                        </p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-text-muted">
+                            {fillTemplate(t("cmdCvPendingSubtext"), filename)}
+                        </p>
+                    </div>
+                </div>
+                <div className="relative mt-4 space-y-1.5">
+                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold animate-pulse" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvPendingReviewLabel")}</span>
+                        <span className="text-[10px] font-medium text-gold">{t("cmdCvPendingNotSavedBadge")}</span>
+                    </div>
+                    {/* Retention is only defensible if the person whose data it is
+                        can see how long it lasts. */}
+                    {expiry && (
+                        <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold/60" aria-hidden="true" />
+                            <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvPendingExpiryLabel")}</span>
+                            <span className="text-[10px] font-medium tabular-nums text-gold/80">{expiry}</span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -851,6 +933,11 @@ export default function CommandPage() {
     // SSR-safe: always false/null on server and first client render.
     // Populated by useEffect after hydration so server and client initial HTML match.
     const [cvReady, setCvReady] = useState(false);
+    // Server's answer about a pending (uploaded, unconfirmed) CV. null = not
+    // asked yet / still in flight, which is deliberately NOT rendered as an
+    // absence: nothing about a CV is claimed on this surface until the server
+    // has said something.
+    const [pendingCv, setPendingCv] = useState<PendingCvUploadResponse | null>(null);
     const [prompt, setPrompt] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
@@ -965,6 +1052,12 @@ export default function CommandPage() {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const promptSentRef = useRef(false);
+    // One request per mount, and — separately — one appended card per artifact.
+    // The keys are real (`upload_id`) or the state name for the states that have
+    // no artifact, so a re-render, a language switch, or a StrictMode double
+    // effect can never stack two identical cards for the same upload.
+    const pendingCvRequestedRef = useRef(false);
+    const pendingCvShownRef = useRef<Set<string>>(new Set());
     const sessionIdRef = useRef<string | null>(null);
     const welcomeMessageRef = useRef("");
     // Synchronous send guard — prevents double-send from rapid Enter taps.
@@ -1712,6 +1805,99 @@ export default function CommandPage() {
         return () => window.clearTimeout(timeoutId);
     }, [chatAudience, historyState, cvReady, prompt, sendMessage, t, language, userName]);
 
+    // ── Pending CV review (?cv=ready) ────────────────────────────────────────
+    // The Vault uploads on /upload and redirects here. The confirm card is a chat
+    // message, so an upload made outside this page left nobody holding the
+    // artifact id: the CV sat server-side for its whole TTL, was never confirmed,
+    // and was purged. This asks the server what is genuinely pending and rebuilds
+    // that card from the answer — so the surface can only claim a CV the server
+    // just handed it.
+    useEffect(() => {
+        if (!cvReady) return;
+        // Guests are never issued an artifact, so there is nothing to ask about.
+        if (chatAudience !== "authenticated") return;
+        if (pendingCvRequestedRef.current) return;
+        pendingCvRequestedRef.current = true;
+
+        let cancelled = false;
+        void (async () => {
+            const res = await fetchPendingCvUpload();
+            if (cancelled) return;
+            setPendingCv(res);
+
+            // Dedupe by the artifact's own id — not by a render count — so the
+            // same upload can never produce two confirm cards.
+            const key = res.state === "pending" ? `upload:${res.upload_id ?? "unknown"}` : `state:${res.state}`;
+            if (pendingCvShownRef.current.has(key)) return;
+            pendingCvShownRef.current.add(key);
+
+            if (res.state === "pending" && res.preview_available && res.preview) {
+                // Deliberately the SAME message shape the in-chat upload builds,
+                // so one card and one confirm path serve both entry points.
+                setMessages((prev) => [...prev, {
+                    id: nextId(),
+                    role: "rico",
+                    text: "",
+                    type: "profile_preview",
+                    preview: res.preview!,
+                    filename: res.filename,
+                    docType: res.doc_type,
+                    uploadId: res.upload_id,
+                }]);
+                return;
+            }
+
+            // Every remaining state that has something true to say gets its own
+            // sentence. `absent` says nothing at all and falls through to the
+            // ordinary welcome — the one state where claiming a CV would be a
+            // lie. `unavailable` never suggests the upload is gone.
+            const copyKey: TranslationKey | null =
+                res.state === "pending" ? "cmdCvPendingNoPreview"
+                    : res.state === "expired" ? "cmdCvPendingExpired"
+                        : res.state === "unavailable" ? "cmdCvPendingUnavailable"
+                            : null;
+            if (!copyKey) return;
+            setMessages((prev) => [...prev, {
+                id: nextId(),
+                role: "rico",
+                text: fillTemplate(t(copyKey), res.filename ?? ""),
+            }]);
+        })();
+        return () => { cancelled = true; };
+    }, [cvReady, chatAudience, t]);
+
+    // What the ?cv=ready surface is allowed to claim, and nothing more.
+    //  * "checking" claims nothing — the banner must never render before the
+    //    server has confirmed a retrievable artifact exists.
+    //  * "pending" — a real unconfirmed upload: review-required banner + card.
+    //  * "saved" — the CV is in My Files, so the original ready panel is true.
+    //  * "none" — expired, absent, unreadable, or a guest: the ordinary welcome.
+    const cvPanel: "checking" | "pending" | "saved" | "none" =
+        !cvReady || chatAudience === "public"
+            ? "none"
+            : !pendingCv
+                ? "checking"
+                : pendingCv.state === "pending" && pendingCv.preview_available && pendingCv.preview
+                    ? "pending"
+                    : pendingCv.state === "already_saved"
+                        ? "saved"
+                        : "none";
+
+    /** Drop `?cv=ready` from the URL and stand the surface down. Called only
+     *  after a confirm has actually succeeded — the param is what carries the
+     *  pending review across a reload, so clearing it any earlier would strand
+     *  the artifact exactly as it was stranded before. */
+    const clearCvReadyParam = useCallback(() => {
+        setCvReady(false);
+        setPendingCv(null);
+        if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") return;
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has("cv")) return;
+        params.delete("cv");
+        const search = params.toString();
+        window.history.replaceState(null, "", window.location.pathname + (search ? `?${search}` : "") + window.location.hash);
+    }, []);
+
     // Re-translate the welcome message when language changes while chat is still at welcome state
     useEffect(() => {
         setMessages((prev) => {
@@ -1876,6 +2062,14 @@ export default function CommandPage() {
                 { action: "view_applications", label: tEff("cmdViewApplications") ?? "Track my applications", message: "show my applications" },
             ] : [];
             setMessages((prev) => prev.map(m => m.id === messageId ? { ...m, type: "profile_confirmed", text: confirmText, options: confirmOptions.length > 0 ? confirmOptions : m.options } : m));
+            // The CV is saved, so `?cv=ready` has done its job. It is cleared HERE
+            // and nowhere earlier: until confirm succeeds the param must survive a
+            // reload, or a refreshed page would silently drop the pending review
+            // and the artifact would expire unconfirmed — the original defect.
+            clearCvReadyParam();
+            // My Files and the profile summary both changed: a document now
+            // exists that did not a moment ago.
+            bustSidebarCache();
         } catch (err) {
             const text = err instanceof Error ? `${t("cmdCvProfileError")}: ${err.message}` : t("cmdCvProfileError");
             setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: text }]);
@@ -2347,8 +2541,21 @@ export default function CommandPage() {
                             </p>
                         )}
 
-                        {/* CV-ready onboarding panel — Pulse-style glass card with action chips */}
-                        {initialContentReady && cvReady && messages.length === 0 && chatAudience !== "checking" && !thinking && (
+                        {/* Uploaded but NOT saved — review required. Its ONLY
+                        source is the pending-upload query: no query parameter,
+                        no local flag and no stored value can draw it, so it
+                        cannot outlive the artifact it describes. */}
+                        {cvPanel === "pending" && pendingCv && (
+                            <CvPendingReviewPanel
+                                filename={pendingCv.filename ?? ""}
+                                expiresAt={pendingCv.expires_at}
+                            />
+                        )}
+
+                        {/* CV-ready onboarding panel — Pulse-style glass card with
+                        action chips. Its copy claims a built profile, so it is
+                        gated on the CV actually being saved. */}
+                        {initialContentReady && cvPanel === "saved" && messages.length === 0 && !thinking && (
                             <CvReadyOnboardingPanel
                                 onAction={(prompt, label) => sendMessage(prompt, label)}
                                 disabled={thinking}
@@ -2357,7 +2564,7 @@ export default function CommandPage() {
 
                         {/* Welcome hero + quick start chips — PR 4b: Atelier for
                         authenticated, original public surface unchanged. */}
-                        {initialContentReady && messages.length === 0 && !thinking && !cvReady && (
+                        {initialContentReady && messages.length === 0 && !thinking && cvPanel === "none" && (
                             <CommandEmptyState
                                 authenticated={chatAudience === "authenticated"}
                                 variant="hero"
@@ -2376,7 +2583,7 @@ export default function CommandPage() {
                             />
                         )}
                         {/* Chips only (no hero) when there's already one message */}
-                        {messages.length === 1 && !thinking && !cvReady && (
+                        {messages.length === 1 && !thinking && cvPanel === "none" && (
                             <CommandEmptyState
                                 authenticated={chatAudience === "authenticated"}
                                 variant="chips"

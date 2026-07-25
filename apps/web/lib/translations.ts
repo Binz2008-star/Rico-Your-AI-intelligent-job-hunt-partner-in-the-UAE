@@ -612,6 +612,11 @@ export const translations = {
     filesPageSubtitle: "Manage your CVs, cover letters, and career documents",
     filesEmpty: "No files yet",
     filesEmptyHint: "Upload your CV to get started",
+    // Shown INSTEAD of the two lines above while a CV is uploaded and awaiting
+    // confirmation: the list is genuinely empty, but telling that user to
+    // upload a CV is the instruction that contradicted the pending banner.
+    filesEmptyPendingReview: "Nothing saved here yet",
+    filesEmptyPendingReviewHint: "Your uploaded CV is waiting for your confirmation in the chat — confirm it and it will be saved here.",
     filesUploadNew: "Upload file",
     filesUploadCv: "New CV",
     filesUploadCoverLetter: "Cover Letter",
@@ -688,6 +693,17 @@ export const translations = {
     cmdCvReadyCard2Badge: "Active",
     cmdCvReadyCard3Label: "Next step",
     cmdCvReadyCard3Badge: "Select below",
+    // Pending review — an uploaded CV that has NOT been saved. Every string here
+    // has to survive the only test that matters: a user who reads it must not
+    // believe their file is stored, and must not believe it is lost either.
+    cmdCvPendingTitle: "CV under review — not saved yet",
+    cmdCvPendingSubtext: "I've read {file}. Nothing is saved until you confirm it below.",
+    cmdCvPendingNotSavedBadge: "Not saved yet",
+    cmdCvPendingReviewLabel: "Review required",
+    cmdCvPendingExpiryLabel: "Preview available until",
+    cmdCvPendingNoPreview: "Your CV **{file}** is uploaded and waiting for your review, but I couldn't rebuild its preview. Please upload it again so you can confirm and save it.",
+    cmdCvPendingExpired: "Your CV preview expired before it was confirmed, so **{file}** was not saved. Please upload it again and confirm it this time.",
+    cmdCvPendingUnavailable: "I couldn't load your pending CV review just now. Your upload has not been lost — please try again in a moment.",
     cmdWelcomeBack: "Welcome back. I'm ready to help with your job search.\n\nWhat would you like to do today?\n\n- Find matching jobs\n- Analyze my career trajectory\n- Review my applications\n- Update my profile",
     cmdWelcomePublic: "Hi, I'm Rico — your AI job-hunt partner in the UAE.\n\nUpload your CV and I'll find matching jobs, track your applications, and guide your next career move.",
     cmdCvConfirmPrompt: "Use this profile for job matching?",
@@ -1997,6 +2013,8 @@ export const translations = {
     filesPageSubtitle: "إدارة سيرك الذاتية وخطابات التقديم ووثائقك المهنية",
     filesEmpty: "لا توجد ملفات بعد",
     filesEmptyHint: "ارفع سيرتك الذاتية للبدء",
+    filesEmptyPendingReview: "لم يُحفظ شيء هنا بعد",
+    filesEmptyPendingReviewHint: "سيرتك المرفوعة بانتظار تأكيدك في المحادثة — أكّدها وستُحفظ هنا.",
     filesUploadNew: "رفع ملف",
     filesUploadCv: "سيرة ذاتية جديدة",
     filesUploadCoverLetter: "خطاب تقديم",
@@ -2073,6 +2091,14 @@ export const translations = {
     cmdCvReadyCard2Badge: "نشط",
     cmdCvReadyCard3Label: "الخطوة التالية",
     cmdCvReadyCard3Badge: "اختر أدناه",
+    cmdCvPendingTitle: "سيرتك قيد المراجعة — لم تُحفظ بعد",
+    cmdCvPendingSubtext: "قرأت {file}. لا يُحفظ أي شيء حتى تؤكّده بالأسفل.",
+    cmdCvPendingNotSavedBadge: "لم تُحفظ بعد",
+    cmdCvPendingReviewLabel: "بحاجة إلى مراجعتك",
+    cmdCvPendingExpiryLabel: "المعاينة متاحة حتى",
+    cmdCvPendingNoPreview: "سيرتك **{file}** مرفوعة وبانتظار مراجعتك، لكن تعذّر عليّ إعادة بناء معاينتها. أعد رفعها لتتمكن من تأكيدها وحفظها.",
+    cmdCvPendingExpired: "انتهت صلاحية معاينة سيرتك قبل تأكيدها، لذلك لم تُحفظ **{file}**. أعد رفعها وأكّدها هذه المرة.",
+    cmdCvPendingUnavailable: "تعذّر عليّ تحميل مراجعة سيرتك المعلّقة الآن. ملفك المرفوع لم يُفقد — أعد المحاولة بعد لحظات.",
     cmdWelcomeBack: "مرحبًا بعودتك. أنا جاهز لمساعدتك في البحث عن وظيفة.\n\nماذا تريد أن تفعل اليوم؟\n\n- ابحث عن وظائف مناسبة\n- حلّل مسيرتي المهنية\n- راجع طلباتي\n- حدّث ملفي الشخصي",
     cmdWelcomePublic: "مرحبًا، أنا ريكو — شريكك الذكي في البحث عن عمل في الإمارات.\n\nارفع سيرتك الذاتية وسأجد وظائف مناسبة وأتابع طلباتك وأرشدك لخطوتك المهنية القادمة.",
     cmdCvConfirmPrompt: "هل تريد استخدام هذا الملف لمطابقة الوظائف؟",
