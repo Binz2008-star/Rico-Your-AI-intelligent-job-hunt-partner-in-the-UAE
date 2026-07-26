@@ -14,6 +14,7 @@ from typing import Any, Dict
 from src.rico.intent import IntentRouter
 from src.schemas.chat import RicoSessionContext
 from src.models.principal import IdentityOwnershipAmbiguous, is_public_principal
+from src.log_privacy import safe_exc, user_ref
 
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -798,7 +799,12 @@ def _resolve_db_user_id(user_id: str):
     try:
         conn = db.connect()
     except Exception as exc:
-        logger.warning("chat_service: rico_users auto-provision failed user=%s: %s", user_id, exc)
+        # user_ref/safe_exc, not the raw values: the failing statement binds this
+        # user's email address, so a psycopg2 error string can re-emit it (#1076).
+        logger.warning(
+            "chat_service: rico_users auto-provision failed user=%s err=%s",
+            user_ref(user_id), safe_exc(exc),
+        )
         return None
     try:
         with conn.cursor() as cur:
@@ -815,7 +821,10 @@ def _resolve_db_user_id(user_id: str):
             new_row = cur.fetchone()
         conn.commit()
     except Exception as exc:
-        logger.warning("chat_service: rico_users auto-provision failed user=%s: %s", user_id, exc)
+        logger.warning(
+            "chat_service: rico_users auto-provision failed user=%s err=%s",
+            user_ref(user_id), safe_exc(exc),
+        )
         try:
             conn.rollback()
         except Exception:
