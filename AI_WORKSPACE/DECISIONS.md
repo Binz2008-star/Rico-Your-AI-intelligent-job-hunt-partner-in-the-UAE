@@ -89,6 +89,41 @@ one source of truth per domain is decided.
 
 ## Accepted decisions
 
+### DEC-20260727-001 — Cloud-primary + Docker warm-standby operating model
+
+Status: accepted
+Date: 2026-07-27
+Owner: Roben (owner directive, 2026-07-27) — recorded by Windsurf
+Related PR: #1413 (Draft, `infra/local-docker-production-readiness`)
+
+#### Context
+
+Rico's production deployment runs on Vercel (frontend), Render (backend), and Neon (PostgreSQL). A Docker/VPS standby path is being prepared as an emergency-readiness artifact so the platform can recover if any cloud provider becomes unavailable. The operating model must be unambiguous: the Docker path is additive, dormant, and cannot accidentally create active-active production writes.
+
+#### Decision
+
+Vercel, Render, and Neon remain Rico's active authoritative cloud path. Docker/VPS is an additive warm standby for continuity. Only one worker/scheduler authority may execute production side effects. Active-active production writes require a separate architecture review.
+
+Binding rules:
+
+1. The standby stack may run for health validation but must not receive normal production user traffic.
+2. The standby stack must use a staging/test database during routine validation — never production Neon.
+3. The RQ worker must remain disabled by default (Docker Compose profile gating).
+4. Scheduled jobs, outbound email, Telegram, auto-apply, and other side-effecting background features must remain disabled on standby.
+5. No automatic traffic failover, DNS change, or cutover is configured in this PR.
+6. The Docker CI workflow is additive, path-filtered, non-deploying, and does not become a required branch-protection check.
+7. Existing Vercel/Render deployment files, workflows, and configurations remain unchanged.
+
+#### Consequences
+
+- Positive: a documented, validated zero-hour recovery path exists without disrupting the active cloud path; rollback to Vercel/Render is always available; no active-active risk.
+- Negative/trade-off: the standby artifacts require periodic validation to remain viable; the frontend Docker image is larger (~500 MB) because `next.config.js` is not modified to add `output: 'standalone'`.
+
+#### Follow-up
+
+- [ ] Future activation requires explicit owner approval, VPS provisioning, secrets configuration, migration-state verification, smoke validation, and controlled traffic switch (see `docs/local-docker-production.md` §C)
+- [ ] Active-active production writes, if ever needed, require a separate architecture review and a new DECISIONS.md entry
+
 ### DEC-20260723-001 — CEO verdict: trust-first commercial strategy, UAE mid-career wedge, verified-career-actions north star
 
 Status: accepted
@@ -213,6 +248,7 @@ Execution rules attached to this decision: the research's chapters are NOT
 converted into tasks in bulk; work proceeds as one small PR at a time; the
 first execution track after work is allowed is **system stabilization** —
 not WhatsApp, not agents, not employers.
+
 ### DEC-20260721-002 — #1262 phase 6 closed: the Refine drawer stays a structured UI action (no slot-filling dialogue)
 
 Status: accepted
@@ -296,6 +332,7 @@ paths. Profile-optimization (monthly) and saved-job (absolute) quotas are
 untouched — Free copy keeps "/month" on the profile-optimization item.
 
 #### Consequences
+
 - Positive: daily return cadence; lower abandonment; small daily cap caps AI
   cost exposure; clear upgrade reason for heavy users; one unambiguous reset
   contract (fixed UTC day) that the countdown and copy both describe correctly.
@@ -305,6 +342,7 @@ untouched — Free copy keeps "/month" on the profile-optimization item.
   is not misread; a future rename to a clearer key is deferred as out of scope.
 
 #### Follow-up
+
 - [ ] (Optional) Frontend live countdown timer using `messages_reset_at`; today
       the countdown is rendered server-side in the over-quota message.
 
@@ -532,7 +570,7 @@ Related task: TASK-20260716-003 (#1083)
 
 #### Context
 
-#1083 found that "My Files" persists metadata rows, not uploaded bytes, and that
+# 1083 found that "My Files" persists metadata rows, not uploaded bytes, and that
 deletion left CV-derived data still grounding Rico (a privacy/trust defect). The
 issue required choosing one honest model **before** implementation: (1) real
 encrypted object storage with an owner-approved retention/threat model, or (2) a
@@ -563,6 +601,7 @@ ratification before they ship.
   language must stop implying raw "file storage" (owner-ratified follow-up).
 
 #### Follow-up (owner ratification required — NOT in this PR)
+
 - [ ] Reject or clearly mark cover-letter/"other" uploads whose bytes are
       discarded; stop charging storage quota for a metadata-only shell.
 - [ ] UI disclosure: state originals are not retained; disclose retained derived

@@ -147,6 +147,26 @@ Update the block for your lane. Never duplicate one.
 - Stop condition: stop and report on unexpected head movement, on any change requiring a sixth file, or on an instruction lacking full attribution
 - Next executable action: report the pushed head for independent review. **`ENGINEERING_ROADMAP.md` is excluded from this PR** and is a separate docs-only change: it still names `main` as `4ce678b`, which is stale, and any session trusting it alone will act on a false picture
 
+### L8 — Docker warm-standby readiness
+
+- Lane alias: `L8`
+- Branch: `infra/local-docker-production-readiness`
+- PR: `#1413` (Draft)
+- Base SHA: `1c13147f45365c10d518356a429f757c740f3a06`
+- Expected remote HEAD: `15588f5d` — fetched live at push time
+- Lease holder: Windsurf
+- Lease ownership: `HELD`
+- Current activity: `WRITING`
+- Write authorization: `AUTHORIZED` for this branch
+- Objective: additive Docker/VPS warm-standby readiness — production-grade Dockerfiles, production Compose, Caddy, Docker CI, standby documentation
+- Allowed scope: production Dockerfiles, production Compose, Caddy, Docker CI, standby documentation, minimal Next.js standalone configuration
+- Forbidden scope: `render.yaml`, `vercel.json`, current deployment workflows, production Neon, DNS, billing, product features, unrelated branches
+- Operating model: Vercel/Render/Neon remain cloud primary; Docker/VPS is additive warm standby. No active-active production writes. No deployment or cutover in this task
+- Tests: Docker CI workflow (`docker-ci.yml`) — compose config validation, image builds, health checks. No runtime pytest or vitest changes
+- Blocker: none
+- Stop condition: any required production, DNS, billing, database, or unrelated product mutation
+- Next executable action: complete validation and open one Draft PR — **done** (PR #1413 opened as draft)
+
 ### Lanes holding no lease
 
 - **L3 — routing.** `CLOSED`, merged as `e433c7d` in a **prior** cycle; its deploy was verified at that time. That is a historical record, not a current production claim — nothing in this pass re-verified the deployment.
@@ -171,7 +191,7 @@ Branch: `claude/md-best-practices-generator-auau3b` (final home of the
 CLAUDE.md refactor commit, reconciled onto the pre-existing PR #1346 rather
 than opened as a competing PR)
 Issue/PR: #1346 (tooling+refactor), plus reviewed-and-merged #1347, #1348,
-#1349, #1350 as part of the same session
+# 1349, #1350 as part of the same session
 
 #### Objective
 
@@ -409,7 +429,6 @@ comes from the DB, not stale token claims; store outage fails closed.
 - Rollback plan: revert the squash commit (behavior returns to stateless
   tokens); column 045 is additive and harmless to leave; dropping it is a
   separate owner-approved migration
-
 
 ### TASK-20260720-001 — hotfix #1225: agentic_ui option buttons as plain dict (stream TypeError) — PRODUCTION VERIFIED
 
