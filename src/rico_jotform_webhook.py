@@ -208,6 +208,25 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
     if resolution.action == "merge" and resolution.matched_user_id:
         user_id = resolution.matched_user_id
         mapped["user"]["external_user_id"] = resolution.matched_user_id
+        # The row being written is now the MATCHED account, not the submitter of
+        # this form. Leaving the form email in the identity payload asked the
+        # writer to stamp it onto that account — and a merge is frequently
+        # decided on phone or Telegram, so the form email may be a typo, a
+        # second address, or someone else's entirely. It is not evidence of who
+        # the matched account is.
+        #
+        # Dropped from the identity payload only. The rest of the submission
+        # (profile, settings, CV) still lands, and a future confirmation flow
+        # can offer the address as a change the account holder opts into.
+        # `RicoDB.upsert_user` refuses the overwrite as well; this keeps the
+        # webhook from asking for something the writer must refuse.
+        if mapped["user"].get("email") is not None:
+            logger.info(
+                "jotform_webhook: withheld form email from merged identity "
+                "submission=%s matched_user_id=%s",  # field name only, never the value
+                submission_id, resolution.matched_user_id,
+            )
+            mapped["user"]["email"] = None
 
     # ── ONE write transaction: claim the submission + its terminal write commit
     #    together, or all roll back together. Because the claim is rolled back on

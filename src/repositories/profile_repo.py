@@ -513,10 +513,28 @@ def upsert_profile(
 
             if db_user_id is None:
                 # Jotform / Telegram users: upsert by external_user_id
+                #
+                # `email` is account identity, so it is sent ONLY when the
+                # principal itself is that email — the same byte-exact ownership
+                # proof `RicoDB.upsert_user` enforces on its conflict branch.
+                # For a non-email principal (Telegram handle, internal id) the
+                # email in `updates` is request-derived: nothing has verified
+                # that this principal owns that mailbox, and promoting it here
+                # would make it the value password reset and account resolution
+                # subsequently key on. It stays out of the identity payload;
+                # a verified change belongs to an explicit account-email flow.
+                _principal_is_email = "@" in user_id
+                if not _principal_is_email and filtered_updates.get("email") is not None:
+                    logger.warning(
+                        "trusted_identity_write_rejected reason=%s principal_kind=%s fields=%s",
+                        "unproven_email_for_non_email_principal",
+                        "non_email",
+                        "email",  # field NAME only, never the value
+                    )
                 user_payload: dict = {
                     "external_user_id": user_id,
                     "name": filtered_updates.get("name"),
-                    "email": user_id if "@" in user_id else filtered_updates.get("email"),
+                    "email": user_id if _principal_is_email else None,
                     "phone": filtered_updates.get("phone"),
                     "telegram_username": filtered_updates.get("telegram_username") or updates.get("telegram_username"),
                     "telegram_chat_id": filtered_updates.get("telegram_chat_id") or updates.get("telegram_chat_id"),

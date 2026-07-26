@@ -1088,6 +1088,27 @@ class RicoDB:
                 )
                 payload = {k: v for k, v in payload.items() if k not in _dropped}
 
+        # ── Email is write-once through the generic path ──────────────────────
+        # `email` is not an ordinary contact column: password reset, account
+        # resolution and every "is this the same person" lookup key on it. The
+        # previous COALESCE(EXCLUDED.email, rico_users.email) replaced a stored
+        # non-NULL email with whatever non-NULL email the newest payload
+        # carried, which is how production rows ended up holding an address
+        # belonging to somebody else's external_user_id.
+        #
+        # On conflict the stored value therefore wins, with exactly one
+        # exception: a NULL email may be filled when the incoming value IS the
+        # row's own external_user_id. That is the only ownership proof available
+        # at this layer — the principal was already established upstream, and an
+        # email equal to it is a restatement of that principal rather than a new
+        # claim. Deliberately byte-exact: no LOWER(), no trimming. Case-folding
+        # would let "Owner@x" fill a row keyed on "owner@x", and this layer
+        # cannot verify that those are one mailbox.
+        #
+        # The alternative — a caller-supplied "verified identity" flag — was
+        # rejected: it adds a trust surface every writer could set, and the
+        # writers are exactly the code paths that produced the corruption.
+        # INSERT is unaffected; new accounts still set their email normally.
         should_close = conn is None
         if conn is None:
             conn = self.connect()
@@ -1101,7 +1122,12 @@ class RicoDB:
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (external_user_id) DO UPDATE SET
                         name = COALESCE(EXCLUDED.name, rico_users.name),
-                        email = COALESCE(EXCLUDED.email, rico_users.email),
+                        email = CASE
+                            WHEN rico_users.email IS NULL
+                                 AND EXCLUDED.email = rico_users.external_user_id
+                            THEN EXCLUDED.email
+                            ELSE rico_users.email
+                        END,
                         phone = COALESCE(EXCLUDED.phone, rico_users.phone),
                         telegram_username = COALESCE(EXCLUDED.telegram_username, rico_users.telegram_username),
                         telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, rico_users.telegram_chat_id),
