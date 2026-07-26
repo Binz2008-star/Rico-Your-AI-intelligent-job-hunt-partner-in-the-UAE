@@ -141,16 +141,24 @@ def _score_candidate(signal: IdentitySignal, candidate: ProfileContext) -> _Iden
     return score
 
 
-def _verified_signal_kinds(signal: IdentitySignal, candidate: ProfileContext) -> set:
+def _matched_strong_signal_kinds(signal: IdentitySignal, candidate: ProfileContext) -> set:
     """Which STRONG signals actually matched, by kind.
 
     The score alone cannot answer "what matched?" — one strong signal and
-    another strong signal both add 1.0. That distinction is the whole point
-    here: an email, a Telegram handle and an explicit user_id are evidence the
-    caller controls the identifier, and a phone number is not. A phone is a
-    contact detail that people share, mistype, reuse and inherit with a
-    recycled SIM, and nothing in a Jotform submission proves the submitter
-    controls it.
+    another strong signal both add 1.0, so the sum cannot distinguish them.
+
+    Named for what it measures and nothing more. An earlier name called these
+    "verified" signals, which wrote a false architectural claim into the code:
+    on the Jotform path NOTHING here is independently verified. The submitter
+    types the email and the Telegram handle into the form, and
+    `_resolve_user_id` (src/rico_jotform_webhook.py:79) derives
+    `external_user_id` from `answers["email"] or answers["telegram_username"]`
+    — which then arrives as `signal.user_id`. All three so-called ownership
+    signals are therefore the same unverified form input wearing three names.
+
+    A name that asserts a verification nobody performed is more dangerous than
+    no name at all, because the next person extends the set on the strength of
+    the word rather than the mechanism.
     """
     kinds = set()
     if signal.telegram_username and _norm_telegram(
@@ -166,9 +174,17 @@ def _verified_signal_kinds(signal: IdentitySignal, candidate: ProfileContext) ->
     return kinds
 
 
-#: Strong signals that, on their own, are sufficient to auto-attach a
-#: submission to an existing account. `phone` is deliberately absent.
-_OWNERSHIP_EVIDENCE_KINDS = frozenset({"email", "telegram_username", "user_id"})
+#: The signals that the EXISTING contract already allows to auto-attach a
+#: submission to an account. `phone` is deliberately absent — removing it is
+#: the whole point of this change.
+#:
+#: This set is a description of current behaviour, NOT an endorsement of it.
+#: These three are preserved byte-for-byte because narrowing them was out of
+#: scope; nothing here establishes that they are independently verified, and
+#: on the Jotform path they demonstrably are not (see
+#: `_matched_strong_signal_kinds`). Do not read membership as a safety
+#: property, and do not extend this set on the strength of its name.
+_EXISTING_AUTO_MERGE_SIGNAL_KINDS = frozenset({"email", "telegram_username", "user_id"})
 
 
 def _find_conflicts(
@@ -303,7 +319,7 @@ def map_identity_flow(
 
     # 5. Strong single match — check for conflicts
     if top_score >= _STRONG_MATCH_THRESHOLD:
-        # A lone phone match is NOT ownership evidence and must not auto-attach.
+        # A lone phone match must not auto-attach.
         #
         # The "multiple strong matches -> ask_user" guard above is not
         # containment on its own: it protects the crowded case and leaves the
@@ -312,16 +328,16 @@ def map_identity_flow(
         # loop. The candidate lookup also reads LIMIT 10 with no ORDER BY, so
         # the mapper never reliably sees the full candidate set anyway — which
         # is a second reason the multiplicity guard cannot be leaned on.
-        verified = _verified_signal_kinds(incoming, top_candidate)
-        if not (verified & _OWNERSHIP_EVIDENCE_KINDS):
+        matched_kinds = _matched_strong_signal_kinds(incoming, top_candidate)
+        if not (matched_kinds & _EXISTING_AUTO_MERGE_SIGNAL_KINDS):
             return IdentityResolution(
                 action="ask_user",
                 confidence=0.5,
                 matched_user_id=top_candidate.user_id,
                 reasons=[
                     f"Matched {top_candidate.user_id} on contact detail only "
-                    f"({', '.join(sorted(verified)) or 'none'}); no verified "
-                    "ownership evidence — human confirmation required"
+                    f"({', '.join(sorted(matched_kinds)) or 'none'}); not a signal "
+                    "the auto-merge contract accepts — human confirmation required"
                 ],
                 # Conflicts are still reported. This branch exists to hand the
                 # decision to a human, and a human deciding whether two records

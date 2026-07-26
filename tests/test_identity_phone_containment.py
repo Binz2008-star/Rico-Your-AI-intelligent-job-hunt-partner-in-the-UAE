@@ -250,3 +250,77 @@ class TestAskUserWritesNothingAndLeaksNothing:
             assert digits not in blob, "nor its digit-only form"
         # The conflict is still REPORTED — the field name survives, the value does not.
         assert "phone" in repr(result.get("identity_resolution", {}).get("conflicts", {}))
+
+
+class TestResolutionMetadataShapeCompatibility:
+    """The response shape changed. This pins exactly how, and how far.
+
+    `conflicts` went from ``{field: [signal_value, candidate_value]}`` to
+    ``{field: {"conflict": True}}``. Field NAMES are preserved, which is what
+    every consumer actually reads; only the values are withheld.
+
+    The redaction is NOT limited to phone. It applies to email and
+    telegram_username as well, because `_find_conflicts` emits all three and
+    all three are `TRUSTED_IDENTITY_FIELDS`. That is wider than this PR's
+    phone-only objective and is declared rather than quietly shipped: a
+    phone-only redaction would have left two of the three fields publishing
+    one account's contact details in an HTTP response body.
+    """
+
+    def test_field_names_survive_for_every_conflict_kind(self):
+        from src.rico_jotform_webhook import _identity_resolution_metadata
+        from src.services.identity_flow_mapper import IdentityResolution
+
+        resolution = IdentityResolution(
+            action="ask_user", confidence=0.6, matched_user_id="u1",
+            reasons=["r"],
+            conflicts={
+                "email": ("a@synthetic.test", "b@synthetic.test"),
+                "phone": (_PHONE, _OTHER_PHONE),
+                "telegram_username": ("handle_a", "handle_b"),
+            },
+            missing_fields=["skills"],
+        )
+        meta = _identity_resolution_metadata(resolution)
+
+        # Every key a consumer could branch on is still present.
+        assert set(meta["conflicts"]) == {"email", "phone", "telegram_username"}
+        # Every top-level key of the envelope is unchanged.
+        assert set(meta) == {
+            "action", "confidence", "matched_user_id",
+            "reasons", "conflicts", "missing_fields",
+        }
+        assert meta["action"] == "ask_user"
+        assert meta["missing_fields"] == ["skills"]
+
+    def test_no_conflict_value_of_any_kind_escapes(self):
+        from src.rico_jotform_webhook import _identity_resolution_metadata
+        from src.services.identity_flow_mapper import IdentityResolution
+
+        secrets = ("a@synthetic.test", "b@synthetic.test", _PHONE,
+                   _OTHER_PHONE, "handle_a", "handle_b")
+        resolution = IdentityResolution(
+            action="ask_user", confidence=0.6, matched_user_id="u1", reasons=[],
+            conflicts={
+                "email": ("a@synthetic.test", "b@synthetic.test"),
+                "phone": (_PHONE, _OTHER_PHONE),
+                "telegram_username": ("handle_a", "handle_b"),
+            },
+        )
+        blob = repr(_identity_resolution_metadata(resolution))
+        for value in secrets:
+            assert value not in blob, f"conflict value escaped for {value[:2]}…"
+
+    def test_serialisable_as_json(self):
+        """The envelope is written to a JSON response and a jsonb column."""
+        import json
+        from src.rico_jotform_webhook import _identity_resolution_metadata
+        from src.services.identity_flow_mapper import IdentityResolution
+
+        meta = _identity_resolution_metadata(
+            IdentityResolution(
+                action="ask_user", confidence=0.6, matched_user_id="u1",
+                reasons=["r"], conflicts={"phone": (_PHONE, _OTHER_PHONE)},
+            )
+        )
+        assert json.loads(json.dumps(meta))["conflicts"]["phone"] == {"conflict": True}
