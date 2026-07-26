@@ -85,11 +85,11 @@ services:
       start_period: 40s
       retries: 3
     mem_limit: 768m
-    cpus: 1.0
     deploy:
       resources:
         limits:
           memory: 768M
+          cpus: "1.0"
         reservations:
           memory: 256M
     networks:
@@ -120,11 +120,11 @@ services:
       start_period: 40s
       retries: 3
     mem_limit: 768m
-    cpus: 1.0
     deploy:
       resources:
         limits:
           memory: 768M
+          cpus: "1.0"
         reservations:
           memory: 256M
     networks:
@@ -200,11 +200,11 @@ services:
         condition: service_healthy
     command: ["python", "-m", "src.rico_worker"]
     mem_limit: 512m
-    cpus: 0.5
     deploy:
       resources:
         limits:
           memory: 512M
+          cpus: "0.5"
         reservations:
           memory: 128M
     networks:
