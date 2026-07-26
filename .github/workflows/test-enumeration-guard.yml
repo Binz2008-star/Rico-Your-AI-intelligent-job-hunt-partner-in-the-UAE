@@ -1,0 +1,67 @@
+name: Test Enumeration Guard
+
+# Fails when a test file exists under tests/ but no pytest invocation in any
+# workflow runs it. The pytest gates in this repository enumerate explicit
+# paths rather than running tests/, so a file only executes if somebody
+# remembered to list it — and a test nobody runs is not coverage, it is a green
+# tick over an unguarded invariant.
+#
+# This workflow deliberately runs the guard's own test file by name. The guard
+# checks that every test file is reachable from some pytest invocation, and its
+# own test is reachable from this one. A guard that was itself unenumerated
+# would be the exact defect it exists to catch, so that property is asserted by
+# a test rather than left to convention.
+#
+# This workflow reads .github/workflows/qa-tests.yml. It never writes it.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-enumeration-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  enumeration:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The guard is stdlib-only by design: a coverage gate that needs the
+      # project's dependency tree installed can fail for reasons unrelated to
+      # coverage, and a gate that is noisy gets ignored.
+      - name: Install test runner
+        run: python -m pip install --quiet pytest
+
+      - name: Record the commit under test
+        run: |
+          echo "head_sha=${{ github.event.pull_request.head.sha || github.sha }}"
+          git rev-parse HEAD
+
+      - name: Guard — every test file is enumerated or explained
+        run: python scripts/check_test_enumeration.py
+
+      # --noconftest for the same reason log-privacy-ratchet.yml uses it:
+      # tests/conftest.py imports the FastAPI app, which would drag the whole
+      # dependency tree into a job that needs none of it. This test file
+      # imports the guard and the standard library, nothing else.
+      - name: The guard's own proofs
+        run: |
+          python -m pytest \
+            tests/test_test_enumeration_guard.py \
+            -v --tb=short --noconftest
