@@ -76,13 +76,19 @@ existing entry if one already exists for the task, never duplicating it)
 before continuing further — see "Session continuity / limit-approach
 handoff" in `AGENT_OPERATING_MODEL.md`.
 
-## Lane continuity blocks — verified 2026-07-25 (evening)
+## Lane continuity blocks — verified 2026-07-26
 
-One block per active lane. **These are the authoritative per-lane records**; the
-dated task entries below remain as history. Every SHA here was verified from the
-API when this section was written — see the Rule of authority in
-`AI_WORKSPACE/PROJECT_STATUS.md` and the Writer Lease Protocol in
-`AI_WORKSPACE/OPERATING_RULES.md`.
+One block per lane. **These are the authoritative per-lane records**; the dated
+task entries below remain as history. Every SHA here was fetched live when this
+section was written — see the Rule of authority in
+`AI_WORKSPACE/PROJECT_STATUS.md`, and the Directive Authority and Writer Lease
+Protocol sections in `AI_WORKSPACE/OPERATING_RULES.md`.
+
+Each lane carries four independent lease fields. **They mean different things and
+must never be collapsed:** `Lease holder` is *who*, `Lease ownership` is
+*whether it is owned at all*, `Current activity` is *what is happening now*, and
+`Write authorization` is *whether a push is permitted*. Holding a lease is not
+permission to push.
 
 Update the block for your lane. Never duplicate one.
 
@@ -91,87 +97,67 @@ Update the block for your lane. Never duplicate one.
 - Lane alias: `L1`
 - Branch: `fix/identity-ownership-resolution`
 - PR: `#1398` (Draft)
-- Base SHA: `e433c7d`
-- Expected remote HEAD: `63749d3d`
-- Lease state: `WRITING`
+- Base SHA: `e433c7d` — rebase onto `fc2e107d` before merge
+- Expected remote HEAD: `c708bbb3` — fetched live; this lane has moved twice today, so re-read it rather than trusting this line
+- Lease holder: `L1`
+- Lease ownership: `HELD`
+- Current activity: `WRITING` — work exists locally that is not on the remote
+- Write authorization: `AUTHORIZED` for its own branch, until its batch is complete
 - Allowed files: identity resolution and its repository layer, plus that lane's tests
-- Forbidden files: the CV/documents surfaces (L2), the documents domain contract (L5), workflow configuration (L4), and `AI_WORKSPACE/CV_PIPELINE_STATE.md`
+- Forbidden files: the CV/documents surfaces (L2), workflow configuration, and `AI_WORKSPACE/CV_PIPELINE_STATE.md`
 - Tests: the lane's own suites, plus exact-head CI
-- Blocker: **BLOCKED by the owner.** All five must hold before it moves:
-  1. the typed re-raise in `upsert_profile` has landed;
-  2. the no-mirror-success and HTTP 409 tests pass;
-  3. trusted-field source drift is closed;
-  4. a fresh independent review is complete;
-  5. exact-head CI is green on the new SHA.
-- Stop condition: do not push, rebase or re-open the objective while any of the five is unmet; report instead
-- Next executable action: satisfy the five conditions in order, then request re-review — nothing merges ahead of this lane
+- Blocker: the owner's five conditions — typed re-raise in `upsert_profile` landed; no-mirror-success and HTTP 409 tests passing; trusted-field source drift closed; fresh independent review complete; exact-head CI green on the new SHA
+- Stop condition: stop and report on an unexpected commit, or if the objective would widen beyond identity ownership
+- Next executable action: complete the identity-ownership batch; it is the next integrity merge and nothing behavioural merges ahead of it
 
 ### L2 — CV and documents
 
 - Lane alias: `L2`
 - Branch: `claude/cv-pending-artifact-confirm`
 - PR: `#1389` (Draft)
-- Base SHA: `e433c7d`
-- Expected remote HEAD: `878c5944` (recorded as "`7e707c8` or newer"; live is `878c5944`)
-- Lease state: `WRITING` — **sole writer.** Two sessions wrote to this branch concurrently; the collision was resolved by merge with nothing lost, and the lease now sits with one holder. This lane is the reason the Writer Lease Protocol exists
+- Base SHA: `e433c7d` — rebase onto the new `main` after `#1398` lands
+- Expected remote HEAD: `878c5944` — fetched live
+- Lease holder: `L2`
+- Lease ownership: `HELD` — **sole writer.** Two sessions once wrote to this branch concurrently; the collision was resolved by merge with nothing lost. This lane is the reason the Writer Lease Protocol exists
+- Current activity: `HOLDING`
+- Write authorization: read at the lane's own resumption — not derivable from GitHub, and not to be inferred from a quiet branch
 - Allowed files: the CV/documents pipeline, its three upload entry points, and its own tests
-- Forbidden files: identity resolution (L1), the documents domain contract (L5), workflow configuration (L4)
+- Forbidden files: identity resolution (L1), workflow configuration
 - Tests: the lane's backend suites, the frontend suite, and the real-Postgres integration job
-- Owner ruling, binding: **a repeated confirm of the same server-verified saved artifact is an idempotent retry and consumes no quota.** It is not a new purchase, and it must not be refused
-- Blocker: none recorded
-- Stop condition: stop on an unexpected commit on the branch, or on any change that would make a confirm non-idempotent
-- Next executable action: continue to green on the exact head; do not merge
+- Owner ruling, binding: **a repeated confirm of the same server-verified saved artifact is an idempotent retry and consumes no quota.** It is not a new purchase and must not be refused
+- Blocker: sequenced behind `#1398`
+- Stop condition: stop on an unexpected commit, or on any change that would make a confirm non-idempotent
+- Next executable action: after `#1398` lands, rebase onto the new `main`, resolve integration conflicts, and take exact-head gates
 
-### L4 — workflow-trigger containment checker
-
-- Lane alias: `L4`
-- Branch: `claude/workflow-guard-pr-target`
-- PR: `#1400` (Draft)
-- Base SHA: `e433c7d`
-- Expected remote HEAD: `0548e424`
-- Lease state: `WRITING`
-- Allowed files: the workflow-security checker and its own tests
-- Forbidden files: everything owned by L1, L2, L5 and L7; `src/`
-- Tests: the checker's own suite, plus exact-head CI
-- Blocker: **must report which existing PR heads a stricter checker would break, before pushing further.** A checker that is tightened without that list turns every open lane red at once and the cause is not visible from the failure
-- Stop condition: do not push a stricter rule until the breakage list is reported and accepted
-- Next executable action: produce the breakage list against the current open PR heads, then report
-
-### L5 — documents domain contract
-
-- Lane alias: `L5`
-- Branch: `claude/arch-v2-phase1-contract-6mqzlv` — note the suffix; a shorter name was previously carried and is wrong
-- PR: `#1399` (Draft)
-- Base SHA: `e433c7d`
-- Expected remote HEAD: `3705d1eb` — previously carried as `c2a4dbf`, which is not the tip; a lane check against it would have compared the wrong commit
-- Lease state: `WRITING`
-- Allowed files: the documents domain contract and its own tests
-- Forbidden files: L1, L2, L4 and L7 territory
-- Tests: the lane's own suites, plus exact-head CI
-- Blocker: **traceability must map to a roadmap that exists in `AI_WORKSPACE/`.** A contract that traces to a document nobody can open is not traceable
-- Stop condition: stop if traceability resolves to a roadmap that is not present in the repository
-- Next executable action: bind each contract item to a roadmap entry that exists, then request review
-
-### L7 — docs-only design extraction
+### L7 — control plane
 
 - Lane alias: `L7`
-- Branch: `claude/design-handoffs-incoming-extract`
-- PR: `#1401` (Draft)
-- Base SHA: `e433c7d`
-- Expected remote HEAD: `d4bd5469`
-- Lease state: **`RELEASED`** at expected remote HEAD `d4bd5469`. Do not push to this branch again. `#1401` stays Draft and frozen; L6 triages it and merge authority stays with the owner
-- Allowed files: `design-handoffs/incoming/` only
-- Forbidden files: every production path — `apps/web/`, `src/`, `migrations/`, `.github/`
-- Tests: none apply; the extracted tree is inert — nothing imports it, it is outside the Next.js app root, and no test configuration collects it
-- Blocker: none. **Exact-head CI on `d4bd5469` is settled green.** `postgres-integration` failed once there from a container-registry pull failure (`Docker pull failed with exit code 1`, retried with backoff), with no test executed, and **passed on re-run attempt #2 at the same SHA**. All eleven checks green with no content change
-- Evidence rule for this lane: a green on any other commit is **not** exact-head evidence and must never be cited as one. Only a conclusion recorded against `d4bd5469` itself settles this — which is what the re-run provided
-- Stop condition: stop if any non-design path appears in the diff
-- Next executable action: **none from this lane — the lease is released.** L6 triages; the owner holds merge authority. `#1371` is superseded by this PR and **the owner closes it, not this lane**
+- Branch: `claude/workspace-control-reconcile`
+- PR: `#1402` (Draft)
+- Base SHA: `fc2e107d` — rebased onto current `main` at this pass
+- Expected remote HEAD: the head this reconciliation pushes
+- Lease holder: `L7`
+- Lease ownership: `HELD`
+- Current activity: `WRITING` — this reconciliation
+- Write authorization: `AUTHORIZED` for this branch, docs-only
+- Allowed files: exactly five — `PROJECT_STATUS.md`, `TASKS.md`, `OPERATING_RULES.md`, `START_HERE.md`, and the latest handoff
+- Forbidden files: `AI_WORKSPACE/CV_PIPELINE_STATE.md`, `AI_WORKSPACE/ENGINEERING_ROADMAP.md`, `src/`, `tests/`, `.github/`, `apps/web/`, `migrations/`
+- Tests: exact-head CI; no runtime tests apply to a docs-only diff
+- Blocker: none
+- Stop condition: stop and report on unexpected head movement, on any change requiring a sixth file, or on an instruction lacking full attribution
+- Next executable action: report the pushed head for independent review. **`ENGINEERING_ROADMAP.md` is excluded from this PR** and is a separate docs-only change: it still names `main` as `4ce678b`, which is stale, and any session trusting it alone will act on a false picture
 
 ### Lanes holding no lease
 
-- **L3 — routing.** `CLOSED` and merged as `e433c7d`, with the deploy fired and verified.
+- **L3 — routing.** `CLOSED`, merged as `e433c7d`; deploy fired and verified.
+- **L4 — workflow-trigger containment checker.** `CLOSED`. `#1400` merged as `03450277`. It touches no runtime path, so no deploy was expected. Lease `RELEASED`; branch work complete.
+- **L5 — documents domain contract.** `CLOSED`. `#1399` merged as `fc2e107d` (Milestone A, first slice). It changes five runtime paths under `src/`, so a backend deploy **is** expected. Lease `RELEASED`; the branch was deleted on merge.
 - **L6 — review.** Read-only. Holds no lease and pushes nothing.
+
+### Closed without merge — evidence preserved
+
+- **`#1401` design-reference extraction**, head `d4bd5469`. Closed by the owner as reference-only and outside the Architecture V2 production sequence. Lease `RELEASED`, write authorization `REVOKED`. **The branch is preserved deliberately — do not delete it, and do not reopen the PR.** Exact-head CI was green at closure.
+- **`#1371` command visual polish**, head `4e7b82f6`. Closed without merge, superseded by `#1401` — which has itself now been closed without merge. Nothing from either PR is in `main`; the design work exists only in branch form.
 
 ## Active tasks
 

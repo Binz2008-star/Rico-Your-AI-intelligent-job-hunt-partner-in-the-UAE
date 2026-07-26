@@ -139,15 +139,21 @@ detail appear here.
 
 ## Lane state
 
-| Lane | Objective | Lease | State |
-| --- | --- | --- | --- |
-| `L1` | Identity ownership | `WRITING` | **Blocked by the owner** on five conditions; nothing merges ahead of it |
-| `L2` | CV and documents | `WRITING`, sole writer | Active. Quota ruling recorded: a repeated confirm of the same server-verified saved artifact is an idempotent retry and consumes no quota |
-| `L3` | Routing | none | **Closed and merged.** Deploy fired and verified |
-| `L4` | Workflow-trigger containment checker | `WRITING` | Must report which existing PR heads a stricter checker would break, before pushing further |
-| `L5` | Documents domain contract | `WRITING` | Direction approved. Traceability must map to a roadmap that exists in the workspace |
-| `L6` | Review | none | Read-only. Holds no lease and pushes nothing |
-| `L7` | Docs-only design extraction | **`RELEASED`** at `d4bd5469` | Frozen at that head — no further push from this lane. Exact-head CI settled green there: one container-registry pull failure, then a pass on re-run attempt #2 at the same SHA with no content change. Reference material only; touches no production path. Its superseded source is closed by the owner, not by the lane |
+Read as of the 2026-07-26 reconciliation. **Lease holder is ownership; activity is
+what is happening now; write authorization is what a push may rely on.** Counts
+against the caps are derived from activity, never from lease possession.
+
+| Lane | Objective | Lease holder | Ownership | Activity | Write auth | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| `L1` | Identity ownership | `L1` | `HELD` | `WRITING` | `AUTHORIZED` | `#1398`, next integrity merge. Local work not yet on the remote |
+| `L2` | CV and documents | `L2` | `HELD` | `HOLDING` | read at resumption | `#1389`, sequenced behind `#1398`. Sole writer after a two-writer collision |
+| `L3` | Routing | none | `RELEASED` | `IDLE` | — | Closed and merged; deploy fired and verified |
+| `L4` | Workflow-trigger containment | none | `RELEASED` | `IDLE` | — | `#1400` merged as `03450277`. No runtime path touched, so no deploy expected |
+| `L5` | Documents domain contract | none | `RELEASED` | `IDLE` | — | `#1399` merged as `fc2e107d`. Five runtime paths touched, so a deploy **is** expected. Branch deleted on merge |
+| `L6` | Review | none | `RELEASED` | `REVIEWING` | — | Read-only. Holds no lease and pushes nothing |
+| `L7` | Control plane | `L7` | `HELD` | `WRITING` | `AUTHORIZED` | `#1402`, docs-only, five files. Its predecessor `#1401` is closed unmerged with the branch preserved |
+
+**Against the caps:** active agents 3 of 4 (L1, L6, L7); simultaneous code writers 1 of 2 (L1 only — L7 is docs-only and does not count); writers per branch 1 of 1 wherever a lease is held.
 
 ## Control facts
 
