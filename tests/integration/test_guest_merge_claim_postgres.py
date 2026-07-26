@@ -295,3 +295,134 @@ def _ext_of(db_uid: str) -> str:
             return cur.fetchone()[0]
     finally:
         conn.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A2 — guest rows are excluded from AUTHENTICATED ownership resolution.
+#
+# This is the invariant the identity work exists to guarantee, and until these
+# tests it had no behavioural backing: the only check was a string match
+# asserting `NOT LIKE 'public:` appears in the emitted SQL. That proves the
+# predicate is PRESENT, not that it EXCLUDES anything — a predicate that is
+# present but ineffective passes it, and reformatting the query fails it. It
+# cannot be fixed with a mocked cursor either: a fake returns whatever rows the
+# test feeds it, so filtering is unobservable by construction. Only a real
+# server executes the predicate.
+#
+# Fixture design is the load-bearing part. It is not enough to seed a guest row
+# that would not have matched anyway — that passes for the wrong reason and
+# proves nothing. Every guest row below is built so it WOULD be a candidate
+# through the branch under test, and is excluded only by the guard.
+#
+# Path under test: `RicoDB.get_user_bundle` (src/rico_db.py) has ONE query
+# construction path with two branches, selected by `"@" in user_id`. Both carry
+# the guard. `count_identity_rows` carries similar predicate text without the
+# caller-is-guest disjunct, but it is a different function (a diagnostic COUNT
+# with a single caller) and is deliberately not exercised here.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _seed_identity_row(
+    external_user_id: str,
+    email: str | None = None,
+    telegram_username: str | None = None,
+) -> str:
+    """Insert a rico_users row with explicit resolution keys."""
+    conn = psycopg2.connect(TEST_DATABASE_URL)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO rico_users (external_user_id, email, telegram_username, name)
+                VALUES (%s, %s, %s, %s) RETURNING id::text
+                """,
+                (external_user_id, email, telegram_username, "synthetic"),
+            )
+            uid = cur.fetchone()[0]
+        conn.commit()
+        return uid
+    finally:
+        conn.close()
+
+
+def _bundle(user_id: str):
+    from src.rico_db import RicoDB
+
+    return RicoDB(database_url=TEST_DATABASE_URL).get_user_bundle(user_id)
+
+
+class TestGuestExclusionOnRealPostgres:
+    """A2: a public row is never a candidate for an authenticated lookup."""
+
+    def test_email_branch_excludes_a_guest_row_sharing_the_account_address(self):
+        """Both rows match the email predicate; only the account row may survive.
+
+        The guest row carries the SAME address as the account, so without the guard
+        the email disjunct selects both and resolution becomes ambiguous. With the
+        guard exactly one candidate remains.
+        """
+        tag = uuid.uuid4().hex[:12]
+        address = f"claim-acct-{tag}@synthetic.test"
+        account_id = _seed_identity_row(f"claim-acct-{tag}@synthetic.test", email=address)
+        _seed_identity_row(f"public:web-claim-{tag}", email=address)  # same address
+
+        bundle = _bundle(address)
+
+        assert bundle is not None, "the account row must still resolve"
+        assert bundle["id"] == account_id
+        assert not str(bundle["external_user_id"]).startswith("public:"), (
+            "authenticated resolution returned a public row"
+        )
+
+    def test_email_branch_returns_nothing_when_only_a_guest_row_holds_the_address(self):
+        """The sharpest form: a guest row alone must not answer an account lookup.
+
+        Without the guard this returns the guest row — a public session served as
+        though it were the account. With it, the correct answer is "no such account".
+        """
+        tag = uuid.uuid4().hex[:12]
+        address = f"claim-orphan-{tag}@synthetic.test"
+        _seed_identity_row(f"public:web-claim-{tag}", email=address)
+
+        assert _bundle(address) is None, (
+            "a guest row must never be served for an authenticated email lookup"
+        )
+
+    def test_non_email_branch_excludes_a_guest_row_sharing_the_telegram_handle(self):
+        """Same invariant on the branch selected when the identifier has no '@'."""
+        tag = uuid.uuid4().hex[:12]
+        handle = f"tg_{tag}"
+        account_id = _seed_identity_row(f"claim-tg-acct-{tag}", telegram_username=handle)
+        _seed_identity_row(f"public:web-claim-{tag}", telegram_username=handle)  # same handle
+
+        bundle = _bundle(handle)
+
+        assert bundle is not None, "the account row must still resolve"
+        assert bundle["id"] == account_id
+        assert not str(bundle["external_user_id"]).startswith("public:"), (
+            "authenticated resolution returned a public row on the non-email branch"
+        )
+
+    def test_non_email_branch_returns_nothing_when_only_a_guest_row_holds_the_handle(self):
+        tag = uuid.uuid4().hex[:12]
+        handle = f"tg_orphan_{tag}"
+        _seed_identity_row(f"public:web-claim-{tag}", telegram_username=handle)
+
+        assert _bundle(handle) is None, (
+            "a guest row must never be served for an authenticated handle lookup"
+        )
+
+    def test_a_guest_still_resolves_its_own_row(self):
+        """The exclusion is scoped to AUTHENTICATED resolution, not applied blindly.
+
+        Without this, the guard could be "fixed" by dropping the caller-is-guest
+        disjunct entirely — which would pass every test above while silently
+        breaking every guest read in production.
+        """
+        tag = uuid.uuid4().hex[:12]
+        principal = f"public:web-claim-{tag}"
+        guest_id = _seed_identity_row(principal, email=f"claim-guest-{tag}@synthetic.test")
+
+        bundle = _bundle(principal)
+
+        assert bundle is not None, "a guest resolving its own principal must get its row"
+        assert bundle["id"] == guest_id

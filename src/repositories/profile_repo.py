@@ -23,6 +23,7 @@ from contextlib import contextmanager
 
 from psycopg2.extras import Json
 
+from src.models.principal import IdentityOwnershipAmbiguous, rejected_trusted_identity_fields
 from src.rico_agent import RicoAgentSettings, RicoProfile
 from src.rico_db import RicoDB
 from src.rico_memory import RicoMemoryStore
@@ -244,6 +245,11 @@ def get_cv_grounding(user_id: str) -> CVGrounding | None:
         return None
     try:
         bundle = db.get_user_bundle(user_id)
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error(
             "profile_repo: get_cv_grounding DB failed user=%s err=%s",
@@ -284,6 +290,11 @@ def get_profile(user_id: str) -> RicoProfile | None:
                     user_ref(user_id), safe_fields(bundle.get("profile") or {}),
                 )
                 profile = _bundle_to_profile(bundle)
+        except IdentityOwnershipAmbiguous:
+            # Fail-closed must survive the broad handler below. Ambiguous ownership is
+            # not a transient fault to fall back from: answering from the JSON mirror,
+            # or reporting "not found", is precisely what this change prevents.
+            raise
         except Exception as e:
             logger.error(
                 "profile_repo: get_profile DB failed user=%s err=%s",
@@ -387,6 +398,27 @@ def upsert_profile(
         if (k in _PROFILE_FIELDS or k in _SETTINGS_FIELDS) and v is not None
     }
 
+    # ── Trusted-identity write boundary ───────────────────────────────────────
+    # A public/guest principal may write ordinary profile data, but never a trusted
+    # identity field. Those columns are how an authenticated caller is later resolved,
+    # so a guest row carrying an account's contact value makes ownership ambiguous.
+    #
+    # Applied here, before any branch, so it holds on EVERY path through this function
+    # rather than only the path where a user row is being created. Scoping it to one
+    # branch would leave the invariant true by coincidence rather than by construction.
+    _rejected_identity = rejected_trusted_identity_fields(user_id, filtered_updates)
+    if _rejected_identity:
+        logger.warning(
+            "trusted_identity_write_rejected reason=%s principal_kind=%s fields=%s",
+            "public_principal",
+            "public",
+            ",".join(sorted(_rejected_identity)),  # field NAMES only, never values
+        )
+        filtered_updates = {
+            k: v for k, v in filtered_updates.items() if k not in _rejected_identity
+        }
+        updates = {k: v for k, v in updates.items() if k not in _rejected_identity}
+
     # ── Write-boundary sanitization for preferred_cities (#1336) ──────────────
     # Defense-in-depth: even if a caller forgets to sanitize, the write
     # boundary itself rejects non-city values so they can never reach Neon
@@ -426,10 +458,15 @@ def upsert_profile(
     # state that a later DB-read outage could expose as if the mutation had
     # succeeded (#764). For those callers the mirror is updated only AFTER the
     # DB transaction commits.
+    # An ownership refusal must not be able to leave mirror state behind, so the
+    # mirror write happens only once the DB attempt has been made — for default
+    # callers too, not just mandatory ones. Every previously-reachable outcome
+    # still writes it (success, DB unavailable, ordinary DB failure); the one new
+    # outcome, an ownership refusal, deliberately does not.
     mem = _memory()
-    profile: RicoProfile | None = None
-    if not require_db:
-        profile = mem.upsert_profile_from_dict(
+
+    def _write_mirror() -> RicoProfile:
+        return mem.upsert_profile_from_dict(
             user_id=user_id, updates=filtered_updates, clear_fields=clears,
         )
 
@@ -438,14 +475,14 @@ def upsert_profile(
     if not db:
         if require_db:
             raise RuntimeError(f"profile DB unavailable (require_db) user={user_id}")
-        return profile
+        return _write_mirror()
 
     try:
         with _db_transaction() as conn:
             if not conn:
                 if require_db:
                     raise RuntimeError(f"profile DB connection unavailable (require_db) user={user_id}")
-                return profile
+                return _write_mirror()
 
             # 1. Resolve the DB user record.
             # Web users are identified by email (from JWT). Use the same bundle
@@ -543,6 +580,18 @@ def upsert_profile(
 
         logger.debug("profile_repo: upsert_profile DB success user=%s", user_ref(user_id))
 
+    except IdentityOwnershipAmbiguous:
+        # Ownership refusal, not a transient fault. The JSON fallback below is the
+        # right answer to "the database is unreachable" and the wrong answer to
+        # "this write does not belong to this caller": returning the mirror would
+        # hand back a success-shaped object for a write that must never land, and
+        # leave mirror state a later fallback read could serve as though it had.
+        # Propagates for every caller, whatever require_db says.
+        logger.warning(
+            "profile_repo: upsert_profile refused user=%s reason=%s",
+            user_ref(user_id), "ambiguous_account_ownership",
+        )
+        raise
     except Exception as e:
         logger.error("profile_repo: upsert_profile DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         # require_db callers must NOT get a false success masked by the JSON
@@ -551,15 +600,11 @@ def upsert_profile(
         if require_db:
             raise
         # Don't re-raise - we have JSON fallback
+        return _write_mirror()
 
-    if require_db:
-        # DB commit confirmed — now (and only now) reflect the change in the
-        # process-local mirror so fallback reads match committed state (#764).
-        profile = mem.upsert_profile_from_dict(
-            user_id=user_id, updates=filtered_updates, clear_fields=clears,
-        )
-
-    return profile
+    # DB attempt made and not refused — now (and only now) reflect the change in
+    # the process-local mirror so fallback reads match committed state (#764).
+    return _write_mirror()
 
 
 def delete_profile(user_id: str) -> bool:
@@ -594,6 +639,11 @@ def delete_profile(user_id: str) -> bool:
         logger.info("profile_repo: deleted profile user=%s", user_ref(user_id))
         return True
 
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error("profile_repo: delete_profile failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return False
@@ -611,6 +661,11 @@ def get_preferences(user_id: str) -> dict[str, Any]:
             bundle = db.get_user_bundle(user_id)
             if bundle and bundle.get("settings"):
                 return dict(bundle["settings"])
+        except IdentityOwnershipAmbiguous:
+            # Fail-closed must survive the broad handler below. Ambiguous ownership is
+            # not a transient fault to fall back from: answering from the JSON mirror,
+            # or reporting "not found", is precisely what this change prevents.
+            raise
         except Exception as e:
             logger.error("profile_repo: get_preferences DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
 
@@ -793,6 +848,11 @@ def list_saved_searches(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
 
         return searches
 
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error("profile_repo: list_saved_searches DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return []
@@ -826,6 +886,11 @@ def delete_search(user_id: str, search_id: str) -> bool:
 
         return deleted
 
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error("profile_repo: delete_search DB failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return False
@@ -908,6 +973,11 @@ def get_search_by_id(user_id: str, search_id: str) -> dict[str, Any] | None:
 
         return None
 
+    except IdentityOwnershipAmbiguous:
+        # Fail-closed must survive the broad handler below. Ambiguous ownership is
+        # not a transient fault to fall back from: answering from the JSON mirror,
+        # or reporting "not found", is precisely what this change prevents.
+        raise
     except Exception as e:
         logger.error("profile_repo: get_search_by_id failed user=%s err=%s", user_ref(user_id), safe_exc(e))
         return None

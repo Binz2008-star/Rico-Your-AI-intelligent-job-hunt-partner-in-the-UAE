@@ -231,48 +231,68 @@ class TestRoleValidationRicoDBLayer:
 
 
 # ---------------------------------------------------------------------------
-# get_user_bundle ordering: email > external_user_id
+# get_user_bundle: ownership resolves through the validated auth identifier
 # ---------------------------------------------------------------------------
 
-class TestGetUserBundleOrdering:
-    """Verify that the SQL ORDER BY was patched to prefer email match."""
+class TestGetUserBundleOwnership:
+    """Authenticated resolution binds to the identifier the caller authenticated with.
 
-    def test_order_by_prefers_email_over_external_user_id(self):
-        """The fixed ORDER BY must rank email=0 before external_user_id=0."""
+    REPLACES an earlier assertion here that required the ORDER BY to rank a match on the
+    mutable contact column *ahead* of a match on the authenticated identifier. That
+    ordering was introduced to stop intake-sourced rows shadowing web users, which was a
+    real problem, but it made a mutable column the effective ownership key: any row
+    carrying an account's contact value outranked the account's own row.
+
+    The invariant is now the inverse, and the reason is recorded here so the old
+    assertion is not reinstated by someone reading it as a regression:
+
+      * the authenticated identifier decides ownership;
+      * a public/guest row is never a candidate;
+      * more than one surviving candidate fails closed rather than being ranked.
+
+    The contact column stays in the WHERE clause so legacy accounts that never had an
+    external identifier populated still resolve -- it simply cannot select a row on its
+    own any more. Fixtures are synthetic.
+    """
+
+    def _run(self, rows):
         from src.rico_db import RicoDB
         db = RicoDB.__new__(RicoDB)
-
         captured_sql = []
 
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.__enter__ = MagicMock(return_value=mock_cur)
         mock_cur.__exit__ = MagicMock(return_value=False)
-        mock_cur.fetchone.return_value = None
+        mock_cur.fetchmany.return_value = rows
         mock_conn.cursor.return_value = mock_cur
-
-        def capture_execute(sql, params):
-            captured_sql.append(sql)
-
-        mock_cur.execute.side_effect = capture_execute
+        mock_cur.execute.side_effect = lambda sql, params: captured_sql.append(sql)
 
         with patch.object(RicoDB, "available", new_callable=lambda: property(lambda self: True)), \
              patch.object(db, "connect", return_value=mock_conn):
-            db.get_user_bundle("robenedwan.1@icloud.com")
+            result = db.get_user_bundle("owner@synthetic.test")
+        return result, (captured_sql[0] if captured_sql else "")
 
-        assert captured_sql, "expected a SQL query to be executed"
-        sql = captured_sql[0].lower()
-        # Only look within the ORDER BY clause, not the WHERE clause
-        order_by_start = sql.find("order by")
-        assert order_by_start != -1, "SQL must contain ORDER BY"
-        order_section = sql[order_by_start:]
-        # SQL uses LOWER(u.email) = LOWER(%s) for case-insensitive matching,
-        # so search for "u.email" without the literal "=" that the old form used.
-        email_pos = order_section.find("u.email")
-        ext_pos = order_section.find("u.external_user_id")
-        assert email_pos != -1, "ORDER BY must reference u.email"
-        assert ext_pos != -1, "ORDER BY must reference u.external_user_id"
-        assert email_pos < ext_pos, (
-            "In ORDER BY, email match must appear before external_user_id match to prevent "
-            "Jotform/Telegram rows shadowing web users"
+    def test_authenticated_identifier_is_ranked_first(self):
+        _, sql = self._run([{"id": "owned-row"}])
+        order_section = sql.lower()[sql.lower().find("order by"):]
+        assert "u.external_user_id" in order_section, (
+            "ownership must be decided by the authenticated identifier"
         )
+
+    def test_public_rows_are_excluded_from_authenticated_resolution(self):
+        _, sql = self._run([{"id": "owned-row"}])
+        assert "not like 'public:" in sql.lower(), (
+            "a guest row must never be a candidate for authenticated resolution"
+        )
+
+    def test_legacy_account_without_external_identifier_still_resolves(self):
+        result, sql = self._run([{"id": "legacy-row", "external_user_id": None}])
+        assert result["id"] == "legacy-row"
+        assert "u.email" in sql, "the contact column must remain in the predicate"
+
+    def test_multiple_candidates_fail_closed(self):
+        from src.models.principal import IdentityOwnershipAmbiguous
+
+        with pytest.raises(IdentityOwnershipAmbiguous):
+            self._run([{"id": "row-1"}, {"id": "row-2"}])

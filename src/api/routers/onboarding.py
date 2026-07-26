@@ -20,6 +20,7 @@ from src.models.onboarding import (
     ONBOARDING_IN_PROGRESS,
     ONBOARDING_PENDING,
 )
+from src.models.principal import IdentityOwnershipAmbiguous
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,11 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
     # device/session.
     try:
         upsert_profile(user_id, updates, require_db=True)
+    except IdentityOwnershipAmbiguous:
+        # Ownership refusal, not a retryable persistence fault — 503 would invite
+        # the client to retry a write that must never land. The app-level handler
+        # answers 409.
+        raise
     except Exception:
         logger.exception("onboarding_submit: profile persistence failed user_id=%s", user_id)
         raise HTTPException(
