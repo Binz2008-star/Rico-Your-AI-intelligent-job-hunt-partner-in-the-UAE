@@ -106,15 +106,30 @@ def _build_identity_signal(mapped: Dict[str, Any]) -> IdentitySignal:
 
 
 def _identity_resolution_metadata(resolution) -> Dict[str, Any]:
-    """Return JSON-safe identity resolution metadata."""
+    """Return JSON-safe identity resolution metadata.
+
+    Conflict VALUES are never emitted. `_find_conflicts` records
+    ``(signal_value, candidate_value)`` pairs for email, phone and
+    telegram_username — all three are `TRUSTED_IDENTITY_FIELDS` — and this
+    dict is written into the webhook's HTTP response body and is available to
+    anything that logs the response. Emitting them published one account's
+    contact details to whoever submitted the form.
+
+    Redacted here, at the egress point, rather than in `_find_conflicts`:
+    the resolver needs the real values to decide that a conflict exists, and
+    every consumer of this metadata wants the FIELD NAME, which is what
+    actually drives the confirmation prompt. The count is kept because
+    "conflicts on 2 fields" is diagnosable while a value is not.
+    """
     return {
         "action": resolution.action,
         "confidence": resolution.confidence,
         "matched_user_id": resolution.matched_user_id,
         "reasons": list(resolution.reasons or []),
+        # Field names only — never the values behind them.
         "conflicts": {
-            key: list(value)
-            for key, value in (resolution.conflicts or {}).items()
+            key: {"conflict": True}
+            for key in (resolution.conflicts or {})
         },
         "missing_fields": list(resolution.missing_fields or []),
     }
