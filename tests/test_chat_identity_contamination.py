@@ -200,7 +200,11 @@ class TestRoleValidationDBAppend:
         with patch("src.services.chat_service._resolve_db_user_id", return_value="uuid-123"), \
              patch("src.rico_db.RicoDB", return_value=mock_db):
             db_append_chat("test@example.com", "user", "hello")
-            mock_db.append_chat.assert_called_once_with("uuid-123", "user", "hello")
+            # session_id is threaded from the ambient chat session (#1197); no
+            # active session writes NULL, which is the legacy default thread.
+            mock_db.append_chat.assert_called_once_with(
+                "uuid-123", "user", "hello", session_id=None,
+            )
 
 
 class TestRoleValidationRicoDBLayer:
