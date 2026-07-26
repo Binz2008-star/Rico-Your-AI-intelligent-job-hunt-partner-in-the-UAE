@@ -1119,18 +1119,34 @@ def find_profiles_by_email(email: str) -> list[Any]:
                             LEFT JOIN rico_profiles p ON p.user_id = u.id
                             LEFT JOIN rico_settings s ON s.user_id = u.id
                             WHERE LOWER(u.email) = %s
+                              AND (u.external_user_id IS NULL
+                                   OR u.external_user_id NOT LIKE 'public:%%')
                             LIMIT 10
                             """,
                             (email_norm,)
                         )
                         rows = cur.fetchall()
+                        # Second, independent enforcement in Python — same
+                        # rationale as the phone path (#1412): the SQL predicate
+                        # is the efficient filter, this one is the verifiable
+                        # one. It survives a reformatting of the query and makes
+                        # the guard provable without a live database, rather
+                        # than only by asserting on SQL text.
+                        rows = [
+                            r for r in rows
+                            if not is_public_principal(str(r.get("external_user_id") or ""))
+                        ]
                         candidates.extend(_bundle_rows_to_profiles(rows))
         except Exception as e:
             logger.error("profile_repo: find_profiles_by_email failed ref=%s err=%s", user_ref(email_norm), safe_exc(e))
 
-    # Memory fallback — linear scan over JSON profiles
+    # Memory fallback — the second doorway into candidacy, and it needs the
+    # same exclusion. Guarding only the SQL path would leave the guard
+    # bypassable whenever the database is unavailable.
     if not candidates:
         for user_id in _memory().list_profiles():
+            if is_public_principal(str(user_id)):
+                continue
             profile = _memory().load_profile(user_id)
             if profile and getattr(profile, "email", None):
                 if str(profile.email).strip().lower() == email_norm:
@@ -1226,11 +1242,19 @@ def find_profiles_by_telegram_username(username: str) -> list[Any]:
                             LEFT JOIN rico_profiles p ON p.user_id = u.id
                             LEFT JOIN rico_settings s ON s.user_id = u.id
                             WHERE LOWER(u.telegram_username) = %s
+                              AND (u.external_user_id IS NULL
+                                   OR u.external_user_id NOT LIKE 'public:%%')
                             LIMIT 10
                             """,
                             (username_norm,)
                         )
                         rows = cur.fetchall()
+                        # Second, independent enforcement in Python — see the
+                        # email path above for why both layers exist.
+                        rows = [
+                            r for r in rows
+                            if not is_public_principal(str(r.get("external_user_id") or ""))
+                        ]
                         candidates.extend(_bundle_rows_to_profiles(rows))
         except Exception as e:
             logger.error(
@@ -1238,9 +1262,11 @@ def find_profiles_by_telegram_username(username: str) -> list[Any]:
                 user_ref(username_norm), safe_exc(e),
             )
 
-    # Memory fallback
+    # Memory fallback — same exclusion as the SQL path, for the same reason.
     if not candidates:
         for user_id in _memory().list_profiles():
+            if is_public_principal(str(user_id)):
+                continue
             profile = _memory().load_profile(user_id)
             if profile and getattr(profile, "telegram_username", None):
                 if str(profile.telegram_username).strip().lstrip("@").lower() == username_norm:
