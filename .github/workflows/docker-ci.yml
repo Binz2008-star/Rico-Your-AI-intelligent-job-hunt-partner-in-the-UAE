@@ -2,9 +2,9 @@ name: Docker Standby CI
 
 # Additive, isolated CI validation for the Docker warm-standby artifacts.
 # This workflow does NOT deploy, does NOT push images, and does NOT
-# become a required branch-protection check. It only validates that
-# the production Dockerfiles and compose file are syntactically correct
-# and buildable.
+# become a required branch-protection check. It validates that
+# the production Dockerfiles and compose file are syntactically correct,
+# buildable, and that the standby stack passes health and proxy checks.
 #
 # Path filters ensure this only runs when Docker readiness files change.
 # Unrelated product PRs are NOT forced to build Docker images.
@@ -34,76 +34,137 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Create disposable .env.production from example
+        run: cp .env.production.example .env.production
+
       - name: Validate compose file syntax
         run: docker compose -f docker-compose.production.yml config --quiet
 
-  build-backend:
-    name: Build Standby Backend Image
+  build-and-test:
+    name: Build and Smoke Test Standby Stack
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: rico
+          POSTGRES_PASSWORD: rico
+          POSTGRES_DB: rico
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rico"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Create disposable .env.production
+        run: |
+          cp .env.production.example .env.production
+          sed -i 's|DATABASE_URL=.*|DATABASE_URL=postgresql://rico:rico@host.docker.internal:5432/rico|' .env.production
 
       - name: Build backend production image
-        run: docker build -f Dockerfile.backend.production -t rico-backend:standby-ci .
-
-      - name: Verify backend starts and health check passes
-        run: |
-          docker run -d --name backend-test \
-            -e DATABASE_URL="postgresql://fake:fake@localhost/fake" \
-            -e JWT_SECRET="ci-test-secret-only" \
-            -e REDIS_URL="" \
-            -e RICO_ENV="production" \
-            -e APP_ENV="production" \
-            -e ADMIN_EMAIL="ci@test" \
-            -e ADMIN_PASSWORD="ci-test-only" \
-            -p 8000:8000 \
-            rico-backend:standby-ci
-
-          sleep 10
-
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || echo "000")
-          echo "Backend health check: HTTP $STATUS"
-
-          if [ "$STATUS" != "200" ]; then
-            echo "::warning::Backend health check returned $STATUS (may be expected without DB)"
-            docker logs backend-test || true
-          fi
-
-          docker stop backend-test || true
-          docker rm backend-test || true
-
-  build-frontend:
-    name: Build Standby Frontend Image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        run: docker build -f Dockerfile.backend.production -t rico-backend:standby .
 
       - name: Build frontend production image
-        run: docker build -f apps/web/Dockerfile.production -t rico-web:standby-ci apps/web/
-
-      - name: Verify frontend starts
         run: |
-          docker run -d --name web-test \
-            -e NODE_ENV=production \
-            -e NEXT_TELEMETRY_DISABLED=1 \
-            -p 3000:3000 \
-            rico-web:standby-ci
+          docker build -f apps/web/Dockerfile.production \
+            --build-arg BACKEND_API_BASE_URL=http://backend:8000 \
+            -t rico-web:standby apps/web/
 
-          sleep 15
+      - name: Print image sizes
+        run: |
+          docker images rico-backend:standby --format "backend: {{.Size}}"
+          docker images rico-web:standby --format "frontend: {{.Size}}"
 
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ || echo "000")
-          echo "Frontend health check: HTTP $STATUS"
+      - name: Create CI compose override
+        run: |
+          printf 'services:\n  backend:\n    extra_hosts:\n      - "host.docker.internal:host-gateway"\n' > docker-compose.ci-override.yml
 
-          if [ "$STATUS" != "200" ]; then
-            echo "::warning::Frontend returned $STATUS"
-            docker logs web-test || true
-          fi
+      - name: Start standby stack
+        run: |
+          docker compose -f docker-compose.production.yml -f docker-compose.ci-override.yml \
+            --env-file .env.production up -d --no-build
 
-          docker stop web-test || true
-          docker rm web-test || true
+      - name: Wait for container health
+        run: |
+          timeout 120 bash -c '
+            while true; do
+              BACKEND=$(docker inspect --format="{{.State.Health.Status}}" rico-backend-standby 2>/dev/null || echo "none")
+              WEB=$(docker inspect --format="{{.State.Health.Status}}" rico-web-standby 2>/dev/null || echo "none")
+              REDIS=$(docker inspect --format="{{.State.Health.Status}}" rico-redis-standby 2>/dev/null || echo "none")
+              echo "Health: backend=$BACKEND web=$WEB redis=$REDIS"
+              if [ "$BACKEND" = "healthy" ] && [ "$WEB" = "healthy" ] && [ "$REDIS" = "healthy" ]; then
+                echo "All core containers healthy"
+                break
+              fi
+              BACKEND_STATE=$(docker inspect --format="{{.State.Status}}" rico-backend-standby 2>/dev/null || echo "missing")
+              WEB_STATE=$(docker inspect --format="{{.State.Status}}" rico-web-standby 2>/dev/null || echo "missing")
+              if [ "$BACKEND_STATE" = "exited" ] || [ "$WEB_STATE" = "exited" ]; then
+                echo "::error::Container exited before becoming healthy"
+                exit 1
+              fi
+              sleep 5
+            done
+          '
+
+      - name: Verify standby stack via Caddy
+        run: |
+          # Wait for Caddy to be ready
+          for i in $(seq 1 15); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/health || echo "000")
+            if [ "$STATUS" = "200" ]; then break; fi
+            echo "Waiting for Caddy... attempt $i: HTTP $STATUS"
+            sleep 3
+          done
+
+          # Backend /health
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/health)
+          echo "Backend /health via Caddy: HTTP $STATUS"
+          [ "$STATUS" = "200" ] || { echo "::error::Backend health failed"; exit 1; }
+
+          # Backend /version
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/version)
+          echo "Backend /version via Caddy: HTTP $STATUS"
+          [ "$STATUS" = "200" ] || { echo "::error::Backend version failed"; exit 1; }
+
+          # Frontend
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/)
+          echo "Frontend via Caddy: HTTP $STATUS"
+          [ "$STATUS" = "200" ] || { echo "::error::Frontend failed"; exit 1; }
+
+          # Proxy /proxy/* end-to-end (Next.js BFF → backend)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/proxy/health)
+          echo "Proxy /proxy/health via Caddy → Next.js → backend: HTTP $STATUS"
+          [ "$STATUS" = "200" ] || { echo "::error::Proxy /proxy/health failed"; exit 1; }
+
+      - name: Print container status and health
+        if: always()
+        run: |
+          docker compose -f docker-compose.production.yml -f docker-compose.ci-override.yml ps || true
+          for c in rico-backend-standby rico-web-standby rico-redis-standby rico-caddy-standby; do
+            echo "--- $c ---"
+            docker inspect --format="Status: {{.State.Status}} Health: {{.State.Health.Status}}" "$c" 2>/dev/null || echo "not found"
+          done
+
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo "=== BACKEND LOGS ==="
+          docker logs rico-backend-standby 2>&1 || true
+          echo "=== WEB LOGS ==="
+          docker logs rico-web-standby 2>&1 || true
+          echo "=== CADDY LOGS ==="
+          docker logs rico-caddy-standby 2>&1 || true
+          echo "=== REDIS LOGS ==="
+          docker logs rico-redis-standby 2>&1 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker-compose.production.yml -f docker-compose.ci-override.yml down -v || true

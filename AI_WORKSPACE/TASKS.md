@@ -147,26 +147,6 @@ Update the block for your lane. Never duplicate one.
 - Stop condition: stop and report on unexpected head movement, on any change requiring a sixth file, or on an instruction lacking full attribution
 - Next executable action: report the pushed head for independent review. **`ENGINEERING_ROADMAP.md` is excluded from this PR** and is a separate docs-only change: it still names `main` as `4ce678b`, which is stale, and any session trusting it alone will act on a false picture
 
-### L8 — Docker warm-standby readiness
-
-- Lane alias: `L8`
-- Branch: `infra/local-docker-production-readiness`
-- PR: `#1413` (Draft)
-- Base SHA: `1c13147f45365c10d518356a429f757c740f3a06`
-- Expected remote HEAD: `15588f5d` — fetched live at push time
-- Lease holder: Windsurf
-- Lease ownership: `HELD`
-- Current activity: `WRITING`
-- Write authorization: `AUTHORIZED` for this branch
-- Objective: additive Docker/VPS warm-standby readiness — production-grade Dockerfiles, production Compose, Caddy, Docker CI, standby documentation
-- Allowed scope: production Dockerfiles, production Compose, Caddy, Docker CI, standby documentation, minimal Next.js standalone configuration
-- Forbidden scope: `render.yaml`, `vercel.json`, current deployment workflows, production Neon, DNS, billing, product features, unrelated branches
-- Operating model: Vercel/Render/Neon remain cloud primary; Docker/VPS is additive warm standby. No active-active production writes. No deployment or cutover in this task
-- Tests: Docker CI workflow (`docker-ci.yml`) — compose config validation, image builds, health checks. No runtime pytest or vitest changes
-- Blocker: none
-- Stop condition: any required production, DNS, billing, database, or unrelated product mutation
-- Next executable action: complete validation and open one Draft PR — **done** (PR #1413 opened as draft)
-
 ### Lanes holding no lease
 
 - **L3 — routing.** `CLOSED`, merged as `e433c7d` in a **prior** cycle; its deploy was verified at that time. That is a historical record, not a current production claim — nothing in this pass re-verified the deployment.
@@ -181,6 +161,85 @@ Update the block for your lane. Never duplicate one.
 
 ## Active tasks
 
+### TASK-20260727-001 — Docker warm-standby readiness (additive)
+
+Status: in_progress
+Owner: Windsurf
+Branch: `infra/local-docker-production-readiness`
+Issue/PR: #1413 (Draft)
+
+#### Objective
+
+Additive Docker/VPS warm-standby readiness — production-grade Dockerfiles, production Compose, Caddy reverse proxy, Docker CI, and standby documentation. Vercel/Render/Neon remain cloud primary; Docker/VPS is additive warm standby only.
+
+#### Context
+
+- Relevant files: `Dockerfile.backend.production`, `apps/web/Dockerfile.production`, `docker-compose.production.yml`, `Caddyfile`, `.env.production.example`, `.github/workflows/docker-ci.yml`, `docs/local-docker-production.md`
+- Relevant docs: `AI_WORKSPACE/DECISIONS.md` (DEC-20260727-001)
+- Existing behavior: No Docker standby artifacts existed prior to this PR
+
+#### Constraints
+
+- Do not touch: `render.yaml`, `vercel.json`, current deployment workflows, production Neon, DNS, billing, product features, unrelated branches
+- No migrations unless explicitly required
+- Keep scope limited to: Docker standby artifacts and their documentation only
+
+#### Acceptance criteria
+
+- [x] Production Dockerfiles build successfully
+- [x] Compose file validates with disposable .env.production
+- [x] CI health checks are blocking (non-zero exit on failure)
+- [x] Side-effect isolation mechanically enforced in Compose
+- [x] Healthchecks use stdlib (no curl dependency)
+- [x] Uvicorn exec args properly quoted
+- [x] Compose has mem_limit/cpus for Docker Compose (not just Swarm)
+- [x] .env.production.example has production-safe defaults
+- [x] Caddy preserves Next.js BFF boundary (no broad /api/* bypass)
+- [x] Frontend Dockerfile sets BACKEND_API_BASE_URL at build time
+- [x] Documentation corrected (warm standby, /proxy/*, no validation claims)
+- [ ] Docker CI passes on PR head
+- [ ] PR remains Draft
+
+#### Required verification
+
+- [ ] Unit tests: n/a (no runtime code changes)
+- [ ] Integration tests: Docker CI workflow
+- [ ] Frontend build: n/a (standalone config only)
+- [ ] Local smoke: Docker compose up + health + /proxy/* validation
+- [ ] Production/deploy smoke: n/a — no deployment in this task
+
+#### Continuity Block
+
+- Task ID: TASK-20260727-001
+- GitHub issue/PR: #1413
+- Branch: `infra/local-docker-production-readiness`
+- Base branch: main
+- Last safe commit SHA: `1a5fb70a6cb15e2dd415f017770631393750e305` (prior to review fixes)
+- Current head SHA: <to be filled after push>
+- Uncommitted changes present: yes — review fixes being applied
+- Status: in_progress
+- Files inspected: `Dockerfile.backend.production`, `apps/web/Dockerfile.production`, `docker-compose.production.yml`, `Caddyfile`, `.env.production.example`, `.github/workflows/docker-ci.yml`, `docs/local-docker-production.md`, `apps/web/next.config.js`, `AI_WORKSPACE/DECISIONS.md`
+- Files changed:
+  - `Dockerfile.backend.production` — removed curl, Python stdlib healthcheck, fixed Uvicorn exec args
+  - `apps/web/Dockerfile.production` — build-time BACKEND_API_BASE_URL ARG, Node stdlib healthcheck
+  - `docker-compose.production.yml` — image tags, build args, mem_limit/cpus, side-effect env isolation, stdlib healthchecks, memory budget
+  - `Caddyfile` — removed /api/*bypass, warm standby terminology, /proxy/* BFF documentation
+  - `.env.production.example` — host.docker.internal DATABASE_URL, COOKIE_SECURE=true, ALLOW_ENV_AUTH_FALLBACK=false
+  - `.github/workflows/docker-ci.yml` — disposable .env.production, disposable Postgres, blocking health checks, /proxy/* validation, log printing
+  - `AI_WORKSPACE/TASKS.md` — removed invalid L8 lane block, added this task entry
+  - `AI_WORKSPACE/DECISIONS.md` — removed validation claims
+  - `docs/local-docker-production.md` — corrected terminology and proxy documentation
+- Files intentionally not touched: `render.yaml`, `vercel.json`, `src/`, `tests/`, `apps/web/app/`, `migrations/`
+- What is complete: all 16 review findings implemented
+- What is incomplete: push, CI verification, PR body update
+- Known blockers: none
+- Validation already run: none yet (pre-push)
+- Validation still required: Docker CI on PR head, compose config validation, image builds, /proxy/* smoke
+- Deployment/CI/Neon/Vercel state to check next: Docker Standby CI on PR head
+- Next exact action: push, verify CI, update PR body with results
+- Stop condition: any required production, DNS, billing, database, or unrelated product mutation
+- Rollback plan: `git revert` the review-fixes commit on `infra/local-docker-production-readiness`
+
 ### TASK-20260723-004 — CLAUDE.md best-practices tooling + full open-PR backlog merge & production verification
 
 Status: done
@@ -191,6 +250,7 @@ Branch: `claude/md-best-practices-generator-auau3b` (final home of the
 CLAUDE.md refactor commit, reconciled onto the pre-existing PR #1346 rather
 than opened as a competing PR)
 Issue/PR: #1346 (tooling+refactor), plus reviewed-and-merged #1347, #1348,
+
 # 1349, #1350 as part of the same session
 
 #### Objective

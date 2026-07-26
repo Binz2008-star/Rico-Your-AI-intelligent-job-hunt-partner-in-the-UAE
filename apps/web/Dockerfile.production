@@ -25,6 +25,9 @@ RUN npm ci
 
 COPY . .
 
+ARG BACKEND_API_BASE_URL=http://backend:8000
+ENV BACKEND_API_BASE_URL=$BACKEND_API_BASE_URL
+
 RUN npm run build
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────
@@ -51,6 +54,6 @@ USER rico
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -fsS http://localhost:3000/ || exit 1
+    CMD node -e "require('http').get('http://localhost:3000/', r => process.exit(r.statusCode === 200 ? 0 : 1))" || exit 1
 
 CMD ["npm", "start"]

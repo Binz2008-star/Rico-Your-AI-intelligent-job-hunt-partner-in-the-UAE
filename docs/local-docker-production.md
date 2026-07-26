@@ -45,19 +45,22 @@ The following features are **disabled by default** in both `docker-compose.produ
 | Signup email alerts | `ENABLE_SIGNUP_EMAIL_NOTIFICATIONS` | `false` | No outbound emails on user signup |
 | Learning | `RICO_ENABLE_LEARNING` | `false` | No ranking adaptation side effects |
 | RQ worker | Docker Compose `profiles: ["worker"]` | Not started | No background task processing |
-| Telegram | `TELEGRAM_BOT_TOKEN` | Not set | No Telegram messages |
-| Email (SMTP) | `EMAIL_USER` / `EMAIL_PASS` | Not set | No outbound email |
-| JotForm | `JOTFORM_API_KEY` | Not set | No onboarding webhook integration |
-| Paddle billing | `PADDLE_API_KEY` | Not set | No billing transactions |
+| Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Empty (compose override) | No Telegram messages |
+| Email (SMTP) | `EMAIL_USER`, `EMAIL_PASS`, `SMTP_USER`, `SMTP_PASSWORD` | Empty (compose override) | No outbound email |
+| JotForm | `JOTFORM_API_KEY`, `JOTFORM_FORM_ID`, `JOTFORM_RICO_FORM_ID`, `JOTFORM_WEBHOOK_SECRET` | Empty (compose override) | No onboarding webhook integration |
+| Paddle billing | `PADDLE_API_KEY`, `PADDLE_WEBHOOK_SECRET` | Empty (compose override) | No billing transactions |
+| Telegram alerts | `RICO_ENABLE_USER_TELEGRAM_ALERTS`, `RICO_TELEGRAM_PUBLIC_ALERTS` | `false` (compose override) | No Telegram notification triggers |
+| Email alerts | `RICO_ENABLE_EMAIL_ALERTS` | `false` (compose override) | No email notification triggers |
+| Billing mode | `BILLING_MODE` | `manual` (compose override) | No automatic billing operations |
 
-**The compose-level env overrides take precedence over `.env.production` values.** A misconfigured `.env.production` file cannot re-enable these features during routine validation.
+**The compose-level env overrides explicitly clear these variables to empty strings, taking precedence over `.env.production` values.** A misconfigured `.env.production` file cannot re-enable these features during routine validation.
 
 ### What the standby CAN do during routine validation
 
-- Serve HTTP health checks (`/health`, `/ready`, `/version`)
+- Serve HTTP health checks (`/health`, `/ready`, `/version` — routed directly to backend by Caddy)
 - Serve the Next.js frontend
-- Serve API docs (`/api/docs`, `/api/redoc`)
-- Accept authenticated API requests (if `DATABASE_URL` points to a staging DB)
+- Serve API docs (`/proxy/api/docs`, `/proxy/api/redoc` — proxied through Next.js BFF)
+- Accept authenticated API requests via the Next.js BFF proxy (`/proxy/*` → backend)
 - Perform AI reasoning (if `DEEPSEEK_API_KEY` or `OPENAI_API_KEY` is set)
 
 ### What the standby CANNOT do during routine validation
@@ -135,8 +138,8 @@ curl -s http://localhost/version | python3 -m json.tool
 # Verify frontend
 curl -s -o /dev/null -w "%{http_code}" http://localhost/
 
-# Verify proxy pass-through
-curl -s -o /dev/null -w "%{http_code}" http://localhost/api/v1/version
+# Verify proxy pass-through (Next.js BFF /proxy/* → backend)
+curl -s -o /dev/null -w "%{http_code}" http://localhost/proxy/api/v1/version
 ```
 
 ### C.7. Start the RQ worker (only if standby becomes active)
@@ -160,7 +163,7 @@ docker compose -f docker-compose.production.yml --profile worker --env-file .env
 - Verify `/health` returns 200 with `status: ok`
 - Verify `/version` shows the correct commit SHA
 - Verify frontend loads at the production domain
-- Verify proxy pass-through works (`/proxy/health`)
+- Verify proxy pass-through works (`/proxy/api/v1/version`)
 - Test authenticated user flow (login, profile, chat)
 - Monitor Sentry for errors
 
@@ -174,9 +177,11 @@ docker compose -f docker-compose.production.yml --profile worker --env-file .env
 
 1. Update DNS A record back to the Vercel/Render IP (or CNAME to Vercel)
 2. Stop the standby Docker stack:
+
    ```bash
    docker compose -f docker-compose.production.yml down
    ```
+
 3. Verify Vercel frontend is serving at the production domain
 4. Verify Render backend `/health` returns 200
 5. Verify Render `/version` shows the correct commit
@@ -184,9 +189,11 @@ docker compose -f docker-compose.production.yml --profile worker --env-file .env
 ### D.2. Restore worker authority
 
 1. Stop the standby RQ worker:
+
    ```bash
    docker compose -f docker-compose.production.yml --profile worker stop worker
    ```
+
 2. Verify the Render backend worker is running (or restart it from Render dashboard)
 3. Confirm only one worker is processing the Redis queue
 
@@ -225,20 +232,20 @@ docker compose -f docker-compose.production.yml --env-file .env.production up --
 ### E.3. Health validation
 
 ```bash
-# Backend health
-curl http://localhost:80/health
+# Backend health (Caddy routes /health directly to backend)
+python3 -c "import urllib.request; print(urllib.request.urlopen('http://localhost:80/health').read().decode())"
 
 # Backend readiness
-curl http://localhost:80/ready
+python3 -c "import urllib.request; print(urllib.request.urlopen('http://localhost:80/ready').read().decode())"
 
 # Backend version
-curl http://localhost:80/version
+python3 -c "import urllib.request; print(urllib.request.urlopen('http://localhost:80/version').read().decode())"
 
 # Frontend
-curl -o /dev/null -w "%{http_code}" http://localhost:80/
+python3 -c "import urllib.request; r=urllib.request.urlopen('http://localhost:80/'); print(r.status, r.reason)"
 
-# API proxy pass-through
-curl http://localhost:80/api/v1/version
+# API proxy pass-through (Next.js BFF /proxy/* → backend)
+python3 -c "import urllib.request; r=urllib.request.urlopen('http://localhost:80/proxy/api/v1/version'); print(r.status, r.read().decode())"
 ```
 
 ### E.4. Verify safeguards are active
@@ -264,19 +271,21 @@ docker ps --filter name=rico-worker-standby --format "{{.Names}} {{.Status}}"
 
 | File | Type | Purpose |
 |---|---|---|
-| `Dockerfile.backend.production` | New | Multi-stage production backend image |
-| `apps/web/Dockerfile.production` | New | Multi-stage production frontend image |
-| `docker-compose.production.yml` | New | Warm-standby compose stack with safeguards |
-| `Caddyfile` | New | Reverse proxy configuration |
-| `.env.production.example` | New | Environment template with standby safeguards |
-| `.github/workflows/docker-ci.yml` | New | Additive CI validation (no deploy, no push) |
+| `Dockerfile.backend.production` | New | Multi-stage production backend image (Python stdlib healthcheck) |
+| `apps/web/Dockerfile.production` | New | Multi-stage production frontend image (build-time `BACKEND_API_BASE_URL`, Node stdlib healthcheck) |
+| `docker-compose.production.yml` | New | Warm-standby compose stack with safeguards, `mem_limit`/`cpus`, explicit side-effect env overrides |
+| `Caddyfile` | New | Reverse proxy: `/health`, `/ready`, `/version` → backend; all other traffic → Next.js (preserves `/proxy/*` BFF boundary) |
+| `.env.production.example` | New | Environment template with production-safe defaults (`COOKIE_SECURE=true`, `ALLOW_ENV_AUTH_FALLBACK=false`, `host.docker.internal` DATABASE_URL) |
+| `.github/workflows/docker-ci.yml` | New | Additive CI validation: disposable Postgres, blocking health checks, `/proxy/*` smoke, no deploy, no push |
 | `docs/local-docker-production.md` | New | This document |
+| `AI_WORKSPACE/TASKS.md` | Modified | Task entry for Docker warm-standby readiness |
+| `AI_WORKSPACE/DECISIONS.md` | Modified | Architecture decision DEC-20260727-001 |
 
 ### Files NOT modified
 
 - `render.yaml` — unchanged
 - `apps/web/vercel.json` — unchanged
-- `apps/web/next.config.js` — unchanged
+- `apps/web/next.config.js` — unchanged (standalone output not enabled; frontend image is larger but functional)
 - `docker-compose.yml` — unchanged (local dev)
 - `Dockerfile.backend` — unchanged (local dev)
 - `apps/web/Dockerfile` — unchanged (local dev)

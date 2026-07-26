@@ -1,6 +1,6 @@
 # Caddyfile — Warm-standby reverse proxy for Rico AI.
 #
-# This is a COLD STANDBY artifact. It does NOT replace the Vercel/Render
+# This is a WARM STANDBY artifact. It does NOT replace the Vercel/Render
 # production path. During routine validation, Caddy serves the standby
 # stack on localhost or a private network only.
 #
@@ -9,11 +9,14 @@
 # docs/local-docker-production.md §C for the activation procedure.
 #
 # Architecture:
-#   :80/        → web:3000      (Next.js frontend)
-#   :80/api/*   → backend:8000  (FastAPI backend, proxied as /api/*)
-#   :80/health  → backend:8000  (Direct backend health check)
-#   :80/ready   → backend:8000  (Direct backend readiness check)
-#   :80/version → backend:8000  (Direct backend version check)
+#   :80/        → web:3000      (Next.js frontend, including /proxy/* BFF routes)
+#   :80/health  → backend:8000  (Direct backend health check — operational only)
+#   :80/ready   → backend:8000  (Direct backend readiness check — operational only)
+#   :80/version → backend:8000  (Direct backend version check — operational only)
+#
+# The Next.js /proxy/* route is the BFF boundary for account-scoped API calls.
+# Caddy does NOT route /api/* directly to FastAPI — all application traffic
+# traverses Next.js to preserve the same-origin boundary.
 
 # ── Local validation (no TLS) ─────────────────────────────────────────
 # For VPS activation, replace :80 with the production domain name
@@ -27,12 +30,7 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 	}
 
-	# Backend API and health endpoints — proxy to FastAPI
-	handle /api/* {
-		strip_prefix /api
-		reverse_proxy backend:8000
-	}
-
+	# Operational endpoints — direct to backend (health/readiness/version only)
 	handle /health {
 		reverse_proxy backend:8000
 	}

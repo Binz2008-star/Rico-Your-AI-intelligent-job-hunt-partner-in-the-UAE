@@ -116,7 +116,7 @@ Binding rules:
 
 #### Consequences
 
-- Positive: a documented, validated zero-hour recovery path exists without disrupting the active cloud path; rollback to Vercel/Render is always available; no active-active risk.
+- Positive: a documented zero-hour recovery path exists without disrupting the active cloud path; rollback to Vercel/Render is always available; no active-active risk. Validation pending Docker CI passage on PR #1413.
 - Negative/trade-off: the standby artifacts require periodic validation to remain viable; the frontend Docker image is larger (~500 MB) because `next.config.js` is not modified to add `output: 'standalone'`.
 
 #### Follow-up
@@ -571,6 +571,7 @@ Related task: TASK-20260716-003 (#1083)
 #### Context
 
 # 1083 found that "My Files" persists metadata rows, not uploaded bytes, and that
+
 deletion left CV-derived data still grounding Rico (a privacy/trust defect). The
 issue required choosing one honest model **before** implementation: (1) real
 encrypted object storage with an owner-approved retention/threat model, or (2) a

@@ -24,10 +24,13 @@
 # Usage (start RQ worker — zero-hour activation only):
 #   docker compose -f docker-compose.production.yml --profile worker --env-file .env.production up --build
 #
-# Resource limits target a 4 GB VPS. Adjust as needed for the target host.
+# Resource limits target a 4 GB VPS:
+#   backend 768 MB + web 768 MB + redis 256 MB + caddy 128 MB = 1920 MB
+#   With optional worker (512 MB): 2432 MB → ~1.5 GB remaining for OS headroom
 
 services:
   backend:
+    image: rico-backend:standby
     build:
       context: .
       dockerfile: Dockerfile.backend.production
@@ -51,32 +54,54 @@ services:
       - RICO_ENABLE_SCHEDULED_SEARCHES=false
       - ENABLE_SIGNUP_EMAIL_NOTIFICATIONS=false
       - RICO_ENABLE_LEARNING=false
-      # Telegram and email are disabled by omitting their tokens from
-      # .env.production. Do NOT set TELEGRAM_BOT_TOKEN, EMAIL_USER, or
-      # EMAIL_PASS in the standby env file unless performing a
-      # controlled zero-hour activation (see docs/local-docker-production.md).
+      # ── Side-effect isolation — mechanically enforced ────────────
+      # Explicitly clear all outbound integration credentials so a
+      # misconfigured .env.production cannot supply them. These overrides
+      # take precedence over env_file values.
+      - TELEGRAM_BOT_TOKEN=
+      - TELEGRAM_CHAT_ID=
+      - TELEGRAM_ADMIN_BOT_TOKEN=
+      - EMAIL_USER=
+      - EMAIL_PASS=
+      - SMTP_USER=
+      - SMTP_PASSWORD=
+      - PADDLE_API_KEY=
+      - PADDLE_WEBHOOK_SECRET=
+      - BILLING_MODE=manual
+      - JOTFORM_API_KEY=
+      - JOTFORM_FORM_ID=
+      - JOTFORM_RICO_FORM_ID=
+      - JOTFORM_WEBHOOK_SECRET=
+      - RICO_ENABLE_EMAIL_ALERTS=false
+      - RICO_ENABLE_USER_TELEGRAM_ALERTS=false
+      - RICO_TELEGRAM_PUBLIC_ALERTS=false
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       start_period: 40s
       retries: 3
+    mem_limit: 768m
+    cpus: 1.0
     deploy:
       resources:
         limits:
-          memory: 1536M
+          memory: 768M
         reservations:
-          memory: 512M
+          memory: 256M
     networks:
       - rico-standby
 
   web:
+    image: rico-web:standby
     build:
       context: ./apps/web
       dockerfile: Dockerfile.production
+      args:
+        - BACKEND_API_BASE_URL=http://backend:8000
     container_name: rico-web-standby
     restart: unless-stopped
     env_file:
@@ -89,15 +114,17 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:3000/"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 30s
       timeout: 10s
       start_period: 40s
       retries: 3
+    mem_limit: 768m
+    cpus: 1.0
     deploy:
       resources:
         limits:
-          memory: 1024M
+          memory: 768M
         reservations:
           memory: 256M
     networks:
@@ -115,10 +142,11 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    mem_limit: 256m
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 256M
         reservations:
           memory: 64M
     networks:
@@ -130,6 +158,7 @@ services:
   # validation, the worker must NOT run. It is only needed during a
   # controlled zero-hour activation (see docs/local-docker-production.md).
   worker:
+    image: rico-backend:standby
     build:
       context: .
       dockerfile: Dockerfile.backend.production
@@ -148,16 +177,36 @@ services:
       - RICO_ENABLE_SCHEDULED_SEARCHES=false
       - ENABLE_SIGNUP_EMAIL_NOTIFICATIONS=false
       - RICO_ENABLE_LEARNING=false
+      # ── Side-effect isolation — mechanically enforced ────────────
+      - TELEGRAM_BOT_TOKEN=
+      - TELEGRAM_CHAT_ID=
+      - TELEGRAM_ADMIN_BOT_TOKEN=
+      - EMAIL_USER=
+      - EMAIL_PASS=
+      - SMTP_USER=
+      - SMTP_PASSWORD=
+      - PADDLE_API_KEY=
+      - PADDLE_WEBHOOK_SECRET=
+      - BILLING_MODE=manual
+      - JOTFORM_API_KEY=
+      - JOTFORM_FORM_ID=
+      - JOTFORM_RICO_FORM_ID=
+      - JOTFORM_WEBHOOK_SECRET=
+      - RICO_ENABLE_EMAIL_ALERTS=false
+      - RICO_ENABLE_USER_TELEGRAM_ALERTS=false
+      - RICO_TELEGRAM_PUBLIC_ALERTS=false
     depends_on:
       redis:
         condition: service_healthy
     command: ["python", "-m", "src.rico_worker"]
+    mem_limit: 512m
+    cpus: 0.5
     deploy:
       resources:
         limits:
-          memory: 1024M
+          memory: 512M
         reservations:
-          memory: 256M
+          memory: 128M
     networks:
       - rico-standby
 
@@ -177,10 +226,11 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+    mem_limit: 128m
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
         reservations:
           memory: 32M
     networks:
