@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from src.api.deps import get_current_user
 from src.api.rate_limit import LIMIT_UPLOAD, limiter
+from src.domain.documents import inventory_from_rows
 from src.repositories import profile_repo
 from src.repositories.profile_repo import upsert_profile
 from src.rico_db import DocumentConflictError, RicoDB
@@ -153,19 +154,21 @@ def list_files(request: Request) -> dict[str, Any]:
 
     # Attach quota info to the response. The synthetic legacy record is not a
     # stored document and must not count against quota — enforcement counts
-    # user_documents rows, and the UI display has to agree with it.
+    # user_documents rows, and the UI display has to agree with it. The split
+    # is the documents contract's (`counts_against_quota`), so this surface and
+    # any other reader of the same rows cannot drift apart on what a CV is.
     resolved = resolve_effective_user_plan(user_id)
     entitlements = resolved.subscription.entitlements
-    stored = [d for d in docs if not d.get("is_legacy")]
+    counts = inventory_from_rows(docs).quota_counts
 
     return {
         "files": docs,
         "total": len(docs),
         "quota": {
             "plan": resolved.subscription.plan.value,
-            "cv_used": sum(1 for d in stored if d.get("doc_type") == "cv"),
+            "cv_used": counts.cv,
             "cv_limit": entitlements.cv_storage_limit,
-            "other_used": sum(1 for d in stored if d.get("doc_type") != "cv"),
+            "other_used": counts.other,
             "other_limit": entitlements.other_document_limit,
         },
     }
