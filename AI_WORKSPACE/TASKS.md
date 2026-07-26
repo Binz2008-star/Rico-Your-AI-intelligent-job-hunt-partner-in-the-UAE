@@ -149,7 +149,7 @@ Update the block for your lane. Never duplicate one.
 
 ### Lanes holding no lease
 
-- **L3 — routing.** `CLOSED`, merged as `e433c7d`; deploy fired and verified.
+- **L3 — routing.** `CLOSED`, merged as `e433c7d` in a **prior** cycle; its deploy was verified at that time. That is a historical record, not a current production claim — nothing in this pass re-verified the deployment.
 - **L4 — workflow-trigger containment checker.** `CLOSED`. `#1400` merged as `03450277`. It touches no runtime path, so no deploy was expected. Lease `RELEASED`; branch work complete.
 - **L5 — documents domain contract.** `CLOSED`. `#1399` merged as `fc2e107d` (Milestone A, first slice). It changes five runtime paths under `src/`, so a backend deploy **is** expected. Lease `RELEASED`; the branch was deleted on merge.
 - **L6 — review.** Read-only. Holds no lease and pushes nothing.

@@ -130,8 +130,14 @@ Revert the PR. No deploy or migration involved.
 # Control dashboard — 2026-07-25 (evening)
 
 Appended to the latest dated handoff rather than opened as a new file, so the
-control plane keeps one place to look. Everything below was verified from the API
-when it was written.
+control plane keeps one place to look.
+
+**Read the evidence class before relying on any line below.** Repository state —
+`main`, PR heads, merge commits, CI conclusions — was fetched live from the
+GitHub API when this was written. Live production state was **not**: the
+production host is unreachable from the reconciling container, so nothing here
+asserts what is deployed, healthy, or smoke-passing at this pass. API-verified
+and production-verified are different claims and are never merged into one.
 
 Lanes are referred to by alias only. This repository is public: no session
 identifiers, no session or browser links, no personal data, and no per-account
@@ -147,7 +153,7 @@ against the caps are derived from activity, never from lease possession.
 | --- | --- | --- | --- | --- | --- | --- |
 | `L1` | Identity ownership | `L1` | `HELD` | `WRITING` | `AUTHORIZED` | `#1398`, next integrity merge. Local work not yet on the remote |
 | `L2` | CV and documents | `L2` | `HELD` | `HOLDING` | read at resumption | `#1389`, sequenced behind `#1398`. Sole writer after a two-writer collision |
-| `L3` | Routing | none | `RELEASED` | `IDLE` | — | Closed and merged; deploy fired and verified |
+| `L3` | Routing | none | `RELEASED` | `IDLE` | — | Closed and merged in a **prior** cycle at `e433c7d`; its deploy was verified then, and that verification is not restated as current |
 | `L4` | Workflow-trigger containment | none | `RELEASED` | `IDLE` | — | `#1400` merged as `03450277`. No runtime path touched, so no deploy expected |
 | `L5` | Documents domain contract | none | `RELEASED` | `IDLE` | — | `#1399` merged as `fc2e107d`. Five runtime paths touched, so a deploy **is** expected. Branch deleted on merge |
 | `L6` | Review | none | `RELEASED` | `REVIEWING` | — | Read-only. Holds no lease and pushes nothing |
@@ -157,18 +163,33 @@ against the caps are derived from activity, never from lease possession.
 
 ## Control facts
 
-- `main` and the deployed backend agree on the same commit.
-- Backend health reports all three job providers healthy and the reasoning
-  provider non-degraded.
-- Production smoke passed three of three classes: an ownership-qualified account
-  question answered from the database with reconciled counts; a CV file-list
-  question answered deterministically from the file store; and a general
-  documents question answered by the model without listing any personal file.
+Each line carries its evidence class. A line without live evidence says so
+rather than inheriting confidence from the lines around it.
+
+- **`main` is `fc2e107d`.** *API-verified at this pass.*
+- **Deployed backend `/version`: not verified at this pass.** The production host
+  is unreachable from the reconciling container, so parity between `main` and the
+  deployment is **neither asserted nor denied**. Before this cycle the two agreed
+  at `e433c7d`. Confirmation is owner-side.
+- **Backend health and provider status: not verified at this pass.** No health or
+  provider claim is made here. The last such reading predates this cycle and is
+  not restated as current.
+- **Production smoke: not run at this pass.** The prior baseline on `e433c7d`
+  passed three of three classes — an ownership-qualified account question
+  answered from the database with reconciled counts; a CV file-list question
+  answered deterministically from the file store; and a general documents
+  question answered by the model without listing any personal file.
   **Evidence class: owner-verified in a browser session through the proxy, with
-  no automated artifact.** It is real evidence of live behaviour and it is not a
-  regression gate.
-- Two merges this cycle. One touched no runtime path and correctly fired no
-  deploy; the other changed request handling, fired a deploy, and was verified.
+  no automated artifact.** It is real evidence of live behaviour, it is not a
+  regression gate, and **it predates `#1399` and does not cover it.**
+- **Two merges this cycle, with different deploy expectations.** `#1400` touches
+  no runtime path, so no deploy was expected and its absence is correct. `#1399`
+  changes five runtime paths under `src/`, so a backend deploy **is expected** —
+  expected, not confirmed. Whether it has landed is unverified here.
+
+`main` moving ahead of the deployed `/version` after a non-runtime merge is
+expected divergence, not deployment drift. Do not chase parity, and do not fire a
+deploy to manufacture it.
 
 ## What this reconciliation corrected
 
