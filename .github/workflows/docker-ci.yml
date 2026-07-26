@@ -89,7 +89,7 @@ jobs:
       - name: Start standby stack
         run: |
           docker compose -f docker-compose.production.yml -f docker-compose.ci-override.yml \
-            --env-file .env.production up -d --no-build
+            --env-file .env.production up -d --pull never
 
       - name: Wait for container health
         run: |
