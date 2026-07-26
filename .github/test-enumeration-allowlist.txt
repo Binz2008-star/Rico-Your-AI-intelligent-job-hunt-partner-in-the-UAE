@@ -1,236 +1,30 @@
-# Test files deliberately NOT reachable from any pytest invocation.
+# Test files deliberately excluded from every pytest invocation, BY DECISION.
 #
 # Format: one entry per line, `path  # reason`.
-# An entry with no reason FAILS the guard. An unexplained exclusion is
-# indistinguishable from an oversight, and that ambiguity is what let this
-# problem recur; see scripts/check_test_enumeration.py.
 #
-# An entry that is no longer needed also fails the guard: once a file is
-# enumerated, its exclusion is stale and must be deleted rather than left to
-# rot into a false record of intent.
+# This file holds one thing only: exclusions somebody chose, with the reason
+# they chose them. It is not the backlog.
 #
-# ---------------------------------------------------------------------------
-# BASELINE BACKLOG, measured at main@1c13147f45365c10d518356a429f757c740f3a06
-# by `python scripts/check_test_enumeration.py` with no allowlist present:
-# 399 test files discovered, 213 reachable by no pytest invocation.
+# The backlog lives in FROZEN_BASELINE in scripts/check_test_enumeration.py —
+# the 213 files that ran in no workflow at
+# main@1c13147f45365c10d518356a429f757c740f3a06. Those are recorded, not
+# excused: an entry there means "nobody has looked at this yet", while an entry
+# here means "somebody decided, and said why".
 #
-# These 213 are recorded, not endorsed. Enumerating them means editing the
-# pytest invocations in .github/workflows/qa-tests.yml, which this change is
-# not permitted to touch, so it is scheduled as separate work. The guard's
-# purpose here is to stop the list growing: a NEW unenumerated test file fails
-# CI immediately, because it will not be in this file.
-# ---------------------------------------------------------------------------
-
-tests/integration/test_chat_cv_job_workflow.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/integration/test_chat_routing_phase1.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/integration/test_cv_parse_quality_gate_postgres.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/integration/test_jotform_webhook_to_chat_flow.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/integration/test_live_chat_role_parsing_path.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/integration/test_operation_multiworker_postgres.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/integration/test_operation_ownership_postgres.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_1101_private_response_cache.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_1249_scheduled_search.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_1262_conversational.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_1336_cv_search_continuity_transcript.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_1336_state_truth_profile_confirmation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_354_apply_link_verification.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_acknowledgement_intent.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_action_endpoint.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_admin_guard.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_admin_subscribers.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_adversarial_qa.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_agent_chat_idempotency_user_scope.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_agent_privileged_authz.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_agentic_ui_composer.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_agentic_ui_contracts.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_agentic_ui_schema.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_application_board_persistence.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_application_drafts_activation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_application_lifecycle.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_applied_screenshot_ocr_fallback.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_apply_approval_gate.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_apply_subscription_gate.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_apply_tracking_and_freshness.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_arabic_context_retention.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_arabic_jobsearch_vs_cv_status.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_atomic_draft_decisions.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_attachment_canonical_context.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_attachment_provenance_latest_wins.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_attachment_provenance_review_corrections.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_authenticated_save_no_legacy_json.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_avatar_endpoints.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bare_role_gate.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_billing_hardening.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_billing_mode.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_billing_ops_no_stripe.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_billing_quota_fail_open.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug03_source_url_fallback.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug04_profile_mutation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug05_confirmation_loop.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug08_city_declaration.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug09_keyword_filter_bleed.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug10_data_quality_display.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug11_name_casing.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug12_arabic_search_locale.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug14_jobs_service_dedup.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug17_pipeline_reset.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug19_application_evidence.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bug2_keyword_include_exclude.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_bulk_apply_safety.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_career_memory_production_activation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_chat_archive_user_job_context.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_chat_bulk_archive_confirmation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_chat_card_save_board_visibility.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_chat_history_persistence.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_chat_identity_contamination.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_chat_regression.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_chat_skip_card_action.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_chat_uploaded_documents_context.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_checkout_attribution_atomic.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_city_reject_confirmation_words.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_city_validation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_clear_chat_history.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_continuation_intent.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_conversation_state.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_core_path_real_wrappers.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_cover_letter_generation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_cover_letter_intent_routing.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_cover_letter_slot_extraction.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_cover_letter_writer.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_cv_activation_resync.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_cv_generate_from_profile.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_cv_generation_continuity.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_deepseek_jotform_integration.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_defect1_explicit_role_precedence.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_delete_saved_jobs_chat.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_development_supervisor_contract.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_document_action_routing.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_document_storage_quotas.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_document_upload_context.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_docx_bomb_guard.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_eligibility_filter.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_email_alert_service.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_email_notifications.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_email_verification_scanner_safe.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_employer_url_passthrough.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_engineering_review_mode.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_file_list_intent.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_files_cv_fallback_rename_upload.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_files_delete_purges_cv_grounding.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_follow_up_intent.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_followup_reminders.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_format_match_links.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_free_provider_mode.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_gmail_connector_m0.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_gmail_legacy_disabled.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_gmail_pagination_bounds.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_guest_provider_degraded.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_hardening_proxy_timing_pipeline.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_identity_email_overwrite_containment.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_identity_flow_mapper.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_import_profile_command.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_issue_135_production_verification.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_job_action_isolation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_job_card_trust.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_job_context_foundation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_job_doc_actions.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_job_lifecycle.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_job_providers.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_job_search_action_contract.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_job_url_validation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_jotform_e2e.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_jsearch_client.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_jsearch_uae_wide_query.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_legacy_db_transactions.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_letter_choice_routing.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_link_verifier_dns_fail_closed.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_location_intent_fix.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_manual_application_tracking.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_match_explanation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_me_is_owner.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_medium3_rate_limits.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_message_limit_warning.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_minimum_profile_gate.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_mission_service.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_multiuser_chat_matrix.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_mutation_confirmation_guard.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_no_text_pdf_routing.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_notification_consent_durable.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_onboarding_repo_readonly.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_onboarding_status_endpoint.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_p0_context_bugs.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_p0_job_link_trust.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_p0_mutation_trust_guard.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_paddle_webhook_body_cap.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_password_reset.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_password_reset_repo.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_pasted_cv_detection.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_pending_permissions_job_binding.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_permission_execute.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_pipeline_save_count_correctness.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_placeholder_role_filter.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_plan_copy_truth.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_profile_city_write_boundary.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_profile_context_resolver.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_profile_cv_fallback.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_profile_inline_edit.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_profile_module_rename_regression.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_profile_persistence.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_profile_query_intent.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_provider_cascade_cancellation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_public_chat_no_profile_loop.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_public_identity.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rate_limiting.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_response_formatting.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_chat_empty_message.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_chat_openai_integration.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_chat_response_source.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_db_connect.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_hf_router.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_identity.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_identity_guardrails.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_jotform_identity.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_openai_runtime.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_runtime_emergency.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_rico_webhook_security.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_role_confirmation_wiring.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_role_confirmation_yes_loop.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_role_noun_city_rejection.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_safety_document_followup_scope.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_save_card_honest_failure.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_save_city_to_profile_routing.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_saved_search_upsert_fallback.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_score_normalization.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_search_attempts_provenance.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_search_confirmation_routing.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_search_dedup.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_search_routing_location_cb.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_search_title_relevance_floor.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_security_hardening_scan.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_set_active_cv_pending_confirmation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_smoke_scripts_no_hardcoded_credentials.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_source_quality.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_sse_done_total_encoder.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_sse_stream_headers.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_subscription_api.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_subscription_expiry.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_subscription_intent_hardening.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_target_role_evidence_guard.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_tc7_structured_tracking_text.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_telegram_audience_routing.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_telegram_demo_mode.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_telegram_inline.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_telegram_notifications.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_telegram_roster_row_decode.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_upload_document_intelligence.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_upload_size_limits.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_uploaded_image_ai_context.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_user_documents_ddl.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_user_isolation.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_user_job_context_interaction.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_user_profiles.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_users_auth.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_users_scheduler.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_whatsapp_repo_connection_close.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_whatsapp_subscription.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
-tests/test_zoho_mail.py  # baseline gap at main@1c13147f, pending enumeration; not a new regression
+# An earlier revision of this change put all 213 in this file under one shared
+# reason. That satisfied the every-entry-has-a-reason rule in text and defeated
+# it in substance: the file could no longer tell a decision apart from an
+# oversight, and a list that cannot make that distinction stops being a recorded
+# debt and becomes a standing permission.
+#
+# Rules the guard enforces here:
+#
+#   * An entry with no reason fails.
+#   * An entry reusing the frozen baseline's reason text fails. That excuse
+#     belongs to the paths measured at that commit; a new file must say why IT
+#     is excluded.
+#   * An entry whose file is enumerated now fails. A stale exclusion is a false
+#     record of intent, so it must be deleted rather than left to rot.
+#
+# There are currently no entries. A new unenumerated test file fails CI until it
+# is either enumerated or listed here with a reason of its own.
