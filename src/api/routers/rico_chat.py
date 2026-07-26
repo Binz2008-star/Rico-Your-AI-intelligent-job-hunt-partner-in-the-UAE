@@ -2996,6 +2996,15 @@ async def confirm_cv_profile(
                 replace_cv_structured=True,
                 require_db=True,
             )
+        except IdentityOwnershipAmbiguous:
+            # Not a persistence fault, and not retryable. The handler below
+            # answers 500 "We couldn't save your CV. Please try again." —
+            # which invites a retry of a condition that is deterministic and
+            # must not succeed on retry, and re-runs identity resolution each
+            # time. The app-level handler answers 409 instead, so the refusal
+            # stays distinguishable from a database outage. Same reason, and
+            # the same shape, as the profile-update path at :1655.
+            raise
         except Exception as _profile_exc:
             logger.error(
                 "cv_confirm_profile_persist_failed user=%s err=%s request_ref=%s",
@@ -3071,6 +3080,11 @@ async def confirm_cv_profile(
             }
         return result
     except HTTPException:
+        raise
+    except IdentityOwnershipAmbiguous:
+        # The quota gate resolves identity too, and it runs outside the inner
+        # try above — so fixing only that one leaves this path answering 500.
+        # Every identity-resolving call in this endpoint reaches one of the two.
         raise
     except Exception as exc:
         logger.error(

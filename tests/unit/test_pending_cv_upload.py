@@ -858,6 +858,48 @@ class TestChatNeverTreatsPendingAsSaved:
 
 # ── The "review my CV" denial, the last surface on the wrong side ───────────
 
+def _run_cv_analysis(
+    *, has_cv, has_content=False, filename=None, unavailable=False,
+    message="review my CV",
+):
+    """Drive the real `cv_analysis` branch with a stood-in CV context.
+
+    ``is_unavailable`` is set explicitly rather than left to ``MagicMock``.
+    An auto-created attribute is truthy, so a handler that consults it would
+    read "the store is down" on every one of these cases and the tests would
+    pass for the wrong reason.
+    """
+    from unittest.mock import MagicMock
+
+    from src.rico_chat_api import RicoChatAPI
+
+    api = RicoChatAPI.__new__(RicoChatAPI)
+    profile = MagicMock()
+    profile.has_cv = has_cv
+    ctx = MagicMock()
+    ctx.has_cv = has_cv
+    ctx.has_content = has_content
+    ctx.filename = filename
+    ctx.is_unavailable = unavailable
+    with (
+        patch.object(RicoChatAPI, "_resolve_profile", return_value=profile),
+        patch.object(RicoChatAPI, "_cv_context", return_value=ctx),
+        patch.object(RicoChatAPI, "_profile_value", return_value=None),
+        patch.object(RicoChatAPI, "_append_chat", MagicMock()),
+        patch.object(RicoChatAPI, "_finalize", lambda self, r, *a, **k: r),
+        patch.object(RicoChatAPI, "_pending_search_redemption_blocked", return_value=False),
+        patch.object(RicoChatAPI, "_get_recent_context", return_value={}),
+        # The document store, stood in for as holding nothing resolvable.
+        # Two earlier routes answer from a stored document when they find one —
+        # `_handle_stored_cv_reference` and the CV-upload guidance check — and
+        # against a MagicMock profile both find a mock-valued "document" and
+        # intercept before this branch is ever reached.
+        patch.object(RicoChatAPI, "_collect_documents_detailed", return_value=[]),
+        patch("src.services.document_resolver.resolve_user_cv", return_value=None),
+    ):
+        return RicoChatAPI._handle_active_user_inner(api, "u@x.com", message)
+
+
 class TestCvAnalysisDenialIsCorrectedToo:
     """"You haven't uploaded one" is the same denial, from a different branch.
 
@@ -870,28 +912,7 @@ class TestCvAnalysisDenialIsCorrectedToo:
     the note, it was that nothing routed this branch into it.
     """
 
-    def _run(self, *, has_cv, has_content=False, filename=None, message="review my CV"):
-        from unittest.mock import MagicMock
-
-        from src.rico_chat_api import RicoChatAPI
-
-        api = RicoChatAPI.__new__(RicoChatAPI)
-        profile = MagicMock()
-        profile.has_cv = has_cv
-        ctx = MagicMock()
-        ctx.has_cv = has_cv
-        ctx.has_content = has_content
-        ctx.filename = filename
-        with (
-            patch.object(RicoChatAPI, "_resolve_profile", return_value=profile),
-            patch.object(RicoChatAPI, "_cv_context", return_value=ctx),
-            patch.object(RicoChatAPI, "_profile_value", return_value=None),
-            patch.object(RicoChatAPI, "_append_chat", MagicMock()),
-            patch.object(RicoChatAPI, "_finalize", lambda self, r, *a, **k: r),
-            patch.object(RicoChatAPI, "_pending_search_redemption_blocked", return_value=False),
-            patch.object(RicoChatAPI, "_get_recent_context", return_value={}),
-        ):
-            return RicoChatAPI._handle_active_user_inner(api, "u@x.com", message)
+    _run = staticmethod(_run_cv_analysis)
 
     def test_the_denial_now_carries_the_ask_the_note_is_keyed_on(self):
         out = self._run(has_cv=False)
@@ -1295,3 +1316,242 @@ class TestQuotaRulingIsImplementedExactly:
             )
         # And the decision is derived from the server-resolved artifact only.
         assert "_repeat_confirm = saved_document_exists(" in source
+
+
+# ── The two identity-contract defects this branch was blocked on ────────────
+#
+# #1398 made identity resolution fail closed: when an authenticated identifier
+# resolves to more than one owner row, `IdentityOwnershipAmbiguous` is raised
+# rather than a row being guessed at, and `src/api/app.py` maps it to 409.
+#
+# That contract only holds if every intermediate handler lets the refusal
+# through. `IdentityOwnershipAmbiguous` subclasses `RuntimeError`, so any
+# `except Exception` between the raise and the app handler silently absorbs it
+# and answers something else. Both surfaces below did exactly that, in the two
+# opposite directions a refusal can be mistranslated:
+#
+#   * the confirm endpoint turned it into 500 "please try again" — telling the
+#     user to retry a condition that must not succeed on retry;
+#   * the CV-review branch turned it into "you haven't uploaded one" — telling
+#     the user to re-upload a file that is, as far as anyone knows, stored.
+
+
+class TestConfirmPropagatesTheOwnershipRefusal:
+    """The confirm path must answer 409, never 500.
+
+    `upsert_profile` and the quota gate both resolve identity, and they sit on
+    opposite sides of the endpoint's inner `try`. One test per handler, so a
+    fix applied to only one of them still fails.
+    """
+
+    _ROW = {
+        "id": "34a86f49-0000-0000-0000-000000000000",
+        "filename": "cv.pdf",
+        "doc_type": "cv",
+        "is_primary": True,
+        "skills_count": 1,
+        "years_experience": None,
+        "inserted": False,
+    }
+
+    def _confirm(self, client, *, upsert=None, saved_document_exists=None, record=None):
+        from src.models.principal import IdentityOwnershipAmbiguous  # noqa: F401
+
+        row = dict(self._ROW)
+
+        class _FakeRicoDB:
+            available = True
+
+            def __init__(self, *a, **kw):
+                pass
+
+            def get_or_create_user_document(self, **kwargs):
+                return dict(row)
+
+        with (
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=_AUTH_UID),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.resolve_cv_upload_artifact",
+                return_value={
+                    "filename": "cv.pdf",
+                    "doc_type": "cv",
+                    "content_hash": "f" * 64,
+                    "file_size": 10,
+                    "cv_text": _CV_TEXT,
+                },
+            ),
+            patch(
+                "src.repositories.cv_upload_artifact_repo.saved_document_exists",
+                saved_document_exists or MagicMock(return_value=False),
+            ),
+            patch("src.services.subscription_gating.enforce_profile_optimization_allowed", MagicMock()),
+            patch(
+                "src.services.subscription_gating.record_profile_optimization_usage",
+                record or MagicMock(),
+            ),
+            patch("src.api.routers.rico_chat.upsert_profile", upsert or MagicMock()),
+            patch("src.api.routers.rico_chat.get_profile", return_value=None),
+            patch("src.services.profile_context_resolver.evaluate_minimum_profile", return_value=(True, [])),
+            patch("src.repositories.onboarding_repo.set_onboarding_status"),
+            patch("src.rico_db.RicoDB", _FakeRicoDB),
+        ):
+            return client.post(
+                "/api/v1/rico/confirm-cv-profile",
+                json={
+                    "preview": {"name": "A", "skills": ["compliance"]},
+                    "filename": "cv.pdf",
+                    "doc_type": "cv",
+                    "upload_id": _UPLOAD_ID,
+                },
+            )
+
+    def test_a_refusal_from_the_profile_write_is_409_not_500(self, client):
+        """The inner handler around `upsert_profile`.
+
+        500 "We couldn't save your CV. Please try again." is the precise wrong
+        answer: the refusal is deterministic, so the retry it invites cannot
+        succeed, and each attempt re-runs identity resolution.
+        """
+        from src.models.principal import IdentityOwnershipAmbiguous
+
+        r = self._confirm(
+            client, upsert=MagicMock(side_effect=IdentityOwnershipAmbiguous(2))
+        )
+        assert r.status_code == 409, r.text
+        body = r.json()
+        assert body["error"] == "ambiguous_account_ownership"
+        assert body["ok"] is False
+        # The 500 wording must be gone, not merely accompanied by a 409.
+        assert "try again" not in r.text.lower()
+
+    def test_a_refusal_from_the_quota_gate_is_409_not_500(self, client):
+        """The outer handler at the end of `confirm_cv_profile`.
+
+        The gate runs before the inner `try`, so fixing only the inner handler
+        leaves this path answering 500.
+        """
+        from src.models.principal import IdentityOwnershipAmbiguous
+
+        r = self._confirm(
+            client,
+            saved_document_exists=MagicMock(side_effect=IdentityOwnershipAmbiguous(3)),
+        )
+        assert r.status_code == 409, r.text
+        assert r.json()["error"] == "ambiguous_account_ownership"
+
+    def test_a_refused_confirm_is_never_billed(self, client):
+        """A refusal is not a sale. The allowance must be untouched."""
+        from src.models.principal import IdentityOwnershipAmbiguous
+
+        record = MagicMock()
+        r = self._confirm(
+            client,
+            upsert=MagicMock(side_effect=IdentityOwnershipAmbiguous(2)),
+            record=record,
+        )
+        assert r.status_code == 409, r.text
+        record.assert_not_called()
+
+    def test_the_response_carries_no_identifier_or_row_content(self, client):
+        """Safe to surface: a count is not an identity."""
+        from src.models.principal import IdentityOwnershipAmbiguous
+
+        r = self._confirm(
+            client, upsert=MagicMock(side_effect=IdentityOwnershipAmbiguous(2))
+        )
+        for leaked in (_AUTH_UID, _UPLOAD_ID, "cv.pdf", self._ROW["id"]):
+            assert leaked not in r.text
+
+
+class TestUnreadableStoreIsNotRenderedAsNoCv:
+    """"I can't read the store" and "you have no CV" are different facts.
+
+    `resolve_cv_context` is explicit that a failed read returns `state="none"`
+    with `availability_reason="store_unavailable"` and is *never* a confident
+    "no CV". The consumer branched on `has_cv` alone, so the refusal collapsed
+    into the denial — and this branch tagged that denial `next_action=
+    "upload_cv"`, so the user was additionally told to upload the file again.
+
+    The producer is out of this PR's scope and is already correct; the fix is
+    the consumer reading `availability_reason`.
+    """
+
+    def test_an_unreadable_store_never_says_you_have_not_uploaded_one(self):
+        out = _run_cv_analysis(has_cv=False, unavailable=True)
+        assert out["type"] == "cv_analysis"
+        assert "haven't uploaded one" not in out["message"]
+        assert "haven’t uploaded one" not in out["message"]
+
+    def test_an_unreadable_store_never_asks_for_another_upload(self):
+        """The tag is the actionable half of the lie.
+
+        `next_action="upload_cv"` drives the exit-point note and the client's
+        upload affordance. Asking for a re-upload during an outage is how a
+        stored CV gets replaced by a duplicate — or lost, if the user no longer
+        has the file.
+        """
+        out = _run_cv_analysis(has_cv=False, unavailable=True)
+        assert "next_action" not in out
+        assert "upload" not in out["message"].lower().split("no need to upload")[0]
+
+    def test_the_answer_says_it_is_temporary_and_not_the_user_s_problem(self):
+        out = _run_cv_analysis(has_cv=False, unavailable=True)
+        lowered = out["message"].lower()
+        assert "couldn't reach" in lowered or "could not reach" in lowered
+        assert "try again" in lowered
+
+    def test_a_known_filename_is_named_so_the_user_knows_it_is_still_there(self):
+        out = _run_cv_analysis(
+            has_cv=True, has_content=False, filename="Dana_Merrick_CV.pdf",
+            unavailable=True,
+        )
+        assert "Dana_Merrick_CV.pdf" in out["message"]
+        assert "next_action" not in out
+
+    def test_an_unreadable_store_does_not_claim_the_file_is_unreadable(self):
+        """Branch (2)'s wording blames the document — "re-upload it as a
+        text-based PDF (not a scanned image)". During an outage nothing is
+        known about the file, and that instruction is a re-upload ask wearing a
+        different hat."""
+        out = _run_cv_analysis(
+            has_cv=True, has_content=False, filename="Dana_Merrick_CV.pdf",
+            unavailable=True,
+        )
+        assert "scanned image" not in out["message"]
+        assert "re-upload" not in out["message"].lower()
+
+    def test_an_unreadable_store_never_produces_a_review(self):
+        """The opposite falsehood: reviewing a CV nobody could read."""
+        out = _run_cv_analysis(has_cv=True, has_content=True, unavailable=True)
+        assert "CV gaps and improvements" not in out["message"]
+
+    def test_the_arabic_path_is_corrected_too(self):
+        """Mixed script, because that is the only way in.
+
+        The CV-analysis classifier is a regex over English tokens, so a
+        wholly-Arabic message never reaches this branch — it routes to upload
+        guidance or profile completeness instead. A bilingual message is both
+        the realistic UAE input and the one that lands here with
+        `_is_arabic_text` true. That Arabic speakers can only reach this branch
+        in mixed script is a real coverage gap, but it is the classifier's, not
+        this branch's, and it is out of scope here.
+        """
+        out = _run_cv_analysis(
+            has_cv=False, unavailable=True, message="review my cv شكرا",
+        )
+        assert out["type"] == "cv_analysis"
+        assert "لم أتمكن من الوصول" in out["message"]
+        assert "haven't uploaded one" not in out["message"]
+        assert "next_action" not in out
+
+    def test_a_real_absence_is_still_a_real_denial(self):
+        """The fix must not swallow the genuine "no CV" case — that denial is
+        correct, and the exit-point note depends on its tag."""
+        out = _run_cv_analysis(has_cv=False, unavailable=False)
+        assert out["next_action"] == "upload_cv"
+        assert "haven't uploaded one" in out["message"]
+
+    def test_a_readable_cv_is_still_reviewed(self):
+        out = _run_cv_analysis(has_cv=True, has_content=True, unavailable=False)
+        assert "CV gaps and improvements" in out["message"]
+        assert "next_action" not in out

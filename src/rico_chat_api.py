@@ -10900,7 +10900,43 @@ class RicoChatAPI:
             # is keyed on it, so tagging any other branch would append "your CV
             # is not saved yet" to an answer about a CV that IS saved.
             _cv_next_action: str | None = None
-            if not (_cv_ctx.has_cv or bool(self._profile_value(profile, "has_cv"))):
+            if _cv_ctx.is_unavailable:
+                # (0) The store could not be read, so nothing is known about
+                # this user's CV — not that they have one, not that they don't.
+                # `has_cv` alone cannot see this: the resolver reports an
+                # unreadable store as state="none" precisely so it is never
+                # mistaken for a confident "no CV", and puts the distinction in
+                # `availability_reason`. Branching on `has_cv` alone collapsed
+                # this into (3) below and told the user they had never uploaded
+                # anything — then tagged it `upload_cv`, asking them to re-send
+                # a file that is, as far as anyone here knows, already stored.
+                # (2)'s wording is the same lie in the other direction: it
+                # blames the document ("not a scanned image") for what is an
+                # outage on our side.
+                #
+                # Carries no `next_action`: there is nothing to ask the user for
+                # until the store answers, and the exit-point pending-upload
+                # note keys on that tag.
+                _fname = _cv_ctx.filename
+                if _arabic_cv:
+                    _cv_msg = (
+                        f"لم أتمكن من الوصول إلى مستنداتك المحفوظة الآن، فلا أستطيع مراجعة سيرتك **{_fname}** بصدق."
+                        if _fname else
+                        "لم أتمكن من الوصول إلى مستنداتك المحفوظة الآن، فلا أستطيع مراجعة سيرتك الذاتية بصدق."
+                    ) + (
+                        "\n\nهذه مشكلة مؤقتة عندي وليست مشكلة في ملفك — جرّب مرة أخرى بعد قليل. "
+                        "لا حاجة لرفع أي شيء من جديد."
+                    )
+                else:
+                    _cv_msg = (
+                        f"I couldn't reach your saved documents just now, so I can't honestly review your CV **{_fname}** yet."
+                        if _fname else
+                        "I couldn't reach your saved documents just now, so I can't honestly review your CV yet."
+                    ) + (
+                        "\n\nThis is a temporary problem on my side, not a problem with your file — "
+                        "please try again in a moment. There's no need to upload anything again."
+                    )
+            elif not (_cv_ctx.has_cv or bool(self._profile_value(profile, "has_cv"))):
                 # (3) Nothing on file — unchanged wording.
                 #
                 # `has_cv` is derived from the PROFILE, which an unconfirmed
