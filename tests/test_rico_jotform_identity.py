@@ -350,5 +350,10 @@ class TestIdentityResolutionMetadata:
         assert meta["confidence"] == 0.95
         assert meta["matched_user_id"] == "user-123"
         assert meta["reasons"] == ["email match"]
-        assert meta["conflicts"]["email"] == ["new@example.com", "old@example.com"]
+        # Field NAMES survive; the values behind them do not. This metadata is
+        # written into the webhook's HTTP response body, so emitting the pair
+        # published one account's contact details to whoever posted the form.
+        assert meta["conflicts"]["email"] == {"conflict": True}
+        assert "new@example.com" not in repr(meta)
+        assert "old@example.com" not in repr(meta)
         assert meta["missing_fields"] == ["skills"]

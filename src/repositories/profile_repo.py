@@ -23,7 +23,11 @@ from contextlib import contextmanager
 
 from psycopg2.extras import Json
 
-from src.models.principal import IdentityOwnershipAmbiguous, rejected_trusted_identity_fields
+from src.models.principal import (
+    IdentityOwnershipAmbiguous,
+    is_public_principal,
+    rejected_trusted_identity_fields,
+)
 from src.rico_agent import RicoAgentSettings, RicoProfile
 from src.rico_db import RicoDB
 from src.rico_memory import RicoMemoryStore
@@ -1151,6 +1155,12 @@ def find_profiles_by_phone(phone: str) -> list[Any]:
                 if conn:
                     with conn.cursor() as cur:
                         # Remove non-digits from stored phone and compare last N digits
+                        #
+                        # Guest rows are excluded here for the same reason
+                        # `get_user_bundle` excludes them: a public principal must
+                        # never be a candidate for identity resolution. Without
+                        # this, a Jotform submission could be attached to a guest
+                        # row, and a guest row is not an account anyone can own.
                         cur.execute(
                             """
                             SELECT u.*, p.data as profile_data, s.data as settings_data
@@ -1158,18 +1168,33 @@ def find_profiles_by_phone(phone: str) -> list[Any]:
                             LEFT JOIN rico_profiles p ON p.user_id = u.id
                             LEFT JOIN rico_settings s ON s.user_id = u.id
                             WHERE REGEXP_REPLACE(u.phone, '[^0-9]', '', 'g') LIKE %s
+                              AND (u.external_user_id IS NULL
+                                   OR u.external_user_id NOT LIKE 'public:%%')
                             LIMIT 10
                             """,
                             (f"%{digits}",)
                         )
                         rows = cur.fetchall()
+                        # Enforced a second time in Python, deliberately. The SQL
+                        # predicate is the efficient filter; this one is the
+                        # verifiable one — it holds even if the query is later
+                        # reformatted, and it makes the guard provable without a
+                        # live database instead of only by asserting on SQL text.
+                        rows = [
+                            r for r in rows
+                            if not is_public_principal(str(r.get("external_user_id") or ""))
+                        ]
                         candidates.extend(_bundle_rows_to_profiles(rows))
         except Exception as e:
             logger.error("profile_repo: find_profiles_by_phone failed ref=%s err=%s", user_ref(digits), safe_exc(e))
 
-    # Memory fallback
+    # Memory fallback — the second doorway into candidacy, and it needs the
+    # same exclusion. Guarding only the SQL path would leave the guard trivially
+    # bypassable whenever the database is unavailable.
     if not candidates:
         for user_id in _memory().list_profiles():
+            if is_public_principal(str(user_id)):
+                continue
             profile = _memory().load_profile(user_id)
             if profile and getattr(profile, "phone", None):
                 p_digits = "".join(ch for ch in str(profile.phone) if ch.isdigit())

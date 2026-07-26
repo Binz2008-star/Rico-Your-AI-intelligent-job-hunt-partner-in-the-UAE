@@ -141,6 +141,36 @@ def _score_candidate(signal: IdentitySignal, candidate: ProfileContext) -> _Iden
     return score
 
 
+def _verified_signal_kinds(signal: IdentitySignal, candidate: ProfileContext) -> set:
+    """Which STRONG signals actually matched, by kind.
+
+    The score alone cannot answer "what matched?" — one strong signal and
+    another strong signal both add 1.0. That distinction is the whole point
+    here: an email, a Telegram handle and an explicit user_id are evidence the
+    caller controls the identifier, and a phone number is not. A phone is a
+    contact detail that people share, mistype, reuse and inherit with a
+    recycled SIM, and nothing in a Jotform submission proves the submitter
+    controls it.
+    """
+    kinds = set()
+    if signal.telegram_username and _norm_telegram(
+        signal.telegram_username
+    ) == _norm_telegram(candidate.telegram_username):
+        kinds.add("telegram_username")
+    if signal.email and _norm_email(signal.email) == _norm_email(candidate.email):
+        kinds.add("email")
+    if signal.phone and _norm_phone(signal.phone) == _norm_phone(candidate.phone):
+        kinds.add("phone")
+    if signal.user_id and signal.user_id == candidate.user_id:
+        kinds.add("user_id")
+    return kinds
+
+
+#: Strong signals that, on their own, are sufficient to auto-attach a
+#: submission to an existing account. `phone` is deliberately absent.
+_OWNERSHIP_EVIDENCE_KINDS = frozenset({"email", "telegram_username", "user_id"})
+
+
 def _find_conflicts(
     signal: IdentitySignal, candidate: ProfileContext
 ) -> Dict[str, Tuple[Any, Any]]:
@@ -273,6 +303,34 @@ def map_identity_flow(
 
     # 5. Strong single match — check for conflicts
     if top_score >= _STRONG_MATCH_THRESHOLD:
+        # A lone phone match is NOT ownership evidence and must not auto-attach.
+        #
+        # The "multiple strong matches -> ask_user" guard above is not
+        # containment on its own: it protects the crowded case and leaves the
+        # lonely one exposed. A phone held by exactly one candidate produced a
+        # single strong match and merged immediately, with no human in the
+        # loop. The candidate lookup also reads LIMIT 10 with no ORDER BY, so
+        # the mapper never reliably sees the full candidate set anyway — which
+        # is a second reason the multiplicity guard cannot be leaned on.
+        verified = _verified_signal_kinds(incoming, top_candidate)
+        if not (verified & _OWNERSHIP_EVIDENCE_KINDS):
+            return IdentityResolution(
+                action="ask_user",
+                confidence=0.5,
+                matched_user_id=top_candidate.user_id,
+                reasons=[
+                    f"Matched {top_candidate.user_id} on contact detail only "
+                    f"({', '.join(sorted(verified)) or 'none'}); no verified "
+                    "ownership evidence — human confirmation required"
+                ],
+                # Conflicts are still reported. This branch exists to hand the
+                # decision to a human, and a human deciding whether two records
+                # are the same person needs to see WHICH fields disagree.
+                # Returning {} here would make the ask harder to answer than the
+                # merge it replaced.
+                conflicts=_find_conflicts(incoming, top_candidate),
+                missing_fields=_missing_fields(incoming, top_candidate),
+            )
         conflicts = _find_conflicts(incoming, top_candidate)
         if conflicts:
             return IdentityResolution(
