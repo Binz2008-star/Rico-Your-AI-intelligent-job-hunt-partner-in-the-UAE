@@ -96,27 +96,23 @@ Update the block for your lane. Never duplicate one.
 
 - Lane alias: `L1`
 - Branch: `fix/identity-ownership-resolution`
-- PR: `#1398` (Draft)
-- Base SHA: `e433c7d` — rebase onto `fc2e107d` before merge
-- Expected remote HEAD: `c708bbb3` — fetched live; this lane has moved twice today, so re-read it rather than trusting this line
-- Lease holder: `L1`
-- Lease ownership: `HELD`
-- Current activity: `WRITING` — work exists locally that is not on the remote
-- Write authorization: `AUTHORIZED` for its own branch, until its batch is complete
-- Allowed files: identity resolution and its repository layer, plus that lane's tests
-- Forbidden files: the CV/documents surfaces (L2), workflow configuration, and `AI_WORKSPACE/CV_PIPELINE_STATE.md`
-- Tests: the lane's own suites, plus exact-head CI
-- Blocker: the owner's five conditions — typed re-raise in `upsert_profile` landed; no-mirror-success and HTTP 409 tests passing; trusted-field source drift closed; fresh independent review complete; exact-head CI green on the new SHA
-- Stop condition: stop and report on an unexpected commit, or if the objective would widen beyond identity ownership
-- Next executable action: complete the identity-ownership batch; it is the next integrity merge and nothing behavioural merges ahead of it
+- PR: `#1398` — **MERGED as `70c2af7c`** (2026-07-26). Follow-up `#1404` merged as `97af6ded`
+- Base SHA: n/a — merged
+- Expected remote HEAD: n/a — merged. **A merged PR cannot carry follow-up work**; new work starts from `main@97af6ded` on a fresh branch
+- Lease holder: none
+- Lease ownership: `RELEASED`
+- Current activity: `IDLE`
+- Write authorization: `REVOKED` on the merged branch
+- **Objective NOT complete.** The merges closed the ownership-resolution path, not the data state. `#1405` (ambiguous ownership → `409` on onboarding) is open in review, and the `55502f40` cluster plus three not-yet-colliding rows remain unhealed by `#1404` — see `PROJECT_STATUS.md` → "Open production-integrity item"
+- Stop condition: no lane may treat identity as finished on the strength of the merge list alone
 
 ### L2 — CV and documents
 
 - Lane alias: `L2`
 - Branch: `claude/cv-pending-artifact-confirm`
 - PR: `#1389` (Draft)
-- Base SHA: `e433c7d` — rebase onto the new `main` after `#1398` lands
-- Expected remote HEAD: `878c5944` — fetched live
+- Base SHA: `70c2af7c` — **STALE**, one commit behind `main@97af6ded`; rebase before taking exact-head gates
+- Expected remote HEAD: `4f2abe60` — fetched live at the 2026-07-26 late pass
 - Lease holder: `L2`
 - Lease ownership: `HELD` — **sole writer.** Two sessions once wrote to this branch concurrently; the collision was resolved by merge with nothing lost. This lane is the reason the Writer Lease Protocol exists
 - Current activity: `HOLDING`
@@ -125,17 +121,17 @@ Update the block for your lane. Never duplicate one.
 - Forbidden files: identity resolution (L1), workflow configuration
 - Tests: the lane's backend suites, the frontend suite, and the real-Postgres integration job
 - Owner ruling, binding: **a repeated confirm of the same server-verified saved artifact is an idempotent retry and consumes no quota.** It is not a new purchase and must not be refused
-- Blocker: sequenced behind `#1398`
+- Blocker: **CLEARED.** The written hold was "behind the five-row identity consolidation". The production repair was executed as **separation, not consolidation** — all five rows still exist, nothing deleted, each row's email now equals its own `external_user_id`, each account kept its own data *(owner-reported; no database read was taken here)*. Mechanically confirmed at this pass: `git merge-tree` against `main@97af6ded` is **conflict-free**, and there is **zero file overlap with `#1404`**
 - Stop condition: stop on an unexpected commit, or on any change that would make a confirm non-idempotent
-- Next executable action: after `#1398` lands, rebase onto the new `main`, resolve integration conflicts, and take exact-head gates
+- Next executable action: rebase off the stale `70c2af7c` onto `main@97af6ded`, then take exact-head gates. **This lane does that work — no other lane may touch this branch or this PR**
 
 ### L7 — control plane
 
 - Lane alias: `L7`
 - Branch: `claude/workspace-control-reconcile`
-- PR: `#1402` (Draft)
-- Base SHA: `fc2e107d` — rebased onto current `main` at this pass
-- Expected remote HEAD: the head this reconciliation pushes
+- PR: `#1402` — **MERGED as `805dd4d6`** (2026-07-26)
+- Base SHA: n/a — merged. The current control-plane pass runs on a fresh branch cut from `main@97af6ded`
+- Expected remote HEAD: n/a — merged
 - Lease holder: `L7`
 - Lease ownership: `HELD`
 - Current activity: `WRITING` — this reconciliation
@@ -151,7 +147,7 @@ Update the block for your lane. Never duplicate one.
 
 - **L3 — routing.** `CLOSED`, merged as `e433c7d` in a **prior** cycle; its deploy was verified at that time. That is a historical record, not a current production claim — nothing in this pass re-verified the deployment.
 - **L4 — workflow-trigger containment checker.** `CLOSED`. `#1400` merged as `03450277`. It touches no runtime path, so no deploy was expected. Lease `RELEASED`; branch work complete.
-- **L5 — documents domain contract.** `CLOSED`. `#1399` merged as `fc2e107d` (Milestone A, first slice). It changes five runtime paths under `src/`, so a backend deploy **is** expected. Lease `RELEASED`; the branch was deleted on merge.
+- **L5 — documents domain contract.** `CLOSED`. `#1399` merged as `fc2e107d` (Milestone A, first slice). It changed five runtime paths under `src/`, so a backend deploy was expected; `main` has since advanced to `97af6ded`. Lease `RELEASED`; the branch was deleted on merge.
 - **L6 — review.** Read-only. Holds no lease and pushes nothing.
 
 ### Closed without merge — evidence preserved

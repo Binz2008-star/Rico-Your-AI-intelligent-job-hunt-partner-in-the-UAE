@@ -127,7 +127,23 @@ Revert the PR. No deploy or migration involved.
 
 ---
 
-# Control dashboard — 2026-07-25 (evening)
+# Control dashboard — 2026-07-25 (evening) — **SUPERSEDED**
+
+> **SUPERSEDED as of 2026-07-26 (late). Do not read the dashboard below as current state.**
+>
+> It is preserved as a dated record of what was true that evening. Live control
+> state is `AI_WORKSPACE/PROJECT_STATUS.md`, reconciled onto `main@97af6ded`.
+>
+> Specifically stale below, verified line by line at the superseding pass:
+>
+> - **"`main` is `fc2e107d`"** — `main` is now `97af6ded`; five further merges have landed (`#1402`, `#1398`, `#1404`, and `#1399`/`#1400` already listed).
+> - **L1 `HELD`/`WRITING` on `#1398`** — `#1398` merged as `70c2af7c`; the lane is `RELEASED`/`IDLE`. Its follow-up `#1404` merged as `97af6ded`.
+> - **L7 `HELD`/`WRITING` on `#1402`** — `#1402` merged as `805dd4d6`; that lease is released.
+> - **L2 "sequenced behind `#1398`"** — that hold has cleared; `#1389`'s base `70c2af7c` is now the stale part.
+> - **The concurrency counts** ("3 of 4 active") describe leases that no longer exist.
+>
+> The identity work is **not** finished despite the merges — see `PROJECT_STATUS.md`
+> → "Open production-integrity item", and the OPEN CI gap that `#1406` closes.
 
 Appended to the latest dated handoff rather than opened as a new file, so the
 control plane keeps one place to look.
