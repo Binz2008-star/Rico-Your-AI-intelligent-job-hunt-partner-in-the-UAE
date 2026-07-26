@@ -52,7 +52,7 @@ BASELINE_SENTINEL = "baseline gap at main@1c13147f"
 # High-water mark for the frozen baseline. It may only ever be lowered, and
 # lowering it is the visible record of debt actually paid. A change that raises
 # it fails the guard, so the backlog cannot quietly grow back.
-BASELINE_HIGH_WATER = 213
+BASELINE_HIGH_WATER = 212
 
 # The frozen baseline: the exact set of test files reachable by no pytest
 # invocation at main@1c13147f45365c10d518356a429f757c740f3a06, measured by
@@ -175,7 +175,6 @@ FROZEN_BASELINE = frozenset((
     "tests/test_guest_provider_degraded.py",
     "tests/test_hardening_proxy_timing_pipeline.py",
     "tests/test_identity_email_overwrite_containment.py",
-    "tests/test_identity_flow_mapper.py",
     "tests/test_import_profile_command.py",
     "tests/test_issue_135_production_verification.py",
     "tests/test_job_action_isolation.py",
