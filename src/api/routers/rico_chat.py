@@ -2136,6 +2136,13 @@ async def rico_upload_cv(
                 parsed = parsed_raw
             else:
                 raise TypeError(f"Unexpected CV parser result type: {type(parsed_raw)}")
+        except IdentityOwnershipAmbiguous:
+            # Defensive: the parser is handed bytes only, so it cannot resolve
+            # ownership today. Were that to change, this handler would answer "I could
+            # not read this file. Please try a text-based PDF…" — blaming the document
+            # for a refusal about the account, and sending the user round a re-export
+            # loop that cannot succeed.
+            raise
         except Exception as exc:
             logger.error(
                 "cv_upload_parse_error ref=%s user=%s filename_len=%d bytes=%d err=%s",
@@ -2327,6 +2334,12 @@ async def rico_upload_cv(
             "warnings": cv_warnings,
         }
     except HTTPException:
+        raise
+    except IdentityOwnershipAmbiguous:
+        # Not an upload failure: the bytes arrived and (where reached) parsed. A 500
+        # "CV upload failed" points the user at their file and invites re-upload
+        # after re-upload, none of which can succeed. The app-level handler answers
+        # 409 so the refusal is legible and terminal.
         raise
     except Exception as exc:
         logger.error(
