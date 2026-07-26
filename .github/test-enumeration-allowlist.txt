@@ -1,0 +1,30 @@
+# Test files deliberately excluded from every pytest invocation, BY DECISION.
+#
+# Format: one entry per line, `path  # reason`.
+#
+# This file holds one thing only: exclusions somebody chose, with the reason
+# they chose them. It is not the backlog.
+#
+# The backlog lives in FROZEN_BASELINE in scripts/check_test_enumeration.py —
+# the 213 files that ran in no workflow at
+# main@1c13147f45365c10d518356a429f757c740f3a06. Those are recorded, not
+# excused: an entry there means "nobody has looked at this yet", while an entry
+# here means "somebody decided, and said why".
+#
+# An earlier revision of this change put all 213 in this file under one shared
+# reason. That satisfied the every-entry-has-a-reason rule in text and defeated
+# it in substance: the file could no longer tell a decision apart from an
+# oversight, and a list that cannot make that distinction stops being a recorded
+# debt and becomes a standing permission.
+#
+# Rules the guard enforces here:
+#
+#   * An entry with no reason fails.
+#   * An entry reusing the frozen baseline's reason text fails. That excuse
+#     belongs to the paths measured at that commit; a new file must say why IT
+#     is excluded.
+#   * An entry whose file is enumerated now fails. A stale exclusion is a false
+#     record of intent, so it must be deleted rather than left to rot.
+#
+# There are currently no entries. A new unenumerated test file fails CI until it
+# is either enumerated or listed here with a reason of its own.
