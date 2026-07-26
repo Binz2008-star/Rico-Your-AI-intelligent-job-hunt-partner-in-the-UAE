@@ -9,6 +9,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, Request
 
 from src.api.rate_limit import LIMIT_PROFILE, limiter
+from src.models.principal import IdentityOwnershipAmbiguous
 
 router = APIRouter(prefix="/api/v1", tags=["user"])
 logger = logging.getLogger(__name__)
@@ -21,6 +22,13 @@ def _fetch_display_name(email: str) -> str | None:
         db = RicoDB()
         bundle = db.get_user_bundle(email)
         return bundle.get("name") if bundle else None
+    except IdentityOwnershipAmbiguous:
+        # Best-effort applies to a lookup that failed, not to one that was refused.
+        # Swallowing here answers /me as `200 {"name": null}` — the same shape as an
+        # account that simply has no name — so every consumer reads a refusal as
+        # "exists, no data", and a client that writes the field back persists that
+        # emptiness over the stored value. Propagates to the 409 handler instead.
+        raise
     except Exception:
         logger.debug("me_name_lookup_failed user=%s", user_ref(email))
         return None

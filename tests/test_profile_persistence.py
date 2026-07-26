@@ -1336,6 +1336,12 @@ def test_get_user_bundle_email_path_keeps_external_user_id_fallback():
                 "settings": {},
             }
 
+        def fetchmany(self, size=1):
+            # get_user_bundle now reads up to two candidate rows so it can detect
+            # ambiguous ownership and fail closed instead of ranking. A single row
+            # means unambiguous ownership, which is what this test exercises.
+            return [self.fetchone()]
+
     class FakeConn:
         def cursor(self):
             return FakeCursor()
@@ -1346,8 +1352,12 @@ def test_get_user_bundle_email_path_keeps_external_user_id_fallback():
     assert bundle is not None
     assert bundle["external_user_id"] == "person@example.com"
     assert "LOWER(u.external_user_id) = LOWER(%s)" in captured["sql"]
+    # Positional order mirrors the placeholders: external_user_id match, email match,
+    # the guest-scope flag (False here -- an authenticated caller keeps the guest
+    # exclusion active), then the ORDER BY match.
     assert captured["params"] == (
         "person@example.com",
         "person@example.com",
+        False,
         "person@example.com",
     )

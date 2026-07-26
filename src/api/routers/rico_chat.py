@@ -55,6 +55,7 @@ from src.repositories.learning_repo import get_learning_repository
 from src.agent.responses.schema import RicoResponse, build_error_response, _generate_debug_id
 from src.agent.runtime import agent_runtime
 from src.models.onboarding import ONBOARDING_COMPLETED, ONBOARDING_IN_PROGRESS
+from src.models.principal import IdentityOwnershipAmbiguous
 from src.rico_agent import RicoAgent
 from src.rico_chat_api import generate_error_ref
 from src.rico_env import get_ai_provider
@@ -1651,6 +1652,11 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
             profile_for_warnings = upsert_profile(
                 user_id, updates, require_db=True, clear_fields=clear_fields,
             )
+        except IdentityOwnershipAmbiguous:
+            # Not a retryable persistence fault. 503 would tell the client to try
+            # the same write again; the app-level handler answers 409 instead, so
+            # the refusal is distinguishable from a database outage.
+            raise
         except Exception as e:
             # #1076 delta: no raw id, no traceback — psycopg2 error strings can
             # re-emit the bound profile values this endpoint just tried to save.

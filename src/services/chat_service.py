@@ -13,6 +13,7 @@ from typing import Any, Dict
 
 from src.rico.intent import IntentRouter
 from src.schemas.chat import RicoSessionContext
+from src.models.principal import IdentityOwnershipAmbiguous
 
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -135,7 +136,20 @@ def run_chat_preflight(ctx: RicoSessionContext, message: str) -> ChatPreflight:
     # ── AI message-limit gate (only applies to AI-routed messages) ───────────
     # Checked after deterministic policy routes so capped users can still reach
     # unsupported-tool clarifications and account_service responses.
-    gate = check_ai_message_allowed(ctx)
+    try:
+        gate = check_ai_message_allowed(ctx)
+    except IdentityOwnershipAmbiguous:
+        # Resolve the refusal into the quota path's own typed contract here, rather
+        # than letting it reach the top-level chat handlers -- both answer 200 with a
+        # generic "I couldn't process your request", which reads as a transient fault
+        # and invites a retry that must never succeed. Same channel as the gate's own
+        # terminal response, so this is one contract, not a second error path.
+        from src.services.subscription_gating import account_conflict_response
+
+        logger.warning(
+            "chat_preflight: quota refused reason=%s", "ambiguous_account_ownership"
+        )
+        return ChatPreflight(terminal=account_conflict_response(), gate=None)
     if gate and not gate.allowed:
         return ChatPreflight(terminal=gate.to_response(), gate=gate)
 

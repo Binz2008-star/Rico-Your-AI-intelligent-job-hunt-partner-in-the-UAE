@@ -24,6 +24,7 @@ import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
+import { ACCOUNT_CONFLICT_TYPE, isAccountConflictResponse } from "@/lib/accountConflict";
 import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
 import type { ChatApiResponse, JobMatch, NextAction, PendingCvUploadResponse, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
 import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, DEFAULT_CHAT_SESSION_ID, executePermissionAction, fetchChatHistory, fetchChatSessions, fetchMe, fetchPendingCvUpload, getCvQuotaError, logout, mintChatSessionId, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
@@ -1455,8 +1456,22 @@ export default function CommandPage() {
                 const responseSource = res.response_source ?? "unknown";
                 const isRateLimited = responseSource === "rate_limited";
                 const isFallbackMode = res.type === "fallback_response";
+                // Identity-ownership refusal: an explicit, non-retryable state. It must
+                // not fall through to the generic error bubble, which offers a retry
+                // that cannot succeed. Backend contract: lib/accountConflict.
+                const isAccountConflict = isAccountConflictResponse(res);
 
-                if (isRateLimited) {
+                if (isAccountConflict) {
+                    setMessages((prev) => {
+                        const filtered = prev.filter((m) => m.id !== streamId);
+                        return [...filtered, {
+                            id: streamId,
+                            role: "rico",
+                            text: reply,
+                            type: ACCOUNT_CONFLICT_TYPE,
+                        }];
+                    });
+                } else if (isRateLimited) {
                     setMessages((prev) => {
                         const filtered = prev.filter((m) => m.id !== streamId);
                         return [...filtered, { id: streamId, role: "rico", text: t("cmdErrRateLimit") }];

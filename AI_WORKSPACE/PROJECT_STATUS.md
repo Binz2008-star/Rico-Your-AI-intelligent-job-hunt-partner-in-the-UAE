@@ -8,165 +8,124 @@
 
 - **Why it exists:** one current, evidence-backed operating snapshot for Rico.
 - **Update when:** production, active ownership, launch blockers, or priority order changes materially.
-- **Source of truth:** this file for current control state; `AI_WORKSPACE/DECISIONS.md` for binding decisions; `AI_WORKSPACE/TASKS.md` for task-level continuity.
+- **Source of truth:** this file for current control state; `AI_WORKSPACE/DECISIONS.md` for binding decisions; `AI_WORKSPACE/TASKS.md` for lane-level continuity.
 - **Owner:** Rico owner, with the acting CTO/session responsible for evidence-backed reconciliation.
 - **History:** prior snapshots remain preserved in Git history. This file intentionally keeps current truth ahead of historical narrative.
 - **SHA rule:** never make this document self-stale by claiming its own commit is the permanent current `main`. Fetch `main` live. Record the application/runtime baseline separately from docs-only control commits.
 
-## Reconciliation — 2026-07-25
+## Rule of authority
 
-The previous snapshot said `main=45fa80c4` and zero open PRs. Both claims were stale. This reconciliation is based on direct GitHub, Vercel, Neon, CI, production screenshots, and owner-provided backend logs.
+Ranked, and not negotiable when they disagree:
+
+1. GitHub `main`, PR heads, and the deployed `/version`.
+2. This file.
+3. The lane continuity blocks in `AI_WORKSPACE/TASKS.md`.
+4. The latest dated handoff.
+5. Everything else.
+
+**Every SHA in this file is verified from the API before it is written.** A SHA copied from a message, a summary, or a previous session is not evidence. If live state and this file disagree, reconcile this file before starting anything else.
+
+## Reconciliation — 2026-07-26
 
 ### Verified control snapshot
 
-| Field | Current verified value |
-| --- | --- |
-| Repository | `Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE` |
-| GitHub control head | Fetch live at session start. `#1390` merged the control-plane reconciliation as docs-only commit `745e9714`; it does not change application runtime |
-| Application/runtime baseline | `e26548bb` is the latest application tree on `main` before the docs-only control reconciliation |
-| Latest application merges | `#1385` rate-limit configuration (`da5339c`), `#1387` first log-privacy sweep (`989f774`), `#1386` test-environment isolation (`e26548b`) |
-| Vercel production | READY on application tree `e26548b`; no 5xx or warning/error runtime logs found in the inspected six-hour window |
-| Render backend | Owner-verified at `989f774`; `#1386` is test-only, so a different backend runtime SHA is expected rather than deployment drift |
-| Neon production | Project ready. CV preview branch exists and has **zero schema diff** from production; the current CV work requires no migration |
-| Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired |
-| Current product P0 | Issue `#1391`: one canonical CV upload/review/confirm/save journey across `/upload`, `/profile`, and `/command` |
-| Current CI/security P0/P1 | Make privacy ratchet sound, remove unintended external network from tests, then move toward a trustworthy full-suite gate |
-| Owner-only operations | Hosting account continuity/billing and database protection posture require owner review; sensitive configuration details are intentionally not recorded in this public repository |
-
-## Production evidence that changes the plan
-
-### CV upload is parsed but the product journey is split
-
-Production evidence proves the backend parser can read the uploaded PDF and produce a good preview. The failure is the product state machine:
-
-1. `/upload` can create a pending preview but historically retained only client state and discarded the authoritative handoff.
-2. `/profile` reports upload success before confirmation and reloads an empty document inventory.
-3. `/command` can render the preview while the generic chat path answers from different context and asks the user to upload again.
-4. The same real file was uploaded repeatedly because the first pending operation was not recovered consistently across surfaces.
-
-A read-only aggregate production audit also found material amplification of duplicate short-lived artifact rows for identical uploads, with many artifacts already corresponding to a saved document. Exact operational counts are intentionally not published. This makes a retention increase unsafe until duplicate amplification and periodic purge are resolved.
-
-**Decision:** do not patch each surface independently. One server-authoritative pending-artifact contract must drive all three entry points. Explicit confirmation-before-save remains binding.
-
-### CV work currently in flight
-
-- Tracker: `#1391`
-- Branch: `claude/cv-pending-artifact-confirm`
-- Observed head: `c3effbae02a0e2f8ae885b6a32a408b0bf817164`
-- Vercel preview: READY
-- Neon preview branch: READY; schema diff from production is empty
-- No implementation PR opened yet
-- Current branch comparison: broader than the reported four-commit summary; it must be audited before PR creation
-- Known blocker: the branch changes Command/Vault/backend state handling but does not yet prove the `/profile` upload entry uses the same orchestration
-- Functional preview smoke is still unverified; static route HTTP 200 is not acceptance evidence
-- TTL increase is blocked until duplicate-artifact amplification and scheduled purge are explicitly handled
-
-**Required acceptance before merge:**
-
-- one upload from each entry point produces the same server-backed pending contract;
-- no `user_documents` row before confirmation;
-- pending state survives navigation and refresh;
-- chat never contradicts a visible preview or asks for a duplicate upload;
-- `pending`, `already_saved`, `expired`, `absent`, and `unavailable` remain distinct;
-- confirmation creates exactly one canonical document and is idempotent;
-- repeated identical uploads cannot amplify retained full CV text without a bounded contract;
-- My Files and Profile refresh from server read-back;
-- no identity/security tests are weakened;
-- authenticated preview smoke uses non-personal test data before production deployment;
-- the owner's real CV is uploaded only once after merge, deploy, and `/version` verification.
-
-## Open PR occupancy — verified 2026-07-25
-
-| PR | State | Ownership / decision |
+| Field | Value | How it was established |
 | --- | --- | --- |
-| `#1388` differential log-privacy ratchet | Draft, CI green | **Blocked.** CTO review comment records three correctness/governance findings; keep Draft until resolved |
-| `#1382` account-data routing | Draft | Stale base and overlaps trust-routing work; rebase and re-audit after current P0 |
-| `#1374` differentiation proposal | Draft, docs-only | Defer; strategy already governed by trust-first decision |
-| `#1371` design + production polish | Draft, currently non-mergeable | Mixed concerns and stale; split or close after P0 |
-| `#1370` public pricing | Ready | Defer under feature freeze and unresolved billing activation/operations |
-| `#1362` Command prompt hints | Draft | Cosmetic; defer until trust P0 closes |
-| `#1359` warnings palette + theme persistence | Ready | Mixed objectives; split/rebase/review later |
+| `main` | `fc2e107d` | Fetched live at the moment this section was written |
+| Deployed backend `/version` | **Not verified this pass** | The production host is unreachable from the reconciling container (outbound blocked). Recorded as unknown rather than assumed |
+| Application/runtime baseline | **Expected to move to `fc2e107d`** | `#1399` changes five runtime paths under `src/`, so a Render deploy is expected. Confirmation is owner-side |
+| Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired | Unchanged |
 
-An open PR is not permission to merge. Exact-head review, CI, overlap, production impact, rollback, and documentation must be re-verified before every merge.
+**`main` and the deployed `/version` are not asserted to be equal here.** Before this cycle they agreed at `e433c7d`. `#1400` cannot have moved the deployment because it touches no runtime path. `#1399` can and should have, because it touches five. Whether that deploy has landed is not verifiable from this container, so it is left open rather than guessed in either direction.
 
-## #1388 — merge blockers
+### Merged this cycle
 
-The current head is green, but green CI does not prove the ratchet is sound.
+| PR | Merge commit | Runtime paths touched | Deploy | Why that is correct |
+| --- | --- | --- | --- | --- |
+| `#1400` privileged-trigger containment | `03450277` | **0** | **No deploy expected** | CI/workflow mechanism only. A deploy would be noise, not safety |
+| `#1399` documents inventory contract (Milestone A) | `fc2e107d` | **5** (`src/api/routers/files.py`, `src/domain/documents/*`) | **Deploy expected** | It changes runtime behaviour, so it must reach production and be confirmed there |
 
-1. **Rule weakening:** HEAD rules are used to scan both base and head. Weakening the rule vocabulary can blind both scans. Required design: base-rule comparison to prevent weakening plus head-rule comparison to activate new protections.
-2. **Zero-debt end state:** a base scan with zero findings must be valid, not `CANNOT RUN`, provided source discovery and strict parse/decode checks succeeded.
-3. **Truthful governance:** major action tags are not immutable SHA pins; documentation must not claim pinned refs unless exact SHAs are used. Detection and Required-check merge enforcement must be stated separately.
+For merges that touch no runtime path, `main` moving ahead of the deployed `/version` is **expected divergence, not deployment drift**. Do not chase parity, and do not fire a deploy to manufacture it.
 
-No call-site remediation belongs in this mechanism PR.
+### Closed without merge this cycle
 
-## Newly verified infrastructure and test risks
+| PR | Head | Disposition |
+| --- | --- | --- |
+| `#1401` design-reference extraction | `d4bd5469` | Closed without merge by the owner as reference-only, outside the Architecture V2 production sequence. **Branch preserved deliberately** — do not delete it, do not reopen the PR. Its exact-head CI was green at closure |
+| `#1371` command visual polish | `4e7b82f6` | Closed without merge. It was superseded by `#1401`, which has itself now been closed without merge — so the design-reference work is parked in branch form only, and nothing from either PR is in `main` |
 
-### Neon
+### Production smoke on `e433c7d` (prior baseline)
 
-- CV preview schema matches production exactly; no migration is justified for the current CV fix.
-- Read-only aggregate checks found no primary-CV uniqueness violation and no expired artifact backlog at inspection time.
-- Duplicate live artifacts exist and must be handled before longer retention is approved.
-- Preview-branch accumulation exists across old branches. Do not mass-delete blindly. First produce a dry-run inventory mapped to open PRs/deployments, TTL, and branch ownership, then remove only proven-orphaned branches.
-- Production branch protection and connection controls require an owner-only settings review. Exact posture is not published here.
-- No application query-performance blocker was found in the inspected query statistics; observed application queries were below the requested slow-query threshold.
+Three of three classes passed: an ownership-qualified account question answered from the database with reconciled counts; a CV file-list question answered deterministically from the file store; and a general documents question answered by the model **without listing any personal file**.
 
-### Vercel
+**Evidence class: verified by the owner through the proxy in a browser session. There is no automated artifact.** That is stated plainly because it decides how much the result can carry: it is real evidence of live behaviour and it is not a regression gate. Nothing may cite this smoke as a substitute for a test. **This smoke predates `#1399` and does not cover it.**
 
-- Current production and the CV/ratchet previews are READY.
-- No inspected production 5xx/error/warning events were found in the scoped runtime-log query.
-- One isolated 404 was for `/design-preview`; no production 5xx pattern was found.
-- Static page success is not a functional smoke test for authenticated CV APIs.
-- CV preview build has one framework warning about edge runtime disabling static generation for a page; it is not currently a build failure but should be attributed before merge if the changed route caused it.
+## Active PRs — heads fetched live at this pass
 
-### Test network isolation
+| Lane | PR | Branch | Head | State |
+| --- | --- | --- | --- | --- |
+| L1 identity ownership | `#1398` | `fix/identity-ownership-resolution` | `c708bbb3` | Draft — next integrity merge |
+| L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | `878c5944` | Draft — resumes after `#1398` |
+| L7 control plane | `#1402` | `claude/workspace-control-reconcile` | this PR | Draft — docs-only |
 
-Measured full-suite evidence found unintended outbound calls to job providers and integration APIs. Some tests remain green even when those calls fail, so they generate traffic without test signal. A third-party Indeed adapter also disables TLS verification on a reachable path.
+Deferred under the trust-first freeze, heads fetched live: `#1374` (`bed81b15`), `#1370` (`b90dd910`), `#1362` (`a14faffd`), `#1359` (`83d07785`). An open PR is not permission to merge.
 
-Required sequence:
+**Enabling branch protection will block these four until they rebase. That is intended protective behaviour, not breakage.**
 
-1. block external TCP/HTTP by default while temporarily allowing DNS needed by SSRF tests;
-2. mock JobSpy/Bayt/Telegram/Hugging Face at service boundaries;
-3. make link-verifier DNS deterministic with an injected resolver;
-4. then block external DNS too;
-5. isolate any deliberate live integration into a scheduled/manual non-blocking workflow;
-6. resolve the known Arabic test flake independently — network evidence shows it performs no external calls;
-7. run the complete suite as a shadow gate before making it Required.
+### CI evidence rule
 
-## Current execution order
+**A passing job on a different commit is not exact-head evidence and may never be cited as one.** Transience is established by the failed run's own annotation, and settled only by a re-run recorded against the same head. A re-run that goes green with no content change is the clean form of that proof: it isolates infrastructure from the diff.
 
-1. **Owner:** resolve hosting account continuity/billing warning.
-2. **CV P0 / #1391:** finish one canonical CV orchestration; audit branch commit history, add the missing Profile entry-point behavior, and control duplicate artifact retention before opening a Draft PR.
-3. **Privacy gate:** fix the three `#1388` blockers; keep Draft and rerun exact-head checks.
-4. **Test trust:** create the external-network isolation PR, then deterministic DNS PR, then flake investigation.
-5. **Log privacy:** after the ratchet is sound and Required, continue remediation in functional batches plus a separate runtime egress sanitizer.
-6. **Database operations:** review protection settings privately and create a non-destructive preview-branch cleanup inventory.
-7. **Backlog:** rebase, split, close, or defer older PRs; do not merge cosmetic/new-feature work ahead of trust P0.
-8. **Production acceptance:** full authenticated EN/AR/mobile smoke only after exact deployment SHAs are known.
+Recorded because it was violated here: a green from a later, different commit was cited as if it settled a `postgres-integration` failure on `#1401`'s head. The failure was a container-registry pull failure with no test executed, and it was properly settled by a re-run on that same SHA.
+
+## Concurrency state
+
+Caps are rules and are fixed. **Counts are read at the reconciliation pass that writes this section**, by applying the counting rules in `OPERATING_RULES.md` to the lane blocks in `TASKS.md` as they read at that moment. They are not carried forward from any earlier report.
+
+| Measure | Cap | At this pass |
+| --- | --- | --- |
+| Active agents (`WRITING` or `REVIEWING`) | 4 | 2 — L1 writing, L7 writing this reconciliation |
+| Simultaneous code writers (`WRITING` + `AUTHORIZED` + executable scope) | 2 | 1 — L1 only; L7 is docs-only and does not count |
+| Writers per branch | 1 | 1 on every branch holding a lease |
+
+Lease holders appear against branches throughout this file. **That is ownership, not activity** — see `OPERATING_RULES.md` → "Ownership is not activity". Reading those assignments as concurrent work in progress is the specific misreading the four-field lease model exists to prevent.
+
+## Standing owner rulings
+
+- **Render billing notice — deferred, non-blocking.** Render is operational *per the owner's standing ruling* — that is the owner's statement, not a reading taken by this reconciliation, which could not reach the host. The payment reminder is acknowledged by the owner and will be handled by the owner. It is **not** a blocker for work, reviews, merges, or the roadmap. **Do not restate or escalate it.** Raise Render again only on verified service degradation, suspension, failed deployment, health-check failure, or production impact.
+
+## Merge order
+
+1. **L1 `#1398`** — identity ownership; the next integrity merge. Nothing behavioural merges ahead of it.
+2. **L7 `#1402`** — this docs-only reconciliation; runs in parallel and must not block coding on other lanes.
+3. **L2 `#1389`** — after `#1398` lands, rebased onto the new `main`.
+
+Branch protection is enabled by the owner, with `trusted-ratchet` as the only Required status check.
 
 ## Stop conditions
 
 Stop and report instead of guessing when:
 
-- another writer owns the same objective or files;
+- another writer holds the lease on the same branch or objective;
 - a branch contains commits not explained by its continuity record;
 - a PR scope expands across unrelated objectives;
 - a schema diff appears where no migration was approved;
 - a check is green only because the relevant test is outside CI;
 - production mutation, billing, access-control, secret, migration, merge, or deployment action lacks explicit owner authorization;
 - a UI claim is not derived from a current server read;
-- a user-data workflow would require another real upload merely to test an unverified fix.
+- a user-data workflow would require another real upload merely to test an unverified fix;
+- an instruction arrives without full attribution — see `OPERATING_RULES.md` → "Directive Authority".
 
 ## Next exact action
 
 ```text
-CV owner: work from #1391. Audit the branch range against current main, explain
-every commit, wire `/profile` into the same server-authoritative pending contract,
-control duplicate full-text artifact amplification, run backend baselines, and
-open a Draft PR only when all three entry points share one state machine.
+Per lane, read the continuity block in AI_WORKSPACE/TASKS.md, confirm the lease is
+yours, check write authorization, fetch the remote, and compare the remote head
+against the expected head recorded there before any push.
 
-Privacy owner: address the three blocking findings recorded on #1388 and keep the
-PR Draft.
+L1 completes its identity-ownership batch.
+L2 rebases onto the new main after #1398 lands.
 
-No production deploy, database mutation, real-CV upload, or bulk Neon branch
-deletion is authorized by this status document.
+No merge, no deploy, no database mutation, no real-CV upload, and no bulk Neon
+branch deletion is authorized by this document.
 ```
