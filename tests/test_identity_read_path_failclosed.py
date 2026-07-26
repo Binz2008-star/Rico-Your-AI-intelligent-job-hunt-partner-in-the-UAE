@@ -344,6 +344,120 @@ def test_the_existing_handler_answers_409_with_the_stable_reason_code():
     assert WEB_PRINCIPAL not in json.dumps(body)
 
 
+# ── 6. what the user actually receives ────────────────────────────────────────
+#
+# The sections above prove the resolver refuses. These prove what reaches the
+# HTTP client, driving the real ASGI app through the real routes with the store
+# scripted to return two candidate rows. A resolver that raises correctly is
+# still a defect if the boundary turns the refusal into a 500 or a 200 — and
+# which of those happens is a property of the call chain, not of the raise.
+
+
+@pytest.fixture
+def _boundary(monkeypatch):
+    """Real app, real routes, real chat_service; the store returns two rows."""
+    from fastapi.testclient import TestClient
+
+    import src.api.routers.rico_chat as rico_chat_router
+    from src.api.app import app
+    from src.api.rate_limit import limiter
+
+    limiter.reset()
+    prev_enabled = limiter.enabled
+    limiter.enabled = False
+
+    def _mock_get_user(request):
+        user = {"email": WEB_PRINCIPAL, "role": "user"}
+        request.state.current_user = user
+        request.state.user_id = WEB_PRINCIPAL
+        return user
+
+    monkeypatch.setattr(rico_chat_router, "get_current_user", _mock_get_user)
+
+    db = MagicMock()
+    db.available = True
+    db.connect.side_effect = lambda: _Conn({"primary": [ROW_OWNED, ROW_FOREIGN]}, [])
+
+    # raise_server_exceptions=False so the test observes what a real client
+    # receives rather than having TestClient re-raise an unhandled exception —
+    # the difference between "500" and "409" is exactly what is under test.
+    with patch("src.rico_db.RicoDB", return_value=db):
+        try:
+            yield TestClient(app, raise_server_exceptions=False), db
+        finally:
+            limiter.enabled = prev_enabled
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/v1/rico/chat/sessions"),
+        ("GET", "/api/v1/rico/chat/history"),
+        ("DELETE", "/api/v1/rico/chat/history"),
+    ],
+)
+def test_the_chat_read_endpoints_answer_409_not_500(_boundary, method, path):
+    """The refusal reaches the caller as the contract, not as a crash.
+
+    A 500 would read as "Rico is broken, try again" and invite the retry that
+    must never succeed; it would also be an unhandled-exception page rather than
+    a stable reason code the frontend can branch on. Pinned exactly rather than
+    as "not 2xx", which any failure at all would satisfy.
+    """
+    client, _db = _boundary
+    response = client.request(method, path)
+
+    assert response.status_code == 409, (
+        f"{method} {path} must answer the ownership contract, "
+        f"got {response.status_code}: {response.text[:200]}"
+    )
+    body = response.json()
+    assert body["error"] == "ambiguous_account_ownership"
+    assert body["ok"] is False
+    # Safe to surface: no identifier, no row content.
+    assert WEB_PRINCIPAL not in response.text
+
+
+def test_the_chat_post_endpoint_does_not_persist_against_an_ambiguous_account(_boundary):
+    """The invariant that matters on the write path: nothing is written.
+
+    This is the endpoint the refusal does NOT surface on. `db_append_chat` and
+    `rico_chat_api._append_chat` both catch broadly, so the turn is answered
+    normally and simply not persisted.
+    """
+    client, db = _boundary
+    response = client.post("/api/v1/rico/chat", json={"message": "synthetic message"})
+
+    assert response.status_code < 500, "the refusal must not surface as a crash"
+    db.append_chat.assert_not_called()
+
+
+def test_the_chat_post_endpoint_currently_answers_200_documented_gap(_boundary):
+    """DOCUMENTED GAP, deliberately pinned so it cannot drift unnoticed.
+
+    A user in a collision cluster gets a normal-looking 200 chat reply whose
+    turn was silently not persisted. That is a worse user experience than the
+    409 the read endpoints give, and it is recorded in the PR body as a known
+    boundary rather than left as an accident.
+
+    Closing it needs `src/rico_chat_api.py:_append_chat` (the write funnel),
+    which is outside this change's allowed files — re-raising in
+    `chat_service.db_append_chat` alone was measured and does NOT change this
+    status code, because the funnel swallows it one level up.
+
+    IF THIS TEST FAILS BECAUSE THE STATUS IS NOW 409: the gap was closed. That
+    is an improvement — delete this test and update the boundary claim in the
+    PR body, do not revert the fix that closed it.
+    """
+    client, _db = _boundary
+    response = client.post("/api/v1/rico/chat", json={"message": "synthetic message"})
+
+    assert response.status_code == 200, (
+        "expected the documented 200 gap; a different status means the boundary "
+        f"moved and the written claim is now stale (got {response.status_code})"
+    )
+
+
 def test_the_canonical_resolver_already_refuses_the_same_shape():
     """Evidence that this fix ALIGNS the chat path rather than inventing a rule.
 
