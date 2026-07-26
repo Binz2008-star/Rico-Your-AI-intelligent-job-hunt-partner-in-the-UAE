@@ -89,11 +89,26 @@ def test_two_accounts_each_resolve_to_their_own_row():
 # ── 2. collision ──────────────────────────────────────────────────────────────
 
 def test_guest_rows_are_excluded_on_both_resolution_branches():
-    """The exclusion is a property of authenticated resolution, not of one branch.
+    """TRIPWIRE, not behavioural acceptance evidence for A2.
 
-    Both the email and the non-email predicate must carry it. An earlier revision had
-    it on the email branch only, so a non-email identifier could still resolve to a
-    guest row -- this exercises both.
+    This asserts only that the string `NOT LIKE 'public:` appears in the emitted SQL.
+    It proves the predicate is PRESENT; it proves nothing about whether any row is
+    EXCLUDED. A predicate that is present but ineffective passes it, and a harmless
+    reformatting of the query fails it. It cannot be strengthened here either: the
+    mocked cursor returns whatever rows the test hands it, so filtering is
+    unobservable by construction in this file.
+
+    Kept because it still catches deletion of the predicate and query reformatting,
+    which is worth having -- but it must never stand in for the invariant itself.
+
+    The behavioural proof of A2 lives in
+    `tests/integration/test_guest_merge_claim_postgres.py::TestGuestExclusionOnRealPostgres`,
+    which executes the real predicate against PostgreSQL with guest rows deliberately
+    constructed to be candidates but for the guard.
+
+    Original rationale, still true: both the email and the non-email predicate must
+    carry the exclusion. An earlier revision had it on the email branch only, so a
+    non-email identifier could still resolve to a guest row -- this exercises both.
     """
     for subject in (ACCOUNT_A, "internal-identifier-0001"):  # email and non-email
         db, conn, cur = _db_with_rows([{"id": "row-a", "external_user_id": subject}])
