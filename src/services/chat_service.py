@@ -732,6 +732,14 @@ def _resolve_db_user_id(user_id: str):
     that chat history and profile data persist correctly.
 
     Returns None when DB is unavailable or user cannot be resolved/created.
+
+    Raises IdentityOwnershipAmbiguous when the identifier matches more than one
+    row. That is NOT the same outcome as returning None: None means the store
+    could not answer and callers degrade on it, while the raise means the store
+    answered and the answer was "more than one owner". Ranking those candidates
+    and taking one attaches the session to a row its user may not own, and every
+    write that follows lands there — which is how new damage entered after the
+    write path was closed (#1404).
     """
     try:
         from src.rico_db import RicoDB
@@ -744,6 +752,18 @@ def _resolve_db_user_id(user_id: str):
                 # Prefer id > email > external_user_id to avoid returning a
                 # Jotform/Telegram row whose external_user_id happens to equal
                 # this web user's email address (cross-user contamination).
+                #
+                # The ORDER BY is unchanged and still load-bearing: it expresses
+                # which KIND of match is stronger evidence of ownership. What it
+                # cannot do is decide between two rows when the evidence does not
+                # separate them, and `LIMIT 1` hid exactly that case — the query
+                # returned a winner whether or not one existed.
+                #
+                # Two rows are read for the same reason `RicoDB.get_user_bundle`
+                # reads two (#1398): ambiguity has to be observable before it can
+                # be refused. This is the same rule as the canonical resolver, so
+                # an account can no longer be served by chat while being refused
+                # by profile.
                 cur.execute(
                     """
                     SELECT id::text FROM rico_users
@@ -753,11 +773,20 @@ def _resolve_db_user_id(user_id: str):
                         CASE WHEN email = %s THEN 0 ELSE 1 END,
                         CASE WHEN external_user_id = %s THEN 0 ELSE 1 END,
                         updated_at DESC
-                    LIMIT 1
+                    LIMIT 2
                     """,
                     (user_id, user_id, user_id, user_id, user_id, user_id),
                 )
-                row = cur.fetchone()
+                rows = cur.fetchmany(2)
+                if len(rows) > 1:
+                    logger.warning(
+                        "identity_ownership_ambiguous reason=%s site=%s candidates=%d",
+                        "multiple_owner_rows",
+                        "chat_resolve_primary",
+                        len(rows),
+                    )
+                    raise IdentityOwnershipAmbiguous(len(rows))
+                row = rows[0] if rows else None
             if row:
                 return row["id"]
 
@@ -790,14 +819,28 @@ def _resolve_db_user_id(user_id: str):
                 # Conflict: external_user_id taken by a non-web row. Look up by
                 # email instead so this web user is never linked to a different
                 # user's profile row.
+                #
+                # This lookup had no match-kind preference to fall back on — every
+                # candidate matched the one predicate equally, and `ORDER BY
+                # updated_at DESC LIMIT 1` picked the most recently touched of
+                # them. Recency is not evidence of ownership, so two email matches
+                # here are exactly the ambiguity this function must refuse.
                 with conn2.cursor() as cur:
                     cur.execute(
-                        "SELECT id::text FROM rico_users WHERE email = %s ORDER BY updated_at DESC LIMIT 1",
+                        "SELECT id::text FROM rico_users WHERE email = %s ORDER BY updated_at DESC LIMIT 2",
                         (user_id,),
                     )
-                    email_row = cur.fetchone()
-                if email_row:
-                    return email_row["id"]
+                    email_rows = cur.fetchmany(2)
+                if len(email_rows) > 1:
+                    logger.warning(
+                        "identity_ownership_ambiguous reason=%s site=%s candidates=%d",
+                        "multiple_owner_rows",
+                        "chat_resolve_email_fallback",
+                        len(email_rows),
+                    )
+                    raise IdentityOwnershipAmbiguous(len(email_rows))
+                if email_rows:
+                    return email_rows[0]["id"]
 
                 # Still nothing — create a fresh row keyed by a web-namespaced
                 # external_user_id that cannot collide with Jotform/Telegram rows.
@@ -814,6 +857,18 @@ def _resolve_db_user_id(user_id: str):
                     fallback_row = cur.fetchone()
                 conn2.commit()
                 return fallback_row["id"] if fallback_row else None
+            except IdentityOwnershipAmbiguous:
+                # A refusal is not a provisioning failure. Falling into the broad
+                # handler below would return None, which this function defines as
+                # "the store could not answer" — callers degrade on that, so an
+                # ownership conflict would be served as a transient fault and the
+                # 409 contract would never fire. Same re-raise-ahead-of-the-broad-
+                # handler shape as api/routers/user.py and rico_chat.py.
+                try:
+                    conn2.rollback()
+                except Exception:
+                    pass
+                raise
             except Exception as exc:
                 logger.warning("chat_service: rico_users auto-provision failed user=%s: %s", user_id, exc)
                 try:
@@ -825,6 +880,12 @@ def _resolve_db_user_id(user_id: str):
                 conn2.close()
         finally:
             conn.close()
+    except IdentityOwnershipAmbiguous:
+        # The outer handler exists to make this function total (it never raises at
+        # its callers) precisely so a store outage degrades quietly. A refusal must
+        # not inherit that treatment: it is an answer, not a missing answer, and it
+        # has to reach the app-level 409 handler intact.
+        raise
     except Exception as exc:
         logger.debug("chat_service: _resolve_db_user_id failed: %s", exc)
         return None
