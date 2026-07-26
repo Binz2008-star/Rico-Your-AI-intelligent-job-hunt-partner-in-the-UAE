@@ -1,0 +1,196 @@
+# docker-compose.production.yml
+# Warm-standby Docker stack for Rico AI.
+#
+# Operating model: CLOUD-PRIMARY + DOCKER WARM STANDBY
+#   Active path:   GitHub → Vercel frontend, Render backend, Neon database
+#   Standby path:  VPS → Caddy → Next.js + FastAPI + Redis
+#
+# This stack is for health validation and emergency readiness ONLY.
+# It must NOT receive normal production user traffic.
+# It must NOT connect to production Neon during routine validation.
+# It must NOT send emails, process scheduled jobs, auto-apply, or run RQ workers.
+#
+# All side-effecting features are disabled by default via environment variables
+# below. The RQ worker service is included but gated behind a Docker Compose
+# profile — it does NOT start unless explicitly requested with --profile worker.
+#
+# NO PostgreSQL service — DATABASE_URL must point to a staging/test database
+# during routine validation. Connecting to production Neon requires explicit
+# operator action and is documented in docs/local-docker-production.md.
+#
+# Usage (local/staging validation):
+#   docker compose -f docker-compose.production.yml --env-file .env.production up --build
+#
+# Usage (start RQ worker — zero-hour activation only):
+#   docker compose -f docker-compose.production.yml --profile worker --env-file .env.production up --build
+#
+# Resource limits target a 4 GB VPS. Adjust as needed for the target host.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend.production
+    container_name: rico-backend-standby
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      # ── Infrastructure ───────────────────────────────────────────
+      - REDIS_URL=redis://redis:6379/0
+      - RICO_ENV=production
+      - APP_ENV=production
+      - RENDER=false
+      # ── Warm-standby safeguards (disable all side effects) ───────
+      # These override any value in .env.production to ensure the
+      # standby stack cannot trigger outbound actions during routine
+      # validation. They are intentionally hardcoded here so a
+      # misconfigured .env.production file cannot re-enable them.
+      - RICO_ENABLE_AUTO_APPLY=false
+      - RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true
+      - RICO_ENABLE_SCHEDULED_SEARCHES=false
+      - ENABLE_SIGNUP_EMAIL_NOTIFICATIONS=false
+      - RICO_ENABLE_LEARNING=false
+      # Telegram and email are disabled by omitting their tokens from
+      # .env.production. Do NOT set TELEGRAM_BOT_TOKEN, EMAIL_USER, or
+      # EMAIL_PASS in the standby env file unless performing a
+      # controlled zero-hour activation (see docs/local-docker-production.md).
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 512M
+    networks:
+      - rico-standby
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.production
+    container_name: rico-web-standby
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      - BACKEND_API_BASE_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 256M
+    networks:
+      - rico-standby
+
+  redis:
+    image: redis:7-alpine
+    container_name: rico-redis-standby
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 64M
+    networks:
+      - rico-standby
+
+  # RQ worker — DISABLED BY DEFAULT.
+  # This service only starts when the operator explicitly passes
+  # --profile worker to docker compose. During routine warm-standby
+  # validation, the worker must NOT run. It is only needed during a
+  # controlled zero-hour activation (see docs/local-docker-production.md).
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend.production
+    container_name: rico-worker-standby
+    restart: unless-stopped
+    profiles: ["worker"]
+    env_file:
+      - .env.production
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - RICO_ENV=production
+      - APP_ENV=production
+      - RENDER=false
+      - RICO_ENABLE_AUTO_APPLY=false
+      - RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true
+      - RICO_ENABLE_SCHEDULED_SEARCHES=false
+      - ENABLE_SIGNUP_EMAIL_NOTIFICATIONS=false
+      - RICO_ENABLE_LEARNING=false
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "src.rico_worker"]
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 256M
+    networks:
+      - rico-standby
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: rico-caddy-standby
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 32M
+    networks:
+      - rico-standby
+
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  rico-standby:
+    driver: bridge

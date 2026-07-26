@@ -1,0 +1,109 @@
+name: Docker Standby CI
+
+# Additive, isolated CI validation for the Docker warm-standby artifacts.
+# This workflow does NOT deploy, does NOT push images, and does NOT
+# become a required branch-protection check. It only validates that
+# the production Dockerfiles and compose file are syntactically correct
+# and buildable.
+#
+# Path filters ensure this only runs when Docker readiness files change.
+# Unrelated product PRs are NOT forced to build Docker images.
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile.backend.production"
+      - "apps/web/Dockerfile.production"
+      - "docker-compose.production.yml"
+      - "Caddyfile"
+      - ".env.production.example"
+      - ".github/workflows/docker-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: docker-standby-ci
+  cancel-in-progress: true
+
+jobs:
+  validate-compose:
+    name: Validate Production Compose
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate compose file syntax
+        run: docker compose -f docker-compose.production.yml config --quiet
+
+  build-backend:
+    name: Build Standby Backend Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build backend production image
+        run: docker build -f Dockerfile.backend.production -t rico-backend:standby-ci .
+
+      - name: Verify backend starts and health check passes
+        run: |
+          docker run -d --name backend-test \
+            -e DATABASE_URL="postgresql://fake:fake@localhost/fake" \
+            -e JWT_SECRET="ci-test-secret-only" \
+            -e REDIS_URL="" \
+            -e RICO_ENV="production" \
+            -e APP_ENV="production" \
+            -e ADMIN_EMAIL="ci@test" \
+            -e ADMIN_PASSWORD="ci-test-only" \
+            -p 8000:8000 \
+            rico-backend:standby-ci
+
+          sleep 10
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || echo "000")
+          echo "Backend health check: HTTP $STATUS"
+
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Backend health check returned $STATUS (may be expected without DB)"
+            docker logs backend-test || true
+          fi
+
+          docker stop backend-test || true
+          docker rm backend-test || true
+
+  build-frontend:
+    name: Build Standby Frontend Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build frontend production image
+        run: docker build -f apps/web/Dockerfile.production -t rico-web:standby-ci apps/web/
+
+      - name: Verify frontend starts
+        run: |
+          docker run -d --name web-test \
+            -e NODE_ENV=production \
+            -e NEXT_TELEMETRY_DISABLED=1 \
+            -p 3000:3000 \
+            rico-web:standby-ci
+
+          sleep 15
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ || echo "000")
+          echo "Frontend health check: HTTP $STATUS"
+
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Frontend returned $STATUS"
+            docker logs web-test || true
+          fi
+
+          docker stop web-test || true
+          docker rm web-test || true

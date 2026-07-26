@@ -1,0 +1,54 @@
+# Dockerfile.backend.production
+# Emergency-readiness production backend image for Rico AI.
+# This is a cold-standby artifact — it does NOT replace the Render deployment.
+#
+# Multi-stage build:
+#   1. builder — install Python dependencies with gcc for C extensions
+#   2. runtime — slim image with only runtime deps, non-root user, healthcheck
+#
+# Build: docker build -f Dockerfile.backend.production -t rico-backend:standby .
+# Run:   docker run --env-file .env.production -p 8000:8000 rico-backend:standby
+
+# ── Stage 1: builder ──────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1001 rico && \
+    useradd --uid 1001 --gid rico --shell /bin/bash --create-home rico
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local
+
+COPY . .
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+USER rico
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -fsS http://localhost:8000/health || exit 1
+
+CMD ["python", "-m", "uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips='*'", "--no-access-log"]

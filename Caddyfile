@@ -1,0 +1,52 @@
+# Caddyfile — Warm-standby reverse proxy for Rico AI.
+#
+# This is a COLD STANDBY artifact. It does NOT replace the Vercel/Render
+# production path. During routine validation, Caddy serves the standby
+# stack on localhost or a private network only.
+#
+# For zero-hour activation on a VPS, replace :80 with the production
+# domain and Caddy will auto-provision TLS certificates. See
+# docs/local-docker-production.md §C for the activation procedure.
+#
+# Architecture:
+#   :80/        → web:3000      (Next.js frontend)
+#   :80/api/*   → backend:8000  (FastAPI backend, proxied as /api/*)
+#   :80/health  → backend:8000  (Direct backend health check)
+#   :80/ready   → backend:8000  (Direct backend readiness check)
+#   :80/version → backend:8000  (Direct backend version check)
+
+# ── Local validation (no TLS) ─────────────────────────────────────────
+# For VPS activation, replace :80 with the production domain name
+# (e.g. ricohunt.com) and Caddy will auto-provision HTTPS.
+:80 {
+	# Security headers
+	header {
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+	}
+
+	# Backend API and health endpoints — proxy to FastAPI
+	handle /api/* {
+		strip_prefix /api
+		reverse_proxy backend:8000
+	}
+
+	handle /health {
+		reverse_proxy backend:8000
+	}
+
+	handle /ready {
+		reverse_proxy backend:8000
+	}
+
+	handle /version {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else — proxy to Next.js frontend
+	handle {
+		reverse_proxy web:3000
+	}
+}

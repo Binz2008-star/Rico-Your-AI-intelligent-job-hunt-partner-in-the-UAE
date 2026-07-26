@@ -1,0 +1,56 @@
+# Dockerfile.production (frontend)
+# Emergency-readiness production frontend image for Rico AI.
+# This is a cold-standby artifact — it does NOT replace the Vercel deployment.
+#
+# Multi-stage build:
+#   1. builder — npm ci + npm run build → produces .next directory
+#   2. runtime — slim image with .next + node_modules + public, non-root, healthcheck
+#
+# NOTE: This Dockerfile does NOT require `output: 'standalone'` in next.config.js.
+# It copies the full .next directory and node_modules into the runtime image.
+# This produces a larger image (~500 MB) but avoids modifying the shared Next.js
+# config that Vercel and local development depend on.
+#
+# Build: docker build -f apps/web/Dockerfile.production -t rico-web:standby apps/web/
+# Run:   docker run --env-file .env.production -p 3000:3000 rico-web:standby
+
+# ── Stage 1: builder ──────────────────────────────────────────────────
+FROM node:20-slim AS builder
+
+WORKDIR /build
+
+COPY package.json package-lock.json ./
+
+RUN npm ci
+
+COPY . .
+
+RUN npm run build
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────
+FROM node:20-slim AS runtime
+
+RUN groupadd --gid 1001 rico && \
+    useradd --uid 1001 --gid rico --shell /bin/bash --create-home rico
+
+WORKDIR /app
+
+COPY --from=builder /build/.next ./.next
+COPY --from=builder /build/node_modules ./node_modules
+COPY --from=builder /build/public ./public
+COPY --from=builder /build/package.json ./package.json
+COPY --from=builder /build/next.config.js ./next.config.js
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+USER rico
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -fsS http://localhost:3000/ || exit 1
+
+CMD ["npm", "start"]
