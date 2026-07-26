@@ -7279,31 +7279,40 @@ class RicoChatAPI:
         # shortlist admission. A provider HTTP 200 does not make a record a
         # trustworthy career opportunity; an empty *trustworthy* result is
         # preferable to a corrupt one. Provider degradation never relaxes this gate.
-        integrity_rejections: dict[str, int] = {}
-        if all_matches:
-            try:
-                from src.job_integrity import filter_listings
-                _req_strong, _req_weak, _req_phrase = self._requested_domain_terms(search_role)
-                _pre_integrity = len(all_matches)
-                # The integrity gate deliberately keeps the LEGACY single-hit
-                # vocabulary (strong ∪ weak as its singles): it stays the
-                # coarse trust gate, while the display floor below applies the
-                # strict 3-layer rule — so an off-title-but-live listing is
-                # dropped by the FLOOR with the honest "didn't strongly match
-                # — broaden?" reply, never mislabeled as "couldn't retrieve".
-                all_matches, integrity_rejections = filter_listings(
-                    all_matches,
-                    requested_role=search_role,
-                    requested_terms=(_req_strong | _req_weak, _req_phrase),
-                    uae_only=True,  # Rico is a UAE-market product
-                )
-                if integrity_rejections:
-                    logger.info(
-                        "job_integrity_gate role=%r kept=%d/%d rejected=%s",
-                        search_role, len(all_matches), _pre_integrity, integrity_rejections,
-                    )
-            except Exception as _integrity_err:
-                logger.warning("job_integrity_gate_error role=%r err=%s", search_role, _integrity_err)
+        # The gate now runs inside the verified-search contract rather than
+        # inline here: src/services/verified_job_search.py applies it exactly
+        # once and returns a VerifiedJobSearchBundle plus the accepted records.
+        # After this point `all_matches` is the accepted subset only — no
+        # builder on this path can see a raw provider item, and every job this
+        # response goes on to name has a VerifiedJobListing standing behind it.
+        #
+        # The integrity gate deliberately keeps the LEGACY single-hit
+        # vocabulary (strong ∪ weak as its singles): it stays the coarse trust
+        # gate, while the display floor below applies the strict 3-layer rule —
+        # so an off-title-but-live listing is dropped by the FLOOR with the
+        # honest "didn't strongly match — broaden?" reply, never mislabeled as
+        # "couldn't retrieve".
+        from src.domain.job_search import SearchStatus as _SearchStatus
+        from src.services.verified_job_search import build_bundle as _build_bundle
+
+        _req_strong, _req_weak, _req_phrase = self._requested_domain_terms(search_role)
+        if quota_exhausted or rate_limited or fetch_error == "all_providers_unavailable":
+            _observed_status = _SearchStatus.PROVIDER_UNAVAILABLE
+        else:
+            _observed_status = _SearchStatus.COMPLETED
+
+        search_bundle, all_matches, integrity_rejections = _build_bundle(
+            all_matches,
+            operation_id=str(operation_id or ""),
+            provider=fetch_provider or "",
+            requested_role=search_role,
+            requested_location=_requested_location or "",
+            started_at=datetime.fromtimestamp(_time.time() - _search_elapsed, tz=timezone.utc),
+            duration_ms=int(_search_elapsed * 1000),
+            status=_observed_status,
+            requested_terms=(_req_strong | _req_weak, _req_phrase),
+            uae_only=True,  # Rico is a UAE-market product
+        )
 
         # Filter out already-applied jobs
         try:
@@ -7686,6 +7695,11 @@ class RicoChatAPI:
             # Identical triple to the profile report's career_context (owner
             # audit point 3) — produced by the same parity_snapshot method.
             "career_context": _career_context_block,
+            # Provenance for every job this response names. Counts and status
+            # only — never listing content. Its presence is the invariant: a
+            # job_matches response from this path always carries the evidence
+            # of the execution that produced its matches.
+            "search_evidence": search_bundle.execution.as_public_dict(),
         }
 
         # Safe aggregate summary of the integrity gate — counts only, never the

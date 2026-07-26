@@ -57,6 +57,8 @@ jobs:
             tests/test_tc2_target_role_propagation.py \
             tests/test_tc2_tc8_wiring.py \
             tests/test_job_result_integrity.py \
+            tests/test_verified_search_contract.py \
+            tests/test_search_provenance_invariant.py \
             tests/test_bug3_duplicate_kanban_entries.py \
             tests/test_764_durable_mutation_truth.py \
             tests/test_1082_consent_fail_closed.py \
