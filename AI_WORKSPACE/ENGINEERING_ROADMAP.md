@@ -35,17 +35,32 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 > if they ever disagree, `PROJECT_STATUS.md` + live `main` win. Snapshots dated
 > 2026-07-16 and earlier are **historical** (superseded).
 >
-> **`main` `97af6ded` (2026-07-26).** Production serves this commit: Deploy Render
-> Backend run `30205559710` and Deploy to Production run `30205559713` are both
-> green for `97af6ded`. Independently, the Central Controller read `/version` in a
-> browser this pass and saw commit `97af6ded…`, environment `production` — that
-> read is **verified by the Central Controller via browser, not reproducible from
-> an agent container**, whose egress to the Render host is blocked.
-> Landed since `fc2e107d`: #1402 control-plane reconciliation (`805dd4d`,
-> docs-only), #1398 fail-closed on ambiguous account ownership (`70c2af7c`),
-> #1404 never overwrite a stored `rico_users.email` on a generic upsert
-> (`97af6ded`). The per-PR narrative and lane authority live in `PROJECT_STATUS.md`
-> and `TASKS.md`, which this file does not duplicate and this PR does not touch.
+> **`main` `ca266366` (2026-07-26).** Production serves this commit: the Central
+> Controller read `/version.commit` = `ca266366…` and `/health` = ok, with
+> `jooble`, `adzuna` and `jsearch` configured and **not** degraded and the
+> DeepSeek precheck reachable. That read is **verified by the Central Controller
+> via browser, not reproducible from an agent container**, whose egress to the
+> Render host is blocked.
+>
+> Landed since `fc2e107d`, in merge order: #1402 control-plane reconciliation
+> (`805dd4d6`, docs-only), #1398 fail-closed on ambiguous account ownership
+> (`70c2af7c`), #1404 never overwrite a stored `rico_users.email` on a generic
+> upsert (`97af6ded`), #1406 identity-ownership boundary tests into the pytest
+> gate (`42c3b976`, CI-only), #1408 roadmap truth restored (`1c13147f`,
+> docs-only), #1412 a phone number is not proof of who someone is (`701939fa`),
+> #1411 fail when a test file is run by no pytest invocation (`a610b696`,
+> CI-only), #1414 a guest row is not a candidate on the email or Telegram path
+> (`ca266366`).
+>
+> **The identity-ownership track is the substance of this stretch.** #1398
+> established that ambiguous ownership fails closed; #1404 stopped a generic
+> upsert overwriting a stored account email; #1412 and #1414 removed guest rows
+> from candidacy on all three identity finders and stopped a phone number, on
+> its own, from auto-attaching a Jotform submission to an account. #1411 closed
+> the meta-gap those PRs kept exposing: a test file that no workflow runs.
+>
+> The per-PR narrative and lane authority live in `PROJECT_STATUS.md`
+> and `TASKS.md`, which this file does not duplicate.
 > The paragraph below is the **historical** 2026-07-18 snapshot, kept for
 > continuity and not re-verified at this head.
 >
@@ -69,18 +84,19 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 | Question | Answer |
 | --- | --- |
-| **Where is Rico?** | `main` `97af6ded` (head re-anchored 2026-07-26). `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
-| **Posture (owner 2026-07-16)?** | **CONTAINMENT.** Security-first → source-of-truth unification (#1068) → then resume. Only security + docs writing allowed now. |
+| **Where is Rico?** | `main` `ca266366` (head re-anchored 2026-07-26). `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
+| **Posture?** | **Trust-first**, per `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired. Identity-ownership hardening has been the active track and its merged slices are listed above. The 2026-07-16 CONTAINMENT framing — security-first → #1068 source-of-truth unification → resume — is **historical and superseded**; #1068 is not the next action. |
 | **What is blocked / frozen?** | New-integration activation is frozen. #1062 (Atelier job cards — HELD, has logged colour/AR/test gaps), #1055 Gmail M0 (**merged 2026-07-17**, `RICO_ENABLE_GMAIL_SYNC=false` — activation still gated on Google restricted-scope verification, Render env provisioning, migration 043, and a separate fleet-sweep PR), #1025 Memory M1 (Draft, flag OFF). Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets. |
 | **What is completed (recent)?** | Atelier `/command` (#1048/#1060/#1061), decision-regression harness (#1056), security hardening (#1058), attachment/SSE/transcript fixes, `DEC-20260716-001` (#1059), operational reconciliation (#1063). |
-| **What comes next?** | #1068 (this reconciliation) → owner secret rotation → #1066 (retire Stripe tooling / stale Render env) + #1067 (paid-plan promises vs limits) → then unfreeze Atelier completion + integrations as small provable PRs. |
+| **What comes next?** | The approved forward sequence is **PR1 → PR5** under Phase 2 — Hardening below, beginning with **PR1 Chat Job Provenance Contract**. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
 
 Production is stable: Render backend healthy (`/health` ok, providers configured),
 Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
 
-Except for the head SHA and the #1055 status above, the rows in this table are
-dated 2026-07-16 and were **not** re-verified at `97af6ded`. Treat any other claim
-in them as historical until it is re-checked.
+Except for the head SHA, the posture row and the "what comes next" row — all
+three re-verified at `ca266366` in this pass — the rows in this table are dated
+2026-07-16 and were **not** re-verified. Treat any other claim in them as
+historical until it is re-checked.
 
 ---
 
@@ -152,9 +168,59 @@ fix only proven gaps (synthetic data only).
   characterisation tests plus one strict xfail
   (`tests/unit/test_document_inventory_contract.py`); unifying that rule is a later
   slice and has not started.
+- **Delivered and released: the identity-ownership track** — #1398 fail closed on
+  ambiguous ownership (`70c2af7c`), #1404 never overwrite a stored
+  `rico_users.email` on a generic upsert (`97af6ded`), #1412 a phone number is
+  not proof of who someone is (`701939fa`), #1414 a guest row is not a candidate
+  on the email or Telegram path (`ca266366`). Supporting CI: #1406 and #1411.
 - Next candidates: unify the legacy profile-CV rule across the files surface and CV
   resolution so one user gets one answer (its acceptance check is the strict xfail
   above); any gap surfaced by continued Audit Phase 2–9 verification.
+
+#### Approved forward sequence — PR1 → PR5
+
+Owner-approved execution order. It sits in **Phase 2 — Hardening** because every
+slice is a correctness contract, not a feature; **Phase 3 — Chat Integration is
+the consumer**, not the owner, of what these produce. Recorded here only: it is
+deliberately absent from `PROJECT_STATUS.md` and `TASKS.md`, which carry current
+lane state rather than forward plans.
+
+**No PR1 code exists yet. This is a plan, not a claim of work done.**
+
+**PR1 — Chat Job Provenance Contract** (the first bounded slice)
+
+The problem it closes: a job card can reach a user without a provable statement
+of where the listing came from. Provenance must be a value the code carries, not
+a convention it observes.
+
+- Three types, created **outside `src/rico_chat_api.py`**: `SearchExecutionEvidence`,
+  `VerifiedJobListing`, `VerifiedJobSearchBundle`. Putting them in the chat module
+  would make the contract a local habit of that file rather than a boundary.
+- The bundle is built **immediately after the canonical provider fetch** — the
+  point where evidence still exists. Built later, it would be a reconstruction.
+- `job_integrity` is applied **before** the bundle is created, so a bundle can
+  never carry a listing that integrity would have rejected.
+- **Exactly one adopter: `_target_role_search_response`.** One adopter is the
+  whole point of a first slice; a second is a later PR.
+- **Fail-first proof that no matches and no job cards can be emitted without a
+  bundle** — the test must fail on the base tree, or the contract is decorative.
+- **No feature flag defaulting off.** A contract that can be switched off is not
+  a contract, and a flag defaulting off means the guarantee is untested in the
+  configuration that actually ships.
+
+**PR2 — fail-closed job-search routing and buffered delivery.** Routing refuses
+rather than guesses, and delivery is buffered so a partial result is never
+presented as a complete one.
+
+**PR3 — remaining builder adoption, in small groups.** The other emit sites move
+onto the PR1 contract a few at a time, each group independently revertable.
+
+**PR4 — role and location extraction with one central UAE vocabulary.** One
+vocabulary, one place; today the knowledge is scattered across call sites.
+
+**PR5 — provenance persistence, with its own migration.** Last, because
+persisting a contract before it has stabilised writes the wrong shape into the
+database. Its migration is its own and is not folded into an earlier slice.
 
 ```text
 EPIC        Career Operating System
@@ -176,6 +242,10 @@ Wire chat to what is already persisted — almost no new logic, just connection.
 - Next candidates: a combined job-search status digest; any other lifecycle view
   not yet reachable from chat.
 - Constraint: reuse existing lifecycle reads; verify-first; synthetic data only.
+- **Consumer of the PR1 → PR5 sequence, not its owner.** Those slices are filed
+  under Phase 2 because they are correctness contracts; chat is where their
+  output becomes visible. Read the sequence in Phase 2 above before starting any
+  chat-side job-provenance work, and do not re-plan it here.
 
 ### Phase 4 — Lifecycle Intelligence 🔵 (Gmail M0 merged, activation gated)
 
@@ -275,6 +345,11 @@ Backend** run for that commit, not by a green Deploy to Production run alone.
 
 | Date | Commit | What went live |
 | --- | --- | --- |
+| 2026-07-26 | `ca266366` | #1414 — a guest row is not a candidate on the email or Telegram path (`find_profiles_by_email` and `find_profiles_by_telegram_username`, SQL predicate plus independent Python re-check, both memory fallbacks guarded). Central Controller read `/version.commit` = `ca266366` and `/health` ok, with `jooble`, `adzuna`, `jsearch` configured and not degraded and the DeepSeek precheck reachable. Browser-verified by the Controller; not reproducible from an agent container. Owner functional smoke not claimed. |
+| 2026-07-26 | `a610b696` | #1411 — CI-only: fail when a test file is run by no pytest invocation, with a frozen 212-file baseline that may only shrink. No runtime path touched, so no deploy expected. |
+| 2026-07-26 | `701939fa` | #1412 — a phone number is not proof of who someone is: phone removed from the signals sufficient to auto-attach a Jotform submission, and guest rows excluded from phone candidacy. Deploy fired on merge (`src/**` filter matched). Owner functional smoke not claimed. |
+| 2026-07-26 | `1c13147f` | #1408 — docs-only roadmap truth restoration. No runtime path touched, so no deploy expected. |
+| 2026-07-26 | `42c3b976` | #1406 — CI-only: identity-ownership boundary tests added to the pytest gate. No runtime path touched, so no deploy expected. |
 | 2026-07-26 | `97af6ded` | #1404 — never overwrite a stored `rico_users.email` on a generic upsert. Deploy Render Backend `30205559710` verified `/version.commit` = `97af6ded`; Deploy to Production `30205559713` green. Owner functional smoke not claimed. |
 | 2026-07-26 | `70c2af7c` | #1398 — fail closed on ambiguous account ownership. Deploy Render Backend `30184733967` verified `/version.commit` = `70c2af7c`; Deploy to Production `30184733970` green. Owner functional smoke not claimed. |
 | 2026-07-26 | `fc2e107d` | #1399 — documents inventory contract (`src/domain/documents`) + one behaviour-preserving wiring site. Deploy Render Backend `30180474833` verified `/version.commit` = `fc2e107d`; Deploy to Production `30180474830` green. The authenticated documents-inventory smoke is a manual owner step and was not run. |

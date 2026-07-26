@@ -96,27 +96,24 @@ Update the block for your lane. Never duplicate one.
 
 - Lane alias: `L1`
 - Branch: `fix/identity-ownership-resolution`
-- PR: `#1398` (Draft)
-- Base SHA: `e433c7d` — rebase onto `fc2e107d` before merge
-- Expected remote HEAD: `c708bbb3` — fetched live; this lane has moved twice today, so re-read it rather than trusting this line
-- Lease holder: `L1`
-- Lease ownership: `HELD`
-- Current activity: `WRITING` — work exists locally that is not on the remote
-- Write authorization: `AUTHORIZED` for its own branch, until its batch is complete
-- Allowed files: identity resolution and its repository layer, plus that lane's tests
-- Forbidden files: the CV/documents surfaces (L2), workflow configuration, and `AI_WORKSPACE/CV_PIPELINE_STATE.md`
-- Tests: the lane's own suites, plus exact-head CI
-- Blocker: the owner's five conditions — typed re-raise in `upsert_profile` landed; no-mirror-success and HTTP 409 tests passing; trusted-field source drift closed; fresh independent review complete; exact-head CI green on the new SHA
-- Stop condition: stop and report on an unexpected commit, or if the objective would widen beyond identity ownership
-- Next executable action: complete the identity-ownership batch; it is the next integrity merge and nothing behavioural merges ahead of it
+- PR: `#1398` — **CLOSED, merged as `70c2af7c`**
+- Lease holder: none
+- Lease ownership: `RELEASED`
+- Current activity: `CLOSED`
+- Write authorization: `REVOKED` — the branch's objective is delivered
+- Delivered by this lane, in merge order: `#1398` fail closed on ambiguous ownership (`70c2af7c`); `#1404` never overwrite a stored `rico_users.email` on a generic upsert (`97af6ded`); `#1412` a phone number is not proof of who someone is (`701939fa`); `#1414` a guest row is not a candidate on the email or Telegram path (`ca266366`). Supporting CI: `#1406` (`42c3b976`) and `#1411` (`a610b696`)
+- Review gap, recorded: `#1398`, `#1412` and `#1414` each merged with **no independent review** — the Codex reviewer was over its usage limit on all three
+- Continuation: the track is **not finished**. `#1409`, `#1410` and `#1405` carry it onto the chat and onboarding paths and are separately owned
+- Open residuals from this track, none authorised for action: whether email / Telegram handle / `user_id` should authorise an automatic attach at all (all three originate in the same unverified Jotform submission); the phone-normalisation mismatch between suffix lookup and exact-normalised scoring; `tests/test_rico_jotform_identity.py:279`, a stale test that blocks its file's enumeration and leaves 30 assertions CI-unprotected; `LIMIT 10` with no `ORDER BY` on all three finders, measured P3 on today's data
+- Production data residuals, read-only characterised and **not** authorised for repair: cluster `55502f40` (3 rows, 2 wrongly stamped), 3 latent mismatched rows, 21 guest rows holding a `TRUSTED_IDENTITY_FIELD` (19 of them a phone), and 74 guest rows holding authenticated onboarding completion. All pre-date the guards now on `main`; the guards stop new ones
 
 ### L2 — CV and documents
 
 - Lane alias: `L2`
 - Branch: `claude/cv-pending-artifact-confirm`
 - PR: `#1389` (Draft)
-- Base SHA: `e433c7d` — rebase onto the new `main` after `#1398` lands
-- Expected remote HEAD: `878c5944` — fetched live
+- Base SHA: **stale.** The recorded base predates `#1398`, `#1404`, `#1412` and `#1414`; rebase onto `ca266366` and re-read every `file:line` in the PR body against it before trusting one
+- Expected remote HEAD: **re-read live.** Any head recorded here predates several merges
 - Lease holder: `L2`
 - Lease ownership: `HELD` — **sole writer.** Two sessions once wrote to this branch concurrently; the collision was resolved by merge with nothing lost. This lane is the reason the Writer Lease Protocol exists
 - Current activity: `HOLDING`
@@ -125,27 +122,22 @@ Update the block for your lane. Never duplicate one.
 - Forbidden files: identity resolution (L1), workflow configuration
 - Tests: the lane's backend suites, the frontend suite, and the real-Postgres integration job
 - Owner ruling, binding: **a repeated confirm of the same server-verified saved artifact is an idempotent retry and consumes no quota.** It is not a new purchase and must not be refused
-- Blocker: sequenced behind `#1398`
+- Blocker: **cleared.** `#1398` merged as `70c2af7c`; the identity track has since merged `#1404`, `#1412` and `#1414`
 - Stop condition: stop on an unexpected commit, or on any change that would make a confirm non-idempotent
-- Next executable action: after `#1398` lands, rebase onto the new `main`, resolve integration conflicts, and take exact-head gates
+- Next executable action: rebase onto `ca266366`, resolve integration conflicts, re-read every `file:line` citation in the PR body against the new base, and take exact-head gates. `src/repositories/profile_repo.py` and `src/api/routers/rico_chat.py` both moved under this lane's feet
 
 ### L7 — control plane
 
 - Lane alias: `L7`
 - Branch: `claude/workspace-control-reconcile`
-- PR: `#1402` (Draft)
-- Base SHA: `fc2e107d` — rebased onto current `main` at this pass
-- Expected remote HEAD: the head this reconciliation pushes
-- Lease holder: `L7`
-- Lease ownership: `HELD`
-- Current activity: `WRITING` — this reconciliation
-- Write authorization: `AUTHORIZED` for this branch, docs-only
-- Allowed files: exactly five — `PROJECT_STATUS.md`, `TASKS.md`, `OPERATING_RULES.md`, `START_HERE.md`, and the latest handoff
-- Forbidden files: `AI_WORKSPACE/CV_PIPELINE_STATE.md`, `AI_WORKSPACE/ENGINEERING_ROADMAP.md`, `src/`, `tests/`, `.github/`, `apps/web/`, `migrations/`
-- Tests: exact-head CI; no runtime tests apply to a docs-only diff
-- Blocker: none
-- Stop condition: stop and report on unexpected head movement, on any change requiring a sixth file, or on an instruction lacking full attribution
-- Next executable action: report the pushed head for independent review. **`ENGINEERING_ROADMAP.md` is excluded from this PR** and is a separate docs-only change: it still names `main` as `4ce678b`, which is stale, and any session trusting it alone will act on a false picture
+- PR: `#1402` — **CLOSED, merged as `805dd4d6`**
+- Lease holder: none
+- Lease ownership: `RELEASED`
+- Current activity: `CLOSED`
+- Write authorization: `REVOKED` for that branch
+- Follow-through: `#1402` deliberately excluded `ENGINEERING_ROADMAP.md` and flagged it as separately stale. `#1408` (`1c13147f`) then restored it at `97af6ded`, and **this reconciliation** re-anchors all four control documents onto `ca266366`
+- Successor pass: docs-only, branched from `ca266366`, covering `ENGINEERING_ROADMAP.md`, `PROJECT_STATUS.md`, `TASKS.md` and `ARCHITECTURE.md`. It touches no `src/`, no tests, no workflows, no migration
+- Standing note for whoever reconciles next: this lane has now gone stale twice by carrying a `main` SHA in prose. Every SHA in these documents is a claim that decays; re-read `main` live before trusting any of them
 
 ### Lanes holding no lease
 
