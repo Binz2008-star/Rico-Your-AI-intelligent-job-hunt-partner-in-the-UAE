@@ -39,6 +39,8 @@ COPY --from=builder /install /usr/local
 
 COPY . .
 
+RUN mkdir -p /app/data /app/logs && chown -R rico:rico /app/data /app/logs
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app

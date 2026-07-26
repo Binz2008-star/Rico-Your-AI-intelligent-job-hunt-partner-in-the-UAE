@@ -82,6 +82,12 @@ jobs:
           docker images rico-backend:standby --format "backend: {{.Size}}"
           docker images rico-web:standby --format "frontend: {{.Size}}"
 
+      - name: Verify images exist
+        run: |
+          docker image inspect rico-backend:standby >/dev/null 2>&1 || { echo "::error::rico-backend:standby not found"; exit 1; }
+          docker image inspect rico-web:standby >/dev/null 2>&1 || { echo "::error::rico-web:standby not found"; exit 1; }
+          echo "Both images verified present"
+
       - name: Create CI compose override
         run: |
           printf 'services:\n  backend:\n    extra_hosts:\n      - "host.docker.internal:host-gateway"\n' > docker-compose.ci-override.yml
@@ -89,7 +95,7 @@ jobs:
       - name: Start standby stack
         run: |
           docker compose -f docker-compose.production.yml -f docker-compose.ci-override.yml \
-            --env-file .env.production up -d --pull never
+            --env-file .env.production up -d --no-build
 
       - name: Wait for container health
         run: |
