@@ -40,11 +40,26 @@ Ranked, and not negotiable when they disagree:
 | `main` | `97af6ded2f2741c10031417c7ac8bda7e7432580` | **Verified this pass** — `git ls-remote origin refs/heads/main`, then confirmed against the fetched tracking ref |
 | `main` subject | `fix(identity): never overwrite a stored rico_users.email on a generic upsert (#1404)` | **Verified this pass** — `git log -1 origin/main` |
 | `main` commit time | `2026-07-26T14:11:15Z` | **Verified this pass** — same command (`+04:00` local = `14:11:15Z`) |
-| Deployed backend `/version.commit` | Owner reports `97af6ded`, i.e. parity with `main` | **NOT verified this pass.** `rico-job-automation-api.onrender.com:443` is refused by this session's egress policy (proxy answered `403` to `CONNECT`; recorded in the proxy's own failure log). Policy denials must be reported, not routed around. **Recorded as owner-reported, not as an independent reading** |
-| Application/runtime baseline | Expected at `97af6ded` | **Derived, not observed** — follows from the owner report above, not from a reading taken here |
+| Deployed backend `/version.commit` | `97af6ded2f2741c10031417c7ac8bda7e7432580` — **agrees with `main`** | **Verified this pass by the Central Controller**, via an authenticated browser read of `GET /version` against the production host. **Not verified by this container** — see the egress constraint below. Cited as a controller reading with a named method, not as a container measurement |
+| Application/runtime baseline | `97af6ded` | **Observed** — follows from the controller's `/version` read above |
 | Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired | **Owner ruling** — restated as a ruling, not re-derived as an observation |
 
-**On the parity line specifically.** The owner reports `main` and production agree at `97af6ded`. This reconciliation could not confirm that, so it is written as the owner's report rather than as a verified fact. Anyone needing deployment parity as a *gate* must take their own reading — this document does not supply one. That distinction is the whole reason this section exists: a previous pass asserted parity it had not observed, and the correction is recorded in `#1402`.
+### Deployment parity, and a structural limit on who can ever verify it
+
+**`main` and the deployed backend agree at `97af6ded` at this pass.** The reading was taken by the Central Controller through an authenticated browser session against `GET /version`, which returned `app ricohunt`, `version 1.0.0`, `commit 97af6ded…`, `environment production`, `deployed_at 2026-05-23T15:21:00Z`, `started_at 2026-07-26T14:29:40Z`.
+
+Two fields in that payload are routinely misread, so they are pinned here:
+
+- **`commit` is the load-bearing field.** It is the only one that establishes parity.
+- **`deployed_at` is a static build constant, not a deploy timestamp.** It reads as May 2026 and always will. **`started_at` is the live process start.** A session that treats `deployed_at` as "when this shipped" will conclude the backend is months stale when it is current.
+
+**The structural part, which no future pass should have to rediscover.** This container's egress policy refuses `rico-job-automation-api.onrender.com:443` — the proxy answers `403` to `CONNECT`, recorded in its own failure log. That is an organization policy denial: it is reported, never routed around, and it is **not a transient outage**.
+
+The consequence is permanent and worth stating as a rule:
+
+> **No container-side session can verify deployment parity.** Any document claiming a CI-container or agent-container session independently confirmed the deployed `/version` is **wrong by construction**, no matter how confident the wording. Parity readings come from the controller or from an environment with egress to the production host — and must be recorded with that provenance, never laundered into "verified".
+
+This is the same failure mode corrected in `#1402`, where a pass asserted parity it had not observed. The fix is not to try harder from inside the container; it is to name who took the reading.
 
 ### Merged 2026-07-26, in order
 
@@ -192,9 +207,10 @@ Base for all lanes: main@97af6ded. Fetch it and confirm before any push.
    the three not-yet-colliding rows are unhealed by #1404. They need a decided
    repair path. No repair is authorized by this document.
 
-5. Whoever needs deployment parity as a gate takes their own /version reading.
-   This document records the owner's report of parity at 97af6ded; it does not
-   supply an independent one, because egress policy blocked the host at this pass.
+5. Deployment parity holds at 97af6ded (controller browser read of /version).
+   Do not re-verify it from a container -- egress policy refuses the production
+   host by design, so a container-side pass cannot confirm parity and must not
+   claim to. Read deployed_at as a build constant, not a deploy time.
 
 No merge, no deploy, no database mutation, no real-CV upload, no production data
 repair, and no bulk Neon branch deletion is authorized by this document.
