@@ -174,7 +174,6 @@ FROZEN_BASELINE = frozenset((
     "tests/test_gmail_pagination_bounds.py",
     "tests/test_guest_provider_degraded.py",
     "tests/test_hardening_proxy_timing_pipeline.py",
-    "tests/test_identity_email_overwrite_containment.py",
     "tests/test_import_profile_command.py",
     "tests/test_issue_135_production_verification.py",
     "tests/test_job_action_isolation.py",

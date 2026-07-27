@@ -43,6 +43,7 @@ jobs:
             tests/test_agent_runtime.py \
             tests/test_jotform_webhook.py \
             tests/test_identity_phone_containment.py \
+            tests/test_identity_email_overwrite_containment.py \
             tests/test_identity_flow_mapper.py \
             tests/test_public_candidate_exclusion.py \
             tests/test_jwt_user_isolation.py \
