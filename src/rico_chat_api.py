@@ -2886,11 +2886,16 @@ class RicoChatAPI:
             return None
 
         arabic = self._is_arabic_text(text)
+        # The exception is still contained here — an infrastructure fault must
+        # not kill the chat turn. What it must NOT do is degrade into `docs=[]`:
+        # that is exactly what a successful read of an empty account returns, so
+        # the not-found branch below would then tell the user there are "no saved
+        # CVs on your account" on the strength of a read that never happened.
         try:
             docs = self._collect_documents_detailed(user_id, profile)
         except Exception as exc:
             logger.warning("stored_cv_reference_db_failed (%s)", type(exc).__name__)
-            docs = []
+            return self._cv_state_unverified_response(user_id, arabic)
 
         matched = self._match_stored_document(docs, text) if has_file_token else None
         if has_file_token and matched is None:
@@ -2903,6 +2908,32 @@ class RicoChatAPI:
         if matched is None:
             return None
         return self._stored_cv_analysis_response(user_id, profile, matched, arabic)
+
+    def _cv_state_unverified_response(self, user_id: str, arabic: bool) -> dict[str, Any]:
+        """The one answer for "I could not read the CV state just now".
+
+        A read failure and a verified absence are different facts, and the user
+        pays for the difference: telling someone to upload a CV the product
+        already holds is the single worst answer this module can give. So the
+        wording claims nothing about the cause — naming a database outage would
+        be a guess, since a caught exception only proves the read did not
+        complete — promises no successful retry, blames no document, and gives
+        no upload or re-upload instruction. It says what is true: the stored
+        state is currently unverifiable, and nothing will be asked of the user
+        until it is not.
+        """
+        if arabic:
+            msg = (
+                "تعذّر عليّ التحقق من سيرتك المحفوظة الآن. "
+                "لن أطلب منك رفعها مجددًا قبل أن أتمكن من التأكد من حالتها المحفوظة."
+            )
+        else:
+            msg = (
+                "I couldn't verify your saved CV right now. "
+                "I won't ask you to upload it again until I can confirm its stored state."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "cv_state_unverified", "message": msg}
 
     def _stored_cv_analysis_response(
         self, user_id: str, profile: Any, doc: dict[str, Any], arabic: bool
@@ -9277,6 +9308,21 @@ class RicoChatAPI:
             if _db_check is not None:
                 return _db_check
             arabic = self._is_arabic_text(message)
+            # The guidance below asserts there is no CV to work from. The check
+            # above returns None both when it verified an empty account and when
+            # its own read threw, so a store outage reached this branch and
+            # answered with next_action="upload_cv" — the exact instruction that
+            # must never follow an unverified state. Arabic lands here for every
+            # CV phrasing ("سيرتي الذاتية" trips this gate), so without it the
+            # Arabic surface had no protection at all. Runs after the DB check so
+            # a verified "you already have X on file" answer still wins, and uses
+            # the per-request memo, so this costs no extra read.
+            if self._cv_context(user_id, profile).is_unavailable:
+                return self._finalize(
+                    self._cv_state_unverified_response(user_id, arabic),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
             if arabic:
                 cv_guidance = (
                     "ممتاز! لرفع سيرتك الذاتية استخدم زر **رفع السيرة الذاتية** في الصفحة. "
@@ -11077,6 +11123,18 @@ class RicoChatAPI:
             # direct call would be another grounding read.
             _cv_ctx = self._cv_context(user_id, profile)
             _arabic_cv = self._is_arabic_text(message)
+            if _cv_ctx.is_unavailable:
+                # (0) The grounding read did not complete. Both branches below
+                # are confident claims the resolver has not earned: (3) asserts
+                # the user has no CV, and (2) blames a document for being
+                # unreadable when nothing was read at all. `is_unavailable` is
+                # only ever true alongside `has_content == False`, so this can
+                # never swallow a review that could have been given.
+                return self._finalize(
+                    self._cv_state_unverified_response(user_id, _arabic_cv),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
             if not (_cv_ctx.has_cv or bool(self._profile_value(profile, "has_cv"))):
                 # (3) Nothing on file — unchanged wording.
                 _cv_msg = (
