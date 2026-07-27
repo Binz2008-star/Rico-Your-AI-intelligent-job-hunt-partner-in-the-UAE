@@ -428,6 +428,82 @@ def test_provider_unavailable_is_never_phrased_as_an_empty_market() -> None:
     assert resp.get("provider_state") in {"quota_exhausted", "rate_limited", "unavailable"}
 
 
+def test_degraded_early_exit_records_a_failed_not_completed_lifecycle_state() -> None:
+    """The *early* degraded exit must use the same lifecycle semantics.
+
+    The sibling test above drives the verified-bundle delivery gate: records
+    arrive from the provider, the integrity gate rejects them, and the gate
+    writes ``failed``. This test drives the OTHER provider-unavailable exit —
+    the degraded guard that fires when the cascade returns nothing at all and a
+    configured provider is quota-exhausted. That guard returns before the
+    bundle is built and before the delivery gate ever runs, so it is the
+    dominant degraded path, and it must not disagree with the gate about what
+    happened.
+
+    The distinction is a right, not a label. ``_duplicate_operation_guard``
+    answers a repeat of a ``completed`` operation id with a status reply
+    instead of re-executing, while a ``failed`` one returns ``None`` from that
+    guard so a legitimate retry runs. An execution that never reached a
+    provider must leave that retry open. ``mark_failed`` also refuses to
+    downgrade an already-``completed`` row, so the first write has to be the
+    right one.
+    """
+    # Zero deliverable records from the cascade *and* zero from the legacy
+    # fallback (`_SearchRun._run_for_profile` returns no matches), with a
+    # configured provider reporting quota exhaustion: control reaches the
+    # degraded early exit instead of the bundle path.
+    run = _SearchRun([], quota_exhausted=True)
+    resp = run.run("Compliance Manager")
+
+    operation_id = run.operations_started[0]
+
+    # -- the user-facing degraded response is unchanged ----------------------
+    assert resp.get("degraded") is True, (
+        f"the early degraded exit stopped reporting a degraded provider: {resp!r}"
+    )
+    assert resp.get("provider_state") in {"quota_exhausted", "rate_limited", "unavailable"}
+    assert resp.get("type") != "job_matches", (
+        "a provider-unavailable outcome was delivered in the shape that names jobs"
+    )
+    _assert_names_no_job(resp)
+    _assert_no_completed_search_claim(resp)
+
+    # -- one accepted request buys exactly one cascade, and no role hop ------
+    assert run.cascades == ["Compliance Manager"], (
+        f"expected exactly one provider cascade for the requested role, got {run.cascades!r}"
+    )
+    _cascade_attempts = [
+        a for a in (resp.get("search_attempts") or [])
+        if a.get("mechanism") == "provider_cascade"
+    ]
+    assert len(_cascade_attempts) == 1, (
+        f"expected one provider_cascade attempt, got {resp.get('search_attempts')!r}"
+    )
+
+    # -- lifecycle: no completion, exactly one failure -----------------------
+    assert run.completed_calls == [], (
+        "the degraded early exit marked an execution that never reached a "
+        f"provider as completed: {run.completed_calls!r}"
+    )
+    assert [op for op, _ in run.failed_calls] == [operation_id], (
+        f"expected exactly one failed write for {operation_id!r}, got {run.failed_calls!r}"
+    )
+
+    stored = run.stored_operation
+    assert stored is not None, "fixture drift: the lifecycle row could not be read back"
+    assert stored.get("status") == "failed", (
+        f"the persisted lifecycle status is {stored.get('status')!r}; a retry after "
+        "quota recovery would be refused as a duplicate of a finished search"
+    )
+
+    # A machine-safe code only: no query, role, user data, provider payload or
+    # exception text may be persisted on the lifecycle row.
+    error = str(stored.get("error") or "")
+    assert error == "provider_unavailable", f"unexpected lifecycle error value {error!r}"
+    for leak in ("synthco", "compliance manager", "chef", "synthetic@test", "@", "quota"):
+        assert leak not in error.lower(), f"lifecycle error leaked {leak!r}"
+
+
 # ===========================================================================
 # D. Cancellation after partial internal work
 # ===========================================================================
