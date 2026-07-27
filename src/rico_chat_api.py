@@ -2250,10 +2250,16 @@ class RicoChatAPI:
         return response
 
     def _begin_job_search_operation(self, user_id: str, role_or_query: str) -> dict[str, Any]:
+        # Normalize BEFORE the lifecycle write, so the store never persists a
+        # blank identity. A whitespace-only id is truthy, so passing it through
+        # would key the row on " " and force a second id to be minted later —
+        # one search with two identities. Empty or whitespace becomes None,
+        # which hands generation to the store; a real id is preserved exactly.
+        _incoming = (self._current_operation_id or "").strip() or None
         operation = start_job_search_operation(
             user_id=user_id,
             role_or_query=role_or_query,
-            operation_id=self._current_operation_id,
+            operation_id=_incoming,
         )
         if operation.get("claimed") is False:
             # Atomic-claim refusal (shared store): another live execution —
@@ -2261,7 +2267,16 @@ class RicoChatAPI:
             # guard passed — owns this operation_id. Do NOT run a second
             # cascade and do NOT touch executor state (we own nothing).
             raise OperationClaimRefused(operation)
-        self._current_operation_id = str(operation["operation_id"])
+        # The store is the single owner and generator of the identity. Fail
+        # closed rather than inventing one here: a caller that cannot be told
+        # which operation it owns must not go on to name jobs.
+        _persisted = str(operation.get("operation_id") or "").strip()
+        if not _persisted:
+            raise RuntimeError(
+                "operation lifecycle store returned no operation_id — refusing "
+                "to execute a search that cannot be identified"
+            )
+        self._current_operation_id = _persisted
         # Attempt fence: outcome writes from THIS execution carry this token;
         # if the operation is later expired + legitimately re-started, the
         # bumped attempt makes this execution's late writes refusable.
@@ -7140,14 +7155,15 @@ class RicoChatAPI:
             _provider_location = ""  # UAE-wide single call covers all requested cities
 
         operation = self._begin_job_search_operation(user_id, search_role)
-        # Resolve the operation identity server-side, once, here. A search that
-        # cannot be tied to one operation across the log, the response and the
-        # delivery is untraceable, so an absent id is minted rather than
-        # tolerated — and it is minted in exactly one place. Everything below
-        # (operation state, logs, the response, and the verified-search
-        # evidence) uses this same value; two generated ids would be worse than
-        # none, because they would look like provenance while pointing apart.
-        operation_id = str(operation.get("operation_id") or "").strip() or uuid.uuid4().hex
+        # Use exactly the identity the lifecycle store persisted. No fallback is
+        # minted here: the store is the single generator and owner, a blank
+        # incoming id was normalised to None *before* the write, and a store
+        # that returns nothing has already failed closed. Everything downstream
+        # — operation state, provider-search logging, SearchExecutionEvidence,
+        # the response operation_id and search_evidence.operation_id,
+        # completion and cancellation — reads this one value, so a search can
+        # never carry two identities.
+        operation_id = str(operation["operation_id"])
 
         # Explicit per-attempt provenance for this ONE operation_id (PR4
         # slice 1 — observability only, no control-flow change): every

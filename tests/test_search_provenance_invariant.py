@@ -23,6 +23,8 @@ from contextlib import ExitStack
 from typing import Any
 from unittest.mock import PropertyMock, patch
 
+import pytest
+
 from src.jsearch_client import FetchResult
 from src.rico_agent import RicoProfile
 
@@ -76,14 +78,13 @@ class _Driver:
             p(patch("src.rico_chat_api.RicoChatAPI._get_recent_context", _get_rctx))
             p(patch("src.rico_chat_api.RicoChatAPI._store_recent_context", _store_rctx))
             p(patch("src.llm_scorer._embed", return_value=None))
-            if drop_operation_id:
-                # A request that carries no operation identity at all. The
-                # server must mint one rather than emit an untraceable bundle.
-                p(patch(
-                    "src.rico_chat_api.RicoChatAPI._begin_job_search_operation",
-                    return_value={"operation_id": ""},
-                ))
             api = RicoChatAPI()
+            if drop_operation_id:
+                # The audited case: a client-supplied identity that is
+                # whitespace-only. It must be normalised to None *before* the
+                # lifecycle write so the store generates the one real id —
+                # not persisted blank and then papered over downstream.
+                api._current_operation_id = "        "
             return api._target_role_search_response(profile.user_id, requested_role, profile)
 
 
@@ -176,6 +177,116 @@ def test_request_without_an_operation_id_gets_one_server_side():
     )
     assert resp.get("operation_id") == evidence["operation_id"], (
         "the response and its evidence must report one operation id, not two"
+    )
+
+
+def test_whitespace_incoming_id_is_normalised_before_the_lifecycle_write():
+    """The store must never persist a blank identity.
+
+    A whitespace-only id is truthy, so passing it through would key the
+    lifecycle row on the blank value and force a second id downstream — one
+    search with two identities. Normalisation happens *before* the write, and
+    the store stays the single generator.
+    """
+    from src.rico_chat_api import RicoChatAPI
+
+    seen: dict[str, Any] = {}
+
+    def _fake_start(*, user_id: str, role_or_query: str, operation_id: Any = None):
+        seen["operation_id_passed_to_store"] = operation_id
+        return {"operation_id": "op-generated-by-store", "attempt": 1, "claimed": True}
+
+    api = RicoChatAPI()
+    api._current_operation_id = "        "  # eight spaces, the audited value
+
+    with patch("src.rico_chat_api.start_job_search_operation", _fake_start):
+        operation = api._begin_job_search_operation("synthetic@test", "Compliance Manager")
+
+    assert seen["operation_id_passed_to_store"] is None, (
+        "a whitespace-only id must be normalised to None before the lifecycle "
+        "write, so the store generates instead of persisting a blank identity"
+    )
+    assert operation["operation_id"] == "op-generated-by-store"
+    assert api._current_operation_id == "op-generated-by-store"
+
+
+def test_a_valid_supplied_id_is_preserved_unchanged():
+    from src.rico_chat_api import RicoChatAPI
+
+    seen: dict[str, Any] = {}
+
+    def _fake_start(*, user_id: str, role_or_query: str, operation_id: Any = None):
+        seen["operation_id_passed_to_store"] = operation_id
+        return {"operation_id": operation_id, "attempt": 1, "claimed": True}
+
+    api = RicoChatAPI()
+    api._current_operation_id = "op-client-supplied-123"
+
+    with patch("src.rico_chat_api.start_job_search_operation", _fake_start):
+        operation = api._begin_job_search_operation("synthetic@test", "Compliance Manager")
+
+    assert seen["operation_id_passed_to_store"] == "op-client-supplied-123"
+    assert operation["operation_id"] == "op-client-supplied-123"
+
+
+def test_a_store_returning_no_id_fails_closed():
+    """No identity, no search — and therefore no named job and no bundle."""
+    from src.rico_chat_api import RicoChatAPI
+
+    def _fake_start(*, user_id: str, role_or_query: str, operation_id: Any = None):
+        return {"operation_id": "   ", "attempt": 1, "claimed": True}
+
+    api = RicoChatAPI()
+    api._current_operation_id = None
+
+    with patch("src.rico_chat_api.start_job_search_operation", _fake_start):
+        with pytest.raises(RuntimeError, match="operation_id"):
+            api._begin_job_search_operation("synthetic@test", "Compliance Manager")
+
+
+def test_no_downstream_second_id_fallback_remains():
+    """The handler must not mint an identity of its own, anywhere."""
+    import inspect
+
+    from src.rico_chat_api import RicoChatAPI
+
+    source = inspect.getsource(RicoChatAPI._target_role_search_response)
+    assert "uuid" not in source, (
+        "the search handler must not generate an operation id — the lifecycle "
+        "store is the single generator and owner"
+    )
+
+
+def test_one_identity_from_storage_through_evidence_to_response():
+    """Trace one operation id end to end: stored == response == evidence."""
+    stored: dict[str, Any] = {}
+    real_start = None
+
+    from src import rico_chat_api as _mod
+
+    real_start = _mod.start_job_search_operation
+
+    def _recording_start(*, user_id: str, role_or_query: str, operation_id: Any = None):
+        result = real_start(
+            user_id=user_id, role_or_query=role_or_query, operation_id=operation_id
+        )
+        stored["persisted"] = str(result.get("operation_id") or "")
+        return result
+
+    with patch("src.rico_chat_api.start_job_search_operation", _recording_start):
+        resp = _Driver(["Compliance Manager"]).run(
+            "Compliance Manager", drop_operation_id=False
+        )
+
+    if resp.get("type") != "job_matches":
+        assert not resp.get("matches")
+        return
+
+    persisted = stored["persisted"]
+    assert persisted.strip(), "the lifecycle store must persist a non-empty id"
+    assert resp["operation_id"] == persisted, "response id diverged from storage"
+    assert resp["search_evidence"]["operation_id"] == persisted, (
+        "evidence id diverged from storage — one search would carry two identities"
     )
 
 
