@@ -104,8 +104,9 @@ class _SearchRun:
         self.cascades: list[str] = []
         self.operations_started: list[str] = []
         self.completed_calls: list[tuple[str, int]] = []
-        self.failed_calls: list[str] = []
+        self.failed_calls: list[tuple[str, str]] = []
         self.legacy_fallback_calls: int = 0
+        self.stored_operation: dict[str, Any] | None = None
         self._ownership_lost = False
 
     # -- stubs ---------------------------------------------------------------
@@ -160,7 +161,7 @@ class _SearchRun:
             return real_completed(user_id, operation_id, count, **kw)
 
         def _recording_failed(user_id: str, operation_id: str, error: str, **kw: Any):
-            self.failed_calls.append(str(operation_id))
+            self.failed_calls.append((str(operation_id), str(error)))
             return real_failed(user_id, operation_id, error, **kw)
 
         with ExitStack() as stack:
@@ -181,6 +182,15 @@ class _SearchRun:
             api = RicoChatAPI()
             resp = api._target_role_search_response(
                 profile.user_id, requested_role, profile, location=location
+            )
+            # Read the lifecycle row back through the same in-memory store the
+            # production code wrote it to, so the assertion is about persisted
+            # state and not merely about which helper was called.
+            from src.services.operation_state import get_operation
+
+            self.stored_operation = (
+                get_operation(profile.user_id, self.operations_started[0])
+                if self.operations_started else None
             )
         self.recent_context = dict(rctx)
         return resp
@@ -362,6 +372,50 @@ def test_provider_unavailable_terminal_delivers_no_completed_search() -> None:
     assert len(run.cascades) == 1, (
         f"a degraded provider was re-queried — {run.cascades!r}; no automatic retry is permitted"
     )
+
+
+def test_provider_unavailable_records_a_failed_not_completed_lifecycle_state() -> None:
+    """The lifecycle row must say the execution errored, not that it finished.
+
+    ``operation_state`` gives the two statuses different meanings and different
+    consequences: ``completed`` is a finished execution, and
+    ``_duplicate_operation_guard`` answers a repeat of that operation id with a
+    status reply instead of re-executing; ``failed`` is terminal in the sense
+    that a retry is legitimate and returns ``None`` from that guard so the
+    search runs again. Writing ``completed`` for an execution that never
+    reached a provider therefore does more than mislabel it — it tells the
+    guard to refuse the retry the user is entitled to once quota recovers.
+
+    ``mark_failed`` also refuses to downgrade a row that is already
+    ``completed``, so this cannot be repaired by a later call: the first write
+    has to be the right one.
+    """
+    run = _SearchRun(_OFF_DOMAIN_TITLES, quota_exhausted=True)
+    run.run("Compliance Manager")
+
+    operation_id = run.operations_started[0]
+
+    assert run.completed_calls == [], (
+        "an execution that could not reach a provider was marked completed: "
+        f"{run.completed_calls!r}"
+    )
+    assert [op for op, _ in run.failed_calls] == [operation_id], (
+        f"expected exactly one failed write for {operation_id!r}, got {run.failed_calls!r}"
+    )
+
+    stored = run.stored_operation
+    assert stored is not None, "fixture drift: the lifecycle row could not be read back"
+    assert stored.get("status") == "failed", (
+        f"the persisted lifecycle status is {stored.get('status')!r}; a retry after "
+        "quota recovery would be refused as a duplicate of a finished search"
+    )
+
+    # A machine-safe code only: no provider payload, query, user data or
+    # exception text may be persisted on the lifecycle row.
+    error = str(stored.get("error") or "")
+    assert error == "provider_unavailable", f"unexpected lifecycle error value {error!r}"
+    for leak in ("synthco", "compliance manager", "pastry", "chef", "synthetic@test"):
+        assert leak not in error.lower(), f"lifecycle error leaked {leak!r}"
 
 
 def test_provider_unavailable_is_never_phrased_as_an_empty_market() -> None:

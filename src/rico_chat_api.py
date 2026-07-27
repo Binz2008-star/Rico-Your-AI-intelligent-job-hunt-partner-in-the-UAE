@@ -7200,8 +7200,26 @@ class RicoChatAPI:
                 "raw=%d accepted=0 op=%s",
                 role, bundle.execution.raw_result_count, operation_ref(operation_id),
             )
+            # `failed`, not `completed`. operation_state gives the two statuses
+            # different consequences, not just different labels:
+            # _duplicate_operation_guard answers a repeat of a `completed`
+            # operation id with a status reply instead of re-executing, while a
+            # `failed` one returns None from that guard so a legitimate retry
+            # runs. An execution that never reached a provider must leave the
+            # retry open — writing `completed` would refuse the user the retry
+            # they are entitled to once quota recovers. mark_failed also refuses
+            # to downgrade an already-completed row, so the first write has to be
+            # the right one.
+            #
+            # The error is a fixed machine-safe code. No provider payload, query,
+            # role, user value or exception text is persisted on the row.
             try:
-                mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
+                mark_failed(
+                    user_id,
+                    operation_id,
+                    "provider_unavailable",
+                    attempt=self._operation_attempt(),
+                )
             except Exception:
                 pass
             attempts.append({"mechanism": "verified_delivery", "outcome": "provider_unavailable"})
