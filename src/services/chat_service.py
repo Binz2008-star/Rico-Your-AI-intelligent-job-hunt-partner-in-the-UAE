@@ -746,14 +746,8 @@ class _ResolverUnavailable:
 
 _RESOLVER_UNAVAILABLE = _ResolverUnavailable()
 
-# Resolution outcome, tri-state:
-#   str                      -> RESOLVED, this is the owner row id
-#   None                     -> VERIFIED_MISS, no owner row exists
-#   _RESOLVER_UNAVAILABLE    -> UNAVAILABLE/ERROR, no answer was obtained
-CentralResolution = "str | None | _ResolverUnavailable"
 
-
-def _central_identity_resolve(db, user_id: str):
+def _central_identity_resolve(db, user_id: str) -> "str | None | _ResolverUnavailable":
     """Read the owner row for `user_id` through the one central resolver.
 
     `RicoDB.get_user_bundle` is the single place ownership is decided. It excludes
@@ -761,8 +755,14 @@ def _central_identity_resolve(db, user_id: str):
     `IdentityOwnershipAmbiguous` rather than ranking candidates, so nothing here may
     re-implement, widen, or soften that predicate.
 
-    Returns the tri-state described on `CentralResolution`. Ambiguity still
-    propagates untouched — a refusal is an answer, and a terminal one.
+    Returns one of three outcomes, which callers must keep distinct:
+
+      * ``str``                   — RESOLVED; this is the owner row id
+      * ``None``                  — VERIFIED_MISS; the resolver looked, no owner row
+      * ``_RESOLVER_UNAVAILABLE`` — UNAVAILABLE; no answer was obtained at all
+
+    Only VERIFIED_MISS may unlock auto-provisioning. Ambiguity still propagates
+    untouched — a refusal is an answer, and a terminal one.
     """
     try:
         bundle = db.get_user_bundle(user_id)
@@ -800,7 +800,8 @@ def _resolve_db_user_id(user_id: str):
 
     Provisioning is gated on a *verified* central-resolver miss. A resolver that could
     not answer (store down, query failure) is not a miss, and does not unlock the
-    INSERT: a write must never be decided by a failed read. See `CentralResolution`.
+    INSERT: a write must never be decided by a failed read. See the tri-state on
+    `_central_identity_resolve`.
 
     Raises:
         IdentityOwnershipAmbiguous: the principal resolves to more than one owner
