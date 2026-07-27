@@ -6403,6 +6403,24 @@ class RicoChatAPI:
         "ماشي", "زين", "كويس", "شكرا", "شكراً", "موافق", "اه", "آه", "لا",
     })
 
+    @staticmethod
+    def _assistant_turn_is_prose(text: str) -> bool:
+        """False when a stored assistant turn is a serialised structured reply.
+
+        ``_append_chat`` persists a dict response as ``json.dumps(response)``, so
+        chat history holds a mix of prose Rico spoke and machine payloads it
+        emitted. Only the former can be evidence of what Rico asked the user.
+        Unparseable text is treated as prose: this narrows what may be read as a
+        question, and must never widen it.
+        """
+        candidate = (text or "").strip()
+        if not (candidate.startswith("{") and candidate.endswith("}")):
+            return True
+        try:
+            return not isinstance(json.loads(candidate), dict)
+        except (ValueError, TypeError):
+            return True
+
     def _resolve_pending_field(
         self, user_id: str, message: str, profile: Any
     ) -> "dict[str, Any] | None":
@@ -6422,13 +6440,23 @@ class RicoChatAPI:
         # Explicit pending field stored by an earlier turn
         pending_field: str | None = ctx.get("_pending_field")
 
-        # Fallback: infer from last assistant message
+        # Fallback: infer from the last assistant message — but only when that
+        # turn is prose Rico actually spoke. A structured reply (job_matches,
+        # profile preview, …) is persisted by _append_chat as its serialised
+        # dict, and that payload contains field vocabulary of its own: a
+        # job_matches payload carries the literal text "preferred cities", which
+        # matches the preferred_cities ask-signal. Scanning it makes Rico infer a
+        # question it never issued, and the user's next message — whatever it is
+        # — is then captured as the answer to that imagined question. Rico's own
+        # machine output is never evidence that it asked the user for a field.
         if not pending_field:
-            last_msg = self._get_last_assistant_message(user_id).lower()
-            for field, signals in self._PENDING_FIELD_ASK_SIGNALS.items():
-                if any(sig in last_msg for sig in signals):
-                    pending_field = field
-                    break
+            last_turn = self._get_last_assistant_message(user_id)
+            if self._assistant_turn_is_prose(last_turn):
+                last_msg = last_turn.lower()
+                for field, signals in self._PENDING_FIELD_ASK_SIGNALS.items():
+                    if any(sig in last_msg for sig in signals):
+                        pending_field = field
+                        break
 
         if not pending_field:
             return None
@@ -7096,6 +7124,120 @@ class RicoChatAPI:
             return True  # cannot evaluate → do not drop
         return role_text_supported(title, strong_terms, phrase_terms, weak_terms)
 
+    def _search_delivery_gate(
+        self,
+        user_id: str,
+        *,
+        bundle: Any,
+        operation_id: str,
+        role: str,
+        location: str,
+        arabic: bool,
+        quota_exhausted: bool,
+        rate_limited: bool,
+        attempts: list[dict[str, Any]],
+        cancel: Any = None,
+    ) -> "dict[str, Any] | None":
+        """The one boundary a verified search's listings are released through.
+
+        Returns an honest terminal response when nothing may be delivered, or
+        ``None`` when the bundle reached ``COMPLETED`` (or the honest zero of
+        ``EMPTY``) and the handler may go on to build its normal reply.
+
+        Everything the search produced stays buffered inside the handler until
+        this returns ``None``. That is the whole point of a single gate: the
+        alternative — a guard at each of the response, the shortlist write, the
+        chat-history append and the lifecycle completion — is four chances to
+        miss one, and a missed one is a named company with no completed bundle
+        behind it.
+
+        Two terminal states are refused here rather than downstream:
+
+        * ``CANCELLED`` — including cancellation observed only now. A de-owned
+          execution must hand the user nothing it already fetched, so the
+          ownership check is re-read at delivery and not trusted from the
+          moment the cascade returned.
+        * ``PROVIDER_UNAVAILABLE`` — records may have arrived internally and
+          none of them survived. "We could not properly ask" is not "the market
+          has no jobs", and delivering it in the shape that names jobs states
+          the second while the evidence says the first.
+
+        ``EMPTY`` passes through: it is a real answer about the market, and the
+        existing builder already renders it as an honest zero with no card.
+        """
+        from src.domain.job_search import SearchStatus as _SearchStatus
+        from src.services.cancellation import is_cancelled
+
+        status = bundle.execution.status
+        _evidence = bundle.execution.as_public_dict()
+
+        if status is _SearchStatus.CANCELLED or is_cancelled(cancel):
+            logger.info(
+                "job_search_delivery_withheld reason=cancelled role=%r op=%s attempt=%s",
+                role, operation_ref(operation_id), self._operation_attempt(),
+            )
+            attempts.append({"mechanism": "verified_delivery", "outcome": "cancelled"})
+            return {
+                "type": "search_superseded",
+                "intent": "search_jobs",
+                "success": True,
+                "operation_id": operation_id,
+                "operation_type": "job_search",
+                "operation_status": "superseded",
+                "response_source": "operation_ownership_lost",
+                "search_attempts": attempts,
+                "search_evidence": _evidence,
+                "message": (
+                    "تم استئناف هذا البحث في جلسة أحدث — لم أكمل النتيجة القديمة."
+                    if arabic else
+                    "This search was resumed in a newer session — I didn't finish the old one."
+                ),
+            }
+
+        if status is _SearchStatus.PROVIDER_UNAVAILABLE:
+            logger.info(
+                "job_search_delivery_withheld reason=provider_unavailable role=%r "
+                "raw=%d accepted=0 op=%s",
+                role, bundle.execution.raw_result_count, operation_ref(operation_id),
+            )
+            # `failed`, not `completed`. operation_state gives the two statuses
+            # different consequences, not just different labels:
+            # _duplicate_operation_guard answers a repeat of a `completed`
+            # operation id with a status reply instead of re-executing, while a
+            # `failed` one returns None from that guard so a legitimate retry
+            # runs. An execution that never reached a provider must leave the
+            # retry open — writing `completed` would refuse the user the retry
+            # they are entitled to once quota recovers. mark_failed also refuses
+            # to downgrade an already-completed row, so the first write has to be
+            # the right one.
+            #
+            # The error is a fixed machine-safe code. No provider payload, query,
+            # role, user value or exception text is persisted on the row.
+            try:
+                mark_failed(
+                    user_id,
+                    operation_id,
+                    "provider_unavailable",
+                    attempt=self._operation_attempt(),
+                )
+            except Exception:
+                pass
+            attempts.append({"mechanism": "verified_delivery", "outcome": "provider_unavailable"})
+            degraded = self._provider_degraded_response(
+                user_id, role,
+                location=location,
+                quota_exhausted=quota_exhausted,
+                rate_limited=rate_limited,
+                arabic=arabic,
+            )
+            degraded["operation_id"] = operation_id
+            degraded["operation_type"] = "job_search"
+            degraded["search_attempts"] = attempts
+            degraded["search_evidence"] = _evidence
+            return degraded
+
+        return None
+
     def _target_role_search_response(
         self, user_id: str, role: str, profile: Any,
         from_saved_profile: bool = False,
@@ -7336,6 +7478,27 @@ class RicoChatAPI:
             requested_terms=(_req_strong | _req_weak, _req_phrase),
             uae_only=True,  # Rico is a UAE-market product
         )
+
+        # ── Delivery boundary, evaluated the moment the bundle exists ─────────
+        # A bundle that is not deliverable stops the turn here, before ranking,
+        # formatting, the relevance floor and — critically — the adjacent-role
+        # hop, which would otherwise run a SECOND provider cascade on behalf of
+        # an execution that was already cancelled or could not reach a provider.
+        # One accepted request buys one cascade; this is where that is enforced.
+        _withheld = self._search_delivery_gate(
+            user_id,
+            bundle=search_bundle,
+            operation_id=operation_id,
+            role=normalized_role or search_role,
+            location=location,
+            arabic=arabic,
+            quota_exhausted=quota_exhausted,
+            rate_limited=rate_limited,
+            attempts=_attempts,
+            cancel=_cancel,
+        )
+        if _withheld is not None:
+            return _withheld
 
         # Filter out already-applied jobs
         try:
@@ -7675,6 +7838,31 @@ class RicoChatAPI:
             except Exception:
                 _offer_daily = False
                 _offer_save = False
+
+        # ── Delivery boundary, re-evaluated at the moment of release ──────────
+        # Everything above only prepared `formatted`; nothing has reached the
+        # user, chat history, the shortlist or the lifecycle store yet. Ranking,
+        # the quality sort, the career-context resolve and role intelligence all
+        # take real time between the cascade and here, and ownership can be lost
+        # inside that window — so the check is re-read now rather than trusted
+        # from when the bundle was built. It sits ahead of message building and
+        # of arming the broaden offer, so a superseded turn leaves no follow-up
+        # state behind either. Past this point the buffered listings are
+        # released exactly once.
+        _withheld = self._search_delivery_gate(
+            user_id,
+            bundle=search_bundle,
+            operation_id=operation_id,
+            role=normalized_role or search_role,
+            location=location,
+            arabic=arabic,
+            quota_exhausted=quota_exhausted,
+            rate_limited=rate_limited,
+            attempts=_attempts,
+            cancel=_cancel,
+        )
+        if _withheld is not None:
+            return _withheld
 
         message = self._build_role_search_message(
             normalized_role, city_text, basis_text, top_matches, role_intelligence_data,
