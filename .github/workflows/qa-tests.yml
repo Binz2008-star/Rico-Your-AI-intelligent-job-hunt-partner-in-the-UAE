@@ -59,6 +59,7 @@ jobs:
             tests/test_job_result_integrity.py \
             tests/test_verified_search_contract.py \
             tests/test_search_provenance_invariant.py \
+            tests/test_search_fail_closed_delivery.py \
             tests/test_bug3_duplicate_kanban_entries.py \
             tests/test_764_durable_mutation_truth.py \
             tests/test_1082_consent_fail_closed.py \
