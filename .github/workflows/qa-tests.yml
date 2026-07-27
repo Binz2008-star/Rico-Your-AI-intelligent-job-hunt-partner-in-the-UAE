@@ -42,6 +42,9 @@ jobs:
             tests/test_agent.py \
             tests/test_agent_runtime.py \
             tests/test_jotform_webhook.py \
+            tests/test_identity_phone_containment.py \
+            tests/test_identity_flow_mapper.py \
+            tests/test_public_candidate_exclusion.py \
             tests/test_jwt_user_isolation.py \
             tests/test_onboarding_state.py \
             tests/test_link_verifier.py \
@@ -54,11 +57,14 @@ jobs:
             tests/test_tc2_target_role_propagation.py \
             tests/test_tc2_tc8_wiring.py \
             tests/test_job_result_integrity.py \
+            tests/test_verified_search_contract.py \
+            tests/test_search_provenance_invariant.py \
             tests/test_bug3_duplicate_kanban_entries.py \
             tests/test_764_durable_mutation_truth.py \
             tests/test_1082_consent_fail_closed.py \
             tests/test_1070_guest_identity_binding.py \
             tests/test_1072_jwt_auth_version.py \
+            tests/test_identity_ownership_boundaries.py \
             tests/test_1084_workflow_guards.py \
             tests/test_1076_log_privacy.py \
             tests/test_1077_no_paid_probe.py \

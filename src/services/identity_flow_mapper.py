@@ -141,6 +141,52 @@ def _score_candidate(signal: IdentitySignal, candidate: ProfileContext) -> _Iden
     return score
 
 
+def _matched_strong_signal_kinds(signal: IdentitySignal, candidate: ProfileContext) -> set:
+    """Which STRONG signals actually matched, by kind.
+
+    The score alone cannot answer "what matched?" — one strong signal and
+    another strong signal both add 1.0, so the sum cannot distinguish them.
+
+    Named for what it measures and nothing more. An earlier name called these
+    "verified" signals, which wrote a false architectural claim into the code:
+    on the Jotform path NOTHING here is independently verified. The submitter
+    types the email and the Telegram handle into the form, and
+    `_resolve_user_id` (src/rico_jotform_webhook.py:79) derives
+    `external_user_id` from `answers["email"] or answers["telegram_username"]`
+    — which then arrives as `signal.user_id`. All three so-called ownership
+    signals are therefore the same unverified form input wearing three names.
+
+    A name that asserts a verification nobody performed is more dangerous than
+    no name at all, because the next person extends the set on the strength of
+    the word rather than the mechanism.
+    """
+    kinds = set()
+    if signal.telegram_username and _norm_telegram(
+        signal.telegram_username
+    ) == _norm_telegram(candidate.telegram_username):
+        kinds.add("telegram_username")
+    if signal.email and _norm_email(signal.email) == _norm_email(candidate.email):
+        kinds.add("email")
+    if signal.phone and _norm_phone(signal.phone) == _norm_phone(candidate.phone):
+        kinds.add("phone")
+    if signal.user_id and signal.user_id == candidate.user_id:
+        kinds.add("user_id")
+    return kinds
+
+
+#: The signals that the EXISTING contract already allows to auto-attach a
+#: submission to an account. `phone` is deliberately absent — removing it is
+#: the whole point of this change.
+#:
+#: This set is a description of current behaviour, NOT an endorsement of it.
+#: These three are preserved byte-for-byte because narrowing them was out of
+#: scope; nothing here establishes that they are independently verified, and
+#: on the Jotform path they demonstrably are not (see
+#: `_matched_strong_signal_kinds`). Do not read membership as a safety
+#: property, and do not extend this set on the strength of its name.
+_EXISTING_AUTO_MERGE_SIGNAL_KINDS = frozenset({"email", "telegram_username", "user_id"})
+
+
 def _find_conflicts(
     signal: IdentitySignal, candidate: ProfileContext
 ) -> Dict[str, Tuple[Any, Any]]:
@@ -273,6 +319,34 @@ def map_identity_flow(
 
     # 5. Strong single match — check for conflicts
     if top_score >= _STRONG_MATCH_THRESHOLD:
+        # A lone phone match must not auto-attach.
+        #
+        # The "multiple strong matches -> ask_user" guard above is not
+        # containment on its own: it protects the crowded case and leaves the
+        # lonely one exposed. A phone held by exactly one candidate produced a
+        # single strong match and merged immediately, with no human in the
+        # loop. The candidate lookup also reads LIMIT 10 with no ORDER BY, so
+        # the mapper never reliably sees the full candidate set anyway — which
+        # is a second reason the multiplicity guard cannot be leaned on.
+        matched_kinds = _matched_strong_signal_kinds(incoming, top_candidate)
+        if not (matched_kinds & _EXISTING_AUTO_MERGE_SIGNAL_KINDS):
+            return IdentityResolution(
+                action="ask_user",
+                confidence=0.5,
+                matched_user_id=top_candidate.user_id,
+                reasons=[
+                    f"Matched {top_candidate.user_id} on contact detail only "
+                    f"({', '.join(sorted(matched_kinds)) or 'none'}); not a signal "
+                    "the auto-merge contract accepts — human confirmation required"
+                ],
+                # Conflicts are still reported. This branch exists to hand the
+                # decision to a human, and a human deciding whether two records
+                # are the same person needs to see WHICH fields disagree.
+                # Returning {} here would make the ask harder to answer than the
+                # merge it replaced.
+                conflicts=_find_conflicts(incoming, top_candidate),
+                missing_fields=_missing_fields(incoming, top_candidate),
+            )
         conflicts = _find_conflicts(incoming, top_candidate)
         if conflicts:
             return IdentityResolution(

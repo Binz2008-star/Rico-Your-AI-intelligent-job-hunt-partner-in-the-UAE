@@ -80,11 +80,19 @@ class TestStrongMatchMerge:
         assert resolution.confidence >= 0.9
         assert "Strong match" in resolution.reasons[0]
 
-    def test_phone_exact_match(self):
+    def test_phone_exact_match_no_longer_merges(self):
+        """Contract changed: a phone match alone is not ownership evidence.
+
+        This previously asserted `merge`, which is the defect it was pinning
+        rather than protecting: a phone is a contact detail people share,
+        mistype and inherit with a recycled SIM, and a Jotform submission
+        proves nothing about who controls it. The candidate is still matched
+        and still surfaced — it now needs a human to confirm.
+        """
         candidate = _profile("u1", name="Ali", phone="+971501234567")
         signal = IdentitySignal(source="telegram", phone="+971 50 123 4567")
         resolution = map_identity_flow(signal, [candidate])
-        assert resolution.action == "merge"
+        assert resolution.action == "ask_user"
         assert resolution.matched_user_id == "u1"
 
     def test_telegram_username_match(self):
@@ -108,11 +116,13 @@ class TestStrongMatchMerge:
         assert resolution.action == "merge"
         assert resolution.matched_user_id == "u1"
 
-    def test_phone_normalization(self):
+    def test_phone_normalization_still_matches_but_asks(self):
+        """Normalisation still works; what changed is what a match authorises."""
         candidate = _profile("u1", phone="971501234567")
         signal = IdentitySignal(source="jotform", phone="+971-50-123-4567")
         resolution = map_identity_flow(signal, [candidate])
-        assert resolution.action == "merge"
+        assert resolution.action == "ask_user"
+        assert resolution.matched_user_id == "u1"
 
 
 # ---------------------------------------------------------------------------
@@ -271,10 +281,11 @@ class TestMissingFields:
 
 class TestEdgeCases:
     def test_phone_normalization_different_formats(self):
+        """Same normalisation, same new contract: matched, not auto-attached."""
         candidate = _profile("u1", phone="971501234567")
         signal = IdentitySignal(source="jotform", phone="+971-50-123-4567")
         resolution = map_identity_flow(signal, [candidate])
-        assert resolution.action == "merge"
+        assert resolution.action == "ask_user"
 
     def test_telegram_at_sign_normalized(self):
         candidate = _profile("u1", telegram_username="ali")
