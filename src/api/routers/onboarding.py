@@ -192,6 +192,11 @@ def onboarding_status(request: Request) -> Dict[str, Any]:
         }
     except HTTPException:
         raise
+    except IdentityOwnershipAmbiguous:
+        # Ownership refusal, not a store outage. The broad handler below answers
+        # 503 "temporarily unavailable", which is the frontend's cue to retry —
+        # and retrying resolves nothing here. The app-level handler answers 409.
+        raise
     except Exception:
         # Never leak internals (stack traces, DB errors) to the client. The
         # frontend treats a non-200 as a recoverable state (Retry / Continue).
