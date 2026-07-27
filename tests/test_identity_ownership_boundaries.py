@@ -706,3 +706,251 @@ def test_quota_refusal_writes_no_usage_and_never_enables_the_send(monkeypatch):
     # No send enablement: nothing that reads as an allowance decision came back.
     for forbidden in ("usage", "limit", "remaining", "plan"):
         assert forbidden not in result
+
+
+# ── HTTP mapping on the remaining read/upload surfaces ────────────────────────
+#
+# The refusal already reaches the client as 409 on `/me` and the profile writes.
+# These two surfaces did not: each wraps its work in a broad handler that
+# predates the typed exception, so an ownership refusal was re-labelled as
+# something the client is invited to retry. Both mappings are pinned here
+# because the wrong answer is indistinguishable from a healthy outcome:
+# `/onboarding/status` said "the store is down, try again", and `upload-cv`
+# said "the upload failed" after the file had in fact been read perfectly.
+
+def test_onboarding_status_answers_the_conflict_and_never_a_transient_503(monkeypatch):
+    """A refusal on this route must not be dressed as a store outage.
+
+    `/onboarding/status` is the endpoint the frontend routes the whole logged-in
+    experience on. Its broad handler maps every failure to 503 with "please try
+    again" — correct for a database that is briefly unreachable, and wrong here:
+    retrying resolves nothing, and the setup screen tells the user the product is
+    merely having a moment when the account actually needs support.
+    """
+    from fastapi.testclient import TestClient
+
+    from src.api.app import app
+    from src.api.rate_limit import limiter
+    import src.api.routers.onboarding as onboarding_router
+    from src.repositories import onboarding_repo, profile_repo
+
+    limiter.reset()
+    prev_enabled = limiter.enabled
+    limiter.enabled = False
+
+    monkeypatch.setattr(
+        onboarding_router, "get_current_user", lambda request: {"email": ACCOUNT_A, "role": "user"}
+    )
+    # The persisted-status read succeeds. The refusal therefore comes from profile
+    # resolution alone, so nothing else in this route can account for a 503.
+    monkeypatch.setattr(onboarding_repo, "get_onboarding_state_readonly", lambda user_id: None)
+
+    db = MagicMock()
+    db.available = True
+    db.get_user_bundle.side_effect = IdentityOwnershipAmbiguous(2)
+    monkeypatch.setattr(profile_repo, "_db", lambda: db)
+
+    try:
+        response = TestClient(app).get("/api/v1/onboarding/status")
+    finally:
+        limiter.enabled = prev_enabled
+
+    assert response.status_code != 503, (
+        "an ownership refusal must never be reported as a transient store failure: "
+        f"{response.text}"
+    )
+    assert response.status_code == 409, (
+        f"expected the ownership conflict, got {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    assert body.get("error") == "ambiguous_account_ownership"
+    # Not a readiness answer: a derived "pending" would push the user back through
+    # onboarding, and a derived "completed" would let the app proceed on a row
+    # nobody could attribute.
+    assert "status" not in body and "complete" not in body, (
+        f"a refusal must not carry an onboarding-readiness verdict: {body}"
+    )
+    assert "try again" not in response.text.lower(), (
+        f"a refusal must not invite a retry: {response.text}"
+    )
+    assert ACCOUNT_A not in response.text
+
+
+def test_upload_cv_refusal_after_a_successful_parse_is_the_conflict_not_a_500(monkeypatch):
+    """Parsing succeeded; only ownership resolution refused.
+
+    The distinction matters because the route's broad handler answers 500 "CV upload
+    failed", which blames the file. The user re-exports the CV, re-uploads it, and
+    every attempt fails identically — while the durable upload artifact must never be
+    written for an account that cannot be attributed.
+    """
+    import io
+
+    from fastapi.testclient import TestClient
+
+    from src.api.app import app
+    from src.api.rate_limit import limiter
+    import src.api.routers.rico_chat as rico_chat_router
+    import src.services.chat_service as chat_service
+    import src.services.subscription_gating as subscription_gating
+    from src.repositories import cv_upload_artifact_repo, profile_repo
+
+    limiter.reset()
+    prev_enabled = limiter.enabled
+    limiter.enabled = False
+
+    monkeypatch.setattr(rico_chat_router, "get_current_user_id", lambda request: ACCOUNT_A)
+
+    parsed_filenames: list[str] = []
+
+    def _fake_parse(data, filename="cv.pdf"):
+        parsed_filenames.append(filename)
+        # Readable text: the #1118 parse-quality gate must pass, so the request
+        # reaches ownership resolution instead of returning a parse verdict.
+        return {
+            "document_type": "resume",
+            "text": (
+                "Jane Roe — Software Engineer with Python, FastAPI and cloud "
+                "experience. Skills: python, testing, CI. Based in Dubai, UAE."
+            ),
+            "extraction_quality": "high",
+            "extracted_chars": 100,
+            "skills": ["python"],
+        }
+
+    monkeypatch.setattr(chat_service, "parse_cv", _fake_parse)
+
+    quota_gate = MagicMock(return_value=None)
+    monkeypatch.setattr(subscription_gating, "enforce_document_quota", quota_gate)
+
+    artifact_write = MagicMock()
+    monkeypatch.setattr(cv_upload_artifact_repo, "create_cv_upload_artifact", artifact_write)
+    profile_write = MagicMock()
+    monkeypatch.setattr(rico_chat_router, "upsert_profile", profile_write)
+
+    db = MagicMock()
+    db.available = True
+    db.get_user_bundle.side_effect = IdentityOwnershipAmbiguous(2)
+    monkeypatch.setattr(profile_repo, "_db", lambda: db)
+
+    try:
+        response = TestClient(app).post(
+            "/api/v1/rico/upload-cv",
+            files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4 fake cv"), "application/pdf")},
+        )
+    finally:
+        limiter.enabled = prev_enabled
+
+    assert parsed_filenames == ["cv.pdf"], (
+        "the parse must have run and succeeded — otherwise this test would pass on a "
+        "refusal raised before parsing and prove nothing about the post-parse path"
+    )
+    assert response.status_code == 409, (
+        f"expected the ownership conflict, got {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    assert body.get("error") == "ambiguous_account_ownership"
+
+    # Nothing durable for an account that could not be attributed.
+    artifact_write.assert_not_called()
+    profile_write.assert_not_called()
+
+    # Not a parse verdict, and no invitation to spend another upload on it. A
+    # consumed allowance would compound the refusal with a real cost.
+    assert body.get("status") not in ("parse_failed", "error"), (
+        f"an ownership refusal must not be reported as a parsing outcome: {body}"
+    )
+    assert body.get("ok") is not True
+    lowered = response.text.lower()
+    for forbidden in ("try again", "re-upload", "reupload", "upload again", "could not read"):
+        assert forbidden not in lowered, (
+            f"a refusal must not instruct the user to retry the upload: {response.text}"
+        )
+    assert ACCOUNT_A not in response.text
+
+
+def test_onboarding_status_still_reports_a_genuine_store_outage_as_503(monkeypatch):
+    """The narrowing must not swallow the case the broad handler exists for.
+
+    A real store failure is retryable and must keep its 503 — otherwise this change
+    would trade one wrong answer for another, and the frontend's Retry path would
+    lose the only signal that justifies it.
+    """
+    from fastapi.testclient import TestClient
+
+    from src.api.app import app
+    from src.api.rate_limit import limiter
+    import src.api.routers.onboarding as onboarding_router
+    from src.repositories import onboarding_repo
+
+    limiter.reset()
+    prev_enabled = limiter.enabled
+    limiter.enabled = False
+
+    def _store_down(user_id):
+        raise RuntimeError("onboarding state store unreachable")
+
+    monkeypatch.setattr(
+        onboarding_router, "get_current_user", lambda request: {"email": ACCOUNT_A, "role": "user"}
+    )
+    monkeypatch.setattr(onboarding_repo, "get_onboarding_state_readonly", _store_down)
+
+    try:
+        response = TestClient(app).get("/api/v1/onboarding/status")
+    finally:
+        limiter.enabled = prev_enabled
+
+    assert response.status_code == 503, (
+        f"a genuine outage must stay retryable, got {response.status_code}: {response.text}"
+    )
+
+
+def test_upload_cv_still_reports_an_unrelated_failure_as_the_generic_upload_error(monkeypatch):
+    """Same narrowing check on the upload route: only the typed refusal is re-raised."""
+    import io
+
+    from fastapi.testclient import TestClient
+
+    from src.api.app import app
+    from src.api.rate_limit import limiter
+    import src.api.routers.rico_chat as rico_chat_router
+    import src.services.chat_service as chat_service
+    import src.services.subscription_gating as subscription_gating
+
+    limiter.reset()
+    prev_enabled = limiter.enabled
+    limiter.enabled = False
+
+    def _fake_parse(data, filename="cv.pdf"):
+        return {
+            "document_type": "resume",
+            "text": (
+                "Jane Roe — Software Engineer with Python, FastAPI and cloud "
+                "experience. Skills: python, testing, CI. Based in Dubai, UAE."
+            ),
+            "extraction_quality": "high",
+            "extracted_chars": 100,
+            "skills": ["python"],
+        }
+
+    def _store_down(user_id):
+        raise RuntimeError("profile store unreachable")
+
+    monkeypatch.setattr(rico_chat_router, "get_current_user_id", lambda request: ACCOUNT_A)
+    monkeypatch.setattr(chat_service, "parse_cv", _fake_parse)
+    monkeypatch.setattr(subscription_gating, "enforce_document_quota", MagicMock(return_value=None))
+    monkeypatch.setattr(rico_chat_router, "get_profile", _store_down)
+
+    try:
+        response = TestClient(app).post(
+            "/api/v1/rico/upload-cv",
+            files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4 fake cv"), "application/pdf")},
+        )
+    finally:
+        limiter.enabled = prev_enabled
+
+    assert response.status_code == 500, (
+        "an unrelated failure must keep the route's existing generic mapping, got "
+        f"{response.status_code}: {response.text}"
+    )
+    assert "ambiguous_account_ownership" not in response.text

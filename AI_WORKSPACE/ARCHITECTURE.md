@@ -159,11 +159,30 @@ mixes request handling, temporary chat memory, and the job-search script in one 
 historically relied on Render's ephemeral disk for state that must be durable. See
 `DECISIONS.md` → DEC-20260707-001 for the full decision and rationale.
 
-> Status: **approved roadmap, implementation not started.** The end-state below is the target,
-> not what is deployed today. The production backend is still FastAPI on **Render** (see
-> "Current live stack" at the top of this file). Railway, the separate worker service, and
-> Redis/Queue do **not** yet exist in production. Render remains production until Railway passes
-> full production smoke testing.
+> Status: **approved roadmap; implementation has begun, and the infrastructure end-state has not.**
+> That distinction matters and the previous "implementation not started" wording erased it.
+>
+> **Milestone A landed as its first slice:** `#1399` — the documents inventory contract
+> (`src/domain/documents`), merged as `fc2e107d`, deployed and verified. It is one statement of
+> which documents a user has and which one is the active CV, adopted at a single wiring site
+> (`src/api/routers/files.py`) with no behaviour change. Two known divergences from the legacy
+> profile-CV rule are held as characterisation tests plus one strict xfail
+> (`tests/unit/test_document_inventory_contract.py`); unifying that rule is a later slice and has
+> not started.
+>
+> **The external job-search boundary now has a domain contract too:** `#1416`, merged as
+> `dac8d8e7`, deployed and verified. `src/domain/job_search` states what a verified search result
+> is (`SearchExecutionEvidence`, `VerifiedJobListing`, `VerifiedJobSearchBundle`), and
+> `src/services/verified_job_search.py` is the seam that applies the integrity gate once before
+> building a bundle. **One adopter: `_target_role_search_response`.** Ten other `job_matches`
+> builders still name jobs without a bundle — adopting them is a later slice and has not started,
+> so this is one boundary contracted, not the chat surface migrated.
+>
+> **The infrastructure end-state below is still untouched.** The production backend is FastAPI on
+> **Render** (see "Current live stack" at the top of this file). Railway, the separate worker
+> service, and Redis/Queue do **not** exist in production. Render remains production until Railway
+> passes full production smoke testing. Read "implementation has begun" as two domain contracts in
+> place, not as a migration under way.
 >
 > Near-term execution gate: read `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
 > **before** starting any feature, redesign, worker, notification, or infrastructure work. That

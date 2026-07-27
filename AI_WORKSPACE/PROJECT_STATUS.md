@@ -25,32 +25,60 @@ Ranked, and not negotiable when they disagree:
 
 **Every SHA in this file is verified from the API before it is written.** A SHA copied from a message, a summary, or a previous session is not evidence. If live state and this file disagree, reconcile this file before starting anything else.
 
-## Reconciliation — 2026-07-26
+## Reconciliation — 2026-07-27 (post-`#1416`)
 
 ### Verified control snapshot
 
 | Field | Value | How it was established |
 | --- | --- | --- |
-| `main` | `fc2e107d` | Fetched live at the moment this section was written |
-| Deployed backend `/version` | **Not verified this pass** | The production host is unreachable from the reconciling container (outbound blocked). Recorded as unknown rather than assumed |
-| Application/runtime baseline | **Expected to move to `fc2e107d`** | `#1399` changes five runtime paths under `src/`, so a Render deploy is expected. Confirmation is owner-side |
+| `main` | `dac8d8e7` | Fetched live at the moment this section was written |
+| Deployed backend `/version` | **`dac8d8e7` — verified** | `/version.commit` = `dac8d8e7`, process start `2026-07-27T01:00:26Z` |
+| `/health` | **ok** | Same read: `jooble`, `adzuna` and `jsearch` configured and **not** degraded |
+| Application/runtime baseline | `dac8d8e7` — **equal to `main`** | `#1416` touches `src/rico_chat_api.py` and adds `src/domain/job_search` + `src/services/verified_job_search.py`, so the `src/**` deploy filter matched and the deploy fired on merge |
 | Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired | Unchanged |
 
-**`main` and the deployed `/version` are not asserted to be equal here.** Before this cycle they agreed at `e433c7d`. `#1400` cannot have moved the deployment because it touches no runtime path. `#1399` can and should have, because it touches five. Whether that deploy has landed is not verifiable from this container, so it is left open rather than guessed in either direction.
+**`main` and the deployed `/version` are asserted equal at this pass.**
 
-### Merged this cycle
+### `#1416` — merged, deployed, smoke-verified
 
-| PR | Merge commit | Runtime paths touched | Deploy | Why that is correct |
-| --- | --- | --- | --- | --- |
-| `#1400` privileged-trigger containment | `03450277` | **0** | **No deploy expected** | CI/workflow mechanism only. A deploy would be noise, not safety |
-| `#1399` documents inventory contract (Milestone A) | `fc2e107d` | **5** (`src/api/routers/files.py`, `src/domain/documents/*`) | **Deploy expected** | It changes runtime behaviour, so it must reach production and be confirmed there |
+PR1 Chat Job Provenance Contract, squash-merged as `dac8d8e7` onto base `1c75f4d6`: 7 files, +1232/−27. The forward sequence it belongs to lives in `ENGINEERING_ROADMAP.md` and is **not** duplicated here.
+
+One synthetic, non-PII named-role search on the adopted path proved five things:
+
+1. A non-empty operation id of **39 characters**.
+2. Response `operation_id` **identical** to `search_evidence.operation_id`.
+3. **5** matches shown, not exceeding `accepted_result_count` of **10**.
+4. Exactly **one** `provider_cascade` attempt for the deliberate search turn.
+5. Execution metadata carrying **no listing content** — only `operation_id`, `provider`, `status`, `requested_role`, `requested_location`, `started_at`, `duration_ms`, `raw_result_count` and `accepted_result_count`.
+
+### Merged since the previous reconciliation
+
+Listed in merge order. The previous snapshot of this section described `#1398` and `#1402` as open Drafts; **both are merged** and that description was stale.
+
+| PR | Merge commit | Runtime paths touched | Deploy |
+| --- | --- | --- | --- |
+| `#1402` control-plane reconciliation | `805dd4d6` | **0** — docs-only | No deploy expected |
+| `#1398` fail closed on ambiguous account ownership | `70c2af7c` | 11 under `src/` | Deploy expected and fired |
+| `#1404` never overwrite a stored `rico_users.email` | `97af6ded` | 3 under `src/` | Deploy expected and fired |
+| `#1406` identity-ownership tests into the pytest gate | `42c3b976` | **0** — CI-only | No deploy expected |
+| `#1408` roadmap truth restored | `1c13147f` | **0** — docs-only | No deploy expected |
+| `#1412` a phone number is not proof of who someone is | `701939fa` | 3 under `src/` | Deploy expected and fired |
+| `#1411` fail when a test file is run by no pytest invocation | `a610b696` | **0** — CI-only | No deploy expected |
+| `#1414` a guest row is not a candidate on the email or Telegram path | `ca266366` | 1 under `src/` | Deploy expected and fired; `/version` confirms |
+| `#1415` control-plane reconciliation onto `main@ca266366` | `1c75f4d6` | **0** — docs-only | No deploy expected |
+| `#1416` PR1 Chat Job Provenance Contract | `dac8d8e7` | 4 under `src/` (3 new) | Deploy expected and fired; `/version` confirms |
 
 For merges that touch no runtime path, `main` moving ahead of the deployed `/version` is **expected divergence, not deployment drift**. Do not chase parity, and do not fire a deploy to manufacture it.
 
-### Closed without merge this cycle
+### Reviewer availability — recorded because it affected three merges
+
+`#1398`, `#1412` and `#1414` each merged with **no independent review**: the Codex reviewer returned "You have reached your Codex usage limits for code reviews" on all three. `#1414` was marked Ready specifically so review would gate merging, and that gate did not function. This is recorded as a standing condition of the review pipeline, not as a defect in any one PR.
+
+### Closed without merge
 
 | PR | Head | Disposition |
 | --- | --- | --- |
+| `#1407` | — | Closed as **stale, not merged** |
 | `#1401` design-reference extraction | `d4bd5469` | Closed without merge by the owner as reference-only, outside the Architecture V2 production sequence. **Branch preserved deliberately** — do not delete it, do not reopen the PR. Its exact-head CI was green at closure |
 | `#1371` command visual polish | `4e7b82f6` | Closed without merge. It was superseded by `#1401`, which has itself now been closed without merge — so the design-reference work is parked in branch form only, and nothing from either PR is in `main` |
 
@@ -62,13 +90,13 @@ Three of three classes passed: an ownership-qualified account question answered 
 
 ## Active PRs — heads fetched live at this pass
 
-| Lane | PR | Branch | Head | State |
-| --- | --- | --- | --- | --- |
-| L1 identity ownership | `#1398` | `fix/identity-ownership-resolution` | `c708bbb3` | Draft — next integrity merge |
-| L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | `878c5944` | Draft — resumes after `#1398` |
-| L7 control plane | `#1402` | `claude/workspace-control-reconcile` | this PR | Draft — docs-only |
+| Lane | PR | Branch | State |
+| --- | --- | --- | --- |
+| L1 identity ownership | `#1398` | `fix/identity-ownership-resolution` | **CLOSED — merged as `70c2af7c`.** The lane's later slices merged as `#1412` (`701939fa`) and `#1414` (`ca266366`) |
+| L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | Open. Was held behind the identity track; that blocker has cleared, and its base is now stale against `dac8d8e7` |
+| L7 control plane | `#1402` | `claude/workspace-control-reconcile` | **CLOSED — merged as `805dd4d6`.** This reconciliation is a separate, later docs-only PR |
 
-Deferred under the trust-first freeze, heads fetched live: `#1374` (`bed81b15`), `#1370` (`b90dd910`), `#1362` (`a14faffd`), `#1359` (`83d07785`). An open PR is not permission to merge.
+Other open PRs at this pass, read live: `#1413`, `#1410`, `#1409`, `#1405`, `#1374`, `#1370`, `#1362`, `#1359`. `#1409`, `#1410` and `#1405` continue the identity-ownership track on the chat and onboarding paths. **An open PR is not permission to merge**, and per-PR heads are deliberately not restated here — they move, and a head copied into this file is stale the moment a lane pushes. Fetch them live.
 
 **Enabling branch protection will block these four until they rebase. That is intended protective behaviour, not breakage.**
 
@@ -84,8 +112,8 @@ Caps are rules and are fixed. **Counts are read at the reconciliation pass that 
 
 | Measure | Cap | At this pass |
 | --- | --- | --- |
-| Active agents (`WRITING` or `REVIEWING`) | 4 | 2 — L1 writing, L7 writing this reconciliation |
-| Simultaneous code writers (`WRITING` + `AUTHORIZED` + executable scope) | 2 | 1 — L1 only; L7 is docs-only and does not count |
+| Active agents (`WRITING` or `REVIEWING`) | 4 | 1 — this docs-only reconciliation. L1's batch is merged and its lease released |
+| Simultaneous code writers (`WRITING` + `AUTHORIZED` + executable scope) | 2 | 0 — this pass is docs-only and does not count against the cap |
 | Writers per branch | 1 | 1 on every branch holding a lease |
 
 Lease holders appear against branches throughout this file. **That is ownership, not activity** — see `OPERATING_RULES.md` → "Ownership is not activity". Reading those assignments as concurrent work in progress is the specific misreading the four-field lease model exists to prevent.
@@ -96,9 +124,13 @@ Lease holders appear against branches throughout this file. **That is ownership,
 
 ## Merge order
 
-1. **L1 `#1398`** — identity ownership; the next integrity merge. Nothing behavioural merges ahead of it.
-2. **L7 `#1402`** — this docs-only reconciliation; runs in parallel and must not block coding on other lanes.
-3. **L2 `#1389`** — after `#1398` lands, rebased onto the new `main`.
+The previous order (L1 `#1398` → L7 `#1402` → L2 `#1389`) is **spent**: its first two entries are merged.
+
+1. **The identity-ownership track continues** on the chat and onboarding paths — `#1409`, `#1410`, `#1405`. They work in the same area and are sequenced by the Controller, not by this file.
+2. **L2 `#1389`** — its blocker has cleared. It needs a rebase onto `dac8d8e7` before anything else; every SHA in its body predates six merges.
+3. Everything else stays deferred under `DEC-20260723-001`.
+
+The forward engineering sequence (PR1 → PR5) lives in `ENGINEERING_ROADMAP.md` under Phase 2 — Hardening. It is **not** duplicated here: this file carries current control state, not forward plans. PR1 is delivered and released as `#1416`; **PR2 is planned and not started, and nothing in this file authorizes beginning it.**
 
 Branch protection is enabled by the owner, with `trusted-ratchet` as the only Required status check.
 
@@ -123,8 +155,15 @@ Per lane, read the continuity block in AI_WORKSPACE/TASKS.md, confirm the lease 
 yours, check write authorization, fetch the remote, and compare the remote head
 against the expected head recorded there before any push.
 
-L1 completes its identity-ownership batch.
-L2 rebases onto the new main after #1398 lands.
+L1's identity-ownership batch is complete and merged (70c2af7c, 701939fa,
+ca266366). The track continues on the chat and onboarding paths in #1409,
+#1410 and #1405.
+
+L2 (#1389) is unblocked and must rebase onto dac8d8e7 before anything else.
+
+PR1 (#1416) is merged, deployed and smoke-verified at dac8d8e7. Its branch lease
+is released and its write authorization revoked. PR2 is NOT started and is NOT
+authorized here.
 
 No merge, no deploy, no database mutation, no real-CV upload, and no bulk Neon
 branch deletion is authorized by this document.
