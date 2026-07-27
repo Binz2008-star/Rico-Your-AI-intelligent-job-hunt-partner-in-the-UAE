@@ -972,6 +972,15 @@ export default function CommandPage() {
     // React state (thinking) is async-batched and cannot guard against same-tick
     // re-entry; a useRef is set/cleared synchronously so the second tap sees it.
     const sendingRef = useRef(false);
+    // Send-acceptance epoch. Bumped exactly once per ACCEPTED user turn (see
+    // sendMessage, alongside sendingRef.current = true) and never for anything
+    // else — not a welcome row, not a stream token, not an error row, not any
+    // unrelated re-render. loadSessionTranscript samples it before awaiting the
+    // destination history and re-checks it after: a change means the user got a
+    // turn in while the switch was in flight, so the late transcript must not
+    // be applied. Transcript length would be an imprecise stand-in for the same
+    // question; this counter moves only on the event that actually matters.
+    const sendEpochRef = useRef(0);
     // Message ids that arrived as part of a bulk history hydration (initial
     // load or session switch) rather than a live send/stream. The transcript
     // skips the entrance animation for these — replaying fade/slide-in for
@@ -1277,6 +1286,10 @@ export default function CommandPage() {
         const operationId = mintOperationId();
 
         sendingRef.current = true;
+        // The turn is now ACCEPTED — past every early return above. Any session
+        // switch still awaiting its history has to abandon its transcript
+        // instead of overwriting this turn.
+        sendEpochRef.current += 1;
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: displayText?.trim() ?? trimmed }]);
         setThinking(true);
         const lc = trimmed.toLowerCase();
@@ -1968,8 +1981,17 @@ export default function CommandPage() {
             return true;
         }
         setSwitchingSessionId(id);
+        // Sampled BEFORE the await: if a user turn is accepted while the
+        // destination history is in flight, this switch has been overtaken and
+        // must apply none of its result. The boot history path (applyHistory)
+        // already carries this rule — "If the user already started chatting
+        // while history was in flight" — which the multi-session switch path
+        // never inherited: a late transcript silently replaced the live turn
+        // and its error row.
+        const epochAtRequest = sendEpochRef.current;
         try {
             const history = await fetchChatHistory(50, undefined, id);
+            if (sendEpochRef.current !== epochAtRequest) return false;
             const mapped = mapHistoryToMessages(history.messages);
             if (mapped.length > 0) markHydrated(mapped);
             setActiveChatSession(id);
