@@ -43,6 +43,13 @@ import {
     type SubscriptionPlan,
 } from "@/lib/api";
 import type { StoredUser } from "@/lib/auth";
+import {
+    FALLBACK_PLANS,
+    PLAN_DESC_KEY,
+    PLAN_FEATURE_KEY,
+    PLAN_NAME_KEY,
+    PLAN_TIER,
+} from "@/components/subscription/planCatalog";
 import { resolveBillingUiMode, type BillingUiMode } from "@/lib/billing";
 import { getPaddlePriceId, openPaddleCheckout } from "@/lib/paddle";
 import { safeExternalUrl } from "@/lib/safe-external-url";
@@ -61,56 +68,9 @@ const PADDLE_ALLOWED_HOSTS = ["paddle.com"];
 
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 
-const FALLBACK_PLANS: SubscriptionPlan[] = [
-    {
-        id: "rico_monthly",
-        plan: "pro",
-        name: "Rico Monthly",
-        price_monthly: 21.50,
-        currency: "USD",
-        description: "Smart AI job hunting for active UAE professionals.",
-        // Must match src/subscription_plans.py RICO_MONTHLY_PLAN.features (issue #1067).
-        features: [
-            "300 AI messages per month",
-            "20 CV & profile optimizations per month",
-            "Smart AI role recommendations",
-            "Advanced match scoring",
-            "Saved searches",
-            "Priority support",
-        ],
-        entitlements: {
-            monthly_ai_message_limit: 300,
-            saved_jobs_limit: 100,
-            profile_optimization_limit: 20,
-            cv_storage_limit: 5,
-            other_document_limit: 10,
-            premium_recommendations_enabled: false,
-            application_automation_enabled: false,
-        },
-        is_popular: true,
-    },
-];
-
-const PLAN_TIER: Record<string, number> = { free: 0, pro: 1 };
-
-const PLAN_NAME_KEY: Record<string, TranslationKey> = {
-    "Rico Monthly": "planProName",
-};
-
-const PLAN_DESC_KEY: Record<string, TranslationKey> = {
-    "Smart AI job hunting for active UAE professionals.": "planProDesc",
-};
-
-// Keys MUST equal the backend feature strings (src/subscription_plans.py) so
-// API-returned plans localize correctly (issue #1067).
-const PLAN_FEATURE_KEY: Record<string, TranslationKey> = {
-    "300 AI messages per month": "planFeatureAiMessages",
-    "20 CV & profile optimizations per month": "planFeatureCvAnalysis",
-    "Smart AI role recommendations": "planFeatureSmartRec",
-    "Advanced match scoring": "planFeatureAdvancedScoring",
-    "Saved searches": "planFeatureSavedSearches",
-    "Priority support": "planFeaturePrioritySupport",
-};
+// FALLBACK_PLANS + PLAN_TIER + the PLAN_*_KEY localization maps now live in
+// @/components/subscription/planCatalog so the public /pricing page reuses the
+// exact same plan definition (single source of truth — see planCatalog.ts).
 
 // ── Internal sub-components ───────────────────────────────────────────────────
 
