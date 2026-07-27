@@ -725,7 +725,35 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
     return _handle(normalized)
 
 
-def _central_identity_resolve(db, user_id: str) -> str | None:
+class _ResolverUnavailable:
+    """Sentinel type: the central resolver could not answer at all.
+
+    Deliberately NOT `None`. `None` is a *verified* miss — the resolver ran, looked,
+    and there is no owner row — which is the only state that may unlock
+    auto-provisioning. A store or query failure is not that: it is the absence of an
+    answer. Collapsing the two let a failed ownership read fall through into the
+    INSERT below, which could mint an `external_user_id = email` row for an account
+    whose existing row simply had not been read yet (a legacy row matching on `email`
+    with a NULL `external_user_id` is exactly that shape) — manufacturing the
+    duplicate ownership cluster this module exists to refuse.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "<central resolver unavailable>"
+
+
+_RESOLVER_UNAVAILABLE = _ResolverUnavailable()
+
+# Resolution outcome, tri-state:
+#   str                      -> RESOLVED, this is the owner row id
+#   None                     -> VERIFIED_MISS, no owner row exists
+#   _RESOLVER_UNAVAILABLE    -> UNAVAILABLE/ERROR, no answer was obtained
+CentralResolution = "str | None | _ResolverUnavailable"
+
+
+def _central_identity_resolve(db, user_id: str):
     """Read the owner row for `user_id` through the one central resolver.
 
     `RicoDB.get_user_bundle` is the single place ownership is decided. It excludes
@@ -733,16 +761,17 @@ def _central_identity_resolve(db, user_id: str) -> str | None:
     `IdentityOwnershipAmbiguous` rather than ranking candidates, so nothing here may
     re-implement, widen, or soften that predicate.
 
-    Ambiguity propagates. Any other failure (store unavailable mid-call, transport
-    error) is a non-answer, not a licence to guess, so it resolves to None.
+    Returns the tri-state described on `CentralResolution`. Ambiguity still
+    propagates untouched — a refusal is an answer, and a terminal one.
     """
     try:
         bundle = db.get_user_bundle(user_id)
     except IdentityOwnershipAmbiguous:
         raise
     except Exception as exc:
+        # No answer. The caller must not read this as "no owner exists".
         logger.debug("chat_service: central identity resolve failed: %s", exc)
-        return None
+        return _RESOLVER_UNAVAILABLE
     if not bundle:
         return None
     resolved = bundle.get("id")
@@ -769,6 +798,10 @@ def _resolve_db_user_id(user_id: str):
     history and profile data persist. Guests and non-email identifiers are never
     provisioned here, unchanged.
 
+    Provisioning is gated on a *verified* central-resolver miss. A resolver that could
+    not answer (store down, query failure) is not a miss, and does not unlock the
+    INSERT: a write must never be decided by a failed read. See `CentralResolution`.
+
     Raises:
         IdentityOwnershipAmbiguous: the principal resolves to more than one owner
             row. Callers must fail closed — falling back to another row is exactly
@@ -788,10 +821,16 @@ def _resolve_db_user_id(user_id: str):
         return None
 
     resolved = _central_identity_resolve(db, user_id)
+    if resolved is _RESOLVER_UNAVAILABLE:
+        # The resolver did not answer. Provisioning is gated on a VERIFIED miss, so
+        # this returns the same outage non-answer as an unreachable store above —
+        # without touching `db.connect` and without an INSERT. Creating a row here
+        # would be a write decided by a failed read.
+        return None
     if resolved:
         return resolved
 
-    # Not found — auto-provision only for an authenticated web principal.
+    # Verified miss — auto-provision only for an authenticated web principal.
     # Public/guest user_ids start with "public:" and are intentionally excluded.
     if not user_id or is_public_principal(user_id) or "@" not in user_id:
         return None
@@ -840,7 +879,12 @@ def _resolve_db_user_id(user_id: str):
     # above and this insert. Re-run the SAME central resolver once — it is the only
     # thing allowed to decide ownership. If it still resolves to nothing, or refuses,
     # that answer stands. No `updated_at` tie-break, and no `web:<email>` second row.
-    return _central_identity_resolve(db, user_id)
+    #
+    # Both non-answers collapse to None for the caller here: the provisioning attempt
+    # is already spent, so a miss and an outage are the same "no id" outcome and the
+    # sentinel must not escape this module's boundary.
+    re_resolved = _central_identity_resolve(db, user_id)
+    return None if re_resolved is _RESOLVER_UNAVAILABLE else re_resolved
 
 
 def _db_get_chat_history(

@@ -224,6 +224,92 @@ class TestAutoProvisioning:
         flattened = [str(value) for params in bound for value in params]
         assert not any(v.startswith("web:") for v in flattened)
 
+    def test_resolver_failure_never_provisions_even_when_the_insert_would_work(self):
+        """A write must never be decided by a failed read.
+
+        The dangerous shape: `get_user_bundle` dies mid-query while the connection
+        that follows is perfectly healthy. Reading that failure as "no owner exists"
+        provisions `external_user_id = email` for an account whose row was merely
+        unread — a legacy row matching on `email` with a NULL `external_user_id` is
+        exactly that case — minting the second row this module refuses to guess
+        through. `db.connect` is deliberately left working so the assertion proves
+        the gate, not an incidental failure further down.
+        """
+        db = _mock_db(bundle_side_effect=RuntimeError("query died mid-flight"))
+        conn = MagicMock()
+        conn.cursor.return_value = _cursor_returning({"id": "would-have-been-minted"})
+        db.connect.return_value = conn
+
+        with patch("src.rico_db.RicoDB", return_value=db):
+            assert chat_service._resolve_db_user_id(OWNER) is None
+
+        db.connect.assert_not_called()
+        conn.cursor.assert_not_called()
+        conn.commit.assert_not_called()
+
+    def test_verified_miss_still_provisions_the_first_time_web_user(self):
+        """The complement: a real miss must keep working, or the gate is just an outage.
+
+        Same principal, same healthy connection as the test above — only the
+        resolver's answer differs (verified None vs failure). One provisions, one
+        does not.
+        """
+        db = _mock_db(bundle=None)
+        conn = MagicMock()
+        conn.cursor.return_value = _cursor_returning({"id": "fresh-uuid"})
+        db.connect.return_value = conn
+
+        with patch("src.rico_db.RicoDB", return_value=db):
+            assert chat_service._resolve_db_user_id(OWNER) == "fresh-uuid"
+
+        db.connect.assert_called_once()
+        conn.commit.assert_called_once()
+
+    def test_a_miss_and_a_failure_are_not_the_same_resolution(self):
+        """Pinned at the helper, so the distinction cannot be lost by refactor.
+
+        `_resolve_db_user_id` returns None for both, by design — the tri-state lives
+        one level down, and asserting only on the outer function would let a future
+        change collapse the two again while every other test still passed.
+        """
+        db_miss = _mock_db(bundle=None)
+        db_down = _mock_db(bundle_side_effect=RuntimeError("store down"))
+        assert chat_service._central_identity_resolve(db_miss, OWNER) is None
+        assert (
+            chat_service._central_identity_resolve(db_down, OWNER)
+            is chat_service._RESOLVER_UNAVAILABLE
+        )
+
+    def test_the_unavailable_sentinel_never_escapes_as_a_user_id(self):
+        """It is not None, so a leak would be truthy and read as a resolved owner."""
+        db = _mock_db(bundle_side_effect=RuntimeError("store down"))
+        with patch("src.rico_db.RicoDB", return_value=db):
+            assert chat_service._resolve_db_user_id(OWNER) is None
+        # And on the post-conflict re-resolve path, where the sentinel is returned
+        # from a second call rather than the first.
+        db_conflict = _mock_db(
+            bundle_side_effect=[None, RuntimeError("store down mid-retry")]
+        )
+        conn = MagicMock()
+        conn.cursor.return_value = _cursor_returning(None)  # DO NOTHING fired
+        db_conflict.connect.return_value = conn
+        with patch("src.rico_db.RicoDB", return_value=db_conflict):
+            assert chat_service._resolve_db_user_id(OWNER) is None
+
+    def test_ambiguity_still_refuses_and_still_never_provisions(self):
+        """Unchanged by the tri-state: a refusal is an answer, and a terminal one."""
+        db = _mock_db(bundle_side_effect=IdentityOwnershipAmbiguous(2))
+        conn = MagicMock()
+        conn.cursor.return_value = _cursor_returning({"id": "would-have-been-minted"})
+        db.connect.return_value = conn
+
+        with patch("src.rico_db.RicoDB", return_value=db):
+            with pytest.raises(IdentityOwnershipAmbiguous):
+                chat_service._resolve_db_user_id(OWNER)
+
+        db.connect.assert_not_called()
+        conn.cursor.assert_not_called()
+
     def test_provisioning_failure_rolls_back_and_returns_none(self):
         db = _mock_db(bundle=None)
         conn = MagicMock()
@@ -393,6 +479,9 @@ class TestStoreFailureStaysDistinctFromAmbiguity:
         db.connect.side_effect = RuntimeError("connection reset")
         with patch("src.rico_db.RicoDB", return_value=db):
             assert chat_service._resolve_db_user_id(OWNER) is None
+        # The outage is answered by the tri-state gate, before provisioning is
+        # considered at all — not by the connection happening to fail too.
+        db.connect.assert_not_called()
 
     def test_history_serves_the_fallback_on_store_failure(self, auth_client):
         api = MagicMock()
