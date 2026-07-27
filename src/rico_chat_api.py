@@ -2250,10 +2250,16 @@ class RicoChatAPI:
         return response
 
     def _begin_job_search_operation(self, user_id: str, role_or_query: str) -> dict[str, Any]:
+        # Normalize BEFORE the lifecycle write, so the store never persists a
+        # blank identity. A whitespace-only id is truthy, so passing it through
+        # would key the row on " " and force a second id to be minted later —
+        # one search with two identities. Empty or whitespace becomes None,
+        # which hands generation to the store; a real id is preserved exactly.
+        _incoming = (self._current_operation_id or "").strip() or None
         operation = start_job_search_operation(
             user_id=user_id,
             role_or_query=role_or_query,
-            operation_id=self._current_operation_id,
+            operation_id=_incoming,
         )
         if operation.get("claimed") is False:
             # Atomic-claim refusal (shared store): another live execution —
@@ -2261,7 +2267,16 @@ class RicoChatAPI:
             # guard passed — owns this operation_id. Do NOT run a second
             # cascade and do NOT touch executor state (we own nothing).
             raise OperationClaimRefused(operation)
-        self._current_operation_id = str(operation["operation_id"])
+        # The store is the single owner and generator of the identity. Fail
+        # closed rather than inventing one here: a caller that cannot be told
+        # which operation it owns must not go on to name jobs.
+        _persisted = str(operation.get("operation_id") or "").strip()
+        if not _persisted:
+            raise RuntimeError(
+                "operation lifecycle store returned no operation_id — refusing "
+                "to execute a search that cannot be identified"
+            )
+        self._current_operation_id = _persisted
         # Attempt fence: outcome writes from THIS execution carry this token;
         # if the operation is later expired + legitimately re-started, the
         # bumped attempt makes this execution's late writes refusable.
@@ -7140,6 +7155,14 @@ class RicoChatAPI:
             _provider_location = ""  # UAE-wide single call covers all requested cities
 
         operation = self._begin_job_search_operation(user_id, search_role)
+        # Use exactly the identity the lifecycle store persisted. No fallback is
+        # minted here: the store is the single generator and owner, a blank
+        # incoming id was normalised to None *before* the write, and a store
+        # that returns nothing has already failed closed. Everything downstream
+        # — operation state, provider-search logging, SearchExecutionEvidence,
+        # the response operation_id and search_evidence.operation_id,
+        # completion and cancellation — reads this one value, so a search can
+        # never carry two identities.
         operation_id = str(operation["operation_id"])
 
         # Explicit per-attempt provenance for this ONE operation_id (PR4
@@ -7279,31 +7302,40 @@ class RicoChatAPI:
         # shortlist admission. A provider HTTP 200 does not make a record a
         # trustworthy career opportunity; an empty *trustworthy* result is
         # preferable to a corrupt one. Provider degradation never relaxes this gate.
-        integrity_rejections: dict[str, int] = {}
-        if all_matches:
-            try:
-                from src.job_integrity import filter_listings
-                _req_strong, _req_weak, _req_phrase = self._requested_domain_terms(search_role)
-                _pre_integrity = len(all_matches)
-                # The integrity gate deliberately keeps the LEGACY single-hit
-                # vocabulary (strong ∪ weak as its singles): it stays the
-                # coarse trust gate, while the display floor below applies the
-                # strict 3-layer rule — so an off-title-but-live listing is
-                # dropped by the FLOOR with the honest "didn't strongly match
-                # — broaden?" reply, never mislabeled as "couldn't retrieve".
-                all_matches, integrity_rejections = filter_listings(
-                    all_matches,
-                    requested_role=search_role,
-                    requested_terms=(_req_strong | _req_weak, _req_phrase),
-                    uae_only=True,  # Rico is a UAE-market product
-                )
-                if integrity_rejections:
-                    logger.info(
-                        "job_integrity_gate role=%r kept=%d/%d rejected=%s",
-                        search_role, len(all_matches), _pre_integrity, integrity_rejections,
-                    )
-            except Exception as _integrity_err:
-                logger.warning("job_integrity_gate_error role=%r err=%s", search_role, _integrity_err)
+        # The gate now runs inside the verified-search contract rather than
+        # inline here: src/services/verified_job_search.py applies it exactly
+        # once and returns a VerifiedJobSearchBundle plus the accepted records.
+        # After this point `all_matches` is the accepted subset only — no
+        # builder on this path can see a raw provider item, and every job this
+        # response goes on to name has a VerifiedJobListing standing behind it.
+        #
+        # The integrity gate deliberately keeps the LEGACY single-hit
+        # vocabulary (strong ∪ weak as its singles): it stays the coarse trust
+        # gate, while the display floor below applies the strict 3-layer rule —
+        # so an off-title-but-live listing is dropped by the FLOOR with the
+        # honest "didn't strongly match — broaden?" reply, never mislabeled as
+        # "couldn't retrieve".
+        from src.domain.job_search import SearchStatus as _SearchStatus
+        from src.services.verified_job_search import build_bundle as _build_bundle
+
+        _req_strong, _req_weak, _req_phrase = self._requested_domain_terms(search_role)
+        if quota_exhausted or rate_limited or fetch_error == "all_providers_unavailable":
+            _observed_status = _SearchStatus.PROVIDER_UNAVAILABLE
+        else:
+            _observed_status = _SearchStatus.COMPLETED
+
+        search_bundle, all_matches, integrity_rejections = _build_bundle(
+            all_matches,
+            operation_id=operation_id,
+            provider=fetch_provider or "",
+            requested_role=search_role,
+            requested_location=_requested_location or "",
+            started_at=datetime.fromtimestamp(_time.time() - _search_elapsed, tz=timezone.utc),
+            duration_ms=int(_search_elapsed * 1000),
+            status=_observed_status,
+            requested_terms=(_req_strong | _req_weak, _req_phrase),
+            uae_only=True,  # Rico is a UAE-market product
+        )
 
         # Filter out already-applied jobs
         try:
@@ -7686,6 +7718,13 @@ class RicoChatAPI:
             # Identical triple to the profile report's career_context (owner
             # audit point 3) — produced by the same parity_snapshot method.
             "career_context": _career_context_block,
+            # Provenance for every job this response names. Execution metadata
+            # only — operation id, provider, what was requested, timing and the
+            # two counts — and never listing content. Its presence is the
+            # invariant: a job_matches response from THIS path always carries
+            # the evidence of the execution that produced its matches. Other
+            # exits from this handler name no job and are not covered by it.
+            "search_evidence": search_bundle.execution.as_public_dict(),
         }
 
         # Safe aggregate summary of the integrity gate — counts only, never the
