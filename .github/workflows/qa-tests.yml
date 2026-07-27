@@ -78,6 +78,7 @@ jobs:
             tests/test_963_onboarding_cv_persistence.py \
             tests/test_paddle_billing.py \
             tests/test_identity_doc_image_bypass.py \
+            tests/test_chat_service_identity_resolution.py \
             tests/test_attachment_ocr_pipeline.py \
             tests/test_uploaded_document_durable_context.py \
             tests/test_attachment_analysis_factory.py \

@@ -13,7 +13,8 @@ from typing import Any, Dict
 
 from src.rico.intent import IntentRouter
 from src.schemas.chat import RicoSessionContext
-from src.models.principal import IdentityOwnershipAmbiguous
+from src.models.principal import IdentityOwnershipAmbiguous, is_public_principal
+from src.log_privacy import safe_exc, user_ref
 
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -724,110 +725,167 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
     return _handle(normalized)
 
 
+class _ResolverUnavailable:
+    """Sentinel type: the central resolver could not answer at all.
+
+    Deliberately NOT `None`. `None` is a *verified* miss — the resolver ran, looked,
+    and there is no owner row — which is the only state that may unlock
+    auto-provisioning. A store or query failure is not that: it is the absence of an
+    answer. Collapsing the two let a failed ownership read fall through into the
+    INSERT below, which could mint an `external_user_id = email` row for an account
+    whose existing row simply had not been read yet (a legacy row matching on `email`
+    with a NULL `external_user_id` is exactly that shape) — manufacturing the
+    duplicate ownership cluster this module exists to refuse.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "<central resolver unavailable>"
+
+
+_RESOLVER_UNAVAILABLE = _ResolverUnavailable()
+
+
+def _central_identity_resolve(db, user_id: str) -> "str | None | _ResolverUnavailable":
+    """Read the owner row for `user_id` through the one central resolver.
+
+    `RicoDB.get_user_bundle` is the single place ownership is decided. It excludes
+    `public:` guest rows from authenticated resolution and raises
+    `IdentityOwnershipAmbiguous` rather than ranking candidates, so nothing here may
+    re-implement, widen, or soften that predicate.
+
+    Returns one of three outcomes, which callers must keep distinct:
+
+      * ``str``                   — RESOLVED; this is the owner row id
+      * ``None``                  — VERIFIED_MISS; the resolver looked, no owner row
+      * ``_RESOLVER_UNAVAILABLE`` — UNAVAILABLE; no answer was obtained at all
+
+    Only VERIFIED_MISS may unlock auto-provisioning. Ambiguity still propagates
+    untouched — a refusal is an answer, and a terminal one.
+    """
+    try:
+        bundle = db.get_user_bundle(user_id)
+    except IdentityOwnershipAmbiguous:
+        raise
+    except Exception as exc:
+        # No answer. The caller must not read this as "no owner exists".
+        logger.debug("chat_service: central identity resolve failed: %s", exc)
+        return _RESOLVER_UNAVAILABLE
+    if not bundle:
+        return None
+    resolved = bundle.get("id")
+    return str(resolved) if resolved else None
+
+
 def _resolve_db_user_id(user_id: str):
-    """Resolve external user_id (email/public-id) to rico_users UUID string.
+    """Resolve a principal (email / public-id / internal id) to its rico_users UUID.
 
-    For web-app users registered via /auth/register (present in `users` table but
-    absent from `rico_users`), auto-provisions the rico_users row on first access so
-    that chat history and profile data persist correctly.
+    Resolution is delegated to `RicoDB.get_user_bundle` — the central resolver — so
+    the chat paths cannot disagree with the rest of the application about who owns a
+    row. This function used to run its own parallel SELECT that ranked candidates
+    (`id` > `email` > `external_user_id` > `updated_at DESC`) and took the first.
+    Ranking is not resolution: the predicate matched on the mutable contact column
+    and never excluded `public:` rows, so a guest row carrying an account's contact
+    value could win the ordering and the chat paths would then read, append to, or
+    delete history against a row the caller does not own. The auto-provision path
+    repeated the defect twice more — an `ORDER BY updated_at DESC LIMIT 1` email
+    lookup, and a `web:<email>` insert that minted a *second* row for the same
+    address and left the account permanently ambiguous.
 
-    Returns None when DB is unavailable or user cannot be resolved/created.
+    For web-app users registered via /auth/register (present in `users` but absent
+    from `rico_users`), the row is still auto-provisioned on first access so chat
+    history and profile data persist. Guests and non-email identifiers are never
+    provisioned here, unchanged.
+
+    Provisioning is gated on a *verified* central-resolver miss. A resolver that could
+    not answer (store down, query failure) is not a miss, and does not unlock the
+    INSERT: a write must never be decided by a failed read. See the tri-state on
+    `_central_identity_resolve`.
+
+    Raises:
+        IdentityOwnershipAmbiguous: the principal resolves to more than one owner
+            row. Callers must fail closed — falling back to another row is exactly
+            the cross-account outcome this refusal exists to prevent.
+
+    Returns:
+        The rico_users UUID as a string, or None when the store is unavailable or the
+        principal cannot be resolved and is not auto-provisionable.
     """
     try:
         from src.rico_db import RicoDB
         db = RicoDB()
         if not db.available:
             return None
-        conn = db.connect()
-        try:
-            with conn.cursor() as cur:
-                # Prefer id > email > external_user_id to avoid returning a
-                # Jotform/Telegram row whose external_user_id happens to equal
-                # this web user's email address (cross-user contamination).
-                cur.execute(
-                    """
-                    SELECT id::text FROM rico_users
-                    WHERE external_user_id = %s OR email = %s OR id::text = %s
-                    ORDER BY
-                        CASE WHEN id::text = %s THEN 0 ELSE 1 END,
-                        CASE WHEN email = %s THEN 0 ELSE 1 END,
-                        CASE WHEN external_user_id = %s THEN 0 ELSE 1 END,
-                        updated_at DESC
-                    LIMIT 1
-                    """,
-                    (user_id, user_id, user_id, user_id, user_id, user_id),
-                )
-                row = cur.fetchone()
-            if row:
-                return row["id"]
-
-            # Not found — auto-provision if this is a verified web-app user (email).
-            # Public/guest user_ids start with "public:" and are intentionally excluded.
-            if not user_id or user_id.startswith("public:") or "@" not in user_id:
-                return None
-
-            conn2 = db.connect()
-            try:
-                with conn2.cursor() as cur:
-                    # Use DO NOTHING to avoid overwriting a Jotform/Telegram row
-                    # that already occupies external_user_id = this email. If a
-                    # conflict exists, fall back to an email-keyed lookup so the
-                    # web user gets the correct row and not another user's profile.
-                    cur.execute(
-                        """
-                        INSERT INTO rico_users (external_user_id, email, source)
-                        VALUES (%s, %s, 'web')
-                        ON CONFLICT (external_user_id) DO NOTHING
-                        RETURNING id::text
-                        """,
-                        (user_id, user_id),
-                    )
-                    new_row = cur.fetchone()
-                conn2.commit()
-                if new_row:
-                    return new_row["id"]
-
-                # Conflict: external_user_id taken by a non-web row. Look up by
-                # email instead so this web user is never linked to a different
-                # user's profile row.
-                with conn2.cursor() as cur:
-                    cur.execute(
-                        "SELECT id::text FROM rico_users WHERE email = %s ORDER BY updated_at DESC LIMIT 1",
-                        (user_id,),
-                    )
-                    email_row = cur.fetchone()
-                if email_row:
-                    return email_row["id"]
-
-                # Still nothing — create a fresh row keyed by a web-namespaced
-                # external_user_id that cannot collide with Jotform/Telegram rows.
-                with conn2.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO rico_users (external_user_id, email, source)
-                        VALUES (%s, %s, 'web')
-                        ON CONFLICT (external_user_id) DO UPDATE SET email = EXCLUDED.email
-                        RETURNING id::text
-                        """,
-                        (f"web:{user_id}", user_id),
-                    )
-                    fallback_row = cur.fetchone()
-                conn2.commit()
-                return fallback_row["id"] if fallback_row else None
-            except Exception as exc:
-                logger.warning("chat_service: rico_users auto-provision failed user=%s: %s", user_id, exc)
-                try:
-                    conn2.rollback()
-                except Exception:
-                    pass
-                return None
-            finally:
-                conn2.close()
-        finally:
-            conn.close()
     except Exception as exc:
         logger.debug("chat_service: _resolve_db_user_id failed: %s", exc)
         return None
+
+    resolved = _central_identity_resolve(db, user_id)
+    if resolved is _RESOLVER_UNAVAILABLE:
+        # The resolver did not answer. Provisioning is gated on a VERIFIED miss, so
+        # this returns the same outage non-answer as an unreachable store above —
+        # without touching `db.connect` and without an INSERT. Creating a row here
+        # would be a write decided by a failed read.
+        return None
+    if resolved:
+        return resolved
+
+    # Verified miss — auto-provision only for an authenticated web principal.
+    # Public/guest user_ids start with "public:" and are intentionally excluded.
+    if not user_id or is_public_principal(user_id) or "@" not in user_id:
+        return None
+
+    try:
+        conn = db.connect()
+    except Exception as exc:
+        # user_ref/safe_exc, not the raw values: the failing statement binds this
+        # user's email address, so a psycopg2 error string can re-emit it (#1076).
+        logger.warning(
+            "chat_service: rico_users auto-provision failed user=%s err=%s",
+            user_ref(user_id), safe_exc(exc),
+        )
+        return None
+    try:
+        with conn.cursor() as cur:
+            # DO NOTHING so provisioning can never overwrite an existing row.
+            cur.execute(
+                """
+                INSERT INTO rico_users (external_user_id, email, source)
+                VALUES (%s, %s, 'web')
+                ON CONFLICT (external_user_id) DO NOTHING
+                RETURNING id::text
+                """,
+                (user_id, user_id),
+            )
+            new_row = cur.fetchone()
+        conn.commit()
+    except Exception as exc:
+        logger.warning(
+            "chat_service: rico_users auto-provision failed user=%s err=%s",
+            user_ref(user_id), safe_exc(exc),
+        )
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+    finally:
+        conn.close()
+
+    if new_row:
+        return new_row["id"]
+
+    # DO NOTHING fired: a concurrent writer took `external_user_id` between the read
+    # above and this insert. Re-run the SAME central resolver once — it is the only
+    # thing allowed to decide ownership. If it still resolves to nothing, or refuses,
+    # that answer stands. No `updated_at` tie-break, and no `web:<email>` second row.
+    #
+    # Both non-answers collapse to None for the caller here: the provisioning attempt
+    # is already spent, so a miss and an outage are the same "no id" outcome and the
+    # sentinel must not escape this module's boundary.
+    re_resolved = _central_identity_resolve(db, user_id)
+    return None if re_resolved is _RESOLVER_UNAVAILABLE else re_resolved
 
 
 def _db_get_chat_history(
@@ -913,6 +971,14 @@ def db_append_chat(user_id: str, role: str, message: str) -> None:
         active = get_active_chat_session()
         session_id = None if active in (None, DEFAULT_SESSION) else active
         db.append_chat(db_uid, role, message, session_id=session_id)
+    except IdentityOwnershipAmbiguous:
+        # Fail closed, and say so at warning level rather than in the generic debug
+        # line below. Dropping the turn is the safe outcome here: persisting it
+        # against a guessed row would file this user's message into another
+        # account's history, which is not recoverable by retrying.
+        logger.warning(
+            "chat_service: db_append_chat refused reason=%s", "ambiguous_account_ownership"
+        )
     except Exception as exc:
         logger.debug("chat_service: db_append_chat failed: %s", exc)
 
@@ -950,6 +1016,13 @@ def get_chat_history(
 
     Returns:
         List of message dictionaries with role, content, and timestamp
+
+    Raises:
+        IdentityOwnershipAmbiguous: ownership could not be resolved to one row.
+            Deliberately NOT caught here. The JSON-memory fallback below would
+            otherwise turn a refusal into a silent partial answer, and the DB branch
+            would have had to guess an owner to return anything at all. The app-level
+            handler answers 409; callers must not downgrade that to an empty history.
     """
     from src.services.chat_session_context import DEFAULT_SESSION, get_active_chat_session
 
@@ -1009,6 +1082,11 @@ def clear_chat_history(user_id: str, session_id: str | None = None) -> None:
     session_id: None deletes every thread (legacy full clear);
     DEFAULT_SESSION deletes only the legacy thread (NULL session rows);
     a UUID deletes only that thread.
+
+    Raises IdentityOwnershipAmbiguous when ownership cannot be resolved to one row.
+    Deliberately NOT caught: this is a destructive path, so a refusal must abort the
+    delete outright — including the local JSON clear further down — rather than let
+    it run against a guessed owner.
     """
     from src.services.chat_session_context import DEFAULT_SESSION
 
@@ -1069,6 +1147,11 @@ def list_chat_sessions(user_id: str) -> list[Dict[str, Any]]:
     "default" thread. Title is the thread's first real user turn — never
     invented. DB unavailable degrades to the JSON-memory legacy thread (if
     any) so the rail stays truthful rather than erroring.
+
+    Raises IdentityOwnershipAmbiguous when ownership cannot be resolved to one row.
+    Deliberately NOT caught: an unresolvable owner is not the same condition as an
+    unreachable store, and degrading it to the JSON fallback would present another
+    account's thread rail as this caller's own.
     """
     from src.services.chat_session_context import DEFAULT_SESSION, derive_session_title
 
