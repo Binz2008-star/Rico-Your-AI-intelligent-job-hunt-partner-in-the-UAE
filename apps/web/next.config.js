@@ -39,8 +39,10 @@ const csp = [
     // https://api.paddle.com          — Paddle.js SDK calls during production checkout
     // ws://localhost:3000 — dev-only Next.js HMR WebSocket
     `connect-src 'self' https://rico-job-automation-api.onrender.com https://vitals.vercel-insights.com https://sandbox-api.paddle.com https://api.paddle.com${isDev ? " ws://localhost:3000 http://localhost:3000" : ""}`,
-    // https://checkout.paddle.com — Paddle overlay checkout iframe (sandbox and production share this host)
-    "frame-src 'self' https://checkout.paddle.com",
+    // https://checkout.paddle.com — Paddle overlay checkout iframe (production)
+    // https://sandbox-buy.paddle.com — Paddle overlay checkout iframe (sandbox only)
+    // sandbox-buy is added only when NEXT_PUBLIC_PADDLE_SANDBOX=true so production CSP stays strict.
+    `frame-src 'self' https://checkout.paddle.com${process.env.NEXT_PUBLIC_PADDLE_SANDBOX === "true" ? " https://sandbox-buy.paddle.com" : ""}`,
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
