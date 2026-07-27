@@ -25,19 +25,31 @@ Ranked, and not negotiable when they disagree:
 
 **Every SHA in this file is verified from the API before it is written.** A SHA copied from a message, a summary, or a previous session is not evidence. If live state and this file disagree, reconcile this file before starting anything else.
 
-## Reconciliation — 2026-07-26 (post-`#1414`)
+## Reconciliation — 2026-07-27 (post-`#1416`)
 
 ### Verified control snapshot
 
 | Field | Value | How it was established |
 | --- | --- | --- |
-| `main` | `ca266366` | Fetched live at the moment this section was written |
-| Deployed backend `/version` | **`ca266366` — verified** | Central Controller read `/version.commit` = `ca266366` in a browser. Not reproducible from the reconciling container, whose egress to the Render host is blocked |
-| `/health` | **ok** | Same read: `jooble`, `adzuna` and `jsearch` configured and **not** degraded; DeepSeek precheck reachable |
-| Application/runtime baseline | `ca266366` — **equal to `main`** | `#1414` touches `src/repositories/profile_repo.py`, so the `src/**` deploy filter matched and the deploy fired on merge |
+| `main` | `dac8d8e7` | Fetched live at the moment this section was written |
+| Deployed backend `/version` | **`dac8d8e7` — verified** | `/version.commit` = `dac8d8e7`, process start `2026-07-27T01:00:26Z` |
+| `/health` | **ok** | Same read: `jooble`, `adzuna` and `jsearch` configured and **not** degraded |
+| Application/runtime baseline | `dac8d8e7` — **equal to `main`** | `#1416` touches `src/rico_chat_api.py` and adds `src/domain/job_search` + `src/services/verified_job_search.py`, so the `src/**` deploy filter matched and the deploy fired on merge |
 | Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired | Unchanged |
 
-**`main` and the deployed `/version` are asserted equal at this pass, on a browser read by the Controller.** That is a real observation with a named observer, not an automated artifact, and it is not a regression gate.
+**`main` and the deployed `/version` are asserted equal at this pass.**
+
+### `#1416` — merged, deployed, smoke-verified
+
+PR1 Chat Job Provenance Contract, squash-merged as `dac8d8e7` onto base `1c75f4d6`: 7 files, +1232/−27. The forward sequence it belongs to lives in `ENGINEERING_ROADMAP.md` and is **not** duplicated here.
+
+One synthetic, non-PII named-role search on the adopted path proved five things:
+
+1. A non-empty operation id of **39 characters**.
+2. Response `operation_id` **identical** to `search_evidence.operation_id`.
+3. **5** matches shown, not exceeding `accepted_result_count` of **10**.
+4. Exactly **one** `provider_cascade` attempt for the deliberate search turn.
+5. Execution metadata carrying **no listing content** — only `operation_id`, `provider`, `status`, `requested_role`, `requested_location`, `started_at`, `duration_ms`, `raw_result_count` and `accepted_result_count`.
 
 ### Merged since the previous reconciliation
 
@@ -53,6 +65,8 @@ Listed in merge order. The previous snapshot of this section described `#1398` a
 | `#1412` a phone number is not proof of who someone is | `701939fa` | 3 under `src/` | Deploy expected and fired |
 | `#1411` fail when a test file is run by no pytest invocation | `a610b696` | **0** — CI-only | No deploy expected |
 | `#1414` a guest row is not a candidate on the email or Telegram path | `ca266366` | 1 under `src/` | Deploy expected and fired; `/version` confirms |
+| `#1415` control-plane reconciliation onto `main@ca266366` | `1c75f4d6` | **0** — docs-only | No deploy expected |
+| `#1416` PR1 Chat Job Provenance Contract | `dac8d8e7` | 4 under `src/` (3 new) | Deploy expected and fired; `/version` confirms |
 
 For merges that touch no runtime path, `main` moving ahead of the deployed `/version` is **expected divergence, not deployment drift**. Do not chase parity, and do not fire a deploy to manufacture it.
 
@@ -79,7 +93,7 @@ Three of three classes passed: an ownership-qualified account question answered 
 | Lane | PR | Branch | State |
 | --- | --- | --- | --- |
 | L1 identity ownership | `#1398` | `fix/identity-ownership-resolution` | **CLOSED — merged as `70c2af7c`.** The lane's later slices merged as `#1412` (`701939fa`) and `#1414` (`ca266366`) |
-| L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | Open. Was held behind the identity track; that blocker has cleared, and its base is now stale against `ca266366` |
+| L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | Open. Was held behind the identity track; that blocker has cleared, and its base is now stale against `dac8d8e7` |
 | L7 control plane | `#1402` | `claude/workspace-control-reconcile` | **CLOSED — merged as `805dd4d6`.** This reconciliation is a separate, later docs-only PR |
 
 Other open PRs at this pass, read live: `#1413`, `#1410`, `#1409`, `#1405`, `#1374`, `#1370`, `#1362`, `#1359`. `#1409`, `#1410` and `#1405` continue the identity-ownership track on the chat and onboarding paths. **An open PR is not permission to merge**, and per-PR heads are deliberately not restated here — they move, and a head copied into this file is stale the moment a lane pushes. Fetch them live.
@@ -113,10 +127,10 @@ Lease holders appear against branches throughout this file. **That is ownership,
 The previous order (L1 `#1398` → L7 `#1402` → L2 `#1389`) is **spent**: its first two entries are merged.
 
 1. **The identity-ownership track continues** on the chat and onboarding paths — `#1409`, `#1410`, `#1405`. They work in the same area and are sequenced by the Controller, not by this file.
-2. **L2 `#1389`** — its blocker has cleared. It needs a rebase onto `ca266366` before anything else; every SHA in its body predates four merges.
+2. **L2 `#1389`** — its blocker has cleared. It needs a rebase onto `dac8d8e7` before anything else; every SHA in its body predates six merges.
 3. Everything else stays deferred under `DEC-20260723-001`.
 
-The forward engineering sequence (PR1 → PR5, beginning with the Chat Job Provenance Contract) lives in `ENGINEERING_ROADMAP.md` under Phase 2 — Hardening. It is **not** duplicated here: this file carries current control state, not forward plans.
+The forward engineering sequence (PR1 → PR5) lives in `ENGINEERING_ROADMAP.md` under Phase 2 — Hardening. It is **not** duplicated here: this file carries current control state, not forward plans. PR1 is delivered and released as `#1416`; **PR2 is planned and not started, and nothing in this file authorizes beginning it.**
 
 Branch protection is enabled by the owner, with `trusted-ratchet` as the only Required status check.
 
@@ -145,7 +159,11 @@ L1's identity-ownership batch is complete and merged (70c2af7c, 701939fa,
 ca266366). The track continues on the chat and onboarding paths in #1409,
 #1410 and #1405.
 
-L2 (#1389) is unblocked and must rebase onto ca266366 before anything else.
+L2 (#1389) is unblocked and must rebase onto dac8d8e7 before anything else.
+
+PR1 (#1416) is merged, deployed and smoke-verified at dac8d8e7. Its branch lease
+is released and its write authorization revoked. PR2 is NOT started and is NOT
+authorized here.
 
 No merge, no deploy, no database mutation, no real-CV upload, and no bulk Neon
 branch deletion is authorized by this document.
