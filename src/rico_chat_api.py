@@ -2918,19 +2918,21 @@ class RicoChatAPI:
         wording claims nothing about the cause — naming a database outage would
         be a guess, since a caught exception only proves the read did not
         complete — promises no successful retry, blames no document, and gives
-        no upload or re-upload instruction. It says what is true: the stored
-        state is currently unverifiable, and nothing will be asked of the user
-        until it is not.
+        no upload or re-upload instruction. It speaks only for THIS attempt: the
+        check that just ran was incomplete, so this turn will not read absence
+        into it. It deliberately makes no promise about what other surfaces do —
+        the My Files path still collapses its own read failure into an empty
+        list, and a sentence here cannot bind behaviour it does not control.
         """
         if arabic:
             msg = (
                 "تعذّر عليّ التحقق من سيرتك المحفوظة الآن. "
-                "لن أطلب منك رفعها مجددًا قبل أن أتمكن من التأكد من حالتها المحفوظة."
+                "لن أعتبرها غير موجودة أو أطلب منك إعادة رفعها بناءً على هذه المحاولة غير المكتملة."
             )
         else:
             msg = (
                 "I couldn't verify your saved CV right now. "
-                "I won't ask you to upload it again until I can confirm its stored state."
+                "I won't treat it as missing or ask you to re-upload it based on this incomplete check."
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "cv_state_unverified", "message": msg}

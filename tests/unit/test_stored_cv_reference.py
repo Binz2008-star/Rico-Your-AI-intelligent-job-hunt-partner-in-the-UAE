@@ -233,7 +233,7 @@ def test_document_read_failure_is_not_a_successful_empty_read_english():
     assert result.get("next_action") != "upload_cv"
     # Truthful about the inability to verify, non-blaming about the cause.
     assert "couldn't verify your saved CV" in msg
-    assert "won't ask you to upload it again" in msg
+    assert "won't treat it as missing or ask you to re-upload it" in msg
     assert "database" not in msg.lower()
 
 
@@ -247,7 +247,7 @@ def test_document_read_failure_is_not_a_successful_empty_read_arabic():
     assert "زر **رفع السيرة الذاتية**" not in msg
     assert result.get("next_action") != "upload_cv"
     assert "تعذّر عليّ التحقق من سيرتك المحفوظة" in msg
-    assert "لن أطلب منك رفعها مجددًا" in msg
+    assert "لن أعتبرها غير موجودة أو أطلب منك إعادة رفعها" in msg
 
 
 def test_document_read_failure_without_filename_token_also_unverified():
@@ -349,7 +349,7 @@ def test_store_outage_never_claims_the_user_has_no_cv_english():
     assert result.get("next_action") != "upload_cv"
     assert result.get("type") == "cv_state_unverified"
     assert "couldn't verify your saved CV" in msg
-    assert "won't ask you to upload it again" in msg
+    assert "won't treat it as missing or ask you to re-upload it" in msg
 
 
 def test_store_outage_never_asks_for_upload_arabic():
@@ -362,7 +362,7 @@ def test_store_outage_never_asks_for_upload_arabic():
     )
     assert result.get("type") == "cv_state_unverified"
     assert "تعذّر عليّ التحقق من سيرتك المحفوظة" in msg
-    assert "لن أطلب منك رفعها مجددًا" in msg
+    assert "لن أعتبرها غير موجودة أو أطلب منك إعادة رفعها" in msg
 
 
 def test_store_outage_with_cv_metadata_does_not_blame_the_document():
@@ -374,7 +374,9 @@ def test_store_outage_with_cv_metadata_does_not_blame_the_document():
     """
     result = _chat_turn("review my cv", METADATA_ONLY_PROFILE, grounding_fails=True)
     msg = result.get("message") or ""
-    assert "Re-upload it" not in msg
+    # The full branch-2 phrase, not a bare "re-upload" substring: the bounded
+    # wording legitimately contains "re-upload it" while REFUSING to ask for one.
+    assert "Re-upload it as a text-based PDF" not in msg
     assert "scanned image" not in msg
     assert result.get("next_action") != "upload_cv"
     assert result.get("type") == "cv_state_unverified"
