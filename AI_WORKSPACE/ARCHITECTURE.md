@@ -170,10 +170,18 @@ historically relied on Render's ephemeral disk for state that must be durable. S
 > (`tests/unit/test_document_inventory_contract.py`); unifying that rule is a later slice and has
 > not started.
 >
+> **The external job-search boundary now has a domain contract too:** `#1416`, merged as
+> `dac8d8e7`, deployed and verified. `src/domain/job_search` states what a verified search result
+> is (`SearchExecutionEvidence`, `VerifiedJobListing`, `VerifiedJobSearchBundle`), and
+> `src/services/verified_job_search.py` is the seam that applies the integrity gate once before
+> building a bundle. **One adopter: `_target_role_search_response`.** Ten other `job_matches`
+> builders still name jobs without a bundle — adopting them is a later slice and has not started,
+> so this is one boundary contracted, not the chat surface migrated.
+>
 > **The infrastructure end-state below is still untouched.** The production backend is FastAPI on
 > **Render** (see "Current live stack" at the top of this file). Railway, the separate worker
 > service, and Redis/Queue do **not** exist in production. Render remains production until Railway
-> passes full production smoke testing. Read "implementation has begun" as one domain contract in
+> passes full production smoke testing. Read "implementation has begun" as two domain contracts in
 > place, not as a migration under way.
 >
 > Near-term execution gate: read `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`

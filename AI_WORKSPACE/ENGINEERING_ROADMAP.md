@@ -84,11 +84,11 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 | Question | Answer |
 | --- | --- |
-| **Where is Rico?** | `main` `ca266366` (head re-anchored 2026-07-26). `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
+| **Where is Rico?** | `main` `dac8d8e7` (head re-anchored 2026-07-27). `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
 | **Posture?** | **Trust-first**, per `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired. Identity-ownership hardening has been the active track and its merged slices are listed above. The 2026-07-16 CONTAINMENT framing — security-first → #1068 source-of-truth unification → resume — is **historical and superseded**; #1068 is not the next action. |
 | **What is blocked / frozen?** | New-integration activation is frozen. #1062 (Atelier job cards — HELD, has logged colour/AR/test gaps), #1055 Gmail M0 (**merged 2026-07-17**, `RICO_ENABLE_GMAIL_SYNC=false` — activation still gated on Google restricted-scope verification, Render env provisioning, migration 043, and a separate fleet-sweep PR), #1025 Memory M1 (Draft, flag OFF). Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets. |
 | **What is completed (recent)?** | Atelier `/command` (#1048/#1060/#1061), decision-regression harness (#1056), security hardening (#1058), attachment/SSE/transcript fixes, `DEC-20260716-001` (#1059), operational reconciliation (#1063). |
-| **What comes next?** | The approved forward sequence is **PR1 → PR5** under Phase 2 — Hardening below, beginning with **PR1 Chat Job Provenance Contract**. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
+| **What comes next?** | **PR1 Chat Job Provenance Contract is delivered and released** (#1416, `dac8d8e7`). The next slice in the approved **PR1 → PR5** sequence under Phase 2 — Hardening below is **PR2 — fail-closed job-search routing and buffered delivery**, which is **planned and not started**; nothing here authorizes beginning it. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
 
 Production is stable: Render backend healthy (`/health` ok, providers configured),
 Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
@@ -173,6 +173,9 @@ fix only proven gaps (synthetic data only).
   `rico_users.email` on a generic upsert (`97af6ded`), #1412 a phone number is
   not proof of who someone is (`701939fa`), #1414 a guest row is not a candidate
   on the email or Telegram path (`ca266366`). Supporting CI: #1406 and #1411.
+- **Delivered and released: #1416** — PR1 Chat Job Provenance Contract, the first
+  slice of the approved PR1 → PR5 sequence below. Merged as `dac8d8e7`, deployed
+  and production-smoked — see the Releases table.
 - Next candidates: unify the legacy profile-CV rule across the files surface and CV
   resolution so one user gets one answer (its acceptance check is the strict xfail
   above); any gap surfaced by continued Audit Phase 2–9 verification.
@@ -185,30 +188,43 @@ the consumer**, not the owner, of what these produce. Recorded here only: it is
 deliberately absent from `PROJECT_STATUS.md` and `TASKS.md`, which carry current
 lane state rather than forward plans.
 
-**No PR1 code exists yet. This is a plan, not a claim of work done.**
+**PR1 is delivered and released. PR2 → PR5 remain a plan, not a claim of work
+done.**
 
-**PR1 — Chat Job Provenance Contract** (the first bounded slice)
+**PR1 — Chat Job Provenance Contract ✅ delivered and released**
 
-The problem it closes: a job card can reach a user without a provable statement
-of where the listing came from. Provenance must be a value the code carries, not
-a convention it observes.
+The problem it closed: a job card could reach a user without a provable statement
+of where the listing came from. Provenance is now a value the code carries, not a
+convention it observes.
 
-- Three types, created **outside `src/rico_chat_api.py`**: `SearchExecutionEvidence`,
-  `VerifiedJobListing`, `VerifiedJobSearchBundle`. Putting them in the chat module
-  would make the contract a local habit of that file rather than a boundary.
-- The bundle is built **immediately after the canonical provider fetch** — the
-  point where evidence still exists. Built later, it would be a reconstruction.
-- `job_integrity` is applied **before** the bundle is created, so a bundle can
-  never carry a listing that integrity would have rejected.
-- **Exactly one adopter: `_target_role_search_response`.** One adopter is the
-  whole point of a first slice; a second is a later PR.
-- **Fail-first proof that no matches and no job cards can be emitted without a
-  bundle** — the test must fail on the base tree, or the contract is decorative.
-- **No feature flag defaulting off.** A contract that can be switched off is not
-  a contract, and a flag defaulting off means the guarantee is untested in the
-  configuration that actually ships.
+Shipped as **#1416**, squash-merged as **`dac8d8e7`** onto base `1c75f4d6` —
+7 files, +1232/−27. Deployed and production-smoked; see the Releases table.
 
-**PR2 — fail-closed job-search routing and buffered delivery.** Routing refuses
+- Three types live **outside `src/rico_chat_api.py`**, in `src/domain/job_search`:
+  `SearchExecutionEvidence`, `VerifiedJobListing`, `VerifiedJobSearchBundle`.
+- `job_integrity.filter_listings` runs **exactly once, before the bundle is
+  built**, in `src/services/verified_job_search.py`. It now has exactly one call
+  site in the repository, so a caller never receives raw provider items.
+- **Exactly one adopted consumer: `_target_role_search_response`** — one of
+  **eleven** `job_matches` builders. The other ten still name jobs without a
+  bundle; that is PR3, and this slice does not claim otherwise.
+- **Operation identity is owned by the lifecycle store.**
+  `_begin_job_search_operation` normalizes the incoming id **before** the
+  lifecycle write — empty or whitespace-only becomes `None`, a valid id is
+  preserved unchanged — and the store is the sole generator. No second UUID
+  exists downstream. The persisted id is reused by lifecycle state,
+  provider-search logging, `SearchExecutionEvidence`, the response
+  `operation_id`, `search_evidence.operation_id`, and completion/cancellation.
+  A store returning no id fails closed.
+- **Status and listing invariants are enforced at construction**, not by caller
+  discipline: `PROVIDER_UNAVAILABLE`, `CANCELLED` and `EMPTY` each require
+  `accepted_result_count == 0`; `COMPLETED` requires `accepted_result_count > 0`.
+- **Standing invariant: no bundle, no matches and no job cards.** Proven
+  fail-first — the tests failed on the base tree before the contract existed.
+- **No feature flag.** The guarantee ships in the configuration that runs.
+
+**PR2 — fail-closed job-search routing and buffered delivery. ⬜ Next planned
+slice — NOT started and NOT authorized by the PR1 release.** Routing refuses
 rather than guesses, and delivery is buffered so a partial result is never
 presented as a complete one.
 
@@ -345,6 +361,7 @@ Backend** run for that commit, not by a green Deploy to Production run alone.
 
 | Date | Commit | What went live |
 | --- | --- | --- |
+| 2026-07-27 | `dac8d8e7` | #1416 — PR1 Chat Job Provenance Contract: the verified job-search contract (`src/domain/job_search`) plus its seam (`src/services/verified_job_search.py`), adopted at exactly one consumer (`_target_role_search_response`). `/version.commit` = `dac8d8e7`, process start `2026-07-27T01:00:26Z`, `/health` ok with `jooble`, `adzuna` and `jsearch` configured and not degraded. Production-smoked on one synthetic non-PII named-role search: non-empty 39-character operation id, response `operation_id` identical to `search_evidence.operation_id`, 5 matches shown against `accepted_result_count` 10, exactly one `provider_cascade` attempt for the deliberate search turn, and execution metadata carrying no listing content. |
 | 2026-07-26 | `ca266366` | #1414 — a guest row is not a candidate on the email or Telegram path (`find_profiles_by_email` and `find_profiles_by_telegram_username`, SQL predicate plus independent Python re-check, both memory fallbacks guarded). Central Controller read `/version.commit` = `ca266366` and `/health` ok, with `jooble`, `adzuna`, `jsearch` configured and not degraded and the DeepSeek precheck reachable. Browser-verified by the Controller; not reproducible from an agent container. Owner functional smoke not claimed. |
 | 2026-07-26 | `a610b696` | #1411 — CI-only: fail when a test file is run by no pytest invocation, with a frozen 212-file baseline that may only shrink. No runtime path touched, so no deploy expected. |
 | 2026-07-26 | `701939fa` | #1412 — a phone number is not proof of who someone is: phone removed from the signals sufficient to auto-attach a Jotform submission, and guest rows excluded from phone candidacy. Deploy fired on merge (`src/**` filter matched). Owner functional smoke not claimed. |
