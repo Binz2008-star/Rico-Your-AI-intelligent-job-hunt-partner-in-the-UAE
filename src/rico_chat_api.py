@@ -7424,8 +7424,24 @@ class RicoChatAPI:
             or fetch_error == "all_providers_unavailable"
         )
         if not all_matches and _provider_failed:
+            # `failed`, not `completed` — the same lifecycle semantics the
+            # verified-delivery gate applies to this outcome. The two statuses
+            # carry different consequences: _duplicate_operation_guard answers a
+            # repeat of a `completed` operation id with a status reply instead of
+            # re-executing, while a `failed` one returns None from that guard so
+            # a legitimate retry runs. An execution that never reached a provider
+            # must leave that retry open, and mark_failed refuses to downgrade an
+            # already-completed row, so the first write has to be the right one.
+            #
+            # The error is a fixed machine-safe code. No provider payload, query,
+            # role, user value or exception text is persisted on the row.
             try:
-                mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
+                mark_failed(
+                    user_id,
+                    operation_id,
+                    "provider_unavailable",
+                    attempt=self._operation_attempt(),
+                )
             except Exception:
                 pass
             _degraded_resp = self._provider_degraded_response(
