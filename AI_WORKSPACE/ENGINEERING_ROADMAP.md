@@ -219,8 +219,11 @@ Shipped as **#1416**, squash-merged as **`dac8d8e7`** onto base `1c75f4d6` —
 - **Status and listing invariants are enforced at construction**, not by caller
   discipline: `PROVIDER_UNAVAILABLE`, `CANCELLED` and `EMPTY` each require
   `accepted_result_count == 0`; `COMPLETED` requires `accepted_result_count > 0`.
-- **Standing invariant: no bundle, no matches and no job cards.** Proven
-  fail-first — the tests failed on the base tree before the contract existed.
+- **On the adopted `_target_role_search_response` path, no verified bundle means
+  no emitted matches and no job cards.** The contract target is repository-wide,
+  but PR1 enforces it at exactly one consumer; the remaining builders are
+  deferred to PR3. Proven fail-first — the tests failed on the base tree before
+  the contract existed.
 - **No feature flag.** The guarantee ships in the configuration that runs.
 
 **PR2 — fail-closed job-search routing and buffered delivery. ⬜ Next planned
