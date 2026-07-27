@@ -45,11 +45,16 @@ from typing import Tuple
 class SearchStatus(str, Enum):
     """How one provider execution ended.
 
-    Four outcomes, and every search must land on exactly one of them. They are
+    Four outcomes, and every search lands on exactly one of them. They are
     distinct because they oblige different replies: ``EMPTY`` means the market
     answered and had nothing, while ``PROVIDER_UNAVAILABLE`` means we could not
     ask — telling a user "no jobs found" in the second case is a false claim
     about the market.
+
+    They are also **mutually exclusive by construction**, not by convention:
+    :class:`SearchExecutionEvidence` refuses any ``COMPLETED`` with zero
+    accepted listings, and any non-``COMPLETED`` carrying listings. Only a
+    completed execution has anything deliverable.
     """
 
     COMPLETED = "completed"
@@ -83,6 +88,15 @@ class SearchExecutionEvidence:
             raise TypeError(
                 f"status must be a SearchStatus, got {type(self.status).__name__}"
             )
+        # An execution that cannot be tied to one operation is not evidence.
+        # Without an identity the same bundle cannot be joined across the log,
+        # the response and the delivery, so it can claim a search happened while
+        # being unattributable to any particular one.
+        if not (self.operation_id or "").strip():
+            raise ValueError(
+                "operation_id is required — a bundle with no operation identity "
+                "cannot be traced across log, response and delivery"
+            )
         if self.duration_ms < 0:
             raise ValueError("duration_ms cannot be negative")
         if self.raw_result_count < 0 or self.accepted_result_count < 0:
@@ -92,12 +106,31 @@ class SearchExecutionEvidence:
                 "accepted_result_count cannot exceed raw_result_count "
                 f"({self.accepted_result_count} > {self.raw_result_count})"
             )
+        # The four outcomes are mutually exclusive, and that is enforced here
+        # rather than left to caller discipline. Only COMPLETED may carry
+        # accepted listings; EMPTY, PROVIDER_UNAVAILABLE and CANCELLED all mean
+        # "nothing is deliverable", and a bundle that says otherwise is a
+        # contradiction the type must refuse to represent.
+        if self.status is SearchStatus.COMPLETED and self.accepted_result_count == 0:
+            raise ValueError(
+                "COMPLETED requires accepted_result_count > 0 — a search that "
+                "accepted nothing is EMPTY, not completed"
+            )
+        if self.status is not SearchStatus.COMPLETED and self.accepted_result_count != 0:
+            raise ValueError(
+                f"{self.status.value} requires accepted_result_count == 0, got "
+                f"{self.accepted_result_count} — only a COMPLETED execution may "
+                "carry deliverable listings"
+            )
 
     def as_public_dict(self) -> dict:
-        """Counts and status only — safe to attach to a chat response.
+        """Execution metadata only — safe to attach to a chat response.
 
-        Never includes listing content. This is what a surface may show about
-        the execution itself.
+        It carries the operation identity, the provider, what was requested,
+        when the execution started, how long it took, and the two counts. It
+        carries **no listing content**: no title, company, location or URL. That
+        is the precise claim — not "counts only", which would understate what is
+        here — and it is what makes the value safe to surface.
         """
         return {
             "operation_id": self.operation_id,

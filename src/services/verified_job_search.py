@@ -170,8 +170,27 @@ def build_bundle(
         listings.append(listing)
         accepted.append(record)
 
-    effective_status = status
-    if status is SearchStatus.COMPLETED and not listings:
+    # Reconcile the caller's observation with what actually survived, so the
+    # four outcomes stay mutually exclusive no matter what the caller passed.
+    # The caller sets PROVIDER_UNAVAILABLE from quota/rate-limit flags, which a
+    # cache or fallback payload can carry while still yielding usable listings —
+    # that combination would otherwise be a bundle that contradicts itself.
+    if status is SearchStatus.CANCELLED:
+        # A cancelled execution delivers nothing, by definition: a de-owned
+        # worker must not hand results to a user. Anything it fetched is
+        # discarded here rather than being reported as deliverable.
+        listings, accepted = [], []
+        effective_status = SearchStatus.CANCELLED
+    elif listings:
+        # Something trustworthy survived, so the search completed in the only
+        # sense a user would recognise — whatever degradation flags rode along.
+        # The rate-limit notice still reaches the response by its own path.
+        effective_status = SearchStatus.COMPLETED
+    elif status is SearchStatus.PROVIDER_UNAVAILABLE:
+        # Nothing survived *and* we could not properly ask. That is not the
+        # same as an empty market and must never be phrased as one.
+        effective_status = SearchStatus.PROVIDER_UNAVAILABLE
+    else:
         effective_status = SearchStatus.EMPTY
 
     evidence = SearchExecutionEvidence(

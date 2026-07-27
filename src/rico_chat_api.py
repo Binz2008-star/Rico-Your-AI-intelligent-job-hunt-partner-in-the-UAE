@@ -7140,7 +7140,14 @@ class RicoChatAPI:
             _provider_location = ""  # UAE-wide single call covers all requested cities
 
         operation = self._begin_job_search_operation(user_id, search_role)
-        operation_id = str(operation["operation_id"])
+        # Resolve the operation identity server-side, once, here. A search that
+        # cannot be tied to one operation across the log, the response and the
+        # delivery is untraceable, so an absent id is minted rather than
+        # tolerated — and it is minted in exactly one place. Everything below
+        # (operation state, logs, the response, and the verified-search
+        # evidence) uses this same value; two generated ids would be worse than
+        # none, because they would look like provenance while pointing apart.
+        operation_id = str(operation.get("operation_id") or "").strip() or uuid.uuid4().hex
 
         # Explicit per-attempt provenance for this ONE operation_id (PR4
         # slice 1 — observability only, no control-flow change): every
@@ -7303,7 +7310,7 @@ class RicoChatAPI:
 
         search_bundle, all_matches, integrity_rejections = _build_bundle(
             all_matches,
-            operation_id=str(operation_id or ""),
+            operation_id=operation_id,
             provider=fetch_provider or "",
             requested_role=search_role,
             requested_location=_requested_location or "",
@@ -7695,10 +7702,12 @@ class RicoChatAPI:
             # Identical triple to the profile report's career_context (owner
             # audit point 3) — produced by the same parity_snapshot method.
             "career_context": _career_context_block,
-            # Provenance for every job this response names. Counts and status
-            # only — never listing content. Its presence is the invariant: a
-            # job_matches response from this path always carries the evidence
-            # of the execution that produced its matches.
+            # Provenance for every job this response names. Execution metadata
+            # only — operation id, provider, what was requested, timing and the
+            # two counts — and never listing content. Its presence is the
+            # invariant: a job_matches response from THIS path always carries
+            # the evidence of the execution that produced its matches. Other
+            # exits from this handler name no job and are not covered by it.
             "search_evidence": search_bundle.execution.as_public_dict(),
         }
 

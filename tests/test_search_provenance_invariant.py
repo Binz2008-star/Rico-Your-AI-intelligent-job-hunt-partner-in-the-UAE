@@ -49,7 +49,7 @@ class _Driver:
     def _search(self, role: str, location: str = "", **_kw: Any) -> FetchResult:
         return FetchResult(items=[dict(j) for j in self._items], provider=self._provider)
 
-    def run(self, requested_role: str) -> dict[str, Any]:
+    def run(self, requested_role: str, *, drop_operation_id: bool = False) -> dict[str, Any]:
         profile = RicoProfile(user_id="synthetic@test")
         if hasattr(profile, "target_roles"):
             profile.target_roles = []
@@ -76,6 +76,13 @@ class _Driver:
             p(patch("src.rico_chat_api.RicoChatAPI._get_recent_context", _get_rctx))
             p(patch("src.rico_chat_api.RicoChatAPI._store_recent_context", _store_rctx))
             p(patch("src.llm_scorer._embed", return_value=None))
+            if drop_operation_id:
+                # A request that carries no operation identity at all. The
+                # server must mint one rather than emit an untraceable bundle.
+                p(patch(
+                    "src.rico_chat_api.RicoChatAPI._begin_job_search_operation",
+                    return_value={"operation_id": ""},
+                ))
             api = RicoChatAPI()
             return api._target_role_search_response(profile.user_id, requested_role, profile)
 
@@ -145,7 +152,34 @@ def test_shown_matches_never_exceed_the_accepted_count():
     assert evidence["accepted_result_count"] <= evidence["raw_result_count"]
 
 
-def test_evidence_is_counts_only_and_leaks_no_listing_content():
+def test_request_without_an_operation_id_gets_one_server_side():
+    """The client is never the source of truth for operation identity.
+
+    A request carrying no operation id must still produce a traceable bundle,
+    and the id the response reports must be the *same* value the evidence
+    carries — two generated ids would look like provenance while pointing
+    apart.
+    """
+    resp = _Driver(["Compliance Manager"]).run(
+        "Compliance Manager", drop_operation_id=True
+    )
+
+    evidence = resp.get("search_evidence")
+    if resp.get("type") != "job_matches":
+        # Other outcomes are permitted, but must still name no job.
+        assert not resp.get("matches")
+        return
+
+    assert evidence, "a job_matches response must carry evidence"
+    assert evidence["operation_id"].strip(), (
+        "the server must mint an operation id when the request carries none"
+    )
+    assert resp.get("operation_id") == evidence["operation_id"], (
+        "the response and its evidence must report one operation id, not two"
+    )
+
+
+def test_evidence_is_execution_metadata_and_leaks_no_listing_content():
     """Provenance must not become a second, unfiltered copy of the results."""
     resp = _Driver(["Compliance Manager"]).run("Compliance Manager")
     if resp.get("type") != "job_matches":

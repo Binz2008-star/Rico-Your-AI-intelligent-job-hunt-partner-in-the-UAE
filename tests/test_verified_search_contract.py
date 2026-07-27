@@ -241,6 +241,124 @@ def test_contract_forbids_extra_fields():
         evidence.provider = "other"  # frozen
 
 
+# ---------------------------------------------------------------------------
+# Blocker 1 — a bundle with no operation identity is not evidence
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_evidence_rejects_an_empty_operation_id(bad_id):
+    """An untraceable bundle claims a search happened but joins to nothing."""
+    with pytest.raises(ValueError, match="operation_id"):
+        SearchExecutionEvidence(
+            operation_id=bad_id,
+            provider="jsearch",
+            requested_role="Compliance Manager",
+            requested_location="Dubai",
+            started_at=_started(),
+            duration_ms=10,
+            status=SearchStatus.EMPTY,
+            raw_result_count=0,
+            accepted_result_count=0,
+        )
+
+
+def test_build_bundle_refuses_to_produce_an_identity_less_bundle():
+    with pytest.raises(ValueError, match="operation_id"):
+        build_bundle(
+            [],
+            operation_id="",
+            provider="jsearch",
+            requested_role="Compliance Manager",
+            requested_location="Dubai",
+            started_at=_started(),
+            duration_ms=10,
+            status=SearchStatus.COMPLETED,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Blocker 2 — the four statuses are mutually exclusive, enforced by the type
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "status",
+    [SearchStatus.EMPTY, SearchStatus.PROVIDER_UNAVAILABLE, SearchStatus.CANCELLED],
+)
+def test_non_completed_status_cannot_carry_accepted_listings(status):
+    """PROVIDER_UNAVAILABLE / CANCELLED / EMPTY all mean nothing is deliverable."""
+    with pytest.raises(ValueError, match="accepted_result_count == 0"):
+        SearchExecutionEvidence(
+            operation_id="op-x",
+            provider="jsearch",
+            requested_role="Compliance Manager",
+            requested_location="Dubai",
+            started_at=_started(),
+            duration_ms=10,
+            status=status,
+            raw_result_count=3,
+            accepted_result_count=2,
+        )
+
+
+def test_completed_status_cannot_be_empty():
+    with pytest.raises(ValueError, match="COMPLETED requires"):
+        SearchExecutionEvidence(
+            operation_id="op-y",
+            provider="jsearch",
+            requested_role="Compliance Manager",
+            requested_location="Dubai",
+            started_at=_started(),
+            duration_ms=10,
+            status=SearchStatus.COMPLETED,
+            raw_result_count=4,
+            accepted_result_count=0,
+        )
+
+
+def test_degraded_flags_with_usable_results_resolve_to_completed():
+    """A cache or fallback payload can carry a quota flag and still be usable.
+
+    The caller observes PROVIDER_UNAVAILABLE from the flags; the service
+    reconciles that against what survived rather than emitting a bundle that
+    contradicts itself.
+    """
+    bundle, accepted, _ = build_bundle(
+        [_record()],
+        operation_id="op-z",
+        provider="jsearch",
+        requested_role="Compliance Manager",
+        requested_location="Dubai",
+        started_at=_started(),
+        duration_ms=50,
+        status=SearchStatus.PROVIDER_UNAVAILABLE,
+    )
+
+    assert bundle.execution.status is SearchStatus.COMPLETED
+    assert bundle.execution.accepted_result_count == len(bundle.listings) > 0
+    assert len(accepted) == len(bundle.listings)
+
+
+def test_cancelled_execution_delivers_nothing_even_if_records_arrived():
+    """A de-owned worker must not hand results to a user."""
+    bundle, accepted, _ = build_bundle(
+        [_record()],
+        operation_id="op-c",
+        provider="jsearch",
+        requested_role="Compliance Manager",
+        requested_location="Dubai",
+        started_at=_started(),
+        duration_ms=20,
+        status=SearchStatus.CANCELLED,
+    )
+
+    assert bundle.execution.status is SearchStatus.CANCELLED
+    assert bundle.listings == ()
+    assert accepted == []
+    assert bundle.execution.accepted_result_count == 0
+
+
 def test_accepted_count_cannot_exceed_raw_count():
     with pytest.raises(ValueError):
         SearchExecutionEvidence(
