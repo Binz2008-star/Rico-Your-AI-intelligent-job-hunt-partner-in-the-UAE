@@ -11,7 +11,7 @@
 
 Evidence and rehearsal only. All database calls explicitly targeted the owner-created Neon branch `d1-ownership-evidence-2026-07-28`. The first read confirmed the connection resolved to that non-default branch. No production database call or production mutation was made.
 
-The public-output contract was preserved: this report contains aggregates and evidence classes only. It contains no raw or linkable user identifier, filename, contact value, deterministic pseudonym, or infrastructure identifier.
+The public-output contract was preserved: this report contains aggregates and evidence classes only. It contains no raw or linkable user identifier, filename, contact value, deterministic pseudonym, credential, DSN, project ID, branch ID, or database endpoint. The evidence-branch name is retained because it is already part of the public control-plane record.
 
 ## Executive result
 
