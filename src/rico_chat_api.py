@@ -11154,11 +11154,26 @@ class RicoChatAPI:
                     profile=profile,
                 )
             if not (_cv_ctx.has_cv or bool(self._profile_value(profile, "has_cv"))):
-                # (3) Nothing on file — unchanged wording.
-                _cv_msg = (
-                    "I can't review your CV yet — you haven't uploaded one.\n\n"
-                    "Upload your CV and I'll identify weak areas, gaps, and improvements."
-                )
+                # (3) Nothing on file. The read COMPLETED, so stating the
+                # absence and asking for an upload is earned here — unlike (0).
+                #
+                # This branch was English-only while its two siblings above
+                # already rendered per-language off the same `_arabic_cv` flag.
+                # That asymmetry was invisible until Arabic analysis asks
+                # started reaching this branch at all: they were previously
+                # answered by the upload-announce gate. So the routing fix in
+                # this PR is what makes an English-only answer reachable for an
+                # Arabic speaker, which makes it this PR's to render.
+                if _arabic_cv:
+                    _cv_msg = (
+                        "لا أستطيع مراجعة سيرتك الذاتية بعد — لم ترفع أي سيرة ذاتية.\n\n"
+                        "ارفع سيرتك الذاتية وسأحدد نقاط الضعف والفجوات والتحسينات."
+                    )
+                else:
+                    _cv_msg = (
+                        "I can't review your CV yet — you haven't uploaded one.\n\n"
+                        "Upload your CV and I'll identify weak areas, gaps, and improvements."
+                    )
             elif not _cv_ctx.has_content:
                 # (2) The file is real, its content is not available. Name the
                 # file so the user knows we have it, refuse to claim an

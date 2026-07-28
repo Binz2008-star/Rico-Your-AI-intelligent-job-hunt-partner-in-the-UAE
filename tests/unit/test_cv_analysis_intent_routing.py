@@ -267,15 +267,16 @@ class TestAnalysisAskStaysTruthfulAboutCvState:
         assert d.job_search_calls == 0
 
     @pytest.mark.parametrize("message", ALL_ANALYSIS_ASKS)
-    def test_contract_genuine_absence_is_still_stated_plainly(self, message):
+    def test_contract_genuine_absence_is_grounded_and_starts_no_search(self, message):
         """A COMPLETED read proving no CV, in BOTH languages.
 
         This is the case where upload guidance is *earned*, and the two failure
         modes sit on either side of it: suppressing it (leaving the user with no
-        way forward) and reaching it without evidence (the D3 violation). Both
-        are asserted, together with the absence of any search.
+        way forward) and reaching it without evidence (the D3 violation). The
+        language-independent half of the contract is asserted here; the wording
+        itself is asserted per-language below.
 
-        Arabic is covered here because it is the surface that previously never
+        Arabic is covered because it is the surface that previously never
         reached this branch at all — the announce gate answered first, so a
         genuinely CV-less Arabic user and a store outage were indistinguishable.
         """
@@ -286,13 +287,45 @@ class TestAnalysisAskStaysTruthfulAboutCvState:
         assert result.get("type") != "cv_state_unverified"
         # ...and the answer must still be grounded in an authoritative read.
         assert d.cv_context_reads >= 1
-        # Truthful: it says there is no CV, and points at the upload.
-        assert "haven't uploaded one" in result["message"]
-        assert "Upload your CV" in result["message"]
         # No search, no provider terminal, no generated answer.
         assert d.job_search_calls == 0
         assert d.job_search_terminals == []
         assert d.llm_fallback_calls == 0
+
+    @pytest.mark.parametrize("message", EN_ANALYSIS_ASKS)
+    def test_contract_english_absence_is_stated_in_english(self, message):
+        """An English ask gets the English absence wording and the English
+        upload instruction. Pinned so the Arabic rendering below cannot be
+        introduced by making the branch language-blind in the other direction.
+        """
+        _d, result, _spy = run_analysis_ask(
+            message, cv_ctx=ctx_genuinely_absent(), has_cv=False
+        )
+        assert "haven't uploaded one" in result["message"]
+        assert "Upload your CV" in result["message"]
+
+    @pytest.mark.parametrize("message", AR_ANALYSIS_ASKS)
+    def test_contract_arabic_absence_is_stated_in_arabic(self, message):
+        """An Arabic ask must be answered in Arabic.
+
+        Both sibling branches of this one — store-unavailable and
+        no-readable-content — already rendered per-language. This branch did
+        not, and the routing fix in this PR is what first made it reachable for
+        Arabic input, so an Arabic speaker with no CV would have been told so in
+        English. Asserted positively (the Arabic wording is present) and
+        negatively (neither English string leaks through).
+        """
+        _d, result, _spy = run_analysis_ask(
+            message, cv_ctx=ctx_genuinely_absent(), has_cv=False
+        )
+        message_text = result["message"]
+        # Truthful absence, in Arabic.
+        assert "لم ترفع أي سيرة ذاتية" in message_text
+        # Arabic upload guidance.
+        assert "ارفع سيرتك الذاتية" in message_text
+        # And no English leaks.
+        assert "haven't uploaded one" not in message_text
+        assert "Upload your CV" not in message_text
 
 
 # ══════════════════════════════════════════════════════════════════════════
