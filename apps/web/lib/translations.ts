@@ -612,6 +612,13 @@ export const translations = {
     filesPageSubtitle: "Manage your CVs, cover letters, and career documents",
     filesEmpty: "No files yet",
     filesEmptyHint: "Upload your CV to get started",
+    // Shown when the document store could not be read. It must never imply the
+    // account is empty: a failed read is not evidence of absence, and telling a
+    // user to upload their CV during an outage is what makes them believe the
+    // one they already have is gone.
+    filesUnavailableTitle: "We couldn't load your files right now.",
+    filesUnavailableHint:
+      "We couldn't reach your document storage, so we can't show what's in it. Nothing was changed — please try again in a moment.",
     filesUploadNew: "Upload file",
     filesUploadCv: "New CV",
     filesUploadCoverLetter: "Cover Letter",
@@ -1997,6 +2004,9 @@ export const translations = {
     filesPageSubtitle: "إدارة سيرك الذاتية وخطابات التقديم ووثائقك المهنية",
     filesEmpty: "لا توجد ملفات بعد",
     filesEmptyHint: "ارفع سيرتك الذاتية للبدء",
+    filesUnavailableTitle: "تعذّر تحميل ملفاتك الآن.",
+    filesUnavailableHint:
+      "تعذّر الوصول إلى مخزن مستنداتك، لذلك لا يمكننا عرض محتواه. لم يتغيّر أي شيء — يُرجى المحاولة مرة أخرى بعد قليل.",
     filesUploadNew: "رفع ملف",
     filesUploadCv: "سيرة ذاتية جديدة",
     filesUploadCoverLetter: "خطاب تقديم",

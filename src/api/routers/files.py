@@ -136,13 +136,45 @@ def build_profile_cv_record(user_id: str) -> Optional[dict[str, Any]]:
         return None
 
 
+# A document-store read that does not complete carries no evidence about what
+# the account holds, so this surface refuses to answer rather than answering
+# with an empty inventory (AI_WORKSPACE/ARCHITECTURE.md — Journey-1 D3:
+# READ FAILURE != VERIFIED ABSENCE). Deliberately free of `files`/`total`: an
+# inventory claim in an error body is the same lie one layer down. The message
+# is the only human-readable field, matching the structured-detail convention
+# the frontend's extractDetail() already reads.
+FILES_UNAVAILABLE_DETAIL: dict[str, Any] = {
+    "type": "files_unavailable",
+    "state": "unavailable",
+    "retryable": True,
+    "message": "We couldn't load your files right now.",
+}
+
+
 @router.get("")
 def list_files(request: Request) -> dict[str, Any]:
-    """Return all documents for the authenticated user."""
+    """Return all documents for the authenticated user.
+
+    Raises 503 when the document store cannot be read. An empty ``files`` list
+    is therefore always a verified answer: the account really holds nothing.
+    """
     user = get_current_user(request)
     user_id = user["email"]
 
-    docs = _db.list_user_documents(user_id) if _db.available else []
+    if not _db.available:
+        logger.warning("file_list_unavailable user=%s reason=store_unavailable", user_ref(user_id))
+        raise HTTPException(status_code=503, detail=FILES_UNAVAILABLE_DETAIL)
+
+    try:
+        docs = _db.list_user_documents(user_id)
+    except Exception as exc:
+        # The failure detail is logged (privacy-scrubbed) and never returned:
+        # the client learns the read failed, not why.
+        logger.warning(
+            "file_list_unavailable user=%s reason=read_failed error=%s",
+            user_ref(user_id), safe_exc(exc),
+        )
+        raise HTTPException(status_code=503, detail=FILES_UNAVAILABLE_DETAIL) from exc
 
     # When no real document is the active CV, surface the parsed profile CV
     # alongside the real documents (not only when the list is empty) so the

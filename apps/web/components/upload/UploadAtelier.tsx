@@ -13,6 +13,12 @@
  *  - cover_letter/other → uploadUserFile → reload
  *  - setPrimary / delete / rename, quota (422) messaging, error/loading/empty
  *  - backend-authoritative: no success shown before the backend confirms.
+ *
+ * The list has four states, and they are kept apart on purpose: loading,
+ * loaded-non-empty, loaded-empty, and unavailable. Only a completed read may
+ * produce loaded-empty — a read that failed says nothing about what the
+ * account holds and must never render as "No files yet" or as an invitation
+ * to upload a first CV (ARCHITECTURE.md, Journey-1 D3).
  * Only the presentation moves to the workspace palette.
  *
  * Command v5 PR 3 applies the v5 Documents mode treatment (gold accent
@@ -327,6 +333,10 @@ export function UploadAtelier() {
 
     const [files, setFiles] = useState<UserDocument[]>([]);
     const [loading, setLoading] = useState(true);
+    // A read that did not complete is its own state, distinct from a read that
+    // completed and proved the account holds nothing. Collapsing the two is
+    // what let an outage render as "No files yet — upload your CV".
+    const [unavailable, setUnavailable] = useState(false);
     const [error, setError] = useState("");
     const [uploadOpen, setUploadOpen] = useState(false);
     const [docType, setDocType] = useState<DocTypeOption>("cv");
@@ -336,6 +346,8 @@ export function UploadAtelier() {
     const [roleMismatch, setRoleMismatch] = useState<{ cvRole: string; targetRoles: string[] } | null>(null);
 
     const loadFiles = useCallback(async () => {
+        setLoading(true);
+        setUnavailable(false);
         try {
             const [res, profile] = await Promise.all([
                 listUserFiles(),
@@ -354,17 +366,22 @@ export function UploadAtelier() {
             } else {
                 setRoleMismatch(null);
             }
-        } catch (err) {
-            if (err instanceof ApiError && (err.statusCode === 404 || err.statusCode === 500 || err.statusCode === 503)) {
-                setFiles([]);
-            } else {
-                setError(t("uploadErrLoad"));
-            }
+        } catch {
+            // READ FAILURE != VERIFIED ABSENCE (ARCHITECTURE.md, Journey-1 D3).
+            // No status is exempt: 503, 500, 404 and a transport failure are all
+            // reads that did not complete, so none of them is evidence about what
+            // this account holds. Previously 404/500/503 became `files=[]` — the
+            // empty state — and everything else showed an error banner *above*
+            // that same empty state. Both told the user their files were gone.
+            setFiles([]);
+            setRoleMismatch(null);
+            setUnavailable(true);
         } finally {
             setLoading(false);
         }
-    }, [t]);
+    }, []);
 
+    // One read per mount. Retry is user-driven only — never an automatic loop.
     useEffect(() => { loadFiles(); }, [loadFiles]);
 
     const handleFileSelected = useCallback(async (file: File) => {
@@ -516,6 +533,32 @@ export function UploadAtelier() {
                         <MaterialIcon icon="hourglass_empty" className="animate-spin text-2xl" style={{ color: palette.ink40 }} />
                     </div>
                 )
+            ) : unavailable ? (
+                /* The read did not complete. Say so, offer Retry, and claim
+                   nothing about the account — no "no files yet", no upload
+                   prompt. The page shell and its Upload control stay usable. */
+                <div
+                    role="alert"
+                    className={`flex flex-col items-center gap-3 py-14 text-center ${v5 ? "wsx5-card" : "rounded-xl"}`}
+                    style={{ border: `1px solid ${palette.hair}`, background: palette.panel, ...(v5 ? ({ "--i": 2 } as React.CSSProperties) : {}) }}
+                    data-wsx5-anim={v5 ? "unfold" : undefined}
+                >
+                    {v5 ? (
+                        <RicoPresence state="warning" size="lg" decorative />
+                    ) : (
+                        <MaterialIcon icon="cloud_off" className="text-4xl" style={{ color: palette.ink40 }} />
+                    )}
+                    <p className="font-semibold" style={{ color: palette.ink }}>{t("filesUnavailableTitle")}</p>
+                    <p className="max-w-md text-sm" style={{ color: palette.ink70 }}>{t("filesUnavailableHint")}</p>
+                    <button
+                        onClick={() => { void loadFiles(); }}
+                        className="mt-2 flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                        style={v5 ? { background: V5_GRADIENT.emberButton, color: V5.onEmber } : { background: palette.red, color: palette.bg }}
+                    >
+                        <MaterialIcon icon="refresh" className="text-base" />
+                        {t("retry")}
+                    </button>
+                </div>
             ) : files.length === 0 ? (
                 <div
                     className={`flex flex-col items-center gap-3 py-14 text-center ${v5 ? "wsx5-card" : "rounded-xl"}`}
