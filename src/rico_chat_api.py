@@ -2062,11 +2062,65 @@ _ACKNOWLEDGEMENT_REPLIES: dict[str, str] = {
 }
 _DEFAULT_ACK_REPLY = "Of course! What would you like to do next?"
 
+# Acknowledgements that express THANKS and can never also mean "yes, do it".
+#
+# Deliberately a strict subset of _ACKNOWLEDGEMENT_REPLIES. The rest of that
+# map — "ok", "تمام", "sounds good", "got it", "perfect" — genuinely IS how a
+# user accepts an offer Rico just made, and several call sites depend on that
+# (see the pending-job-search redemption inside the acknowledgement branch).
+# Gratitude is different in kind: nobody thanks Rico in order to start work, so
+# a turn that is only thanks must never redeem an armed action. Praise words
+# are left out on purpose — "perfect" after "shall I broaden?" is plausibly an
+# acceptance, and this list is only for phrases where that reading is impossible.
+# Stored as CANONICAL keys (see _acknowledgement_key): the Arabic entries are
+# normalised at construction so one spelling of a word cannot be a member while
+# another is not. Written here in their natural orthography for readability.
+_GRATITUDE_ONLY_REPLIES: frozenset[str] = frozenset(
+    _normalize_arabic(_p) for _p in {
+        "thanks", "thank you", "thank you so much", "thanks a lot",
+        "thank you very much", "much appreciated", "appreciate it",
+        "appreciate that", "cheers",
+        "ok thanks", "okay thanks", "ok thank you", "okay thank you",
+        # Arabic
+        "شكرا", "شكراً", "شكرا جزيلا", "شكراً جزيلاً",
+    }
+)
+# Trailing sentiment punctuation only — never internal characters, so a phrase
+# is normalised without being rewritten into a different one.
+_ACK_TRAILING_PUNCT = " \t\r\n!.،؛?؟…"
+
+
+def _acknowledgement_key(message: str) -> str:
+    """Normalise a turn to its acknowledgement lookup key.
+
+    Arabic runs through the same ``_normalize_arabic`` the CV-intent and
+    upload-announce gates already use, so orthographic variants of one word
+    collapse to one key. That matters here because the variants are not
+    equally likely: ``شكرًا`` — tanween BEFORE the alef — is the standard MSA
+    spelling and the one a phone keyboard produces, while the literal set held
+    ``شكرا`` and ``شكراً``. Matching raw text therefore let the *correct*
+    spelling, and any vocalised form such as ``شُكرًا``, slip the gratitude
+    guard and spend a real provider call on a search the user never asked for.
+
+    Normalisation is applied to the lookup key only. The raw keys of
+    ``_ACKNOWLEDGEMENT_REPLIES`` are deliberately left as they are, so every
+    existing exact-match call site keeps its current behaviour.
+    """
+    key = (message or "").strip().lower().rstrip(_ACK_TRAILING_PUNCT).strip()
+    return _normalize_arabic(key)
+
+
+def _is_gratitude_only(message: str) -> bool:
+    """True when the whole turn is thanks and nothing else."""
+    return _acknowledgement_key(message) in _GRATITUDE_ONLY_REPLIES
+
 
 def _acknowledgement_reply(message: str) -> str:
     """Return a short warm reply for acknowledgement phrases."""
     key = message.strip().lower()
-    return _ACKNOWLEDGEMENT_REPLIES.get(key, _DEFAULT_ACK_REPLY)
+    return _ACKNOWLEDGEMENT_REPLIES.get(
+        key, _ACKNOWLEDGEMENT_REPLIES.get(_acknowledgement_key(message), _DEFAULT_ACK_REPLY)
+    )
 
 
 class HandlerResult(NamedTuple):
@@ -6237,6 +6291,17 @@ class RicoChatAPI:
             ctx = self._get_recent_context(user_id) or {}
             pending_field = ctx.get("_pending_field") or ""
             if pending_field in self._SEARCH_OUTRANKING_PENDING_FIELDS:
+                return True
+        except Exception:
+            pass
+        # Priority 2 — the current turn is pure gratitude. "thanks" / "شكراً"
+        # is not a continuation of anything: it closes an exchange. Redeeming an
+        # armed search on it spends a real provider call and answers with a
+        # search the user never asked for — and after ANY successful search that
+        # offered adjacent roles, one IS armed, so this fired on the single most
+        # common way a satisfied user ends a turn.
+        try:
+            if _is_gratitude_only(msg):
                 return True
         except Exception:
             pass
