@@ -92,6 +92,7 @@ jobs:
             tests/test_sse_stream_quota_enforcement.py \
             tests/test_lifecycle_followup.py \
             tests/test_no_import_time_env_mutation.py \
+            tests/test_search_zero_result_recovery.py \
             tests/decision_regression/ \
             -v --tb=short
 
