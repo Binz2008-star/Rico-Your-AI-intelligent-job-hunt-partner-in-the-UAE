@@ -8,7 +8,7 @@
 
 - **Why it exists:** one current, evidence-backed operating snapshot for Rico.
 - **Update when:** production, active ownership, launch blockers, or priority order changes materially.
-- **Source of truth:** this file for current control state; `AI_WORKSPACE/DECISIONS.md` for binding decisions; `AI_WORKSPACE/TASKS.md` for lane-level continuity.
+- **Source of truth:** this file for current control state; `AI_WORKSPACE/DECISIONS.md` for binding decisions; `AI_WORKSPACE/TASKS.md` for lane-level continuity; `AI_WORKSPACE/ENGINEERING_ROADMAP.md` for the forward sequence; `AI_WORKSPACE/ARCHITECTURE.md` for structural rules.
 - **Owner:** Rico owner, with the acting CTO/session responsible for evidence-backed reconciliation.
 - **History:** prior snapshots remain preserved in Git history. This file intentionally keeps current truth ahead of historical narrative.
 - **SHA rule:** never make this document self-stale by claiming its own commit is the permanent current `main`. Fetch `main` live. Record the application/runtime baseline separately from docs-only control commits.
@@ -25,86 +25,91 @@ Ranked, and not negotiable when they disagree:
 
 **Every SHA in this file is verified from the API before it is written.** A SHA copied from a message, a summary, or a previous session is not evidence. If live state and this file disagree, reconcile this file before starting anything else.
 
-## Reconciliation — 2026-07-27 (post-`#1416`)
+## Reconciliation — 2026-07-28 (post-`#1422`)
 
 ### Verified control snapshot
 
 | Field | Value | How it was established |
 | --- | --- | --- |
-| `main` | `dac8d8e7` | Fetched live at the moment this section was written |
-| Deployed backend `/version` | **`dac8d8e7` — verified** | `/version.commit` = `dac8d8e7`, process start `2026-07-27T01:00:26Z` |
-| `/health` | **ok** | Same read: `jooble`, `adzuna` and `jsearch` configured and **not** degraded |
-| Application/runtime baseline | `dac8d8e7` — **equal to `main`** | `#1416` touches `src/rico_chat_api.py` and adds `src/domain/job_search` + `src/services/verified_job_search.py`, so the `src/**` deploy filter matched and the deploy fired on merge |
-| Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired | Unchanged |
+| `main` | `c64aa99158695c78138e15ca4d6dfb57b5c762c7` | Fetched live from `origin/main` at the moment this section was written |
+| Deployed backend `/version` | **`c64aa99` — verified** | `/version.commit` matched `c64aa99` |
+| `/health` | **200 / ok** | Same read: `jooble`, `adzuna` and `jsearch` configured and **not** degraded |
+| Application/runtime baseline | `c64aa99` — **equal to `main`** | `#1422` touches `src/rico_chat_api.py`, so the `src/**` deploy filter matched and the deploy fired on merge |
+| Production evidence class | **owner/browser-verified** | Not an automated artifact, and not a regression gate — see "Production verification" below |
+| Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired | Unchanged. `#1422` is trust repair, not expansion |
 
 **`main` and the deployed `/version` are asserted equal at this pass.**
 
-### `#1416` — merged, deployed, smoke-verified
+The previous snapshot of this section recorded `dac8d8e7` as the baseline and stated that PR2 had not started. **Both claims were stale at the moment this pass ran** and are corrected here: eight PRs have merged since, and PR2 is delivered.
 
-PR1 Chat Job Provenance Contract, squash-merged as `dac8d8e7` onto base `1c75f4d6`: 7 files, +1232/−27. The forward sequence it belongs to lives in `ENGINEERING_ROADMAP.md` and is **not** duplicated here.
+### `#1422` — merged, deployed, owner-verified
 
-One synthetic, non-PII named-role search on the adopted path proved five things:
+D3 truthful CV read-failure handling. Approved head `f8073ad28fac798eb44828f98d8d8f7f3c4c63ff`, squash-merged as `c64aa99158695c78138e15ca4d6dfb57b5c762c7` onto base `3f2805de`.
 
-1. A non-empty operation id of **39 characters**.
-2. Response `operation_id` **identical** to `search_evidence.operation_id`.
-3. **5** matches shown, not exceeding `accepted_result_count` of **10**.
-4. Exactly **one** `provider_cascade` attempt for the deliberate search turn.
-5. Execution metadata carrying **no listing content** — only `operation_id`, `provider`, `status`, `requested_role`, `requested_location`, `started_at`, `duration_ms`, `raw_result_count` and `accepted_result_count`.
+**The invariant it establishes: READ FAILURE != VERIFIED ABSENCE.**
 
-### Merged since the previous reconciliation
+Delivered behaviour — a failed CV grounding or document read no longer becomes any of:
 
-Listed in merge order. The previous snapshot of this section described `#1398` and `#1402` as open Drafts; **both are merged** and that description was stale.
+- "no CV";
+- "no stored CV";
+- unreadable-document blame;
+- upload or re-upload guidance;
+- `next_action="upload_cv"`.
 
-| PR | Merge commit | Runtime paths touched | Deploy |
+English and Arabic are both covered. A genuine successful empty read remains a genuine absence, and a genuine `no_readable_content` remains a content problem — only a *failed read* is reclassified. The exception remains contained inside the chat turn. No route, migration, schema or frontend change.
+
+**Structural consequence** — the invariant, the boundary it implies, and the migration rules that follow from it are recorded in `AI_WORKSPACE/ARCHITECTURE.md`, not restated here.
+
+### Production verification — what this evidence can and cannot carry
+
+The `/version` and `/health` reads above were taken by the owner through a browser session. **That is real evidence of live behaviour and it is not a regression gate.** Nothing may cite it as a substitute for a test.
+
+**No deliberate CV-store failure smoke was performed.** The behaviour `#1422` changes is therefore *not* covered by any production observation at this baseline — it is covered by its unit tests only. Do not record or repeat this smoke as evidence that the D3 path was exercised in production.
+
+### Merged since the previous control-plane reconciliation (`#1417`)
+
+Listed in merge order. Full narratives live with the document that owns each fact — the forward sequence in `ENGINEERING_ROADMAP.md`, lane detail in `TASKS.md`, structural rules in `ARCHITECTURE.md` — and are deliberately not duplicated here.
+
+| PR | Merge commit | What it is | Runtime paths |
 | --- | --- | --- | --- |
-| `#1402` control-plane reconciliation | `805dd4d6` | **0** — docs-only | No deploy expected |
-| `#1398` fail closed on ambiguous account ownership | `70c2af7c` | 11 under `src/` | Deploy expected and fired |
-| `#1404` never overwrite a stored `rico_users.email` | `97af6ded` | 3 under `src/` | Deploy expected and fired |
-| `#1406` identity-ownership tests into the pytest gate | `42c3b976` | **0** — CI-only | No deploy expected |
-| `#1408` roadmap truth restored | `1c13147f` | **0** — docs-only | No deploy expected |
-| `#1412` a phone number is not proof of who someone is | `701939fa` | 3 under `src/` | Deploy expected and fired |
-| `#1411` fail when a test file is run by no pytest invocation | `a610b696` | **0** — CI-only | No deploy expected |
-| `#1414` a guest row is not a candidate on the email or Telegram path | `ca266366` | 1 under `src/` | Deploy expected and fired; `/version` confirms |
-| `#1415` control-plane reconciliation onto `main@ca266366` | `1c75f4d6` | **0** — docs-only | No deploy expected |
-| `#1416` PR1 Chat Job Provenance Contract | `dac8d8e7` | 4 under `src/` (3 new) | Deploy expected and fired; `/version` confirms |
+| `#1405` | `20037d2c3adb5a372bd1355c7e1edbc8c4f01b1f` | ambiguous ownership mapped to 409 on onboarding status and CV upload | `src/` — deploy expected |
+| `#1410` | `2757f53b554e15257fe298abd17a239916f8eeae` | central chat ownership resolver | `src/` — deploy expected |
+| `#1418` | `b7e3aedc8d2c64624da335405a98190a40c87585` | session-switch/send race — **frontend only** | `apps/web/` — Vercel |
+| `#1370` | `4f1af6bcba8680317d52dbf0ffc5e51711e84693` | public pricing page | `apps/web/` — Vercel |
+| `#1419` | `1ea1d973161b261de9463d5a1434f3d5b4928874` | **PR2** — fail-closed job-search routing and buffered delivery | `src/` — deploy expected |
+| `#1420` | `0d826b31396ba435d66f9a5dd0823fe86bb0756d` | `ci(tests): enforce identity email containment coverage` — supporting CI for the **identity-containment** track | CI-only — no deploy expected |
+| `#1421` | `3f2805de4028451e316937a3c2b631c3bced1548` | degraded early-exit lifecycle state correction | `src/` — deploy expected |
+| `#1422` | `c64aa99158695c78138e15ca4d6dfb57b5c762c7` | **D3** truthful CV read-failure handling | `src/` — deploy fired; `/version` confirms |
+
+**`#1420` in detail, because its scope is narrow and was previously described too loosely.** It enrolled `tests/test_identity_email_overwrite_containment.py` into the required CI pytest invocation (`.github/workflows/qa-tests.yml`) and removed that same file from `FROZEN_BASELINE` in `scripts/check_test_enumeration.py`. Two files, `+1/−1`, no runtime path. **It is supporting CI for the identity-containment track and has nothing to do with PR2 or the job-search contract.** It appears in this chronological merge list because it merged in this window, and nowhere else as a PR2 artifact.
+
+**Backend evidence covers backend commits only.** Of the runtime merges above, only `#1405`, `#1410`, `#1419` and `#1421` touch `src/`. The final commit in the sequence carries the `/version` read; the earlier ones were superseded by the next merge before any independent per-commit deployment verification was taken, so **no per-commit deploy evidence is claimed for `#1405`, `#1410`, `#1419` or `#1421`.** They are in `main` and in the deployed tree at `c64aa99`; that is the whole of the claim.
+
+**`#1418` and `#1370` are `apps/web/` frontend changes and are not covered by any backend evidence in this pass.** `#1418` touches exactly two files, both under `apps/web/` (`apps/web/app/command/page.tsx` and its test), and explicitly states no backend change. **A backend `/version` read does not prove a frontend deploy** and must never be cited as though it does. What is established for both: **they are present on `main` at `c64aa99`.** **No independent production frontend verification was taken in this pass** — no Vercel deployment read, no browser check of the affected surface.
 
 For merges that touch no runtime path, `main` moving ahead of the deployed `/version` is **expected divergence, not deployment drift**. Do not chase parity, and do not fire a deploy to manufacture it.
 
-### Reviewer availability — recorded because it affected three merges
-
-`#1398`, `#1412` and `#1414` each merged with **no independent review**: the Codex reviewer returned "You have reached your Codex usage limits for code reviews" on all three. `#1414` was marked Ready specifically so review would gate merging, and that gate did not function. This is recorded as a standing condition of the review pipeline, not as a defect in any one PR.
-
-### Closed without merge
-
-| PR | Head | Disposition |
-| --- | --- | --- |
-| `#1407` | — | Closed as **stale, not merged** |
-| `#1401` design-reference extraction | `d4bd5469` | Closed without merge by the owner as reference-only, outside the Architecture V2 production sequence. **Branch preserved deliberately** — do not delete it, do not reopen the PR. Its exact-head CI was green at closure |
-| `#1371` command visual polish | `4e7b82f6` | Closed without merge. It was superseded by `#1401`, which has itself now been closed without merge — so the design-reference work is parked in branch form only, and nothing from either PR is in `main` |
-
-### Production smoke on `e433c7d` (prior baseline)
-
-Three of three classes passed: an ownership-qualified account question answered from the database with reconciled counts; a CV file-list question answered deterministically from the file store; and a general documents question answered by the model **without listing any personal file**.
-
-**Evidence class: verified by the owner through the proxy in a browser session. There is no automated artifact.** That is stated plainly because it decides how much the result can carry: it is real evidence of live behaviour and it is not a regression gate. Nothing may cite this smoke as a substitute for a test. **This smoke predates `#1399` and does not cover it.**
-
-## Active PRs — heads fetched live at this pass
+## Active PRs — read live at this pass
 
 | Lane | PR | Branch | State |
 | --- | --- | --- | --- |
-| L1 identity ownership | `#1398` | `fix/identity-ownership-resolution` | **CLOSED — merged as `70c2af7c`.** The lane's later slices merged as `#1412` (`701939fa`) and `#1414` (`ca266366`) |
-| L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | Open. Was held behind the identity track; that blocker has cleared, and its base is now stale against `dac8d8e7` |
-| L7 control plane | `#1402` | `claude/workspace-control-reconcile` | **CLOSED — merged as `805dd4d6`.** This reconciliation is a separate, later docs-only PR |
+| L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | **Open, Draft, and on owner HOLD.** See below |
+| L8 job-search contract | — | — | No open PR. PR1 (`#1416`) and PR2 (`#1419`) are merged |
+| L9 Journey-1 CV truthfulness | — | — | No open PR. `#1422` is merged |
 
-Other open PRs at this pass, read live: `#1413`, `#1410`, `#1409`, `#1405`, `#1374`, `#1370`, `#1362`, `#1359`. `#1409`, `#1410` and `#1405` continue the identity-ownership track on the chat and onboarding paths. **An open PR is not permission to merge**, and per-PR heads are deliberately not restated here — they move, and a head copied into this file is stale the moment a lane pushes. Fetch them live.
+**`#1389` is HOLD, not "unblocked".** The previous snapshot of this file said its blocker had cleared and that it "must rebase onto `dac8d8e7` before anything else". **That instruction is withdrawn.** The PR body carries an explicit owner HOLD ruling behind an upstream *production data* problem — several ownership rows for one account — which is not a code defect on that branch and is not cleared by any merge listed above.
 
-**Enabling branch protection will block these four until they rebase. That is intended protective behaviour, not breakage.**
+Until the owner rules otherwise: **do not rebase, edit, reopen, mark Ready, merge, or use `#1389` as an implementation branch.** Nothing in this document resumes it, and its Draft state is not an invitation.
+
+Other open Draft PRs at this reconciliation pass: `#1413`, `#1374`, `#1362`, `#1359`. Their presence is not authorization to resume, rebase, mark Ready or merge. Fetch each live before acting.
+
+This inventory deliberately excludes the reconciliation PR that writes this section: it is not a backlog item and closes on merge.
+
+**An open PR is not permission to merge.** Per-PR heads are deliberately not restated here — they move, and a head copied into this file is stale the moment a lane pushes. Fetch them live.
 
 ### CI evidence rule
 
 **A passing job on a different commit is not exact-head evidence and may never be cited as one.** Transience is established by the failed run's own annotation, and settled only by a re-run recorded against the same head. A re-run that goes green with no content change is the clean form of that proof: it isolates infrastructure from the diff.
-
-Recorded because it was violated here: a green from a later, different commit was cited as if it settled a `postgres-integration` failure on `#1401`'s head. The failure was a container-registry pull failure with no test executed, and it was properly settled by a re-run on that same SHA.
 
 ## Concurrency state
 
@@ -112,27 +117,45 @@ Caps are rules and are fixed. **Counts are read at the reconciliation pass that 
 
 | Measure | Cap | At this pass |
 | --- | --- | --- |
-| Active agents (`WRITING` or `REVIEWING`) | 4 | 1 — this docs-only reconciliation. L1's batch is merged and its lease released |
+| Active agents (`WRITING` or `REVIEWING`) | 4 | 1 — this docs-only reconciliation |
 | Simultaneous code writers (`WRITING` + `AUTHORIZED` + executable scope) | 2 | 0 — this pass is docs-only and does not count against the cap |
 | Writers per branch | 1 | 1 on every branch holding a lease |
 
-Lease holders appear against branches throughout this file. **That is ownership, not activity** — see `OPERATING_RULES.md` → "Ownership is not activity". Reading those assignments as concurrent work in progress is the specific misreading the four-field lease model exists to prevent.
+Lease holders appear against branches in `TASKS.md`. **That is ownership, not activity** — see `OPERATING_RULES.md` → "Ownership is not activity". Reading those assignments as concurrent work in progress is the specific misreading the four-field lease model exists to prevent.
 
 ## Standing owner rulings
 
 - **Render billing notice — deferred, non-blocking.** Render is operational *per the owner's standing ruling* — that is the owner's statement, not a reading taken by this reconciliation, which could not reach the host. The payment reminder is acknowledged by the owner and will be handled by the owner. It is **not** a blocker for work, reviews, merges, or the roadmap. **Do not restate or escalate it.** Raise Render again only on verified service degradation, suspension, failed deployment, health-check failure, or production impact.
+- **`#1389` is on HOLD** behind a production data problem, as recorded above. This is an owner ruling and is not cleared by a control-plane pass.
 
 ## Merge order
 
-The previous order (L1 `#1398` → L7 `#1402` → L2 `#1389`) is **spent**: its first two entries are merged.
+The previous order is **spent**, and its final entry was wrong: it named `#1389` as the next executable item, which the owner HOLD forbids.
 
-1. **The identity-ownership track continues** on the chat and onboarding paths — `#1409`, `#1410`, `#1405`. They work in the same area and are sequenced by the Controller, not by this file.
-2. **L2 `#1389`** — its blocker has cleared. It needs a rebase onto `dac8d8e7` before anything else; every SHA in its body predates six merges.
-3. Everything else stays deferred under `DEC-20260723-001`.
+There is **no queued merge** at this pass.
 
-The forward engineering sequence (PR1 → PR5) lives in `ENGINEERING_ROADMAP.md` under Phase 2 — Hardening. It is **not** duplicated here: this file carries current control state, not forward plans. PR1 is delivered and released as `#1416`; **PR2 is planned and not started, and nothing in this file authorizes beginning it.**
+1. **Immediate execution is a tests-only characterization of Journey-1 CV routing** — recorded as `TASK-20260728-001` in `TASKS.md`. It is a separate PR, it is not started, and it is not started in the same PR as this reconciliation.
+2. **PR3 is not the immediate next action** merely because PR2 is delivered. PR3 → PR5 remain planned and unauthorized; see `ENGINEERING_ROADMAP.md`.
+3. `#1389` stays on HOLD.
+4. Everything else stays deferred under `DEC-20260723-001`.
+
+The forward engineering sequence (PR1 → PR5) lives in `ENGINEERING_ROADMAP.md` under Phase 2 — Hardening. It is **not** duplicated here: this file carries current control state, not forward plans. **PR1 is delivered as `#1416`; PR2 is delivered as `#1419`.**
 
 Branch protection is enabled by the owner, with `trusted-ratchet` as the only Required status check.
+
+## Open residuals — documented is not authorized
+
+The following are known-open. **Recording one here does not authorize acting on it.** Each needs its own scoped, owner-authorized PR.
+
+1. **My Files still converts its own failed read into `files=[]`** — the same defect class `#1422` fixed on the chat path, still live on an adjacent surface.
+2. **Arabic and English CV routing diverge** at `_looks_like_cv_intent_no_file`, which intercepts Arabic CV phrasing before intent classification.
+3. **Journey-1 D1** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD.
+4. **Journey-1 D2** — pending-artifact activation.
+5. **Journey-1 D4** — mission/dashboard truth.
+6. **Journey-1 D5** — first-useful-result activation.
+7. **Stored-CV / CV-state logic remains spread across `src/rico_chat_api.py`**, answering "does the user have a CV?" from several independent gates.
+
+> **Naming collision, stated so it cannot mislead.** The labels above are the **Journey-1 D1–D5** series. They are unrelated to the **security-audit D1–D5** rows in the audit table further down `TASKS.md`, which describe entirely different findings. Neither series is renumbered. **Always write "Journey-1 D1–D5" or "security-audit D1–D5" — never a bare `D3`.**
 
 ## Stop conditions
 
@@ -155,15 +178,16 @@ Per lane, read the continuity block in AI_WORKSPACE/TASKS.md, confirm the lease 
 yours, check write authorization, fetch the remote, and compare the remote head
 against the expected head recorded there before any push.
 
-L1's identity-ownership batch is complete and merged (70c2af7c, 701939fa,
-ca266366). The track continues on the chat and onboarding paths in #1409,
-#1410 and #1405.
+Baseline is c64aa99. PR1 (#1416) and PR2 (#1419) are delivered. D3 (#1422) is
+merged, deployed and owner-verified. All their leases are released and their
+write authorizations revoked.
 
-L2 (#1389) is unblocked and must rebase onto dac8d8e7 before anything else.
+After this reconciliation PR is reviewed and merged: open a SEPARATE, tests-only
+characterization PR for Journey-1 CV routing — TASK-20260728-001 in TASKS.md.
+It changes tests only. It is not started here.
 
-PR1 (#1416) is merged, deployed and smoke-verified at dac8d8e7. Its branch lease
-is released and its write authorization revoked. PR2 is NOT started and is NOT
-authorized here.
+PR3 is NOT authorized. #1389 is on owner HOLD and must not be rebased, edited,
+reopened, marked Ready, merged, or used as an implementation branch.
 
 No merge, no deploy, no database mutation, no real-CV upload, and no bulk Neon
 branch deletion is authorized by this document.

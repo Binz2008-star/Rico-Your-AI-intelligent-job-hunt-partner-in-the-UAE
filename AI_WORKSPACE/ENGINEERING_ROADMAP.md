@@ -29,35 +29,37 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 ---
 
-## Where Rico is right now (2026-07-26)
+## Where Rico is right now (2026-07-28)
 
 > This snapshot is authoritative alongside `PROJECT_STATUS.md` (the control panel);
 > if they ever disagree, `PROJECT_STATUS.md` + live `main` win. Snapshots dated
 > 2026-07-16 and earlier are **historical** (superseded).
 >
-> **`main` `ca266366` (2026-07-26).** Production serves this commit: the Central
-> Controller read `/version.commit` = `ca266366…` and `/health` = ok, with
-> `jooble`, `adzuna` and `jsearch` configured and **not** degraded and the
-> DeepSeek precheck reachable. That read is **verified by the Central Controller
-> via browser, not reproducible from an agent container**, whose egress to the
-> Render host is blocked.
+> **`main` `c64aa99` (2026-07-28).** Production serves this commit: `/version.commit`
+> matched `c64aa99` and `/health` returned 200 / ok, with `jooble`, `adzuna` and
+> `jsearch` configured and **not** degraded. Evidence class is
+> **owner/browser-verified** — real evidence of live behaviour, not a regression
+> gate, and not reproducible from an agent container. **No deliberate CV-store
+> failure smoke was performed**, so the D3 path below has unit-test coverage only
+> in production terms.
 >
-> Landed since `fc2e107d`, in merge order: #1402 control-plane reconciliation
-> (`805dd4d6`, docs-only), #1398 fail-closed on ambiguous account ownership
-> (`70c2af7c`), #1404 never overwrite a stored `rico_users.email` on a generic
-> upsert (`97af6ded`), #1406 identity-ownership boundary tests into the pytest
-> gate (`42c3b976`, CI-only), #1408 roadmap truth restored (`1c13147f`,
-> docs-only), #1412 a phone number is not proof of who someone is (`701939fa`),
-> #1411 fail when a test file is run by no pytest invocation (`a610b696`,
-> CI-only), #1414 a guest row is not a candidate on the email or Telegram path
-> (`ca266366`).
+> Landed since `dac8d8e7`, in merge order: #1417 control-plane reconciliation
+> (`1592162e`, docs-only), #1405 ambiguous ownership mapped to 409 on onboarding
+> status and CV upload (`20037d2c`), #1410 central chat ownership resolver
+> (`2757f53b`), #1418 session-switch/send race (`b7e3aedc`, **`apps/web/`
+> frontend only**), #1370 public pricing page (`4f1af6bc`, `apps/web/`), #1419
+> **PR2** fail-closed job-search routing and buffered delivery (`1ea1d973`),
+> #1420 identity email containment coverage enforced in CI (`0d826b31`, CI-only,
+> identity-containment track), #1421 degraded early-exit lifecycle state
+> correction (`3f2805de`), #1422 **Journey-1 D3** truthful CV read-failure
+> handling (`c64aa99`).
 >
-> **The identity-ownership track is the substance of this stretch.** #1398
-> established that ambiguous ownership fails closed; #1404 stopped a generic
-> upsert overwriting a stored account email; #1412 and #1414 removed guest rows
-> from candidacy on all three identity finders and stopped a phone number, on
-> its own, from auto-attaching a Jotform submission to an account. #1411 closed
-> the meta-gap those PRs kept exposing: a test file that no workflow runs.
+> **Two things define this stretch.** The approved forward sequence advanced by a
+> whole slice — **PR2 is delivered as #1419**, and the previous wording here, which
+> called it planned and unimplemented, was stale. And the CV surface gained a
+> truthfulness invariant in #1422: **READ FAILURE != VERIFIED ABSENCE.** The
+> identity-ownership track continued onto the chat and onboarding paths in #1405
+> and #1410.
 >
 > The per-PR narrative and lane authority live in `PROJECT_STATUS.md`
 > and `TASKS.md`, which this file does not duplicate.
@@ -84,17 +86,17 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 | Question | Answer |
 | --- | --- |
-| **Where is Rico?** | `main` `dac8d8e7` (head re-anchored 2026-07-27). `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
+| **Where is Rico?** | `main` `c64aa99` (head re-anchored 2026-07-28). `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
 | **Posture?** | **Trust-first**, per `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired. Identity-ownership hardening has been the active track and its merged slices are listed above. The 2026-07-16 CONTAINMENT framing — security-first → #1068 source-of-truth unification → resume — is **historical and superseded**; #1068 is not the next action. |
 | **What is blocked / frozen?** | New-integration activation is frozen. #1062 (Atelier job cards — HELD, has logged colour/AR/test gaps), #1055 Gmail M0 (**merged 2026-07-17**, `RICO_ENABLE_GMAIL_SYNC=false` — activation still gated on Google restricted-scope verification, Render env provisioning, migration 043, and a separate fleet-sweep PR), #1025 Memory M1 (Draft, flag OFF). Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets. |
 | **What is completed (recent)?** | Atelier `/command` (#1048/#1060/#1061), decision-regression harness (#1056), security hardening (#1058), attachment/SSE/transcript fixes, `DEC-20260716-001` (#1059), operational reconciliation (#1063). |
-| **What comes next?** | **PR1 Chat Job Provenance Contract is delivered and released** (#1416, `dac8d8e7`). The next slice in the approved **PR1 → PR5** sequence under Phase 2 — Hardening below is **PR2 — fail-closed job-search routing and buffered delivery**, which is **planned and not started**; nothing here authorizes beginning it. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
+| **What comes next?** | **PR1 (#1416, `dac8d8e7`) and PR2 (#1419, `1ea1d973`) are both delivered and released.** The immediate next action is **not** PR3. It is a **tests-only characterization of Journey-1 CV routing** — `TASK-20260728-001` in `TASKS.md` — which must land before any extraction from `src/rico_chat_api.py`. PR3 → PR5 remain planned and are **not** authorized by the PR2 release; following PR2 in sequence is not the same as being cleared to start. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
 
 Production is stable: Render backend healthy (`/health` ok, providers configured),
 Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
 
 Except for the head SHA, the posture row and the "what comes next" row — all
-three re-verified at `ca266366` in this pass — the rows in this table are dated
+three re-verified at `c64aa99` in this pass — the rows in this table are dated
 2026-07-16 and were **not** re-verified. Treat any other claim in them as
 historical until it is re-checked.
 
@@ -176,6 +178,22 @@ fix only proven gaps (synthetic data only).
 - **Delivered and released: #1416** — PR1 Chat Job Provenance Contract, the first
   slice of the approved PR1 → PR5 sequence below. Merged as `dac8d8e7`, deployed
   and production-smoked — see the Releases table.
+- **Delivered and released: #1419** — PR2 fail-closed job-search routing and
+  buffered verified delivery, the second slice of that sequence. Merged as
+  `1ea1d973`. Its one follow-on behaviour correction is **#1421** degraded
+  early-exit lifecycle state (`3f2805de`).
+- **Delivered and released: the identity-ownership continuation** — #1405
+  ambiguous ownership mapped to 409 on onboarding status and CV upload
+  (`20037d2c`) and #1410 the central chat ownership resolver (`2757f53b`).
+  Supporting CI for the identity-containment track: **#1420**
+  `ci(tests): enforce identity email containment coverage` (`0d826b31`), which
+  enrolled `tests/test_identity_email_overwrite_containment.py` into the required
+  CI pytest invocation and removed it from `FROZEN_BASELINE` in
+  `scripts/check_test_enumeration.py`. **It is not a PR2 artifact.**
+- **Delivered and released: #1422** — Journey-1 D3 truthful CV read-failure
+  handling (`c64aa99`), establishing **READ FAILURE != VERIFIED ABSENCE** on the
+  chat CV path in English and Arabic. The structural rule it implies is owned by
+  `ARCHITECTURE.md`, not by this roadmap.
 - Next candidates: unify the legacy profile-CV rule across the files surface and CV
   resolution so one user gets one answer (its acceptance check is the strict xfail
   above); any gap surfaced by continued Audit Phase 2–9 verification.
@@ -188,8 +206,15 @@ the consumer**, not the owner, of what these produce. Recorded here only: it is
 deliberately absent from `PROJECT_STATUS.md` and `TASKS.md`, which carry current
 lane state rather than forward plans.
 
-**PR1 is delivered and released. PR2 → PR5 remain a plan, not a claim of work
-done.**
+**PR1 and PR2 are delivered and released. PR3 → PR5 remain a plan, not a claim of
+work done.**
+
+> **Position in the sequence is not authorization.** PR3 follows PR2 in this list;
+> that does not make it the next action, and nothing in the PR2 release starts it.
+> **The immediate execution item is the Journey-1 CV routing characterization**
+> (`TASK-20260728-001` in `TASKS.md`), which is tests-only and must precede any
+> extraction from `src/rico_chat_api.py` — see `ARCHITECTURE.md` →
+> "Migration rules for `rico_chat_api.py`".
 
 **PR1 — Chat Job Provenance Contract ✅ delivered and released**
 
@@ -226,20 +251,32 @@ Shipped as **#1416**, squash-merged as **`dac8d8e7`** onto base `1c75f4d6` —
   the contract existed.
 - **No feature flag.** The guarantee ships in the configuration that runs.
 
-**PR2 — fail-closed job-search routing and buffered delivery. ⬜ Next planned
-slice — NOT started and NOT authorized by the PR1 release.** Routing refuses
-rather than guesses, and delivery is buffered so a partial result is never
-presented as a complete one.
+**PR2 — fail-closed job-search routing and buffered verified delivery ✅
+delivered and released.** Routing refuses rather than guesses, and delivery is
+buffered so a partial result is never presented as a complete one.
 
-**PR3 — remaining builder adoption, in small groups.** The other emit sites move
-onto the PR1 contract a few at a time, each group independently revertable.
+Shipped as **#1419**, merged as **`1ea1d973161b261de9463d5a1434f3d5b4928874`**.
+**One** follow-on correction belongs to this slice's record: **#1421**
+(`3f2805de`), which corrected the degraded early-exit lifecycle state. `#1420`
+merged in the same window but belongs to the identity-containment track, not to
+PR2, and is recorded there.
 
-**PR4 — role and location extraction with one central UAE vocabulary.** One
-vocabulary, one place; today the knowledge is scattered across call sites.
+The previous text here described PR2 as planned and unimplemented. That was
+stale from the moment `#1419` merged and is corrected, not stacked beneath.
 
-**PR5 — provenance persistence, with its own migration.** Last, because
-persisting a contract before it has stabilised writes the wrong shape into the
-database. Its migration is its own and is not folded into an earlier slice.
+**PR3 — remaining builder adoption, in small groups. ⬜ planned, NOT authorized.**
+The other emit sites move onto the PR1 contract a few at a time, each group
+independently revertable. **Do not treat this as the next action** — see the
+note above the sequence.
+
+**PR4 — role and location extraction with one central UAE vocabulary. ⬜ planned,
+NOT authorized.** One vocabulary, one place; today the knowledge is scattered
+across call sites.
+
+**PR5 — provenance persistence, with its own migration. ⬜ planned, NOT
+authorized.** Last, because persisting a contract before it has stabilised writes
+the wrong shape into the database. Its migration is its own and is not folded
+into an earlier slice.
 
 ```text
 EPIC        Career Operating System
@@ -364,6 +401,7 @@ Backend** run for that commit, not by a green Deploy to Production run alone.
 
 | Date | Commit | What went live |
 | --- | --- | --- |
+| 2026-07-28 | `c64aa99` | #1422 — D3 truthful CV read-failure handling on the chat CV path: a failed grounding or document read is no longer rendered as "no CV", "no stored CV", unreadable-document blame, upload/re-upload guidance, or `next_action="upload_cv"`, in English and Arabic. A successful empty read is still an absence and `no_readable_content` is still a content problem. No route, migration, schema or frontend change. `/version.commit` matched `c64aa99` and `/health` returned 200 / ok with `jooble`, `adzuna` and `jsearch` configured and not degraded. **Evidence class: owner/browser-verified — not an automated artifact and not a regression gate. No deliberate CV-store failure smoke was performed, so the changed path itself was not exercised in production.** This row also carries the intermediate **backend** merges that reached production inside the same rolling sequence without an individual `/version` read of their own — #1405 (`20037d2c`), #1410 (`2757f53b`), #1419 (`1ea1d973`, PR2) and #1421 (`3f2805de`). **No per-commit deploy evidence is claimed for any of them.** The `apps/web/` frontend merges in the same window — #1418 (`b7e3aedc`, session-switch/send race, two files under `apps/web/` and explicitly no backend change) and #1370 (`4f1af6bc`, public pricing page) — are **present on `main`** and are **not** covered by this row's evidence: a backend `/version` read does not prove a frontend deploy, and **no independent production frontend verification was taken in this pass.** |
 | 2026-07-27 | `dac8d8e7` | #1416 — PR1 Chat Job Provenance Contract: the verified job-search contract (`src/domain/job_search`) plus its seam (`src/services/verified_job_search.py`), adopted at exactly one consumer (`_target_role_search_response`). `/version.commit` = `dac8d8e7`, process start `2026-07-27T01:00:26Z`, `/health` ok with `jooble`, `adzuna` and `jsearch` configured and not degraded. Production-smoked on one synthetic non-PII named-role search: non-empty 39-character operation id, response `operation_id` identical to `search_evidence.operation_id`, 5 matches shown against `accepted_result_count` 10, exactly one `provider_cascade` attempt for the deliberate search turn, and execution metadata carrying no listing content. |
 | 2026-07-26 | `ca266366` | #1414 — a guest row is not a candidate on the email or Telegram path (`find_profiles_by_email` and `find_profiles_by_telegram_username`, SQL predicate plus independent Python re-check, both memory fallbacks guarded). Central Controller read `/version.commit` = `ca266366` and `/health` ok, with `jooble`, `adzuna`, `jsearch` configured and not degraded and the DeepSeek precheck reachable. Browser-verified by the Controller; not reproducible from an agent container. Owner functional smoke not claimed. |
 | 2026-07-26 | `a610b696` | #1411 — CI-only: fail when a test file is run by no pytest invocation, with a frozen 212-file baseline that may only shrink. No runtime path touched, so no deploy expected. |

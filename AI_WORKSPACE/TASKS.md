@@ -2,6 +2,20 @@
 
 Use this file as the shared task ledger. Each task must be small enough to review in one PR.
 
+## Document contract
+
+- **Why it exists:** the lane-level and task-level continuity record — who owns what,
+  what is resumable, and what the next concrete step is.
+- **Update when:** a lane's ownership, lease, authorization, or next executable
+  action changes, or a task is created, advanced, or closed.
+- **Source of truth:** this file for lane continuity and task detail;
+  `PROJECT_STATUS.md` + live `main` for current control state, which outrank it;
+  `ENGINEERING_ROADMAP.md` for the forward slice order, which is **not** duplicated
+  here; `ARCHITECTURE.md` for structural rules.
+- **Owner:** each lane owns its own block. Update yours; never duplicate another.
+- **History:** dated task entries below are kept as history. Superseded lane text is
+  replaced, not stacked — Git holds the previous version.
+
 ## Status values
 
 - `proposed`
@@ -76,7 +90,7 @@ existing entry if one already exists for the task, never duplicating it)
 before continuing further — see "Session continuity / limit-approach
 handoff" in `AGENT_OPERATING_MODEL.md`.
 
-## Lane continuity blocks — verified 2026-07-26
+## Lane continuity blocks — verified 2026-07-28 at `main` `c64aa99`
 
 One block per lane. **These are the authoritative per-lane records**; the dated
 task entries below remain as history. Every SHA here was fetched live when this
@@ -103,7 +117,8 @@ Update the block for your lane. Never duplicate one.
 - Write authorization: `REVOKED` — the branch's objective is delivered
 - Delivered by this lane, in merge order: `#1398` fail closed on ambiguous ownership (`70c2af7c`); `#1404` never overwrite a stored `rico_users.email` on a generic upsert (`97af6ded`); `#1412` a phone number is not proof of who someone is (`701939fa`); `#1414` a guest row is not a candidate on the email or Telegram path (`ca266366`). Supporting CI: `#1406` (`42c3b976`) and `#1411` (`a610b696`)
 - Review gap, recorded: `#1398`, `#1412` and `#1414` each merged with **no independent review** — the Codex reviewer was over its usage limit on all three
-- Continuation: the track is **not finished**. `#1409`, `#1410` and `#1405` carry it onto the chat and onboarding paths and are separately owned
+- Continuation: the track is **not finished**. `#1405` (`20037d2c`, ambiguous ownership mapped to 409 on onboarding status and CV upload) and `#1410` (`2757f53b`, central chat ownership resolver) have since merged; `#1409` remains separately owned
+- Supporting CI for the identity-containment track: `#1420` (`0d826b31396ba435d66f9a5dd0823fe86bb0756d`) — `ci(tests): enforce identity email containment coverage`. It enrolled `tests/test_identity_email_overwrite_containment.py` into the required CI pytest invocation (`.github/workflows/qa-tests.yml`) and removed that file from `FROZEN_BASELINE` in `scripts/check_test_enumeration.py`. Two files, `+1/−1`, no runtime path, no deploy expected. **It belongs here, not to PR2 or the job-search lane**
 - Open residuals from this track, none authorised for action: whether email / Telegram handle / `user_id` should authorise an automatic attach at all (all three originate in the same unverified Jotform submission); the phone-normalisation mismatch between suffix lookup and exact-normalised scoring; `tests/test_rico_jotform_identity.py:279`, a stale test that blocks its file's enumeration and leaves 30 assertions CI-unprotected; `LIMIT 10` with no `ORDER BY` on all three finders, measured P3 on today's data
 - Production data residuals, read-only characterised and **not** authorised for repair: cluster `55502f40` (3 rows, 2 wrongly stamped), 3 latent mismatched rows, 21 guest rows holding a `TRUSTED_IDENTITY_FIELD` (19 of them a phone), and 74 guest rows holding authenticated onboarding completion. All pre-date the guards now on `main`; the guards stop new ones
 
@@ -111,20 +126,21 @@ Update the block for your lane. Never duplicate one.
 
 - Lane alias: `L2`
 - Branch: `claude/cv-pending-artifact-confirm`
-- PR: `#1389` (Draft)
-- Base SHA: **stale.** The recorded base predates `#1398`, `#1404`, `#1412` and `#1414`; rebase onto `ca266366` and re-read every `file:line` in the PR body against it before trusting one
+- PR: `#1389` — **Draft, and on owner HOLD.** Verified live at this pass: open, draft, unmerged
+- Base SHA: **stale, and not to be refreshed by a rebase.** The recorded base predates the whole post-`70c2af7c` sequence. Do not rebase to fix that — the HOLD forbids touching the branch at all
 - Expected remote HEAD: **re-read live.** Any head recorded here predates several merges
 - Lease holder: `L2`
 - Lease ownership: `HELD` — **sole writer.** Two sessions once wrote to this branch concurrently; the collision was resolved by merge with nothing lost. This lane is the reason the Writer Lease Protocol exists
-- Current activity: `HOLDING`
-- Write authorization: read at the lane's own resumption — not derivable from GitHub, and not to be inferred from a quiet branch
+- Current activity: `HOLDING` — parked behind an owner ruling, not waiting on a queue position
+- Write authorization: `REVOKED` while the HOLD stands. Not derivable from GitHub, and not to be inferred from a quiet branch
 - Allowed files: the CV/documents pipeline, its three upload entry points, and its own tests
 - Forbidden files: identity resolution (L1), workflow configuration
 - Tests: the lane's backend suites, the frontend suite, and the real-Postgres integration job
 - Owner ruling, binding: **a repeated confirm of the same server-verified saved artifact is an idempotent retry and consumes no quota.** It is not a new purchase and must not be refused
-- Blocker: **cleared.** `#1398` merged as `70c2af7c`; the identity track has since merged `#1404`, `#1412` and `#1414`
-- Stop condition: stop on an unexpected commit, or on any change that would make a confirm non-idempotent
-- Next executable action: rebase onto `ca266366`, resolve integration conflicts, re-read every `file:line` citation in the PR body against the new base, and take exact-head gates. `src/repositories/profile_repo.py` and `src/api/routers/rico_chat.py` both moved under this lane's feet
+- **Blocker: NOT cleared. `#1389` is on owner HOLD.** The earlier "blocker cleared — rebase onto `ca266366` before anything else" text was wrong and is withdrawn, not amended. The identity-track merges (`#1398`, `#1404`, `#1412`, `#1414`, and since then `#1405` and `#1410`) cleared the *code* blocker only. An **upstream production data problem** — several ownership rows for one account — sits above this branch, is not a defect on it, and is not resolved by any merge to date
+- **Forbidden while the HOLD stands:** do not rebase, edit, push to, reopen, mark Ready, merge, or use `#1389` as an implementation branch. No control document may schedule its resumption; only an owner ruling lifts the HOLD
+- Stop condition: stop on any instruction that treats `#1389` as resumable without an owner ruling lifting the HOLD; stop on an unexpected commit; stop on any change that would make a confirm non-idempotent
+- Next executable action: **none.** This lane is parked. When the HOLD is lifted, the first step is re-reading every `file:line` citation in the PR body against live `main` — the recorded base predates the entire post-`70c2af7c` sequence
 
 ### L7 — control plane
 
@@ -135,9 +151,11 @@ Update the block for your lane. Never duplicate one.
 - Lease ownership: `RELEASED`
 - Current activity: `CLOSED`
 - Write authorization: `REVOKED` for that branch
-- Follow-through: `#1402` deliberately excluded `ENGINEERING_ROADMAP.md` and flagged it as separately stale. `#1408` (`1c13147f`) then restored it at `97af6ded`, and **this reconciliation** re-anchors all four control documents onto `ca266366`
-- Successor pass: docs-only, branched from `ca266366`, covering `ENGINEERING_ROADMAP.md`, `PROJECT_STATUS.md`, `TASKS.md` and `ARCHITECTURE.md`. It touches no `src/`, no tests, no workflows, no migration
-- Standing note for whoever reconciles next: this lane has now gone stale twice by carrying a `main` SHA in prose. Every SHA in these documents is a claim that decays; re-read `main` live before trusting any of them
+- Follow-through, in order: `#1402` (`805dd4d6`) deliberately excluded `ENGINEERING_ROADMAP.md` and flagged it as separately stale; `#1408` (`1c13147f`) restored it at `97af6ded`; `#1415` (`1c75f4d6`) re-anchored onto `ca266366`; `#1417` (`1592162e`) re-anchored onto `dac8d8e7` and required that the **next** pass cover four existing documents
+- **Pass completed 2026-07-28 (post-`#1422`):** docs-only, branched from `c64aa99`, covering exactly the four documents the `#1417` record named — `PROJECT_STATUS.md`, `TASKS.md`, `ENGINEERING_ROADMAP.md` and `ARCHITECTURE.md`. No new status document, roadmap, handoff or decision file was created, and `DECISIONS.md` was not modified: no binding decision was shown to be factually false. It touches no `src/`, no tests, no workflows, no migration
+- Stale claims this pass removed, each verified against live state first: `PROJECT_STATUS.md` recorded baseline `dac8d8e7` and said PR2 had not started; `ENGINEERING_ROADMAP.md` called PR2 planned and unimplemented after `#1419` had merged; L8 below ended at `#1416`; `ARCHITECTURE.md` recorded the `#1416` contract only, with neither Journey-1 D3 nor the CV-boundary rules; and three documents scheduled `#1389` for resumption against an owner HOLD
+- Corrections applied in a second commit on the same branch, after owner review (`RICO-1423-RECONCILIATION-CORRECTIONS`): `#1420` was mis-attributed to PR2 and is now recorded once, with its real title and scope, as supporting CI for the identity-containment track; `#1418` was wrongly recorded as touching `src/` and is now recorded as `apps/web/` frontend-only with no backend `/version` evidence claimed for it; the open-Draft inventory (`#1413`, `#1374`, `#1362`, `#1359`) was restored to `PROJECT_STATUS.md`; the generalized stored-data architecture rule was narrowed to the owner's exact wording; and the Journey-1 / security-audit label qualification was made mandatory rather than advisory
+- Standing note for whoever reconciles next: this lane has now gone stale three times by carrying a `main` SHA in prose. Every SHA in these documents is a claim that decays; re-read `main` live before trusting any of them. Replace a stale "next action" — never stack a new one beneath it
 
 ### Lanes holding no lease
 
@@ -145,7 +163,13 @@ Update the block for your lane. Never duplicate one.
 - **L4 — workflow-trigger containment checker.** `CLOSED`. `#1400` merged as `03450277`. It touches no runtime path, so no deploy was expected. Lease `RELEASED`; branch work complete.
 - **L5 — documents domain contract.** `CLOSED`. `#1399` merged as `fc2e107d` (Milestone A, first slice). It changes five runtime paths under `src/`, so a backend deploy **is** expected. Lease `RELEASED`; the branch was deleted on merge.
 - **L6 — review.** Read-only. Holds no lease and pushes nothing.
-- **L8 — verified job-search contract (PR1).** `CLOSED`. `#1416` merged as `dac8d8e7` onto base `1c75f4d6` — 7 files, +1232/−27. Branch `claude/pr1-verified-search-contract`; lease `RELEASED`, write authorization `REVOKED`. It changes four runtime paths under `src/` (three of them new), so a backend deploy was expected: `/version.commit` = `dac8d8e7` and `/health` ok, production-smoked on one synthetic non-PII search. **Delivered:** the verified job-search contract in `src/domain/job_search` with its seam in `src/services/verified_job_search.py`, `filter_listings` running once before the bundle is built, and exactly one adopted consumer — `_target_role_search_response`, one of eleven `job_matches` builders. Operation identity is owned by the lifecycle store: normalized before the lifecycle write, whitespace-only or empty becomes `None`, a valid id is preserved unchanged, the store is the sole generator, no second UUID exists downstream. Status and listing invariants are enforced at construction. On the adopted `_target_role_search_response` path, no verified bundle means no emitted matches and no job cards. Repository-wide adoption remains deferred to PR3. **Rollback:** revert `dac8d8e7` — no schema or data rollback, no migration, no feature flag. **Residual, not authorised for action:** ten `job_matches` builders still name jobs without a bundle. The PR1 → PR5 forward plan is **not** duplicated here; it lives in `ENGINEERING_ROADMAP.md`.
+- **L8 — verified job-search contract (PR1).** `CLOSED`. `#1416` merged as `dac8d8e7` onto base `1c75f4d6` — 7 files, +1232/−27. Branch `claude/pr1-verified-search-contract`; lease `RELEASED`, write authorization `REVOKED`. It changes four runtime paths under `src/` (three of them new), so a backend deploy was expected: `/version.commit` = `dac8d8e7` and `/health` ok, production-smoked on one synthetic non-PII search. **Delivered:** the verified job-search contract in `src/domain/job_search` with its seam in `src/services/verified_job_search.py`, `filter_listings` running once before the bundle is built, and exactly one adopted consumer — `_target_role_search_response`, one of eleven `job_matches` builders. Operation identity is owned by the lifecycle store: normalized before the lifecycle write, whitespace-only or empty becomes `None`, a valid id is preserved unchanged, the store is the sole generator, no second UUID exists downstream. Status and listing invariants are enforced at construction. On the adopted `_target_role_search_response` path, no verified bundle means no emitted matches and no job cards. Repository-wide adoption remains deferred to PR3. **Rollback:** revert `dac8d8e7` — no schema or data rollback, no migration, no feature flag. **Residual, not authorised for action:** ten `job_matches` builders still name jobs without a bundle.
+
+  **PR2 delivered — this lane no longer ends at `#1416`.** `#1419` merged as `1ea1d973161b261de9463d5a1434f3d5b4928874`: fail-closed job-search routing and buffered verified delivery — routing refuses rather than guesses, and delivery is buffered so a partial result is never presented as a complete one. **One** follow-on correction belongs to this slice: `#1421` (`3f2805de4028451e316937a3c2b631c3bced1548`, degraded early-exit lifecycle state). `#1420` merged in the same window but is **not** part of this lane — it is supporting CI for the identity-containment track and is recorded with L1. No per-commit `/version` evidence is claimed for `#1419` or `#1421`; both were superseded before an individual deploy read was taken, and both are in the deployed tree at `c64aa99`. **Rollback:** revert each commit independently; no schema, migration or feature flag on either. **PR3 → PR5 remain planned and unauthorized, and PR3 is not the next action.** The PR1 → PR5 forward plan is **not** duplicated here; it lives in `ENGINEERING_ROADMAP.md`.
+
+- **L9 — Journey-1 CV read truthfulness (Journey-1 D3).** `CLOSED`. `#1422` merged as `c64aa99158695c78138e15ca4d6dfb57b5c762c7` from approved head `f8073ad28fac798eb44828f98d8d8f7f3c4c63ff`, onto base `3f2805de`. Branch `claude/cv-read-failure-truthful-response-pfub9j`; lease `RELEASED`, write authorization `REVOKED`. It changes one runtime path under `src/`, so a backend deploy was expected and fired: `/version.commit` matched `c64aa99` and `/health` returned 200 / ok with `jooble`, `adzuna` and `jsearch` configured and non-degraded — **owner/browser-verified, and no deliberate CV-store failure smoke was performed, so the changed path itself was never exercised in production.** **Delivered:** the invariant **READ FAILURE != VERIFIED ABSENCE** on the chat CV path. A failed CV grounding or document read no longer becomes "no CV", "no stored CV", unreadable-document blame, upload/re-upload guidance, or `next_action="upload_cv"`, in English and Arabic. A successful empty read is still a genuine absence; `no_readable_content` from a completed read is still a content problem; the exception stays contained. No route, migration, schema or frontend change. The structural statement of the invariant is owned by `ARCHITECTURE.md`. **Rollback:** revert `c64aa99` — additive branching in one module, no migration, no schema, no config, no env var. **Residuals, open and NOT authorized by being recorded:** My Files still converts its own failed read into `files=[]`; Arabic and English CV routing diverge at `_looks_like_cv_intent_no_file`; stored-CV/CV-state logic remains spread across `src/rico_chat_api.py`; and Journey-1 D1 (ownership/data consolidation), Journey-1 D2 (pending-artifact activation), Journey-1 D4 (mission/dashboard truth) and Journey-1 D5 (first-useful-result activation) are untouched. **Queued, not started:** `TASK-20260728-001`.
+
+  > **Label collision, stated once so nothing downstream misreads it.** The **Journey-1 D1–D5** series above is unrelated to the **security-audit D1–D5** rows in the audit table further down this file (`audit_repo.py` DDL, `_DEDUP_CACHE`, safety regex, password complexity, JWT revocation). Different findings, same letters. **Neither series is renumbered. Always write "Journey-1 D1–D5" or "security-audit D1–D5" — never a bare `D3`.**
 
 ### Closed without merge — evidence preserved
 
@@ -153,6 +177,79 @@ Update the block for your lane. Never duplicate one.
 - **`#1371` command visual polish**, head `4e7b82f6`. Closed without merge, superseded by `#1401` — which has itself now been closed without merge. Nothing from either PR is in `main`; the design work exists only in branch form.
 
 ## Active tasks
+
+### TASK-20260728-001 — Journey-1 CV routing characterization (tests only)
+
+Status: proposed
+Owner: unassigned — **not started, and not to be started in the reconciliation PR that recorded it**
+Branch: not created
+Issue/PR: none yet — it is a **separate** PR, opened only after the post-`#1422` reconciliation PR is reviewed and merged
+
+#### Objective
+
+Capture what `src/rico_chat_api.py` actually does on the Journey-1 CV paths, on the
+untouched tree, **before** any extraction. This is the immediate execution item
+after the reconciliation — not PR3.
+
+#### Constraints
+
+- **It must initially change tests only.** No production code, no route, no
+  migration, no schema, no workflow, no frontend.
+- Characterize behaviour as it is, including behaviour known to be wrong. A
+  divergence is recorded as a characterization test or a strict xfail — it is not
+  fixed here, and it is not "cleaned up" in passing.
+- Synthetic users and synthetic profile data only. No live provider calls, no live
+  Neon, no real CV.
+- Cover both languages: English and Arabic input are separate cases, because the
+  routing is known to diverge at `_looks_like_cv_intent_no_file`.
+
+#### Scenarios to characterize
+
+1. stored filename reference
+2. CV analysis request
+3. Arabic CV question
+4. CV upload announcement
+5. job search mentioning CV
+6. successful empty read
+7. store unavailable
+8. metadata-only CV
+9. genuine no-CV state
+
+#### What each scenario must capture
+
+- winning gate
+- routing precedence
+- response type
+- `next_action`
+- `_append_chat` behaviour
+- `_finalize` behaviour
+- CV-context read count
+- whether job search or LLM fallback was reached
+
+#### Acceptance criteria
+
+- [ ] All nine scenarios have tests that pass against the untouched tree at the
+      baseline they are written on.
+- [ ] Every test asserts all eight captured properties, not only the response text.
+- [ ] Any behaviour the tests reveal as wrong is recorded as a divergence, with its
+      owning residual named — it is **not** fixed in this PR.
+- [ ] The new tests are reached by the CI enumeration (see `#1420`), with no
+      allowlist entry needed.
+
+#### Required verification
+
+- [ ] Unit tests: `python -m pytest tests/unit/ -q`
+- [ ] Enumeration guard: `python -m pytest tests/test_test_enumeration_guard.py -q`
+- [ ] Integration tests: n/a — tests-only, no integration surface touched
+- [ ] Frontend build: n/a — no frontend files
+- [ ] Local smoke: n/a — **do not run `delivery_smoke.py`**
+- [ ] Production/deploy smoke: n/a — tests-only merges are not releases
+
+#### Stop condition
+
+Stop and ask the owner if characterizing a scenario would require changing
+production code to make it observable. That is a signal the seam is not ready,
+not a licence to edit the module.
 
 ### TASK-20260723-004 — CLAUDE.md best-practices tooling + full open-PR backlog merge & production verification
 
