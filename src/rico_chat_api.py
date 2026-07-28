@@ -9298,11 +9298,27 @@ class RicoChatAPI:
         # upload guidance and continues to the job-search path. Genuine CV
         # questions ("هل لدي سيرة ذاتية محفوظة؟") and upload/replace requests are
         # not explicit job-listing requests, so they still get CV guidance.
-        from src.rico.intent.gates import is_explicit_job_listing_request
+        #
+        # The same gate also swallowed CV-ANALYSIS asks. "سيرتي الذاتية" trips
+        # it for every Arabic CV phrasing, so "حلل سيرتي الذاتية" ("analyse my
+        # CV") was answered with upload guidance — asking a user who has a CV to
+        # upload one — and never reached the cv_analysis branch that reads the
+        # grounding. An analysis ask is a CONTENT question about a CV that
+        # already exists; this gate only owns EXISTENCE questions and upload
+        # announcements. Defer to the canonical predicate for the same reason as
+        # above: one source of truth, so the gate and the intent router cannot
+        # disagree about what an analysis ask is. Existence questions ("هل لدي
+        # سيرة ذاتية محفوظة؟") and upload announcements carry no analysis verb,
+        # so they still belong to this gate.
+        from src.rico.intent.gates import (
+            is_cv_analysis_request,
+            is_explicit_job_listing_request,
+        )
 
         if (
             self._looks_like_cv_intent_no_file(message)
             and not is_explicit_job_listing_request(message)
+            and not is_cv_analysis_request(message)
         ):
             # Check user_documents first — if a CV already exists, confirm it
             # rather than asking for an upload.
@@ -11138,11 +11154,26 @@ class RicoChatAPI:
                     profile=profile,
                 )
             if not (_cv_ctx.has_cv or bool(self._profile_value(profile, "has_cv"))):
-                # (3) Nothing on file — unchanged wording.
-                _cv_msg = (
-                    "I can't review your CV yet — you haven't uploaded one.\n\n"
-                    "Upload your CV and I'll identify weak areas, gaps, and improvements."
-                )
+                # (3) Nothing on file. The read COMPLETED, so stating the
+                # absence and asking for an upload is earned here — unlike (0).
+                #
+                # This branch was English-only while its two siblings above
+                # already rendered per-language off the same `_arabic_cv` flag.
+                # That asymmetry was invisible until Arabic analysis asks
+                # started reaching this branch at all: they were previously
+                # answered by the upload-announce gate. So the routing fix in
+                # this PR is what makes an English-only answer reachable for an
+                # Arabic speaker, which makes it this PR's to render.
+                if _arabic_cv:
+                    _cv_msg = (
+                        "لا أستطيع مراجعة سيرتك الذاتية بعد — لم ترفع أي سيرة ذاتية.\n\n"
+                        "ارفع سيرتك الذاتية وسأحدد نقاط الضعف والفجوات والتحسينات."
+                    )
+                else:
+                    _cv_msg = (
+                        "I can't review your CV yet — you haven't uploaded one.\n\n"
+                        "Upload your CV and I'll identify weak areas, gaps, and improvements."
+                    )
             elif not _cv_ctx.has_content:
                 # (2) The file is real, its content is not available. Name the
                 # file so the user knows we have it, refuse to claim an

@@ -455,29 +455,35 @@ class TestDispatcherScenarioMatrix:
         assert d.gate2_calls == 0
 
     @pytest.mark.parametrize("target_roles", [[], ["Compliance Manager"]])
-    def test_characterizes_analysis_ask_routes_to_job_search_not_cv_analysis(
+    def test_characterizes_analysis_ask_reaches_grounded_cv_analysis(
         self, target_roles
     ):
-        """CURRENT BEHAVIOUR, and the most surprising fact this file records.
+        """CURRENT BEHAVIOUR — and no longer the surprising fact it was.
 
-        "analyse my cv please" does NOT reach a CV-analysis answer through the
-        dispatcher. It reaches ``_target_role_search_response`` — a job search —
-        with or without saved target roles, and without reading the document
-        store or the CV context at all.
+        This test previously recorded that "analyse my cv please" reached
+        ``_target_role_search_response`` — a job search — without reading the
+        document store or the CV context at all. That was recorded rather than
+        xfailed because no owner decision had established what an analysis ask
+        *should* return, so there was no contract to diverge from.
 
-        This is recorded, not endorsed, and deliberately NOT an xfail: no owner
-        decision has established what an analysis ask *should* return, so there
-        is no contract to diverge from. It is named here so an extraction cannot
-        assume the obvious routing and quietly change behaviour.
+        That decision now exists, and the routing was corrected: an analysis ask
+        classifies as ``cv_analysis`` and reaches the branch that reads the
+        grounding. What is recorded here is the mechanism — one CV-context read,
+        no document read, no job search. The product contract itself, in English
+        and Arabic, lives in ``tests/unit/test_cv_analysis_intent_routing.py``;
+        this stays a ``test_characterizes_*`` because the read economy below is
+        a current cost, not a guarantee.
         """
         d = Dispatch(target_roles=target_roles)
         result = d.run(EN_CV_ANALYSIS)
-        assert result.get("type") == "job_matches"
-        assert d.job_search_terminals == ["_target_role_search_response"]
+        assert result.get("type") == "cv_analysis"
+        assert d.job_search_terminals == []
         assert d.llm_fallback_calls == 0
+        # The intent branch grounds on the CV context, not on stored documents —
+        # only a filename-specific ask reaches ``_handle_stored_cv_reference``.
         assert d.stored_cv_handler_calls == 0
         assert d.document_reads == 0
-        assert d.cv_context_reads == 0
+        assert d.cv_context_reads == 1
 
     # -- Scenario 9: genuine no-CV account ---------------------------------
 
