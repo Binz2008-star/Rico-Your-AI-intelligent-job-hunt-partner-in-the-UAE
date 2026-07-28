@@ -2072,22 +2072,42 @@ _DEFAULT_ACK_REPLY = "Of course! What would you like to do next?"
 # a turn that is only thanks must never redeem an armed action. Praise words
 # are left out on purpose — "perfect" after "shall I broaden?" is plausibly an
 # acceptance, and this list is only for phrases where that reading is impossible.
-_GRATITUDE_ONLY_REPLIES: frozenset[str] = frozenset({
-    "thanks", "thank you", "thank you so much", "thanks a lot",
-    "thank you very much", "much appreciated", "appreciate it",
-    "appreciate that", "cheers",
-    "ok thanks", "okay thanks", "ok thank you", "okay thank you",
-    # Arabic
-    "شكرا", "شكراً", "شكرا جزيلا", "شكراً جزيلاً",
-})
+# Stored as CANONICAL keys (see _acknowledgement_key): the Arabic entries are
+# normalised at construction so one spelling of a word cannot be a member while
+# another is not. Written here in their natural orthography for readability.
+_GRATITUDE_ONLY_REPLIES: frozenset[str] = frozenset(
+    _normalize_arabic(_p) for _p in {
+        "thanks", "thank you", "thank you so much", "thanks a lot",
+        "thank you very much", "much appreciated", "appreciate it",
+        "appreciate that", "cheers",
+        "ok thanks", "okay thanks", "ok thank you", "okay thank you",
+        # Arabic
+        "شكرا", "شكراً", "شكرا جزيلا", "شكراً جزيلاً",
+    }
+)
 # Trailing sentiment punctuation only — never internal characters, so a phrase
 # is normalised without being rewritten into a different one.
 _ACK_TRAILING_PUNCT = " \t\r\n!.،؛?؟…"
 
 
 def _acknowledgement_key(message: str) -> str:
-    """Normalise a turn to its acknowledgement lookup key."""
-    return (message or "").strip().lower().rstrip(_ACK_TRAILING_PUNCT).strip()
+    """Normalise a turn to its acknowledgement lookup key.
+
+    Arabic runs through the same ``_normalize_arabic`` the CV-intent and
+    upload-announce gates already use, so orthographic variants of one word
+    collapse to one key. That matters here because the variants are not
+    equally likely: ``شكرًا`` — tanween BEFORE the alef — is the standard MSA
+    spelling and the one a phone keyboard produces, while the literal set held
+    ``شكرا`` and ``شكراً``. Matching raw text therefore let the *correct*
+    spelling, and any vocalised form such as ``شُكرًا``, slip the gratitude
+    guard and spend a real provider call on a search the user never asked for.
+
+    Normalisation is applied to the lookup key only. The raw keys of
+    ``_ACKNOWLEDGEMENT_REPLIES`` are deliberately left as they are, so every
+    existing exact-match call site keeps its current behaviour.
+    """
+    key = (message or "").strip().lower().rstrip(_ACK_TRAILING_PUNCT).strip()
+    return _normalize_arabic(key)
 
 
 def _is_gratitude_only(message: str) -> bool:

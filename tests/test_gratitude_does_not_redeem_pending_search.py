@@ -64,6 +64,14 @@ def _api_and_calls(stack: ExitStack) -> tuple[Any, list[str]]:
         "thanks a lot", "much appreciated", "appreciate it", "cheers",
         "ok thanks", "okay thank you",
         "شكرا", "شكراً", "شكراً جزيلاً", "شكرا!",
+        # Arabic orthographic variants of the SAME word. `شكرًا` — tanween
+        # before the alef — is the standard MSA spelling and what a phone
+        # keyboard produces, so it is the likeliest form a real user sends;
+        # it was the one that slipped the guard while `شكرا`/`شكراً` were
+        # caught. `شُكرًا` adds a damma. Padding and trailing punctuation are
+        # asserted on the variant that used to fail, not only on the ASCII one.
+        "شكرًا", "شُكرًا", "شكرًا!", "  شكرًا  ", "شكرًا.", "شكرًا،",
+        "شكرًا جزيلًا",
     ],
 )
 def test_gratitude_blocks_pending_search_redemption(message: str):
@@ -81,6 +89,11 @@ def test_gratitude_blocks_pending_search_redemption(message: str):
         # A real instruction that merely contains a courtesy word.
         "thanks, now search Quality Manager jobs in Dubai",
         "find me quality manager jobs please, thank you",
+        # The Arabic equivalent, in the MSA spelling the fix normalises. The
+        # normalisation must collapse SPELLINGS, never swallow a turn that
+        # opens with thanks and then asks for work.
+        "شكرًا، ابحث الآن عن وظائف مدير جودة في دبي",
+        "شكرًا، كمل البحث",
     ],
 )
 def test_genuine_confirmations_and_instructions_still_redeem(message: str):
@@ -108,6 +121,38 @@ def test_arabic_thanks_does_not_dispatch_a_search():
 
     assert calls == []
     assert result is None
+
+
+@pytest.mark.parametrize("message", ["شكرًا", "شُكرًا", "شكرًا!", "  شكرًا  "])
+def test_msa_arabic_thanks_dispatches_nothing_and_keeps_the_offer(message: str):
+    """The regression this fix exists for, at a real redemption site.
+
+    Before normalisation these reached ``_target_role_search_response`` and
+    spent a JSearch call on a role the user never named. Both halves are
+    asserted: no dispatch, and the armed offer is still there afterwards, so a
+    later "yes" inside the TTL still works.
+    """
+    cleared: list[str] = []
+    with ExitStack() as stack:
+        api, calls = _api_and_calls(stack)
+        from src.rico_chat_api import RicoChatAPI
+
+        stack.enter_context(patch.object(
+            RicoChatAPI, "_clear_pending_job_search", lambda _s, u: cleared.append(u),
+        ))
+        result = api._resolve_pending_intent(USER, message, profile=object())
+
+    assert calls == [], f"{message!r} dispatched a provider search: {calls}"
+    assert result is None, "the turn must fall through to a normal acknowledgement"
+    assert cleared == [], "a thank-you must not consume the armed offer"
+
+
+def test_arabic_spelling_variants_share_one_canonical_key():
+    """The mechanism, pinned directly: one word, one key, one decision."""
+    from src.rico_chat_api import _acknowledgement_key
+
+    keys = {_acknowledgement_key(m) for m in ("شكرا", "شكراً", "شكرًا", "شُكرًا", "  شكرًا!  ")}
+    assert len(keys) == 1, f"spelling variants produced different keys: {keys}"
 
 
 def test_ok_still_dispatches_the_armed_search():
@@ -154,6 +199,11 @@ def test_gratitude_still_gets_its_warm_reply():
     assert _acknowledgement_reply("شكرا") == "عفواً!"
     # Trailing punctuation now resolves to the same reply instead of the generic one.
     assert _acknowledgement_reply("thanks!") == "You're welcome!"
+    # The canonical-key fallback carries the variants onto the SAME warm reply
+    # the bare spelling already got — the raw dictionary keys are untouched.
+    assert _acknowledgement_reply("شكرًا") == "عفواً!"
+    assert _acknowledgement_reply("شُكرًا") == "عفواً!"
+    assert _acknowledgement_reply("شكرًا جزيلًا") == "على الرحب والسعة!"
 
 
 if __name__ == "__main__":  # pragma: no cover
