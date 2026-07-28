@@ -68,6 +68,8 @@ The public result is recorded in:
 
 `AI_WORKSPACE/EVALS/2026-07-29-journey1-d1-row-mapping-rehearsal.md`
 
+The task's current state is **completed**. Any older `blocked` label retained in its historical `TASKS.md` continuity block is superseded by this mandatory control panel and the final evaluation above; it carries no lease, write authorization, or permission to repeat the mapping.
+
 ### Evidence result
 
 One unique ownership shape matched the historical conflict:
@@ -131,7 +133,7 @@ After a separately authorized production consolidation completes, the pending-ar
 | Open implementation PRs | 0 |
 | Authorized implementation writers | 0 |
 | Production database repair | not authorized |
-| D1 evidence/rehearsal | completed; public report in review through this docs branch |
+| D1 evidence/rehearsal | completed; final report stored at the evaluation path above |
 | `#1432` endpoint verification | complete |
 | `#1432` authenticated behavior smoke | still required |
 
