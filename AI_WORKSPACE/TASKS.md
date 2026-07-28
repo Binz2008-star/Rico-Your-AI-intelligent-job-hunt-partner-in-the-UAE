@@ -515,7 +515,7 @@ rather than trusting this line.
 3. **No explicit go-ahead for the first row-level read** that acknowledges the containment
    gap below.
 
-**Blocker 1 is now the only thing standing between this task and its first read.**
+**Blocker 1 is the only one an access route clears; blocker 3 remains unresolved and also requires owner action.**
 
 #### Containment gap — state it before the first row-level read
 
@@ -534,10 +534,9 @@ tooling enforces.** Consequences, binding:
    `d1-ownership-evidence-2026-07-28` with no access to `production`, created by the owner
    and wired into the MCP config.
 
-**Separately: `rico-job-automation-api.env` at the repository root holds a production DSN**,
-so any session on the owner's machine with shell access can reach production with full
-write privileges. **It must not be used for this task** — it resolves to production, which
-is a stop condition, not the target. Rotation is tracked as the open **Owner P0** in
+**Separately: an exposed local environment credential file on the owner's machine
+resolves to production.** **It must not be used for this task** — it is a stop
+condition, not the target. Rotation is tracked as the open **Owner P0** in
 `ENGINEERING_ROADMAP.md` and is not agent-actionable.
 
 #### Constraints — the binding ones
@@ -757,7 +756,7 @@ Branch: `claude/md-best-practices-generator-auau3b` (final home of the
 CLAUDE.md refactor commit, reconciled onto the pre-existing PR #1346 rather
 than opened as a competing PR)
 Issue/PR: #1346 (tooling+refactor), plus reviewed-and-merged #1347, #1348,
-#1349, #1350 as part of the same session
+# 1349, #1350 as part of the same session
 
 #### Objective
 
@@ -995,7 +994,6 @@ comes from the DB, not stale token claims; store outage fails closed.
 - Rollback plan: revert the squash commit (behavior returns to stateless
   tokens); column 045 is additive and harmless to leave; dropping it is a
   separate owner-approved migration
-
 
 ### TASK-20260720-001 — hotfix #1225: agentic_ui option buttons as plain dict (stream TypeError) — PRODUCTION VERIFIED
 
@@ -5214,7 +5212,7 @@ fix small isolated bugs immediately, document larger issues for separate PRs.
 #### Issues documented (separate PRs required — do NOT touch without explicit scope)
 
 | # | Issue | File | Recommended action |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | D1 | Runtime DDL bypasses migration system | `audit_repo.py` | Move 3 table creates to numbered migrations |
 | D2 | `_DEDUP_CACHE` unbounded memory growth | `audit_repo.py` | Add periodic sweep or size cap in `_mem_seed` |
 | D3 | Safety regex over-breadth (`password`, `bypass`) | `rico_safety.py` | Narrow with word-boundary anchors + regression tests |

@@ -47,7 +47,7 @@ Ranked, and not negotiable when they disagree:
 The post-`#1426` section recorded `#1430` as **Draft, in review**, and recorded the next action as an **owner ruling on whether to establish a secure row-level evidence location**. Both were true when written. **Both are now stale:**
 
 1. **`#1430` merged** as `8c6c421f`, at the reviewed head `f504a37a` — nothing diverged between review and merge. The assessment deliverable is on `main` at `AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessment.md`. `TASK-20260728-002` moves `review` → `done`.
-2. **The owner ruling has been given.** The owner authorized a secure row-level evidence environment on 2026-07-28 and created the Neon branch `d1-ownership-evidence-2026-07-28` — an LSN-pinned point-in-time clone of `production`, created 2026-07-28 22:07:29 +04, **auto-deleting 2026-08-04 22:07 +04**. That is the ruling the merged control plane was still pointing at as pending.
+2. **The owner ruling has been given.** The owner authorized a secure row-level evidence environment on 2026-07-28 and created the Neon branch `d1-ownership-evidence-2026-07-28` — an LSN-pinned point-in-time clone of `production`, created 2026-07-28 22:07:29 +04, originally auto-deleting 2026-08-04 22:07 +04 (since extended — see below). That is the ruling the merged control plane was still pointing at as pending.
 
 The successor phase is opened as **`TASK-20260728-003`** in `TASKS.md`, carrying the owner's authorized scope verbatim. **It is an evidence and rehearsal phase. It is not a repair, and opening it authorizes no production mutation.**
 
@@ -67,13 +67,11 @@ Verified at this pass: **no Neon MCP server is authenticated**, `neonctl` is **n
 
 ### A second, unauthorized production path exists on the owner's machine
 
-`rico-job-automation-api.env` sits at the repository root holding a **production** DSN. Any agent session on that machine with shell access can reach production with full write privileges. This was demonstrated in the ordinary course this pass — an owner-requested connectivity check ran `SELECT`-only metadata and aggregate reads through it, wrote nothing, and printed no identifier — and it is recorded here as a containment fact, not as an incident.
-
-**This is the second time that file has become load-bearing.** `ENGINEERING_ROADMAP.md` already carries **Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets**, still open. Rotating it — and keeping the rotated value out of the repository tree — does more for containment than the scoped role does: the scoped role narrows what the *authorized* path can reach, while the loose `.env` is an *unauthorized* path that bypasses the question entirely. **Neither substitutes for the other, and neither is authorized to be actioned by an agent.**
+An exposed local environment credential file grants production write access from the owner's machine. This is tracked as the open **Owner P0** in `ENGINEERING_ROADMAP.md` and is **not agent-actionable**. The containment gap it creates is recorded in `TASK-20260728-003`; neither rotating it nor the scoped Neon role substitutes for the other.
 
 ### Schedule constraint — cleared
 
-**The owner extended the branch expiry to 30 days on 2026-07-28**, superseding the original 2026-08-04 auto-delete; effective deletion lands on or about **2026-08-27 +04**, and the Neon Console holds the authoritative timestamp. Row-level mapping across seven domains plus a rehearsal with validation and rollback queries now fits comfortably, so **schedule pressure is no longer a reason to compress the work or to skip a verification step.**
+**The owner extended the branch expiry to 30 days on 2026-07-28** (Owner-attested, not connector-verified — no Neon MCP was authenticated in this session to confirm the extension directly), superseding the original 2026-08-04 auto-delete; effective deletion lands on or about **2026-08-27 +04**, and the Neon Console holds the authoritative timestamp. Row-level mapping across seven domains plus a rehearsal with validation and rollback queries now fits comfortably, so **schedule pressure is no longer a reason to compress the work or to skip a verification step.**
 
 What has not changed: **do not let the branch lapse mid-rehearsal, and do not silently re-create it** — a fresh branch is a different point-in-time snapshot and invalidates every mapping built against the current one. **Access, not time, is now the only blocker.**
 
@@ -257,15 +255,15 @@ row-level mapping and a consolidation REHEARSAL, INSIDE THAT BRANCH ONLY.
 TASK-20260728-003 IS BLOCKED ON ACCESS, NOT ON AUTHORIZATION. Verified at this
 pass: no Neon MCP server is authenticated, neonctl is not installed, and no
 NEON_API_KEY or Neon config exists in the session environment. Do not improvise
-a credential path, and DO NOT USE THE PRODUCTION DSN IN rico-job-automation-api.env
+a credential path, and DO NOT USE THE LOCAL PRODUCTION ENVIRONMENT CREDENTIAL
 FOR THIS WORK — it resolves to production, which is the stop condition, not the
 target.
 
 Before the first row-level read, the OWNER must: (1) connect a Neon access route
 with the credential held by the MCP server config, never passed to an agent;
-(2) extend the branch expiration past 2026-08-04 22:07 +04; (3) give an explicit
-go-ahead that acknowledges the containment gap recorded above — Neon MCP is not
-read-only and reaches production, so branch confinement is discipline, not a wall.
+(2) give an explicit go-ahead that acknowledges the containment gap recorded
+above — Neon MCP is not read-only and reaches production, so branch confinement
+is discipline, not a wall.
 
 NO PRODUCTION NEON ROW MUTATION IS AUTHORIZED. Not by this document, not by
 TASK-20260728-002, not by TASK-20260728-003, not by #1430, and not by anything

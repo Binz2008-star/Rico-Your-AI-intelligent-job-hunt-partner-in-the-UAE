@@ -69,9 +69,10 @@ another one.**
 - **Branch name:** `d1-ownership-evidence-2026-07-28`
 - **Parent:** `production`, LSN-pinned point-in-time clone
 - **Created:** 2026-07-28 22:07:29 +04
-- **Expiry — EXTENDED to 30 days by the owner on 2026-07-28**, superseding the original
-  2026-08-04 auto-delete. Effective deletion on or about **2026-08-27 +04**; the branch
-  overview in the Neon Console holds the authoritative timestamp.
+- **Expiry — EXTENDED to 30 days by the owner on 2026-07-28** (Owner-attested, not
+  connector-verified), superseding the original 2026-08-04 auto-delete. Effective
+  deletion on or about **2026-08-27 +04**; the branch overview in the Neon Console
+  holds the authoritative timestamp.
 
 **The schedule constraint is cleared** — the original seven-day window would not have fit
 mapping plus a full rehearsal, and it no longer applies. **Re-read the live expiry before
@@ -110,11 +111,9 @@ enforces.** Practical consequences:
 
 ### A second production path exists, and it is not the target
 
-`rico-job-automation-api.env` at the repository root holds a **production** DSN — the only
-database credential reachable from a shell on the owner's machine. **It must not be used
-for this task:** it resolves to `production`, which is a stop condition, not the target.
-Any agent session with shell access can reach production with full write privileges
-through it. Rotation is tracked as the open **Owner P0** in `ENGINEERING_ROADMAP.md` and is
+An exposed local environment credential file on the owner's machine resolves to
+`production`. **It must not be used for this task:** it is a stop condition, not the
+target. Rotation is tracked as the open **Owner P0** in `ENGINEERING_ROADMAP.md` and is
 **not agent-actionable**.
 
 ## Constraints — the binding ones
@@ -261,10 +260,8 @@ Stop and ask the owner when:
 ```text
 1. Confirm which Neon access route is live. If none, stop and report.
 2. Confirm the connection resolves to d1-ownership-evidence-2026-07-28, not production.
-3. Ask the owner to extend the branch expiration past 2026-08-04 22:07 +04 before
-   starting long work.
-4. Read AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessment.md in full.
-5. Restate the containment gap to the owner and get an explicit go-ahead for the first
+3. Read AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessment.md in full.
+4. Restate the containment gap to the owner and get an explicit go-ahead for the first
    row-level read.
 
 LEAVE #1389 DRAFT AND ON HOLD.

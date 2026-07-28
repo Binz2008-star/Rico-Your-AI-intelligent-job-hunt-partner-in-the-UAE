@@ -100,7 +100,7 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 | --- | --- |
 | **Where is Rico?** | `main` `8c6c421f` (docs-only, re-anchored 2026-07-28 after `#1430`); **runtime baseline `383dcb6c`**, which production serves — the gap is three docs-only merges, not deploy drift. `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
 | **Posture?** | **Trust-first**, per `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired. Identity-ownership hardening has been the active track and its merged slices are listed above. The 2026-07-16 CONTAINMENT framing — security-first → #1068 source-of-truth unification → resume — is **historical and superseded**; #1068 is not the next action. |
-| **What is blocked / frozen?** | New-integration activation is frozen. #1062 (Atelier job cards — HELD, has logged colour/AR/test gaps), #1055 Gmail M0 (**merged 2026-07-17**, `RICO_ENABLE_GMAIL_SYNC=false` — activation still gated on Google restricted-scope verification, Render env provisioning, migration 043, and a separate fleet-sweep PR), #1025 Memory M1 (Draft, flag OFF). **Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets — still open, and load-bearing again as of 2026-07-28.** That file holds a production DSN at the repository root, so any session on the owner's machine with shell access can reach production with full write privileges. It is the reason `TASK-20260728-003` records a second, unauthorized production path alongside its Neon containment gap. Not agent-actionable. |
+| **What is blocked / frozen?** | New-integration activation is frozen. #1062 (Atelier job cards — HELD, has logged colour/AR/test gaps), #1055 Gmail M0 (**merged 2026-07-17**, `RICO_ENABLE_GMAIL_SYNC=false` — activation still gated on Google restricted-scope verification, Render env provisioning, migration 043, and a separate fleet-sweep PR), #1025 Memory M1 (Draft, flag OFF). **Owner P0: rotate the exposed local environment credentials — still open, and load-bearing again as of 2026-07-28. Not agent-actionable.** This is the canonical reference; other workspace documents point here rather than repeating details. |
 | **What is completed (recent)?** | Atelier `/command` (#1048/#1060/#1061), decision-regression harness (#1056), security hardening (#1058), attachment/SSE/transcript fixes, `DEC-20260716-001` (#1059), operational reconciliation (#1063). |
 | **What comes next?** | **PR1 (#1416, `dac8d8e7`) and PR2 (#1419, `1ea1d973`) are both delivered and released.** The Journey-1 CV routing characterization is **delivered as #1424**, and the two defects it exposed are delivered as **#1425** and **#1426**. The immediate next action is **not** PR3. **The read-only Journey-1 D1 production-data consolidation assessment is delivered and merged as `#1430`** (`8c6c421f`) — `TASK-20260728-002` in `TASKS.md`, now `done`. It read and reported. **The owner ruling that followed it has been given:** a secure row-level evidence environment is authorized and exists as a temporary Neon branch, and the successor is `TASK-20260728-003` — mapping and a **rehearsal inside that branch only**, currently `blocked` on Neon access, not on authorization. **No production Neon row mutation is authorized by any of it, and no repair is queued.** PR3 → PR5 remain planned and are **not** authorized by the PR2 release; following PR2 in sequence is not the same as being cleared to start. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
 
@@ -463,13 +463,13 @@ Backend** run for that commit, not by a green Deploy to Production run alone.
 | 2026-07-18 | `14b2b2e` | #1153 — English "find jobs that match my CV" routed to job search (not job-doc scoring) |
 | 2026-07-08 | `7d167dd` | #887 — batch-row-isolation hardening (apply-link batch resilience) |
 
-_Merged to `main` (`80e246b`), deploy verification pending: #885 (follow-ups
+*Merged to `main` (`80e246b`), deploy verification pending: #885 (follow-ups
 endpoint) and #891 (chat follow-up readiness). Promote each to a release row once
-`/version.commit` on Render reads `80e246b…` and `/health` is ok._
+`/version.commit` on Render reads `80e246b…` and `/health` is ok.*
 
-_Add a row when a runtime change is deployed and verified (`/version.commit`
+*Add a row when a runtime change is deployed and verified (`/version.commit`
 matches `main`, `/health` ok). Docs-only merges are not releases — #1402
-(`805dd4d`) is docs-only and earns no row._
+(`805dd4d`) is docs-only and earns no row.*
 
 ---
 
