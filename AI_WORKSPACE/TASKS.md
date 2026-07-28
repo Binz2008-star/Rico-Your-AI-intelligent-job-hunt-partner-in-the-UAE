@@ -490,16 +490,18 @@ another one.**
 - **Branch name:** `d1-ownership-evidence-2026-07-28`
 - **Parent:** `production`, LSN-pinned point-in-time clone
 - **Created:** 2026-07-28 22:07:29 +04
-- **Expires — hard deadline:** **2026-08-04 22:07 +04 (auto-delete)**
+- **Expiry — EXTENDED by the owner to 30 days on 2026-07-28**, superseding the original
+  2026-08-04 auto-delete. Effective deletion lands on or about **2026-08-27 +04**; the
+  authoritative timestamp is the one shown on the branch overview in the Neon Console.
 
 Neon infrastructure identifiers — branch ID, compute ID, project ID — are **operational
 only and are deliberately not recorded in this repository.** They live with the owner.
 
-**The expiry is the binding schedule constraint**, and roughly one day of the seven was
-already spent when this task was opened. **Ask the owner to extend it before starting long
-work**, not during. Do not let it lapse mid-rehearsal and **do not silently re-create it** —
-a fresh branch is a different point-in-time snapshot and invalidates every mapping built
-against the current one.
+**The schedule constraint is cleared and is no longer a reason to rush the work.** What has
+not changed: **do not let the branch lapse mid-rehearsal, and do not silently re-create
+it** — a fresh branch is a different point-in-time snapshot and invalidates every mapping
+built against the current one. Re-read the live expiry before starting a long session
+rather than trusting this line.
 
 #### Blockers — all owner-side, none of them agent-resolvable
 
@@ -508,9 +510,12 @@ against the current one.
    in the session environment. The owner connects one — hosted OAuth, or a local MCP server
    holding a project-scoped key — **with the credential in the server's own config. An
    agent may not receive a DSN or an API key.**
-2. **The branch expiration is not extended.**
+2. ~~**The branch expiration is not extended.**~~ **CLEARED 2026-07-28** — the owner
+   extended it to 30 days.
 3. **No explicit go-ahead for the first row-level read** that acknowledges the containment
    gap below.
+
+**Blocker 1 is now the only thing standing between this task and its first read.**
 
 #### Containment gap — state it before the first row-level read
 
@@ -630,6 +635,117 @@ Stop and ask the owner when:
 - Inside the branch: nothing to preserve — it is disposable and auto-deletes.
 - Production: nothing to roll back, because production is never written.
 - Documentation: revert the report commit, or close its PR unmerged.
+
+### TASK-20260728-004 — Thin-market search recovery: a zero becomes a recovered result, not a blank screen
+
+Status: **open** — `#1431` READY, all checks green, **not merged**
+Owner: authored by another session on `claude/ricohunt-website-00969f`; **no lease was ever recorded**
+Branch: `claude/ricohunt-website-00969f` — head `3b7572a34d36aea5879314e4ba80d1af0cea84b0`, base `main`, `MERGEABLE`
+Issue/PR: `#1431`, opened 2026-07-28T18:05:09Z
+
+> **Continuity block reconstructed at reconciliation, not authored by the lane.** This PR
+> was opened with no `TASKS.md` entry and no lease, so `OPERATING_RULES.md` → Pull Request
+> Audit Checklist item 11 blocked it from merging. This block exists to clear that gate.
+> Scope, risk and rollback below are **read from the diff and the live check runs**, not
+> copied from a lane report — no lane report exists.
+
+#### Scope
+
+6 files, +553/−30. `src/rico_chat_api.py`, `apps/web/app/command/page.tsx`,
+`apps/web/lib/translations.ts`, two new test files, and the `qa-tests.yml` enumeration
+entries for them.
+
+Two behaviours are added on the thin-market path, where the title floor rejects every live
+listing:
+
+1. **City-scope widening.** When a provider-level city was in play and nothing cleared the
+   title floor, the same title is re-run country-wide before any adjacent-role hop.
+   **Exactly one of the two runs**, so an accepted request still buys exactly one extra
+   cascade. The decision reads only *whether* a city reached the provider — no city list,
+   no per-market threshold, no per-account rule.
+2. **A labelled `related_matches` tier**, capped at 3, sourced by re-running the integrity
+   gate over the pre-gate payload with the role vocabulary removed — so a record reaches it
+   only when the single thing wrong with it was the title. Applied-jobs and
+   non-nationals eligibility filters are re-applied; the requested-city filter deliberately
+   is not.
+
+#### Risk
+
+- **An extra provider call on the thin-market path.** This is a real JSearch/quota cost and
+  is the main thing to weigh. It is bounded to one extra cascade per request.
+- Recursion into `_target_role_search_response` with `_adjacent_hop=True`; operation id and
+  attempt are saved and restored in a `finally`, so lifecycle identity is preserved.
+- Every helper fails closed — a failure anywhere in the related tier yields **no** tier, not
+  a degraded or unchecked one.
+- **A code comment cites an "owner directive 2026-07-28" for the widening behaviour that is
+  recorded nowhere in the control plane.** Confirm the directive before merge; do not treat
+  the comment as its own evidence.
+
+#### Validation
+
+- **Run:** all checks green on head `3b7572a3` — `pytest`, `frontend`, `playwright`,
+  `postgres-integration`, `enumeration`, `ratchet`, `trusted-ratchet`,
+  `workflow-security-guards`, Vercel preview.
+- **Required before merge:** owner confirmation of the cited directive and of the extra
+  provider call. **Frontend evidence is not carried by a backend read** — `page.tsx` and
+  `translations.ts` changed, so the Vercel half needs its own check.
+- **Required after merge:** `src/**` changed, so a Render deploy fires. Confirm
+  `/version.commit` matches the merge commit and `/health` is 200 before claiming it live.
+
+#### Rollback
+
+Revert the merge commit. No migration, no schema, no config, no env var, no feature flag.
+
+### TASK-20260728-005 — A thank-you must not spend a provider call
+
+Status: **open** — `#1432` READY, all checks green, **not merged**
+Owner: authored by another session on `claude/gratitude-pending-search`; **no lease was ever recorded**
+Branch: `claude/gratitude-pending-search` — head `d736380e37b4e91ba0552c2e5db8694ad9661cc2`, base `main`, `MERGEABLE`
+Issue/PR: `#1432`, opened 2026-07-28T18:12:50Z
+
+> **Continuity block reconstructed at reconciliation**, on the same basis as
+> `TASK-20260728-004` above and for the same gate.
+
+#### Scope
+
+3 files, +207/−1. One guard in `src/rico_chat_api.py`, one new test file, and its
+`qa-tests.yml` enumeration entry.
+
+After any successful search with adjacent roles to offer, Rico arms a pending job search.
+Every redemption site redeems an armed search on a bare acknowledgement — and `thanks` /
+`شكراً` were acknowledgements. So **the most common way a satisfied user ends a turn burned
+a real provider call and answered with a search they never asked for.**
+
+`_GRATITUDE_ONLY_REPLIES` is a deliberately strict subset of the acknowledgement map:
+praise words (`perfect`) and acceptances (`ok`, `تمام`) are excluded on purpose, because
+after "shall I broaden?" those genuinely do mean yes. The guard lands in
+`_pending_search_redemption_blocked`, which **all four redemption sites share** — a per-site
+fix would be three chances to miss one.
+
+#### Risk
+
+- **Low, and the failure mode is safe:** gratitude declines to redeem but does **not clear**
+  the armed search, so a later "yes" still works inside the TTL.
+- The reverse fence is the real risk and is asserted in both languages: `ok` / `yes` /
+  `تمام` / `ماشي` must still redeem, or the "hollow promise" loop those call sites exist to
+  close would come back.
+- **Judgement call worth the owner's eye:** `ok thanks` / `okay thank you` are classified as
+  gratitude-only. After an explicit offer they could plausibly mean acceptance. The
+  conservative reading was chosen — do not spend a provider call — and the armed search
+  survives, so the cost of being wrong is one extra user turn, not a lost offer.
+
+#### Validation
+
+- **Run:** all checks green on head `d736380e` — `pytest`, `frontend`, `playwright`,
+  `postgres-integration`, `enumeration`, `ratchet`, `trusted-ratchet`, Vercel preview.
+- Tests are hermetic: no DB, no provider, no network, no credentials, synthetic user only.
+  Both languages and both directions are covered.
+- **Required after merge:** `src/**` changed, so a Render deploy fires. Confirm
+  `/version.commit` matches the merge commit and `/health` is 200.
+
+#### Rollback
+
+Revert the merge commit. No migration, no schema, no config, no env var, no feature flag.
 
 ### TASK-20260723-004 — CLAUDE.md best-practices tooling + full open-PR backlog merge & production verification
 

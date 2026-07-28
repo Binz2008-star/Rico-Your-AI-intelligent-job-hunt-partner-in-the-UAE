@@ -71,9 +71,11 @@ Verified at this pass: **no Neon MCP server is authenticated**, `neonctl` is **n
 
 **This is the second time that file has become load-bearing.** `ENGINEERING_ROADMAP.md` already carries **Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets**, still open. Rotating it — and keeping the rotated value out of the repository tree — does more for containment than the scoped role does: the scoped role narrows what the *authorized* path can reach, while the loose `.env` is an *unauthorized* path that bypasses the question entirely. **Neither substitutes for the other, and neither is authorized to be actioned by an agent.**
 
-### Schedule constraint
+### Schedule constraint — cleared
 
-**The branch auto-deletes 2026-08-04 22:07 +04**, and roughly one day of the seven is already spent. Row-level mapping across seven domains plus a rehearsal with validation and rollback queries is unlikely to fit. **The owner should extend the expiration before the first read, not during the work.** Do not let it lapse mid-rehearsal, and **do not silently re-create it** — a fresh branch is a different point-in-time snapshot and invalidates every mapping built against the current one.
+**The owner extended the branch expiry to 30 days on 2026-07-28**, superseding the original 2026-08-04 auto-delete; effective deletion lands on or about **2026-08-27 +04**, and the Neon Console holds the authoritative timestamp. Row-level mapping across seven domains plus a rehearsal with validation and rollback queries now fits comfortably, so **schedule pressure is no longer a reason to compress the work or to skip a verification step.**
+
+What has not changed: **do not let the branch lapse mid-rehearsal, and do not silently re-create it** — a fresh branch is a different point-in-time snapshot and invalidates every mapping built against the current one. **Access, not time, is now the only blocker.**
 
 ## Reconciliation — 2026-07-28 (post-`#1426`)
 
@@ -147,8 +149,12 @@ Kept so the sequence is not lost when the section above is next replaced. Detail
 | --- | --- | --- | --- |
 | L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | **Open, Draft, and on owner HOLD.** See below |
 | L2 Journey-1 D1 assessment | `#1430` | `docs/journey1-d1-readonly-assessment` | **MERGED** as `8c6c421f` at head `f504a37a`. No longer an open PR; lease `RELEASED`. Its successor phase (`TASK-20260728-003`) has **no PR and no branch** — it is blocked on Neon access |
-| L8 job-search contract | — | — | No open PR. PR1 (`#1416`) and PR2 (`#1419`) are merged |
-| L9 Journey-1 CV truthfulness | — | — | No open PR. `#1422`, `#1424`, `#1425` and `#1426` are merged |
+| L8 job-search contract | `#1431` | `claude/ricohunt-website-00969f` | **Open, READY, all checks green on `3b7572a3`. Not merged.** Thin-market search recovery — city-scope widening plus a labelled 3-card related tier. `TASK-20260728-004` |
+| L9 Journey-1 CV truthfulness | `#1432` | `claude/gratitude-pending-search` | **Open, READY, all checks green on `d736380e`. Not merged.** A thank-you must not redeem an armed search. `TASK-20260728-005` |
+
+**`#1431` and `#1432` were opened during the window this pass reconciles — after `#1430` merged — with no `TASKS.md` entry and no recorded lease.** `OPERATING_RULES.md` → Pull Request Audit Checklist item 11 therefore blocked both from merging: *no PR merges on a task with an empty or stale Continuity Block.* Blocks were reconstructed from the diffs and the live check runs as `TASK-20260728-004` and `TASK-20260728-005`; **they are reconciliation reconstructions, not lane reports.** Both PRs touch `src/rico_chat_api.py` **and** `.github/workflows/qa-tests.yml`, so **whichever merges second needs a rebase and a re-verified check run** — they are individually `MERGEABLE` against `main`, which is not the same as being mergeable after each other.
+
+**Two open items belong to the owner before `#1431` merges**, and neither is an agent call: it adds **an extra provider call** on the thin-market path, and a code comment cites an **"owner directive 2026-07-28"** for the widening behaviour that **appears nowhere in the control plane**. A comment is not its own evidence.
 
 **`#1389` is HOLD, not "unblocked".** The previous snapshot of this file said its blocker had cleared and that it "must rebase onto `dac8d8e7` before anything else". **That instruction is withdrawn.** The PR body carries an explicit owner HOLD ruling behind an upstream *production data* problem — several ownership rows for one account — which is not a code defect on that branch and is not cleared by any merge listed above.
 

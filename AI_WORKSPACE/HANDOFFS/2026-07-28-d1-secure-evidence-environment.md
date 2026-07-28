@@ -69,12 +69,13 @@ another one.**
 - **Branch name:** `d1-ownership-evidence-2026-07-28`
 - **Parent:** `production`, LSN-pinned point-in-time clone
 - **Created:** 2026-07-28 22:07:29 +04
-- **Expires — hard deadline:** **2026-08-04 22:07 +04 (auto-delete)**
+- **Expiry — EXTENDED to 30 days by the owner on 2026-07-28**, superseding the original
+  2026-08-04 auto-delete. Effective deletion on or about **2026-08-27 +04**; the branch
+  overview in the Neon Console holds the authoritative timestamp.
 
-**The expiry is the binding schedule constraint.** Seven days from creation, and roughly
-one day was already spent at handoff. Row-level mapping plus a full rehearsal is unlikely
-to fit comfortably. **Before starting any long work, ask the owner to extend the
-expiration** — "Edit Expiration" on the branch overview. Do not let the branch lapse
+**The schedule constraint is cleared** — the original seven-day window would not have fit
+mapping plus a full rehearsal, and it no longer applies. **Re-read the live expiry before
+starting a long session** rather than trusting this line. Do not let the branch lapse
 mid-rehearsal and do not silently re-create it; a fresh branch would be a different
 point-in-time snapshot and would invalidate every mapping built against the old one.
 
