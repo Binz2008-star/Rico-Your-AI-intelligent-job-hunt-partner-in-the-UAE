@@ -6,8 +6,8 @@
 \endif
 
 -- Run only when a rollback condition in the runbook is met.
--- The relative directory ./secure-d1-backup must contain the private export
--- produced from the exact pre-repair Neon backup branch.
+-- ./secure-d1-backup must contain the private export from the exact
+-- pre-repair Neon backup branch.
 
 BEGIN;
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -30,14 +30,9 @@ CREATE TEMP TABLE d1_restore_job_context_ownership (id integer PRIMARY KEY,user_
 CREATE TEMP TABLE d1_restore_onboarding (LIKE rico_onboarding_states INCLUDING DEFAULTS) ON COMMIT DROP;
 CREATE TEMP TABLE d1_restore_agent_settings (LIKE rico_agent_settings INCLUDING DEFAULTS) ON COMMIT DROP;
 CREATE TEMP TABLE d1_restore_manifest (
-  owner_rows bigint,
-  profiles bigint,
-  chat_messages bigint,
-  rico_learning_signals bigint,
-  learning_signals bigint,
-  job_context bigint,
-  onboarding bigint,
-  agent_settings bigint
+  owner_rows bigint,profiles bigint,chat_messages bigint,
+  rico_learning_signals bigint,learning_signals bigint,
+  job_context bigint,onboarding bigint,agent_settings bigint
 ) ON COMMIT DROP;
 
 \copy d1_restore_target FROM './secure-d1-backup/target.csv' CSV HEADER
@@ -59,10 +54,7 @@ CROSS JOIN LATERAL unnest(ARRAY[t.id::text,t.external_user_id,t.email]) v
 WHERE v IS NOT NULL AND btrim(v)<>'';
 
 DO $$
-DECLARE
-  v int;
-  v_canonical uuid;
-  v_principal text;
+DECLARE v int; v_canonical uuid; v_principal text;
 BEGIN
   IF (SELECT count(*) FROM d1_restore_manifest)<>1 THEN RAISE EXCEPTION 'Manifest row count mismatch'; END IF;
   IF (SELECT count(*) FROM d1_restore_target)<>5 THEN RAISE EXCEPTION 'Restore target expected 5'; END IF;
@@ -95,8 +87,7 @@ BEGIN
   IF v<>1 THEN RAISE EXCEPTION 'Rollback precondition onboarding expected 1, got %',v; END IF;
 
   SELECT count(*) INTO v
-  FROM rico_users u
-  JOIN d1_restore_users b
+  FROM rico_users u JOIN d1_restore_users b
     ON u.external_user_id=b.external_user_id AND u.id<>b.id
   WHERE b.external_user_id IS NOT NULL;
   IF v<>0 THEN RAISE EXCEPTION 'External-user-id collision: %',v; END IF;
@@ -145,11 +136,9 @@ ON CONFLICT(id) DO UPDATE SET
 
 DELETE FROM rico_profiles
 WHERE user_id IN (SELECT id FROM d1_restore_target);
-
 INSERT INTO rico_profiles(
   id,user_id,profile,cv_file_url,cv_text,cv_structured,created_at,updated_at)
-SELECT
-  id,user_id,profile,cv_file_url,cv_text,cv_structured,created_at,updated_at
+SELECT id,user_id,profile,cv_file_url,cv_text,cv_structured,created_at,updated_at
 FROM d1_restore_profiles;
 
 UPDATE rico_chat_history h
@@ -174,14 +163,12 @@ WHERE j.id=b.id;
 
 DELETE FROM rico_onboarding_states
 WHERE lower(user_id) IN (SELECT alias FROM d1_restore_aliases);
-
 INSERT INTO rico_onboarding_states(user_id,status,completed_at,updated_at)
 SELECT user_id,status,completed_at,updated_at
 FROM d1_restore_onboarding;
 
 DELETE FROM rico_agent_settings
 WHERE user_id IN (SELECT id FROM d1_restore_target);
-
 INSERT INTO rico_agent_settings(id,user_id,settings,created_at,updated_at)
 SELECT id,user_id,settings,created_at,updated_at
 FROM d1_restore_agent_settings;
@@ -191,69 +178,91 @@ DECLARE v int;
 BEGIN
   SELECT count(*) INTO v FROM (
     (SELECT u.* FROM rico_users u WHERE u.id IN (SELECT id FROM d1_restore_target))
-    EXCEPT
-    (SELECT * FROM d1_restore_users)
+    EXCEPT (SELECT * FROM d1_restore_users)
   ) q;
   IF v<>0 THEN RAISE EXCEPTION 'Restored users differ: %',v; END IF;
   SELECT count(*) INTO v FROM (
     (SELECT * FROM d1_restore_users)
-    EXCEPT
-    (SELECT u.* FROM rico_users u WHERE u.id IN (SELECT id FROM d1_restore_target))
+    EXCEPT (SELECT u.* FROM rico_users u WHERE u.id IN (SELECT id FROM d1_restore_target))
   ) q;
   IF v<>0 THEN RAISE EXCEPTION 'Restored users missing: %',v; END IF;
 
   SELECT count(*) INTO v FROM (
     (SELECT p.* FROM rico_profiles p WHERE p.user_id IN (SELECT id FROM d1_restore_target))
-    EXCEPT
-    (SELECT * FROM d1_restore_profiles)
+    EXCEPT (SELECT * FROM d1_restore_profiles)
   ) q;
   IF v<>0 THEN RAISE EXCEPTION 'Restored profiles differ: %',v; END IF;
   SELECT count(*) INTO v FROM (
     (SELECT * FROM d1_restore_profiles)
-    EXCEPT
-    (SELECT p.* FROM rico_profiles p WHERE p.user_id IN (SELECT id FROM d1_restore_target))
+    EXCEPT (SELECT p.* FROM rico_profiles p WHERE p.user_id IN (SELECT id FROM d1_restore_target))
   ) q;
   IF v<>0 THEN RAISE EXCEPTION 'Restored profiles missing: %',v; END IF;
 
   SELECT count(*) INTO v FROM (
-    (SELECT h.id,h.user_id FROM rico_chat_history h
-      JOIN d1_restore_chat_ownership b ON b.id=h.id)
-    EXCEPT
-    (SELECT * FROM d1_restore_chat_ownership)
+    (SELECT h.id,h.user_id FROM rico_chat_history h JOIN d1_restore_chat_ownership b ON b.id=h.id)
+    EXCEPT (SELECT * FROM d1_restore_chat_ownership)
   ) q;
   IF v<>0 THEN RAISE EXCEPTION 'Chat ownership differs: %',v; END IF;
+  SELECT count(*) INTO v FROM (
+    (SELECT * FROM d1_restore_chat_ownership)
+    EXCEPT (SELECT h.id,h.user_id FROM rico_chat_history h JOIN d1_restore_chat_ownership b ON b.id=h.id)
+  ) q;
+  IF v<>0 THEN RAISE EXCEPTION 'Chat ownership rows missing: %',v; END IF;
 
   SELECT count(*) INTO v FROM (
-    (SELECT l.id,l.canonical_user_id FROM learning_signals l
-      JOIN d1_restore_learning_ownership b ON b.id=l.id)
-    EXCEPT
-    (SELECT * FROM d1_restore_learning_ownership)
+    (SELECT l.id,l.user_id FROM rico_learning_signals l JOIN d1_restore_rico_learning_ownership b ON b.id=l.id)
+    EXCEPT (SELECT * FROM d1_restore_rico_learning_ownership)
+  ) q;
+  IF v<>0 THEN RAISE EXCEPTION 'UUID learning ownership differs: %',v; END IF;
+  SELECT count(*) INTO v FROM (
+    (SELECT * FROM d1_restore_rico_learning_ownership)
+    EXCEPT (SELECT l.id,l.user_id FROM rico_learning_signals l JOIN d1_restore_rico_learning_ownership b ON b.id=l.id)
+  ) q;
+  IF v<>0 THEN RAISE EXCEPTION 'UUID learning rows missing: %',v; END IF;
+
+  SELECT count(*) INTO v FROM (
+    (SELECT l.id,l.canonical_user_id FROM learning_signals l JOIN d1_restore_learning_ownership b ON b.id=l.id)
+    EXCEPT (SELECT * FROM d1_restore_learning_ownership)
   ) q;
   IF v<>0 THEN RAISE EXCEPTION 'Learning ownership differs: %',v; END IF;
+  SELECT count(*) INTO v FROM (
+    (SELECT * FROM d1_restore_learning_ownership)
+    EXCEPT (SELECT l.id,l.canonical_user_id FROM learning_signals l JOIN d1_restore_learning_ownership b ON b.id=l.id)
+  ) q;
+  IF v<>0 THEN RAISE EXCEPTION 'Learning rows missing: %',v; END IF;
 
   SELECT count(*) INTO v FROM (
-    (SELECT j.id,j.user_id FROM user_job_context j
-      JOIN d1_restore_job_context_ownership b ON b.id=j.id)
-    EXCEPT
-    (SELECT * FROM d1_restore_job_context_ownership)
+    (SELECT j.id,j.user_id FROM user_job_context j JOIN d1_restore_job_context_ownership b ON b.id=j.id)
+    EXCEPT (SELECT * FROM d1_restore_job_context_ownership)
   ) q;
   IF v<>0 THEN RAISE EXCEPTION 'Job-context ownership differs: %',v; END IF;
+  SELECT count(*) INTO v FROM (
+    (SELECT * FROM d1_restore_job_context_ownership)
+    EXCEPT (SELECT j.id,j.user_id FROM user_job_context j JOIN d1_restore_job_context_ownership b ON b.id=j.id)
+  ) q;
+  IF v<>0 THEN RAISE EXCEPTION 'Job-context rows missing: %',v; END IF;
 
   SELECT count(*) INTO v FROM (
-    (SELECT o.* FROM rico_onboarding_states o
-      WHERE lower(o.user_id) IN (SELECT alias FROM d1_restore_aliases))
-    EXCEPT
-    (SELECT * FROM d1_restore_onboarding)
+    (SELECT o.* FROM rico_onboarding_states o WHERE lower(o.user_id) IN (SELECT alias FROM d1_restore_aliases))
+    EXCEPT (SELECT * FROM d1_restore_onboarding)
   ) q;
   IF v<>0 THEN RAISE EXCEPTION 'Onboarding differs: %',v; END IF;
+  SELECT count(*) INTO v FROM (
+    (SELECT * FROM d1_restore_onboarding)
+    EXCEPT (SELECT o.* FROM rico_onboarding_states o WHERE lower(o.user_id) IN (SELECT alias FROM d1_restore_aliases))
+  ) q;
+  IF v<>0 THEN RAISE EXCEPTION 'Onboarding rows missing: %',v; END IF;
 
   SELECT count(*) INTO v FROM (
-    (SELECT s.* FROM rico_agent_settings s
-      WHERE s.user_id IN (SELECT id FROM d1_restore_target))
-    EXCEPT
-    (SELECT * FROM d1_restore_agent_settings)
+    (SELECT s.* FROM rico_agent_settings s WHERE s.user_id IN (SELECT id FROM d1_restore_target))
+    EXCEPT (SELECT * FROM d1_restore_agent_settings)
   ) q;
   IF v<>0 THEN RAISE EXCEPTION 'Agent settings differ: %',v; END IF;
+  SELECT count(*) INTO v FROM (
+    (SELECT * FROM d1_restore_agent_settings)
+    EXCEPT (SELECT s.* FROM rico_agent_settings s WHERE s.user_id IN (SELECT id FROM d1_restore_target))
+  ) q;
+  IF v<>0 THEN RAISE EXCEPTION 'Agent settings missing: %',v; END IF;
 END $$;
 
 SELECT jsonb_build_object(
