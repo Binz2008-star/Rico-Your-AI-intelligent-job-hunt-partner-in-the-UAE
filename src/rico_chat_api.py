@@ -9298,11 +9298,27 @@ class RicoChatAPI:
         # upload guidance and continues to the job-search path. Genuine CV
         # questions ("هل لدي سيرة ذاتية محفوظة؟") and upload/replace requests are
         # not explicit job-listing requests, so they still get CV guidance.
-        from src.rico.intent.gates import is_explicit_job_listing_request
+        #
+        # The same gate also swallowed CV-ANALYSIS asks. "سيرتي الذاتية" trips
+        # it for every Arabic CV phrasing, so "حلل سيرتي الذاتية" ("analyse my
+        # CV") was answered with upload guidance — asking a user who has a CV to
+        # upload one — and never reached the cv_analysis branch that reads the
+        # grounding. An analysis ask is a CONTENT question about a CV that
+        # already exists; this gate only owns EXISTENCE questions and upload
+        # announcements. Defer to the canonical predicate for the same reason as
+        # above: one source of truth, so the gate and the intent router cannot
+        # disagree about what an analysis ask is. Existence questions ("هل لدي
+        # سيرة ذاتية محفوظة؟") and upload announcements carry no analysis verb,
+        # so they still belong to this gate.
+        from src.rico.intent.gates import (
+            is_cv_analysis_request,
+            is_explicit_job_listing_request,
+        )
 
         if (
             self._looks_like_cv_intent_no_file(message)
             and not is_explicit_job_listing_request(message)
+            and not is_cv_analysis_request(message)
         ):
             # Check user_documents first — if a CV already exists, confirm it
             # rather than asking for an upload.

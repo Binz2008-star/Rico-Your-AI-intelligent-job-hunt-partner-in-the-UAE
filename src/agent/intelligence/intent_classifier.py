@@ -536,7 +536,22 @@ _CV_ANALYSIS_RE = re.compile(
     r"|\bhow\s+is\s+my\s+(cv|resume)\s*\?*\s*$"
     r"|\brate\s+my\s+(cv|resume)\b"
     r"|\b(cv|resume)\s+feedback\b"
-    r"|\bfeedback\s+on\s+my\s+(cv|resume)\b",
+    r"|\bfeedback\s+on\s+my\s+(cv|resume)\b"
+    # An analysis VERB bound directly to the CV noun. Without this arm the only
+    # recognised phrasing was the literal "review my cv": "analyse my cv please"
+    # classified as `unknown`, fell through the whole legacy cascade to the
+    # bare-role gate, and was searched as if it were a job title. The verb must
+    # be adjacent to the noun — "find jobs that MATCH my CV" carries no analysis
+    # verb and stays a job search, which is the fence this arm must not cross.
+    r"|\b(analy[sz]e|anali[sz]e|critique|assess|evaluate|appraise|criti[cq]ue)\b"
+    r"\s+(?:my|the)\s+(cv|resume|curriculum\s+vitae|profile)\b"
+    # Arabic. The classifier had no Arabic CV-analysis arm at all, so every
+    # Arabic phrasing reached `unknown`. Same shape as the English arm: an
+    # analysis verb immediately followed by the CV noun, so "ابحث عن وظائف
+    # تناسب سيرتي الذاتية" (a search) and "أريد رفع سيرتي الذاتية" (an upload
+    # announcement) are both left alone.
+    r"|(حلل|تحليل|راجع|مراجعة|قيّم|قيم|تقييم|انتقد)\s*(?:لي\s+)?"
+    r"(سيرتي|سيرة|السيرة)",
     re.IGNORECASE,
 )
 

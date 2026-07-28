@@ -368,6 +368,26 @@ def is_explicit_job_listing_request(message: str) -> bool:
         return False
 
 
+def is_cv_analysis_request(message: str) -> bool:
+    """Return True when message asks for the user's own CV to be analysed.
+
+    Deliberately thin: it defers to the same ``classify_intent`` the CV-analysis
+    branch itself keys on, so the two can never drift. A second, independently
+    maintained predicate is exactly the defect this exists to close — the
+    upload-announce gate and the intent router disagreed about what an analysis
+    ask was, and Arabic analysis asks ("حلل سيرتي الذاتية") were captured as
+    upload guidance before the router ever saw them.
+
+    Fails closed: an unclassifiable message is not an analysis request, so the
+    gates that consult this keep whatever behaviour they had.
+    """
+    try:
+        from src.agent.intelligence.intent_classifier import classify_intent
+        return classify_intent(message or "").intent == "cv_analysis"
+    except Exception:
+        return False
+
+
 def is_open_ended_question(message: str) -> tuple[bool, str]:
     """
     Decide whether a message must route to the conversational AI handler.
