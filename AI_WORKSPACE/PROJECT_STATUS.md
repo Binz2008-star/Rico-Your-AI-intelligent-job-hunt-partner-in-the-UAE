@@ -25,6 +25,59 @@ Ranked, and not negotiable when they disagree:
 
 **Every SHA in this file is verified from the API before it is written.** A SHA copied from a message, a summary, or a previous session is not evidence. If live state and this file disagree, reconcile this file before starting anything else.
 
+## Reconciliation — 2026-07-28 (post-`#1430`, evidence-environment phase)
+
+**This is the current pass. The post-`#1426` section below is retained for its delivery detail and is superseded only where the two disagree — and they disagree in exactly two places, both corrected here: `#1430` is merged, and the owner ruling it was waiting on has been given.**
+
+### Verified control snapshot
+
+| Field | Value | How it was established |
+| --- | --- | --- |
+| `main` | `8c6c421f04931fd2df3b60b46b8c12615369efcd` | `git rev-parse HEAD` on a clean tree at this pass, matching the live `#1430` merge commit |
+| `#1430` | **MERGED** — merged `2026-07-28T17:49:52Z`, merge commit `8c6c421f`, head `f504a37a` | `gh pr view 1430 --json number,isDraft,state,headRefOid,reviewDecision`, read live |
+| `#1389` | **OPEN, Draft, head `4f2abe60`** — untouched, still on owner HOLD | `gh pr view 1389 --json number,isDraft,state,headRefOid`, read live |
+| Application/runtime baseline | `383dcb6c` — **unchanged**; `main` is ahead of it by docs-only commits | `#1427`, `#1429` and `#1430` touch `AI_WORKSPACE/**` only, so no `src/**` deploy filter matched |
+| Deployed backend `/version` | **`383dcb6c` — verified**, `started_at` `2026-07-28T14:15:33Z` | `/version` read directly from the public endpoint by this session |
+| `/health` | **200 / ok** | Same read: `jooble`, `adzuna`, `jsearch` configured and non-degraded; `deepseek` configured, reachable, fallback available |
+
+**`main` ahead of the deployed `/version` is expected divergence here, not deployment drift** — three docs-only merges. Do not chase parity and do not fire a deploy to manufacture it.
+
+### The correction this pass exists to make
+
+The post-`#1426` section recorded `#1430` as **Draft, in review**, and recorded the next action as an **owner ruling on whether to establish a secure row-level evidence location**. Both were true when written. **Both are now stale:**
+
+1. **`#1430` merged** as `8c6c421f`, at the reviewed head `f504a37a` — nothing diverged between review and merge. The assessment deliverable is on `main` at `AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessment.md`. `TASK-20260728-002` moves `review` → `done`.
+2. **The owner ruling has been given.** The owner authorized a secure row-level evidence environment on 2026-07-28. That is the ruling the merged control plane was still pointing at as pending.
+
+   **Owner-attested, not connector-verified** — every fact in this paragraph is the owner's statement, taken on trust. **No Neon connector was ever authenticated in this session, so none of it has been confirmed against Neon itself:** that the evidence branch **exists**; that its **name** is `d1-ownership-evidence-2026-07-28`; that its **parentage** is an LSN-pinned point-in-time clone of `production`; that it was **created** 2026-07-28 22:07:29 +04; and that its expiry was **extended** to 30 days on 2026-07-28, superseding the original 2026-08-04 auto-delete. **Re-verify each of these against the Neon Console before relying on any of them.**
+
+The successor phase is opened as **`TASK-20260728-003`** in `TASKS.md`, carrying the owner's authorized scope verbatim. **It is an evidence and rehearsal phase. It is not a repair, and opening it authorizes no production mutation.**
+
+### The evidence environment — what it does and does not permit
+
+**Authorized, inside the Neon branch `d1-ownership-evidence-2026-07-28` only:** reading and analyzing row-level identifiers; creating temporary private mapping structures; rehearsing consolidation; producing a public report of aggregates and non-identifying conclusions.
+
+**Not authorized, by this document or by anything the mapping or rehearsal finds:** any production mutation, schema change, deletion or reassignment; publishing identifiers anywhere; moving `#1389` off Draft/HOLD; reusing the D1 report's `Cluster A`–`Cluster D` labels; a production repair PR; exposing credentials.
+
+**The public-output contract from `TASK-20260728-002` carries forward unchanged and binding**, including the no-deterministic-pseudonym and no-derived-hash rules, and the rule that the joining signal is reported as a category only. **`Cluster A`–`Cluster D` expired with the D1 report.** The successor report mints fresh ephemeral labels, which expire with it in turn.
+
+### The successor phase is blocked, and the blocker is access, not authorization
+
+Verified at this pass: **no Neon MCP server is authenticated**, `neonctl` is **not installed**, and **no `NEON_API_KEY` or Neon config exists** in the session environment. No row-level read has been taken and none can be until the owner connects a route.
+
+**Containment gap — record it, because it does not go away once access exists.** The Neon MCP server is **not read-only**: it exposes `run_sql`, migration preparation and `delete_branch` against **every branch the credential can reach, including `production`**. A project-scoped API key limits *which project*, not *which branch*. **"Evidence-branch-only" is therefore a discipline an agent follows, not a wall the tooling enforces.** The hard guarantee is a Postgres role scoped to `d1-ownership-evidence-2026-07-28` with no access to `production`, created by the owner and wired into the MCP server's own config — an agent may not receive a DSN or an API key. Until that exists, every call must name the branch explicitly, and the first statement of every session must confirm which branch the connection actually resolves to and abort if it is `production`.
+
+### Credential containment
+
+`TASK-20260728-003` must not use production credentials.
+See `ENGINEERING_ROADMAP.md` → Owner P0 credential rotation.
+
+### Schedule constraint — cleared
+
+**The owner extended the branch expiry to 30 days on 2026-07-28** (Owner-attested, not connector-verified — no Neon MCP was authenticated in this session to confirm the extension directly), superseding the original 2026-08-04 auto-delete; effective deletion lands on or about **2026-08-27 +04**, and the Neon Console holds the authoritative timestamp. Row-level mapping across seven domains plus a rehearsal with validation and rollback queries now fits comfortably, so **schedule pressure is no longer a reason to compress the work or to skip a verification step.**
+
+What has not changed: **do not let the branch lapse mid-rehearsal, and do not silently re-create it** — a fresh branch is a different point-in-time snapshot and invalidates every mapping built against the current one. **Access is the only remaining technical blocker; the owner's explicit go-ahead (blocker 3) is still required and is not cleared by connecting a route.**
+
 ## Reconciliation — 2026-07-28 (post-`#1426`)
 
 ### Verified control snapshot
@@ -96,9 +149,13 @@ Kept so the sequence is not lost when the section above is next replaced. Detail
 | Lane | PR | Branch | State |
 | --- | --- | --- | --- |
 | L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | **Open, Draft, and on owner HOLD.** See below |
-| L2 Journey-1 D1 assessment | `#1430` | `docs/journey1-d1-readonly-assessment` | **Open, Draft, in review.** Docs-only read-only assessment; awaiting owner ruling. Not for merge by an agent |
-| L8 job-search contract | — | — | No open PR. PR1 (`#1416`) and PR2 (`#1419`) are merged |
-| L9 Journey-1 CV truthfulness | — | — | No open PR. `#1422`, `#1424`, `#1425` and `#1426` are merged |
+| L2 Journey-1 D1 assessment | `#1430` | `docs/journey1-d1-readonly-assessment` | **MERGED** as `8c6c421f` at head `f504a37a`. No longer an open PR; lease `RELEASED`. Its successor phase (`TASK-20260728-003`) has **no PR and no branch** — it is blocked on Neon access |
+| L8 job-search contract | `#1431` | `claude/ricohunt-website-00969f` | **Open, READY, all checks green on `3b7572a3`. Not merged.** Thin-market search recovery — city-scope widening plus a labelled 3-card related tier. `TASK-20260728-004` |
+| L9 Journey-1 CV truthfulness | `#1432` | `claude/gratitude-pending-search` | **Open, READY, all checks green on `d736380e`. Not merged.** A thank-you must not redeem an armed search. `TASK-20260728-005` |
+
+**`#1431` and `#1432` were opened during the window this pass reconciles — after `#1430` merged — with no `TASKS.md` entry and no recorded lease.** `OPERATING_RULES.md` → Pull Request Audit Checklist item 11 therefore blocked both from merging: *no PR merges on a task with an empty or stale Continuity Block.* Blocks were reconstructed from the diffs and the live check runs as `TASK-20260728-004` and `TASK-20260728-005`; **they are reconciliation reconstructions, not lane reports.** Both PRs touch `src/rico_chat_api.py` **and** `.github/workflows/qa-tests.yml`, so **whichever merges second needs a rebase and a re-verified check run** — they are individually `MERGEABLE` against `main`, which is not the same as being mergeable after each other.
+
+**Two open items belong to the owner before `#1431` merges**, and neither is an agent call: it adds **an extra provider call** on the thin-market path, and a code comment cites an **"owner directive 2026-07-28"** for the widening behaviour that **appears nowhere in the control plane**. A comment is not its own evidence.
 
 **`#1389` is HOLD, not "unblocked".** The previous snapshot of this file said its blocker had cleared and that it "must rebase onto `dac8d8e7` before anything else". **That instruction is withdrawn.** The PR body carries an explicit owner HOLD ruling behind an upstream *production data* problem — several ownership rows for one account — which is not a code defect on that branch and is not cleared by any merge listed above.
 
@@ -137,8 +194,8 @@ The previous order is **spent**. Its first entry — the tests-only characteriza
 
 There is **no queued merge** at this pass.
 
-1. **The read-only Journey-1 D1 production-data consolidation assessment is delivered and in review** — `TASK-20260728-002`, PR `#1430`, Draft. **It is no longer the immediate executable action**; it is an open review. It read and reported, it proposed nothing for execution, and **no production Neon row mutation is authorized by it, by its findings, or by this document.**
-2. **The next action is an owner ruling, not an implementation.** The assessment could not bind the `#1389` cluster to an account without publishing a production identifier, so it recorded the mapping as unestablished. The owner must rule on **whether to establish an owner-approved secure evidence location outside the repository** to hold the row-level mapping any repair would need. **No repair is queued**, and none becomes queued by that ruling alone.
+1. **The read-only Journey-1 D1 production-data consolidation assessment is delivered and merged** — `TASK-20260728-002`, PR `#1430`, merged `8c6c421f`. It read and reported, it proposed nothing for execution, and **no production Neon row mutation is authorized by it, by its findings, or by this document.** `TASK-20260728-002` is `done`.
+2. **The owner ruling that assessment was waiting on has been given**, and the secure evidence environment exists as the Neon branch `d1-ownership-evidence-2026-07-28`. The successor phase is `TASK-20260728-003`: row-level mapping and a consolidation **rehearsal, inside that branch only**. **It is blocked on Neon access** — no MCP route is authenticated and no scoped credential exists — so it is authorized but **not startable**, which is not the same as queued. **No repair is queued**, and the rehearsal does not queue one however it turns out.
 3. **PR3 is not the immediate next action** merely because PR2 is delivered. PR3 → PR5 remain planned and unauthorized; see `ENGINEERING_ROADMAP.md`.
 4. `#1389` stays on HOLD. The D1 assessment **characterizes** the data problem sitting above that branch; it does not lift the HOLD, and only an owner ruling can.
 5. Everything else stays deferred under `DEC-20260723-001`.
@@ -154,7 +211,7 @@ The following are known-open. **Recording one here does not authorize acting on 
 1. ~~**My Files still converts its own failed read into `files=[]`.**~~ **CLOSED by `#1425`** (`39b44696`). The endpoint answers 503 with a structured `files_unavailable` detail and the surface renders a distinct unavailable state. Kept visible, struck through, for one pass so the closure is legible against the list it was on; it will be dropped at the next reconciliation.
 2. **Arabic and English CV routing still diverge at `_looks_like_cv_intent_no_file` — but narrowed by `#1426`, not closed.** What is delivered: on the active-user chat path, a CV-**analysis** ask in either language now reaches `cv_analysis` with authoritative grounding, so an Arabic user is no longer told to upload a CV they already have. What remains: the gate still runs *before* intent classification, and it has **two** call sites. `src/rico_chat_api.py:9319` (active user) now carries the `is_cv_analysis_request` exemption; **`src/rico_chat_api.py:8783`, on the `_process_message_inner` path taken by onboarding-incomplete users, carries no such exemption.** That asymmetry is a **code read taken during this reconciliation, not a test-proven defect** — the `#1424`/`#1426` suites drive `_handle_active_user_inner` only, so no test currently covers the second call site either way. Treat it as a lead to verify, not as an established bug, and **not** as authorization to edit either call site.
 3. **English and Arabic reach different job-search terminals for the same intent** — `_target_role_search_response` vs `_handle_company_search`. Recorded by `#1424` as characterization: both satisfy the job-search contract, so this is an unexplained asymmetry rather than a known defect.
-4. **Journey-1 D1** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD. **Assessed, not repaired.** `TASK-20260728-002` is delivered as `#1430` (Draft, in review) and its findings are in `AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessment.md`. The snapshot holds four connected ownership-signal clusters, 21 guest rows carrying a trusted identity field and 74 guest rows carrying authenticated onboarding completion; every observed residual predates the complete guard set, so production data does **not** establish that the guards have stopped new bad rows — it merely fails to disprove it. **Being assessed is not being authorized for repair**, and the residual stays open.
+4. **Journey-1 D1** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD. **Assessed, not repaired.** `TASK-20260728-002` is delivered as `#1430` (**merged** `8c6c421f`) and its findings are in `AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessment.md`. The snapshot holds four connected ownership-signal clusters, 21 guest rows carrying a trusted identity field and 74 guest rows carrying authenticated onboarding completion; every observed residual predates the complete guard set, so production data does **not** establish that the guards have stopped new bad rows — it merely fails to disprove it. **Being assessed is not being authorized for repair**, and the residual stays open.
 5. **Journey-1 D2** — pending-artifact activation.
 6. **Journey-1 D4** — mission/dashboard truth.
 7. **Journey-1 D5** — first-useful-result activation.
@@ -190,19 +247,31 @@ CV-analysis routing / Arabic parity fix (#1426) are delivered. All their leases
 are released and their write authorizations revoked.
 
 The READ-ONLY Journey-1 D1 production-data consolidation ASSESSMENT is DELIVERED
-and IN REVIEW as #1430 (Draft) — TASK-20260728-002 in TASKS.md. It is no longer
-an executable action; do not re-run it, and do not open a second assessment.
-Keep #1430 Draft. Do not merge it.
+and MERGED as #1430 (8c6c421f, at reviewed head f504a37a) — TASK-20260728-002 is
+DONE. Do not re-run it and do not open a second assessment.
 
-The next action belongs to the OWNER, not to an agent: rule on whether to
-establish an owner-approved secure evidence location outside the repository to
-hold the row-level mapping a repair would need. The assessment could not bind
-the #1389 cluster to an account without publishing a production identifier, so
-it recorded that mapping as unestablished. NO REPAIR IS QUEUED.
+The owner ruling it was waiting on HAS BEEN GIVEN. A secure row-level evidence
+environment is authorized and exists as the Neon branch
+d1-ownership-evidence-2026-07-28. The successor phase is TASK-20260728-003:
+row-level mapping and a consolidation REHEARSAL, INSIDE THAT BRANCH ONLY.
+
+TASK-20260728-003 IS BLOCKED ON ACCESS, NOT ON AUTHORIZATION. Verified at this
+pass: no Neon MCP server is authenticated, neonctl is not installed, and no
+NEON_API_KEY or Neon config exists in the session environment. Do not improvise
+a credential path, and DO NOT USE THE LOCAL PRODUCTION ENVIRONMENT CREDENTIAL
+FOR THIS WORK — it resolves to production, which is the stop condition, not the
+target.
+
+Before the first row-level read, the OWNER must: (1) connect a Neon access route
+with the credential held by the MCP server config, never passed to an agent;
+(2) give an explicit go-ahead that acknowledges the containment gap recorded
+above — Neon MCP is not read-only and reaches production, so branch confinement
+is discipline, not a wall.
 
 NO PRODUCTION NEON ROW MUTATION IS AUTHORIZED. Not by this document, not by
-TASK-20260728-002, not by #1430, and not by anything the assessment found. A
-finding is a finding; repair needs its own owner authorization.
+TASK-20260728-002, not by TASK-20260728-003, not by #1430, and not by anything
+the assessment, the mapping, or the rehearsal finds. A finding is a finding;
+repair needs its own owner authorization. NO PRODUCTION REPAIR PR.
 
 PR3 is NOT authorized. #1389 is on owner HOLD and must not be rebased, edited,
 reopened, marked Ready, merged, or used as an implementation branch — the D1

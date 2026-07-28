@@ -178,7 +178,7 @@ Update the block for your lane. Never duplicate one.
   - **`#1425` — My Files: unavailable store is not an empty inventory.** Merged as `39b44696b2887194f1ec9de9604ee17da9231a48` from branch `fix/my-files-store-unavailable-truth`, onto base `594a4d3b`. Six files, four of them tests; **touches both `src/` and `apps/web/`**. `GET /api/v1/user/files` answers **503** with a structured `files_unavailable` detail when `_db.available` is false or `list_user_documents` raises, instead of `{"files": [], "total": 0}`. The body carries no inventory claim and no exception text, DSN, provider detail, identifier, document id, filename or stack trace. The legacy `profile-cv` projection is deliberately **not** used as an outage fallback — it is a copy of grounding, not an inventory read. `UploadAtelier` gained a fourth state, **unavailable**, with a `role="alert"` panel, truthful EN/AR copy, a manual Retry that performs no mutation, and no auto-retry; **any** failed read now counts, not just the 404/500/503 the old code special-cased. The `#1424` strict xfail was converted to a passing `test_contract_*` with its assertion preserved. **Rollback:** revert `39b44696` — no migration, no schema, no new response model, no feature flag. **Frontend evidence: none taken.** A backend `/version` read does not prove the Vercel half.
   - **`#1426` — CV-analysis asks route to analysis, not job search.** Merged as `383dcb6c6c72a849891e0b55c1af80f80d4f4865` from branch `fix/cv-analysis-intent-routing`, onto base `39b44696`. Five files, one a new test. `_CV_ANALYSIS_RE` in `src/agent/intelligence/intent_classifier.py` gained the analysis verbs bound to `cv` / `resume` / `curriculum vitae` (`profile` was tried and **removed** as over-capture), plus an Arabic arm requiring the `(ال)ذاتية` qualifier so a bare `سيرة` — biography — does not match; `src/rico/intent/gates.py` gained `is_cv_analysis_request()`, which defers to the same `classify_intent` the CV-analysis branch keys on, so gate and router cannot drift; and the upload-announce gate in `src/rico_chat_api.py` now skips analysis asks the way it already skipped explicit job-listing requests. **This is the Arabic/English verified-absence parity fix:** an Arabic CV-analysis ask previously answered `cv_upload_guidance` with `next_action="upload_cv"` regardless of phrasing, making a genuinely CV-less Arabic user and a store outage indistinguishable. Negative fences asserted in both languages with zero CV-context and zero document reads. Tests at merge: 119 in the new file, 57 in the characterization file, 4054 passed / 1 xfailed across `tests/unit/`. **Deployed:** `Deploy Render Backend` run `30367283239` green, `/version.commit` = `383dcb6c`, `/health` 200 / ok. **Rollback:** revert `383dcb6c` — regex and gate-predicate changes only, no migration, no schema, no config, no env var.
 
-  **Open residuals after this arc, NOT authorized by being recorded:** stored-CV/CV-state logic is still spread across `src/rico_chat_api.py`; `_looks_like_cv_intent_no_file` still precedes intent classification and its second call site (`src/rico_chat_api.py:8783`, the `_process_message_inner` path for onboarding-incomplete users) carries no analysis-ask exemption — **a code read taken at reconciliation, not a test-proven defect**, since the suites drive `_handle_active_user_inner` only; the EN/AR job-search terminal asymmetry is characterized, unexplained and unfixed; and Journey-1 D1, D2, D4 and D5 remain untouched. **`TASK-20260728-001` is `done`. `TASK-20260728-002` — the read-only Journey-1 D1 assessment — is `review`, delivered as `#1430` (Draft). It reports; it authorizes no repair.**
+  **Open residuals after this arc, NOT authorized by being recorded:** stored-CV/CV-state logic is still spread across `src/rico_chat_api.py`; `_looks_like_cv_intent_no_file` still precedes intent classification and its second call site (`src/rico_chat_api.py:8783`, the `_process_message_inner` path for onboarding-incomplete users) carries no analysis-ask exemption — **a code read taken at reconciliation, not a test-proven defect**, since the suites drive `_handle_active_user_inner` only; the EN/AR job-search terminal asymmetry is characterized, unexplained and unfixed; and Journey-1 D1, D2, D4 and D5 remain untouched. **`TASK-20260728-001` is `done`. `TASK-20260728-002` — the read-only Journey-1 D1 assessment — is `done`, merged as `#1430` (`8c6c421f`). It reported; it authorized no repair. Its successor `TASK-20260728-003` (row-level mapping + rehearsal inside an owner-created Neon evidence branch) is authorized but `blocked` on Neon access, and it authorizes no repair either.**
 
   > **Label collision, stated once so nothing downstream misreads it.** The **Journey-1 D1–D5** series above is unrelated to the **security-audit D1–D5** rows in the audit table further down this file (`audit_repo.py` DDL, `_DEDUP_CACHE`, safety regex, password complexity, JWT revocation). Different findings, same letters. **Neither series is renumbered. Always write "Journey-1 D1–D5" or "security-audit D1–D5" — never a bare `D3`.**
 
@@ -272,12 +272,24 @@ not a licence to edit the module.
 
 ### TASK-20260728-002 — Journey-1 D1 production-data consolidation assessment (READ-ONLY)
 
-Status: **review** — assessment delivered as `#1430`, Draft, awaiting owner ruling
-Owner: the D1 read-only assessment session (this pass) — lease held on the branch below
-Branch: `docs/journey1-d1-readonly-assessment`
-Issue/PR: `#1430` — **Draft, not merged.** Opened after `#1427` and `#1429` reconciled the control plane
+Status: **done** — assessment delivered as `#1430`, **merged `8c6c421f04931fd2df3b60b46b8c12615369efcd`**
+Owner: closed; lease `RELEASED`, write authorization `REVOKED`
+Branch: `docs/journey1-d1-readonly-assessment` (merged)
+Issue/PR: `#1430` — **merged 2026-07-28T17:49:52Z at head `f504a37a`**, the reviewed head; nothing diverged between review and merge. Opened after `#1427` and `#1429` reconciled the control plane
 
 Deliverable: [`AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessment.md`](EVALS/2026-07-28-journey1-d1-production-data-assessment.md)
+
+> **Closed by merge, and the successor phase is `TASK-20260728-003` below.** The owner
+> ruling this task ended by requesting — whether to establish a secure row-level evidence
+> location — **has been given**, and the evidence environment exists. That does not
+> retroactively authorize anything here: this task assessed and reported, and its
+> read-only, no-repair constraints are preserved below as the historical statement of what
+> it was permitted to do, not as a live instruction.
+>
+> **The public-output contract stated in this task carries forward to `TASK-20260728-003`
+> unchanged and binding**, including the no-deterministic-pseudonym and no-derived-hash
+> rules and the report-the-signal-as-a-category-only rule. **`Cluster A`–`Cluster D`
+> expired with the deliverable and must not be reused to mean the same clusters.**
 
 > **The assessment is complete and no repair is authorized.** Reaching `review` discharges
 > the *assessment*; it authorizes nothing else. **No production Neon row mutation, no
@@ -293,10 +305,13 @@ Deliverable: [`AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessm
 > current snapshot. Binding a cluster to the affected account would require a production
 > identifier, so the mapping is correctly absent from the repository.
 >
-> **The next thing that could unblock D1 is an owner ruling**, not more reading: whether to
+> ~~**The next thing that could unblock D1 is an owner ruling**, not more reading: whether to
 > establish an owner-approved secure evidence location outside the repository to hold the
-> row-level mapping a repair would need. Until that ruling exists, the missing evidence
-> stays recorded as missing.
+> row-level mapping a repair would need.~~ **That ruling has been given** — the owner
+> authorized the evidence environment on 2026-07-28 and created the Neon branch
+> `d1-ownership-evidence-2026-07-28`. **Replaced, not stacked:** the live successor is
+> `TASK-20260728-003`. The missing row-level evidence stays recorded as missing until that
+> task actually runs, which it cannot yet do — it is blocked on Neon access.
 
 #### Objective
 
@@ -431,6 +446,306 @@ unpublished, and no conclusion the assessment might reach outranks that.
 Nothing to roll back — the deliverable is a document and the production database is
 never written.
 
+### TASK-20260728-003 — Journey-1 D1 secure row-level evidence environment (MAPPING + REHEARSAL)
+
+Status: **blocked** — authorized by the owner, **not startable**: no Neon access route exists
+Owner: unassigned — no lease is held, because no agent can begin
+Branch: none. **Do not open one, and do not open a PR, until the access blockers below clear**
+Issue/PR: none
+
+Handoff: [`HANDOFFS/2026-07-28-d1-secure-evidence-environment.md`](HANDOFFS/2026-07-28-d1-secure-evidence-environment.md)
+Predecessor: `TASK-20260728-002` (`done`, `#1430`, merged `8c6c421f`)
+
+> **This task produces evidence and a rehearsal. It does not produce a production repair,
+> and completing it does not authorize one.** Authorization to map and rehearse is not
+> authorization to fix, however clearly the rehearsal shows what a fix would be.
+
+#### Owner authorization — verbatim scope
+
+The owner authorized a secure row-level evidence environment on 2026-07-28.
+
+**Authorized:**
+
+- Read and analyze row-level identifiers **only inside the temporary Neon branch**.
+- Create temporary private mapping structures **inside that branch**.
+- Rehearse consolidation **inside that branch only**.
+- Produce a public report using aggregates and non-identifying conclusions only.
+
+**Not authorized:**
+
+- Any production mutation.
+- Any production schema change.
+- Any deletion or reassignment on production.
+- Publishing identifiers in GitHub, `AI_WORKSPACE`, chat, logs, screenshots, or PRs.
+- Moving `#1389` from Draft/HOLD.
+- Reusing the D1 public cluster labels as permanent identifiers.
+- Creating a production repair PR.
+- Exposing credentials.
+
+#### The evidence environment
+
+The owner created this branch manually in the Neon Console on 2026-07-28. **Do not create
+another one.**
+
+- **Branch name:** `d1-ownership-evidence-2026-07-28`
+- **Parent:** `production`, LSN-pinned point-in-time clone
+- **Created:** 2026-07-28 22:07:29 +04
+- **Expiry — EXTENDED by the owner to 30 days on 2026-07-28**, superseding the original
+  2026-08-04 auto-delete. Effective deletion lands on or about **2026-08-27 +04**; the
+  authoritative timestamp is the one shown on the branch overview in the Neon Console.
+
+Neon infrastructure identifiers — branch ID, compute ID, project ID — are **operational
+only and are deliberately not recorded in this repository.** They live with the owner.
+
+**The schedule constraint is cleared and is no longer a reason to rush the work.** What has
+not changed: **do not let the branch lapse mid-rehearsal, and do not silently re-create
+it** — a fresh branch is a different point-in-time snapshot and invalidates every mapping
+built against the current one. Re-read the live expiry before starting a long session
+rather than trusting this line.
+
+#### Blockers — all owner-side, none of them agent-resolvable
+
+1. **No Neon access route is connected.** Verified 2026-07-28: no Neon MCP server is
+   authenticated, `neonctl` is not installed, and no `NEON_API_KEY` or Neon config exists
+   in the session environment. The owner connects one — hosted OAuth, or a local MCP server
+   holding a project-scoped key — **with the credential in the server's own config. An
+   agent may not receive a DSN or an API key.**
+2. ~~**The branch expiration is not extended.**~~ **CLEARED 2026-07-28** — the owner
+   extended it to 30 days.
+3. **No explicit go-ahead for the first row-level read** that acknowledges the containment
+   gap below.
+
+**Blocker 1 is the only one an access route clears; blocker 3 remains unresolved and also requires owner action.**
+
+#### Containment gap — state it before the first row-level read
+
+**The Neon MCP server is not read-only.** It exposes `run_sql`, migration preparation and
+`delete_branch` against **every branch the credential can reach, including `production`**.
+A project-scoped key limits *which project*, not *which branch*.
+
+**"Evidence-branch-only" is therefore a discipline the agent follows, not a wall the
+tooling enforces.** Consequences, binding:
+
+1. **Assert the target branch on every single call.** Never rely on a default. If a call
+   does not let you name the branch explicitly, do not make it.
+2. **The first statement of any session must confirm which branch the connection actually
+   resolves to.** If it resolves to `production`, stop.
+3. The hard guarantee, if the owner wants one: a Postgres role scoped to
+   `d1-ownership-evidence-2026-07-28` with no access to `production`, created by the owner
+   and wired into the MCP config.
+
+**Separately: an exposed local environment credential file on the owner's machine
+resolves to production.** **It must not be used for this task** — it is a stop
+condition, not the target. Rotation is tracked as the open **Owner P0** in
+`ENGINEERING_ROADMAP.md` and is not agent-actionable.
+
+#### Constraints — the binding ones
+
+- **Production is untouchable.** No `UPDATE`, `DELETE`, `INSERT`, `MERGE`, DDL, migration
+  or schema change against `production`, under any justification, including a "trivially
+  safe" one-row correction and including anything the rehearsal proves correct.
+- **Writes are permitted inside `d1-ownership-evidence-2026-07-28` only**, and only for
+  temporary mapping structures and rehearsal. Treat every object created there as expiring
+  with the branch.
+- **`#1389` stays untouched** — not rebased, edited, reopened, marked Ready, merged, or used
+  as an implementation branch. This task characterizes and rehearses; only an owner ruling
+  lifts the HOLD.
+- **No production repair PR.** Not as a draft, not "for review", not as a migration file.
+- **No `src/`, no `apps/web/`, no tests, no workflows, no environment variables.**
+- **No credentials in chat, files, logs, commit messages or PR text.**
+- **The public-output contract from `TASK-20260728-002` applies unchanged** — aggregates,
+  cluster shapes, non-identifying dates, **ephemeral labels only**; no raw or linkable
+  identifier, **no deterministic pseudonym and no deterministic hash**; the joining signal
+  reported as a **category only**. **Row-level mapping lives in the Neon branch and nowhere
+  else** — not in `AI_WORKSPACE`, a PR body, a PR comment, a commit message, a log, a
+  screenshot or a build artifact. **`Cluster A`–`Cluster D` expired with the D1 report;**
+  mint fresh ephemeral labels and state that they expire with the new report too.
+
+#### What this task must establish
+
+1. **Row-level mapping, inside the branch only** — per cluster: which rows exist, which
+   dependent records hang off each, and what evidence bears on common ownership.
+2. **A canonical-row rule**, stated explicitly with the evidence that justifies it — not
+   "most recent" or "most complete" asserted as self-evident.
+3. **A per-domain reassignment matrix** covering career state, CV/documents, chat,
+   onboarding, settings, subscriptions and learning — **plus the legacy `applications`
+   table**, which the D1 assessment could not attribute because it lacks a usable ownership
+   key. Resolve that gap or record it as unresolved.
+4. **A rehearsed consolidation inside the branch**, with validation queries proving the
+   post-state, rollback queries proving reversibility, and an explicit count of what the
+   rehearsal touched.
+5. **Whether the `#1389` account can now be identified** with row-level access — and if so,
+   what the correct repair would be, **stated as an unauthorized option**.
+6. **What still cannot be determined**, recorded as unknown rather than estimated.
+
+**Apply the Product Generalization Rule.** State for every finding whether it affects one
+user, one profile state, one locale, one provider, or all users. **A consolidation that only
+helps one account is invalid** and must be reported as such.
+
+#### Acceptance criteria
+
+- [ ] Zero production writes — demonstrable from the commands run.
+- [ ] Every row-level read and write provably scoped to `d1-ownership-evidence-2026-07-28`,
+      with the branch asserted per call.
+- [ ] Zero raw or linkable production identifiers in the report, PR body, PR comments,
+      commit messages, screenshots, logs and build artifacts.
+- [ ] Fresh ephemeral labels; `Cluster A`–`Cluster D` not reused.
+- [ ] A canonical-row rule stated with its justifying evidence.
+- [ ] A per-domain reassignment matrix exists, including the `applications` gap.
+- [ ] The rehearsal ran inside the branch with validation and rollback queries recorded.
+- [ ] Every repair option marked unauthorized with its missing preconditions.
+- [ ] Unknowns listed as unknowns.
+- [ ] `#1389` still Draft and on HOLD, and the deliverable says so.
+
+> **One acceptance criterion from the handoff is void and is deliberately not carried
+> here:** *"`#1430` is still Draft at `f504a37a` and unmerged."* `#1430` merged as
+> `8c6c421f` at that exact head before this task was opened. The criterion existed to stop
+> scope growth into a PR under review; that PR is merged, so it has no referent. **The
+> successor report goes on its own fresh branch and its own PR.**
+
+#### Required verification
+
+```bash
+gh pr view 1430 --json number,isDraft,state,headRefOid,reviewDecision
+```
+
+```bash
+gh pr view 1389 --json number,isDraft,state,headRefOid
+```
+
+No unit tests, integration tests, frontend build or deploy smoke apply — this is an
+assessment and a rehearsal, not a release.
+
+#### Stop conditions
+
+Stop and ask the owner when:
+
+- no Neon MCP or equivalent scoped access is connected;
+- a connection resolves to `production` rather than the evidence branch;
+- a read or rehearsal step would require touching production;
+- a claim cannot be established without exposing or publishing a production identifier —
+  **record it as unestablished and stop there**;
+- the branch expiry is approaching and the work is not complete;
+- a finding appears to require immediate corrective action. **"It looked urgent" is not
+  authorization to mutate a row.**
+
+#### Rollback plan
+
+- Inside the branch: nothing to preserve — it is disposable and auto-deletes.
+- Production: nothing to roll back, because production is never written.
+- Documentation: revert the report commit, or close its PR unmerged.
+
+### TASK-20260728-004 — Thin-market search recovery: a zero becomes a recovered result, not a blank screen
+
+Status: **open** — `#1431` READY, all checks green, **not merged**
+Owner: authored by another session on `claude/ricohunt-website-00969f`; **no lease was ever recorded**
+Branch: `claude/ricohunt-website-00969f` — head `3b7572a34d36aea5879314e4ba80d1af0cea84b0`, base `main`, `MERGEABLE`
+Issue/PR: `#1431`, opened 2026-07-28T18:05:09Z
+
+> **Continuity block reconstructed at reconciliation, not authored by the lane.** This PR
+> was opened with no `TASKS.md` entry and no lease, so `OPERATING_RULES.md` → Pull Request
+> Audit Checklist item 11 blocked it from merging. This block exists to clear that gate.
+> Scope, risk and rollback below are **read from the diff and the live check runs**, not
+> copied from a lane report — no lane report exists.
+
+#### Scope
+
+6 files, +553/−30. `src/rico_chat_api.py`, `apps/web/app/command/page.tsx`,
+`apps/web/lib/translations.ts`, two new test files, and the `qa-tests.yml` enumeration
+entries for them.
+
+Two behaviours are added on the thin-market path, where the title floor rejects every live
+listing:
+
+1. **City-scope widening.** When a provider-level city was in play and nothing cleared the
+   title floor, the same title is re-run country-wide before any adjacent-role hop.
+   **Exactly one of the two runs**, so an accepted request still buys exactly one extra
+   cascade. The decision reads only *whether* a city reached the provider — no city list,
+   no per-market threshold, no per-account rule.
+2. **A labelled `related_matches` tier**, capped at 3, sourced by re-running the integrity
+   gate over the pre-gate payload with the role vocabulary removed — so a record reaches it
+   only when the single thing wrong with it was the title. Applied-jobs and
+   non-nationals eligibility filters are re-applied; the requested-city filter deliberately
+   is not.
+
+#### Risk
+
+- **An extra provider call on the thin-market path.** This is a real JSearch/quota cost and
+  is the main thing to weigh. It is bounded to one extra cascade per request.
+- Recursion into `_target_role_search_response` with `_adjacent_hop=True`; operation id and
+  attempt are saved and restored in a `finally`, so lifecycle identity is preserved.
+- Every helper fails closed — a failure anywhere in the related tier yields **no** tier, not
+  a degraded or unchecked one.
+- **A code comment cites an "owner directive 2026-07-28" for the widening behaviour that is
+  recorded nowhere in the control plane.** Confirm the directive before merge; do not treat
+  the comment as its own evidence.
+
+#### Validation
+
+- **Run:** all checks green on head `3b7572a3` — `pytest`, `frontend`, `playwright`,
+  `postgres-integration`, `enumeration`, `ratchet`, `trusted-ratchet`,
+  `workflow-security-guards`, Vercel preview.
+- **Required before merge:** owner confirmation of the cited directive and of the extra
+  provider call. **Frontend evidence is not carried by a backend read** — `page.tsx` and
+  `translations.ts` changed, so the Vercel half needs its own check.
+- **Required after merge:** `src/**` changed, so a Render deploy fires. Confirm
+  `/version.commit` matches the merge commit and `/health` is 200 before claiming it live.
+
+#### Rollback
+
+Revert the merge commit. No migration, no schema, no config, no env var, no feature flag.
+
+### TASK-20260728-005 — A thank-you must not spend a provider call
+
+Status: **open** — `#1432` READY, all checks green, **not merged**
+Owner: authored by another session on `claude/gratitude-pending-search`; **no lease was ever recorded**
+Branch: `claude/gratitude-pending-search` — head `d736380e37b4e91ba0552c2e5db8694ad9661cc2`, base `main`, `MERGEABLE`
+Issue/PR: `#1432`, opened 2026-07-28T18:12:50Z
+
+> **Continuity block reconstructed at reconciliation**, on the same basis as
+> `TASK-20260728-004` above and for the same gate.
+
+#### Scope
+
+3 files, +207/−1. One guard in `src/rico_chat_api.py`, one new test file, and its
+`qa-tests.yml` enumeration entry.
+
+After any successful search with adjacent roles to offer, Rico arms a pending job search.
+Every redemption site redeems an armed search on a bare acknowledgement — and `thanks` /
+`شكراً` were acknowledgements. So **the most common way a satisfied user ends a turn burned
+a real provider call and answered with a search they never asked for.**
+
+`_GRATITUDE_ONLY_REPLIES` is a deliberately strict subset of the acknowledgement map:
+praise words (`perfect`) and acceptances (`ok`, `تمام`) are excluded on purpose, because
+after "shall I broaden?" those genuinely do mean yes. The guard lands in
+`_pending_search_redemption_blocked`, which **all four redemption sites share** — a per-site
+fix would be three chances to miss one.
+
+#### Risk
+
+- **Low, and the failure mode is safe:** gratitude declines to redeem but does **not clear**
+  the armed search, so a later "yes" still works inside the TTL.
+- The reverse fence is the real risk and is asserted in both languages: `ok` / `yes` /
+  `تمام` / `ماشي` must still redeem, or the "hollow promise" loop those call sites exist to
+  close would come back.
+- **Judgement call worth the owner's eye:** `ok thanks` / `okay thank you` are classified as
+  gratitude-only. After an explicit offer they could plausibly mean acceptance. The
+  conservative reading was chosen — do not spend a provider call — and the armed search
+  survives, so the cost of being wrong is one extra user turn, not a lost offer.
+
+#### Validation
+
+- **Run:** all checks green on head `d736380e` — `pytest`, `frontend`, `playwright`,
+  `postgres-integration`, `enumeration`, `ratchet`, `trusted-ratchet`, Vercel preview.
+- Tests are hermetic: no DB, no provider, no network, no credentials, synthetic user only.
+  Both languages and both directions are covered.
+- **Required after merge:** `src/**` changed, so a Render deploy fires. Confirm
+  `/version.commit` matches the merge commit and `/health` is 200.
+
+#### Rollback
+
+Revert the merge commit. No migration, no schema, no config, no env var, no feature flag.
+
 ### TASK-20260723-004 — CLAUDE.md best-practices tooling + full open-PR backlog merge & production verification
 
 Status: done
@@ -441,7 +756,7 @@ Branch: `claude/md-best-practices-generator-auau3b` (final home of the
 CLAUDE.md refactor commit, reconciled onto the pre-existing PR #1346 rather
 than opened as a competing PR)
 Issue/PR: #1346 (tooling+refactor), plus reviewed-and-merged #1347, #1348,
-#1349, #1350 as part of the same session
+# 1349, #1350 as part of the same session
 
 #### Objective
 
@@ -679,7 +994,6 @@ comes from the DB, not stale token claims; store outage fails closed.
 - Rollback plan: revert the squash commit (behavior returns to stateless
   tokens); column 045 is additive and harmless to leave; dropping it is a
   separate owner-approved migration
-
 
 ### TASK-20260720-001 — hotfix #1225: agentic_ui option buttons as plain dict (stream TypeError) — PRODUCTION VERIFIED
 
@@ -4898,7 +5212,7 @@ fix small isolated bugs immediately, document larger issues for separate PRs.
 #### Issues documented (separate PRs required — do NOT touch without explicit scope)
 
 | # | Issue | File | Recommended action |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | D1 | Runtime DDL bypasses migration system | `audit_repo.py` | Move 3 table creates to numbered migrations |
 | D2 | `_DEDUP_CACHE` unbounded memory growth | `audit_repo.py` | Add periodic sweep or size cap in `_mem_seed` |
 | D3 | Safety regex over-breadth (`password`, `bypass`) | `rico_safety.py` | Narrow with word-boundary anchors + regression tests |
