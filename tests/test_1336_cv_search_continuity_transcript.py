@@ -401,8 +401,8 @@ def test_1336_full_pr3_acceptance_sequence():
     # 5958) and a second unconditional check in the legacy
     # follow_up_confirmation branch (~line 10345) do not verify the new
     # message actually looks like a continuation before redeeming an armed
-    # pending search — see test_pending_job_search_outranks_cv_analysis_KNOWN_GAP
-    # below, marked xfail and tracked for separate follow-up.
+    # pending search. That gap is now closed — see
+    # test_cv_analysis_outranks_pending_job_search below, which pins it.
 
     before = len(h.searched_roles)
     r5 = h.say(user, "what was that?")
@@ -410,22 +410,20 @@ def test_1336_full_pr3_acceptance_sequence():
     assert len(h.searched_roles) == before, "'what was that?' must never trigger a new search"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "#1336 PR3 follow-up (not this PR's scope): _resolve_pending_intent's "
-        "Priority-0 pending-job-search redemption (rico_chat_api.py ~line 5958) "
-        "and the legacy follow_up_confirmation branch's equivalent check "
-        "(~line 10345) redeem an armed pending job search unconditionally, "
-        "without checking whether the new message actually looks like a "
-        "continuation. A clear CV-analysis request sent right after a وسع "
-        "turn is swallowed as a search-continuation instead of reaching "
-        "_handle_stored_cv_reference. Fix: gate both redemption sites on "
-        "_CV_ANALYZE_ASK_RE (and similar higher-specificity intents) not "
-        "matching before redeeming the pending search."
-    ),
-    strict=True,
-)
-def test_pending_job_search_outranks_cv_analysis_KNOWN_GAP():
+def test_cv_analysis_outranks_pending_job_search():
+    """A CV-analysis ask is NOT swallowed as a pending-search continuation.
+
+    Recorded here as a #1336 PR3 known gap and carried as a strict xfail: the
+    redemption sites redeemed an armed pending job search without checking
+    whether the new message was a continuation at all, so "analize my cv" sent
+    right after a وسع turn ran the search instead of reaching CV analysis.
+
+    The gap is now closed — `_pending_search_redemption_blocked` gates every
+    redemption site on `_CV_ANALYZE_ASK_RE`, which is exactly the fix the xfail
+    reason prescribed. The marker outlived it and, being strict, turned the
+    delivered fix into a red suite. It is removed and the case stands as the
+    positive contract it always described.
+    """
     h = _FailableHarness()
     user = USER_PR3 + ".gap"
     h.seed(
