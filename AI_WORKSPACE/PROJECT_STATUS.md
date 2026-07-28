@@ -47,7 +47,9 @@ Ranked, and not negotiable when they disagree:
 The post-`#1426` section recorded `#1430` as **Draft, in review**, and recorded the next action as an **owner ruling on whether to establish a secure row-level evidence location**. Both were true when written. **Both are now stale:**
 
 1. **`#1430` merged** as `8c6c421f`, at the reviewed head `f504a37a` — nothing diverged between review and merge. The assessment deliverable is on `main` at `AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessment.md`. `TASK-20260728-002` moves `review` → `done`.
-2. **The owner ruling has been given.** The owner authorized a secure row-level evidence environment on 2026-07-28 and created the Neon branch `d1-ownership-evidence-2026-07-28` — an LSN-pinned point-in-time clone of `production`, created 2026-07-28 22:07:29 +04, originally auto-deleting 2026-08-04 22:07 +04 (since extended — see below). That is the ruling the merged control plane was still pointing at as pending.
+2. **The owner ruling has been given.** The owner authorized a secure row-level evidence environment on 2026-07-28. That is the ruling the merged control plane was still pointing at as pending.
+
+   **Owner-attested, not connector-verified** — every fact in this paragraph is the owner's statement, taken on trust. **No Neon connector was ever authenticated in this session, so none of it has been confirmed against Neon itself:** that the evidence branch **exists**; that its **name** is `d1-ownership-evidence-2026-07-28`; that its **parentage** is an LSN-pinned point-in-time clone of `production`; that it was **created** 2026-07-28 22:07:29 +04; and that its expiry was **extended** to 30 days on 2026-07-28, superseding the original 2026-08-04 auto-delete. **Re-verify each of these against the Neon Console before relying on any of them.**
 
 The successor phase is opened as **`TASK-20260728-003`** in `TASKS.md`, carrying the owner's authorized scope verbatim. **It is an evidence and rehearsal phase. It is not a repair, and opening it authorizes no production mutation.**
 
@@ -65,9 +67,10 @@ Verified at this pass: **no Neon MCP server is authenticated**, `neonctl` is **n
 
 **Containment gap — record it, because it does not go away once access exists.** The Neon MCP server is **not read-only**: it exposes `run_sql`, migration preparation and `delete_branch` against **every branch the credential can reach, including `production`**. A project-scoped API key limits *which project*, not *which branch*. **"Evidence-branch-only" is therefore a discipline an agent follows, not a wall the tooling enforces.** The hard guarantee is a Postgres role scoped to `d1-ownership-evidence-2026-07-28` with no access to `production`, created by the owner and wired into the MCP server's own config — an agent may not receive a DSN or an API key. Until that exists, every call must name the branch explicitly, and the first statement of every session must confirm which branch the connection actually resolves to and abort if it is `production`.
 
-### A second, unauthorized production path exists on the owner's machine
+### Credential containment
 
-An exposed local environment credential file grants production write access from the owner's machine. This is tracked as the open **Owner P0** in `ENGINEERING_ROADMAP.md` and is **not agent-actionable**. The containment gap it creates is recorded in `TASK-20260728-003`; neither rotating it nor the scoped Neon role substitutes for the other.
+`TASK-20260728-003` must not use production credentials.
+See `ENGINEERING_ROADMAP.md` → Owner P0 credential rotation.
 
 ### Schedule constraint — cleared
 
