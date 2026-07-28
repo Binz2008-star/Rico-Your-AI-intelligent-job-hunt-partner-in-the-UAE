@@ -76,7 +76,7 @@ See `ENGINEERING_ROADMAP.md` → Owner P0 credential rotation.
 
 **The owner extended the branch expiry to 30 days on 2026-07-28** (Owner-attested, not connector-verified — no Neon MCP was authenticated in this session to confirm the extension directly), superseding the original 2026-08-04 auto-delete; effective deletion lands on or about **2026-08-27 +04**, and the Neon Console holds the authoritative timestamp. Row-level mapping across seven domains plus a rehearsal with validation and rollback queries now fits comfortably, so **schedule pressure is no longer a reason to compress the work or to skip a verification step.**
 
-What has not changed: **do not let the branch lapse mid-rehearsal, and do not silently re-create it** — a fresh branch is a different point-in-time snapshot and invalidates every mapping built against the current one. **Access, not time, is now the only blocker.**
+What has not changed: **do not let the branch lapse mid-rehearsal, and do not silently re-create it** — a fresh branch is a different point-in-time snapshot and invalidates every mapping built against the current one. **Access is the only remaining technical blocker; the owner's explicit go-ahead (blocker 3) is still required and is not cleared by connecting a route.**
 
 ## Reconciliation — 2026-07-28 (post-`#1426`)
 
