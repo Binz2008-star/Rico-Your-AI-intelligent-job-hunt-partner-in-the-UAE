@@ -310,17 +310,46 @@ understood. Understanding it is therefore the next thing that is both useful and
 - **`#1389` stays untouched** — not rebased, edited, reopened, marked Ready, merged, or
   used as an implementation branch. This task characterizes the problem *above* that
   branch; it does not lift the HOLD, and only an owner ruling can.
-- **No PII in the output.** Report row counts, cluster shapes, and stable identifiers
-  only. No email addresses, phone numbers, names, or CV content — this repeats the
-  containment discipline the L1 lane already established for its own read-only
-  characterization.
+- **Public-output contract — binding, and stated as a contract rather than as "no PII"**,
+  because "no PII" is too loose to decide the hard cases. This repeats and tightens the
+  containment discipline the L1 lane established for its own read-only characterization.
+
+  **The repository deliverable MAY contain:**
+
+  - aggregate counts;
+  - cluster shapes;
+  - dates and ranges, where non-identifying;
+  - **ephemeral labels only** — `Cluster A`, `Cluster B`, and so on.
+
+  **The repository deliverable MUST NOT contain any raw or linkable production
+  identifier**, including: `user_id`, row or database IDs, UUIDs, account IDs,
+  document or CV IDs, operation IDs, email addresses, phone numbers, Telegram
+  handles, names, IP addresses, filenames, CV content, authentication identifiers,
+  or **hashes and tokens derived from any of those values**.
+
+  - **No deterministic pseudonyms, and no deterministic hashes.** A label that lets the
+    same person or the same row be tracked across two reports is a linkable identifier
+    regardless of how it was generated. This is why the labels above must be
+    **ephemeral** — a label may not survive from one report into the next.
+  - **If row-level mapping is operationally necessary, it does not go in the
+    repository.** Keep it in an owner-approved secure location. The `AI_WORKSPACE`
+    assessment records aggregates and non-linkable ephemeral labels, and nothing else.
+  - **Queries may be documented as parameterized or redacted templates. Query *output*
+    containing production identifiers may not be committed or pasted anywhere** — not
+    into the document, the PR body, PR comments, commit messages, logs, screenshots, or
+    build artifacts.
+  - **The joining signal is reported as a category only** — `email` / `phone` /
+    `Telegram` / `user_id` — **never its value.** Which signal joined a cluster is the
+    finding; what the signal contained is not.
 - Anything the assessment cannot establish read-only is recorded as **unknown**, not
   estimated and not inferred.
 
 #### What the assessment must establish
 
 1. The exact ownership-row clusters on production today — how many, how large, and by
-   which signal they were joined (email, phone, Telegram handle, `user_id`).
+   which signal they were joined. **The signal is reported as a category only** —
+   `email` / `phone` / `Telegram` / `user_id` — never its value, per the public-output
+   contract above.
 2. Which of those clusters pre-date the guards now on `main` and which, if any, are
    still being created — the L1 lane records the guards as stopping *new* ones; this
    is where that claim gets checked rather than repeated.
@@ -335,7 +364,14 @@ understood. Understanding it is therefore the next thing that is both useful and
 
 - [ ] Every claim traces to a read that is named and reproducible.
 - [ ] Zero production writes — demonstrable from the commands run.
-- [ ] No PII in the deliverable.
+- [ ] **Zero raw or linkable production identifiers** in the document, the PR body, PR
+      comments, commit messages, screenshots, logs and build artifacts. All of those
+      surfaces, not only the committed document.
+- [ ] **Every cluster is referred to by an ephemeral label only**, and no label is
+      reused to mean the same cluster across separate reports.
+- [ ] **Any row-level evidence that would be needed but cannot be recorded is listed as
+      missing**, unless an owner-approved secure evidence location exists to hold it.
+      Recording it as missing is the correct outcome; putting it in the repository is not.
 - [ ] Every repair option is marked unauthorized, with its missing precondition stated.
 - [ ] Unknowns are listed as unknowns.
 - [ ] The `#1389` HOLD is left in force, and the deliverable says so.
@@ -351,9 +387,14 @@ understood. Understanding it is therefore the next thing that is both useful and
 #### Stop condition
 
 Stop and ask the owner if the assessment cannot proceed without a write, if a read
-would require production credentials not already available to the session, if it would
-expose PII to satisfy a question, or if a finding appears to require immediate
-corrective action. **"It looked urgent" is not authorization to mutate a row.**
+would require production credentials not already available to the session, or if a
+finding appears to require immediate corrective action. **"It looked urgent" is not
+authorization to mutate a row.**
+
+**Stop if a claim cannot be established without exposing or publishing a production
+identifier.** Record the claim as unestablished and stop there. A finding is not worth
+more than the contract above — an identifier published to make a point cannot be
+unpublished, and no conclusion the assessment might reach outranks that.
 
 #### Rollback plan
 
