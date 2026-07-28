@@ -249,8 +249,8 @@ See `DECISIONS.md` → DEC-20260707-001 for per-phase success criteria.
 
 ## The CV read-truthfulness invariant
 
-Established by `#1422` (`c64aa99`) and binding on every surface that answers a
-question about a user's stored CV:
+Established by `#1422` (`c64aa99`) as **Journey-1 D3**, and binding on every surface
+that answers a question about a user's stored CV:
 
 > **READ FAILURE != VERIFIED ABSENCE.**
 
@@ -317,5 +317,11 @@ lives in `ENGINEERING_ROADMAP.md`.
 - Keep protected routes based on JWT-derived identity, not request-body `user_id`.
 - Keep user-impacting actions permission-based.
 - Do not claim production readiness without tests, deployment verification, and smoke evidence.
-- Do not state a claim about stored user data that the code did not verify at the
-  moment of rendering — the generalized form of the CV invariant above.
+- **Any user-visible claim that stored user data exists, is absent, or is current
+  must be backed by either a successful authoritative read for that operation or a
+  verified result explicitly carried into rendering. A failed or incomplete read
+  remains unknown and must not be rendered as absence, as a document defect, or as
+  an instruction based on either claim.** This is the generalized form of the
+  Journey-1 D3 CV invariant above, extended by owner ruling to every stored-data
+  surface. It is consistent with the trust-first posture (`DEC-20260723-001`) and
+  needs no new DEC of its own.

@@ -46,11 +46,13 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 > Landed since `dac8d8e7`, in merge order: #1417 control-plane reconciliation
 > (`1592162e`, docs-only), #1405 ambiguous ownership mapped to 409 on onboarding
 > status and CV upload (`20037d2c`), #1410 central chat ownership resolver
-> (`2757f53b`), #1418 session-switch/send race (`b7e3aedc`), #1370 public pricing
-> page (`4f1af6bc`), #1419 **PR2** fail-closed job-search routing and buffered
-> delivery (`1ea1d973`), #1420 CI enumeration coverage correction (`0d826b31`,
-> CI-only), #1421 degraded early-exit lifecycle state correction (`3f2805de`),
-> #1422 **D3** truthful CV read-failure handling (`c64aa99`).
+> (`2757f53b`), #1418 session-switch/send race (`b7e3aedc`, **`apps/web/`
+> frontend only**), #1370 public pricing page (`4f1af6bc`, `apps/web/`), #1419
+> **PR2** fail-closed job-search routing and buffered delivery (`1ea1d973`),
+> #1420 identity email containment coverage enforced in CI (`0d826b31`, CI-only,
+> identity-containment track), #1421 degraded early-exit lifecycle state
+> correction (`3f2805de`), #1422 **Journey-1 D3** truthful CV read-failure
+> handling (`c64aa99`).
 >
 > **Two things define this stretch.** The approved forward sequence advanced by a
 > whole slice — **PR2 is delivered as #1419**, and the previous wording here, which
@@ -178,15 +180,19 @@ fix only proven gaps (synthetic data only).
   and production-smoked — see the Releases table.
 - **Delivered and released: #1419** — PR2 fail-closed job-search routing and
   buffered verified delivery, the second slice of that sequence. Merged as
-  `1ea1d973`. Supporting corrections in the same stretch: #1420 CI enumeration
-  coverage (`0d826b31`, CI-only) and #1421 degraded early-exit lifecycle state
-  (`3f2805de`).
+  `1ea1d973`. Its one follow-on behaviour correction is **#1421** degraded
+  early-exit lifecycle state (`3f2805de`).
 - **Delivered and released: the identity-ownership continuation** — #1405
   ambiguous ownership mapped to 409 on onboarding status and CV upload
   (`20037d2c`) and #1410 the central chat ownership resolver (`2757f53b`).
-- **Delivered and released: #1422** — D3 truthful CV read-failure handling
-  (`c64aa99`), establishing **READ FAILURE != VERIFIED ABSENCE** on the chat CV
-  path in English and Arabic. The structural rule it implies is owned by
+  Supporting CI for the identity-containment track: **#1420**
+  `ci(tests): enforce identity email containment coverage` (`0d826b31`), which
+  enrolled `tests/test_identity_email_overwrite_containment.py` into the required
+  CI pytest invocation and removed it from `FROZEN_BASELINE` in
+  `scripts/check_test_enumeration.py`. **It is not a PR2 artifact.**
+- **Delivered and released: #1422** — Journey-1 D3 truthful CV read-failure
+  handling (`c64aa99`), establishing **READ FAILURE != VERIFIED ABSENCE** on the
+  chat CV path in English and Arabic. The structural rule it implies is owned by
   `ARCHITECTURE.md`, not by this roadmap.
 - Next candidates: unify the legacy profile-CV rule across the files surface and CV
   resolution so one user gets one answer (its acceptance check is the strict xfail
@@ -250,9 +256,10 @@ delivered and released.** Routing refuses rather than guesses, and delivery is
 buffered so a partial result is never presented as a complete one.
 
 Shipped as **#1419**, merged as **`1ea1d973161b261de9463d5a1434f3d5b4928874`**.
-Two follow-on corrections landed in the same stretch and belong to this slice's
-record: **#1420** (`0d826b31`) corrected CI enumeration coverage, and **#1421**
-(`3f2805de`) corrected the degraded early-exit lifecycle state.
+**One** follow-on correction belongs to this slice's record: **#1421**
+(`3f2805de`), which corrected the degraded early-exit lifecycle state. `#1420`
+merged in the same window but belongs to the identity-containment track, not to
+PR2, and is recorded there.
 
 The previous text here described PR2 as planned and unimplemented. That was
 stale from the moment `#1419` merged and is corrected, not stacked beneath.
@@ -394,7 +401,7 @@ Backend** run for that commit, not by a green Deploy to Production run alone.
 
 | Date | Commit | What went live |
 | --- | --- | --- |
-| 2026-07-28 | `c64aa99` | #1422 — D3 truthful CV read-failure handling on the chat CV path: a failed grounding or document read is no longer rendered as "no CV", "no stored CV", unreadable-document blame, upload/re-upload guidance, or `next_action="upload_cv"`, in English and Arabic. A successful empty read is still an absence and `no_readable_content` is still a content problem. No route, migration, schema or frontend change. `/version.commit` matched `c64aa99` and `/health` returned 200 / ok with `jooble`, `adzuna` and `jsearch` configured and not degraded. **Evidence class: owner/browser-verified — not an automated artifact and not a regression gate. No deliberate CV-store failure smoke was performed, so the changed path itself was not exercised in production.** This row also carries the intermediate runtime merges that reached production inside the same rolling sequence without an individual `/version` read of their own — #1405 (`20037d2c`), #1410 (`2757f53b`), #1418 (`b7e3aedc`), #1419 (`1ea1d973`, PR2) and #1421 (`3f2805de`) — plus #1370 (`4f1af6bc`, `apps/web/` public pricing page, Vercel). **No per-commit deploy evidence is claimed for any of them.** |
+| 2026-07-28 | `c64aa99` | #1422 — D3 truthful CV read-failure handling on the chat CV path: a failed grounding or document read is no longer rendered as "no CV", "no stored CV", unreadable-document blame, upload/re-upload guidance, or `next_action="upload_cv"`, in English and Arabic. A successful empty read is still an absence and `no_readable_content` is still a content problem. No route, migration, schema or frontend change. `/version.commit` matched `c64aa99` and `/health` returned 200 / ok with `jooble`, `adzuna` and `jsearch` configured and not degraded. **Evidence class: owner/browser-verified — not an automated artifact and not a regression gate. No deliberate CV-store failure smoke was performed, so the changed path itself was not exercised in production.** This row also carries the intermediate **backend** merges that reached production inside the same rolling sequence without an individual `/version` read of their own — #1405 (`20037d2c`), #1410 (`2757f53b`), #1419 (`1ea1d973`, PR2) and #1421 (`3f2805de`). **No per-commit deploy evidence is claimed for any of them.** The `apps/web/` frontend merges in the same window — #1418 (`b7e3aedc`, session-switch/send race, two files under `apps/web/` and explicitly no backend change) and #1370 (`4f1af6bc`, public pricing page) — are **present on `main`** and are **not** covered by this row's evidence: a backend `/version` read does not prove a frontend deploy, and **no independent production frontend verification was taken in this pass.** |
 | 2026-07-27 | `dac8d8e7` | #1416 — PR1 Chat Job Provenance Contract: the verified job-search contract (`src/domain/job_search`) plus its seam (`src/services/verified_job_search.py`), adopted at exactly one consumer (`_target_role_search_response`). `/version.commit` = `dac8d8e7`, process start `2026-07-27T01:00:26Z`, `/health` ok with `jooble`, `adzuna` and `jsearch` configured and not degraded. Production-smoked on one synthetic non-PII named-role search: non-empty 39-character operation id, response `operation_id` identical to `search_evidence.operation_id`, 5 matches shown against `accepted_result_count` 10, exactly one `provider_cascade` attempt for the deliberate search turn, and execution metadata carrying no listing content. |
 | 2026-07-26 | `ca266366` | #1414 — a guest row is not a candidate on the email or Telegram path (`find_profiles_by_email` and `find_profiles_by_telegram_username`, SQL predicate plus independent Python re-check, both memory fallbacks guarded). Central Controller read `/version.commit` = `ca266366` and `/health` ok, with `jooble`, `adzuna`, `jsearch` configured and not degraded and the DeepSeek precheck reachable. Browser-verified by the Controller; not reproducible from an agent container. Owner functional smoke not claimed. |
 | 2026-07-26 | `a610b696` | #1411 — CI-only: fail when a test file is run by no pytest invocation, with a frozen 212-file baseline that may only shrink. No runtime path touched, so no deploy expected. |

@@ -74,14 +74,18 @@ Listed in merge order. Full narratives live with the document that owns each fac
 | --- | --- | --- | --- |
 | `#1405` | `20037d2c3adb5a372bd1355c7e1edbc8c4f01b1f` | ambiguous ownership mapped to 409 on onboarding status and CV upload | `src/` — deploy expected |
 | `#1410` | `2757f53b554e15257fe298abd17a239916f8eeae` | central chat ownership resolver | `src/` — deploy expected |
-| `#1418` | `b7e3aedc8d2c64624da335405a98190a40c87585` | session-switch/send race | `src/` — deploy expected |
+| `#1418` | `b7e3aedc8d2c64624da335405a98190a40c87585` | session-switch/send race — **frontend only** | `apps/web/` — Vercel |
 | `#1370` | `4f1af6bcba8680317d52dbf0ffc5e51711e84693` | public pricing page | `apps/web/` — Vercel |
 | `#1419` | `1ea1d973161b261de9463d5a1434f3d5b4928874` | **PR2** — fail-closed job-search routing and buffered delivery | `src/` — deploy expected |
-| `#1420` | `0d826b31396ba435d66f9a5dd0823fe86bb0756d` | CI enumeration coverage correction | CI-only — no deploy expected |
+| `#1420` | `0d826b31396ba435d66f9a5dd0823fe86bb0756d` | `ci(tests): enforce identity email containment coverage` — supporting CI for the **identity-containment** track | CI-only — no deploy expected |
 | `#1421` | `3f2805de4028451e316937a3c2b631c3bced1548` | degraded early-exit lifecycle state correction | `src/` — deploy expected |
 | `#1422` | `c64aa99158695c78138e15ca4d6dfb57b5c762c7` | **D3** truthful CV read-failure handling | `src/` — deploy fired; `/version` confirms |
 
-Only the final commit in this sequence carries a `/version` read. The intermediate runtime merges were superseded by the next merge before any independent per-commit deployment verification was taken, so **no per-commit deploy evidence is claimed for `#1405`, `#1410`, `#1418`, `#1419` or `#1421`.** They are in `main` and in the deployed tree at `c64aa99`; that is the whole of the claim.
+**`#1420` in detail, because its scope is narrow and was previously described too loosely.** It enrolled `tests/test_identity_email_overwrite_containment.py` into the required CI pytest invocation (`.github/workflows/qa-tests.yml`) and removed that same file from `FROZEN_BASELINE` in `scripts/check_test_enumeration.py`. Two files, `+1/−1`, no runtime path. **It is supporting CI for the identity-containment track and has nothing to do with PR2 or the job-search contract.** It appears in this chronological merge list because it merged in this window, and nowhere else as a PR2 artifact.
+
+**Backend evidence covers backend commits only.** Of the runtime merges above, only `#1405`, `#1410`, `#1419` and `#1421` touch `src/`. The final commit in the sequence carries the `/version` read; the earlier ones were superseded by the next merge before any independent per-commit deployment verification was taken, so **no per-commit deploy evidence is claimed for `#1405`, `#1410`, `#1419` or `#1421`.** They are in `main` and in the deployed tree at `c64aa99`; that is the whole of the claim.
+
+**`#1418` and `#1370` are `apps/web/` frontend changes and are not covered by any backend evidence in this pass.** `#1418` touches exactly two files, both under `apps/web/` (`apps/web/app/command/page.tsx` and its test), and explicitly states no backend change. **A backend `/version` read does not prove a frontend deploy** and must never be cited as though it does. What is established for both: **they are present on `main` at `c64aa99`.** **No independent production frontend verification was taken in this pass** — no Vercel deployment read, no browser check of the affected surface.
 
 For merges that touch no runtime path, `main` moving ahead of the deployed `/version` is **expected divergence, not deployment drift**. Do not chase parity, and do not fire a deploy to manufacture it.
 
@@ -96,6 +100,10 @@ For merges that touch no runtime path, `main` moving ahead of the deployed `/ver
 **`#1389` is HOLD, not "unblocked".** The previous snapshot of this file said its blocker had cleared and that it "must rebase onto `dac8d8e7` before anything else". **That instruction is withdrawn.** The PR body carries an explicit owner HOLD ruling behind an upstream *production data* problem — several ownership rows for one account — which is not a code defect on that branch and is not cleared by any merge listed above.
 
 Until the owner rules otherwise: **do not rebase, edit, reopen, mark Ready, merge, or use `#1389` as an implementation branch.** Nothing in this document resumes it, and its Draft state is not an invitation.
+
+Other open Draft PRs at this reconciliation pass: `#1413`, `#1374`, `#1362`, `#1359`. Their presence is not authorization to resume, rebase, mark Ready or merge. Fetch each live before acting.
+
+This inventory deliberately excludes the reconciliation PR that writes this section: it is not a backlog item and closes on merge.
 
 **An open PR is not permission to merge.** Per-PR heads are deliberately not restated here — they move, and a head copied into this file is stale the moment a lane pushes. Fetch them live.
 
@@ -141,13 +149,13 @@ The following are known-open. **Recording one here does not authorize acting on 
 
 1. **My Files still converts its own failed read into `files=[]`** — the same defect class `#1422` fixed on the chat path, still live on an adjacent surface.
 2. **Arabic and English CV routing diverge** at `_looks_like_cv_intent_no_file`, which intercepts Arabic CV phrasing before intent classification.
-3. **D1** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD.
-4. **D2** — pending-artifact activation.
-5. **D4** — mission/dashboard truth.
-6. **D5** — first-useful-result activation.
+3. **Journey-1 D1** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD.
+4. **Journey-1 D2** — pending-artifact activation.
+5. **Journey-1 D4** — mission/dashboard truth.
+6. **Journey-1 D5** — first-useful-result activation.
 7. **Stored-CV / CV-state logic remains spread across `src/rico_chat_api.py`**, answering "does the user have a CV?" from several independent gates.
 
-> **Naming collision, stated so it cannot mislead.** These `D1`–`D5` labels are the **Journey-1 defect series**. They are unrelated to the older `D1`–`D5` rows in the security-audit table further down `TASKS.md`, which describe entirely different findings. Always qualify the series when citing one.
+> **Naming collision, stated so it cannot mislead.** The labels above are the **Journey-1 D1–D5** series. They are unrelated to the **security-audit D1–D5** rows in the audit table further down `TASKS.md`, which describe entirely different findings. Neither series is renumbered. **Always write "Journey-1 D1–D5" or "security-audit D1–D5" — never a bare `D3`.**
 
 ## Stop conditions
 
