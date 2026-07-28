@@ -67,6 +67,11 @@ interface Message {
     text: string;
     type?: string;
     matches?: JobMatch[];
+    // Listings the backend's title floor rejected but the integrity gate
+    // accepted: real, live, UAE listings that are simply not the title that was
+    // asked for. Kept in their own field — never merged into `matches` — so a
+    // weaker suggestion can never be counted or rendered as a match.
+    related_matches?: JobMatch[];
     applications?: ApplicationEntry[];
     follow_up_needed?: ApplicationEntry[];
     profile_gaps?: string[];
@@ -233,6 +238,7 @@ function parseHistoryContent(content: string, id: number): Partial<Message> {
                     type: "job_matches",
                     text: (parsed.message ?? parsed.reply ?? parsed.response ?? "") as string,
                     matches: (parsed.matches as JobMatch[] | undefined) ?? [],
+                    related_matches: parsed.related_matches as JobMatch[] | undefined,
                     search_query: query,
                     result_count: parsed.result_count as number | undefined,
                     broadened: parsed.broadened as boolean | undefined,
@@ -1431,6 +1437,7 @@ export default function CommandPage() {
                             text: displayText,
                             type: res.type,
                             matches: res.matches as JobMatch[] | undefined,
+                            related_matches: (res as Record<string, unknown>).related_matches as JobMatch[] | undefined,
                             options: displayOptions.length > 0 ? displayOptions : (res.options as RicoOption[] | undefined),
                             next_action: res.next_action,
                             roleName: res.role,
@@ -1634,6 +1641,7 @@ export default function CommandPage() {
                                         text: retryReply,
                                         type: retryRes.type,
                                         matches: retryRes.matches as JobMatch[] | undefined,
+                                        related_matches: (retryRes as Record<string, unknown>).related_matches as JobMatch[] | undefined,
                                         options: retryRes.options as RicoOption[] | undefined,
                                         roleName: retryRes.role,
                                         next_action: retryRes.next_action,
@@ -2572,6 +2580,32 @@ export default function CommandPage() {
                                                     )}
                                                 </div>
                                             )}
+                                        </AtelierCardScope>
+                                    )}
+
+                                    {/* Related tier — listings that are NOT the requested
+                                        title, shown only because nothing matched it. The
+                                        divider and the label carry the whole contract: they
+                                        are visually and textually separated from matches, and
+                                        they are never counted in the "N matches" caption
+                                        above (which reads result_count, i.e. matches only). */}
+                                    {m.related_matches && m.related_matches.length > 0 && (
+                                        <AtelierCardScope authenticated={atelierCards}>
+                                            <div className="mt-3 border-t border-border-soft pt-2">
+                                                <div className="mb-1.5 flex items-baseline gap-2 text-[10px]">
+                                                    <span className="uppercase tracking-wide text-text-secondary">{t("cmdRelatedHeading")}</span>
+                                                    <span className="text-text-muted">{t("cmdRelatedNote")}</span>
+                                                </div>
+                                                <div className="space-y-2 opacity-80">
+                                                    {m.related_matches.map((match, i) =>
+                                                        atelierCards ? (
+                                                            <JobMatchCardAtelier key={`rel-${i}`} match={match} onAction={(prompt) => sendMessage(prompt)} onMarkApplied={(prompt) => new Promise<boolean>((resolve) => { void sendMessage(prompt, undefined, resolve); })} />
+                                                        ) : (
+                                                            <JobMatchCard key={`rel-${i}`} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                        ),
+                                                    )}
+                                                </div>
+                                            </div>
                                         </AtelierCardScope>
                                     )}
 

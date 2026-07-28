@@ -7055,12 +7055,81 @@ class RicoChatAPI:
     # Ultra-generic vocabulary that must never, on its own, qualify a job as a
     # relevance match for an explicit-title search (would over-match unrelated roles).
     _FLOOR_STOP_TERMS = frozenset({"management", "leadership", "reporting"})
+    # How many floor-rejected (but integrity-accepted) listings may be offered
+    # as the labelled `related_matches` tier when nothing clears the floor.
+    # Deliberately smaller than the 5-card match window: this is a fallback the
+    # user did not ask for, not a result set.
+    _RELATED_TIER_LIMIT = 3
     # A family term mentioned by this many (or more) distinct taxonomy
     # families is cross-domain vocabulary (WEAK evidence). Data-derived from
     # job_role_taxonomy.json: audit=6, compliance=5, environment=5, risk=3
     # span unrelated domains, while sustainability=2, inspection=2, quality=1
     # stay discriminating. See cross_family_term_counts().
     _CROSS_FAMILY_WEAK_MIN = 3
+
+    def _related_tier_pool(
+        self, user_id: str, raw_records: list[dict[str, Any]], profile: Any,
+    ) -> list[dict[str, Any]]:
+        """Trustworthy listings that are simply NOT the requested title.
+
+        Sourced by re-running the integrity gate over the pre-gate payload with
+        the role vocabulary removed. That is the whole point: every non-role
+        check still runs — UAE market, title/description domain conflict,
+        availability, apply-URL validity, freshness, evidence — so a record only
+        reaches this pool when the single thing wrong with it was that it did
+        not match the title the user asked for. A record rejected for any other
+        reason stays rejected and never becomes a "related" suggestion.
+
+        The two user-protecting filters from the main path are re-applied here
+        rather than assumed: already-applied jobs, and UAE-nationals-only
+        listings for a non-national. The requested-city filter is deliberately
+        NOT applied — this pool exists precisely because that city returned
+        nothing on-title, and each card carries its own location.
+
+        Returns at most ``_RELATED_TIER_LIMIT`` records. Never raises: a failure
+        anywhere here means no related tier, never a degraded or unchecked one.
+        """
+        if not raw_records:
+            return []
+        try:
+            from src.job_integrity import filter_listings as _fl
+            pool, _ = _fl(
+                [dict(r) for r in raw_records if isinstance(r, dict)],
+                requested_role="",
+                requested_terms=None,
+                uae_only=True,
+            )
+        except Exception:
+            logger.debug("related_tier: integrity re-filter unavailable", exc_info=True)
+            return []
+        if not pool:
+            return []
+
+        try:
+            from src.applications import is_applied_batch, get_job_id
+            applied_map = is_applied_batch(pool, user_id=user_id)
+            pool = [m for m in pool if not applied_map.get(get_job_id(m), False)]
+        except Exception as exc:
+            logger.debug("related_tier: applied filter unavailable: %s", exc)
+
+        try:
+            nationality = (
+                self._profile_value(profile, "nationality")
+                or self._profile_value(profile, "citizenship")
+                or ""
+            ).strip().lower()
+            if nationality not in ("uae", "emirati", "emirati national", "uae national"):
+                from src.eligibility_filter import filter_for_non_nationals
+                pool = filter_for_non_nationals(pool)
+        except Exception as exc:
+            logger.debug("related_tier: eligibility filter unavailable: %s", exc)
+
+        try:
+            from src.services.search_dedup import dedupe_job_matches as _dedupe
+            pool = _dedupe(pool)
+        except Exception:
+            pass
+        return pool[: self._RELATED_TIER_LIMIT]
 
     def _requested_domain_terms(
         self, requested_role: str
@@ -7509,6 +7578,12 @@ class RicoChatAPI:
         from src.domain.job_search import SearchStatus as _SearchStatus
         from src.services.verified_job_search import build_bundle as _build_bundle
 
+        # Kept for the related tier below: once the gate runs, `all_matches` is
+        # the accepted subset and every rejected record is gone, counts only. A
+        # listing dropped purely for being off-title is not a corrupt listing,
+        # and re-deriving that set needs the pre-gate payload.
+        _raw_before_integrity = list(all_matches)
+
         _req_strong, _req_weak, _req_phrase = self._requested_domain_terms(search_role)
         if quota_exhausted or rate_limited or fetch_error == "all_providers_unavailable":
             _observed_status = _SearchStatus.PROVIDER_UNAVAILABLE
@@ -7739,6 +7814,59 @@ class RicoChatAPI:
                 search_role, len(all_matches), operation_id,
             )
 
+        # City-scope widening (owner directive 2026-07-28). The title floor just
+        # dropped every live result while the query was pinned to ONE city. Two
+        # constraints were in play and they are not equal: the title is what the
+        # user asked for EXPLICITLY, while the city is usually an implicit
+        # default carried from their profile. The adjacent-role hop below
+        # relaxes the explicit constraint — it substitutes the very thing the
+        # user named. Widening the geography keeps their title intact and
+        # relaxes the implicit one instead, so it is tried FIRST whenever a
+        # provider-level city was in play; the role hop is then reserved for
+        # searches that were already country-wide.
+        #
+        # Exactly ONE of the two runs. An accepted request still buys exactly
+        # one extra cascade, which is the budget the delivery gate above already
+        # assumes. The decision reads only whether a city reached the provider —
+        # no city list, no per-market threshold, no per-account rule, so a thin
+        # market anywhere in the country behaves identically.
+        _widened_city = False
+        if _off_title_only and not _adjacent_hop and _provider_location:
+            _widened_city = True
+            _saved_op_id = self._current_operation_id
+            _saved_attempt = getattr(self, "_current_operation_attempt", None)
+            self._current_operation_id = None
+            try:
+                _wide_resp = self._target_role_search_response(
+                    user_id, search_role, profile,
+                    location="UAE",
+                    employment_type_filter=employment_type_filter,
+                    _adjacent_hop=True,
+                )
+            except Exception:
+                logger.warning(
+                    "city_widen_failed role=%r from=%r", search_role, _provider_location,
+                    exc_info=True,
+                )
+                _wide_resp = None
+            finally:
+                self._current_operation_id = _saved_op_id
+                self._current_operation_attempt = _saved_attempt
+            if _wide_resp and _wide_resp.get("matches"):
+                _wide_note = (
+                    f"لا توجد نتائج حية بمسمى **{search_role}** في {_requested_location} الآن، "
+                    f"فوسّعت البحث لنفس المسمى في كل الإمارات:"
+                    if arabic else
+                    f"No live **{search_role}** results in {_requested_location} right now, "
+                    f"so I widened the same title to the whole UAE:"
+                )
+                _wide_resp["message"] = _wide_note + "\n\n" + (_wide_resp.get("message") or "")
+                _wide_resp["widened_from_location"] = _requested_location
+                _wide_resp["broadened"] = True
+                self._append_chat(user_id, "assistant", _wide_resp["message"])
+                mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
+                return _wide_resp
+
         # Adjacent-role auto-hop (owner directive 2026-07-21 «كي أضغط وأقدم»):
         # live results existed but the title floor dropped them ALL — instead
         # of stopping at the honest zero, take exactly ONE hop to the closest
@@ -7749,8 +7877,9 @@ class RicoChatAPI:
         # (_adjacent_hop guard), and the outer operation is completed with its
         # own truthful zero. Operation state is saved/cleared around the
         # nested call so the atomic store mints a fresh operation for the hop
-        # instead of refusing a re-claim of the live outer one.
-        if _off_title_only and not _adjacent_hop:
+        # instead of refusing a re-claim of the live outer one. Skipped when the
+        # city widening above already spent this request's one extra cascade.
+        if _off_title_only and not _adjacent_hop and not _widened_city:
             _hop_role = self._closest_adjacent_role(user_id, search_role, profile)
             if _hop_role and _hop_role.strip().lower() != (search_role or "").strip().lower():
                 _saved_op_id = self._current_operation_id
@@ -7780,6 +7909,7 @@ class RicoChatAPI:
                     )
                     _hop_resp["message"] = _hop_note + "\n\n" + (_hop_resp.get("message") or "")
                     _hop_resp["adjacent_hop_from"] = search_role
+                    _hop_resp["broadened"] = True
                     self._append_chat(user_id, "assistant", _hop_resp["message"])
                     mark_completed(user_id, operation_id, 0, attempt=self._operation_attempt())
                     return _hop_resp
@@ -7810,6 +7940,35 @@ class RicoChatAPI:
         from src.services.search_dedup import dedupe_job_matches
         top_matches = dedupe_job_matches(_relevant)[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
+
+        # Related tier — the honest middle between "5 matches" and a dead end.
+        #
+        # When the floor drops every result, the listings it dropped are NOT
+        # untrustworthy: they already passed the integrity gate, so each one is
+        # a real, UAE, available listing with a usable link. What they are not
+        # is the title the user asked for. Deleting them turns a thin market
+        # into a blank screen; putting them in `matches` would restate the exact
+        # 2026-07 defect the floor exists to prevent ("5 matches for ESG
+        # Manager" that were Operations jobs).
+        #
+        # So they ship in their OWN field. `matches` keeps its meaning — these
+        # match what you asked for — and `related_matches` carries the weaker
+        # set, tagged per item and labelled in the copy as related rather than
+        # matching. Costs no extra provider call: this is the payload already
+        # fetched for this turn. Deliberately NOT written to the search-match
+        # context, so a follow-up "apply to the first one" can never resolve to
+        # a job the user never asked for.
+        related_formatted: list[dict[str, Any]] = []
+        if _off_title_only and not top_matches:
+            related_formatted = [
+                dict(_rf, match_tier="related")
+                for _rf in (
+                    self._format_match(_rm, profile)
+                    for _rm in self._related_tier_pool(
+                        user_id, _raw_before_integrity, profile,
+                    )
+                )
+            ]
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]
         # Canonical career context (2026-07-19 provenance incident): the search
@@ -7920,6 +8079,8 @@ class RicoChatAPI:
             filtered_off_title=_off_title_only,
             offer_scheduled_search=_offer_daily,
             offer_save_search=_offer_save,
+            related_shown=bool(related_formatted),
+            city_widen_tried=_widened_city,
         )
 
         # Whenever _build_role_search_message included a broaden-to-adjacent-role
@@ -7950,7 +8111,13 @@ class RicoChatAPI:
             "operation_type": "job_search",
             "result_count": len(formatted),
             "search_query": search_role,
-            "broadened": len(all_matches) == 0,
+            # TRUE only when Rico actually widened this search — a city hop to
+            # UAE scope, or the adjacent-role hop (which sets it on its own
+            # response). It previously carried `len(all_matches) == 0`, i.e. the
+            # zero-result condition, and the UI rendered that as a "· broadened"
+            # badge — asserting an action that had not happened, on the one
+            # surface whose whole contract is that it never overstates.
+            "broadened": False,
             "rate_limited": rate_limited,
             # Identical triple to the profile report's career_context (owner
             # audit point 3) — produced by the same parity_snapshot method.
@@ -7963,6 +8130,11 @@ class RicoChatAPI:
             # exits from this handler name no job and are not covered by it.
             "search_evidence": search_bundle.execution.as_public_dict(),
         }
+
+        # Related tier travels in its own field, never merged into `matches`.
+        if related_formatted:
+            response["related_matches"] = related_formatted
+            response["related_to_role"] = search_role
 
         # Safe aggregate summary of the integrity gate — counts only, never the
         # per-record reasons or the corrupt listings themselves.
@@ -8066,6 +8238,8 @@ class RicoChatAPI:
         filtered_off_title: bool = False,
         offer_scheduled_search: bool = False,
         offer_save_search: bool = False,
+        related_shown: bool = False,
+        city_widen_tried: bool = False,
     ) -> str:
         """Build message for role search response."""
         if from_saved_profile:
@@ -8126,30 +8300,56 @@ class RicoChatAPI:
                 f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
             )
 
-        # Adjacent roles are an OPT-IN offer, never a silent substitution. We always
-        # searched the exact requested role (normalized_role); related roles such as
-        # "Environmental Officer" for "Environmental Manager" are only ever proposed
-        # as a question the user must accept — Rico never broadens on its own.
+        # Adjacent roles named in THIS copy are an OPT-IN offer, never a silent
+        # substitution: we always searched the exact requested role
+        # (normalized_role), and a related role such as "Environmental Officer"
+        # for "Environmental Manager" is proposed here as a question the user
+        # must accept. Two automatic widenings do exist upstream — the
+        # adjacent-role hop and the city hop — and BOTH relabel their own reply
+        # to name what they widened. Neither is silent, and neither reaches this
+        # builder: they return their own response. The invariant is therefore
+        # "Rico never widens without saying so", not "Rico never widens".
         _adjacent = (role_intelligence_data or {}).get("adjacent_roles", []) if role_intelligence_data else []
         _adjacent_names = [r["role"] for r in _adjacent[:3] if r.get("role")]
         if not top_matches and filtered_off_title:
             # Live results existed but none strongly matched the requested title.
             # Be honest about it and offer to broaden — never present off-title jobs.
-            if _adjacent_names:
+            _widen_note = (
+                " وسّعت البحث أيضاً ليشمل كل الإمارات ولم يظهر مسمى مطابق."
+                if arabic else
+                " I also widened the search to the whole UAE and still found no on-title match."
+            ) if city_widen_tried else ""
+            if related_shown:
+                # The floor-rejected listings are being SHOWN, in their own
+                # labelled tier. The copy has to state what they are and what
+                # they are not — anything vaguer reads as "here are your
+                # matches", which is the claim the floor exists to refuse.
                 base_message += (
-                    f" بحثت عن **{normalized_role}** تحديداً، لكن النتائج الحالية لا تطابق هذا المسمى بقوة. "
+                    f" بحثت عن **{normalized_role}** تحديداً، لكن النتائج الحية الحالية "
+                    f"لا تطابق هذا المسمى بقوة.{_widen_note} أدناه أقرب ما وجدته — "
+                    f"معروضة كنتائج قريبة أضعف، وليست وظائف **{normalized_role}**."
+                    if arabic else
+                    f" I searched **{normalized_role}** specifically, but the current live results "
+                    f"didn't strongly match that title.{_widen_note} Below are the closest live "
+                    f"listings — shown as related, weaker results, not as **{normalized_role}** jobs."
+                )
+            elif _adjacent_names:
+                base_message += (
+                    f" بحثت عن **{normalized_role}** تحديداً، لكن النتائج الحالية لا تطابق هذا المسمى بقوة.{_widen_note} "
                     f"هل أوسّع البحث ليشمل {', '.join(_adjacent_names)}؟"
                     if arabic else
                     f" I searched **{normalized_role}** specifically, but the current live results didn't strongly "
-                    f"match that title, so I'm not showing them. Want me to broaden to {', '.join(_adjacent_names)}?"
+                    f"match that title, so I'm not showing them.{_widen_note} "
+                    f"Want me to broaden to {', '.join(_adjacent_names)}?"
                 )
             else:
                 base_message += (
-                    " بحثت عن هذا المسمى تحديداً، لكن النتائج الحالية لا تطابقه بقوة. "
+                    f" بحثت عن هذا المسمى تحديداً، لكن النتائج الحالية لا تطابقه بقوة.{_widen_note} "
                     "هل تريد توسيع البحث لأدوار قريبة، أو تجربة مسمى مختلف؟"
                     if arabic else
                     " I searched that title specifically, but the current live results didn't strongly match it, "
-                    "so I'm not showing them. Want me to broaden to related roles, or try a different title?"
+                    f"so I'm not showing them.{_widen_note} "
+                    "Want me to broaden to related roles, or try a different title?"
                 )
         elif not top_matches and _adjacent_names:
             if arabic:
