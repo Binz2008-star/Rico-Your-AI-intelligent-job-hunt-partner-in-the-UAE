@@ -96,6 +96,7 @@ Kept so the sequence is not lost when the section above is next replaced. Detail
 | Lane | PR | Branch | State |
 | --- | --- | --- | --- |
 | L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | **Open, Draft, and on owner HOLD.** See below |
+| L2 Journey-1 D1 assessment | `#1430` | `docs/journey1-d1-readonly-assessment` | **Open, Draft, in review.** Docs-only read-only assessment; awaiting owner ruling. Not for merge by an agent |
 | L8 job-search contract | — | — | No open PR. PR1 (`#1416`) and PR2 (`#1419`) are merged |
 | L9 Journey-1 CV truthfulness | — | — | No open PR. `#1422`, `#1424`, `#1425` and `#1426` are merged |
 
@@ -136,10 +137,11 @@ The previous order is **spent**. Its first entry — the tests-only characteriza
 
 There is **no queued merge** at this pass.
 
-1. **Immediate execution is a read-only Journey-1 D1 production-data consolidation assessment** — recorded as `TASK-20260728-002` in `TASKS.md`. It is **assessment only**: it reads and reports, it proposes nothing for execution, and it is a separate PR from this reconciliation. **No production Neon row mutation is authorized by it or by this document.**
-2. **PR3 is not the immediate next action** merely because PR2 is delivered. PR3 → PR5 remain planned and unauthorized; see `ENGINEERING_ROADMAP.md`.
-3. `#1389` stays on HOLD. The D1 assessment **characterizes** the data problem sitting above that branch; it does not lift the HOLD, and only an owner ruling can.
-4. Everything else stays deferred under `DEC-20260723-001`.
+1. **The read-only Journey-1 D1 production-data consolidation assessment is delivered and in review** — `TASK-20260728-002`, PR `#1430`, Draft. **It is no longer the immediate executable action**; it is an open review. It read and reported, it proposed nothing for execution, and **no production Neon row mutation is authorized by it, by its findings, or by this document.**
+2. **The next action is an owner ruling, not an implementation.** The assessment could not bind the `#1389` cluster to an account without publishing a production identifier, so it recorded the mapping as unestablished. The owner must rule on **whether to establish an owner-approved secure evidence location outside the repository** to hold the row-level mapping any repair would need. **No repair is queued**, and none becomes queued by that ruling alone.
+3. **PR3 is not the immediate next action** merely because PR2 is delivered. PR3 → PR5 remain planned and unauthorized; see `ENGINEERING_ROADMAP.md`.
+4. `#1389` stays on HOLD. The D1 assessment **characterizes** the data problem sitting above that branch; it does not lift the HOLD, and only an owner ruling can.
+5. Everything else stays deferred under `DEC-20260723-001`.
 
 The forward engineering sequence (PR1 → PR5) lives in `ENGINEERING_ROADMAP.md` under Phase 2 — Hardening. It is **not** duplicated here: this file carries current control state, not forward plans. **PR1 is delivered as `#1416`; PR2 is delivered as `#1419`.**
 
@@ -152,7 +154,7 @@ The following are known-open. **Recording one here does not authorize acting on 
 1. ~~**My Files still converts its own failed read into `files=[]`.**~~ **CLOSED by `#1425`** (`39b44696`). The endpoint answers 503 with a structured `files_unavailable` detail and the surface renders a distinct unavailable state. Kept visible, struck through, for one pass so the closure is legible against the list it was on; it will be dropped at the next reconciliation.
 2. **Arabic and English CV routing still diverge at `_looks_like_cv_intent_no_file` — but narrowed by `#1426`, not closed.** What is delivered: on the active-user chat path, a CV-**analysis** ask in either language now reaches `cv_analysis` with authoritative grounding, so an Arabic user is no longer told to upload a CV they already have. What remains: the gate still runs *before* intent classification, and it has **two** call sites. `src/rico_chat_api.py:9319` (active user) now carries the `is_cv_analysis_request` exemption; **`src/rico_chat_api.py:8783`, on the `_process_message_inner` path taken by onboarding-incomplete users, carries no such exemption.** That asymmetry is a **code read taken during this reconciliation, not a test-proven defect** — the `#1424`/`#1426` suites drive `_handle_active_user_inner` only, so no test currently covers the second call site either way. Treat it as a lead to verify, not as an established bug, and **not** as authorization to edit either call site.
 3. **English and Arabic reach different job-search terminals for the same intent** — `_target_role_search_response` vs `_handle_company_search`. Recorded by `#1424` as characterization: both satisfy the job-search contract, so this is an unexplained asymmetry rather than a known defect.
-4. **Journey-1 D1** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD. **This is the subject of the next executable action** (`TASK-20260728-002`), which is **read-only assessment**. Being assessed is not being authorized for repair.
+4. **Journey-1 D1** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD. **Assessed, not repaired.** `TASK-20260728-002` is delivered as `#1430` (Draft, in review) and its findings are in `AI_WORKSPACE/EVALS/2026-07-28-journey1-d1-production-data-assessment.md`. The snapshot holds four connected ownership-signal clusters, 21 guest rows carrying a trusted identity field and 74 guest rows carrying authenticated onboarding completion; every observed residual predates the complete guard set, so production data does **not** establish that the guards have stopped new bad rows — it merely fails to disprove it. **Being assessed is not being authorized for repair**, and the residual stays open.
 5. **Journey-1 D2** — pending-artifact activation.
 6. **Journey-1 D4** — mission/dashboard truth.
 7. **Journey-1 D5** — first-useful-result activation.
@@ -187,14 +189,20 @@ characterization (#1424), the My Files unavailable-store fix (#1425) and the
 CV-analysis routing / Arabic parity fix (#1426) are delivered. All their leases
 are released and their write authorizations revoked.
 
-After this reconciliation PR is reviewed and merged: open a SEPARATE, READ-ONLY
-Journey-1 D1 production-data consolidation ASSESSMENT — TASK-20260728-002 in
-TASKS.md. It reads and reports. It writes no production row, proposes no
-migration for execution, and is not started here.
+The READ-ONLY Journey-1 D1 production-data consolidation ASSESSMENT is DELIVERED
+and IN REVIEW as #1430 (Draft) — TASK-20260728-002 in TASKS.md. It is no longer
+an executable action; do not re-run it, and do not open a second assessment.
+Keep #1430 Draft. Do not merge it.
+
+The next action belongs to the OWNER, not to an agent: rule on whether to
+establish an owner-approved secure evidence location outside the repository to
+hold the row-level mapping a repair would need. The assessment could not bind
+the #1389 cluster to an account without publishing a production identifier, so
+it recorded that mapping as unestablished. NO REPAIR IS QUEUED.
 
 NO PRODUCTION NEON ROW MUTATION IS AUTHORIZED. Not by this document, not by
-TASK-20260728-002, and not by anything the assessment finds. A finding is a
-finding; repair needs its own owner authorization.
+TASK-20260728-002, not by #1430, and not by anything the assessment found. A
+finding is a finding; repair needs its own owner authorization.
 
 PR3 is NOT authorized. #1389 is on owner HOLD and must not be rebased, edited,
 reopened, marked Ready, merged, or used as an implementation branch — the D1

@@ -102,7 +102,7 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 | **Posture?** | **Trust-first**, per `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired. Identity-ownership hardening has been the active track and its merged slices are listed above. The 2026-07-16 CONTAINMENT framing — security-first → #1068 source-of-truth unification → resume — is **historical and superseded**; #1068 is not the next action. |
 | **What is blocked / frozen?** | New-integration activation is frozen. #1062 (Atelier job cards — HELD, has logged colour/AR/test gaps), #1055 Gmail M0 (**merged 2026-07-17**, `RICO_ENABLE_GMAIL_SYNC=false` — activation still gated on Google restricted-scope verification, Render env provisioning, migration 043, and a separate fleet-sweep PR), #1025 Memory M1 (Draft, flag OFF). Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets. |
 | **What is completed (recent)?** | Atelier `/command` (#1048/#1060/#1061), decision-regression harness (#1056), security hardening (#1058), attachment/SSE/transcript fixes, `DEC-20260716-001` (#1059), operational reconciliation (#1063). |
-| **What comes next?** | **PR1 (#1416, `dac8d8e7`) and PR2 (#1419, `1ea1d973`) are both delivered and released.** The Journey-1 CV routing characterization is **delivered as #1424**, and the two defects it exposed are delivered as **#1425** and **#1426**. The immediate next action is **not** PR3. It is a **read-only Journey-1 D1 production-data consolidation assessment** — `TASK-20260728-002` in `TASKS.md` — which reads and reports. **No production Neon row mutation is authorized by it.** PR3 → PR5 remain planned and are **not** authorized by the PR2 release; following PR2 in sequence is not the same as being cleared to start. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
+| **What comes next?** | **PR1 (#1416, `dac8d8e7`) and PR2 (#1419, `1ea1d973`) are both delivered and released.** The Journey-1 CV routing characterization is **delivered as #1424**, and the two defects it exposed are delivered as **#1425** and **#1426**. The immediate next action is **not** PR3. **The read-only Journey-1 D1 production-data consolidation assessment is in review as `#1430`** (Draft) — `TASK-20260728-002` in `TASKS.md`. It read and reported; it is no longer an executable action, and what follows it is an **owner ruling** on whether to establish a secure row-level evidence location, not an implementation. **No production Neon row mutation is authorized by it, and no repair is queued.** PR3 → PR5 remain planned and are **not** authorized by the PR2 release; following PR2 in sequence is not the same as being cleared to start. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
 
 Production is stable: Render backend healthy (`/health` ok, providers configured),
 Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
@@ -249,9 +249,14 @@ work done.**
 > before moving code" — is therefore **satisfied for the Journey-1 CV paths**, and
 > for those paths only. **Satisfying it does not authorize an extraction:** no CV
 > boundary is approved, and none is created by a characterization landing.
-> **The immediate execution item is now a read-only Journey-1 D1 production-data
-> consolidation assessment** (`TASK-20260728-002` in `TASKS.md`). It reads and
-> reports. **No production Neon row mutation is authorized by it.**
+> **The read-only Journey-1 D1 production-data consolidation assessment is in
+> review as `#1430`** (Draft) — `TASK-20260728-002` in `TASKS.md`. It is no
+> longer the immediate execution item, and **it does not hand off to PR3.** It
+> read and reported; the next step is an **owner ruling** on whether to establish
+> a secure row-level evidence location outside the repository. **No production
+> Neon row mutation is authorized by it, and no repair is queued.**
+> **PR3 → PR5 remain unauthorized** — the assessment reaching review changes
+> nothing about their status.
 
 **PR1 — Chat Job Provenance Contract ✅ delivered and released**
 
