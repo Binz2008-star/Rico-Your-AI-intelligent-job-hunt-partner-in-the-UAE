@@ -1,5 +1,20 @@
 # Architecture
 
+## Document contract
+
+- **Why it exists:** one description of how Rico is built, how it is intended to
+  become, and the structural rules that govern movement between the two.
+- **Update when:** a structural boundary, contract, or migration rule changes —
+  not when a PR merges. Per-PR narrative belongs in `PROJECT_STATUS.md` and
+  `TASKS.md`; the forward slice order belongs in `ENGINEERING_ROADMAP.md`.
+- **Source of truth:** this file for structure and architecture rules;
+  `DECISIONS.md` for binding decisions; `PROJECT_STATUS.md` + live `main` for
+  current control state, which wins over any snapshot here.
+- **Owner:** Rico owner, with the acting CTO/session responsible for keeping the
+  rules below consistent with what the code actually does.
+- **History:** superseded diagrams and rules stay in Git history and are not
+  duplicated inline.
+
 ## Current live stack
 
 - Frontend: Next.js 14 / TypeScript / Tailwind in `apps/web`
@@ -178,6 +193,15 @@ historically relied on Render's ephemeral disk for state that must be durable. S
 > builders still name jobs without a bundle — adopting them is a later slice and has not started,
 > so this is one boundary contracted, not the chat surface migrated.
 >
+> **That boundary was then made fail-closed:** `#1419` (PR2), merged as `1ea1d973` — routing refuses
+> rather than guesses, and delivery is buffered so a partial result is never presented as a complete
+> one. `#1421` (`3f2805de`) corrected the degraded early-exit lifecycle state that surfaced with it.
+>
+> **The CV surface has a truthfulness invariant but not yet a boundary:** `#1422`, merged as
+> `c64aa99`. See "The CV read-truthfulness invariant" below. It is a behaviour contract enforced by
+> guards *inside* `src/rico_chat_api.py`, not a module boundary — no `src/domain/cv` exists, and none
+> is authorized. Read it as one invariant made true at the consumer, not as the CV surface migrated.
+>
 > **The infrastructure end-state below is still untouched.** The production backend is FastAPI on
 > **Render** (see "Current live stack" at the top of this file). Railway, the separate worker
 > service, and Redis/Queue do **not** exist in production. Render remains production until Railway
@@ -223,6 +247,69 @@ See `DECISIONS.md` → DEC-20260707-001 for per-phase success criteria.
 6. Add monitoring / logging (PR F)
 7. UI redesign (PR G) — only after 1–6 land
 
+## The CV read-truthfulness invariant
+
+Established by `#1422` (`c64aa99`) and binding on every surface that answers a
+question about a user's stored CV:
+
+> **READ FAILURE != VERIFIED ABSENCE.**
+
+A CV-state or document-store read that does not complete carries no evidence about
+whether a CV exists. It must therefore never be rendered as any of:
+
+- "no CV";
+- "no stored CV";
+- unreadable-document blame;
+- upload or re-upload guidance;
+- `next_action="upload_cv"`.
+
+What the invariant does **not** relax:
+
+- a **successful** read returning nothing is a genuine absence and keeps its
+  existing guidance;
+- `no_readable_content` from a completed read is a genuine content problem and
+  keeps its existing guidance;
+- the exception stays **contained** — containment protects the chat turn, and what
+  changed is only what containment is allowed to produce.
+
+`src/services/cv_context_resolver.py` already reports the distinction
+(`availability_reason`, `is_unavailable`). The defect was always on the consumer
+side. **Enforcement today is three guards inside `src/rico_chat_api.py`, in English
+and Arabic. It is not a module boundary.**
+
+**Where the invariant is still violated, and not authorized by being written down
+here:** the My Files path still converts its own failed read into `files=[]`, which
+is byte-identical to a successful read of an empty account. Arabic and English CV
+routing also still diverge at `_looks_like_cv_intent_no_file`, which intercepts
+Arabic CV phrasing before intent classification. The live open-residual list is in
+`PROJECT_STATUS.md`.
+
+## Migration rules for `rico_chat_api.py`
+
+`src/rico_chat_api.py` is the primary conversational layer and is very large; it
+answers "does the user have a CV?" from several independent gates. These rules
+govern how it is reduced. They are architecture rules, not a plan — the slice order
+lives in `ENGINEERING_ROADMAP.md`.
+
+- **`RicoChatAPI` remains the compatibility facade during migration.** Callers keep
+  their entry point while logic moves behind it.
+- **No big-bang rewrite.** There is no authorized branch that replaces this module.
+- **Characterize routing and side-effect order before moving code.** For any seam,
+  the winning gate, routing precedence, response type, `next_action`, `_append_chat`
+  behaviour, `_finalize` behaviour, read counts, and which downstream path was
+  reached must be captured by tests *first*, on the untouched tree.
+- **Extract one owned vertical seam per PR.** A seam is a surface with one owner and
+  one contract, not a folder of helpers.
+- **Do not move known-wrong behaviour into a new module under the name "refactor".**
+  A defect relocated is a defect blessed. Fix it, or characterize it as a divergence
+  and leave it where it is until it is fixed under its own scope.
+- **Once the first approved CV boundary exists, new CV logic goes behind that
+  boundary** rather than expanding `rico_chat_api.py`. No such boundary exists today
+  and none is authorized by this file.
+- **Until that boundary exists, only small fixes for proven user failures may touch
+  the legacy CV consumer paths.** "Proven" means a demonstrated user-visible failure,
+  not an inferred one, and "small" means it does not restructure the path it fixes.
+
 ## Architecture rules
 
 - Preserve the existing Rico architecture unless the task explicitly approves changing it.
@@ -230,3 +317,5 @@ See `DECISIONS.md` → DEC-20260707-001 for per-phase success criteria.
 - Keep protected routes based on JWT-derived identity, not request-body `user_id`.
 - Keep user-impacting actions permission-based.
 - Do not claim production readiness without tests, deployment verification, and smoke evidence.
+- Do not state a claim about stored user data that the code did not verify at the
+  moment of rendering — the generalized form of the CV invariant above.
