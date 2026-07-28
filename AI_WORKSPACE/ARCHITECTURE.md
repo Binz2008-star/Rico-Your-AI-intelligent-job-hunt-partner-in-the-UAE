@@ -198,9 +198,14 @@ historically relied on Render's ephemeral disk for state that must be durable. S
 > one. `#1421` (`3f2805de`) corrected the degraded early-exit lifecycle state that surfaced with it.
 >
 > **The CV surface has a truthfulness invariant but not yet a boundary:** `#1422`, merged as
-> `c64aa99`. See "The CV read-truthfulness invariant" below. It is a behaviour contract enforced by
-> guards *inside* `src/rico_chat_api.py`, not a module boundary — no `src/domain/cv` exists, and none
-> is authorized. Read it as one invariant made true at the consumer, not as the CV surface migrated.
+> `c64aa99`, then extended to the files surface by `#1425` (`39b44696`) and to CV-analysis routing
+> by `#1426` (`383dcb6c`). See "The CV read-truthfulness invariant" below. It is a behaviour
+> contract enforced by guards *inside* `src/rico_chat_api.py` and at the `files.py` route, not a
+> module boundary — no `src/domain/cv` exists, and none is authorized. Read it as one invariant
+> made true at three consumers, not as the CV surface migrated. `#1424` (`594a4d3b`) characterized
+> the Journey-1 CV routing on the untouched tree, which satisfies the pre-extraction requirement in
+> "Migration rules for `rico_chat_api.py`" **for those paths only — and satisfying it is not
+> authorization to extract.**
 >
 > **The infrastructure end-state below is still untouched.** The production backend is FastAPI on
 > **Render** (see "Current live stack" at the top of this file). Railway, the separate worker
@@ -274,15 +279,46 @@ What the invariant does **not** relax:
 
 `src/services/cv_context_resolver.py` already reports the distinction
 (`availability_reason`, `is_unavailable`). The defect was always on the consumer
-side. **Enforcement today is three guards inside `src/rico_chat_api.py`, in English
-and Arabic. It is not a module boundary.**
+side. **Enforcement today is three guards inside `src/rico_chat_api.py` plus the
+`GET /api/v1/user/files` route, in English and Arabic. It is not a module boundary.**
 
-**Where the invariant is still violated, and not authorized by being written down
-here:** the My Files path still converts its own failed read into `files=[]`, which
-is byte-identical to a successful read of an empty account. Arabic and English CV
-routing also still diverge at `_looks_like_cv_intent_no_file`, which intercepts
-Arabic CV phrasing before intent classification. The live open-residual list is in
-`PROJECT_STATUS.md`.
+### Where the invariant now holds, and how it is expressed per surface
+
+The invariant is one rule, but each surface expresses it in its own vocabulary. Recorded
+so a future surface adopts the rule rather than copying another surface's mechanism:
+
+| Surface | Unavailable is expressed as | Established by |
+| --- | --- | --- |
+| Chat CV path | `cv_state_unverified`, **no** `next_action` | `#1422` (`c64aa99`) |
+| My Files inventory | **503** with structured `files_unavailable` detail — **no `files`, no `total`** | `#1425` (`39b44696`) |
+| My Files UI | a fourth state, `unavailable`: alert panel, manual Retry, **no** empty-state copy and **no** upload CTA | `#1425` (`39b44696`) |
+
+Two rules that fell out of `#1425` and bind any surface adopting this invariant:
+
+- **An error response may not carry an inventory claim.** Returning `files: []` inside a
+  503 body is the same lie one layer down — a defensive client renders absence again.
+- **Any failed read counts.** The pre-`#1425` code special-cased 404/500/503 into an empty
+  list and left every other failure showing an error banner above the same empty state.
+  No status code is evidence about what an account holds.
+
+**Routing is part of truthfulness, not separate from it.** `#1426` established that a
+question about the user's own CV must reach a handler that reads the CV. Before it,
+"analyse my cv please" reached a job search and read no grounding at all, and an Arabic
+analysis ask was answered with `next_action="upload_cv"` regardless of phrasing — so a
+genuinely CV-less Arabic user and a store outage were indistinguishable, which is the
+same failure this invariant exists to prevent, reached by a routing path rather than by a
+read path. The structural rule: **a gate that answers a stored-data question must defer to
+the same canonical predicate the router keys on**, so the gate and the router cannot drift
+(`src/rico/intent/gates.py::is_cv_analysis_request` defers to `classify_intent`).
+
+**Where the invariant is still at risk, and not authorized for repair by being written down
+here:** `_looks_like_cv_intent_no_file` still runs *before* intent classification and has two
+call sites. `src/rico_chat_api.py:9319` (active user) carries the `is_cv_analysis_request`
+exemption added by `#1426`; `src/rico_chat_api.py:8783`, on the `_process_message_inner`
+path for onboarding-incomplete users, does not. **That is a code read taken at
+reconciliation, not a test-proven defect** — the `#1424`/`#1426` suites drive
+`_handle_active_user_inner` only, so no test covers the second call site either way. The
+live open-residual list is in `PROJECT_STATUS.md`.
 
 ## Migration rules for `rico_chat_api.py`
 
