@@ -969,23 +969,22 @@ class TestReadEconomy:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 8. Known divergence — established contract, not yet implemented
+# 8. Divergences this file recorded — one closed, one still open
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKnownDivergences:
+class TestResolvedDivergences:
+    """Was the strict xfail. The contract now holds, so it is asserted plainly.
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Journey-1 residual: My Files collapses an unavailable document "
-            "store into files=[], which is byte-identical to a successful read "
-            "of an empty account. The desired contract IS established — "
-            "ARCHITECTURE.md: a failed or incomplete read must not be rendered "
-            "as absence — and is unimplemented on this surface. Remove this "
-            "marker when the surface distinguishes the two."
-        ),
-    )
-    def test_my_files_must_not_render_an_unavailable_store_as_an_empty_list(self):
+    The full state matrix for this surface — raising reads, body redaction,
+    successful empty and non-empty reads — lives in
+    ``tests/unit/test_files_store_unavailable_truth.py``. What is kept here is
+    the original assertion, because Journey-1 is where the divergence was
+    found and this file is what proves it stayed closed.
+    """
+
+    def test_contract_my_files_does_not_render_an_unavailable_store_as_an_empty_list(self):
+        from fastapi import HTTPException
+
         from src.api.routers import files as files_router
 
         unavailable_db = SimpleNamespace(
@@ -995,8 +994,8 @@ class TestKnownDivergences:
             ),
         )
         # A faithful plan/entitlement stub, so the test runs to its own
-        # assertion instead of dying on a sentinel — an xfail that fails for an
-        # incidental reason proves nothing about the divergence it names.
+        # assertion instead of dying on a sentinel — a failure here has to be
+        # about the contract and not about an incidental fixture.
         plan_stub = SimpleNamespace(
             subscription=SimpleNamespace(
                 plan=SimpleNamespace(value="free"),
@@ -1014,13 +1013,20 @@ class TestKnownDivergences:
             patch.object(files_router, "has_active_cv_document", return_value=False),
             patch.object(files_router, "resolve_effective_user_plan",
                          return_value=plan_stub),
+            pytest.raises(HTTPException) as exc_info,
         ):
-            payload = files_router.list_files(request)
+            files_router.list_files(request)
 
-        # Guard the xfail itself: the store really was unavailable on this run,
-        # so a failure below is the divergence and not a broken fixture.
+        # Guard the assertion itself: the store really was unavailable on this
+        # run, so what follows is the contract and not a broken fixture.
         assert unavailable_db.available is False
-        # The desired contract: an unreadable store is not an empty inventory.
-        # Today this returns files=[] with total=0 — indistinguishable from a
-        # successful read of an account that genuinely holds nothing.
-        assert payload["files"] != [] or payload.get("state") == "unavailable"
+        # The contract, previously the xfail: an unreadable store is not an
+        # empty inventory. It used to return files=[] with total=0 —
+        # indistinguishable from a successful read of an account that
+        # genuinely holds nothing. It now refuses to answer, retryably, and
+        # says nothing at all about what the account holds.
+        assert exc_info.value.status_code == 503
+        detail = exc_info.value.detail
+        assert detail["state"] == "unavailable"
+        assert detail["retryable"] is True
+        assert "files" not in detail and "total" not in detail
