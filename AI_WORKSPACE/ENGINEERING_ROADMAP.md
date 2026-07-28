@@ -35,13 +35,17 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 > if they ever disagree, `PROJECT_STATUS.md` + live `main` win. Snapshots dated
 > 2026-07-16 and earlier are **historical** (superseded).
 >
-> **`main` `c64aa99` (2026-07-28).** Production serves this commit: `/version.commit`
-> matched `c64aa99` and `/health` returned 200 / ok, with `jooble`, `adzuna` and
-> `jsearch` configured and **not** degraded. Evidence class is
-> **owner/browser-verified** — real evidence of live behaviour, not a regression
-> gate, and not reproducible from an agent container. **No deliberate CV-store
-> failure smoke was performed**, so the D3 path below has unit-test coverage only
-> in production terms.
+> **`main` `383dcb6c` (2026-07-28).** Production serves this commit: `/version.commit`
+> matched `383dcb6c` and `/health` returned 200 / ok, with `jooble`, `adzuna` and
+> `jsearch` configured and **not** degraded. `Deploy Render Backend` run
+> `30367283239` is green for that exact commit, and the backend process
+> `started_at` is `2026-07-28T14:15:33Z` — so this is the new process, not a stale
+> one. Evidence class is an **automated endpoint read taken by the reconciliation
+> session**; the earlier claim that such a read is "not reproducible from an agent
+> container" is withdrawn. It is still **not a regression gate**. **No deliberate
+> CV-store failure smoke and no CV-analysis routing smoke were performed**, so the
+> paths changed by #1425 and #1426 have unit/frontend-test coverage only in
+> production terms.
 >
 > Landed since `dac8d8e7`, in merge order: #1417 control-plane reconciliation
 > (`1592162e`, docs-only), #1405 ambiguous ownership mapped to 409 on onboarding
@@ -52,12 +56,20 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 > #1420 identity email containment coverage enforced in CI (`0d826b31`, CI-only,
 > identity-containment track), #1421 degraded early-exit lifecycle state
 > correction (`3f2805de`), #1422 **Journey-1 D3** truthful CV read-failure
-> handling (`c64aa99`).
+> handling (`c64aa99`), #1423 control-plane reconciliation (`4ce4add8`,
+> docs-only), #1424 Journey-1 CV routing characterization (`594a4d3b`, **tests
+> only**), #1425 My Files unavailable-store truthfulness (`39b44696`, `src/` +
+> `apps/web/`), #1426 CV-analysis routing and Arabic/English verified-absence
+> parity (`383dcb6c`).
 >
-> **Two things define this stretch.** The approved forward sequence advanced by a
-> whole slice — **PR2 is delivered as #1419**, and the previous wording here, which
-> called it planned and unimplemented, was stale. And the CV surface gained a
-> truthfulness invariant in #1422: **READ FAILURE != VERIFIED ABSENCE.** The
+> **Three things define this stretch.** The approved forward sequence advanced by a
+> whole slice — **PR2 is delivered as #1419**. The CV surface gained a truthfulness
+> invariant in #1422: **READ FAILURE != VERIFIED ABSENCE.** And that invariant was
+> then **characterized and extended**: #1424 pinned what the Journey-1 CV paths
+> actually do before any extraction, and the two defects it exposed were fixed in
+> their own scoped PRs — #1425 stopped My Files rendering an unreadable store as an
+> empty account, and #1426 stopped CV-analysis asks routing to job search, which is
+> also what closed the Arabic verified-absence gap on the active-user path. The
 > identity-ownership track continued onto the chat and onboarding paths in #1405
 > and #1410.
 >
@@ -86,17 +98,17 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 | Question | Answer |
 | --- | --- |
-| **Where is Rico?** | `main` `c64aa99` (head re-anchored 2026-07-28). `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
+| **Where is Rico?** | `main` `383dcb6c` (head re-anchored 2026-07-28). `/command` is the full **Atelier** surface (paper + Atelier at Night, editorial serif replies) — `DEC-20260716-001` merged. #963 CV-persistence + Paddle #1008 shipped long ago (Paddle merged, NOT activated). |
 | **Posture?** | **Trust-first**, per `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired. Identity-ownership hardening has been the active track and its merged slices are listed above. The 2026-07-16 CONTAINMENT framing — security-first → #1068 source-of-truth unification → resume — is **historical and superseded**; #1068 is not the next action. |
 | **What is blocked / frozen?** | New-integration activation is frozen. #1062 (Atelier job cards — HELD, has logged colour/AR/test gaps), #1055 Gmail M0 (**merged 2026-07-17**, `RICO_ENABLE_GMAIL_SYNC=false` — activation still gated on Google restricted-scope verification, Render env provisioning, migration 043, and a separate fleet-sweep PR), #1025 Memory M1 (Draft, flag OFF). Owner P0: rotate the exposed local `rico-job-automation-api.env` secrets. |
 | **What is completed (recent)?** | Atelier `/command` (#1048/#1060/#1061), decision-regression harness (#1056), security hardening (#1058), attachment/SSE/transcript fixes, `DEC-20260716-001` (#1059), operational reconciliation (#1063). |
-| **What comes next?** | **PR1 (#1416, `dac8d8e7`) and PR2 (#1419, `1ea1d973`) are both delivered and released.** The immediate next action is **not** PR3. It is a **tests-only characterization of Journey-1 CV routing** — `TASK-20260728-001` in `TASKS.md` — which must land before any extraction from `src/rico_chat_api.py`. PR3 → PR5 remain planned and are **not** authorized by the PR2 release; following PR2 in sequence is not the same as being cleared to start. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
+| **What comes next?** | **PR1 (#1416, `dac8d8e7`) and PR2 (#1419, `1ea1d973`) are both delivered and released.** The Journey-1 CV routing characterization is **delivered as #1424**, and the two defects it exposed are delivered as **#1425** and **#1426**. The immediate next action is **not** PR3. It is a **read-only Journey-1 D1 production-data consolidation assessment** — `TASK-20260728-002` in `TASKS.md` — which reads and reports. **No production Neon row mutation is authorized by it.** PR3 → PR5 remain planned and are **not** authorized by the PR2 release; following PR2 in sequence is not the same as being cleared to start. The former answer (#1068 → owner secret rotation → #1066 + #1067) is **historical and no longer the execution order**; it is not deleted from the record, but it must not be read as the next action. |
 
 Production is stable: Render backend healthy (`/health` ok, providers configured),
 Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
 
 Except for the head SHA, the posture row and the "what comes next" row — all
-three re-verified at `c64aa99` in this pass — the rows in this table are dated
+three re-verified at `383dcb6c` in this pass — the rows in this table are dated
 2026-07-16 and were **not** re-verified. Treat any other claim in them as
 historical until it is re-checked.
 
@@ -194,9 +206,29 @@ fix only proven gaps (synthetic data only).
   handling (`c64aa99`), establishing **READ FAILURE != VERIFIED ABSENCE** on the
   chat CV path in English and Arabic. The structural rule it implies is owned by
   `ARCHITECTURE.md`, not by this roadmap.
+- **Delivered: #1424** — Journey-1 CV routing characterization (`594a4d3b`),
+  **tests only**. It satisfies the `ARCHITECTURE.md` requirement that routing and
+  side-effect order be captured on the untouched tree before any extraction, and
+  it is what turned two suspected problems into evidence.
+- **Delivered and released: #1425** — My Files distinguishes an unavailable store
+  from an empty inventory (`39b44696`): a failed inventory read answers 503 with a
+  structured `files_unavailable` detail instead of `{"files": [], "total": 0}`, and
+  the surface renders a distinct unavailable state with a manual Retry. This is the
+  invariant above applied to the second surface that violated it. **The backend half
+  is deployed; the `apps/web/` half has no independent production verification.**
+- **Delivered and released: #1426** — CV-analysis asks route to `cv_analysis` with
+  authoritative grounding rather than to job search (`383dcb6c`), in English and
+  Arabic. It also closes the Arabic verified-absence gap on the active-user path:
+  an Arabic analysis ask previously answered `cv_upload_guidance` with
+  `next_action="upload_cv"` regardless of phrasing.
 - Next candidates: unify the legacy profile-CV rule across the files surface and CV
-  resolution so one user gets one answer (its acceptance check is the strict xfail
-  above); any gap surfaced by continued Audit Phase 2–9 verification.
+  resolution so one user gets one answer — **note that its former acceptance check,
+  the strict xfail in the characterization file, was converted to a passing contract
+  by #1425, so this candidate now needs a new acceptance check before it is
+  actionable**; the second `_looks_like_cv_intent_no_file` call site
+  (`src/rico_chat_api.py:8783`), which carries no analysis-ask exemption and is
+  covered by no test either way; the characterized EN/AR job-search terminal
+  asymmetry; any gap surfaced by continued Audit Phase 2–9 verification.
 
 #### Approved forward sequence — PR1 → PR5
 
@@ -211,10 +243,15 @@ work done.**
 
 > **Position in the sequence is not authorization.** PR3 follows PR2 in this list;
 > that does not make it the next action, and nothing in the PR2 release starts it.
-> **The immediate execution item is the Journey-1 CV routing characterization**
-> (`TASK-20260728-001` in `TASKS.md`), which is tests-only and must precede any
-> extraction from `src/rico_chat_api.py` — see `ARCHITECTURE.md` →
-> "Migration rules for `rico_chat_api.py`".
+> **The Journey-1 CV routing characterization that used to sit here is delivered**
+> as #1424 (`594a4d3b`), together with the two fixes it justified, #1425 and #1426.
+> The `ARCHITECTURE.md` precondition — "characterize routing and side-effect order
+> before moving code" — is therefore **satisfied for the Journey-1 CV paths**, and
+> for those paths only. **Satisfying it does not authorize an extraction:** no CV
+> boundary is approved, and none is created by a characterization landing.
+> **The immediate execution item is now a read-only Journey-1 D1 production-data
+> consolidation assessment** (`TASK-20260728-002` in `TASKS.md`). It reads and
+> reports. **No production Neon row mutation is authorized by it.**
 
 **PR1 — Chat Job Provenance Contract ✅ delivered and released**
 
@@ -401,6 +438,7 @@ Backend** run for that commit, not by a green Deploy to Production run alone.
 
 | Date | Commit | What went live |
 | --- | --- | --- |
+| 2026-07-28 | `383dcb6c` | #1426 — CV-analysis asks route to `cv_analysis` with authoritative CV grounding instead of to job search, in English and Arabic. `_CV_ANALYSIS_RE` gained the analysis verbs bound to `cv`/`resume`/`curriculum vitae` plus an Arabic arm requiring the `(ال)ذاتية` qualifier; `is_cv_analysis_request()` defers to the same `classify_intent` the router keys on; the upload-announce gate skips analysis asks. It also closes the **Arabic verified-absence gap on the active-user path** — an Arabic analysis ask previously answered `cv_upload_guidance` with `next_action="upload_cv"` regardless of phrasing. `Deploy Render Backend` run `30367283239` green; `/version.commit` = `383dcb6c`, process `started_at` `2026-07-28T14:15:33Z`, `/health` 200 / ok with `jooble`, `adzuna` and `jsearch` configured and not degraded. **Evidence class: automated endpoint read taken by the reconciliation session — not a regression gate, and no CV-analysis routing smoke was performed, so the changed path was not exercised in production.** This row also carries the **backend** half of #1425 (`39b44696`, My Files unavailable-store truthfulness), which reached production inside the same rolling sequence without an individual `/version` read; **no per-commit deploy evidence is claimed for it.** #1425's `apps/web/` half (`UploadAtelier.tsx`, `translations.ts`) is **present on `main`** and **not** covered by this row: a backend `/version` read does not prove a frontend deploy, and **no independent production frontend verification was taken.** #1424 (`594a4d3b`) is **tests-only and earns no release row.** |
 | 2026-07-28 | `c64aa99` | #1422 — D3 truthful CV read-failure handling on the chat CV path: a failed grounding or document read is no longer rendered as "no CV", "no stored CV", unreadable-document blame, upload/re-upload guidance, or `next_action="upload_cv"`, in English and Arabic. A successful empty read is still an absence and `no_readable_content` is still a content problem. No route, migration, schema or frontend change. `/version.commit` matched `c64aa99` and `/health` returned 200 / ok with `jooble`, `adzuna` and `jsearch` configured and not degraded. **Evidence class: owner/browser-verified — not an automated artifact and not a regression gate. No deliberate CV-store failure smoke was performed, so the changed path itself was not exercised in production.** This row also carries the intermediate **backend** merges that reached production inside the same rolling sequence without an individual `/version` read of their own — #1405 (`20037d2c`), #1410 (`2757f53b`), #1419 (`1ea1d973`, PR2) and #1421 (`3f2805de`). **No per-commit deploy evidence is claimed for any of them.** The `apps/web/` frontend merges in the same window — #1418 (`b7e3aedc`, session-switch/send race, two files under `apps/web/` and explicitly no backend change) and #1370 (`4f1af6bc`, public pricing page) — are **present on `main`** and are **not** covered by this row's evidence: a backend `/version` read does not prove a frontend deploy, and **no independent production frontend verification was taken in this pass.** |
 | 2026-07-27 | `dac8d8e7` | #1416 — PR1 Chat Job Provenance Contract: the verified job-search contract (`src/domain/job_search`) plus its seam (`src/services/verified_job_search.py`), adopted at exactly one consumer (`_target_role_search_response`). `/version.commit` = `dac8d8e7`, process start `2026-07-27T01:00:26Z`, `/health` ok with `jooble`, `adzuna` and `jsearch` configured and not degraded. Production-smoked on one synthetic non-PII named-role search: non-empty 39-character operation id, response `operation_id` identical to `search_evidence.operation_id`, 5 matches shown against `accepted_result_count` 10, exactly one `provider_cascade` attempt for the deliberate search turn, and execution metadata carrying no listing content. |
 | 2026-07-26 | `ca266366` | #1414 — a guest row is not a candidate on the email or Telegram path (`find_profiles_by_email` and `find_profiles_by_telegram_username`, SQL predicate plus independent Python re-check, both memory fallbacks guarded). Central Controller read `/version.commit` = `ca266366` and `/health` ok, with `jooble`, `adzuna`, `jsearch` configured and not degraded and the DeepSeek precheck reachable. Browser-verified by the Controller; not reproducible from an agent container. Owner functional smoke not claimed. |
