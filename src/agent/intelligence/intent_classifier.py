@@ -543,15 +543,26 @@ _CV_ANALYSIS_RE = re.compile(
     # bare-role gate, and was searched as if it were a job title. The verb must
     # be adjacent to the noun — "find jobs that MATCH my CV" carries no analysis
     # verb and stays a job search, which is the fence this arm must not cross.
+    # The noun list is deliberately only cv / resume / curriculum vitae.
+    # "profile" was included at first and was too wide: "assess my profile",
+    # "review my LinkedIn profile" and "evaluate my career profile" are not CV
+    # asks, and routing them to the CV-analysis branch would have answered a
+    # question about a different artefact entirely.
     r"|\b(analy[sz]e|anali[sz]e|critique|assess|evaluate|appraise|criti[cq]ue)\b"
-    r"\s+(?:my|the)\s+(cv|resume|curriculum\s+vitae|profile)\b"
+    r"\s+(?:my|the)\s+(cv|resume|curriculum\s+vitae)\b"
     # Arabic. The classifier had no Arabic CV-analysis arm at all, so every
     # Arabic phrasing reached `unknown`. Same shape as the English arm: an
     # analysis verb immediately followed by the CV noun, so "ابحث عن وظائف
     # تناسب سيرتي الذاتية" (a search) and "أريد رفع سيرتي الذاتية" (an upload
     # announcement) are both left alone.
+    #
+    # The "الذاتية" qualifier is REQUIRED. A bare "سيرة" is just "biography"
+    # and matched things that are not the user's CV at all — "حلل سيرة الشركة"
+    # (the company's history), "راجع سيرة المرشح" (a candidate's background),
+    # "تحليل سيرة شخصية" (a personal biography). Only سيرتي/السيرة/سيرة
+    # followed by (ال)ذاتية is a curriculum vitae.
     r"|(حلل|تحليل|راجع|مراجعة|قيّم|قيم|تقييم|انتقد)\s*(?:لي\s+)?"
-    r"(سيرتي|سيرة|السيرة)",
+    r"(?:سيرتي|السيرة|سيرة)\s+(?:ال)?ذاتية",
     re.IGNORECASE,
 )
 

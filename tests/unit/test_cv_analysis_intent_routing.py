@@ -93,6 +93,28 @@ AR_ANALYSIS_ASKS = [
 
 ALL_ANALYSIS_ASKS = EN_ANALYSIS_ASKS + AR_ANALYSIS_ASKS
 
+#: English near-misses. Each pairs an analysis verb with a noun that is NOT a
+#: CV. The first draft of this fix accepted "profile" as a CV noun, which made
+#: all three of these ``cv_analysis`` — answering a question about a LinkedIn
+#: page or a career profile with a CV review.
+EN_NOT_CV_ASKS = [
+    pytest.param("assess my profile", id="en-bare-profile"),
+    pytest.param("review my LinkedIn profile", id="en-linkedin-profile"),
+    pytest.param("evaluate my career profile", id="en-career-profile"),
+]
+
+#: Arabic near-misses. "سيرة" alone is just *biography*; only "سيرة ذاتية" is a
+#: curriculum vitae. The first draft keyed on the bare noun, so a request to
+#: analyse a company's history or a candidate's background became a review of
+#: the user's own CV.
+AR_NOT_CV_ASKS = [
+    pytest.param("حلل سيرة الشركة", id="ar-company-history"),
+    pytest.param("راجع سيرة المرشح", id="ar-candidate-background"),
+    pytest.param("تحليل سيرة شخصية", id="ar-personal-biography"),
+]
+
+ALL_NOT_CV_ASKS = EN_NOT_CV_ASKS + AR_NOT_CV_ASKS
+
 #: Response types that mean "the user was told to upload a CV, or told about
 #: one, instead of being given the analysis they asked for".
 CV_GUIDANCE_TYPES = frozenset({"cv_upload_guidance", "cv_already_exists"})
@@ -244,17 +266,85 @@ class TestAnalysisAskStaysTruthfulAboutCvState:
         )
         assert d.job_search_calls == 0
 
-    @pytest.mark.parametrize("message", EN_ANALYSIS_ASKS)
+    @pytest.mark.parametrize("message", ALL_ANALYSIS_ASKS)
     def test_contract_genuine_absence_is_still_stated_plainly(self, message):
-        """A COMPLETED read proving no CV. The user must be told so and pointed
-        at an upload — this is the case where that guidance is earned, and it
-        must not be suppressed by the fix above."""
+        """A COMPLETED read proving no CV, in BOTH languages.
+
+        This is the case where upload guidance is *earned*, and the two failure
+        modes sit on either side of it: suppressing it (leaving the user with no
+        way forward) and reaching it without evidence (the D3 violation). Both
+        are asserted, together with the absence of any search.
+
+        Arabic is covered here because it is the surface that previously never
+        reached this branch at all — the announce gate answered first, so a
+        genuinely CV-less Arabic user and a store outage were indistinguishable.
+        """
         d, result, _spy = run_analysis_ask(
             message, cv_ctx=ctx_genuinely_absent(), has_cv=False
         )
+        # Verified absence is evidence, so the unverified answer is WRONG here.
         assert result.get("type") != "cv_state_unverified"
-        assert d.job_search_calls == 0
+        # ...and the answer must still be grounded in an authoritative read.
         assert d.cv_context_reads >= 1
+        # Truthful: it says there is no CV, and points at the upload.
+        assert "haven't uploaded one" in result["message"]
+        assert "Upload your CV" in result["message"]
+        # No search, no provider terminal, no generated answer.
+        assert d.job_search_calls == 0
+        assert d.job_search_terminals == []
+        assert d.llm_fallback_calls == 0
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 2b. Negative fences — what an analysis VERB alone must not capture
+# ══════════════════════════════════════════════════════════════════════════
+
+class TestAnalysisVerbDoesNotCaptureNonCvNouns:
+    """The widened predicate keys on a verb bound to a noun. These prove the
+    noun half is doing real work: the same verbs, attached to something that is
+    not a CV, must not be answered as a CV review.
+
+    Both lists are regressions from the first draft of this fix, not
+    hypotheticals — "profile" was an accepted English noun, and the Arabic arm
+    accepted a bare "سيرة" (biography).
+    """
+
+    @pytest.mark.parametrize("message", ALL_NOT_CV_ASKS)
+    def test_contract_non_cv_noun_is_not_cv_analysis(self, message):
+        """The contract. Where these DO go is pre-existing routing this change
+        does not touch, so only the CV-analysis outcome is fenced here."""
+        _d, result, _spy = run_analysis_ask(message)
+        assert result.get("type") != "cv_analysis"
+
+    @pytest.mark.parametrize("message", ALL_NOT_CV_ASKS)
+    def test_contract_non_cv_noun_does_not_read_the_cv_grounding(self, message):
+        """The stronger form: not merely a different answer, but no CV work at
+        all. A grounding read here would mean the message was routed as a CV ask
+        and then rendered differently — the fence must hold at the routing
+        decision, not at the response."""
+        d, _result, _spy = run_analysis_ask(message)
+        assert d.cv_context_reads == 0
+        assert d.document_reads == 0
+
+    @pytest.mark.parametrize(
+        "message", [p.values[0] for p in ALL_NOT_CV_ASKS]
+    )
+    def test_contract_non_cv_noun_does_not_classify_as_cv_analysis(self, message):
+        """Predicate level, so a regression names the exact phrase."""
+        from src.agent.intelligence.intent_classifier import classify_intent
+
+        assert classify_intent(message).intent != "cv_analysis"
+
+    @pytest.mark.parametrize(
+        "message",
+        ["مراجعة السيرة الذاتية", "تحليل سيرة ذاتية"],
+    )
+    def test_contract_arabic_cv_phrase_variants_are_still_recognised(self, message):
+        """The other side of the Arabic tightening: requiring the "ذاتية"
+        qualifier must not cost the definite and indefinite CV phrasings."""
+        from src.agent.intelligence.intent_classifier import classify_intent
+
+        assert classify_intent(message).intent == "cv_analysis"
 
 
 # ══════════════════════════════════════════════════════════════════════════
