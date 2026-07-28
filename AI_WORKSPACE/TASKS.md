@@ -90,7 +90,7 @@ existing entry if one already exists for the task, never duplicating it)
 before continuing further — see "Session continuity / limit-approach
 handoff" in `AGENT_OPERATING_MODEL.md`.
 
-## Lane continuity blocks — verified 2026-07-28 at `main` `c64aa99`
+## Lane continuity blocks — verified 2026-07-28 at `main` `383dcb6c`
 
 One block per lane. **These are the authoritative per-lane records**; the dated
 task entries below remain as history. Every SHA here was fetched live when this
@@ -180,10 +180,10 @@ Update the block for your lane. Never duplicate one.
 
 ### TASK-20260728-001 — Journey-1 CV routing characterization (tests only)
 
-Status: proposed
-Owner: unassigned — **not started, and not to be started in the reconciliation PR that recorded it**
-Branch: not created
-Issue/PR: none yet — it is a **separate** PR, opened only after the post-`#1422` reconciliation PR is reviewed and merged
+Status: done
+Owner: Windsurf session (2026-07-28)
+Branch: `test/journey1-cv-routing-characterization`
+Issue/PR: **#1424** — squash-merged as `594a4d3b` onto base `c64aa99`
 
 #### Objective
 
@@ -261,7 +261,8 @@ Branch: `claude/md-best-practices-generator-auau3b` (final home of the
 CLAUDE.md refactor commit, reconciled onto the pre-existing PR #1346 rather
 than opened as a competing PR)
 Issue/PR: #1346 (tooling+refactor), plus reviewed-and-merged #1347, #1348,
-#1349, #1350 as part of the same session
+
+# 1349, #1350 as part of the same session
 
 #### Objective
 
@@ -499,7 +500,6 @@ comes from the DB, not stale token claims; store outage fails closed.
 - Rollback plan: revert the squash commit (behavior returns to stateless
   tokens); column 045 is additive and harmless to leave; dropping it is a
   separate owner-approved migration
-
 
 ### TASK-20260720-001 — hotfix #1225: agentic_ui option buttons as plain dict (stream TypeError) — PRODUCTION VERIFIED
 
@@ -4718,7 +4718,7 @@ fix small isolated bugs immediately, document larger issues for separate PRs.
 #### Issues documented (separate PRs required — do NOT touch without explicit scope)
 
 | # | Issue | File | Recommended action |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | D1 | Runtime DDL bypasses migration system | `audit_repo.py` | Move 3 table creates to numbered migrations |
 | D2 | `_DEDUP_CACHE` unbounded memory growth | `audit_repo.py` | Add periodic sweep or size cap in `_mem_seed` |
 | D3 | Safety regex over-breadth (`password`, `bypass`) | `rico_safety.py` | Narrow with word-boundary anchors + regression tests |

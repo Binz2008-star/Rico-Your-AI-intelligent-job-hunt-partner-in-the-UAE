@@ -25,67 +25,44 @@ Ranked, and not negotiable when they disagree:
 
 **Every SHA in this file is verified from the API before it is written.** A SHA copied from a message, a summary, or a previous session is not evidence. If live state and this file disagree, reconcile this file before starting anything else.
 
-## Reconciliation — 2026-07-28 (post-`#1422`)
+## Reconciliation — 2026-07-28 (post-`#1426`)
 
 ### Verified control snapshot
 
 | Field | Value | How it was established |
 | --- | --- | --- |
-| `main` | `c64aa99158695c78138e15ca4d6dfb57b5c762c7` | Fetched live from `origin/main` at the moment this section was written |
-| Deployed backend `/version` | **`c64aa99` — verified** | `/version.commit` matched `c64aa99` |
-| `/health` | **200 / ok** | Same read: `jooble`, `adzuna` and `jsearch` configured and **not** degraded |
-| Application/runtime baseline | `c64aa99` — **equal to `main`** | `#1422` touches `src/rico_chat_api.py`, so the `src/**` deploy filter matched and the deploy fired on merge |
-| Production evidence class | **owner/browser-verified** | Not an automated artifact, and not a regression gate — see "Production verification" below |
-| Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired | Unchanged. `#1422` is trust repair, not expansion |
+| `main` | `383dcb6c` | Fetched live from `origin/main` at the moment this section was written |
+| Deployed backend `/version` | **Not re-verified at this pass** | The previous pass verified `c64aa99`; `#1424` is tests-only (no deploy), `#1425` and `#1426` touch `src/` and are expected to have deployed, but no independent `/version` read was taken for this pass |
+| `/health` | **Not re-verified at this pass** | See above |
+| Application/runtime baseline | `383dcb6c` — **expected equal to `main`** | `#1425` and `#1426` both touch `src/`, so the `src/**` deploy filter matched; no per-commit deploy evidence is claimed |
+| Production evidence class | **Not claimed at this pass** | No browser smoke or `/version` read was taken; the previous pass's `c64aa99` evidence remains the most recent |
+| Governing strategy | `DEC-20260723-001`: no new feature expansion until trust and execution reliability are repaired | Unchanged. `#1424`–`#1426` are trust repair, not expansion |
 
-**`main` and the deployed `/version` are asserted equal at this pass.**
+**`main` is `383dcb6c`.** The deployed `/version` was not re-verified at this pass. The previous pass's evidence at `c64aa99` remains the most recent production verification.
 
-The previous snapshot of this section recorded `dac8d8e7` as the baseline and stated that PR2 had not started. **Both claims were stale at the moment this pass ran** and are corrected here: eight PRs have merged since, and PR2 is delivered.
+### `#1424` — merged (tests-only)
 
-### `#1422` — merged, deployed, owner-verified
+Journey-1 CV routing characterization. Squash-merged as `594a4d3b` onto base `c64aa99`. Tests-only: no production code, no runtime path, no deploy. Characterized nine CV-routing scenarios through the real dispatcher, including one strict xfail recording that "analyse my cv please" reaches job search. **`TASK-20260728-001` is done via this PR.**
 
-D3 truthful CV read-failure handling. Approved head `f8073ad28fac798eb44828f98d8d8f7f3c4c63ff`, squash-merged as `c64aa99158695c78138e15ca4d6dfb57b5c762c7` onto base `3f2805de`.
+### `#1425` — merged
 
-**The invariant it establishes: READ FAILURE != VERIFIED ABSENCE.**
+My Files store-unavailable truth. Squash-merged as `39b44696` onto base `594a4d3b`. `GET /api/v1/user/files` now returns 503 with structured detail when the document store is unavailable or a read fails, instead of converting the failure into `files: []`. An empty `files` list always represents a verified empty inventory. Frontend shows an unavailable state with retry, not an empty vault. **The My Files unavailable-store residual is closed.**
 
-Delivered behaviour — a failed CV grounding or document read no longer becomes any of:
+### `#1426` — merged
 
-- "no CV";
-- "no stored CV";
-- unreadable-document blame;
-- upload or re-upload guidance;
-- `next_action="upload_cv"`.
+CV-analysis intent routing. Squash-merged as `383dcb6c` onto base `39b44696`. "analyse / analyze / review / critique my CV" (English and Arabic) now classifies as `cv_analysis` and reaches grounded CV analysis with zero job-search provider calls. The fix extends `_CV_ANALYSIS_RE` with missing verbs/nouns and adds `is_cv_analysis_request()` to the upload-announce gate. **The active-user CV-analysis routing residual is closed.** A narrowed residual remains: the onboarding-incomplete path at `_process_message_inner` still passes through `_looks_like_cv_intent_no_file` without the `is_cv_analysis_request` exemption, so Arabic CV-analysis asks from users with incomplete onboarding may still receive upload guidance. This is recorded as an open residual below and is **not authorized for fix.**
 
-English and Arabic are both covered. A genuine successful empty read remains a genuine absence, and a genuine `no_readable_content` remains a content problem — only a *failed read* is reclassified. The exception remains contained inside the chat turn. No route, migration, schema or frontend change.
-
-**Structural consequence** — the invariant, the boundary it implies, and the migration rules that follow from it are recorded in `AI_WORKSPACE/ARCHITECTURE.md`, not restated here.
-
-### Production verification — what this evidence can and cannot carry
-
-The `/version` and `/health` reads above were taken by the owner through a browser session. **That is real evidence of live behaviour and it is not a regression gate.** Nothing may cite it as a substitute for a test.
-
-**No deliberate CV-store failure smoke was performed.** The behaviour `#1422` changes is therefore *not* covered by any production observation at this baseline — it is covered by its unit tests only. Do not record or repeat this smoke as evidence that the D3 path was exercised in production.
-
-### Merged since the previous control-plane reconciliation (`#1417`)
+### Merged since the previous control-plane reconciliation (`#1423`)
 
 Listed in merge order. Full narratives live with the document that owns each fact — the forward sequence in `ENGINEERING_ROADMAP.md`, lane detail in `TASKS.md`, structural rules in `ARCHITECTURE.md` — and are deliberately not duplicated here.
 
 | PR | Merge commit | What it is | Runtime paths |
 | --- | --- | --- | --- |
-| `#1405` | `20037d2c3adb5a372bd1355c7e1edbc8c4f01b1f` | ambiguous ownership mapped to 409 on onboarding status and CV upload | `src/` — deploy expected |
-| `#1410` | `2757f53b554e15257fe298abd17a239916f8eeae` | central chat ownership resolver | `src/` — deploy expected |
-| `#1418` | `b7e3aedc8d2c64624da335405a98190a40c87585` | session-switch/send race — **frontend only** | `apps/web/` — Vercel |
-| `#1370` | `4f1af6bcba8680317d52dbf0ffc5e51711e84693` | public pricing page | `apps/web/` — Vercel |
-| `#1419` | `1ea1d973161b261de9463d5a1434f3d5b4928874` | **PR2** — fail-closed job-search routing and buffered delivery | `src/` — deploy expected |
-| `#1420` | `0d826b31396ba435d66f9a5dd0823fe86bb0756d` | `ci(tests): enforce identity email containment coverage` — supporting CI for the **identity-containment** track | CI-only — no deploy expected |
-| `#1421` | `3f2805de4028451e316937a3c2b631c3bced1548` | degraded early-exit lifecycle state correction | `src/` — deploy expected |
-| `#1422` | `c64aa99158695c78138e15ca4d6dfb57b5c762c7` | **D3** truthful CV read-failure handling | `src/` — deploy fired; `/version` confirms |
+| `#1424` | `594a4d3b` | Journey-1 CV routing characterization (tests only) | Tests-only — no deploy |
+| `#1425` | `39b44696` | My Files store-unavailable truth (503 on failed read) | `src/` + `apps/web/` — deploy expected |
+| `#1426` | `383dcb6c` | CV-analysis intent routing (analyse/review/critique → `cv_analysis`) | `src/` — deploy expected |
 
-**`#1420` in detail, because its scope is narrow and was previously described too loosely.** It enrolled `tests/test_identity_email_overwrite_containment.py` into the required CI pytest invocation (`.github/workflows/qa-tests.yml`) and removed that same file from `FROZEN_BASELINE` in `scripts/check_test_enumeration.py`. Two files, `+1/−1`, no runtime path. **It is supporting CI for the identity-containment track and has nothing to do with PR2 or the job-search contract.** It appears in this chronological merge list because it merged in this window, and nowhere else as a PR2 artifact.
-
-**Backend evidence covers backend commits only.** Of the runtime merges above, only `#1405`, `#1410`, `#1419` and `#1421` touch `src/`. The final commit in the sequence carries the `/version` read; the earlier ones were superseded by the next merge before any independent per-commit deployment verification was taken, so **no per-commit deploy evidence is claimed for `#1405`, `#1410`, `#1419` or `#1421`.** They are in `main` and in the deployed tree at `c64aa99`; that is the whole of the claim.
-
-**`#1418` and `#1370` are `apps/web/` frontend changes and are not covered by any backend evidence in this pass.** `#1418` touches exactly two files, both under `apps/web/` (`apps/web/app/command/page.tsx` and its test), and explicitly states no backend change. **A backend `/version` read does not prove a frontend deploy** and must never be cited as though it does. What is established for both: **they are present on `main` at `c64aa99`.** **No independent production frontend verification was taken in this pass** — no Vercel deployment read, no browser check of the affected surface.
+**No per-commit deploy evidence is claimed for `#1425` or `#1426`.** Both touch `src/` and are expected to have deployed via the `src/**` filter, but no independent `/version` read was taken at this pass. The previous pass's `c64aa99` verification remains the most recent production evidence.
 
 For merges that touch no runtime path, `main` moving ahead of the deployed `/version` is **expected divergence, not deployment drift**. Do not chase parity, and do not fire a deploy to manufacture it.
 
@@ -95,7 +72,7 @@ For merges that touch no runtime path, `main` moving ahead of the deployed `/ver
 | --- | --- | --- | --- |
 | L2 CV and documents | `#1389` | `claude/cv-pending-artifact-confirm` | **Open, Draft, and on owner HOLD.** See below |
 | L8 job-search contract | — | — | No open PR. PR1 (`#1416`) and PR2 (`#1419`) are merged |
-| L9 Journey-1 CV truthfulness | — | — | No open PR. `#1422` is merged |
+| L9 Journey-1 CV truthfulness | — | — | No open PR. `#1422`, `#1424`, `#1425`, `#1426` are merged |
 
 **`#1389` is HOLD, not "unblocked".** The previous snapshot of this file said its blocker had cleared and that it "must rebase onto `dac8d8e7` before anything else". **That instruction is withdrawn.** The PR body carries an explicit owner HOLD ruling behind an upstream *production data* problem — several ownership rows for one account — which is not a code defect on that branch and is not cleared by any merge listed above.
 
@@ -130,11 +107,11 @@ Lease holders appear against branches in `TASKS.md`. **That is ownership, not ac
 
 ## Merge order
 
-The previous order is **spent**, and its final entry was wrong: it named `#1389` as the next executable item, which the owner HOLD forbids.
+The previous order is **spent**: `TASK-20260728-001` is done via `#1424`, and `#1425` and `#1426` followed it.
 
 There is **no queued merge** at this pass.
 
-1. **Immediate execution is a tests-only characterization of Journey-1 CV routing** — recorded as `TASK-20260728-001` in `TASKS.md`. It is a separate PR, it is not started, and it is not started in the same PR as this reconciliation.
+1. **Next action is a D1 read-only production-data consolidation assessment** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD. Read-only: no mutation of any Neon row without separate owner delegation.
 2. **PR3 is not the immediate next action** merely because PR2 is delivered. PR3 → PR5 remain planned and unauthorized; see `ENGINEERING_ROADMAP.md`.
 3. `#1389` stays on HOLD.
 4. Everything else stays deferred under `DEC-20260723-001`.
@@ -147,13 +124,12 @@ Branch protection is enabled by the owner, with `trusted-ratchet` as the only Re
 
 The following are known-open. **Recording one here does not authorize acting on it.** Each needs its own scoped, owner-authorized PR.
 
-1. **My Files still converts its own failed read into `files=[]`** — the same defect class `#1422` fixed on the chat path, still live on an adjacent surface.
-2. **Arabic and English CV routing diverge** at `_looks_like_cv_intent_no_file`, which intercepts Arabic CV phrasing before intent classification.
-3. **Journey-1 D1** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD.
-4. **Journey-1 D2** — pending-artifact activation.
-5. **Journey-1 D4** — mission/dashboard truth.
-6. **Journey-1 D5** — first-useful-result activation.
-7. **Stored-CV / CV-state logic remains spread across `src/rico_chat_api.py`**, answering "does the user have a CV?" from several independent gates.
+1. **Arabic onboarding-incomplete CV-analysis routing** — the onboarding-incomplete path at `_process_message_inner` still passes through `_looks_like_cv_intent_no_file` without the `is_cv_analysis_request` exemption. The active-user path was fixed by `#1426`, narrowing this residual to users with incomplete onboarding. **Still open. Not authorized for fix.**
+2. **Journey-1 D1** — ownership/data consolidation residuals, including the multi-row production account behind the `#1389` HOLD.
+3. **Journey-1 D2** — pending-artifact activation.
+4. **Journey-1 D4** — mission/dashboard truth.
+5. **Journey-1 D5** — first-useful-result activation.
+6. **Stored-CV / CV-state logic remains spread across `src/rico_chat_api.py`**, answering "does the user have a CV?" from several independent gates.
 
 > **Naming collision, stated so it cannot mislead.** The labels above are the **Journey-1 D1–D5** series. They are unrelated to the **security-audit D1–D5** rows in the audit table further down `TASKS.md`, which describe entirely different findings. Neither series is renumbered. **Always write "Journey-1 D1–D5" or "security-audit D1–D5" — never a bare `D3`.**
 
@@ -178,13 +154,13 @@ Per lane, read the continuity block in AI_WORKSPACE/TASKS.md, confirm the lease 
 yours, check write authorization, fetch the remote, and compare the remote head
 against the expected head recorded there before any push.
 
-Baseline is c64aa99. PR1 (#1416) and PR2 (#1419) are delivered. D3 (#1422) is
-merged, deployed and owner-verified. All their leases are released and their
+Baseline is 383dcb6c. PR1 (#1416) and PR2 (#1419) are delivered. D3 (#1422) is
+merged and owner-verified. #1424 (characterization), #1425 (My Files truth), and
+#1426 (CV-analysis routing) are merged. All their leases are released and their
 write authorizations revoked.
 
-After this reconciliation PR is reviewed and merged: open a SEPARATE, tests-only
-characterization PR for Journey-1 CV routing — TASK-20260728-001 in TASKS.md.
-It changes tests only. It is not started here.
+Next action: D1 read-only production-data consolidation assessment. No mutation
+of any Neon row without separate owner delegation.
 
 PR3 is NOT authorized. #1389 is on owner HOLD and must not be rebased, edited,
 reopened, marked Ready, merged, or used as an implementation branch.

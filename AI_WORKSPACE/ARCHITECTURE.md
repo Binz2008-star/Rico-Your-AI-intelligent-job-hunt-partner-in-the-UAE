@@ -81,6 +81,7 @@ The dashed **Worker service** + **Redis/Queue** are the planned Phase-7 separati
 (DEC-20260707-001 PRs D/E) — not deployed. Render stays production until then.
 
 Notes:
+
 - `/chat` and `/orchestrate` redirect to `/command` (see `CURRENT_STATE.md` route
   table + No Dead UI Rule, DEC-20260628-001).
 - The active AI provider is env-controlled (`RICO_AI_PROVIDER`, currently
@@ -197,8 +198,9 @@ historically relied on Render's ephemeral disk for state that must be durable. S
 > rather than guesses, and delivery is buffered so a partial result is never presented as a complete
 > one. `#1421` (`3f2805de`) corrected the degraded early-exit lifecycle state that surfaced with it.
 >
-> **The CV surface has a truthfulness invariant but not yet a boundary:** `#1422`, merged as
-> `c64aa99`. See "The CV read-truthfulness invariant" below. It is a behaviour contract enforced by
+> **The CV surface has a truthfulness invariant but not yet a boundary:** established by
+> `#1422` and binding on every surface that answers a question about a user's stored CV.
+> See "The CV read-truthfulness invariant" below. It is a behaviour contract enforced by
 > guards *inside* `src/rico_chat_api.py`, not a module boundary — no `src/domain/cv` exists, and none
 > is authorized. Read it as one invariant made true at the consumer, not as the CV surface migrated.
 >
@@ -228,6 +230,7 @@ Telegram / Email  notifications only
 ```
 
 Principles:
+
 - Separate API from worker logic (FastAPI serves requests only; workers own background/scheduled work).
 - Neon is the single source of truth — persist job search results, apply links, application state,
   target role, chat-derived preferences, and follow-up state. No important state lives only in
@@ -278,11 +281,12 @@ side. **Enforcement today is three guards inside `src/rico_chat_api.py`, in Engl
 and Arabic. It is not a module boundary.**
 
 **Where the invariant is still violated, and not authorized by being written down
-here:** the My Files path still converts its own failed read into `files=[]`, which
-is byte-identical to a successful read of an empty account. Arabic and English CV
-routing also still diverge at `_looks_like_cv_intent_no_file`, which intercepts
-Arabic CV phrasing before intent classification. The live open-residual list is in
-`PROJECT_STATUS.md`.
+here:** the onboarding-incomplete path at `_process_message_inner` still passes
+through `_looks_like_cv_intent_no_file` without the `is_cv_analysis_request`
+exemption, so Arabic CV-analysis asks from users with incomplete onboarding may
+still receive upload guidance instead of grounded analysis. The active-user path
+was fixed by `#1426`; the My Files path was fixed by `#1425`. The live
+open-residual list is in `PROJECT_STATUS.md`.
 
 ## Migration rules for `rico_chat_api.py`
 
