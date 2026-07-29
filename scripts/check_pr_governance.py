@@ -28,6 +28,13 @@ REQUIRED_SECTIONS = (
 
 PLACEHOLDERS = {"", "tbd", "todo", "n/a?", "pending", "fill me"}
 ALLOWED_VERDICTS = {"PASS", "PASS WITH OWNER-ACCEPTED RISK"}
+UNCHECKED_TASK_RE = re.compile(r"(?im)^\s*[-*]\s*\[\s\]\s*")
+CHANGED_FILE_RE = re.compile(
+    r"(?m)^\s*[-*]\s+`(?!path`)([^`]+)`\s+(?:—|-)\s+\S+"
+)
+DEFAULT_CHANGED_FILE_RE = re.compile(
+    r"(?im)^\s*[-*]\s+`path`\s+(?:—|-)\s+reason\s*$"
+)
 
 
 def _sections(body: str) -> dict[str, str]:
@@ -56,8 +63,12 @@ def _field(section: str, label: str) -> str | None:
 def _missing_or_placeholder(value: str | None) -> bool:
     if value is None:
         return True
-    cleaned = value.strip().strip("`*_-").strip().lower()
-    return cleaned in PLACEHOLDERS or cleaned.startswith("<")
+    cleaned = value.strip().strip("`*_- ").strip().lower()
+    return (
+        cleaned in PLACEHOLDERS
+        or cleaned.startswith("<")
+        or bool(re.fullmatch(r"\[\s*\]", cleaned))
+    )
 
 
 def validate(
@@ -81,6 +92,9 @@ def validate(
         elif _missing_or_placeholder(content):
             errors.append(f"required section is empty or placeholder: ## {name}")
 
+    if UNCHECKED_TASK_RE.search(body):
+        errors.append("ready PR contains unchecked task-list items")
+
     trace = sections.get("Roadmap traceability", "")
     for label in ("Vision", "Epic", "Milestone", "Phase", "Task"):
         if _missing_or_placeholder(_field(trace, label)):
@@ -90,6 +104,15 @@ def validate(
     for label in ("In scope", "Out of scope"):
         if _missing_or_placeholder(_field(scope, label)):
             errors.append(f"Scope must define {label}")
+    one_objective = (_field(scope, "One objective only") or "").strip().casefold()
+    if one_objective not in {"[x]", "yes", "true"}:
+        errors.append("Scope must confirm One objective only with [x], yes, or true")
+
+    changed_files = sections.get("Changed files", "")
+    if DEFAULT_CHANGED_FILE_RE.search(changed_files):
+        errors.append("Changed files still contains the default `path` placeholder")
+    if changed_files and not CHANGED_FILE_RE.search(changed_files):
+        errors.append("Changed files must name at least one concrete `path` and reason")
 
     risk = sections.get("Risk", "")
     if _missing_or_placeholder(_field(risk, "Risk level")):
@@ -139,12 +162,13 @@ Ship one controlled governance change.
 ## Scope
 - In scope: governance files only
 - Out of scope: runtime and production settings
+- One objective only: [x]
 
 ## Acceptance criteria
-- Ready PRs carry exact-head review evidence.
+- [x] Ready PRs carry exact-head review evidence.
 
 ## Changed files
-- `path` — reason
+- `scripts/check_pr_governance.py` — enforce the ready-state policy
 
 ## Risk
 - Risk level: Low
@@ -184,6 +208,22 @@ def self_test() -> None:
     assert any(
         "cannot be recorded" in item
         for item in validate(self_review, draft=False, head_sha=sha, author="author")
+    )
+    unchecked = valid.replace(
+        "- [x] Ready PRs carry exact-head review evidence.",
+        "- [ ] Ready PRs carry exact-head review evidence.",
+    )
+    assert any(
+        "unchecked task-list" in item
+        for item in validate(unchecked, draft=False, head_sha=sha, author="author")
+    )
+    placeholder_path = valid.replace(
+        "- `scripts/check_pr_governance.py` — enforce the ready-state policy",
+        "- `path` — reason",
+    )
+    assert any(
+        "default `path` placeholder" in item
+        for item in validate(placeholder_path, draft=False, head_sha=sha, author="author")
     )
 
 
