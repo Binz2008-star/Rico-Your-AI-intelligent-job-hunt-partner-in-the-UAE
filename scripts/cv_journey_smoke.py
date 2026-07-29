@@ -200,6 +200,14 @@ def build_pdf() -> bytes:
 
 
 def assert_not_job_search(label: str, status: int, raw: bytes) -> None:
+    """Assert the reply is a real answer that is not a job search.
+
+    The negative alone is not enough. ``rico_chat`` catches every exception and
+    still answers HTTP 200 with ``type="error"``/``success=False``, so a total
+    chat-pipeline outage would satisfy "did not route to job search" and score a
+    PASS on a broken product. The reply must therefore also be a substantive
+    non-error answer.
+    """
     payload = as_json(raw)
     rtype = str(payload.get("type") or "")
     intent = str(payload.get("intent") or "")
@@ -208,10 +216,16 @@ def assert_not_job_search(label: str, status: int, raw: bytes) -> None:
     # reply called itself.
     jobs = payload.get("jobs")
     carried_jobs = isinstance(jobs, list) and len(jobs) > 0
+    answered = (
+        payload.get("success") is not False
+        and rtype != "error"
+        and bool(str(payload.get("message") or "").strip())
+    )
     record(
-        f"{label} does not route to job search",
-        status == 200 and not routed_to_search and not carried_jobs,
-        f"HTTP {status} type={rtype or '-'} intent={intent or '-'} jobs={len(jobs) if isinstance(jobs, list) else 0}",
+        f"{label} is answered and does not route to job search",
+        status == 200 and answered and not routed_to_search and not carried_jobs,
+        f"HTTP {status} type={rtype or '-'} intent={intent or '-'} "
+        f"jobs={len(jobs) if isinstance(jobs, list) else 0} answered={answered}",
     )
 
 
@@ -247,10 +261,9 @@ def main() -> int:
             status == 200 and me.get("authenticated") is True and bool(me.get("guest")) is False,
             f"HTTP {status} authenticated={me.get('authenticated')} guest={bool(me.get('guest'))}",
         )
-        with conn.cursor() as cur:
-            cur.execute("SELECT id FROM rico_users WHERE email = %s", (EMAIL,))
-            row = cur.fetchone()
-            rico_uid = str(row[0]) if row else None
+        # NOTE: the rico_users row is not created by registration here (no
+        # display name is sent), so it is deliberately resolved in cleanup
+        # rather than now — see the comment there.
 
         # ── 3. upload the CV through the real parse path ──────────────────
         pdf = build_pdf()
@@ -258,10 +271,19 @@ def main() -> int:
         upload = as_json(raw)
         preview = upload.get("preview") or upload.get("profile_preview") or {}
         upload_id = upload.get("upload_id")
+        # The upload route answers 200 for refusals too (e.g. status=
+        # "invalid_signature" with ok=False), so the status code alone proves
+        # nothing. Require the success shape the route documents.
         record(
             "upload CV (PDF) accepted",
-            status == 200 and isinstance(preview, dict),
-            f"HTTP {status} bytes={len(pdf)} has_preview={bool(preview)} has_upload_id={bool(upload_id)}",
+            status == 200
+            and upload.get("ok") is True
+            and upload.get("status") == "preview_ready"
+            and bool(preview)
+            and bool(upload_id),
+            f"HTTP {status} bytes={len(pdf)} ok={upload.get('ok')} "
+            f"status={upload.get('status') or '-'} has_preview={bool(preview)} "
+            f"has_upload_id={bool(upload_id)}",
         )
 
         # ── 4. confirm it into the profile so it becomes a stored document ─
@@ -278,10 +300,14 @@ def main() -> int:
         files = as_json(raw).get("files") or []
         cvs = [f for f in files if isinstance(f, dict) and f.get("doc_type") == "cv"]
         doc_id = next((str(f.get("id")) for f in cvs if f.get("id") not in (None, "profile-cv")), None)
+        # `profile-cv` is a synthetic card the route injects from the parsed
+        # profile whenever no real primary CV document exists — counting it as a
+        # hit would pass this check on the exact #1425 failure mode it covers.
+        # Only a genuinely stored document proves the inventory.
         record(
-            "CV appears in My Files",
-            status == 200 and len(cvs) >= 1,
-            f"HTTP {status} files={len(files)} cv_entries={len(cvs)}",
+            "CV appears in My Files as a stored document",
+            status == 200 and doc_id is not None,
+            f"HTTP {status} files={len(files)} cv_entries={len(cvs)} stored_doc={doc_id is not None}",
         )
 
         # ── 6. analysis asks must not become job searches (#1426) ─────────
@@ -299,11 +325,14 @@ def main() -> int:
         record("re-login", status == 200, f"HTTP {status}")
         status, raw = call("GET", f"{BACKEND}/api/v1/user/files")
         files_after = as_json(raw).get("files") or []
-        cvs_after = [f for f in files_after if isinstance(f, dict) and f.get("doc_type") == "cv"]
+        stored_after = [
+            f for f in files_after
+            if isinstance(f, dict) and f.get("doc_type") == "cv" and str(f.get("id")) != "profile-cv"
+        ]
         record(
             "CV persists after logout/login",
-            status == 200 and len(cvs_after) >= 1,
-            f"HTTP {status} cv_entries={len(cvs_after)}",
+            status == 200 and len(stored_after) >= 1,
+            f"HTTP {status} stored_cv_entries={len(stored_after)}",
         )
         status, raw = call("GET", f"{BACKEND}/api/v1/rico/profile")
         profile = as_json(raw)
@@ -335,12 +364,28 @@ def main() -> int:
         cleaned = False
         try:
             with conn.cursor() as cur:
+                # The rico_users row does NOT exist at login: registration only
+                # creates one when a display name is supplied, and this smoke
+                # registers with email/password alone. It is auto-provisioned
+                # later, at confirm-cv-profile (upsert_profile) or at the first
+                # chat turn. Re-resolve it HERE — reusing an id read earlier
+                # would always be None and would silently leave rico_users,
+                # rico_profiles (which holds the parsed CV text) and
+                # rico_chat_history behind in production.
+                cur.execute(
+                    "SELECT id FROM rico_users WHERE email = %s OR external_user_id = %s",
+                    (EMAIL, EMAIL),
+                )
+                row = cur.fetchone()
+                if row:
+                    rico_uid = str(row[0])
+
+                cur.execute("DELETE FROM user_documents WHERE user_id = %s", (EMAIL,))
+                cur.execute("DELETE FROM learning_signals WHERE canonical_user_id = %s", (EMAIL,))
                 if rico_uid:
-                    cur.execute("DELETE FROM user_documents WHERE user_id = %s", (EMAIL,))
                     cur.execute("DELETE FROM rico_chat_history WHERE user_id = %s::uuid", (rico_uid,))
+                    # rico_profiles / rico_agent_settings cascade from this row.
                     cur.execute("DELETE FROM rico_users WHERE id = %s::uuid", (rico_uid,))
-                else:
-                    cur.execute("DELETE FROM user_documents WHERE user_id = %s", (EMAIL,))
                 cur.execute("DELETE FROM email_verification_tokens WHERE user_email = %s", (EMAIL,))
                 cur.execute("DELETE FROM users WHERE email = %s", (EMAIL,))
             cleaned = True
@@ -355,8 +400,10 @@ def main() -> int:
                 cur.execute(
                     "SELECT (SELECT COUNT(*) FROM users WHERE email = %s) "
                     "     + (SELECT COUNT(*) FROM user_documents WHERE user_id = %s) "
-                    "     + (SELECT COUNT(*) FROM rico_users WHERE email = %s)",
-                    (EMAIL, EMAIL, EMAIL),
+                    "     + (SELECT COUNT(*) FROM learning_signals WHERE canonical_user_id = %s) "
+                    "     + (SELECT COUNT(*) FROM rico_users "
+                    "        WHERE email = %s OR external_user_id = %s)",
+                    (EMAIL, EMAIL, EMAIL, EMAIL, EMAIL),
                 )
                 residual = int(cur.fetchone()[0])
         except Exception as exc:
