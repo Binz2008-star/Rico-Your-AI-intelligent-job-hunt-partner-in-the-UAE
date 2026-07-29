@@ -1,7 +1,7 @@
 name: "PR Governance (trusted)"
 
-# Trusted policy: the checker is loaded from the base commit, never from the PR.
-# No PR code is executed and no secrets are available to this workflow.
+# Trusted policy: pull_request_target runs the base branch's copy of this file.
+# The PR head is never checked out or executed, and no secret reaches this job.
 on:
   pull_request_target:
     branches: [main]
@@ -21,10 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check out trusted base policy
+      - name: Check out the trusted BASE branch policy
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          # No ref on purpose. pull_request_target must keep the workspace on
+          # the trusted base branch; the PR head is data only and is not needed.
           persist-credentials: false
 
       - name: Set up Python
@@ -35,21 +36,33 @@ jobs:
       - name: Exercise policy self-test
         run: python scripts/check_pr_governance.py --self-test
 
-      - name: Materialize PR body safely
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+      - name: Enforce ready-state governance record
+        # Read author-controlled fields from GitHub's event JSON as data. Never
+        # interpolate PR body/login/branch text into YAML env, with, or shell.
         run: |
           python - <<'PY'
+          import json
           import os
+          import subprocess
+          import sys
           from pathlib import Path
 
-          Path(".pr-body.md").write_text(os.environ.get("PR_BODY", ""), encoding="utf-8")
-          PY
+          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+          pr = event.get("pull_request") or {}
+          body_path = Path(".pr-body.md")
+          body_path.write_text(pr.get("body") or "", encoding="utf-8")
 
-      - name: Enforce ready-state governance record
-        run: >-
-          python scripts/check_pr_governance.py
-          --body-file .pr-body.md
-          --draft "${{ github.event.pull_request.draft }}"
-          --head-sha "${{ github.event.pull_request.head.sha }}"
-          --author "${{ github.event.pull_request.user.login }}"
+          command = [
+              sys.executable,
+              "scripts/check_pr_governance.py",
+              "--body-file",
+              str(body_path),
+              "--draft",
+              str(bool(pr.get("draft"))).lower(),
+              "--head-sha",
+              str((pr.get("head") or {}).get("sha") or ""),
+              "--author",
+              str((pr.get("user") or {}).get("login") or ""),
+          ]
+          raise SystemExit(subprocess.call(command))
+          PY
