@@ -29,11 +29,12 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 
 | Item | Verified state |
 | --- | --- |
-| `main` | `3e18737079d21da8db63f581b7d1d99c87cc1904` |
+| `main` | `7714b49643485f7c87a28c0f7d85ed61cc017375` |
 | `#1432` | **MERGED** as `3fa214a2b6631d2f73d0980f7700983550dce717`; authenticated gratitude smoke still pending |
 | `#1435` | **MERGED** as `9f731f19f5c46d454525690fc44b2ec319a4f2d1`; records endpoint evidence and the `#1389` ruling |
 | `#1436` | **MERGED** as `a292f99bf4a6a80745f4b5e29151684f37530cfc`; final D1 operating package, no production execution authorization |
 | `#1437` | **MERGED** as `3e18737079d21da8db63f581b7d1d99c87cc1904`; synthetic persona/CV-fixture factory and required QA enrollment |
+| `#1438` | **MERGED** as `7714b49643485f7c87a28c0f7d85ed61cc017375`; real-Postgres cross-user document-isolation coverage, tests only |
 | `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
 | Open implementation PRs | **0** |
 
@@ -48,7 +49,7 @@ The last direct production verification for `#1432` established:
 
 The authenticated pending-search/gratitude interaction remains **not product-smoke verified**. A dedicated secret-safe smoke must prove that `شكرًا` causes no second search dispatch and leaves the pending offer available for a later explicit confirmation.
 
-`#1436` is documentation/operator SQL only and `#1437` is tests/workflow enrollment only. Their merge SHAs do not constitute new runtime behavior evidence and do not close the `#1432` smoke gap.
+`#1436` is documentation/operator SQL only. `#1437` and `#1438` are tests/workflow enrollment only. Their merge SHAs do not constitute new runtime behavior evidence and do not close the `#1432` smoke gap.
 
 ## Journey-1 D1 evidence
 
@@ -125,6 +126,7 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | Active implementation writers | **0** |
 | Active documentation writers | **1 — this reconciliation branch only; lease ends on merge/close** |
 | Open implementation PRs | **0** |
+| Multi-user reliability PR 1 / PR 2 | **merged through #1437 / #1438** |
 | D1 mapping/rehearsal | **complete** |
 | D1 final operating package | **merged** |
 | Production database repair | **not authorized** |
