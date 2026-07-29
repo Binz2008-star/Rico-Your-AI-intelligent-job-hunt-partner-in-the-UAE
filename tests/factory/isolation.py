@@ -25,10 +25,32 @@ class CollisionPair:
     cv_b: CvFixture
 
 
+def _select_cross_dimension_pair(run_id: str) -> tuple[Persona, Persona]:
+    """Deterministically pick two personas that differ on *every* dimension.
+
+    Used by collision-pair builders whose whole point is to isolate a single
+    deliberate collision (e.g. filename, content hash): every other
+    dimension — ``user_id``, ``career``, ``document_style``, ``language``,
+    and ``display_name`` — must differ, so a test can't mistake an
+    incidental shared dimension for the one under test.
+    """
+    personas = build_personas(run_id)
+    first = personas[0]
+    for candidate in personas[1:]:
+        if (
+            candidate.user_id != first.user_id
+            and candidate.career != first.career
+            and candidate.document_style != first.document_style
+            and candidate.language != first.language
+            and candidate.display_name != first.display_name
+        ):
+            return first, candidate
+    raise AssertionError("no cross-dimension persona pair found in the persona matrix")
+
+
 def build_same_filename_pair(run_id: str) -> CollisionPair:
     """Two users uploading different content under the identical filename."""
-    personas = build_personas(run_id, count=2)
-    user_a, user_b = personas[0], personas[1]
+    user_a, user_b = _select_cross_dimension_pair(run_id)
     cv_a = build_cv_fixture(user_a, "single")
     cv_b = build_cv_fixture(user_b, "single")
     shared_name = "cv-shared-filename.txt"
@@ -43,8 +65,7 @@ def build_same_filename_pair(run_id: str) -> CollisionPair:
 
 def build_same_cv_hash_pair(run_id: str) -> CollisionPair:
     """Two users uploading byte-identical CV content under different filenames."""
-    personas = build_personas(run_id, count=2)
-    user_a, user_b = personas[0], personas[1]
+    user_a, user_b = _select_cross_dimension_pair(run_id)
     shared_content = "CV\nIdentical synthetic content for hash-collision test.\n"
     cv_a = CvFixture(persona=user_a, variant="single", filename=f"cv-{user_a.fingerprint}.txt", content=shared_content)
     cv_b = CvFixture(persona=user_b, variant="single", filename=f"cv-{user_b.fingerprint}.txt", content=shared_content)

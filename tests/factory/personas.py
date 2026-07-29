@@ -125,8 +125,19 @@ class Persona:
     career: str
 
     @property
+    def _namespace(self) -> str:
+        """Opaque, deterministic stand-in for ``run_id`` — never the raw value.
+
+        Any PII a caller accidentally puts in ``run_id`` (e.g. an email or
+        phone-like string used as a test-run label) must never surface in a
+        generated identity. Hashing collapses it to an opaque token while
+        staying deterministic per ``run_id`` and distinct across ``run_id``s.
+        """
+        return _stable_hash("persona-namespace", self.run_id)
+
+    @property
     def user_id(self) -> str:
-        return f"synthetic-{self.run_id}-{self.index:04d}@{_SYNTHETIC_EMAIL_DOMAIN}"
+        return f"synthetic-{self._namespace}-{self.index:04d}@{_SYNTHETIC_EMAIL_DOMAIN}"
 
     @property
     def display_name(self) -> str:

@@ -76,6 +76,29 @@ def test_synthetic_content_contains_no_pii_patterns():
             assert not pattern.search(persona.display_name)
 
 
+def test_pii_looking_run_id_never_leaks_into_generated_artifacts():
+    """A caller-supplied ``run_id`` must never surface verbatim (or any of its
+    sensitive substrings) in generated identity or content — even if the
+    caller mistakenly used a PII-looking label as the run_id."""
+    dirty_run_id = "run-jane.doe@example.com-+971501234567"
+    sensitive_substrings = ["jane.doe@example.com", "+971501234567", "jane.doe", "971501234567"]
+
+    personas = build_personas(dirty_run_id, count=5)
+    for persona in personas:
+        fixture = build_cv_fixture(persona, "single")
+        surfaces = [
+            persona.user_id,
+            persona.display_name,
+            persona.fingerprint,
+            fixture.filename,
+            fixture.content,
+        ]
+        for surface in surfaces:
+            assert dirty_run_id not in surface, (dirty_run_id, surface)
+            for substring in sensitive_substrings:
+                assert substring not in surface, (substring, surface)
+
+
 # --- CV variant coverage -------------------------------------------------------
 
 @pytest.mark.parametrize("variant", CV_VARIANT_KINDS)
@@ -122,18 +145,27 @@ def test_persona_matrix_covers_every_career_and_style():
 
 # --- Isolation collision-pair helpers ------------------------------------------
 
+def _assert_only_declared_dimension_collides(pair):
+    """Every dimension other than the declared collision must differ."""
+    assert pair.user_a.user_id != pair.user_b.user_id
+    assert pair.user_a.career != pair.user_b.career
+    assert pair.user_a.document_style != pair.user_b.document_style
+    assert pair.user_a.language != pair.user_b.language
+    assert pair.user_a.display_name != pair.user_b.display_name
+
+
 def test_same_filename_pair_shares_only_filename():
     pair = build_same_filename_pair("collision-filename")
     assert pair.cv_a.filename == pair.cv_b.filename
-    assert pair.user_a.user_id != pair.user_b.user_id
     assert pair.cv_a.content_hash != pair.cv_b.content_hash
+    _assert_only_declared_dimension_collides(pair)
 
 
 def test_same_cv_hash_pair_shares_only_content():
     pair = build_same_cv_hash_pair("collision-hash")
     assert pair.cv_a.content_hash == pair.cv_b.content_hash
     assert pair.cv_a.filename != pair.cv_b.filename
-    assert pair.user_a.user_id != pair.user_b.user_id
+    _assert_only_declared_dimension_collides(pair)
 
 
 def test_similar_name_pair_has_distinct_user_ids():
