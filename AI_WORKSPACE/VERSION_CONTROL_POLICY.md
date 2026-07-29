@@ -102,16 +102,23 @@ separate identity:
 
 ## Trusted required checks
 
-The `main` ruleset should require these stable check names:
+GitHub rulesets match **check-run job names**, not workflow display titles. The
+`main` ruleset should require these verified job names:
 
 1. `pr-governance`
 2. `trusted-ratchet`
-3. `QA Tests`
-4. `Workflow Security Guards`
-5. `Test Enumeration Guard`
+3. `workflow-security-guards`
+4. `enumeration`
+5. `frontend`
+6. `pytest`
+7. `postgres-integration`
+8. `playwright`
 
 Rules:
 
+- Configure required checks only after observing each exact job name on a real
+  disposable pull request. A workflow title is not a substitute for a check-run
+  name.
 - Require branches to be up to date before merging when the risk of base drift
   is material; otherwise exact-head checks and conflict-free mergeability remain
   mandatory.
