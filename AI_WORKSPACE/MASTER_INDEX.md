@@ -12,7 +12,8 @@
 1. **`PROJECT_STATUS.md`** — 30-second snapshot (read first).
 2. **`START_HERE.md`** — entrypoint + full read order.
 3. **`ENGINEERING_ROADMAP.md`** — authoritative "where is Rico now" (phases 0–7).
-4. Latest handoff (see Handoffs below) → `CURRENT_STATE.md` → `TASKS.md`.
+4. **`PRODUCT_ACCOUNTABILITY_SCORECARD.md`** — product outcome metrics, truth rules and update cadence.
+5. Latest handoff (see Handoffs below) → `CURRENT_STATE.md` → `TASKS.md`.
 
 ## Core — Active (source of truth)
 
@@ -25,6 +26,8 @@
 | `CURRENT_STATE.md` | Dated state log (newest at top; see reconciliation header) | Active (log) | Release/last-merger | ROADMAP, handoffs | 2026-07-11 |
 | `TASKS.md` | Task ledger | Active | Assignee per task | DECISIONS, EVALS | 2026-07-11 |
 | `DECISIONS.md` | Decision log (ADRs — see ADR index below) | Active | Owner/Architect | — (source) | 2026-07-08 |
+| `PRODUCT_ACCOUNTABILITY_SCORECARD.md` | Product accountability contract, metric definitions and truth rules | Active | Owner/acting CTO | strategy, analytics, PROJECT_STATUS | 2026-07-29 |
+| `product_accountability_scorecard.json` | Machine-readable metric status, ownership, blockers and next actions | Active (data) | Owner/acting CTO | PRODUCT_ACCOUNTABILITY_SCORECARD | 2026-07-29 |
 
 ## Governance & process — Active
 
