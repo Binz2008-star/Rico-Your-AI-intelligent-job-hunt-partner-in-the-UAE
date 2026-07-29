@@ -21,7 +21,7 @@
 4. The latest dated handoff.
 5. Everything else.
 
-A green deployment badge is not a product smoke. An open PR is not merge authorization. A rehearsal is not production-repair authorization.
+A green deployment badge is not a product smoke. A rehearsal is not production-repair authorization. A prepared SQL package is not permission to execute it.
 
 ## Current reconciliation — 2026-07-29
 
@@ -29,148 +29,150 @@ A green deployment badge is not a product smoke. An open PR is not merge authori
 
 | Item | Verified state |
 | --- | --- |
-| `main` at the start of this pass | `0e68f11d834ae8e8f376f16f26f52091a0dc8cbb` |
+| `main` at package cut | `9f731f19f5c46d454525690fc44b2ec319a4f2d1` |
 | `#1432` | **MERGED** as `3fa214a2b6631d2f73d0980f7700983550dce717` |
-| `#1434` | **MERGED** as `0e68f11d834ae8e8f376f16f26f52091a0dc8cbb`; previous batch reconciliation |
-| `#1389` | **CLOSED WITHOUT MERGE**; branch history preserved, not validated for reuse |
-| Other previously open PRs | closed or merged; no implementation PR is currently authorized |
+| `#1435` | **MERGED** as `9f731f19f5c46d454525690fc44b2ec319a4f2d1`; records production endpoint evidence and the `#1389` ruling |
+| `#1389` | **CLOSED WITHOUT MERGE**; branch history is not an implementation branch |
+| Open implementation PRs | **0** |
 
 ## `#1432` production verification
 
-Direct production reads through the deployed web proxy established:
+Verified directly:
 
-- `/version` returned **HTTP 200** and served commit `3fa214a2b6631d2f73d0980f7700983550dce717` in the production environment;
-- `/health` returned **HTTP 200 / status=ok**;
-- Jooble, Adzuna, and JSearch were configured and non-degraded at the read;
-- the reasoning provider was configured, its model precheck was reachable, and fallback was available;
+- `/version` returned HTTP 200 and served `3fa214a2b6631d2f73d0980f7700983550dce717`;
+- `/health` returned HTTP 200 / `status=ok`;
+- configured providers were non-degraded at the read;
 - `ricohunt.com` was reachable.
 
-### Verification boundary
+The authenticated pending-search/gratitude interaction remains **not product-smoke verified**. A dedicated secret-safe smoke must still prove that `شكرًا` causes no second search dispatch and leaves the pending offer available for an explicit later confirmation.
 
-The authenticated pending-search/gratitude interaction was **not executed by this controller session**. The available safe web connector could read production endpoints but could not perform an authenticated POST with the smoke account while preserving secret boundaries.
+## Journey-1 D1 evidence
 
-Therefore:
+The single mapped ownership cluster is established:
 
-- deployment identity: **VERIFIED**;
-- service health: **VERIFIED**;
-- changed gratitude behavior in production: **NOT PRODUCT-SMOKE VERIFIED**;
-- unit and exact-head CI evidence remain valid, but do not substitute for the missing authenticated interaction.
-
-The remaining focused smoke must prove that standard Arabic gratitude `شكرًا` causes no second search/provider dispatch and leaves the pending offer available for a later explicit confirmation.
-
-## Journey-1 D1 mapping and rehearsal
-
-`TASK-20260728-003` became startable in this pass because the Neon connector was authenticated and the owner explicitly directed the controller to process the decision above `#1389`.
-
-Every database call explicitly targeted the owner-created evidence branch `d1-ownership-evidence-2026-07-28`. The first read confirmed the connection resolved to that non-default branch. No production call or production mutation was made.
-
-The public result is recorded in:
-
-`AI_WORKSPACE/EVALS/2026-07-29-journey1-d1-row-mapping-rehearsal.md`
-
-The task's current state is **completed**. Any older `blocked` label retained in its historical `TASKS.md` continuity block is superseded by this mandatory control panel and the final evaluation above; it carries no lease, write authorization, or permission to repeat the mapping.
-
-### Evidence result
-
-One unique ownership shape matched the historical conflict:
-
-- five connected owner rows;
-- three non-guest resolver candidates;
-- two guest rows;
+- five owner rows;
 - one unique exact authenticated-principal row;
-- two non-guest email-only candidates.
+- two non-guest email-only rows;
+- two guest rows;
+- five profiles;
+- 1,463 chat messages;
+- 24 text-keyed learning signals;
+- 13 job-context rows;
+- five completed onboarding rows;
+- one canonical agent-settings row;
+- no authoritative stored document or pending CV artifact.
 
-### Canonical rule
+The canonical rule is the unique exact authenticated-principal row. Shared email, recency, completeness, row order, and chat volume are not ownership proofs.
 
-The unique exact authenticated-principal row is canonical. Recency, completeness, row order, or chat volume are not ownership proofs.
+## D1 production consolidation package
 
-### Rehearsal result
+Owner authorization covers **preparation only**. The package is stored at:
 
-A temporary private schema inside the evidence branch rehearsed the consolidation and then was dropped.
+`AI_WORKSPACE/RUNBOOKS/2026-07-29-d1-production-consolidation.md`
 
-Validated post-state in the rehearsal copies:
+Adjacent SQL files provide:
 
-- one owner row and one profile;
-- all **1,463** chat messages preserved;
-- all **24** learning-signal rows preserved;
-- all **13** job-context rows preserved;
-- one completed onboarding state;
-- zero stale CV filename/status claims;
-- zero orphaned chat or learning rows;
-- one canonical owner for text-keyed learning and job context.
+- read-only preflight;
+- private backup export from a fresh pre-repair Neon branch;
+- serializable fail-closed apply script;
+- aggregate postcheck;
+- targeted rollback from the private export.
 
-A final read after dropping the rehearsal schema confirmed the original evidence-branch tables remained unchanged at five owners/five profiles with all dependent counts intact.
+### Rehearsal evidence
 
-### Data-repair boundary
+Two disposable branches created from the current production parent were used.
 
-The repair contract is now understood, but **production repair remains unauthorized**.
+Apply rehearsal passed:
 
-A production maintenance approval must separately confirm:
+- one owner and one profile;
+- all 1,463 chat messages preserved;
+- all 24 learning signals preserved;
+- all 13 job-context rows preserved;
+- one completed onboarding row;
+- zero stale CV claims.
 
-1. backup/PITR availability;
-2. exact target re-identification at execution time;
-3. exact SQL and rollback review;
-4. fail-closed pre/post count assertions;
-5. explicit acceptance that legacy `applications` has no usable ownership key;
-6. post-repair authenticated smoke.
+Targeted rollback rehearsal passed:
 
-No bulk cleanup of other clusters is authorized.
+- five owners restored;
+- five profiles restored;
+- five onboarding rows restored;
+- one agent-settings row restored;
+- zero chat ownership differences;
+- zero learning ownership differences;
+- zero job-context ownership differences.
+
+These branches are test evidence only and are not the required production backup.
+
+### PITR and backup finding
+
+The Neon connector currently reports a 24-hour history-retention window. A fresh pre-repair branch plus private encrypted row export is therefore a hard execution gate. The branch and export must be retained for seven days after successful smoke.
+
+### Authorization state
+
+| Action | State |
+| --- | --- |
+| Package preparation and non-production rehearsal | **AUTHORIZED AND COMPLETE** |
+| Docs PR review/merge | permitted after exact-head gates |
+| Production read-only preflight | **NOT YET AUTHORIZED** |
+| Production `commit=false` rehearsal | **NOT YET AUTHORIZED** |
+| Production committed transaction | **NOT AUTHORIZED** |
+| Targeted production rollback | authorized only by a rollback condition after the final execution approval |
+| Any other cluster or bulk cleanup | **NOT AUTHORIZED** |
 
 ## `#1389` ruling
 
-The data blocker is characterized; the historical PR is still unsafe to merge.
+`#1389` remains closed without merge. Its branch was substantially diverged and mixed backend, frontend, identity, artifact lifecycle, tests, and documentation.
 
-Against current `main`, its branch was 28 commits ahead and 27 behind, changed 18 files, and combined backend, frontend, identity, artifact lifecycle, tests, and documentation.
-
-**Ruling:** `#1389` was closed without merge. Its branch history remains available for selective salvage only.
-
-After a separately authorized production consolidation completes, the pending-artifact activation objective must be recut from current `main` as one or more small PRs. No old CI result, review, SHA, or code hunk carries forward without independent re-verification.
+After the production data repair is separately approved and verified, pending-artifact activation must be recut from current `main` as one or more small PRs. No old CI result, review, SHA, or code hunk carries forward without re-verification.
 
 ## Current work state
 
 | Measure | State |
 | --- | --- |
-| Open implementation PRs | 0 |
-| Authorized implementation writers | 0 |
+| Active implementation writers | 0 |
+| Active documentation writers | 1 — D1 package branch only; lease ends on merge/close |
 | Production database repair | not authorized |
-| D1 evidence/rehearsal | completed; final report stored at the evaluation path above |
+| D1 mapping/rehearsal | complete |
+| D1 final operating package | prepared; awaiting exact-head review gates and explicit execution approval |
 | `#1432` endpoint verification | complete |
 | `#1432` authenticated behavior smoke | still required |
 
 ## Standing rulings
 
 - Trust-first remains binding; no unrelated feature expansion.
-- Production credentials must not be passed to agents or written into repository material.
-- Shared email or contact data alone is not sufficient ownership proof.
-- No production mutation, schema change, deletion, or reassignment is authorized by the D1 report or rehearsal.
+- Production credentials and target identifiers must not enter repository material.
+- No production SQL may run from the preparation authorization.
+- Shared email or contact data alone is not ownership proof.
 - Closed PR branches are historical sources, not implementation branches.
+- Do not re-upload a real CV merely to test this repair.
 
 ## Stop conditions
 
 Stop and report instead of guessing when:
 
 - a writer already owns the same branch/objective;
-- branch history contains unexplained commits;
-- scope expands across unrelated objectives;
-- production mutation, secret, migration, merge, or deployment action lacks explicit owner authorization;
-- a data claim is not derived from a current authoritative read;
-- an authenticated smoke would expose credentials or require an uncontrolled real-user mutation;
+- the package head changes after review or CI;
+- the live fingerprint differs from the approved 5/5/1463/24/13/5/1 contract;
+- the pre-repair branch or encrypted export is missing;
+- the account is active during the maintenance window;
+- a production mutation, secret, migration, merge, or deployment action lacks explicit authorization;
 - a repair query cannot assert its exact target and expected cardinality before writing.
 
 ## Next exact action
 
 ```text
-1. Close the remaining #1432 product-smoke gap with a dedicated authenticated
-   smoke account and secret-safe POST path. Prove no second search dispatch on
-   "شكرًا" and prove the pending offer survives for a later explicit YES.
-
-2. Present the exact production consolidation plan, rollback queries, PITR proof,
-   and post-repair smoke for explicit owner approval. Do not execute production
-   SQL from the evidence/rehearsal authorization.
-
-3. After the production data repair is separately approved and verified, recut
-   Journey-1 D2 pending-artifact activation from current main. Do not reopen or
-   rebase #1389.
-
-No unrelated feature, bulk cleanup, or historical-branch merge is queued.
+1. Open the docs-only D1 package PR from the current package branch.
+2. Require exact-head CI and an independent review of the SQL, rollback, PITR,
+   privacy boundary, and smoke plan.
+3. Present the final head and review result to the owner. Do not run production SQL.
+4. Only after a new explicit owner approval naming that final head:
+   - create and verify the fresh pre-repair Neon branch;
+   - export and validate the private backup;
+   - run production preflight;
+   - run one commit=false rehearsal;
+   - commit only if every gate passes;
+   - execute postcheck and authenticated smoke;
+   - run targeted rollback only on a defined rollback condition.
+5. Close the separate #1432 authenticated gratitude smoke gap with a dedicated
+   smoke account; do not combine it with the repaired account.
 ```
