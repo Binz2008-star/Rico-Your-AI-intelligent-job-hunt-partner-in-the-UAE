@@ -52,7 +52,7 @@ BASELINE_SENTINEL = "baseline gap at main@1c13147f"
 # High-water mark for the frozen baseline. It may only ever be lowered, and
 # lowering it is the visible record of debt actually paid. A change that raises
 # it fails the guard, so the backlog cannot quietly grow back.
-BASELINE_HIGH_WATER = 212
+BASELINE_HIGH_WATER = 204
 
 # The frozen baseline: the exact set of test files reachable by no pytest
 # invocation at main@1c13147f45365c10d518356a429f757c740f3a06, measured by
@@ -74,9 +74,6 @@ FROZEN_BASELINE = frozenset((
     "tests/integration/test_cv_parse_quality_gate_postgres.py",
     "tests/integration/test_jotform_webhook_to_chat_flow.py",
     "tests/integration/test_live_chat_role_parsing_path.py",
-    "tests/integration/test_operation_multiworker_postgres.py",
-    "tests/integration/test_operation_ownership_postgres.py",
-    "tests/test_1101_private_response_cache.py",
     "tests/test_1249_scheduled_search.py",
     "tests/test_1262_conversational.py",
     "tests/test_1336_cv_search_continuity_transcript.py",
@@ -194,7 +191,6 @@ FROZEN_BASELINE = frozenset((
     "tests/test_manual_application_tracking.py",
     "tests/test_match_explanation.py",
     "tests/test_me_is_owner.py",
-    "tests/test_medium3_rate_limits.py",
     "tests/test_message_limit_warning.py",
     "tests/test_minimum_profile_gate.py",
     "tests/test_mission_service.py",
@@ -223,15 +219,12 @@ FROZEN_BASELINE = frozenset((
     "tests/test_profile_module_rename_regression.py",
     "tests/test_profile_persistence.py",
     "tests/test_profile_query_intent.py",
-    "tests/test_provider_cascade_cancellation.py",
     "tests/test_public_chat_no_profile_loop.py",
     "tests/test_public_identity.py",
-    "tests/test_rate_limiting.py",
     "tests/test_response_formatting.py",
     "tests/test_rico_chat_empty_message.py",
     "tests/test_rico_chat_openai_integration.py",
     "tests/test_rico_chat_response_source.py",
-    "tests/test_rico_db_connect.py",
     "tests/test_rico_hf_router.py",
     "tests/test_rico_identity.py",
     "tests/test_rico_identity_guardrails.py",
