@@ -42,6 +42,7 @@ jobs:
             tests/test_agent.py \
             tests/test_agent_runtime.py \
             tests/test_audit_delivery_smoke_residuals.py \
+            tests/test_cleanup_delivery_smoke_residuals.py \
             tests/test_jotform_webhook.py \
             tests/test_identity_phone_containment.py \
             tests/test_identity_email_overwrite_containment.py \
@@ -153,6 +154,7 @@ jobs:
             tests/integration/test_1092_applications_pagination_postgres.py \
             tests/integration/test_multiuser_isolation_postgres.py \
             tests/integration/test_audit_residuals_postgres.py \
+            tests/integration/test_cleanup_residuals_postgres.py \
             -v --tb=short
 
   playwright:

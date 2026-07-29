@@ -1,0 +1,51 @@
+name: "Delivery Smoke Residual Cleanup (manual, dry-run default)"
+
+# Manually dispatched cleanup for rows left behind by Delivery Smoke synthetic
+# accounts (smoke-delivery-*@synthetic-rico.test).
+#
+# This workflow is intentionally dangerous: it DELETEs production data when
+# commit=true. The default is commit=false (dry run). A fresh pre-cleanup Neon
+# branch or equivalent approved private backup is required before any committed
+# production execution.
+#
+# Do not attribute the rows being cleaned to a single workflow run; the audit
+# explicitly states they span the full historical synthetic namespace.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type CLEANUP-DELIVERY-RESIDUALS to authorize this cleanup"
+        required: true
+      commit:
+        type: choice
+        description: "commit=true actually deletes rows; anything else is dry-run"
+        required: true
+        default: "false"
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: delivery-smoke-residual-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: "Synthetic residual cleanup (dry-run default)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --quiet psycopg2-binary
+      - name: Run cleanup (dry-run by default)
+        env:
+          CLEANUP_CONFIRM: ${{ inputs.confirm }}
+          CLEANUP_COMMIT: ${{ inputs.commit }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/cleanup_delivery_smoke_residuals.py
