@@ -142,7 +142,7 @@ approved Atelier shell. 3. No production navigation opens legacy UI. 4. Zero
 user-facing imports of legacy `AppShell`/`DashboardShell`. 5. Desktop + mobile
 consistent. 6. EN/AR + RTL pass. 7. Auth + billing work. 8. Paddle checkout + portal
 pass real Sandbox browser smoke. 9. Preview/demo routes removed or protected.
-10. Full frontend CI + Playwright green.
+2. Full frontend CI + Playwright green.
 
 ## Program closure — 2026-07-14 (owner decision)
 
@@ -180,7 +180,7 @@ per-route audit proves they still expose legacy UI.
 ### Refreshed route matrix — audited @ `main = 5cf9a6f` (2026-07-14)
 
 `main` advanced past the Phase-0 base (`c11575d`): #1017 (foundation),
-#1020 (`/command` → WorkspaceShell), #1019 (opening films), #1021
+# 1020 (`/command` → WorkspaceShell), #1019 (opening films), #1021
 (`/subscription` Atelier UI), #1022-history merged. Re-audited from the live tree
 (33 `page.tsx` routes) — shell import verified per route.
 
@@ -205,6 +205,35 @@ per-route audit proves they still expose legacy UI.
 
 Legacy-shell import census on `main` (production routes only): `AppShell` →
 `/queue` `/jobs` `/archive` `/saved-searches`; `DashboardShell` →
+`/subscription/success`. Step 8 legacy deletion is gated until these reach zero.
+
+### Refreshed route matrix — audited @ `main = 49584f0acf0cee183657472c5213bbef3be98ef5` (2026-07-29)
+
+`main` advanced past the 2026-07-14 base (`5cf9a6f`) to the current control-plane SHA. The open implementation PRs are **#1455** (frontend /applications board DnD) and **#1457** (backend bounded cache). Re-audited from the live tree (33 `page.tsx` routes) — shell import verified per route.
+
+| Route | Shell on `main` 49584f0a | Status | Owner step |
+| --- | --- | --- | --- |
+| `/` | `LandingPageV2` (own layout) | **PARTIAL** — parity verify vs approved public reference; landing-page production freeze #871 | Step 4 |
+| `/about` | `AboutContent` — legacy `GlassPanel`/`AuraGlow` | **LEGACY** | Step 4 |
+| `/contact` | `ContactContent` — Atelier public island | **DONE** | — |
+| `/faq` | `FAQContent` — Atelier public island | **DONE** | — |
+| `/privacy` `/terms` `/refund-policy` | Atelier editorial | **DONE** | — |
+| `/login` `/signup` | `AtelierAuthShell` (via `LoginForm`/`SignupForm`) | **DONE** | Step 5 verify |
+| `/forgot-password` `/reset-password` `/verify-email` | `AtelierAuthShell` | **DONE** | Step 5 verify |
+| `/onboarding` | Atelier island | **DONE** | Step 5 verify |
+| `/dashboard` | `WorkspaceShell` + `DashboardAtelier` | **DONE** — reachable (stale `/dashboard → /command` redirect already removed from `next.config.js`) | — |
+| `/command` | `CommandObsidianShell` (Atelier workspace shell) | **SHELL DONE** (#1020 + Obsidian C1); composer/message/tool-state work frozen | Step 2 |
+| `/profile` `/settings` `/applications` `/upload` | `WorkspaceShell` | **DONE** | — |
+| `/queue` | `WorkspaceShell` + `QueueAtelier` | **DONE** | — |
+| `/jobs` `/archive` `/saved-searches` | page exists, legacy `AppShell` import | **DEAD** (config redirect → `/command`) | Step 3 (delete or keep redirect) |
+| `/signals` | legacy glass (no shell) | **DEAD** (config redirect) | Step 3 |
+| `/subscription` | `WorkspaceShell` + `SubscriptionAtelier` | **SHELL DONE** (#1021); live Paddle Sandbox checkout error outstanding | Step 7 |
+| `/subscription/success` | `DashboardShell` (only remaining consumer) | **LEGACY** | Step 3/7 |
+| `/admin/leads` | bare page (no shell) | **LEGACY** | Step 6 |
+| `/design-gallery`(+`/atelier`) `/design-preview` `/rico-preview` `/sandbox/command-primitives` | preview/dev | **PROTECTED** — `robots.ts` disallow + all four pages assert `assertInternalPreviewAccess()` (production 404) | Step 1 |
+
+Legacy-shell import census on `main` (production routes only): `AppShell` →
+`/jobs` `/archive` `/saved-searches`; `DashboardShell` →
 `/subscription/success`. Step 8 legacy deletion is gated until these reach zero.
 
 ### Existing Atelier PRs in flight (do not duplicate)

@@ -29,7 +29,7 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 
 | Item | Verified state |
 | --- | --- |
-| `main` | `cbcb4206b7b13a6de2fbbe84e42d610addc054e2` |
+| `main` | `49584f0acf0cee183657472c5213bbef3be98ef5` |
 | `#1432` | **MERGED** as `3fa214a2b6631d2f73d0980f7700983550dce717`; authenticated gratitude smoke still pending |
 | `#1435` | **MERGED** as `9f731f19f5c46d454525690fc44b2ec319a4f2d1`; records endpoint evidence and the `#1389` ruling |
 | `#1436` | **MERGED** as `a292f99bf4a6a80745f4b5e29151684f37530cfc`; final D1 operating package, no production execution authorization |
@@ -37,7 +37,7 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 | `#1438` | **MERGED** as `7714b49643485f7c87a28c0f7d85ed61cc017375`; real-Postgres cross-user document-isolation coverage, tests only |
 | `#1443` | **MERGED** as `cbcb4206b7b13a6de2fbbe84e42d610addc054e2` from head `542b66a6b7c65467b92385792ee0abe0201bf3d9`; read-only Delivery Smoke residual audit package |
 | `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
-| Open implementation PRs | **0** |
+| Open implementation PRs | **#1455** (frontend /applications board DnD, draft) · **#1457** (backend bounded cache, open) |
 
 ## Production verification boundary
 
@@ -126,7 +126,7 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | --- | --- |
 | Active implementation writers | **0** |
 | Active documentation writers | **1 — this reconciliation branch only; lease ends on merge/close** |
-| Open implementation PRs | **0** |
+| Open implementation PRs | **#1455** (frontend /applications board DnD, draft) · **#1457** (backend bounded cache, open) |
 | Multi-user reliability PR 1 / PR 2 | **merged through #1437 / #1438** |
 | D1 mapping/rehearsal | **complete** |
 | D1 final operating package | **merged** |
