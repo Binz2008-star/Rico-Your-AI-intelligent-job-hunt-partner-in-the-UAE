@@ -94,18 +94,28 @@ jobs:
             tests/test_sse_stream_quota_enforcement.py \
             tests/test_lifecycle_followup.py \
             tests/test_no_import_time_env_mutation.py \
+            tests/test_rico_apply_ai_client.py \
+            tests/test_rico_apply_ai.py \
             tests/test_gratitude_does_not_redeem_pending_search.py \
+            tests/test_rate_limiting.py \
+            tests/test_medium3_rate_limits.py \
+            tests/test_provider_cascade_cancellation.py \
+            tests/test_1101_private_response_cache.py \
+            tests/test_rico_db_connect.py \
             tests/decision_regression/ \
             -v --tb=short
 
   # Real-Postgres coverage for the user_documents single-primary invariant
-  # (#960, migration 037). The `pytest` job above mocks every cursor/
-  # transaction, which cannot reproduce how a real, non-deferrable partial
-  # unique index (uq_user_documents_one_primary_per_type) rejects a write
-  # mid-transaction, or how pg_advisory_xact_lock actually serializes two
-  # concurrent connections. This job runs tests/integration/test_user_documents_postgres.py
-  # against a real, disposable postgres service container with migration 037
-  # applied. Independent of Neon — no production credentials involved.
+  # (#960, migration 037) and the atomic chat-operations ownership store
+  # (DEC-20260721-001, migration 051). The `pytest` job above mocks every
+  # cursor/transaction, which cannot reproduce how a real, non-deferrable
+  # partial unique index (uq_user_documents_one_primary_per_type) rejects a
+  # write mid-transaction, how pg_advisory_xact_lock actually serializes two
+  # concurrent connections, or how a heartbeat-lease takeover races between
+  # genuinely concurrent OS processes. This job runs the integration suite
+  # against a real, disposable postgres service container; each test self-
+  # applies the migration it needs. Independent of Neon — no production
+  # credentials involved.
   postgres-integration:
     runs-on: ubuntu-latest
     permissions:
@@ -140,7 +150,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run real-Postgres integration tests (user_documents #960 + cv_upload_artifacts #963)
+      - name: Run real-Postgres integration tests (user_documents #960 + cv_upload_artifacts #963 + operation-ownership DEC-20260721-001)
         env:
           RICO_TEST_DATABASE_URL: "postgresql://rico_test:rico_test@localhost:5432/rico_test"
           JWT_SECRET: "test-secret-ci-only"
@@ -153,6 +163,8 @@ jobs:
             tests/integration/test_1092_applications_pagination_postgres.py \
             tests/integration/test_multiuser_isolation_postgres.py \
             tests/integration/test_audit_residuals_postgres.py \
+            tests/integration/test_operation_ownership_postgres.py \
+            tests/integration/test_operation_multiworker_postgres.py \
             -v --tb=short
 
   playwright:

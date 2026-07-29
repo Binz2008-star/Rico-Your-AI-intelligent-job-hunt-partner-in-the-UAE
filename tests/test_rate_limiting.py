@@ -341,3 +341,88 @@ class TestRateLimitResponseShape:
         )
         assert r is not None
         assert r.headers.get("Retry-After") == "60"
+
+
+# ── 8. Operation status — separate bucket from chat ──────────────────────────
+
+class TestOperationStatusRateLimit:
+    """The operation-status poll endpoint must have its own rate-limit bucket
+    so that frequent polling cannot exhaust the chat quota and vice versa."""
+
+    def test_operation_status_returns_429_after_limit(self):
+        """GET /rico/operations/{id} must return 429 once LIMIT_OPERATION_STATUS
+        is exhausted."""
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        from src.api.rate_limit import LIMIT_OPERATION_STATUS
+
+        client = TestClient(app, raise_server_exceptions=False)
+        _reset_limiter()
+
+        count = int(LIMIT_OPERATION_STATUS.split("/")[0])
+        statuses = []
+        for _ in range(count + 2):
+            r = client.get("/api/v1/rico/operations/op_test_padding_001")
+            statuses.append(r.status_code)
+
+        assert 429 in statuses, (
+            f"Expected 429 after {count} operation-status requests. Got: {statuses}"
+        )
+
+    def test_operation_status_does_not_consume_chat_bucket(self):
+        """Polling operation status must NOT consume the LIMIT_CHAT bucket —
+        the two endpoints have separate rate-limit decorators."""
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        from src.api.rate_limit import LIMIT_CHAT, LIMIT_OPERATION_STATUS
+
+        client = TestClient(app, raise_server_exceptions=False)
+        _reset_limiter()
+
+        # Exhaust the operation-status bucket.
+        op_count = int(LIMIT_OPERATION_STATUS.split("/")[0])
+        for _ in range(op_count + 2):
+            client.get("/api/v1/rico/operations/op_test_padding_002")
+
+        # Chat should still work — its bucket is untouched.
+        chat_count = int(LIMIT_CHAT.split("/")[0])
+        for i in range(min(chat_count - 1, 5)):
+            r = client.post(
+                "/api/v1/rico/chat",
+                json={"user_id": f"sep_user_{i}", "message": "hello"},
+            )
+            assert r.status_code != 429, (
+                f"Chat got 429 on call {i} — operation-status polling leaked into "
+                "the chat bucket. The decorators must use separate limit constants."
+            )
+
+
+# ── 9. Feedback endpoint — rate-limited ──────────────────────────────────────
+
+class TestFeedbackRateLimit:
+    """The feedback endpoint must enforce its own rate limit to prevent
+    signal-flood abuse of the learning repository."""
+
+    def test_feedback_returns_429_after_limit(self):
+        """POST /rico/feedback must return 429 once LIMIT_FEEDBACK is exhausted."""
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        from src.api.rate_limit import LIMIT_FEEDBACK
+
+        client = TestClient(app, raise_server_exceptions=False)
+        _reset_limiter()
+
+        count = int(LIMIT_FEEDBACK.split("/")[0])
+        body = {
+            "job_id": "job_001",
+            "feedback_type": "positive",
+            "rating": 5,
+        }
+        statuses = []
+        for _ in range(count + 2):
+            r = client.post("/api/v1/rico/feedback", json=body)
+            statuses.append(r.status_code)
+
+        assert 429 in statuses, (
+            f"Expected 429 after {count} feedback requests. Got: {statuses}"
+        )
