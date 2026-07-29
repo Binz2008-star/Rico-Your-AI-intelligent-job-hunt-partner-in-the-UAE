@@ -54,6 +54,14 @@ The secure mapping and current-production rehearsal both reproduced one and only
 
 Any mismatch aborts before destructive statements.
 
+## Ownership-schema drift gate
+
+At package preparation, the public schema contained **39** columns named `user_id`, `canonical_user_id`, or `external_user_id`. Their ordered table/column/type fingerprint is fixed in the preflight and apply scripts.
+
+Both scripts recompute that inventory inside their transaction and abort when either the count or fingerprint differs. This prevents the package from silently ignoring a newly introduced ownership-bearing table or relying on a removed/changed ownership column.
+
+A drift failure requires a new repository/database assessment, package revision, exact-head CI, independent review, and owner approval. Do not update the fingerprint during the maintenance window merely to make the script pass.
+
 ## Canonical ownership rule
 
 The unique row whose `external_user_id` exactly matches the authenticated principal is canonical.
@@ -114,7 +122,7 @@ No schema or migration is part of the repair.
 - Lock timeout: short and fail-closed.
 - Statement timeout: bounded.
 - Target and dependent rows are locked before mutation.
-- Any unexpected row, count, alias, conflict, or ownership-bearing domain aborts the transaction.
+- Any unexpected row, count, alias, conflict, ownership-bearing domain, or ownership-schema drift aborts the transaction.
 - The apply script defaults to `commit=false`; omission can never commit.
 
 The account must remain inactive during the maintenance window. Do not run this while the affected user is using Rico.
