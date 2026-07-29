@@ -1,0 +1,55 @@
+name: "Product Accountability Scorecard"
+
+on:
+  pull_request:
+    branches: [main, governance/mature-version-control]
+    paths:
+      - "AI_WORKSPACE/PRODUCT_ACCOUNTABILITY_SCORECARD.md"
+      - "AI_WORKSPACE/product_accountability_scorecard.json"
+      - "AI_WORKSPACE/MASTER_INDEX.md"
+      - "scripts/check_product_accountability_scorecard.py"
+      - ".github/workflows/product-accountability-scorecard.yml"
+  push:
+    branches: [main]
+    paths:
+      - "AI_WORKSPACE/PRODUCT_ACCOUNTABILITY_SCORECARD.md"
+      - "AI_WORKSPACE/product_accountability_scorecard.json"
+      - "AI_WORKSPACE/MASTER_INDEX.md"
+      - "scripts/check_product_accountability_scorecard.py"
+      - ".github/workflows/product-accountability-scorecard.yml"
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: product-accountability-scorecard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  product-accountability-scorecard:
+    name: product-accountability-scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Exercise positive and negative policy cases
+        run: python scripts/check_product_accountability_scorecard.py --self-test
+
+      - name: Validate scorecard structure and truth rules
+        run: python scripts/check_product_accountability_scorecard.py
+
+      - name: Enforce weekly freshness
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: python scripts/check_product_accountability_scorecard.py --max-age-days 8
