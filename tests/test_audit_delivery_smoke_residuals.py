@@ -75,15 +75,46 @@ def test_no_write_statement_anywhere_in_the_sql(source: str):
 
 def test_sql_fragments_contain_no_write_verbs(module):
     """The composed predicates are built from module constants; check them too."""
-    for frag in (module._EMAIL_SET, module._RICO_UUID_SET, module._TEXT_ID_SET):
+    for frag in (module._RICO_UUID_SET, module._TEXT_ID_SET):
         lowered = frag.lower()
         assert lowered.strip().startswith("select")
         for verb in ("delete", "update", "insert", "drop", "truncate", "alter"):
             assert verb not in lowered
 
 
+def test_email_keyed_tables_do_not_resolve_through_the_users_table(module):
+    """An orphan's parent is gone by definition — resolving through ``users``
+    would hide exactly the rows this audit exists to find."""
+    for table, key_col, mode, _ in module.TABLES:
+        if mode not in ("email_direct", "rico_self"):
+            continue
+        predicate = module.build_predicate(key_col, mode)
+        assert "select" not in predicate.lower(), f"{table} predicate runs a subquery"
+        assert "users" not in predicate.lower(), (
+            f"{table} would go invisible once its parent row is deleted"
+        )
+        assert "LIKE %(pat)s" in predicate
+
+
+def test_zero_is_only_provable_for_directly_keyed_tables(module):
+    """A count of zero from an unresolvable child must not read as VERIFIED."""
+    class _NoFkCursor:
+        def execute(self, *_a, **_k):
+            pass
+
+        def fetchall(self):
+            return []
+
+    cur = _NoFkCursor()
+    assert module.zero_is_provable(cur, "users", "email", "email_direct") is True
+    assert module.zero_is_provable(cur, "rico_users", "email", "rico_self") is True
+    # No cascade FK discoverable -> absence is not provable.
+    assert module.zero_is_provable(cur, "rico_profiles", "user_id", "uuid_child") is False
+    assert module.zero_is_provable(cur, "chat_operations", "user_id", "text_id_child") is False
+
+
 def test_every_audited_table_uses_a_known_key_mode(module):
-    known = {"email", "rico_self", "rico_uuid", "text_id"}
+    known = {"email_direct", "rico_self", "uuid_child", "text_id_child"}
     assert module.TABLES, "the audit must cover at least one table"
     for table, key_col, mode, ts_candidates in module.TABLES:
         assert mode in known, f"{table} uses unknown key mode {mode!r}"

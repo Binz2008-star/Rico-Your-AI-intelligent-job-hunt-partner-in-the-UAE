@@ -9,6 +9,29 @@ identity-scoped deletes are skipped. That smoke also has no post-cleanup read,
 so it prints success either way. This audit answers, from the database, whether
 rows actually remain. It makes no cleanup claim and changes nothing.
 
+Scope: **all historical Delivery Smoke synthetic accounts**, not one run. Rows
+are never attributed to a specific workflow run — nothing in the schema records
+which run created a row, so earliest/latest timestamps are reported as
+observations and no run attribution is claimed.
+
+Finding an orphan is the whole point, so the audit must not depend on the
+parent identity surviving. Cleanup deletes the ``users`` row, and several
+tables key on the canonical email with **no foreign key** to ``users`` — an
+audit that resolved emails through ``users`` would report zero for exactly the
+rows it exists to find. Email-keyed tables are therefore matched directly on
+their own key column, and a count of zero is only reported as VERIFIED when
+absence is actually provable:
+
+  * email-keyed table            -> zero is provable (matched directly)
+  * child of ``rico_users`` with a proven ``ON DELETE CASCADE`` foreign key
+                                 -> zero is provable (the parent's removal
+                                    guarantees the child's)
+  * child without that guarantee, or keyed on an opaque parent id
+                                 -> zero is NOT provable once the parent is
+                                    gone: reported INCONCLUSIVE
+
+A non-zero count is always authoritative: rows found are rows present.
+
 Safety contract — this script is READ ONLY and structurally incapable of writing:
 
   * the connection is opened read-only and every statement runs inside an
@@ -42,22 +65,19 @@ if os.environ.get("AUDIT_CONFIRM") != CONFIRMATION:
     print(f"Refusing to run: set AUDIT_CONFIRM={CONFIRMATION} to confirm the read-only audit.")
     sys.exit(2)
 
-DATABASE_URL = os.environ["DATABASE_URL"]
-
 #: The exact synthetic namespace `scripts/delivery_smoke.py:51` generates.
 #: A module constant, deliberately not an input: nothing outside this file can
 #: widen the audit's reach.
 PATTERN = "smoke-delivery-%@synthetic-rico.test"
 
-#: Identity resolution. Every table below is keyed one of three proven ways.
-#:   "email"    — the column stores the canonical user id, which for an
-#:                authenticated user is the email (src/api/routers/files.py:161,
-#:                src/api/routers/onboarding.py:104).
-#:   "rico_uuid"— the column is a UUID FK to rico_users.id (src/rico_db.py:112).
-#:   "text_id"  — the column is TEXT holding either users.id or rico_users.id
-#:                (migrations/051_chat_operations.sql:37; the delete in
-#:                delivery_smoke.py:349 unions both).
-_EMAIL_SET = "SELECT email FROM users WHERE email LIKE %(pat)s"
+STATUS_ZERO = "VERIFIED ZERO RESIDUALS"
+STATUS_PRESENT = "VERIFIED RESIDUALS PRESENT"
+STATUS_CONTRACT = "INCONCLUSIVE — TABLE OR COLUMN CONTRACT MISMATCH"
+STATUS_UNRESOLVABLE = "INCONCLUSIVE — SYNTHETIC ID CANNOT BE RECONSTRUCTED"
+
+#: Resolves the surviving Rico identity rows. Used only by child tables; it is
+#: deliberately NOT used for email-keyed tables, whose orphans must stay visible
+#: after the parent is deleted.
 _RICO_UUID_SET = (
     "SELECT id FROM rico_users WHERE email LIKE %(pat)s OR external_user_id LIKE %(pat)s"
 )
@@ -72,16 +92,75 @@ _TEXT_ID_SET = (
 #: journey (register -> verify -> login -> onboarding submit -> authenticated
 #: chat -> SSE stream -> real search).
 TABLES: list[tuple[str, str, str, tuple[str, ...]]] = [
-    ("users", "email", "email", ("created_at",)),
+    # Directly keyed on the canonical synthetic email — orphan-visible.
+    ("users", "email", "email_direct", ("created_at",)),
+    ("email_verification_tokens", "user_email", "email_direct", ("created_at",)),
+    ("rico_onboarding_states", "user_id", "email_direct", ("updated_at",)),
+    ("learning_signals", "canonical_user_id", "email_direct", ("created_at", "timestamp")),
+    ("user_documents", "user_id", "email_direct", ("created_at",)),
+    # rico_users carries the namespace on its own columns.
     ("rico_users", "email", "rico_self", ("created_at",)),
-    ("email_verification_tokens", "user_email", "email", ("created_at",)),
-    ("rico_onboarding_states", "user_id", "email", ("updated_at",)),
-    ("learning_signals", "canonical_user_id", "email", ("created_at", "timestamp")),
-    ("user_documents", "user_id", "email", ("created_at",)),
-    ("rico_profiles", "user_id", "rico_uuid", ("created_at",)),
-    ("rico_chat_history", "user_id", "rico_uuid", ("created_at",)),
-    ("chat_operations", "user_id", "text_id", ("created_at",)),
+    # Children of rico_users, keyed by its UUID.
+    ("rico_profiles", "user_id", "uuid_child", ("created_at",)),
+    ("rico_chat_history", "user_id", "uuid_child", ("created_at",)),
+    # Keyed on an opaque parent id (users.id or rico_users.id) as TEXT.
+    ("chat_operations", "user_id", "text_id_child", ("created_at",)),
 ]
+
+#: Child tables whose zero is only provable when this FK, with ON DELETE
+#: CASCADE, is present in the live schema: (table, column) -> parent table.
+_CASCADE_PARENT = {
+    ("rico_profiles", "user_id"): "rico_users",
+    ("rico_chat_history", "user_id"): "rico_users",
+}
+
+
+def build_predicate(key_col: str, mode: str) -> str:
+    """Return the WHERE fragment for a key mode.
+
+    Pure and identifier-only so the composition can be asserted in tests: the
+    email-keyed branches must never reference the ``users`` table, or an orphan
+    row would become invisible the moment its parent was deleted.
+    """
+    if mode == "email_direct":
+        return f"{key_col} LIKE %(pat)s"
+    if mode == "rico_self":
+        return f"({key_col} LIKE %(pat)s OR external_user_id LIKE %(pat)s)"
+    if mode == "uuid_child":
+        return f"{key_col} IN ({_RICO_UUID_SET})"
+    if mode == "text_id_child":
+        return f"{key_col} IN ({_TEXT_ID_SET})"
+    raise ValueError(f"unknown key mode: {mode!r}")
+
+
+def zero_is_provable(cur, table: str, key_col: str, mode: str) -> bool:
+    """Can a count of zero be trusted as real absence?
+
+    For directly-keyed tables, yes: the query does not depend on a parent. For a
+    child table, only when the live schema really enforces ON DELETE CASCADE
+    from the parent — that is what makes "parent gone" imply "child gone".
+    """
+    if mode in ("email_direct", "rico_self"):
+        return True
+    if mode == "uuid_child":
+        parent = _CASCADE_PARENT.get((table, key_col))
+        if not parent:
+            return False
+        cur.execute(
+            "SELECT c.confdeltype FROM pg_constraint c "
+            "JOIN pg_class child ON child.oid = c.conrelid "
+            "JOIN pg_class parent ON parent.oid = c.confrelid "
+            "JOIN pg_attribute a ON a.attrelid = child.oid AND a.attnum = ANY(c.conkey) "
+            "WHERE c.contype = 'f' AND child.relname = %s "
+            "  AND parent.relname = %s AND a.attname = %s",
+            (table, parent, key_col),
+        )
+        rows = cur.fetchall()
+        # 'c' is ON DELETE CASCADE. Anything else (or no FK) cannot guarantee it.
+        return any(r[0] == "c" for r in rows)
+    # text_id_child: once the parent row is deleted its id is unrecoverable, so
+    # absence can never be proven.
+    return False
 
 
 def table_exists(cur, table: str) -> bool:
@@ -100,78 +179,70 @@ def columns_of(cur, table: str) -> set[str]:
 
 def audit_table(cur, table: str, key_col: str, mode: str, ts_candidates: tuple[str, ...]) -> dict:
     if not table_exists(cur, table):
-        return {"table": table, "status": "INCONCLUSIVE — TABLE OR COLUMN CONTRACT MISMATCH",
-                "detail": "table not present"}
+        return {"table": table, "status": STATUS_CONTRACT, "detail": "table not present"}
 
     cols = columns_of(cur, table)
     if key_col not in cols:
-        return {"table": table, "status": "INCONCLUSIVE — TABLE OR COLUMN CONTRACT MISMATCH",
+        return {"table": table, "status": STATUS_CONTRACT,
                 "detail": f"key column '{key_col}' absent"}
+    if mode == "rico_self" and "external_user_id" not in cols:
+        return {"table": table, "status": STATUS_CONTRACT,
+                "detail": "external_user_id absent"}
 
     ts_col = next((c for c in ts_candidates if c in cols), None)
+    ts_select = f"MIN({ts_col})::text, MAX({ts_col})::text" if ts_col else "NULL::text, NULL::text"
 
-    if mode == "email":
-        predicate = f"{key_col} IN ({_EMAIL_SET})"
-    elif mode == "rico_self":
-        predicate = f"({key_col} LIKE %(pat)s OR external_user_id LIKE %(pat)s)"
-    elif mode == "rico_uuid":
-        predicate = f"{key_col} IN ({_RICO_UUID_SET})"
-    elif mode == "text_id":
-        predicate = f"{key_col} IN ({_TEXT_ID_SET})"
-    else:  # pragma: no cover - guarded by the literal table map above
-        return {"table": table, "status": "INCONCLUSIVE — TABLE OR COLUMN CONTRACT MISMATCH",
-                "detail": "unknown key mode"}
-
-    ts_select = (
-        f"MIN({ts_col})::text, MAX({ts_col})::text" if ts_col else "NULL::text, NULL::text"
-    )
     cur.execute(
-        f"SELECT COUNT(*), COUNT(DISTINCT {key_col}), {ts_select} "  # noqa: S608 - all identifiers are module constants
-        f"FROM {table} WHERE {predicate}",
+        f"SELECT COUNT(*), COUNT(DISTINCT {key_col}), {ts_select} "  # noqa: S608 - identifiers are module constants
+        f"FROM {table} WHERE {build_predicate(key_col, mode)}",
         {"pat": PATTERN},
     )
     total, distinct_keys, earliest, latest = cur.fetchone()
+    total = int(total)
+
+    if total > 0:
+        status = STATUS_PRESENT          # finding rows is always authoritative
+    elif zero_is_provable(cur, table, key_col, mode):
+        status = STATUS_ZERO
+    else:
+        status = STATUS_UNRESOLVABLE     # absence cannot be proven — say so
+
     return {
         "table": table,
-        "synthetic_row_count": int(total),
+        "synthetic_row_count": total,
         "distinct_synthetic_users": int(distinct_keys),
         "earliest_created_at": earliest or "-",
         "latest_created_at": latest or "-",
-        "status": ("VERIFIED ZERO RESIDUALS" if total == 0 else "VERIFIED RESIDUALS PRESENT"),
+        "status": status,
         "ts_column": ts_col or "(none)",
     }
 
 
-def main() -> int:
-    # Read-only at the connection level, then again per transaction. Either alone
-    # would do; both together mean a write cannot slip through a reconnect.
-    conn = psycopg2.connect(DATABASE_URL)
-    conn.set_session(readonly=True, autocommit=False)
+def run_audit(conn) -> list[dict]:
     rows: list[dict] = []
-    try:
-        # One transaction per table: a contract mismatch aborts only its own
-        # transaction, so the remaining tables are still audited on a clean one
-        # instead of the whole run dying on the first mismatch.
-        for table, key_col, mode, ts in TABLES:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SET TRANSACTION READ ONLY")
-                    rows.append(audit_table(cur, table, key_col, mode, ts))
-            except Exception as exc:
-                rows.append({
-                    "table": table,
-                    "status": "INCONCLUSIVE — TABLE OR COLUMN CONTRACT MISMATCH",
-                    "detail": type(exc).__name__,
-                })
-            finally:
-                conn.rollback()
-    finally:
-        conn.close()
+    # One transaction per table: a contract mismatch aborts only its own
+    # transaction, so the remaining tables are still audited on a clean one
+    # instead of the whole run dying on the first mismatch.
+    for table, key_col, mode, ts in TABLES:
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SET TRANSACTION READ ONLY")
+                rows.append(audit_table(cur, table, key_col, mode, ts))
+        except Exception as exc:
+            rows.append({"table": table, "status": STATUS_CONTRACT, "detail": type(exc).__name__})
+        finally:
+            conn.rollback()
+    return rows
 
+
+def report(rows: list[dict]) -> None:
     width = max(len(r["table"]) for r in rows)
-    print("Delivery Smoke synthetic-residual audit (namespace: smoke-delivery-*@synthetic-rico.test)")
+    print("Delivery Smoke synthetic-residual audit")
+    print("Namespace: smoke-delivery-*@synthetic-rico.test (ALL historical runs)")
+    print("Rows are not attributed to any specific workflow run.")
     print()
-    print(f"{'table'.ljust(width)}  {'rows':>6}  {'users':>6}  earliest              latest                status")
+    print(f"{'table'.ljust(width)}  {'rows':>6}  {'users':>6}  "
+          f"{'earliest':<20}  {'latest':<20}  status")
     for r in rows:
         if "synthetic_row_count" not in r:
             print(f"{r['table'].ljust(width)}  {'-':>6}  {'-':>6}  {'-':<20}  {'-':<20}  "
@@ -185,21 +256,40 @@ def main() -> int:
 
     counted = [r for r in rows if "synthetic_row_count" in r]
     residual_total = sum(r["synthetic_row_count"] for r in counted)
-    inconclusive = [r for r in rows if "synthetic_row_count" not in r]
+    unproven = [r for r in rows if r["status"] in (STATUS_CONTRACT, STATUS_UNRESOLVABLE)]
 
     print()
     print(f"TOTAL synthetic rows observed: {residual_total}")
-    print(f"Tables audited: {len(counted)}  |  Inconclusive: {len(inconclusive)}")
-    if inconclusive:
-        print("Inconclusive tables: " + ", ".join(r["table"] for r in inconclusive))
-    if residual_total == 0 and not inconclusive:
-        print("AUDIT: VERIFIED ZERO RESIDUALS")
-    elif residual_total > 0:
-        print("AUDIT: VERIFIED RESIDUALS PRESENT — no deletion performed, owner authorization required")
+    print(f"Tables audited: {len(counted)}  |  Not provable: {len(unproven)}")
+    if unproven:
+        print("Not provable: " + ", ".join(f"{r['table']} [{r['status']}]" for r in unproven))
+    if residual_total > 0:
+        print("AUDIT: VERIFIED RESIDUALS PRESENT — no deletion performed, "
+              "owner authorization required")
+    elif unproven:
+        print("AUDIT: INCONCLUSIVE — zero observed, but absence is not provable for every table")
     else:
-        print("AUDIT: INCONCLUSIVE — TABLE OR COLUMN CONTRACT MISMATCH")
+        print("AUDIT: VERIFIED ZERO RESIDUALS")
     print()
     print("This audit performed no writes and makes no cleanup claim.")
+
+
+def main() -> int:
+    try:
+        # Read-only at the connection level, then again per transaction. Either
+        # alone would do; both together mean a write cannot slip through.
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        conn.set_session(readonly=True, autocommit=False)
+    except Exception as exc:
+        # Never print the exception text: psycopg2 connection errors embed the
+        # host and username from the DSN.
+        print(f"Audit could not connect to the database: {type(exc).__name__}")
+        return 2
+    try:
+        rows = run_audit(conn)
+    finally:
+        conn.close()
+    report(rows)
     return 0
 
 

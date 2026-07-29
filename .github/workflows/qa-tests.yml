@@ -152,6 +152,7 @@ jobs:
             tests/integration/test_guest_merge_claim_postgres.py \
             tests/integration/test_1092_applications_pagination_postgres.py \
             tests/integration/test_multiuser_isolation_postgres.py \
+            tests/integration/test_audit_residuals_postgres.py \
             -v --tb=short
 
   playwright:
