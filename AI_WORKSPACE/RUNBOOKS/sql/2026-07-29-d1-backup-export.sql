@@ -1,0 +1,130 @@
+\set ON_ERROR_STOP on
+
+-- psql ignores any argument to \quit and would exit 0, so this stop is raised as
+-- a real server-side error instead. With ON_ERROR_STOP that yields a non-zero
+-- psql exit status, which is what an operator or wrapper must see.
+\if :{?target_principal}
+\else
+  \echo 'ERROR: target_principal is required and must be supplied privately.'
+  DO $$ BEGIN RAISE EXCEPTION 'target_principal is required'; END $$;
+\endif
+
+-- Run only against the fresh pre-repair Neon backup branch after the strict
+-- read-only preflight has passed on both production and this branch.
+-- The working directory must be an owner-controlled encrypted location.
+-- The relative directory ./secure-d1-backup must already exist.
+-- This transaction writes temporary staging tables only and always rolls back.
+
+BEGIN;
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL statement_timeout='60s';
+SET LOCAL lock_timeout='2s';
+
+DO $$
+DECLARE
+  v_schema_count int;
+  v_schema_hash text;
+BEGIN
+  SELECT count(*),
+         md5(string_agg(
+           table_name||'.'||column_name||':'||data_type,
+           ',' ORDER BY table_name,column_name))
+    INTO v_schema_count,v_schema_hash
+  FROM information_schema.columns
+  WHERE table_schema='public'
+    AND column_name IN ('user_id','canonical_user_id','external_user_id');
+
+  IF v_schema_count<>39 OR v_schema_hash<>'aa3df6507f6909ab9bbf33e31082ee36' THEN
+    RAISE EXCEPTION 'Ownership schema drift: columns %, hash %',
+      v_schema_count,v_schema_hash;
+  END IF;
+END $$;
+
+CREATE TEMP TABLE d1_params(target_principal text NOT NULL PRIMARY KEY) ON COMMIT DROP;
+INSERT INTO d1_params VALUES(lower(:'target_principal'));
+
+CREATE TEMP TABLE d1_target ON COMMIT DROP AS
+SELECT u.id,u.external_user_id,u.email,
+       CASE
+         WHEN lower(u.external_user_id)=p.target_principal THEN 'canonical'
+         WHEN u.external_user_id LIKE 'public:%' THEN 'guest'
+         ELSE 'email_only'
+       END AS class
+FROM rico_users u
+JOIN d1_params p ON lower(u.email)=p.target_principal;
+
+CREATE TEMP TABLE d1_aliases ON COMMIT DROP AS
+SELECT DISTINCT lower(v) AS alias
+FROM d1_target t
+CROSS JOIN LATERAL unnest(ARRAY[t.id::text,t.external_user_id,t.email]) v
+WHERE v IS NOT NULL AND btrim(v)<>'';
+
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM d1_target)<>5 THEN RAISE EXCEPTION 'Target count mismatch'; END IF;
+  IF (SELECT count(*) FROM d1_target WHERE class='canonical')<>1 THEN RAISE EXCEPTION 'Canonical count mismatch'; END IF;
+  IF (SELECT count(*) FROM d1_target WHERE class='email_only')<>2 THEN RAISE EXCEPTION 'Email-only count mismatch'; END IF;
+  IF (SELECT count(*) FROM d1_target WHERE class='guest')<>2 THEN RAISE EXCEPTION 'Guest count mismatch'; END IF;
+  IF (SELECT count(*) FROM rico_profiles WHERE user_id IN (SELECT id FROM d1_target))<>5 THEN RAISE EXCEPTION 'Profile count mismatch'; END IF;
+  IF (SELECT count(*) FROM rico_chat_history WHERE user_id IN (SELECT id FROM d1_target))<>1463 THEN RAISE EXCEPTION 'Chat count mismatch'; END IF;
+  IF (SELECT count(*) FROM learning_signals WHERE lower(canonical_user_id) IN (SELECT alias FROM d1_aliases))<>24 THEN RAISE EXCEPTION 'Learning count mismatch'; END IF;
+  IF (SELECT count(*) FROM user_job_context WHERE lower(user_id) IN (SELECT alias FROM d1_aliases))<>13 THEN RAISE EXCEPTION 'Job-context count mismatch'; END IF;
+  IF (SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases))<>5 THEN RAISE EXCEPTION 'Onboarding count mismatch'; END IF;
+  IF (SELECT count(*) FROM rico_agent_settings WHERE user_id IN (SELECT id FROM d1_target))<>1 THEN RAISE EXCEPTION 'Agent-settings count mismatch'; END IF;
+END $$;
+
+-- Onboarding state must be fully completed before any export is trusted.
+-- Count alone is not sufficient: an in_progress row, or a completed row that
+-- lost completed_at, would otherwise be exported as an approved pre-state.
+DO $$
+DECLARE
+  v_completed int;
+  v_completed_at_non_null int;
+  v_non_completed int;
+  v_completed_at_null int;
+BEGIN
+  SELECT count(*) FILTER (WHERE status='completed'),
+         count(*) FILTER (WHERE completed_at IS NOT NULL),
+         count(*) FILTER (WHERE status IS DISTINCT FROM 'completed'),
+         count(*) FILTER (WHERE status='completed' AND completed_at IS NULL)
+    INTO v_completed,v_completed_at_non_null,v_non_completed,v_completed_at_null
+  FROM rico_onboarding_states
+  WHERE lower(user_id) IN (SELECT alias FROM d1_aliases);
+
+  IF v_completed<>5
+     OR v_completed_at_non_null<>5
+     OR v_non_completed<>0
+     OR v_completed_at_null<>0
+  THEN
+    RAISE EXCEPTION
+      'Onboarding pre-state mismatch: completed %, completed_at_non_null %, non_completed %, completed_at_null %',
+      v_completed,v_completed_at_non_null,v_non_completed,v_completed_at_null;
+  END IF;
+END $$;
+
+\copy (SELECT * FROM d1_target ORDER BY class,id) TO './secure-d1-backup/target.csv' CSV HEADER
+\copy (SELECT u.* FROM rico_users u JOIN d1_target t ON t.id=u.id ORDER BY u.id) TO './secure-d1-backup/rico_users.csv' CSV HEADER
+\copy (SELECT p.* FROM rico_profiles p JOIN d1_target t ON t.id=p.user_id ORDER BY p.id) TO './secure-d1-backup/rico_profiles.csv' CSV HEADER
+\copy (SELECT h.id,h.user_id FROM rico_chat_history h JOIN d1_target t ON t.id=h.user_id ORDER BY h.id) TO './secure-d1-backup/rico_chat_ownership.csv' CSV HEADER
+\copy (SELECT l.id,l.user_id FROM rico_learning_signals l JOIN d1_target t ON t.id=l.user_id ORDER BY l.id) TO './secure-d1-backup/rico_learning_ownership.csv' CSV HEADER
+\copy (SELECT l.id,l.canonical_user_id FROM learning_signals l WHERE lower(l.canonical_user_id) IN (SELECT alias FROM d1_aliases) ORDER BY l.id) TO './secure-d1-backup/learning_ownership.csv' CSV HEADER
+\copy (SELECT j.id,j.user_id FROM user_job_context j WHERE lower(j.user_id) IN (SELECT alias FROM d1_aliases) ORDER BY j.id) TO './secure-d1-backup/job_context_ownership.csv' CSV HEADER
+\copy (SELECT o.* FROM rico_onboarding_states o WHERE lower(o.user_id) IN (SELECT alias FROM d1_aliases) ORDER BY o.user_id) TO './secure-d1-backup/onboarding.csv' CSV HEADER
+\copy (SELECT s.* FROM rico_agent_settings s JOIN d1_target t ON t.id=s.user_id ORDER BY s.id) TO './secure-d1-backup/agent_settings.csv' CSV HEADER
+\copy (SELECT 5::bigint owner_rows,5::bigint profiles,1463::bigint chat_messages,0::bigint rico_learning_signals,24::bigint learning_signals,13::bigint job_context,5::bigint onboarding,5::bigint onboarding_completed,5::bigint onboarding_completed_at_non_null,0::bigint onboarding_non_completed,0::bigint onboarding_completed_at_null,1::bigint agent_settings) TO './secure-d1-backup/manifest.csv' CSV HEADER
+
+SELECT jsonb_build_object(
+  'target_rows',(SELECT count(*) FROM d1_target),
+  'profiles',(SELECT count(*) FROM rico_profiles WHERE user_id IN (SELECT id FROM d1_target)),
+  'chat_messages',(SELECT count(*) FROM rico_chat_history WHERE user_id IN (SELECT id FROM d1_target)),
+  'learning_signals',(SELECT count(*) FROM learning_signals WHERE lower(canonical_user_id) IN (SELECT alias FROM d1_aliases)),
+  'job_context',(SELECT count(*) FROM user_job_context WHERE lower(user_id) IN (SELECT alias FROM d1_aliases)),
+  'onboarding',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases)),
+  'onboarding_completed',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases) AND status='completed'),
+  'onboarding_completed_at_non_null',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases) AND completed_at IS NOT NULL),
+  'onboarding_non_completed',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases) AND status IS DISTINCT FROM 'completed'),
+  'onboarding_completed_at_null',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases) AND status='completed' AND completed_at IS NULL),
+  'agent_settings',(SELECT count(*) FROM rico_agent_settings WHERE user_id IN (SELECT id FROM d1_target))
+) AS private_export_manifest;
+
+ROLLBACK;
