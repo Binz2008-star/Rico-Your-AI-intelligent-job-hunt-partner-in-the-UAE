@@ -5,12 +5,43 @@ AI engine for per-job CV tailoring and cover letter generation.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+import re
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
 _MAX_CV_CHARS = 6000
 _MAX_JD_CHARS = 3000
+_MAX_COMBINED_OUTPUT_TOKENS = 3500
+
+_CV_START = "[TAILORED_CV]"
+_CV_END = "[/TAILORED_CV]"
+_COVER_START = "[COVER_LETTER]"
+_COVER_END = "[/COVER_LETTER]"
+
+
+def _parse_tailored_output(text: str) -> Optional[Dict[str, str]]:
+    """Extract tailored CV and cover letter from a single marked response.
+
+    Returns None if either section is missing or empty.
+    """
+    cv_match = re.search(
+        re.escape(_CV_START) + r"(.*?)" + re.escape(_CV_END),
+        text,
+        re.DOTALL,
+    )
+    cl_match = re.search(
+        re.escape(_COVER_START) + r"(.*?)" + re.escape(_COVER_END),
+        text,
+        re.DOTALL,
+    )
+    if not cv_match or not cl_match:
+        return None
+    tailored_cv = cv_match.group(1).strip()
+    cover_letter = cl_match.group(1).strip()
+    if not tailored_cv or not cover_letter:
+        return None
+    return {"tailored_cv": tailored_cv, "cover_letter": cover_letter}
 
 
 def _get_ai_client():
@@ -28,13 +59,13 @@ def _get_ai_client():
         return None, None, None
 
 
-def _call_ai(client, provider: str, model: str, system: str, user: str) -> str:
+def _call_ai(client, provider: str, model: str, system: str, user: str, max_tokens: int = 2000) -> str:
     if provider == "openai":
         from src.rico_openai_runtime import _extract_response_text
         resp = client.responses.create(
             model=model,
             input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            max_output_tokens=2000,
+            max_output_tokens=max_tokens,
         )
         text = _extract_response_text(resp)
         if not text:
@@ -45,7 +76,7 @@ def _call_ai(client, provider: str, model: str, system: str, user: str) -> str:
         resp = client.chat.completions.create(
             model=model,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            max_tokens=2000,
+            max_tokens=max_tokens,
             temperature=0.4,
         )
         text = _extract_chat_completion_text(resp)
@@ -89,41 +120,44 @@ def tailor_application(cv_text: str, profile: Dict[str, Any], job: Dict[str, Any
         logger.info("AI unavailable — using fallback for %s @ %s", title, company)
         return _keyword_fallback(cv_text, job)
 
-    cv_system = (
-        "You are an expert UAE resume writer. Rewrite the candidate's CV to maximise keyword "
-        "alignment with the target job description. Rules:\n"
-        "1. Keep all factual content true — never invent experience or dates.\n"
-        "2. Mirror keywords and phrases from the job description naturally.\n"
-        "3. Reorder bullet points to lead with the most relevant achievements.\n"
-        "4. Keep the same section structure (Summary, Experience, Education, Skills).\n"
-        "5. Output only the full rewritten CV text — no preamble, no markdown fences."
+    combined_system = (
+        "You are an expert UAE job application writer. You will receive a candidate's CV "
+        "and a job description. Produce two outputs:\n"
+        "1. A tailored CV: rewrite the candidate's CV to align with the job, keeping all "
+        "facts true, mirroring keywords naturally, reordering bullets, and preserving the "
+        "section structure (Summary, Experience, Education, Skills).\n"
+        "2. A concise, compelling cover letter (3 short paragraphs, max 250 words): open "
+        "with the role and company, match 2-3 specific achievements from the CV, close with "
+        "a call to action, and sign off as the candidate.\n\n"
+        "Use EXACTLY these section markers and nothing else:\n"
+        f"{_CV_START}...{_CV_END}\n"
+        f"{_COVER_START}...{_COVER_END}\n\n"
+        "Do not output any other text, preamble, or markdown fences."
     )
-    cv_user = (
-        f"Target role: {title} at {company} ({location})\n\n"
-        f"Job description:\n{description}\n\n"
-        f"Candidate's current CV:\n{truncated_cv}"
-    )
-    cl_system = (
-        "You are an expert UAE job application writer. Write a concise, compelling cover letter "
-        "(3 short paragraphs, max 250 words). Rules:\n"
-        "1. Opening: state the role and why this company specifically.\n"
-        "2. Middle: 2-3 specific achievements from the CV that directly match the job requirements.\n"
-        "3. Closing: call to action. Sign off as the candidate.\n"
-        "4. Do not use generic filler phrases like 'I am a hard worker'.\n"
-        "5. Output only the cover letter — no subject line, no preamble."
-    )
-    cl_user = (
+    combined_user = (
         f"Candidate name: {name}\n"
         f"Target role: {title} at {company} ({location})\n"
         f"Target roles profile: {target_roles}\n\n"
         f"Job description:\n{description}\n\n"
-        f"Candidate CV summary:\n{truncated_cv[:2000]}"
+        f"Candidate's current CV:\n{truncated_cv}\n\n"
+        f"Instructions:\n"
+        f"1. Output the tailored CV inside {_CV_START}...{_CV_END}.\n"
+        f"2. Output the cover letter inside {_COVER_START}...{_COVER_END}.\n"
+        f"3. Do not invent experience, dates, skills, or achievements.\n"
+        f"4. Sign the cover letter as {name}."
     )
 
     try:
-        tailored_cv = _call_ai(client, provider, model, cv_system, cv_user)
-        cover_letter = _call_ai(client, provider, model, cl_system, cl_user)
-        return {"tailored_cv": tailored_cv, "cover_letter": cover_letter}
+        raw_output = _call_ai(
+            client, provider, model, combined_system, combined_user,
+            max_tokens=_MAX_COMBINED_OUTPUT_TOKENS,
+        )
+        parsed = _parse_tailored_output(raw_output)
+        if parsed:
+            logger.info("tailor_application source=ai job=%s @ %s", title, company)
+            return parsed
+        logger.warning("tailor_application parse_failed for %s @ %s — falling back", title, company)
     except Exception as exc:
         logger.error("AI tailoring failed: %s — falling back", exc)
-        return _keyword_fallback(cv_text, job)
+
+    return _keyword_fallback(cv_text, job)

@@ -95,6 +95,7 @@ jobs:
             tests/test_lifecycle_followup.py \
             tests/test_no_import_time_env_mutation.py \
             tests/test_rico_apply_ai_client.py \
+            tests/test_rico_apply_ai.py \
             tests/test_gratitude_does_not_redeem_pending_search.py \
             tests/test_rate_limiting.py \
             tests/test_medium3_rate_limits.py \
