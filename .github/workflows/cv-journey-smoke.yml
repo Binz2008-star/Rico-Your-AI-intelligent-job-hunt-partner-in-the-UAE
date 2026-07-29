@@ -1,0 +1,40 @@
+name: "CV Golden Journey Smoke (manual)"
+
+# Dispatch-only production journey smoke for the CV path (#1425 documents
+# inventory, #1426 analysis-vs-search routing). Uses ONE disposable synthetic
+# account per run and always removes it. No real user, no deployment, no
+# migration, no schema change, no product runtime change.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type SMOKE-CV-JOURNEY to authorize this production smoke"
+        required: true
+      expected_sha:
+        description: "Exact live /version.commit under test"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cv-journey-smoke-production
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: "CV golden journey production smoke"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --quiet psycopg2-binary
+      - name: Run CV golden journey smoke
+        env:
+          SMOKE_CONFIRM: ${{ inputs.confirm }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/cv_journey_smoke.py
