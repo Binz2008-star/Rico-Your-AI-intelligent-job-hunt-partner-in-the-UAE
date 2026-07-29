@@ -127,7 +127,9 @@ def _call(
         _capture_auth_cookie(exc)
         return exc.code, _decode_json(exc.read())
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise SmokeFailure(f"request failed: {method} {path}: {type(exc).__name__}") from exc
+        raise SmokeFailure(
+            f"request failed: {method} {path}: {type(exc).__name__}"
+        ) from exc
 
 
 def _text(payload: dict[str, Any]) -> str:
@@ -200,12 +202,15 @@ def _authenticate() -> None:
         authenticated=False,
     )
     print(f"[login] HTTP={status} cookie_captured={bool(_auth_cookie)}")
-    _require(status == 200 and bool(_auth_cookie), "dedicated smoke-account login failed")
+    _require(
+        status == 200 and bool(_auth_cookie),
+        "dedicated smoke-account login failed",
+    )
 
     status, me = _call("GET", "/api/v1/me")
     print(
         f"[me] HTTP={status} authenticated={bool(me.get('authenticated'))} "
-        f"guest={bool(me.get('guest'))} role={str(me.get('role') or '-') }"
+        f"guest={bool(me.get('guest'))} role={str(me.get('role') or '-')}"
     )
     _require(status == 200, "/me failed")
     _require(me.get("authenticated") is True, "smoke account is not authenticated")
@@ -224,12 +229,27 @@ def _chat(message: str) -> tuple[int, dict[str, Any]]:
 def _cleanup_session() -> bool:
     encoded = urllib.parse.quote(SESSION_ID, safe="")
     try:
-        status, _ = _call("DELETE", f"/api/v1/rico/chat/history?session_id={encoded}")
+        delete_status, _ = _call(
+            "DELETE", f"/api/v1/rico/chat/history?session_id={encoded}"
+        )
+        verify_status, history = _call(
+            "GET", f"/api/v1/rico/chat/history?session_id={encoded}&limit=5"
+        )
     except SmokeFailure as exc:
         print(f"[cleanup] FAIL request_error={type(exc).__name__}")
         return False
-    ok = status in {200, 204}
-    print(f"[cleanup] HTTP={status} session_deleted={ok}")
+    messages = history.get("messages")
+    empty = (
+        verify_status == 200
+        and isinstance(messages, list)
+        and len(messages) == 0
+        and history.get("total") == 0
+    )
+    ok = delete_status in {200, 204} and empty
+    print(
+        f"[cleanup] delete_HTTP={delete_status} verify_HTTP={verify_status} "
+        f"session_empty={empty}"
+    )
     return ok
 
 
@@ -278,7 +298,7 @@ def main() -> int:
             not _is_search_execution(gratitude),
             "gratitude redeemed the pending search",
         )
-        print("[assert] gratitude dispatched no user-visible search result: PASS")
+        print("[assert] gratitude did not redeem the pending search: PASS")
 
         status, confirmed = _chat("نعم")
         _safe_summary("confirm", status, confirmed)
@@ -288,20 +308,26 @@ def main() -> int:
             "explicit confirmation did not redeem the still-pending search",
         )
         pending_may_be_armed = False
-        print("[assert] pending offer survived gratitude and redeemed on explicit confirmation: PASS")
+        print(
+            "[assert] pending offer survived gratitude and redeemed on "
+            "explicit confirmation: PASS"
+        )
 
     except SmokeFailure as exc:
         failure = exc
     finally:
-        # Best-effort state drain: if the arm turn may have succeeded but the normal
-        # confirmation was never attempted, consume the 15-minute pending slot on
+        # Best-effort state drain: if the arm turn may have succeeded but normal
+        # confirmation did not complete, consume the 15-minute pending slot on
         # the dedicated smoke account before deleting the disposable transcript.
         if authenticated and pending_may_be_armed:
             try:
                 status, drained = _chat("نعم")
                 _safe_summary("cleanup-drain", status, drained)
             except SmokeFailure:
-                print("[cleanup-drain] warning=request_failed; pending slot expires by TTL")
+                print(
+                    "[cleanup-drain] warning=request_failed; "
+                    "pending slot expires by TTL"
+                )
         if authenticated and session_touched:
             cleanup_ok = _cleanup_session()
         if authenticated:
