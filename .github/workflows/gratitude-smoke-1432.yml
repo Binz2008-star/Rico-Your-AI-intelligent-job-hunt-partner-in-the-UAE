@@ -1,0 +1,44 @@
+name: "#1432 Gratitude Pending Search Smoke (manual)"
+
+# Dispatch-only production behavior smoke. Uses one pre-provisioned dedicated
+# account and one disposable chat session. No registration, profile mutation,
+# SQL, deployment, migration, or real-user action.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type SMOKE-1432 to authorize this production smoke"
+        required: true
+      expected_sha:
+        description: "Exact live /version.commit that contains #1432"
+        required: true
+      off_profile_role:
+        description: "Real role outside the dedicated smoke account's target roles"
+        required: false
+        default: "Data Scientist"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gratitude-smoke-1432-production
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: "#1432 authenticated production smoke"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run secret-safe smoke
+        env:
+          SMOKE_CONFIRM: ${{ inputs.confirm }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          SMOKE_OFF_PROFILE_ROLE: ${{ inputs.off_profile_role }}
+          RICO_SMOKE_TEST_EMAIL: ${{ secrets.RICO_SMOKE_TEST_EMAIL }}
+          RICO_SMOKE_TEST_PASSWORD: ${{ secrets.RICO_SMOKE_TEST_PASSWORD }}
+        run: python scripts/gratitude_smoke_1432.py
