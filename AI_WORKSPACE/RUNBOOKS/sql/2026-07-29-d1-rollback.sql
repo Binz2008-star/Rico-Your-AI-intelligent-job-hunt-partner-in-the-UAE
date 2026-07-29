@@ -32,7 +32,10 @@ CREATE TEMP TABLE d1_restore_agent_settings (LIKE rico_agent_settings INCLUDING 
 CREATE TEMP TABLE d1_restore_manifest (
   owner_rows bigint,profiles bigint,chat_messages bigint,
   rico_learning_signals bigint,learning_signals bigint,
-  job_context bigint,onboarding bigint,agent_settings bigint
+  job_context bigint,onboarding bigint,
+  onboarding_completed bigint,onboarding_completed_at_non_null bigint,
+  onboarding_non_completed bigint,onboarding_completed_at_null bigint,
+  agent_settings bigint
 ) ON COMMIT DROP;
 
 \copy d1_restore_target FROM './secure-d1-backup/target.csv' CSV HEADER
@@ -70,6 +73,26 @@ BEGIN
   IF (SELECT count(*) FROM d1_restore_onboarding)<>5 THEN RAISE EXCEPTION 'Restore onboarding expected 5'; END IF;
   IF (SELECT count(*) FROM d1_restore_agent_settings)<>1 THEN RAISE EXCEPTION 'Restore settings expected 1'; END IF;
 
+  -- The private backup must itself carry the approved onboarding pre-state.
+  -- Restoring from an export that was taken in an unexpected state would
+  -- reinstate that state as if it had been approved.
+  IF (SELECT count(*) FROM d1_restore_onboarding WHERE status='completed')<>5
+     OR (SELECT count(*) FROM d1_restore_onboarding WHERE completed_at IS NOT NULL)<>5
+     OR (SELECT count(*) FROM d1_restore_onboarding WHERE status IS DISTINCT FROM 'completed')<>0
+     OR (SELECT count(*) FROM d1_restore_onboarding WHERE status='completed' AND completed_at IS NULL)<>0
+  THEN
+    RAISE EXCEPTION 'Backup onboarding state is not the approved five completed rows';
+  END IF;
+
+  IF (SELECT onboarding FROM d1_restore_manifest)<>5
+     OR (SELECT onboarding_completed FROM d1_restore_manifest)<>5
+     OR (SELECT onboarding_completed_at_non_null FROM d1_restore_manifest)<>5
+     OR (SELECT onboarding_non_completed FROM d1_restore_manifest)<>0
+     OR (SELECT onboarding_completed_at_null FROM d1_restore_manifest)<>0
+  THEN
+    RAISE EXCEPTION 'Manifest onboarding invariants do not match the approved pre-state';
+  END IF;
+
   SELECT id,lower(email) INTO v_canonical,v_principal
   FROM d1_restore_target WHERE class='canonical';
 
@@ -85,6 +108,11 @@ BEGIN
   IF v<>13 THEN RAISE EXCEPTION 'Rollback precondition jobs expected 13, got %',v; END IF;
   SELECT count(*) INTO v FROM rico_onboarding_states WHERE lower(user_id)=v_principal;
   IF v<>1 THEN RAISE EXCEPTION 'Rollback precondition onboarding expected 1, got %',v; END IF;
+  SELECT count(*) INTO v FROM rico_onboarding_states
+    WHERE lower(user_id)=v_principal AND status='completed' AND completed_at IS NOT NULL;
+  IF v<>1 THEN
+    RAISE EXCEPTION 'Rollback precondition: canonical onboarding row is not completed with a non-null completed_at';
+  END IF;
 
   SELECT count(*) INTO v
   FROM rico_users u JOIN d1_restore_users b
@@ -272,6 +300,8 @@ SELECT jsonb_build_object(
   'learning_mapping_differences',0,
   'job_mapping_differences',0,
   'onboarding',(SELECT count(*) FROM rico_onboarding_states o WHERE lower(o.user_id) IN (SELECT alias FROM d1_restore_aliases)),
+  'onboarding_completed',(SELECT count(*) FROM rico_onboarding_states o WHERE lower(o.user_id) IN (SELECT alias FROM d1_restore_aliases) AND o.status='completed'),
+  'onboarding_completed_at_non_null',(SELECT count(*) FROM rico_onboarding_states o WHERE lower(o.user_id) IN (SELECT alias FROM d1_restore_aliases) AND o.completed_at IS NOT NULL),
   'agent_settings',(SELECT count(*) FROM rico_agent_settings s JOIN d1_restore_target t ON t.id=s.user_id),
   'requested_commit',:'commit'
 ) AS d1_rollback_result;

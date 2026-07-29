@@ -1,9 +1,12 @@
 \set ON_ERROR_STOP on
 
+-- psql ignores any argument to \quit and would exit 0, so this stop is raised as
+-- a real server-side error instead. With ON_ERROR_STOP that yields a non-zero
+-- psql exit status, which is what an operator or wrapper must see.
 \if :{?target_principal}
 \else
   \echo 'ERROR: target_principal is required and must be supplied privately.'
-  \quit 3
+  DO $$ BEGIN RAISE EXCEPTION 'target_principal is required'; END $$;
 \endif
 
 -- Run only against the fresh pre-repair Neon backup branch after the strict
@@ -70,6 +73,35 @@ BEGIN
   IF (SELECT count(*) FROM rico_agent_settings WHERE user_id IN (SELECT id FROM d1_target))<>1 THEN RAISE EXCEPTION 'Agent-settings count mismatch'; END IF;
 END $$;
 
+-- Onboarding state must be fully completed before any export is trusted.
+-- Count alone is not sufficient: an in_progress row, or a completed row that
+-- lost completed_at, would otherwise be exported as an approved pre-state.
+DO $$
+DECLARE
+  v_completed int;
+  v_completed_at_non_null int;
+  v_non_completed int;
+  v_completed_at_null int;
+BEGIN
+  SELECT count(*) FILTER (WHERE status='completed'),
+         count(*) FILTER (WHERE completed_at IS NOT NULL),
+         count(*) FILTER (WHERE status IS DISTINCT FROM 'completed'),
+         count(*) FILTER (WHERE status='completed' AND completed_at IS NULL)
+    INTO v_completed,v_completed_at_non_null,v_non_completed,v_completed_at_null
+  FROM rico_onboarding_states
+  WHERE lower(user_id) IN (SELECT alias FROM d1_aliases);
+
+  IF v_completed<>5
+     OR v_completed_at_non_null<>5
+     OR v_non_completed<>0
+     OR v_completed_at_null<>0
+  THEN
+    RAISE EXCEPTION
+      'Onboarding pre-state mismatch: completed %, completed_at_non_null %, non_completed %, completed_at_null %',
+      v_completed,v_completed_at_non_null,v_non_completed,v_completed_at_null;
+  END IF;
+END $$;
+
 \copy (SELECT * FROM d1_target ORDER BY class,id) TO './secure-d1-backup/target.csv' CSV HEADER
 \copy (SELECT u.* FROM rico_users u JOIN d1_target t ON t.id=u.id ORDER BY u.id) TO './secure-d1-backup/rico_users.csv' CSV HEADER
 \copy (SELECT p.* FROM rico_profiles p JOIN d1_target t ON t.id=p.user_id ORDER BY p.id) TO './secure-d1-backup/rico_profiles.csv' CSV HEADER
@@ -79,7 +111,7 @@ END $$;
 \copy (SELECT j.id,j.user_id FROM user_job_context j WHERE lower(j.user_id) IN (SELECT alias FROM d1_aliases) ORDER BY j.id) TO './secure-d1-backup/job_context_ownership.csv' CSV HEADER
 \copy (SELECT o.* FROM rico_onboarding_states o WHERE lower(o.user_id) IN (SELECT alias FROM d1_aliases) ORDER BY o.user_id) TO './secure-d1-backup/onboarding.csv' CSV HEADER
 \copy (SELECT s.* FROM rico_agent_settings s JOIN d1_target t ON t.id=s.user_id ORDER BY s.id) TO './secure-d1-backup/agent_settings.csv' CSV HEADER
-\copy (SELECT 5::bigint owner_rows,5::bigint profiles,1463::bigint chat_messages,0::bigint rico_learning_signals,24::bigint learning_signals,13::bigint job_context,5::bigint onboarding,1::bigint agent_settings) TO './secure-d1-backup/manifest.csv' CSV HEADER
+\copy (SELECT 5::bigint owner_rows,5::bigint profiles,1463::bigint chat_messages,0::bigint rico_learning_signals,24::bigint learning_signals,13::bigint job_context,5::bigint onboarding,5::bigint onboarding_completed,5::bigint onboarding_completed_at_non_null,0::bigint onboarding_non_completed,0::bigint onboarding_completed_at_null,1::bigint agent_settings) TO './secure-d1-backup/manifest.csv' CSV HEADER
 
 SELECT jsonb_build_object(
   'target_rows',(SELECT count(*) FROM d1_target),
@@ -88,6 +120,10 @@ SELECT jsonb_build_object(
   'learning_signals',(SELECT count(*) FROM learning_signals WHERE lower(canonical_user_id) IN (SELECT alias FROM d1_aliases)),
   'job_context',(SELECT count(*) FROM user_job_context WHERE lower(user_id) IN (SELECT alias FROM d1_aliases)),
   'onboarding',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases)),
+  'onboarding_completed',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases) AND status='completed'),
+  'onboarding_completed_at_non_null',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases) AND completed_at IS NOT NULL),
+  'onboarding_non_completed',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases) AND status IS DISTINCT FROM 'completed'),
+  'onboarding_completed_at_null',(SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM d1_aliases) AND status='completed' AND completed_at IS NULL),
   'agent_settings',(SELECT count(*) FROM rico_agent_settings WHERE user_id IN (SELECT id FROM d1_target))
 ) AS private_export_manifest;
 

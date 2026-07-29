@@ -1,9 +1,12 @@
 \set ON_ERROR_STOP on
 
+-- psql ignores any argument to \quit and would exit 0, so this stop is raised as
+-- a real server-side error instead. With ON_ERROR_STOP that yields a non-zero
+-- psql exit status, which is what an operator or wrapper must see.
 \if :{?target_principal}
 \else
   \echo 'ERROR: target_principal is required and must be supplied privately.'
-  \quit 3
+  DO $$ BEGIN RAISE EXCEPTION 'target_principal is required'; END $$;
 \endif
 
 \if :{?commit}
@@ -189,6 +192,49 @@ BEGIN
   IF v<>0 THEN RAISE EXCEPTION 'Unexpected whatsapp_subscription_requests: %',v; END IF;
 END $$;
 
+-- Strict onboarding pre-state gate.
+-- The approved contract is five COMPLETED rows with non-null completed_at.
+-- Row count alone is not sufficient: without this gate an in_progress row, or a
+-- completed row that lost completed_at, would still reach the mutation below,
+-- where the canonical row is forced to 'completed' and the aliases are deleted.
+-- An unexpected onboarding state must abort, never be silently coerced.
+DO $$
+DECLARE
+  v_rows int;
+  v_completed int;
+  v_completed_at_non_null int;
+  v_non_completed int;
+  v_completed_at_null int;
+  v_canonical_rows int;
+BEGIN
+  SELECT count(*),
+         count(*) FILTER (WHERE status='completed'),
+         count(*) FILTER (WHERE completed_at IS NOT NULL),
+         count(*) FILTER (WHERE status IS DISTINCT FROM 'completed'),
+         count(*) FILTER (WHERE status='completed' AND completed_at IS NULL)
+    INTO v_rows,v_completed,v_completed_at_non_null,v_non_completed,v_completed_at_null
+  FROM rico_onboarding_states
+  WHERE lower(user_id) IN (SELECT alias FROM d1_aliases);
+
+  IF v_rows<>5
+     OR v_completed<>5
+     OR v_completed_at_non_null<>5
+     OR v_non_completed<>0
+     OR v_completed_at_null<>0
+  THEN
+    RAISE EXCEPTION
+      'Onboarding pre-state mismatch: rows %, completed %, completed_at_non_null %, non_completed %, completed_at_null %',
+      v_rows,v_completed,v_completed_at_non_null,v_non_completed,v_completed_at_null;
+  END IF;
+
+  SELECT count(*) INTO v_canonical_rows
+  FROM rico_onboarding_states
+  WHERE lower(user_id)=(SELECT target_principal FROM d1_params);
+  IF v_canonical_rows<>1 THEN
+    RAISE EXCEPTION 'Canonical onboarding row expected 1, got %',v_canonical_rows;
+  END IF;
+END $$;
+
 DO $$
 BEGIN
   PERFORM 1 FROM rico_users WHERE id IN (SELECT id FROM d1_target) ORDER BY id FOR UPDATE;
@@ -258,12 +304,19 @@ UPDATE user_job_context
 SET user_id=(SELECT target_principal FROM d1_params)
 WHERE lower(user_id) IN (SELECT alias FROM d1_aliases);
 
+-- Merge rule, enforced by the onboarding pre-state gate above:
+--   completed_at = earliest completed_at across the five approved completed rows;
+--   updated_at   = latest updated_at across the same five rows.
+-- Both aggregates are filtered to completed rows with a non-null completed_at so
+-- the merge can never silently derive a value from an unexpected row state.
 UPDATE rico_onboarding_states
 SET status='completed',
     completed_at=(SELECT min(completed_at) FROM rico_onboarding_states
-                  WHERE lower(user_id) IN (SELECT alias FROM d1_aliases)),
+                  WHERE lower(user_id) IN (SELECT alias FROM d1_aliases)
+                    AND status='completed' AND completed_at IS NOT NULL),
     updated_at=(SELECT max(updated_at) FROM rico_onboarding_states
-                WHERE lower(user_id) IN (SELECT alias FROM d1_aliases))
+                WHERE lower(user_id) IN (SELECT alias FROM d1_aliases)
+                  AND status='completed' AND completed_at IS NOT NULL)
 WHERE lower(user_id)=(SELECT target_principal FROM d1_params);
 
 DELETE FROM rico_onboarding_states
@@ -325,9 +378,13 @@ BEGIN
     WHERE lower(user_id) IN (SELECT alias FROM d1_aliases WHERE alias<>v_principal);
   IF v<>0 THEN RAISE EXCEPTION 'Job-context aliases remain'; END IF;
 
+  SELECT count(*) INTO v FROM rico_onboarding_states WHERE lower(user_id)=v_principal;
+  IF v<>1 THEN RAISE EXCEPTION 'Post onboarding expected exactly one canonical row, got %',v; END IF;
   SELECT count(*) INTO v FROM rico_onboarding_states
-    WHERE lower(user_id)=v_principal AND status='completed';
-  IF v<>1 THEN RAISE EXCEPTION 'Post onboarding expected one completed row'; END IF;
+    WHERE lower(user_id)=v_principal AND status='completed' AND completed_at IS NOT NULL;
+  IF v<>1 THEN
+    RAISE EXCEPTION 'Post onboarding canonical row is not completed with a non-null completed_at';
+  END IF;
   SELECT count(*) INTO v FROM rico_onboarding_states
     WHERE lower(user_id) IN (SELECT alias FROM d1_aliases WHERE alias<>v_principal);
   IF v<>0 THEN RAISE EXCEPTION 'Onboarding aliases remain'; END IF;

@@ -1,9 +1,12 @@
 \set ON_ERROR_STOP on
 
+-- psql ignores any argument to \quit and would exit 0, so every stop below is
+-- raised as a real server-side error instead. With ON_ERROR_STOP that yields a
+-- non-zero psql exit status, which is what an operator or wrapper must see.
 \if :{?target_principal}
 \else
   \echo 'ERROR: target_principal is required and must be supplied privately.'
-  \quit 3
+  DO $$ BEGIN RAISE EXCEPTION 'target_principal is required'; END $$;
 \endif
 
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY;
@@ -53,6 +56,18 @@ metrics AS (
     (SELECT count(*) FROM learning_signals WHERE lower(canonical_user_id) IN (SELECT alias FROM aliases))::bigint AS learning_signals,
     (SELECT count(*) FROM user_job_context WHERE lower(user_id) IN (SELECT alias FROM aliases))::bigint AS job_context,
     (SELECT count(*) FROM rico_onboarding_states WHERE lower(user_id) IN (SELECT alias FROM aliases))::bigint AS onboarding,
+    (SELECT count(*) FROM rico_onboarding_states
+      WHERE lower(user_id) IN (SELECT alias FROM aliases)
+        AND status='completed')::bigint AS onboarding_completed_rows,
+    (SELECT count(*) FROM rico_onboarding_states
+      WHERE lower(user_id) IN (SELECT alias FROM aliases)
+        AND completed_at IS NOT NULL)::bigint AS onboarding_completed_at_non_null_rows,
+    (SELECT count(*) FROM rico_onboarding_states
+      WHERE lower(user_id) IN (SELECT alias FROM aliases)
+        AND status IS DISTINCT FROM 'completed')::bigint AS onboarding_non_completed_rows,
+    (SELECT count(*) FROM rico_onboarding_states
+      WHERE lower(user_id) IN (SELECT alias FROM aliases)
+        AND status='completed' AND completed_at IS NULL)::bigint AS onboarding_completed_at_null_rows,
     (SELECT count(*) FROM rico_agent_settings WHERE user_id IN (SELECT id FROM target))::bigint AS agent_settings,
     (SELECT count(*) FROM rico_agent_settings WHERE user_id IN (SELECT id FROM target WHERE class='canonical'))::bigint AS canonical_agent_settings,
     (SELECT count(DISTINCT profile->'skills') FROM rico_profiles
@@ -120,6 +135,10 @@ result AS (
       AND learning_signals=24
       AND job_context=13
       AND onboarding=5
+      AND onboarding_completed_rows=5
+      AND onboarding_completed_at_non_null_rows=5
+      AND onboarding_non_completed_rows=0
+      AND onboarding_completed_at_null_rows=0
       AND agent_settings=1
       AND canonical_agent_settings=1
       AND skills_distinct=1
@@ -140,6 +159,10 @@ result AS (
       'learning_signals',learning_signals,
       'job_context',job_context,
       'onboarding',onboarding,
+      'onboarding_completed_rows',onboarding_completed_rows,
+      'onboarding_completed_at_non_null_rows',onboarding_completed_at_non_null_rows,
+      'onboarding_non_completed_rows',onboarding_non_completed_rows,
+      'onboarding_completed_at_null_rows',onboarding_completed_at_null_rows,
       'agent_settings',agent_settings,
       'canonical_agent_settings',canonical_agent_settings,
       'skills_distinct',skills_distinct,
@@ -159,7 +182,7 @@ SELECT preflight_ok,preflight_result FROM result
   \echo 'ERROR: D1 preflight failed; transaction will roll back.'
   SELECT :'d1_preflight_result'::jsonb AS d1_preflight_failure;
   ROLLBACK;
-  \quit 4
+  DO $$ BEGIN RAISE EXCEPTION 'D1 preflight failed'; END $$;
 \endif
 
 ROLLBACK;

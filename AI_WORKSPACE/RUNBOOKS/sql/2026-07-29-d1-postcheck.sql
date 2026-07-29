@@ -1,9 +1,12 @@
 \set ON_ERROR_STOP on
 
+-- psql ignores any argument to \quit and would exit 0, so every stop below is
+-- raised as a real server-side error instead. With ON_ERROR_STOP that yields a
+-- non-zero psql exit status, which is what an operator or wrapper must see.
 \if :{?target_principal}
 \else
   \echo 'ERROR: target_principal is required and must be supplied privately.'
-  \quit 3
+  DO $$ BEGIN RAISE EXCEPTION 'target_principal is required'; END $$;
 \endif
 
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY;
@@ -20,6 +23,16 @@ canonical AS (
   CROSS JOIN params p
   WHERE lower(u.external_user_id)=p.target_principal
     AND lower(u.email)=p.target_principal
+),
+-- Aliases that remain establishable from the surviving canonical row alone.
+-- The four retired owner rows are deleted by the apply step, so their
+-- identifiers cannot be re-derived here; the canonical UUID alias can be, and
+-- any onboarding row still keyed on it would be a leftover.
+canonical_aliases AS (
+  SELECT DISTINCT lower(v) AS alias
+  FROM canonical c
+  CROSS JOIN LATERAL unnest(ARRAY[c.id::text,c.external_user_id,c.email]) v
+  WHERE v IS NOT NULL AND btrim(v)<>''
 ),
 schema_metrics AS (
   SELECT count(*)::bigint AS schema_count,
@@ -48,6 +61,15 @@ metrics AS (
     (SELECT count(*) FROM rico_onboarding_states
       WHERE lower(user_id)=(SELECT target_principal FROM params)
         AND status='completed')::bigint AS onboarding,
+    (SELECT count(*) FROM rico_onboarding_states
+      WHERE lower(user_id)=(SELECT target_principal FROM params))::bigint AS onboarding_canonical_rows,
+    (SELECT count(*) FROM rico_onboarding_states
+      WHERE lower(user_id)=(SELECT target_principal FROM params)
+        AND status='completed'
+        AND completed_at IS NOT NULL)::bigint AS onboarding_completed_at_non_null_rows,
+    (SELECT count(*) FROM rico_onboarding_states
+      WHERE lower(user_id) IN (SELECT alias FROM canonical_aliases)
+        AND lower(user_id)<>(SELECT target_principal FROM params))::bigint AS onboarding_retired_alias_rows,
     (SELECT count(*) FROM rico_agent_settings
       WHERE user_id IN (SELECT id FROM canonical))::bigint AS agent_settings,
     (SELECT count(*) FROM rico_profiles
@@ -74,6 +96,9 @@ result AS (
       AND learning_signals=24
       AND job_context=13
       AND onboarding=1
+      AND onboarding_canonical_rows=1
+      AND onboarding_completed_at_non_null_rows=1
+      AND onboarding_retired_alias_rows=0
       AND agent_settings=1
       AND stale_cv_claims=0
       AND career_complete_profiles=1
@@ -88,6 +113,9 @@ result AS (
       'learning_signals',learning_signals,
       'job_context',job_context,
       'onboarding',onboarding,
+      'onboarding_canonical_rows',onboarding_canonical_rows,
+      'onboarding_completed_at_non_null_rows',onboarding_completed_at_non_null_rows,
+      'onboarding_retired_alias_rows',onboarding_retired_alias_rows,
       'agent_settings',agent_settings,
       'stale_cv_claims',stale_cv_claims,
       'career_complete_profiles',career_complete_profiles
@@ -103,7 +131,7 @@ SELECT postcheck_ok,postcheck_result FROM result
   \echo 'ERROR: D1 postcheck failed; evaluate rollback immediately.'
   SELECT :'d1_postcheck_result'::jsonb AS d1_postcheck_failure;
   ROLLBACK;
-  \quit 5
+  DO $$ BEGIN RAISE EXCEPTION 'D1 postcheck failed'; END $$;
 \endif
 
 ROLLBACK;

@@ -48,7 +48,7 @@ The secure mapping and current-production rehearsal both reproduced one and only
 - chat messages: **1,463**;
 - text-keyed learning signals: **24**;
 - job-context rows: **13**;
-- completed onboarding rows: **5**;
+- onboarding rows: **5**, all of them completed — see the onboarding-state gate below;
 - agent-settings rows: **1**, already attached to the canonical owner;
 - every other enumerated ownership-bearing domain: **0** for this cluster.
 
@@ -61,6 +61,42 @@ At package preparation, the public schema contained **39** columns named `user_i
 Both scripts recompute that inventory inside their transaction and abort when either the count or fingerprint differs. This prevents the package from silently ignoring a newly introduced ownership-bearing table or relying on a removed/changed ownership column.
 
 A drift failure requires a new repository/database assessment, package revision, exact-head CI, independent review, and owner approval. Do not update the fingerprint during the maintenance window merely to make the script pass.
+
+## Onboarding-state gate
+
+Onboarding row **count alone is not an approved pre-state**. The apply step forces the surviving canonical row to `completed` and deletes the retired-alias rows, so an unexpected state that reached the mutation would be silently overwritten rather than reported.
+
+### Required pre-state invariants
+
+All five must hold before export, before mutation, and inside the apply transaction:
+
+- onboarding rows: **5**;
+- rows with `status='completed'`: **5**;
+- rows with `completed_at IS NOT NULL`: **5**;
+- rows whose status is anything other than `completed`: **0**;
+- rows with `status='completed'` and `completed_at IS NULL`: **0**.
+
+Exactly one of the five rows must already be keyed on the canonical authenticated principal.
+
+### Required post-state invariants
+
+- canonical onboarding rows: **1**;
+- that row's `status`: `completed`;
+- that row's `completed_at`: **not null**;
+- onboarding rows on retired aliases: **0**.
+
+### Hard stop
+
+A `status` or `completed_at` mismatch is a **hard stop**, not a condition to coerce. The preflight, backup export, and apply scripts each abort on it independently, and the postcheck refuses a canonical row that is not completed with a non-null `completed_at`.
+
+Do not relax these values during a maintenance window to make a script pass. A mismatch means the target changed after the package was approved and requires a fresh assessment, package revision, exact-head CI, independent review, and new owner approval.
+
+### Merge rule for the surviving row
+
+- `completed_at` = the **earliest** `completed_at` across the five approved completed rows;
+- `updated_at` = the **latest** `updated_at` across the same five rows.
+
+Both aggregates are filtered to rows with `status='completed'` and a non-null `completed_at`, so the merged value can never be derived from an unexpected row.
 
 ## Canonical ownership rule
 
@@ -108,7 +144,7 @@ The committed transaction will:
 3. reassign all 1,463 chat messages to the canonical UUID;
 4. normalize all 24 text-keyed learning signals to the canonical authenticated principal;
 5. normalize all 13 job-context rows to the canonical authenticated principal;
-6. collapse five completed onboarding rows into one canonical completed row;
+6. collapse the five approved completed onboarding rows into one canonical completed row, preserving the earliest `completed_at`;
 7. preserve the existing canonical agent-settings row;
 8. delete the four duplicate profiles and four duplicate owner rows;
 9. run exact postconditions before commit.
@@ -187,7 +223,7 @@ Only after Gate C passes:
 - chat messages on canonical UUID: **1,463**;
 - learning signals on canonical principal: **24**;
 - job-context rows on canonical principal: **13**;
-- completed onboarding rows on canonical principal: **1**;
+- canonical onboarding rows: **1**, `status='completed'`, `completed_at` not null;
 - canonical agent-settings rows: **1**;
 - stale CV claims: **0**;
 - rows on retired aliases in affected domains: **0**;
@@ -236,7 +272,33 @@ After rollback:
 
 ## Rehearsal evidence
 
-The package was tested on two disposable Neon branches created from the current production parent:
+The package was tested on disposable Neon branches created from the current production parent. Every rehearsal branch reproduced the committed ownership-schema fingerprint (39 columns, `aa3df650…`) before any other assertion was trusted.
+
+### Required negative-guard rehearsal
+
+A rehearsal is not complete until the onboarding gate has been shown to **fail**, not only to pass. Both cases must be run on a disposable branch, each followed by a restore:
+
+1. flip one of the five onboarding rows to `in_progress`;
+2. set `completed_at` to NULL on one row that remains `status='completed'`.
+
+In both cases the preflight must exit non-zero, and the backup export and apply must refuse to run. Case 2 exists because a `completed`-only check still passes it — the `completed_at` invariant is what catches it.
+
+Recorded results:
+
+| Case | Observed onboarding aggregates | Preflight | Backup export | Apply |
+| --- | --- | --- | --- | --- |
+| Approved pre-state | rows 5, completed 5, non-null `completed_at` 5 | exit 0 | exit 0 | dry run exit 0 |
+| One `in_progress` row | completed 4, non-completed 1 | exit 3 | exit 3 | exit 3 |
+| One `completed` row with NULL `completed_at` | completed 5, non-null `completed_at` 4, completed-with-null 1 | exit 3 | not reached | not reached |
+| Missing `target_principal` | n/a | exit 3 | n/a | n/a |
+
+After each restore the row-level onboarding fingerprint returned to its baseline value and the preflight passed again.
+
+### Exit-status contract
+
+Every gate must be observable by exit status, not only by printed text. `\quit` ignores any argument in psql and would exit **0**, so each stop is raised as a server-side error and, with `ON_ERROR_STOP`, surfaces as a non-zero psql exit.
+
+Never chain these scripts on printed output alone. `psql -f preflight.sql && psql -f apply.sql -v commit=true` is only safe because the preflight now exits non-zero on failure.
 
 ### Apply rehearsal
 
@@ -247,8 +309,11 @@ Validated post-state:
 - 1,463 chat messages preserved;
 - 24 learning signals preserved;
 - 13 job-context rows preserved;
-- one completed onboarding state;
+- one canonical onboarding row, `status='completed'`, `completed_at` not null;
+- zero onboarding rows on establishable retired aliases;
 - zero stale CV claims.
+
+The postcheck was run immediately after the committed rehearsal and passed.
 
 ### Targeted rollback rehearsal
 
@@ -256,11 +321,13 @@ The original state was restored from private rehearsal backup tables:
 
 - five owners restored;
 - five profiles restored;
-- five onboarding rows restored;
+- five onboarding rows restored, all completed with non-null `completed_at`;
 - one agent-settings row restored;
 - chat ownership differences: zero;
 - learning ownership differences: zero;
 - job-context ownership differences: zero.
+
+Restoration was verified by comparing per-domain content fingerprints taken before the apply and after the rollback across owners, profiles, chat ownership, learning ownership, job context, onboarding, and agent settings. All seven matched exactly, and the preflight passed again on the restored state.
 
 The disposable rehearsal branches are not production backups and must not be used during the real maintenance window.
 
