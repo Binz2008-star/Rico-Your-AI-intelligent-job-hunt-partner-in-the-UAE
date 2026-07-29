@@ -63,7 +63,7 @@ def build_similar_name_pair(run_id: str) -> CollisionPair:
 
 def build_same_target_role_pair(run_id: str) -> CollisionPair:
     """Two users targeting the same career persona/role for search-isolation tests."""
-    personas = build_personas(run_id, count=len(build_personas(run_id)))
+    personas = build_personas(run_id)
     same_career = [p for p in personas if p.career == personas[0].career]
     user_a, user_b = same_career[0], same_career[1]
     cv_a = build_cv_fixture(user_a, "single")
