@@ -32,12 +32,30 @@ Isolation invariants asserted (Journey E in the reliability program), all P0:
     ownership, and each row is owned by its own uploader
   * two users may hold the identical filename with different content
   * neither user's listing ever contains the other's document
-  * filename lookup cannot cross users
   * each user may independently hold their own primary CV
   * A cannot delete B's document by id, and the failed attempt leaves B intact
   * A cannot promote B's document to primary
   * two users writing byte-identical content concurrently (real threads, real
     connections) both succeed, with no ownership crossover
+
+Positive control — these assertions are not vacuous, and the two ways of
+breaking the per-user index fail differently. Both were run against a
+disposable Postgres 16:
+
+  * baseline, unmodified                          -> 9 passed
+  * per-user index REPLACED by (doc_type, content_hash)
+        -> 9 failed, `InvalidColumnReference: there is no unique or exclusion
+           constraint matching the ON CONFLICT specification`. A UniqueViolation
+           is impossible here: with the per-user index gone, the writer's
+           ON CONFLICT (user_id, doc_type, content_hash) target can no longer
+           be inferred, so the statement fails before any row is compared.
+  * global index ADDED ALONGSIDE the per-user one
+        -> 5 failed / 4 passed, `UniqueViolation` on
+           `Key (doc_type, content_hash)`. The survivors are exactly the tests
+           that do not depend on cross-user hash uniqueness.
+
+Recording both matters: an earlier revision of this file described the second
+result as belonging to the first experiment. It does not.
 
 Requires a real Postgres reachable via RICO_TEST_DATABASE_URL (NOT the shared
 DATABASE_URL — kept separate so the fake-DB unit-test job never runs these).
@@ -162,9 +180,11 @@ class TestIdenticalContentDoesNotMergeOwnership:
         result_a = _store(db, pair.cv_a)
         result_b = _store(db, pair.cv_b)
 
-        # Both are genuine inserts. If the hash index were global rather than
-        # per-user, B would come back as a duplicate of A's row — silently
-        # handing B a document A uploaded.
+        # Both are genuine inserts. If the hash index were not user-scoped,
+        # B's write does NOT quietly resolve to A's row — it fails outright:
+        # UniqueViolation when a global index sits alongside the per-user one,
+        # InvalidColumnReference when it replaces it. The isolation failure
+        # surfaces as a refused write, not as a silent handover.
         assert result_a["inserted"] is True
         assert result_b["inserted"] is True
         assert result_a["id"] != result_b["id"]
@@ -216,16 +236,12 @@ class TestIdenticalFilenameDoesNotCrossUsers:
         assert _owner_of(db, result_a["id"]) == pair.user_a.user_id
         assert _owner_of(db, result_b["id"]) == pair.user_b.user_id
 
-    def test_filename_lookup_is_user_scoped(self, db: RicoDB):
-        pair = build_same_filename_pair(RUN_ID)
-        _store(db, pair.cv_a)
-        result_b = _store(db, pair.cv_b)
-
-        # A's listing resolves the shared filename to A's row only.
-        matches_a = [r for r in _rows_for(db, pair.user_a.user_id) if r["filename"] == pair.cv_a.filename]
-        assert len(matches_a) == 1
-        assert matches_a[0]["id"] != result_b["id"]
-        assert matches_a[0]["user_id"] == pair.user_a.user_id
+    # NOTE: there is deliberately no "filename lookup is user-scoped" test here.
+    # `rico_db.py` exposes no lookup-by-filename path — a test that filtered
+    # `list_user_documents()` output in Python would assert nothing the listing
+    # test above does not already cover, while reading as though a real lookup
+    # had been exercised. If a by-filename resolver is ever added, that is the
+    # point to test it.
 
 
 class TestPrimaryDocumentIsPerUser:
@@ -280,12 +296,18 @@ class TestDeletionIsolation:
 
 class TestConcurrentIdenticalUploadsAcrossUsers:
     def test_two_users_writing_identical_bytes_concurrently_do_not_cross(self, db: RicoDB):
-        """Real threads, real connections — the serialization path is per-user.
+        """Real threads, real connections: contention does not cross ownership.
 
-        `get_or_create_user_document` takes an advisory lock keyed on the
-        content. If that key omitted the user, these two writers would
-        serialize against *each other* and the loser could match the winner's
-        row — handing one user the other's document.
+        Two users commit byte-identical content at the same moment and each
+        ends up owning exactly their own row.
+
+        What this does NOT prove, stated so nobody reads more into it: it does
+        not establish that the advisory-lock key in
+        `get_or_create_user_document` is user-scoped. Dropping `user_id` from
+        that key leaves every assertion here passing, because the pre-check
+        SELECT and the unique index are *already* user-scoped — a shared lock
+        key would cost throughput, not correctness. This test covers the
+        correctness half only.
         """
         pair = build_same_cv_hash_pair(RUN_ID)
         results: Dict[str, Dict[str, Any]] = {}
