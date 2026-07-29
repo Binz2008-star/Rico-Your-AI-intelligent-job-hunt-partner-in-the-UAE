@@ -17,6 +17,26 @@ SET LOCAL statement_timeout = '30s';
 SET LOCAL lock_timeout = '2s';
 SELECT pg_advisory_xact_lock(hashtextextended('rico:d1-single-cluster-consolidation:v1',0));
 
+DO $$
+DECLARE
+  v_schema_count int;
+  v_schema_hash text;
+BEGIN
+  SELECT count(*),
+         md5(string_agg(
+           table_name||'.'||column_name||':'||data_type,
+           ',' ORDER BY table_name,column_name))
+    INTO v_schema_count,v_schema_hash
+  FROM information_schema.columns
+  WHERE table_schema='public'
+    AND column_name IN ('user_id','canonical_user_id','external_user_id');
+
+  IF v_schema_count<>39 OR v_schema_hash<>'aa3df6507f6909ab9bbf33e31082ee36' THEN
+    RAISE EXCEPTION 'Ownership schema drift: columns %, hash %',
+      v_schema_count,v_schema_hash;
+  END IF;
+END $$;
+
 CREATE TEMP TABLE d1_params (target_principal text NOT NULL PRIMARY KEY) ON COMMIT DROP;
 INSERT INTO d1_params VALUES (lower(:'target_principal'));
 
