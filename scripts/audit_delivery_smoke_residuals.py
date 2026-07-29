@@ -100,11 +100,22 @@ TABLES: list[tuple[str, str, str, tuple[str, ...]]] = [
     ("user_documents", "user_id", "email_direct", ("created_at",)),
     # rico_users carries the namespace on its own columns.
     ("rico_users", "email", "rico_self", ("created_at",)),
+    # A search that surfaces matches writes both of these. Neither is deleted by
+    # scripts/delivery_smoke.py, and user_job_context has no parent to cascade
+    # from, so it is the journey's most likely residual.
+    ("user_job_context", "user_id", "email_direct", ("searched_at",)),
+    # chat_operations is keyed on the CANONICAL EMAIL, not on an opaque row id:
+    # rico_chat.py builds the session context with RicoSessionContext
+    # .for_authenticated(user["email"]) and that value reaches
+    # chat_operations.user_id uninterpreted. Modelling it as an id-keyed child
+    # would resolve through users/rico_users, match nothing, and report a clean
+    # zero for the one table whose cleanup in delivery_smoke.py provably misses
+    # (it deletes WHERE user_id IN (users.id ∪ rico_uid) — never the email).
+    ("chat_operations", "user_id", "email_direct", ("created_at",)),
     # Children of rico_users, keyed by its UUID.
     ("rico_profiles", "user_id", "uuid_child", ("created_at",)),
     ("rico_chat_history", "user_id", "uuid_child", ("created_at",)),
-    # Keyed on an opaque parent id (users.id or rico_users.id) as TEXT.
-    ("chat_operations", "user_id", "text_id_child", ("created_at",)),
+    ("rico_job_recommendations", "user_id", "uuid_child", ("created_at", "updated_at")),
 ]
 
 #: Child tables whose zero is only provable when this FK, with ON DELETE
@@ -112,6 +123,7 @@ TABLES: list[tuple[str, str, str, tuple[str, ...]]] = [
 _CASCADE_PARENT = {
     ("rico_profiles", "user_id"): "rico_users",
     ("rico_chat_history", "user_id"): "rico_users",
+    ("rico_job_recommendations", "user_id"): "rico_users",
 }
 
 
@@ -149,6 +161,7 @@ def zero_is_provable(cur, table: str, key_col: str, mode: str) -> bool:
         cur.execute(
             "SELECT c.confdeltype FROM pg_constraint c "
             "JOIN pg_class child ON child.oid = c.conrelid "
+            "JOIN pg_namespace n ON n.oid = child.relnamespace AND n.nspname = 'public' "
             "JOIN pg_class parent ON parent.oid = c.confrelid "
             "JOIN pg_attribute a ON a.attrelid = child.oid AND a.attnum = ANY(c.conkey) "
             "WHERE c.contype = 'f' AND child.relname = %s "

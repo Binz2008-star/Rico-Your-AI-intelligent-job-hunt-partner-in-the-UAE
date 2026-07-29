@@ -93,10 +93,22 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
     user_email TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- user_id holds the canonical email, exactly as production does.
 CREATE TABLE IF NOT EXISTS chat_operations (
     operation_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- No parent to cascade from: the journey's most likely residual.
+CREATE TABLE IF NOT EXISTS user_job_context (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    searched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS rico_job_recommendations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES rico_users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 """
 
@@ -160,6 +172,14 @@ def seeded(audit, iso_url):
         cur.execute("INSERT INTO learning_signals (canonical_user_id) VALUES (%s)", (ORPHAN_EMAIL,))
         cur.execute("INSERT INTO user_documents (user_id) VALUES (%s)", (ORPHAN_EMAIL,))
         cur.execute("INSERT INTO email_verification_tokens (user_email) VALUES (%s)", (ORPHAN_EMAIL,))
+        # Both keyed on the canonical email in production, and both left behind
+        # by the smoke's cleanup — chat_operations because that cleanup matches
+        # on row ids, user_job_context because nothing deletes it at all.
+        cur.execute(
+            "INSERT INTO chat_operations (operation_id, user_id) VALUES (%s, %s)",
+            (f"op-{_RUN}", ORPHAN_EMAIL),
+        )
+        cur.execute("INSERT INTO user_job_context (user_id) VALUES (%s)", (ORPHAN_EMAIL,))
         # Now delete the parent, exactly as delivery_smoke.py does.
         cur.execute("DELETE FROM users WHERE email = %s", (ORPHAN_EMAIL,))
 
@@ -172,10 +192,7 @@ def seeded(audit, iso_url):
         rico_id = cur.fetchone()[0]
         cur.execute("INSERT INTO rico_profiles (user_id) VALUES (%s)", (rico_id,))
         cur.execute("INSERT INTO rico_chat_history (user_id) VALUES (%s)", (rico_id,))
-        cur.execute(
-            "INSERT INTO chat_operations (operation_id, user_id) VALUES (%s, %s)",
-            (f"op-{_RUN}", str(rico_id)),
-        )
+        cur.execute("INSERT INTO rico_job_recommendations (user_id) VALUES (%s)", (rico_id,))
 
         # A real user with rows that must never be counted.
         cur.execute("INSERT INTO users (email) VALUES (%s)", (REAL_EMAIL,))
@@ -198,7 +215,8 @@ def test_parent_user_row_is_really_gone(seeded):
 
 @pytest.mark.parametrize(
     "table",
-    ["rico_onboarding_states", "learning_signals", "user_documents", "email_verification_tokens"],
+    ["rico_onboarding_states", "learning_signals", "user_documents",
+     "email_verification_tokens", "chat_operations", "user_job_context"],
 )
 def test_email_keyed_orphans_are_reported_after_the_parent_is_deleted(seeded, table):
     """The regression: these must NOT be invisible just because users is empty."""
@@ -216,6 +234,8 @@ def test_email_keyed_orphans_are_reported_after_the_parent_is_deleted(seeded, ta
         ("learning_signals", "canonical_user_id"),
         ("user_documents", "user_id"),
         ("email_verification_tokens", "user_email"),
+        ("chat_operations", "user_id"),
+        ("user_job_context", "user_id"),
     ],
 )
 def test_count_is_exactly_the_namespace_and_nothing_else(seeded, audit, iso_url, table, key_col):
@@ -257,7 +277,7 @@ def test_count_is_exactly_the_namespace_and_nothing_else(seeded, audit, iso_url,
 def test_child_tables_resolve_through_the_surviving_rico_identity(seeded):
     assert seeded["rico_profiles"]["synthetic_row_count"] >= 1
     assert seeded["rico_chat_history"]["synthetic_row_count"] >= 1
-    assert seeded["chat_operations"]["synthetic_row_count"] >= 1
+    assert seeded["rico_job_recommendations"]["synthetic_row_count"] >= 1
 
 
 def test_email_keyed_predicates_never_depend_on_the_users_table(audit):

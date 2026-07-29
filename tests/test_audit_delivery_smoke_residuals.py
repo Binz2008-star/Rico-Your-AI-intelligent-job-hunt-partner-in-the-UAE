@@ -25,12 +25,18 @@ _WRITE_VERBS = (
 
 @pytest.fixture(scope="module")
 def module():
+    # Restored afterwards: the confirmation gate is a global, and leaving it set
+    # would arm any later import of the audit in the same session.
+    previous = os.environ.get("AUDIT_CONFIRM")
     os.environ["AUDIT_CONFIRM"] = "AUDIT-DELIVERY-RESIDUALS"
-    os.environ.setdefault("DATABASE_URL", "postgresql://unused/unused")
     spec = importlib.util.spec_from_file_location("audit_mod", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod
+    yield mod
+    if previous is None:
+        os.environ.pop("AUDIT_CONFIRM", None)
+    else:
+        os.environ["AUDIT_CONFIRM"] = previous
 
 
 @pytest.fixture(scope="module")
@@ -57,20 +63,60 @@ def test_session_is_opened_read_only(source: str):
 
 
 def test_no_write_statement_anywhere_in_the_sql(source: str):
-    """Every SQL string in the file must be a SELECT or a session directive."""
-    # Collect what is actually handed to cur.execute(...).
-    executed = re.findall(r"cur\.execute\(\s*(?:f?\")([^\"]+)\"", source)
-    executed += re.findall(r"cur\.execute\(\s*(?:f?')([^']+)'", source)
-    assert executed, "no executed SQL found — the extraction regex needs updating"
+    """No string literal in the module may carry a write statement.
+
+    Parsed with ``ast`` rather than a regex: the SQL is built from implicit
+    multi-line concatenation and f-strings, so a regex that grabs the first
+    quoted chunk of each ``execute(...)`` silently skips every continuation
+    fragment — and would miss a write hiding in one.
+    """
+    import ast
+
+    def _flatten(node) -> str | None:
+        """Recover the literal text of an execute() argument.
+
+        Python merges adjacent string literals at parse time, so the multi-line
+        implicit concatenations arrive as a single Constant. f-strings arrive as
+        JoinedStr; only their constant parts are SQL text (the interpolated
+        parts are module-constant identifiers, asserted separately).
+        """
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.JoinedStr):
+            return "".join(
+                v.value for v in node.values
+                if isinstance(v, ast.Constant) and isinstance(v.value, str)
+            )
+        return None
+
+    executed = [
+        text
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in ("execute", "executemany", "copy_expert")
+        and node.args
+        for text in [_flatten(node.args[0])]
+        if text is not None
+    ]
+    assert len(executed) >= 4, f"expected every execute() site to be literal SQL, found {len(executed)}"
     for stmt in executed:
-        lowered = stmt.strip().lower()
-        if lowered.startswith("set transaction"):
-            continue
-        assert lowered.startswith("select"), f"non-SELECT statement executed: {stmt!r}"
+        lowered = stmt.lower()
         for verb in _WRITE_VERBS:
             assert not re.search(rf"\b{re.escape(verb.strip())}\b", lowered), (
                 f"write verb {verb!r} appears in executed SQL: {stmt!r}"
             )
+
+
+def test_only_read_only_statements_are_executed(source: str):
+    """Every execute() call site must issue a SELECT or a session directive."""
+    executed = re.findall(r"cur\.execute\(\s*\n?\s*(?:f?[\"'])([^\"']+)", source)
+    assert executed, "no executed SQL found — the extraction regex needs updating"
+    for stmt in executed:
+        lowered = stmt.strip().lower()
+        assert lowered.startswith(("select", "set transaction")), (
+            f"non-read statement executed: {stmt!r}"
+        )
 
 
 def test_sql_fragments_contain_no_write_verbs(module):
@@ -126,11 +172,16 @@ def test_every_audited_table_uses_a_known_key_mode(module):
         assert re.fullmatch(r"[a-z_][a-z0-9_]*", key_col), key_col
 
 
-def test_covers_the_tables_the_delivery_journey_writes(module):
-    """Regression guard: these were traced from the Delivery journey in code.
+def test_covers_the_tables_reachable_from_the_authenticated_surface(module):
+    """Regression guard on audit coverage.
 
-    `rico_onboarding_states` in particular has no foreign key to `users`, so it
-    is not swept by deleting the user and has to be audited explicitly.
+    Most of these are written by the Delivery journey itself; `user_documents`
+    and `learning_signals` are not (the smoke uploads no CV and sends no
+    feedback) but stay audited because they are reachable from the same
+    authenticated identity and cost nothing to count.
+
+    `rico_onboarding_states` and `user_job_context` matter most: neither has a
+    foreign key to `users`, so deleting the user does not sweep them.
     """
     audited = {t[0] for t in module.TABLES}
     for required in (
@@ -143,8 +194,23 @@ def test_covers_the_tables_the_delivery_journey_writes(module):
         "learning_signals",
         "user_documents",
         "rico_onboarding_states",
+        "user_job_context",
+        "rico_job_recommendations",
     ):
-        assert required in audited, f"{required} is written by the journey but not audited"
+        assert required in audited, f"{required} is reachable but not audited"
+
+
+def test_chat_operations_is_keyed_on_the_canonical_email(module):
+    """chat_operations.user_id stores the email, not an opaque row id.
+
+    RicoSessionContext.for_authenticated(user["email"]) flows unchanged into
+    the operation row. Auditing it as an id-keyed child would resolve through
+    users/rico_users, match nothing, and report a clean zero for the one table
+    delivery_smoke.py's own cleanup provably fails to clear.
+    """
+    modes = {t[0]: t[2] for t in module.TABLES}
+    assert modes["chat_operations"] == "email_direct"
+    assert modes["user_job_context"] == "email_direct"
 
 
 def test_audit_takes_no_sql_bearing_input_from_the_environment(source: str):
