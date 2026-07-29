@@ -112,12 +112,45 @@ def audit():
 
 
 @pytest.fixture(scope="module")
-def seeded(audit):
+def iso_url():
+    """A private database on the same server.
+
+    The audit resolves tables in ``public``, and this file needs minimal table
+    shapes it fully controls. The shared CI database already holds the real
+    migrated schemas from the other integration tests — `user_documents` there
+    carries ``filename NOT NULL``, so a ``CREATE TABLE IF NOT EXISTS`` here is a
+    no-op and the seed INSERTs fail. Owning a whole database removes the
+    coupling in both directions: this test cannot be broken by another file's
+    schema, and cannot leave rows where another file would count them.
+    """
+    import urllib.parse as _url
+
+    name = f"rico_audit_test_{_RUN}"
+    admin = psycopg2.connect(TEST_DATABASE_URL)
+    admin.autocommit = True  # CREATE DATABASE cannot run inside a transaction
+    with admin.cursor() as cur:
+        cur.execute(f'CREATE DATABASE "{name}"')
+    admin.close()
+
+    parts = _url.urlsplit(TEST_DATABASE_URL)
+    yield _url.urlunsplit((parts.scheme, parts.netloc, f"/{name}", parts.query, parts.fragment))
+
+    admin = psycopg2.connect(TEST_DATABASE_URL)
+    admin.autocommit = True
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s", (name,)
+        )
+        cur.execute(f'DROP DATABASE IF EXISTS "{name}"')
+    admin.close()
+
+
+@pytest.fixture(scope="module")
+def seeded(audit, iso_url):
     """Reproduce the post-cleanup state: parent deleted, orphans surviving."""
-    conn = psycopg2.connect(TEST_DATABASE_URL)
+    conn = psycopg2.connect(iso_url)
     conn.autocommit = True
     with conn.cursor() as cur:
-        cur.execute('CREATE EXTENSION IF NOT EXISTS "pgcrypto"')
         cur.execute(_SCHEMA)
 
         # A synthetic account that Delivery cleanup fully removed.
@@ -150,7 +183,7 @@ def seeded(audit):
         cur.execute("INSERT INTO learning_signals (canonical_user_id) VALUES (%s)", (REAL_EMAIL,))
     conn.close()
 
-    ro = psycopg2.connect(TEST_DATABASE_URL)
+    ro = psycopg2.connect(iso_url)
     ro.set_session(readonly=True, autocommit=False)
     rows = {r["table"]: r for r in audit.run_audit(ro)}
     ro.close()
@@ -185,13 +218,13 @@ def test_email_keyed_orphans_are_reported_after_the_parent_is_deleted(seeded, ta
         ("email_verification_tokens", "user_email"),
     ],
 )
-def test_count_is_exactly_the_namespace_and_nothing_else(seeded, audit, table, key_col):
+def test_count_is_exactly_the_namespace_and_nothing_else(seeded, audit, iso_url, table, key_col):
     """The filter must cover the whole synthetic namespace and no real address.
 
     Compared against an independently computed count rather than a hardcoded
     number, so the assertion holds even when other tests share the container.
     """
-    conn = psycopg2.connect(TEST_DATABASE_URL)
+    conn = psycopg2.connect(iso_url)
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -239,9 +272,9 @@ def test_email_keyed_predicates_never_depend_on_the_users_table(audit):
         assert "select" not in predicate.lower()
 
 
-def test_zero_is_not_claimed_provable_for_opaque_parent_ids(audit, seeded):
+def test_zero_is_not_claimed_provable_for_opaque_parent_ids(audit, seeded, iso_url):
     """chat_operations keys on a parent id that is unrecoverable once deleted."""
-    conn = psycopg2.connect(TEST_DATABASE_URL)
+    conn = psycopg2.connect(iso_url)
     conn.set_session(readonly=True, autocommit=False)
     try:
         with conn.cursor() as cur:
