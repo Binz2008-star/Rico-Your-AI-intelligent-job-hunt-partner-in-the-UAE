@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -18,7 +19,7 @@ def test_get_ai_client_uses_current_runtime_helpers(
     provider: str,
     primary_model: str,
 ) -> None:
-    """Supported providers resolve without the removed _primary_model_for symbol."""
+    """Supported providers resolve through the current shared-runtime helpers."""
     client = object()
 
     with (
@@ -44,22 +45,23 @@ def test_get_ai_client_uses_current_runtime_helpers(
     build_client.assert_called_once_with(provider)
 
 
-def test_removed_primary_model_symbol_no_longer_causes_silent_degradation() -> None:
-    """The previous missing import must not force the generic fallback path."""
-    import src.rico_openai_runtime as runtime
-
-    assert not hasattr(runtime, "_primary_model_for")
+def test_removed_primary_model_import_no_longer_controls_client_resolution() -> None:
+    """The missing legacy symbol must not appear in the active client function."""
+    source = inspect.getsource(rico_apply_ai._get_ai_client)
+    assert "_primary_model_for" not in source
 
     client = object()
     with (
         patch("src.rico_env.get_ai_provider", return_value="openai"),
-        patch.object(runtime, "_provider_key_present", return_value=True),
-        patch.object(
-            runtime,
-            "_provider_models",
+        patch(
+            "src.rico_openai_runtime._provider_key_present",
+            return_value=True,
+        ),
+        patch(
+            "src.rico_openai_runtime._provider_models",
             return_value=("gpt-test", "gpt-fallback"),
         ),
-        patch.object(runtime, "_build_client", return_value=client),
+        patch("src.rico_openai_runtime._build_client", return_value=client),
     ):
         resolved = rico_apply_ai._get_ai_client()
 
