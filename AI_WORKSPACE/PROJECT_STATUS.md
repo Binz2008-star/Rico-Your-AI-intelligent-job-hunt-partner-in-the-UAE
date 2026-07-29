@@ -35,7 +35,7 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 | `#1436` | **MERGED** as `a292f99bf4a6a80745f4b5e29151684f37530cfc`; final D1 operating package, no production execution authorization |
 | `#1437` | **MERGED** as `3e18737079d21da8db63f581b7d1d99c87cc1904`; synthetic persona/CV-fixture factory and required QA enrollment |
 | `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
-| Open PRs | **0** |
+| Open implementation PRs | **0** |
 
 ## Production verification boundary
 
