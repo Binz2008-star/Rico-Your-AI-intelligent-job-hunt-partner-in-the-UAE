@@ -5,7 +5,7 @@
 > **Proposed** (not yet built), or **Template**. When you add, rename, retire, or
 > supersede a workspace file, update this index in the same PR.
 >
-> **Last reviewed:** 2026-07-11. "Updated" = last commit date of the file.
+> **Last reviewed:** 2026-07-29. "Updated" = last commit date of the file.
 
 ## Start order (fastest path in)
 
@@ -19,7 +19,7 @@
 | Document | Purpose | Status | Owner | Depends on | Updated |
 | --- | --- | --- | --- | --- | --- |
 | `PROJECT_STATUS.md` | One-page dashboard; read first | Active | Release/last-merger | ROADMAP, CURRENT_STATE | 2026-07-11 |
-| `MASTER_INDEX.md` | This index | Active | Whoever adds/retires a doc | all workspace docs | 2026-07-11 |
+| `MASTER_INDEX.md` | This index | Active | Whoever adds/retires a doc | all workspace docs | 2026-07-29 |
 | `START_HERE.md` | Session entrypoint + read order | Active | Core | PROJECT_STATUS, MASTER_INDEX, ROADMAP | 2026-07-11 |
 | `ENGINEERING_ROADMAP.md` | Vision→…→releases; phase status (canonical "now") | Active | Owner/Architect | DECISIONS, AUDIT gate | 2026-07-11 |
 | `CURRENT_STATE.md` | Dated state log (newest at top; see reconciliation header) | Active (log) | Release/last-merger | ROADMAP, handoffs | 2026-07-11 |
@@ -31,6 +31,7 @@
 | Document | Purpose | Status | Owner | Depends on | Updated |
 | --- | --- | --- | --- | --- | --- |
 | `OPERATING_RULES.md` | GitHub/Render/Vercel/Neon/test/verify guardrails | Active | Owner/Architect | — (source) | 2026-07-06 |
+| `VERSION_CONTROL_POLICY.md` | Enforceable Git/GitHub branch, PR, review, merge, release and rollback policy | Active | Owner/Release Captain | OPERATING_RULES | 2026-07-29 |
 | `AGENT_OPERATING_MODEL.md` | Owner/architect/Claude/Codex/Lovable/release roles | Active | Owner | — (source) | 2026-07-09 |
 | `PROMPT_CONTRACT.md` | Required task-brief inputs + output format | Active | Owner/Architect | OPERATING_RULES | 2026-07-06 |
 | `PR_CHECKLIST.md` | Checklist to paste into PRs | Active | Core | PR_QUALITY_GATE_RULES | 2026-07-11 |
