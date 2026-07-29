@@ -214,7 +214,7 @@ def _authenticate() -> None:
     )
     _require(status == 200, "/me failed")
     _require(me.get("authenticated") is True, "smoke account is not authenticated")
-    _require(me.get("guest") is False, "smoke account resolved as guest")
+    _require(bool(me.get("guest")) is False, "smoke account resolved as guest")
     _require(me.get("role") == "user", "smoke account role is not user")
 
 
