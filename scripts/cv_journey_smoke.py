@@ -35,7 +35,7 @@ Required environment variables:
 
 Optional environment variables:
     RICO_API_BASE   Defaults to the Render production backend.
-    SMOKE_TIMEOUT   Per-request timeout in seconds; defaults to 90.
+    SMOKE_TIMEOUT   Per-request timeout in seconds; defaults to 45.
 
 Exit code 0 = every check and cleanup passed. Any uncertainty fails closed.
 """
@@ -52,7 +52,12 @@ import urllib.request
 import psycopg2
 
 BACKEND = os.environ.get("RICO_API_BASE", "https://rico-job-automation-api.onrender.com").rstrip("/")
-TIMEOUT = int(os.environ.get("SMOKE_TIMEOUT", "90"))
+# 45s default, 90s for the four slow calls (upload, confirm, two chat turns).
+# Worst case is 14*45 + 4*90 = 990s ~= 16.5 min of requests, against the
+# workflow's 25-minute budget — so the runner cannot cancel the job mid-journey
+# and skip the cleanup in `finally`, which is where the safety guarantee lives.
+TIMEOUT = int(os.environ.get("SMOKE_TIMEOUT", "45"))
+SLOW_TIMEOUT = TIMEOUT * 2
 CONFIRMATION = "SMOKE-CV-JOURNEY"
 
 if os.environ.get("SMOKE_CONFIRM") != CONFIRMATION:
@@ -79,6 +84,26 @@ AR_ANALYSIS_ASK = "حلل سيرتي الذاتية"
 #: an analysis ask fell through to the bare-role gate and became a search.
 JOB_SEARCH_TYPES = frozenset({"job_matches", "job_list", "search_results"})
 JOB_SEARCH_INTENTS = frozenset({"search_jobs", "job_search"})
+
+#: Every table this journey can write that is keyed on the canonical email.
+#: None of them has a foreign key to `users`, so none is swept by deleting the
+#: user — each has to be named explicitly in cleanup AND counted afterwards.
+#:   cv_upload_artifacts      <- POST /rico/upload-cv (carries the parsed CV text)
+#:   user_documents           <- POST /rico/confirm-cv-profile
+#:   rico_onboarding_states   <- confirm-cv-profile -> set_onboarding_status
+#:   learning_signals         <- profile-optimization usage recording
+#:   email_verification_tokens<- registration
+#:   chat_operations          <- only if an analysis ask regressed into a search
+#:   user_job_context         <- only if such a search surfaced matches
+_EMAIL_KEYED_TABLES: tuple[tuple[str, str], ...] = (
+    ("cv_upload_artifacts", "user_id"),
+    ("user_documents", "user_id"),
+    ("rico_onboarding_states", "user_id"),
+    ("learning_signals", "canonical_user_id"),
+    ("email_verification_tokens", "user_email"),
+    ("chat_operations", "user_id"),
+    ("user_job_context", "user_id"),
+)
 
 jar = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
@@ -212,10 +237,15 @@ def assert_not_job_search(label: str, status: int, raw: bytes) -> None:
     rtype = str(payload.get("type") or "")
     intent = str(payload.get("intent") or "")
     routed_to_search = rtype in JOB_SEARCH_TYPES or intent in JOB_SEARCH_INTENTS
-    # `jobs` carrying results is independent proof a search ran, whatever the
-    # reply called itself.
-    jobs = payload.get("jobs")
-    carried_jobs = isinstance(jobs, list) and len(jobs) > 0
+    # Carrying results is independent proof a search ran, whatever the reply
+    # called itself. The field is `matches` — that is what the search paths
+    # populate and what the response model declares; `jobs` appears only on a
+    # few cached-list replies. Checking `jobs` alone was an inert backstop that
+    # printed 0 no matter what happened.
+    results = payload.get("matches")
+    if not isinstance(results, list):
+        results = payload.get("jobs")
+    carried_jobs = isinstance(results, list) and len(results) > 0
     answered = (
         payload.get("success") is not False
         and rtype != "error"
@@ -225,12 +255,31 @@ def assert_not_job_search(label: str, status: int, raw: bytes) -> None:
         f"{label} is answered and does not route to job search",
         status == 200 and answered and not routed_to_search and not carried_jobs,
         f"HTTP {status} type={rtype or '-'} intent={intent or '-'} "
-        f"jobs={len(jobs) if isinstance(jobs, list) else 0} answered={answered}",
+        f"results={len(results) if isinstance(results, list) else 0} answered={answered}",
     )
 
 
+def _finish() -> int:
+    """Print the summary and return the exit code.
+
+    Shared by the normal end of the journey and by the early abort, so an abort
+    still reports everything recorded up to that point instead of exiting mute.
+    """
+    failed = [n for n, ok, _ in results if not ok]
+    print()
+    print(f"RESULT: {len(results) - len(failed)} passed, {len(failed)} failed")
+    print("SMOKE: ALL GREEN" if not failed else f"SMOKE: FAILURES: {failed}")
+    return 0 if not failed else 1
+
+
 def main() -> int:
-    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+    except Exception as exc:
+        # psycopg2 connection errors embed the host and username from the DSN;
+        # print the class only so a failure cannot leak them into CI logs.
+        print(f"Smoke could not connect to the database: {type(exc).__name__}")
+        return 2
     conn.autocommit = True
     rico_uid = None
     doc_id = None
@@ -249,6 +298,11 @@ def main() -> int:
         # ── 2. synthetic identity ─────────────────────────────────────────
         status, _ = call("POST", f"{BACKEND}/api/v1/auth/register", {"email": EMAIL, "password": PASSWORD})
         record("register synthetic user", status in (200, 201), f"HTTP {status}")
+        if status not in (200, 201):
+            # Nothing was created, so stop before the verify/cleanup statements
+            # can touch a row this run did not make. `finally` still runs and
+            # finds nothing to delete.
+            return _finish()
         with conn.cursor() as cur:
             cur.execute("UPDATE users SET email_verified = TRUE WHERE email = %s", (EMAIL,))
             record("verify synthetic user in DB", cur.rowcount == 1, f"rows={cur.rowcount}")
@@ -267,7 +321,7 @@ def main() -> int:
 
         # ── 3. upload the CV through the real parse path ──────────────────
         pdf = build_pdf()
-        status, raw = call_multipart(f"{BACKEND}/api/v1/rico/upload-cv", "file", CV_FILENAME, pdf, timeout=120)
+        status, raw = call_multipart(f"{BACKEND}/api/v1/rico/upload-cv", "file", CV_FILENAME, pdf, timeout=SLOW_TIMEOUT)
         upload = as_json(raw)
         preview = upload.get("preview") or upload.get("profile_preview") or {}
         upload_id = upload.get("upload_id")
@@ -291,7 +345,7 @@ def main() -> int:
             "POST",
             f"{BACKEND}/api/v1/rico/confirm-cv-profile",
             {"preview": preview, "filename": CV_FILENAME, "doc_type": "cv", "upload_id": upload_id},
-            timeout=120,
+            timeout=SLOW_TIMEOUT,
         )
         record("confirm CV into profile", status == 200, f"HTTP {status} cv_status={as_json(raw).get('cv_status') or '-'}")
 
@@ -311,9 +365,9 @@ def main() -> int:
         )
 
         # ── 6. analysis asks must not become job searches (#1426) ─────────
-        status, raw = call("POST", f"{BACKEND}/api/v1/rico/chat", {"message": EN_ANALYSIS_ASK}, timeout=120)
+        status, raw = call("POST", f"{BACKEND}/api/v1/rico/chat", {"message": EN_ANALYSIS_ASK}, timeout=SLOW_TIMEOUT)
         assert_not_job_search("EN CV analysis ask", status, raw)
-        status, raw = call("POST", f"{BACKEND}/api/v1/rico/chat", {"message": AR_ANALYSIS_ASK}, timeout=120)
+        status, raw = call("POST", f"{BACKEND}/api/v1/rico/chat", {"message": AR_ANALYSIS_ASK}, timeout=SLOW_TIMEOUT)
         assert_not_job_search("AR CV analysis ask", status, raw)
 
         # ── 7. persistence across logout → login ──────────────────────────
@@ -380,42 +434,78 @@ def main() -> int:
                 if row:
                     rico_uid = str(row[0])
 
-                cur.execute("DELETE FROM user_documents WHERE user_id = %s", (EMAIL,))
-                cur.execute("DELETE FROM learning_signals WHERE canonical_user_id = %s", (EMAIL,))
+                # Email-keyed tables. NONE of these has a foreign key to users,
+                # so deleting the user sweeps nothing here — each must be named.
+                for table, column in _EMAIL_KEYED_TABLES:
+                    cur.execute(
+                        f"DELETE FROM {table} WHERE {column} = %s",  # noqa: S608 - identifiers are module constants
+                        (EMAIL,),
+                    )
                 if rico_uid:
                     cur.execute("DELETE FROM rico_chat_history WHERE user_id = %s::uuid", (rico_uid,))
-                    # rico_profiles / rico_agent_settings cascade from this row.
+                    # rico_profiles / rico_agent_settings / rico_job_recommendations
+                    # are ON DELETE CASCADE children of this row.
                     cur.execute("DELETE FROM rico_users WHERE id = %s::uuid", (rico_uid,))
-                cur.execute("DELETE FROM email_verification_tokens WHERE user_email = %s", (EMAIL,))
                 cur.execute("DELETE FROM users WHERE email = %s", (EMAIL,))
             cleaned = True
             print("[CLEANUP] synthetic user and all its rows removed")
         except Exception as exc:
-            print(f"[CLEANUP-WARN] {type(exc).__name__}: manual cleanup may be needed for {EMAIL}")
+            print(f"[CLEANUP-WARN] {type(exc).__name__}: retrying once on a fresh connection")
+            # A dropped Neon connection mid-run must not be the reason rows are
+            # left in production; one reconnect is cheap and often decisive.
+            try:
+                conn = psycopg2.connect(DATABASE_URL)
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    for table, column in _EMAIL_KEYED_TABLES:
+                        cur.execute(
+                            f"DELETE FROM {table} WHERE {column} = %s",  # noqa: S608
+                            (EMAIL,),
+                        )
+                    if rico_uid:
+                        cur.execute(
+                            "DELETE FROM rico_chat_history WHERE user_id = %s::uuid", (rico_uid,)
+                        )
+                        cur.execute("DELETE FROM rico_users WHERE id = %s::uuid", (rico_uid,))
+                    cur.execute("DELETE FROM users WHERE email = %s", (EMAIL,))
+                cleaned = True
+                print("[CLEANUP] synthetic user removed on retry")
+            except Exception as exc2:
+                print(f"[CLEANUP-WARN] {type(exc2).__name__}: manual cleanup needed for {EMAIL}")
 
         # A cleanup that reports success but leaves rows behind is still a FAIL.
-        residual = -1
+        # Every table this journey can write is re-read by its own key. A table
+        # that cannot be counted leaves the verdict unproven, not clean.
+        residual = 0
+        unresolved: list[str] = []
+        for table, column in _EMAIL_KEYED_TABLES + (("users", "email"),):
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"SELECT COUNT(*) FROM {table} WHERE {column} = %s",  # noqa: S608
+                        (EMAIL,),
+                    )
+                    residual += int(cur.fetchone()[0])
+            except Exception as exc:
+                unresolved.append(f"{table}:{type(exc).__name__}")
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT (SELECT COUNT(*) FROM users WHERE email = %s) "
-                    "     + (SELECT COUNT(*) FROM user_documents WHERE user_id = %s) "
-                    "     + (SELECT COUNT(*) FROM learning_signals WHERE canonical_user_id = %s) "
-                    "     + (SELECT COUNT(*) FROM rico_users "
-                    "        WHERE email = %s OR external_user_id = %s)",
-                    (EMAIL, EMAIL, EMAIL, EMAIL, EMAIL),
+                    "SELECT COUNT(*) FROM rico_users WHERE email = %s OR external_user_id = %s",
+                    (EMAIL, EMAIL),
                 )
-                residual = int(cur.fetchone()[0])
+                residual += int(cur.fetchone()[0])
         except Exception as exc:
-            print(f"[CLEANUP-WARN] residual check failed: {type(exc).__name__}")
-        record("cleanup verified — no residual synthetic rows", cleaned and residual == 0, f"residual_rows={residual}")
+            unresolved.append(f"rico_users:{type(exc).__name__}")
+
+        record(
+            "cleanup verified — no residual synthetic rows",
+            cleaned and residual == 0 and not unresolved,
+            f"residual_rows={residual} unresolved={','.join(unresolved) if unresolved else 'none'}",
+        )
         conn.close()
 
-    failed = [n for n, ok, _ in results if not ok]
-    print()
-    print(f"RESULT: {len(results) - len(failed)} passed, {len(failed)} failed")
-    print("SMOKE: ALL GREEN" if not failed else f"SMOKE: FAILURES: {failed}")
-    return 0 if not failed else 1
+    return _finish()
 
 
 if __name__ == "__main__":
