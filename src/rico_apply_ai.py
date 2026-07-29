@@ -5,7 +5,6 @@ AI engine for per-job CV tailoring and cover letter generation.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
@@ -16,13 +15,12 @@ _MAX_JD_CHARS = 3000
 
 def _get_ai_client():
     try:
-        from src.rico_openai_runtime import _build_client, _primary_model_for
+        from src.rico_openai_runtime import _build_client, _provider_key_present, _provider_models
         from src.rico_env import get_ai_provider
         provider = get_ai_provider()
-        key_present = bool(os.getenv("DEEPSEEK_API_KEY")) if provider == "deepseek" else bool(os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API"))
-        if not key_present:
+        if provider not in ("openai", "deepseek") or not _provider_key_present(provider):
             return None, None, None
-        model, _ = _primary_model_for(provider)
+        model, _ = _provider_models(provider)
         client = _build_client(provider)
         return client, provider, model
     except Exception as exc:
@@ -32,24 +30,28 @@ def _get_ai_client():
 
 def _call_ai(client, provider: str, model: str, system: str, user: str) -> str:
     if provider == "openai":
+        from src.rico_openai_runtime import _extract_response_text
         resp = client.responses.create(
             model=model,
             input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             max_output_tokens=2000,
         )
-        for item in getattr(resp, "output", []):
-            for block in getattr(item, "content", []):
-                if getattr(block, "type", "") == "output_text":
-                    return block.text.strip()
-        return str(resp)
+        text = _extract_response_text(resp)
+        if not text:
+            raise ValueError("OpenAI response contained no usable text")
+        return text
     else:
+        from src.rico_openai_runtime import _extract_chat_completion_text
         resp = client.chat.completions.create(
             model=model,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             max_tokens=2000,
             temperature=0.4,
         )
-        return resp.choices[0].message.content.strip()
+        text = _extract_chat_completion_text(resp)
+        if not text:
+            raise ValueError("DeepSeek response contained no usable text")
+        return text
 
 
 def _keyword_fallback(cv_text: str, job: Dict[str, Any]) -> Dict[str, str]:
