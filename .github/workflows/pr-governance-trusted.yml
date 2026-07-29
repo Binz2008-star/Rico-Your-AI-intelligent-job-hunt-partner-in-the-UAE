@@ -1,0 +1,55 @@
+name: "PR Governance (trusted)"
+
+# Trusted policy: the checker is loaded from the base commit, never from the PR.
+# No PR code is executed and no secrets are available to this workflow.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-governance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-governance:
+    name: pr-governance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted base policy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Exercise policy self-test
+        run: python scripts/check_pr_governance.py --self-test
+
+      - name: Materialize PR body safely
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          Path(".pr-body.md").write_text(os.environ.get("PR_BODY", ""), encoding="utf-8")
+          PY
+
+      - name: Enforce ready-state governance record
+        run: >-
+          python scripts/check_pr_governance.py
+          --body-file .pr-body.md
+          --draft "${{ github.event.pull_request.draft }}"
+          --head-sha "${{ github.event.pull_request.head.sha }}"
+          --author "${{ github.event.pull_request.user.login }}"
