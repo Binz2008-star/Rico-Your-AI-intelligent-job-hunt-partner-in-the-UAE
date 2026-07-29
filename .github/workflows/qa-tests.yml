@@ -41,6 +41,7 @@ jobs:
             tests/unit/ \
             tests/test_agent.py \
             tests/test_agent_runtime.py \
+            tests/test_audit_delivery_smoke_residuals.py \
             tests/test_jotform_webhook.py \
             tests/test_identity_phone_containment.py \
             tests/test_identity_email_overwrite_containment.py \

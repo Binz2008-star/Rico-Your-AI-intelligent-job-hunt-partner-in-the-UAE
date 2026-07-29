@@ -1,0 +1,39 @@
+name: "Delivery Smoke Residual Audit (manual, read-only)"
+
+# Dispatch-only READ-ONLY audit. Counts rows left behind in Neon by Delivery
+# Smoke synthetic accounts (smoke-delivery-*@synthetic-rico.test).
+#
+# This workflow performs NO writes: the connection and every transaction are
+# opened READ ONLY and the script issues SELECT statements only. It reports
+# aggregate counts and makes no cleanup claim. Deleting anything it finds
+# requires separate, explicit owner authorization.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type AUDIT-DELIVERY-RESIDUALS to authorize this read-only production audit"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: delivery-smoke-residual-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: "Read-only synthetic residual audit"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --quiet psycopg2-binary
+      - name: Run read-only residual audit
+        env:
+          AUDIT_CONFIRM: ${{ inputs.confirm }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/audit_delivery_smoke_residuals.py
