@@ -1,0 +1,32 @@
+# Rico code ownership
+#
+# CODEOWNERS requests review; branch protection/rulesets decide whether that
+# review is mandatory. Keep this file narrow and explicit for high-risk paths.
+
+# Default repository owner
+* @Binz2008-star
+
+# Governance and CI policy
+/.github/ @Binz2008-star
+/AI_WORKSPACE/ @Binz2008-star
+/AGENTS.md @Binz2008-star
+/CLAUDE.md @Binz2008-star
+
+# Production infrastructure and data
+/render.yaml @Binz2008-star
+/migrations/ @Binz2008-star
+/scripts/ @Binz2008-star
+
+# High-risk backend boundaries
+/src/api/auth.py @Binz2008-star
+/src/api/app.py @Binz2008-star
+/src/rico_chat_api.py @Binz2008-star
+/src/job_providers.py @Binz2008-star
+/src/repositories/ @Binz2008-star
+/src/services/ @Binz2008-star
+
+# High-risk frontend boundaries
+/apps/web/lib/api.ts @Binz2008-star
+/apps/web/hooks/useAuth.ts @Binz2008-star
+/apps/web/next.config.js @Binz2008-star
+/apps/web/app/command/ @Binz2008-star
