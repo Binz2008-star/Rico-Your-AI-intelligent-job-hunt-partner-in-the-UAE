@@ -22,9 +22,12 @@ indexes per user:
 
 A mocked cursor cannot tell a per-user index from a global one — both accept
 every INSERT. Only a real server proves that two different users may each hold
-byte-identical CVs, and that each may independently hold a primary CV. If
-either index were ever narrowed to `(doc_type, content_hash)` or `(doc_type)`,
-every test here would fail and every mocked test would still pass.
+byte-identical CVs, and that each may independently hold a primary CV.
+
+Narrowing either index is caught here, but they are caught to different
+degrees — measured, not assumed (see the positive control below): narrowing
+the content-hash index fails most of this file, while narrowing the primary
+index fails exactly one test. Neither is caught by any mocked test.
 
 Isolation invariants asserted (Journey E in the reliability program), all P0:
 
@@ -43,19 +46,34 @@ breaking the per-user index fail differently. Both were run against a
 disposable Postgres 16:
 
   * baseline, unmodified                          -> 9 passed
-  * per-user index REPLACED by (doc_type, content_hash)
-        -> 9 failed, `InvalidColumnReference: there is no unique or exclusion
-           constraint matching the ON CONFLICT specification`. A UniqueViolation
-           is impossible here: with the per-user index gone, the writer's
-           ON CONFLICT (user_id, doc_type, content_hash) target can no longer
-           be inferred, so the statement fails before any row is compared.
-  * global index ADDED ALONGSIDE the per-user one
-        -> 5 failed / 4 passed, `UniqueViolation` on
-           `Key (doc_type, content_hash)`. The survivors are exactly the tests
-           that do not depend on cross-user hash uniqueness.
 
-Recording both matters: an earlier revision of this file described the second
-result as belonging to the first experiment. It does not.
+  * content-hash index REPLACED by (doc_type, content_hash)
+        -> 9 failed, `InvalidColumnReference: there is no unique or exclusion
+           constraint matching the ON CONFLICT specification`.
+           The FIRST write dies: user A's own insert raises, and user B's is
+           never attempted. A UniqueViolation is impossible here — with the
+           per-user index gone, the writer's ON CONFLICT (user_id, doc_type,
+           content_hash) target can no longer be inferred, so the statement
+           fails before any row is compared to any other.
+
+  * global content-hash index ADDED ALONGSIDE the per-user one
+        -> 5 failed / 4 passed, `UniqueViolation` on
+           `Key (doc_type, content_hash)`.
+           Here user A's write SUCCEEDS and user B's is the one refused. The
+           survivors are exactly the tests that do not depend on cross-user
+           hash uniqueness.
+
+  * primary index narrowed to (doc_type) WHERE is_primary
+        -> 1 failed / 8 passed. Only the simultaneous-primary test depends on
+           that index, so this mutation is caught, but narrowly.
+
+Recording all of it matters. Two earlier revisions of this file got the
+description wrong while the numbers were right: the first attributed the
+"alongside" result to the "replaced" experiment, and the second said user B's
+write was the one that failed under replacement. Every line above was produced
+by running that exact state, with the mutation applied AFTER the `db` fixture —
+migration 037's `CREATE UNIQUE INDEX IF NOT EXISTS` silently recreates a
+dropped index, which is precisely how the first mislabelling happened.
 
 Requires a real Postgres reachable via RICO_TEST_DATABASE_URL (NOT the shared
 DATABASE_URL — kept separate so the fake-DB unit-test job never runs these).
@@ -181,10 +199,14 @@ class TestIdenticalContentDoesNotMergeOwnership:
         result_b = _store(db, pair.cv_b)
 
         # Both are genuine inserts. If the hash index were not user-scoped,
-        # B's write does NOT quietly resolve to A's row — it fails outright:
-        # UniqueViolation when a global index sits alongside the per-user one,
-        # InvalidColumnReference when it replaces it. The isolation failure
-        # surfaces as a refused write, not as a silent handover.
+        # neither write quietly resolves to the other's row — one of them is
+        # refused outright, and which one depends on the mutation:
+        #   * global index ADDED alongside -> A succeeds, B raises
+        #     UniqueViolation on the line below.
+        #   * per-user index REPLACED      -> A's own write raises
+        #     InvalidColumnReference, and B is never attempted.
+        # The isolation failure surfaces as a refused write, never as a silent
+        # handover of A's document to B.
         assert result_a["inserted"] is True
         assert result_b["inserted"] is True
         assert result_a["id"] != result_b["id"]
@@ -221,7 +243,7 @@ class TestIdenticalContentDoesNotMergeOwnership:
 
 
 class TestIdenticalFilenameDoesNotCrossUsers:
-    """Two users may use the same filename; lookup by name must not leak."""
+    """Two users may each hold a document under the identical filename."""
 
     def test_both_users_store_the_same_filename(self, db: RicoDB):
         pair = build_same_filename_pair(RUN_ID)
