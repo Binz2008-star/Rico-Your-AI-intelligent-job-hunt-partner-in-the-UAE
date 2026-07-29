@@ -25,7 +25,9 @@ jobs:
   smoke:
     name: "CV golden journey production smoke"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Above the script's worst-case request budget (~16.5 min), so the runner
+    # cannot cancel the job mid-journey and skip the cleanup in `finally`.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
