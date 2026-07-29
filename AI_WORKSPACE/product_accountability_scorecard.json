@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-07-29",
+  "owner": "Rico owner with the acting CTO/session",
+  "north_star_metric_id": "ENG-001",
+  "strategy_source": "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md",
+  "required_categories": [
+    "delivery",
+    "reliability",
+    "activation",
+    "engagement",
+    "search_quality",
+    "applications",
+    "outcomes",
+    "retention",
+    "ai_quality",
+    "business"
+  ],
+  "metrics": [
+    {
+      "id": "DLV-001",
+      "name": "Roadmap commitments closed with exact-head evidence",
+      "category": "delivery",
+      "status": "partial",
+      "value": null,
+      "unit": "percent",
+      "target": 100,
+      "owner": "Release captain",
+      "cadence": "weekly",
+      "source": "GitHub PRs, CI, deployment and production-smoke evidence",
+      "evidence": [
+        "AI_WORKSPACE/PROJECT_STATUS.md",
+        "AI_WORKSPACE/TASKS.md",
+        "AI_WORKSPACE/VERSION_CONTROL_POLICY.md",
+        "GitHub PR #1449"
+      ],
+      "blocker": "The repository records exact-head evidence, but the required main-branch ruleset is not yet connector-verifiable or activated.",
+      "next_action": "Activate and verify issue #1448 after PR #1449 is independently reviewed and merged."
+    },
+    {
+      "id": "REL-001",
+      "name": "Trust-critical production journeys passing",
+      "category": "reliability",
+      "status": "partial",
+      "value": null,
+      "unit": "percent",
+      "target": 100,
+      "owner": "Release captain",
+      "cadence": "weekly",
+      "source": "Dispatch-only production smoke workflows and exact deployed SHA",
+      "evidence": [
+        ".github/workflows/cv-journey-smoke.yml",
+        ".github/workflows/gratitude-smoke-1432.yml",
+        "GitHub PR #1445"
+      ],
+      "blocker": "Journey coverage exists by slice, but there is no single computed numerator and denominator across all trust-critical journeys.",
+      "next_action": "Define the canonical journey inventory and emit one aggregate pass-rate report without weakening per-journey evidence."
+    },
+    {
+      "id": "ACT-001",
+      "name": "Activation rate",
+      "category": "activation",
+      "status": "not_instrumented",
+      "value": null,
+      "unit": "percent",
+      "target": null,
+      "owner": "Product",
+      "cadence": "weekly",
+      "source": "analytics_events",
+      "evidence": [
+        "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md",
+        "src/repositories/analytics_events_repo.py",
+        "src/services/analytics_emitters.py"
+      ],
+      "blocker": "Activation is defined as completing one verified career action, but the full activation funnel is not wired into analytics.",
+      "next_action": "Wire signup, CV confirmation, target selection, verified matches and first approved action with privacy-safe idempotent events."
+    },
+    {
+      "id": "ACT-002",
+      "name": "Median time to first verified opportunity",
+      "category": "activation",
+      "status": "not_instrumented",
+      "value": null,
+      "unit": "minutes",
+      "target": 10,
+      "owner": "Product",
+      "cadence": "weekly",
+      "source": "analytics_events",
+      "evidence": [
+        "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md"
+      ],
+      "blocker": "The start and verified-opportunity timestamps are not both emitted under one actor lifecycle.",
+      "next_action": "Instrument session or signup start and the first verified result presentation with a stable privacy-safe actor."
+    },
+    {
+      "id": "ENG-001",
+      "name": "Verified career actions completed per weekly active user",
+      "category": "engagement",
+      "status": "partial",
+      "value": null,
+      "unit": "actions_per_wau",
+      "target": null,
+      "owner": "Product",
+      "cadence": "weekly",
+      "source": "analytics_events",
+      "evidence": [
+        "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md",
+        "src/services/analytics_emitters.py",
+        "src/repositories/analytics_events_repo.py"
+      ],
+      "blocker": "Only search_performed and a limited job_action enum are wired; prepared applications, approved documents, follow-ups and interview preparation are absent.",
+      "next_action": "Approve one canonical verified-career-action taxonomy, wire each successful server-side completion and compute weekly distinct actors."
+    },
+    {
+      "id": "SRCH-001",
+      "name": "Searches producing at least one verified user action",
+      "category": "search_quality",
+      "status": "partial",
+      "value": null,
+      "unit": "percent",
+      "target": null,
+      "owner": "Search",
+      "cadence": "weekly",
+      "source": "analytics_events",
+      "evidence": [
+        "src/services/analytics_emitters.py",
+        "src/repositories/analytics_events_repo.py"
+      ],
+      "blocker": "Search and job-action events exist, but they lack a shared search or recommendation correlation identifier.",
+      "next_action": "Add a non-user, non-query correlation token so actions can be attributed to the search that produced them."
+    },
+    {
+      "id": "APP-001",
+      "name": "Applications prepared, approved and submitted",
+      "category": "applications",
+      "status": "not_instrumented",
+      "value": null,
+      "unit": "count",
+      "target": null,
+      "owner": "Applications",
+      "cadence": "weekly",
+      "source": "application records plus analytics_events",
+      "evidence": [
+        "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md"
+      ],
+      "blocker": "Application lifecycle states exist in product data, but no canonical weekly outcome query or approved analytics taxonomy is recorded here.",
+      "next_action": "Define state-transition events and reconcile them against the authoritative application table before reporting."
+    },
+    {
+      "id": "OUT-001",
+      "name": "Recruiter replies, interviews, offers and hires",
+      "category": "outcomes",
+      "status": "not_instrumented",
+      "value": null,
+      "unit": "count",
+      "target": null,
+      "owner": "Product",
+      "cadence": "weekly",
+      "source": "application outcomes and user-confirmed status",
+      "evidence": [
+        "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md"
+      ],
+      "blocker": "Outcome states are not captured with a complete, user-correctable and deduplicated reporting contract.",
+      "next_action": "Add explicit user-confirmed outcome transitions and preserve unknown separately from zero."
+    },
+    {
+      "id": "RET-001",
+      "name": "Seven-day activated-user retention",
+      "category": "retention",
+      "status": "not_instrumented",
+      "value": null,
+      "unit": "percent",
+      "target": null,
+      "owner": "Product",
+      "cadence": "weekly",
+      "source": "analytics_events",
+      "evidence": [
+        "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md",
+        "src/repositories/analytics_events_repo.py"
+      ],
+      "blocker": "Session-start and activation events are reserved in the allowlist but not fully wired, so an activated cohort cannot be reconstructed honestly.",
+      "next_action": "Wire privacy-safe session and activation events, then publish cohort SQL with explicit timezone and dedupe rules."
+    },
+    {
+      "id": "AIQ-001",
+      "name": "False execution-claim rate",
+      "category": "ai_quality",
+      "status": "not_instrumented",
+      "value": null,
+      "unit": "percent",
+      "target": 0,
+      "owner": "AI quality",
+      "cadence": "weekly",
+      "source": "operation audit records and evaluation cases",
+      "evidence": [
+        "AI_WORKSPACE/RICO_EXECUTION_PRINCIPLES.md",
+        "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md"
+      ],
+      "blocker": "Individual regressions are tested, but there is no aggregate denominator binding assistant execution claims to operation results.",
+      "next_action": "Create an evaluation set that pairs each execution claim with its operation result and report unsupported claims separately."
+    },
+    {
+      "id": "BIZ-001",
+      "name": "Paid conversion from activated users",
+      "category": "business",
+      "status": "not_instrumented",
+      "value": null,
+      "unit": "percent",
+      "target": null,
+      "owner": "Owner",
+      "cadence": "weekly",
+      "source": "billing records plus activated-user cohort",
+      "evidence": [
+        "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md"
+      ],
+      "blocker": "An honest activated cohort is not yet measurable and billing attribution must be reconciled atomically before conversion is reported.",
+      "next_action": "Complete activation instrumentation and join it to authoritative successful checkout attribution."
+    },
+    {
+      "id": "BIZ-002",
+      "name": "AI cost per paying customer",
+      "category": "business",
+      "status": "not_instrumented",
+      "value": null,
+      "unit": "aed_per_paying_customer",
+      "target": null,
+      "owner": "Owner",
+      "cadence": "monthly",
+      "source": "provider usage and billing records",
+      "evidence": [
+        "docs/strategy/2026-07-23-ceo-verdict-strategy-positioning.md"
+      ],
+      "blocker": "Provider cost is not yet allocated to a privacy-safe paying-customer cohort under one reconciled reporting contract.",
+      "next_action": "Record model, task class, token or unit cost and plan attribution without storing prompt text."
+    }
+  ]
+}
