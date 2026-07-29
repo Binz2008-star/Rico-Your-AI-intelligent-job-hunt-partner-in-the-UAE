@@ -49,7 +49,7 @@ from src.api.public_identity import (
     make_public_user_id,
     normalize_public_email,
 )
-from src.api.rate_limit import LIMIT_ADMIN, LIMIT_CHAT, LIMIT_PROFILE, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
+from src.api.rate_limit import LIMIT_ADMIN, LIMIT_CHAT, LIMIT_FEEDBACK, LIMIT_OPERATION_STATUS, LIMIT_PROFILE, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
 from src.repositories import onboarding_repo, profile_repo
 from src.repositories.learning_repo import get_learning_repository
 from src.agent.responses.schema import RicoResponse, build_error_response, _generate_debug_id
@@ -1359,7 +1359,7 @@ def rico_clear_chat_history(
 
 
 @router.get("/operations/{operation_id}")
-@limiter.limit(LIMIT_CHAT)
+@limiter.limit(LIMIT_OPERATION_STATUS)
 def rico_operation_status(request: Request, operation_id: str) -> dict[str, Any]:
     """Read-only status of a job-search operation owned by the current user.
 
@@ -1405,6 +1405,7 @@ def rico_operation_status(request: Request, operation_id: str) -> dict[str, Any]
 # ============================================================================
 
 @router.post("/feedback", status_code=204)
+@limiter.limit(LIMIT_FEEDBACK)
 def rico_feedback(request: Request, body: FeedbackRequest) -> None:
     """Record user feedback on job matches for learning."""
     start_time = time.time()

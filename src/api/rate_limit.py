@@ -160,6 +160,8 @@ LIMIT_ADMIN    = "10/minute"    # admin endpoints — low ceiling, sensitive ope
 LIMIT_INTENT   = "20/minute"    # unauth upgrade-intent log — cap anonymous storage flood
 LIMIT_INTEGRATIONS = "20/minute"       # integration status/connect/review reads+actions
 LIMIT_INTEGRATIONS_SYNC = "5/minute"   # manual Gmail sync — mailbox scan is heavy
+LIMIT_OPERATION_STATUS = "60/minute"   # read-only poll — client polls every 4s, separate from chat
+LIMIT_FEEDBACK = "20/minute"           # feedback DB write — prevent signal flood
 
 # ── 429 response handler ──────────────────────────────────────────────────────
 
