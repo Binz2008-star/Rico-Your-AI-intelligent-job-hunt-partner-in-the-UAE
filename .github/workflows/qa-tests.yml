@@ -93,6 +93,7 @@ jobs:
             tests/test_sse_stream_quota_enforcement.py \
             tests/test_lifecycle_followup.py \
             tests/test_no_import_time_env_mutation.py \
+            tests/test_rico_apply_ai_client.py \
             tests/test_gratitude_does_not_redeem_pending_search.py \
             tests/decision_regression/ \
             -v --tb=short
