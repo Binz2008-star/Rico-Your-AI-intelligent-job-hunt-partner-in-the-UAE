@@ -69,6 +69,7 @@ jobs:
             tests/test_1072_jwt_auth_version.py \
             tests/test_identity_ownership_boundaries.py \
             tests/test_1084_workflow_guards.py \
+            tests/test_pr_governance.py \
             tests/test_1076_log_privacy.py \
             tests/test_1077_no_paid_probe.py \
             tests/test_1086_single_scheduled_pipeline.py \
