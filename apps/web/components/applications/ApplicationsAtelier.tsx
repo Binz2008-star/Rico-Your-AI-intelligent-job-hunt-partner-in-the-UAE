@@ -35,11 +35,30 @@ import {
     getApplicationStats,
     updateApplicationStatus,
 } from "@/lib/api";
-import { APPLICATION_STATUSES, STAGE_DEFS, type StageKey } from "@/lib/applicationStatus";
+import {
+    APPLICATION_STATUSES,
+    STAGE_DEFS,
+    getStageForStatus,
+    type StageKey,
+} from "@/lib/applicationStatus";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
 import type { Application, ApplicationStatus } from "@/types";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+    DndContext,
+    KeyboardSensor,
+    PointerSensor,
+    useDraggable,
+    useDroppable,
+    useSensor,
+    useSensors,
+    type DragEndEvent,
+    type DragMoveEvent,
+    type DragOverEvent,
+    type DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 type ViewMode = "list" | "board";
 
@@ -70,6 +89,14 @@ const STAGE_LABEL_KEYS: Record<StageKey, TranslationKey> = {
     applied: "flowColApplied",
     interview: "flowColInterview",
     outcome: "flowColOutcome",
+};
+
+// Maps each board column to the canonical status assigned when a card is dropped there.
+export const COLUMN_TARGET_STATUS: Record<StageKey, ApplicationStatus> = {
+    lead: "saved",
+    applied: "applied",
+    interview: "interview",
+    outcome: "offer",
 };
 
 const KANBAN_COLS: Array<{ key: StageKey; labelKey: TranslationKey; statuses: ApplicationStatus[] }> =
@@ -115,6 +142,42 @@ const STATUS_COUNT_ORDER: ApplicationStatus[] = [
     "applied", "follow_up_due", "interview", "offer",
     "saved", "prepared", "rejected", "decision_made",
 ];
+
+// Localized screen-reader announcements for board drag-and-drop.
+const DND_ANNOUNCEMENTS: Record<
+    "en" | "ar",
+    {
+        start: string;
+        move: string;
+        over: string;
+        end: string;
+        cancel: string;
+        instructions: string;
+    }
+> = {
+    en: {
+        start: "Picked up application {{title}}.",
+        move: "Moving application {{title}}.",
+        over: "Application {{title}} is over the {{column}} column. Press space or enter to drop.",
+        end: "Application {{title}} moved to {{column}}.",
+        cancel: "Move cancelled. Application {{title}} returned to its column.",
+        instructions:
+            "Use tab to reach a card, then press space or enter to pick it up. Move with arrow keys, and press space or enter again to drop.",
+    },
+    ar: {
+        start: "تم رفع طلب {{title}}.",
+        move: "جاري نقل طلب {{title}}.",
+        over: "طلب {{title}} فوق عمود {{column}}. اضغط مسافة أو إدخال للإفلات.",
+        end: "تم نقل طلب {{title}} إلى {{column}}.",
+        cancel: "تم إلغاء النقل. عاد طلب {{title}} إلى عموده.",
+        instructions:
+            "استخدم Tab للوصول إلى البطاقة، ثم اضغط مسافة أو إدخال لرفعها. حرّكها بالأسهم، واضغط مسافة أو إدخال مرة أخرى للإفلات.",
+    },
+};
+
+function fmtAnnounce(template: string, values: Record<string, string>) {
+    return template.replace(/{{\s*(\w+)\s*}}/g, (_, key) => values[key] ?? "");
+}
 
 type ManualApplicationForm = {
     title: string;
@@ -193,6 +256,129 @@ function StatusSelect({
                 ))}
             </select>
         </>
+    );
+}
+
+type Accent = { modeA: string; modeAText: string };
+
+function BoardCard({
+    app,
+    disabled,
+    language,
+    onStatusChange,
+    t,
+    c,
+    v5,
+    acc,
+}: {
+    app: Application;
+    disabled: boolean;
+    language: "en" | "ar";
+    onStatusChange: (status: ApplicationStatus) => void;
+    t: (key: TranslationKey) => string;
+    c: Palette;
+    v5: boolean;
+    acc: Accent;
+}) {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+        id: app.application_id,
+        data: { app },
+        disabled,
+    });
+    return (
+        <div
+            ref={setNodeRef}
+            {...listeners}
+            {...attributes}
+            aria-label={`${language === "ar" ? "اسحب بطاقة الطلب:" : "Drag application card:"} ${app.title}`}
+            className={`wsx-action ${v5 ? "wsx5-card" : "rounded-[4px]"} p-3`}
+            style={{
+                background: c.panel,
+                border: `1px solid ${c.hair}`,
+                borderRadius: v5 ? 12 : undefined,
+                transform: transform ? CSS.Translate.toString(transform) : undefined,
+                opacity: isDragging ? 0.5 : undefined,
+                cursor: disabled ? "default" : "grab",
+            }}
+        >
+            <p className="text-[0.95rem] leading-snug [overflow-wrap:anywhere]" style={{ fontFamily: SERIF, color: c.ink }}>
+                {app.title}
+            </p>
+            <p className="mt-0.5 text-[12px] [overflow-wrap:anywhere]" style={{ color: c.ink55 }}>
+                {app.company}
+            </p>
+            {app.apply_url && app.apply_url !== "#" && (
+                <a
+                    href={app.apply_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold"
+                    style={{ color: v5 ? acc.modeAText : c.red, textDecoration: "none" }}
+                >
+                    {t("flowViewListing")} ↗
+                </a>
+            )}
+            <div className="mt-2 flex items-center justify-between gap-2">
+                <DateProvenance app={app} language={language} t={t} c={c} />
+                <StatusSelect
+                    id={`board-status-${app.application_id}`}
+                    app={app}
+                    disabled={disabled}
+                    onChange={onStatusChange}
+                    t={t}
+                    c={c}
+                />
+            </div>
+        </div>
+    );
+}
+
+function BoardColumn({
+    stageKey,
+    label,
+    count,
+    children,
+    c,
+    v5,
+    acc,
+}: {
+    stageKey: StageKey;
+    label: string;
+    count: number;
+    children: ReactNode;
+    c: Palette;
+    v5: boolean;
+    acc: Accent;
+}) {
+    const { isOver, setNodeRef } = useDroppable({ id: stageKey });
+    return (
+        <div
+            ref={setNodeRef}
+            data-droppable-id={stageKey}
+            className="flex min-w-[220px] flex-1 flex-col p-3 sm:min-w-[200px]"
+            style={{
+                background: c.inset,
+                border: `1px solid ${isOver ? (v5 ? acc.modeA : c.ink) : c.hair}`,
+                borderRadius: v5 ? 14 : 4,
+            }}
+        >
+            <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-normal">
+                    <Mono style={{ color: c.ink55 }}>{label}</Mono>
+                </h3>
+                <span
+                    style={{
+                        fontFamily: ATELIER_FONT.mono,
+                        fontSize: 11,
+                        color: v5 && count > 0 ? acc.modeAText : c.ink40,
+                        ...(v5 && count > 0 ? { background: `${acc.modeA}14`, borderRadius: 999, padding: "2px 8px" } : {}),
+                    }}
+                >
+                    {count}
+                </span>
+            </div>
+            <div className="flex flex-col gap-2">{children}</div>
+        </div>
     );
 }
 
@@ -356,6 +542,102 @@ export function ApplicationsAtelier() {
     const v5 = !c.dark;
     const acc = V5_MODE_ACCENTS.applications;
 
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 8 },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: (event) => {
+                switch (event.code) {
+                    case "ArrowRight":
+                        return { x: 120, y: 0 };
+                    case "ArrowLeft":
+                        return { x: -120, y: 0 };
+                    case "ArrowDown":
+                        return { x: 0, y: 80 };
+                    case "ArrowUp":
+                        return { x: 0, y: -80 };
+                    default:
+                        return undefined;
+                }
+            },
+        })
+    );
+
+    const announcements = useMemo(() => {
+        const getApp = (active: { id: string | number; data?: { current?: { app?: Application } } }) =>
+            active.data?.current?.app as Application | undefined;
+        const getColLabel = (overId: string | number | null) => {
+            if (overId == null) return undefined;
+            const id = String(overId);
+            const stage = STAGE_DEFS.find((s) => s.key === id);
+            return stage ? t(STAGE_LABEL_KEYS[stage.key]) : undefined;
+        };
+        const template = DND_ANNOUNCEMENTS[language];
+        return {
+            onDragStart: ({ active }: DragStartEvent) => {
+                const app = getApp(active);
+                return fmtAnnounce(template.start, { title: app?.title ?? String(active.id) });
+            },
+            onDragMove: ({ active }: DragMoveEvent) => {
+                const app = getApp(active);
+                return fmtAnnounce(template.move, { title: app?.title ?? String(active.id) });
+            },
+            onDragOver: ({ active, over }: DragOverEvent) => {
+                const app = getApp(active);
+                const col = getColLabel(over?.id ?? null);
+                return fmtAnnounce(template.over, {
+                    title: app?.title ?? String(active.id),
+                    column: col ?? "",
+                });
+            },
+            onDragEnd: ({ active, over }: DragEndEvent) => {
+                const app = getApp(active);
+                const col = getColLabel(over?.id ?? null);
+                return fmtAnnounce(template.end, {
+                    title: app?.title ?? String(active.id),
+                    column: col ?? "",
+                });
+            },
+            onDragCancel: ({ active }: DragStartEvent) => {
+                const app = getApp(active);
+                return fmtAnnounce(template.cancel, { title: app?.title ?? String(active.id) });
+            },
+        } as unknown as import("@dnd-kit/core").Announcements;
+    }, [language, t]);
+
+    const screenReaderInstructions = useMemo(
+        () => ({ draggable: DND_ANNOUNCEMENTS[language].instructions }),
+        [language]
+    );
+
+    const handleDragEnd = useCallback(
+        (event: DragEndEvent) => {
+            const { active, over } = event;
+            if (!over) return;
+
+            const app = applications.find((a) => a.application_id === active.id);
+            if (!app) return;
+
+            const overId = String(over.id);
+            let targetStage: StageKey | null = null;
+            if (KANBAN_COLS.some((col) => col.key === overId)) {
+                targetStage = overId as StageKey;
+            } else {
+                const targetApp = applications.find((a) => a.application_id === overId);
+                targetStage = targetApp ? (getStageForStatus(targetApp.status) ?? null) : null;
+            }
+            if (!targetStage) return;
+
+            const sourceStage = getStageForStatus(app.status);
+            if (targetStage === sourceStage) return;
+
+            const targetStatus = COLUMN_TARGET_STATUS[targetStage];
+            void changeStatus(app, targetStatus);
+        },
+        [applications, changeStatus]
+    );
+
     return (
         <div>
             {/* Header */}
@@ -479,66 +761,45 @@ export function ApplicationsAtelier() {
                     ) : viewMode === "board" ? (
                         /* ── Board ── */
                         <div className="mt-6 overflow-x-hidden" data-wsx5-anim="rise" style={{ "--i": 3 } as React.CSSProperties}>
-                            <div className="-mx-1 flex gap-3 overflow-x-auto pb-4 sm:mx-0">
-                                {KANBAN_COLS.map((col) => {
-                                    const colApps = applications.filter((a) => col.statuses.includes(a.status));
-                                    return (
-                                        <div
-                                            key={col.key}
-                                            className="flex min-w-[220px] flex-1 flex-col p-3 sm:min-w-[200px]"
-                                            style={{ background: c.inset, border: `1px solid ${c.hair}`, borderRadius: v5 ? 14 : 4 }}
-                                        >
-                                            <div className="mb-3 flex items-center justify-between">
-                                                <h3 className="font-normal">
-                                                    <Mono style={{ color: c.ink55 }}>{t(col.labelKey)}</Mono>
-                                                </h3>
-                                                <span style={{ fontFamily: ATELIER_FONT.mono, fontSize: 11, color: v5 && colApps.length > 0 ? acc.modeAText : c.ink40, ...(v5 && colApps.length > 0 ? { background: `${acc.modeA}14`, borderRadius: 999, padding: "2px 8px" } : {}) }}>{colApps.length}</span>
-                                            </div>
-                                            <div className="flex flex-col gap-2">
+                            <DndContext
+                                sensors={sensors}
+                                accessibility={{ announcements, screenReaderInstructions }}
+                                onDragEnd={handleDragEnd}
+                            >
+                                <div className="-mx-1 flex gap-3 overflow-x-auto pb-4 sm:mx-0">
+                                    {KANBAN_COLS.map((col) => {
+                                        const colApps = applications.filter((a) => col.statuses.includes(a.status));
+                                        return (
+                                            <BoardColumn
+                                                key={col.key}
+                                                stageKey={col.key}
+                                                label={t(col.labelKey)}
+                                                count={colApps.length}
+                                                c={c}
+                                                v5={v5}
+                                                acc={acc}
+                                            >
                                                 {colApps.length === 0 && (
                                                     <p className="py-4 text-center text-[11px]" style={{ color: c.ink40 }}>—</p>
                                                 )}
                                                 {colApps.map((item) => (
-                                                    <div
+                                                    <BoardCard
                                                         key={item.application_id}
-                                                        className={`wsx-action ${v5 ? "wsx5-card" : "rounded-[4px]"} p-3`}
-                                                        style={{ background: c.panel, border: `1px solid ${c.hair}`, ...(v5 ? { borderRadius: 12 } : {}) }}
-                                                    >
-                                                        <p className="text-[0.95rem] leading-snug [overflow-wrap:anywhere]" style={{ fontFamily: SERIF, color: c.ink }}>
-                                                            {item.title}
-                                                        </p>
-                                                        <p className="mt-0.5 text-[12px] [overflow-wrap:anywhere]" style={{ color: c.ink55 }}>
-                                                            {item.company}
-                                                        </p>
-                                                        {item.apply_url && item.apply_url !== "#" && (
-                                                            <a
-                                                                href={item.apply_url}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold"
-                                                                style={{ color: v5 ? acc.modeAText : c.red, textDecoration: "none" }}
-                                                            >
-                                                                {t("flowViewListing")} ↗
-                                                            </a>
-                                                        )}
-                                                        <div className="mt-2 flex items-center justify-between gap-2">
-                                                            <DateProvenance app={item} language={language} t={t} c={c} />
-                                                            <StatusSelect
-                                                                id={`board-status-${item.application_id}`}
-                                                                app={item}
-                                                                disabled={!!updating}
-                                                                onChange={(status) => changeStatus(item, status)}
-                                                                t={t}
-                                                                c={c}
-                                                            />
-                                                        </div>
-                                                    </div>
+                                                        app={item}
+                                                        disabled={!!updating}
+                                                        language={language}
+                                                        onStatusChange={(status) => changeStatus(item, status)}
+                                                        t={t}
+                                                        c={c}
+                                                        v5={v5}
+                                                        acc={acc}
+                                                    />
                                                 ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                            </BoardColumn>
+                                        );
+                                    })}
+                                </div>
+                            </DndContext>
                         </div>
                     ) : (
                         /* ── List ── */
