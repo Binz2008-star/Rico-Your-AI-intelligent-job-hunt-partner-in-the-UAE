@@ -3246,6 +3246,31 @@ class RicoChatAPI:
                 # career_context_source, identity_state) — same method the
                 # search response uses, so the two can never disagree.
                 ctx["career_context"].update(_cc.parity_snapshot())
+
+                # Canonical, bounded evidence from the active CV's structured
+                # extraction. This is the positive counterpart to the filename
+                # guardrail: the model needs verified facts it can assert as
+                # user facts, or it will fill gaps from filenames/training data.
+                from src.services.cv_context_resolver import resolve_cv_context
+
+                _cv_ctx = resolve_cv_context(user_id, profile)
+                if _cv_ctx.structured:
+                    _vce = {}
+                    _keep = {
+                        "work_experience",
+                        "skills",
+                        "certifications",
+                        "education",
+                        "languages",
+                        "extraction_quality",
+                    }
+                    for k in _keep:
+                        v = _cv_ctx.structured.get(k)
+                        if v not in (None, "", [], {}):
+                            _vce[k] = v
+                    if _vce:
+                        ctx["career_context"]["verified_cv_evidence"] = _vce
+
                 if _cc.degraded:
                     ctx["career_context"]["status"] = "degraded"
                 if _cc.display_years is None and (
@@ -3315,7 +3340,7 @@ class RicoChatAPI:
                 _doc_text = (_last_doc or {}).get("extracted_text")
                 if _doc_text:
                     ctx["last_uploaded_document"] = {
-                        "filename": _last_doc.get("filename"),
+                        "filename_untrusted": _last_doc.get("filename"),
                         "type": _last_doc.get("display_label") or _last_doc.get("document_type"),
                         "transcribed_text": str(_doc_text)[:4000],
                     }
@@ -3334,7 +3359,7 @@ class RicoChatAPI:
                         _conf_str = f" — confidence {round(float(_conf) * 100)}%" if _conf else ""
                         ctx["last_uploaded_document"] = {
                             "type": _label,
-                            "filename": _fname,
+                            "filename_untrusted": _fname,
                             "note": f"[Uploaded document: {_label} ({_fname}){_conf_str}. "
                                     "No full text available — describe based on document type.]",
                         }
