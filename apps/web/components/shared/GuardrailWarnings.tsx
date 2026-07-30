@@ -71,10 +71,10 @@ export function GuardrailWarnings({
       style={
         usesPalette
           ? {
-            backgroundColor: `color-mix(in srgb, ${palette.red} 10%, ${palette.panel})`,
+            backgroundColor: palette.inset,
             borderWidth: 1,
             borderStyle: "solid",
-            borderColor: `color-mix(in srgb, ${palette.red} 35%, transparent)`,
+            borderColor: palette.hair,
           }
           : undefined
       }
@@ -88,7 +88,7 @@ export function GuardrailWarnings({
             <li key={`${warning.code}-${warning.field}-${index}`} className="text-xs leading-5">
               <p
                 className={cn("font-semibold", !usesPalette && "text-amber-100")}
-                style={usesPalette ? { color: palette.red } : undefined}
+                style={usesPalette ? { color: palette.ink } : undefined}
               >
                 {message}
               </p>

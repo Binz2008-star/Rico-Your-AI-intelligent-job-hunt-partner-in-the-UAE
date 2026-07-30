@@ -14,12 +14,6 @@ const sampleWarnings = [
     },
 ];
 
-/** Convert a hex color to the rgb(...) form jsdom uses inside color-mix(). */
-function toRgb(hex: string): string {
-    const n = parseInt(hex.slice(1), 16);
-    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
-}
-
 /** Canonicalise a CSS color value for comparison (hex, rgb, rgba). */
 function canonicalColor(value: string): string {
     if (value.startsWith("rgba(")) {
@@ -44,31 +38,26 @@ describe("GuardrailWarnings palette awareness", () => {
         expect(message.className).toContain("text-amber-100");
     });
 
-    it("uses WorkspacePalette colors in light mode", () => {
+    it("uses approved [role=alert] semantic tokens in light mode", () => {
         const palette = WORKSPACE_THEME.light;
         render(<GuardrailWarnings warnings={sampleWarnings} language="en" palette={palette} />);
         const alert = screen.getByRole("alert");
-        expect(alert.style.backgroundColor).toBe(
-            `color-mix(in srgb, ${toRgb(palette.red)} 10%, ${toRgb(palette.panel)})`,
-        );
-        expect(alert.style.borderColor).toBe(
-            `color-mix(in srgb, ${toRgb(palette.red)} 35%, transparent)`,
-        );
+        expect(canonicalColor(alert.style.backgroundColor)).toBe(canonicalColor(palette.inset));
+        expect(canonicalColor(alert.style.borderColor)).toBe(canonicalColor(palette.hair));
         const message = screen.getByText("Salary is not set.");
-        expect(canonicalColor(message.style.color)).toBe(canonicalColor(palette.red));
+        expect(canonicalColor(message.style.color)).toBe(canonicalColor(palette.ink));
         const suggestion = screen.getByText("Add your expected salary.");
         expect(canonicalColor(suggestion.style.color)).toBe(canonicalColor(palette.ink55));
     });
 
-    it("uses WorkspacePalette colors in dark mode", () => {
+    it("uses approved [role=alert] semantic tokens in dark mode", () => {
         const palette = WORKSPACE_THEME.dark;
         render(<GuardrailWarnings warnings={sampleWarnings} language="en" palette={palette} />);
         const alert = screen.getByRole("alert");
-        expect(alert.style.backgroundColor).toBe(
-            `color-mix(in srgb, ${toRgb(palette.red)} 10%, ${toRgb(palette.panel)})`,
-        );
+        expect(canonicalColor(alert.style.backgroundColor)).toBe(canonicalColor(palette.inset));
+        expect(canonicalColor(alert.style.borderColor)).toBe(canonicalColor(palette.hair));
         const message = screen.getByText("Salary is not set.");
-        expect(canonicalColor(message.style.color)).toBe(canonicalColor(palette.red));
+        expect(canonicalColor(message.style.color)).toBe(canonicalColor(palette.ink));
     });
 
     it("renders Arabic localized text when palette is provided", () => {
