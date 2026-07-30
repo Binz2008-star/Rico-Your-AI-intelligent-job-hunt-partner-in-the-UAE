@@ -180,7 +180,7 @@ per-route audit proves they still expose legacy UI.
 ### Refreshed route matrix — audited @ `main = 5cf9a6f` (2026-07-14)
 
 `main` advanced past the Phase-0 base (`c11575d`): #1017 (foundation),
-#1020 (`/command` → WorkspaceShell), #1019 (opening films), #1021
+`#1020` (`/command` → WorkspaceShell), #1019 (opening films), #1021
 (`/subscription` Atelier UI), #1022-history merged. Re-audited from the live tree
 (33 `page.tsx` routes) — shell import verified per route.
 
@@ -207,11 +207,11 @@ Legacy-shell import census on `main` (production routes only): `AppShell` →
 `/queue` `/jobs` `/archive` `/saved-searches`; `DashboardShell` →
 `/subscription/success`. Step 8 legacy deletion is gated until these reach zero.
 
-### Refreshed route matrix — audited @ `main = 49584f0acf0cee183657472c5213bbef3be98ef5` (2026-07-29)
+### Refreshed route matrix — audited @ `main = dcc949af3e6300482be78146222d8d03fb6b092e` (2026-07-30)
 
-`main` advanced past the 2026-07-14 base (`5cf9a6f`) to the current control-plane SHA. The open implementation PRs are **#1455** (frontend /applications board DnD) and **#1457** (backend bounded cache). Re-audited from the live tree (33 `page.tsx` routes) — shell import verified per route.
+`main` advanced past the 2026-07-14 base (`5cf9a6f`) to the current control-plane SHA `dcc949af` — a backend-only advance (**#1457** bounded cache merged), so the frontend route matrix below is unchanged from the 2026-07-29 audit. The open implementation PRs are **#1455** (frontend /applications board DnD) and **#1460** (frontend /about Atelier migration); **#1454** is operational cleanup tooling (production deletion prohibited). Re-audited from the live tree (33 `page.tsx` routes) — shell import verified per route.
 
-| Route | Shell on `main` 49584f0a | Status | Owner step |
+| Route | Shell on `main` dcc949af | Status | Owner step |
 | --- | --- | --- | --- |
 | `/` | `LandingPageV2` (own layout) | **PARTIAL** — parity verify vs approved public reference; landing-page production freeze #871 | Step 4 |
 | `/about` | `AboutContent` — legacy `GlassPanel`/`AuraGlow` | **LEGACY** | Step 4 |
