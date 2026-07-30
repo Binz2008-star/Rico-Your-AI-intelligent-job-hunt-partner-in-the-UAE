@@ -1955,3 +1955,123 @@ different fact from `no_cv_on_file`.
       to "PDF or DOCX" (no `.doc` without a real fixture and a passing extraction).
 - [ ] Live verification of upload → confirm → document evidence → My Files → chat
       continuity, performed by the owner.
+
+### DEC-20260731-001 — Authoritative deployment commit identity (Railway-native SHA precedence)
+
+Status: proposed
+Date: 2026-07-31
+Owner: Rico Engineering
+Related PR: `#1470` (Draft)
+
+#### Context
+
+The `/version` endpoint reports the deployed source revision via its `commit`
+field. Before this decision, the resolver was a flat `_first_env` list that
+checked `GIT_COMMIT` before any platform-native variable:
+
+```
+_first_env("GIT_COMMIT", "VERCEL_GIT_COMMIT_SHA", "RENDER_GIT_COMMIT", ...)
+```
+
+`GIT_COMMIT` is a generic name. Commits from the production `/version` endpoint
+reported `ccde2c48` — the same value across multiple deploys — consistent with
+a static or rarely-updated generic variable taking precedence at runtime.
+Because it appeared first in the list, every deploy potentially reported a stale
+value regardless of what code Railway actually deployed. The Railway-native
+`RAILWAY_GIT_COMMIT_SHA` (auto-populated by Railway for GitHub-triggered deploys)
+was never checked.
+
+The exact stale value source in the Railway dashboard is not console-verified
+here; the observable symptom is that `/version.commit` did not change across
+deploys that should have changed it.
+
+This meant:
+1. `/version.commit` was **not** trustworthy source identity — a generic
+   variable could impersonate the deployed revision without detection.
+2. `started_at` (process boot time) proved a restart happened but did **not**
+   identify **which** code revision is running. A platform health-replacement
+   of a failed replica restarts the process without changing the deployed code.
+3. The `deploy-production.yml` workflow fetches `/version` and prints both the
+   deployed commit and `$GITHUB_SHA` for human review. It does **not**
+   compare them or fail on mismatch. A stale `/version.commit` therefore
+   surfaces in the log but does not block the workflow, so divergence can go
+   unnoticed unless an operator reads the summary.
+
+#### Decision
+
+1. **`RAILWAY_GIT_COMMIT_SHA` is added to the resolver** — confirmed from
+   Railway's official documentation (`docs.railway.com/variables/reference`) as
+   the variable that "contains the git SHA of the commit that triggered the
+   deployment" for GitHub-originated deploys.
+
+2. **Platform-aware precedence replaces the flat list.** The new resolver
+   `_resolve_deployment_revision()` detects the running platform and uses only
+   its native SHA variable:
+   - **Railway**: `RAILWAY_GIT_COMMIT_SHA` (detected via `RAILWAY_REPLICA_ID`)
+   - **Vercel**: `VERCEL_GIT_COMMIT_SHA` (detected via `VERCEL_ENV`)
+   - **Render**: `RENDER_GIT_COMMIT` (detected via `RENDER`)
+   - **Generic fallback** (no platform detected): `GIT_COMMIT` → `COMMIT_SHA` → `SOURCE_VERSION`
+
+3. **A stale generic value must not impersonate a platform revision.** When a
+   platform is detected and its native SHA is absent, the resolver returns
+   `"unknown"` / unverified. It does not fall through to a generic variable
+   that could be stale.
+
+4. **`commit_verified` (bool) and `commit_source` (str) are added** to
+   `/version` — additive backward-compatible fields. `commit_verified` is `True`
+   only when the value is a full 40-character hex SHA from a platform-native
+   source. `commit_source` names the exact env var that supplied the value.
+
+5. **`started_at` is documented as recency, not identity.** A process restart
+   (platform replica replacement) restarts the clock but does not change the
+   deployed code. Both `commit` (identity) and `started_at` (recency) are
+   required to fully verify a deploy.
+
+#### Consequences
+
+- Positive: `/version.commit` now reports the actual deployed source revision on
+  Railway, Vercel, and Render when the native SHA is available.
+- Positive: A stale static `GIT_COMMIT` in the Railway dashboard can no longer
+  impersonate the deployed revision — Railway-mode ignores generics.
+- Positive: `commit_source` and `commit_verified` give operators immediate,
+  code-provable insight into whether the reported commit is trustworthy.
+- Positive: `deploy-production.yml` continues to print both the deployed commit
+  and `$GITHUB_SHA` for human review. The `commit` key remains the same field,
+  so the workflow parser needs no change.
+- Positive: Backward compatible — all existing consumers that read `commit`
+  continue to work.
+- Trade-off: On Railway, if `RAILWAY_GIT_COMMIT_SHA` is absent or malformed
+  (e.g., a deploy triggered outside GitHub), `/version.commit` reports
+  `"unknown"` instead of falling back to a potentially stale generic. This is
+  correct — an absent or malformed platform-native SHA means the revision is
+  not verifiable, not that a stale value should be used.
+- Trade-off: Three platform checks run on every `/version` call (negligible cost
+  — `os.getenv` on already-cached env var state).
+- Trade-off: Exact-SHA post-deploy verification remains live/manual or requires
+  a separately designed non-gating workflow. The current `deploy-production.yml`
+  does not fail on SHA mismatch and adding that check must be evaluated for
+  Railway Wait-for-CI deadlock risk before introduction.
+
+#### Railway console evidence still required
+
+The following should be verified from the Railway console or a live production
+read of `/version` after this code is deployed:
+
+1. `RAILWAY_REPLICA_ID` is present at runtime for Railway deployments.
+2. `RAILWAY_GIT_COMMIT_SHA` contains the expected full 40-char commit SHA.
+3. `/version.commit` matches `origin/main` after a fresh Railway deploy.
+4. `/version.commit_source` is `"RAILWAY_GIT_COMMIT_SHA"`.
+5. `/version.commit_verified` is `true`.
+
+#### Rollback
+
+Revert the single commit. This is an additive, runtime-only change:
+
+- No migration, no schema, no database write.
+- No frontend change.
+- No workflow configuration change.
+- No feature flag or env var to toggle.
+- If the new resolver misbehaves, `/version` returns `"unknown"` or falls back
+  to the generic `_first_env` fallback — it cannot prevent the app from
+  starting, serving traffic, or deploying.
+- To return to the old flat-list behavior: revert the PR commit.
