@@ -180,7 +180,7 @@ per-route audit proves they still expose legacy UI.
 ### Refreshed route matrix — audited @ `main = 5cf9a6f` (2026-07-14)
 
 `main` advanced past the Phase-0 base (`c11575d`): #1017 (foundation),
-#1020 (`/command` → WorkspaceShell), #1019 (opening films), #1021
+# 1020 (`/command` → WorkspaceShell), #1019 (opening films), #1021
 (`/subscription` Atelier UI), #1022-history merged. Re-audited from the live tree
 (33 `page.tsx` routes) — shell import verified per route.
 
