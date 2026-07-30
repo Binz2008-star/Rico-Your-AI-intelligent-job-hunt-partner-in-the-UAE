@@ -8679,10 +8679,10 @@ medium-workspace architecture.
 
 ### TASK-20260730-001 — A filename is not a career
 
-Status: review
+Status: done (MERGED — **not** VERIFIED; production smoke pending)
 Owner: Claude (acting engineer)
 Branch: `fix/ai-grounding-contract`
-Issue/PR: Draft PR (see Continuity Block)
+Issue/PR: #1464 — squash-merged as `41a95adf5e08b576571f32e57afd6919b0374a88`
 
 Epic: AI Response Reliability & Performance (`ENGINEERING_ROADMAP.md` → Phase 2
 Hardening). Phase **1 of 6**. Phases 2–6 are NOT authorized by this task.
@@ -8876,7 +8876,7 @@ usable" — bounded here, not deleted).
 
 #### Required verification
 
-- [x] Focused: `tests/test_ai_grounding_contract.py` (29 new tests)
+- [x] Focused: `tests/test_ai_grounding_contract.py` (**50** tests)
 - [x] Regression: identity guardrails, uploaded-documents context, profile-CV
       fallback, document upload context, storage quotas, file-list intent,
       uploaded-image context
@@ -8889,11 +8889,18 @@ usable" — bounded here, not deleted).
 - Task ID: TASK-20260730-001
 - Branch: `fix/ai-grounding-contract`
 - Base branch: `main`
-- Verified base SHA: `ccde2c483c76b782214f3bb117c4c07310121c4d`
-- Status: review — Draft PR only
+- Verified base SHA: `4a6324957de35d09c0804800bef9ac83fa56e768`
+  (branch was cut from `ccde2c4`, then `main` moved and was merged in;
+  `4a63249` is the base the final head was reviewed and merged against)
+- Status: MERGED as `41a95adf5e08b576571f32e57afd6919b0374a88`.
+  **Phase 1 is NOT VERIFIED** — authenticated production smoke has not been
+  performed. The Render deploy hook returned HTTP 409 on the merge commit
+  (and on `ccde2c4` before it), so the change is not confirmed live.
 - Files changed: `src/rico_chat_api.py` (metadata isolation, evidence block,
   truthful `content_available`), `src/rico_identity.py` (untrusted-class rule,
-  evidence contract), `tests/test_ai_grounding_contract.py` (new, 30 tests),
+  evidence contract), `src/rico_openai_agent.py` (inject the shared grounding
+  contract into the HuggingFace fallback leg),
+  `tests/test_ai_grounding_contract.py` (new, **50** tests),
   seven existing test files corrected to the new contract,
   `.github/workflows/qa-tests.yml` (enumerate the new test file — the repo's own
   enumeration guard correctly failed the build because a test no workflow runs
