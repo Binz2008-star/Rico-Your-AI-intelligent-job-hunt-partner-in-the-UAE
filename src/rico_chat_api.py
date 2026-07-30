@@ -2788,6 +2788,12 @@ class RicoChatAPI:
             text = _text(key)
             if text:
                 evidence[key] = text
+        # How good the parse was. Lets the model hedge honestly on a poor
+        # extraction instead of treating a partial parse as complete evidence.
+        if structured.get("extraction_quality"):
+            evidence["extraction_quality"] = _cap(
+                str(structured["extraction_quality"]), cls._EVIDENCE_MAX_ITEM_CHARS
+            )
 
         if not evidence:
             return None

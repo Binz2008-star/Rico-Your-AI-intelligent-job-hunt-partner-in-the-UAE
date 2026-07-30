@@ -8782,6 +8782,67 @@ identity/years provenance, which degrades independently); dropping
 section "the fallback that makes an unsplittable CV still usable" — it is
 bounded here, not deleted).
 
+#### Phase 1 closure work — F-1 and F-2 (owner ruling 2026-07-30)
+
+The owner ruled that the Phase 1 objective is **global grounding integrity
+across every provider and prompt path**, so these are not separate objectives —
+they belong inside this PR.
+
+**F-1 — the contract did not survive the provider cascade.** Production runs
+`RICO_AI_PROVIDER=deepseek` with a documented DeepSeek → HuggingFace fallback.
+`_call_hf_free` built its own three-line system prompt and never called
+`get_rico_system_prompt()`, so the identity-integrity rule, the `_untrusted`
+rule and the evidence contract were all absent on that leg — while `_skip` still
+forwarded `career_context` (carrying `active_cv_filename_untrusted`) and
+`verified_cv_evidence` to it. **A filename with no rule governing it is the
+production incident, silently reproducible whenever DeepSeek fell over.**
+
+Closed by EXTRACTION, not duplication: `IDENTITY_INTEGRITY_RULE`,
+`UNTRUSTED_METADATA_RULE` and `EVIDENCE_CONTRACT` are named constants, and
+`get_grounding_contract()` composes them for any leg. The primary prompt splices
+the same constants back at their existing positions and is **proven
+byte-identical** to before the refactor. Timeout, model, routing, retries,
+temperature and provider selection untouched.
+
+**F-2 — filenames in `prompt_override` prose.** Both builders
+(`_handle_uploaded_document_followup`, `_score_uploaded_job_against_cv`) put a
+bare filename into the USER message, outside the `_untrusted` context-field
+rule. Removed; the document type and transcript — the actual evidence — remain.
+The third builder (`_build_interview_prompt_override`) was verified clean and is
+now pinned by a test.
+
+Both are **mutation-tested**: restoring the filename interpolation fails the
+prompt_override tests; removing the contract from the HF prompt fails the
+cascade tests. A test that cannot fail proves nothing.
+
+#### PR #1462 consolidation (closed without merge)
+
+Every unique protection from `#1462` is present here:
+
+| `#1462` protection | State in `#1464` |
+| --- | --- |
+| `career_context.active_cv_filename_untrusted` | present |
+| `last_uploaded_document.filename_untrusted` | present |
+| filename removed from the metadata-only `note` | present |
+| `verified_cv_evidence` via the memoised `_cv_context` | present |
+| per-entry (240) / per-item (120) string caps | present, **plus** a 1800-char total block budget with ordered shedding |
+| entry-count caps | present (work 6 / education 4 vs `#1462`'s 5 / 3) |
+| `extraction_quality` as provenance | ported in this commit |
+| recursive filename-**key** guard | present, and proven to catch a real violation |
+| recursive string-**value** guard | ported |
+| one `_cv_context` call per instance | ported |
+| `transcribed_text` 4000-char + bounded-evidence budget test | ported |
+| profile facts preserved beside an oversized CV | ported in this commit |
+| prompt names the leaked fields + evidence contract | present, governed as a **class** at any depth |
+
+Deliberately NOT carried forward from `#1462`, with reasons: leaving
+`content_available` untouched (its own PR body records it as unresolved — it is
+the false-promise half of the root cause); nesting evidence under
+`career_context` (couples CV content to identity/years provenance, which
+degrades independently); deleting `work_experience_text` (`cv_structured.py`
+calls the verbatim section "the fallback that makes an unsplittable CV still
+usable" — bounded here, not deleted).
+
 #### Intentional technical debt
 
 - `_verified_cv_evidence` reads through `_cv_context`, which is memoised per

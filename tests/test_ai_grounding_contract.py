@@ -914,3 +914,30 @@ class TestPromptOverrideCarriesNoFilename:
         import inspect
         source = inspect.getsource(RicoChatAPI._build_interview_prompt_override)
         assert "filename" not in source
+
+
+# ── 11. Consolidation checks carried from PR #1462 ──────────────────────────
+
+class TestOversizedCvDoesNotEvictProfileFacts:
+    def test_essential_profile_facts_survive_an_oversized_cv(self):
+        """A CV with 100 work entries must not push the user's own profile
+        fields out of the context — they are ordered first and the evidence
+        block is bounded, but nothing asserted it."""
+        structured = {
+            **_substantive_cv_structured(),
+            "work_experience": [
+                {"title": f"Role {i}", "company": f"Company {i}", "text": "x" * 900}
+                for i in range(100)
+            ],
+        }
+        ctx = _build_context(_complete_profile(), structured=structured)
+        assert ctx["current_role"] == "Founder & General Manager"
+        assert ctx["current_company"] == "Synthetic Eco Co"
+        assert ctx["years_experience"] == 10
+        assert "Environmental Compliance" in ctx["skills"]
+        assert len(json.dumps(ctx["verified_cv_evidence"], ensure_ascii=False)) \
+            <= RicoChatAPI._EVIDENCE_MAX_TOTAL_CHARS
+
+    def test_extraction_quality_is_carried_as_provenance(self):
+        ctx = _build_context(_complete_profile(), structured=_substantive_cv_structured())
+        assert ctx["verified_cv_evidence"]["extraction_quality"] == "good"
