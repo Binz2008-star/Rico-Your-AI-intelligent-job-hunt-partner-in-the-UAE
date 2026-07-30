@@ -251,27 +251,47 @@ def _apply_cv_upload_artifacts() -> None:
     _apply_sql_migration("038_cv_upload_artifacts", sql)
 
 
+def _startup_migrations_enabled() -> bool:
+    """Gate for write-capable startup DB initialization (#railway-startup-safety).
+
+    Defaults to true so existing Render/main behavior is unchanged. Set
+    RICO_RUN_STARTUP_MIGRATIONS=false to connect to an existing, already-
+    initialized Neon database without the process issuing any startup DDL —
+    for standing up an additional deployment target (e.g. a second platform)
+    against a database that another deployment already owns and migrates.
+    """
+    return os.getenv("RICO_RUN_STARTUP_MIGRATIONS", "true").strip().lower() != "false"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        from src.rico_db import RicoDB
-        RicoDB().init()
-        logger.info("rico_db_init OK")
-    except Exception:
-        logger.warning("rico_db_init skipped (DB unavailable or tables already exist)")
+    if not _startup_migrations_enabled():
+        logger.info(
+            "startup_migrations_disabled: RICO_RUN_STARTUP_MIGRATIONS=false — "
+            "skipping RicoDB().init(), init_db(), and all _apply_* migrations; "
+            "connecting to existing schema only"
+        )
+        _check_critical_tables()
+    else:
+        try:
+            from src.rico_db import RicoDB
+            RicoDB().init()
+            logger.info("rico_db_init OK")
+        except Exception:
+            logger.warning("rico_db_init skipped (DB unavailable or tables already exist)")
 
-    try:
-        from src.db import init_db
-        init_db()
-        logger.info("settings_migration OK")
-    except Exception as exc:
-        logger.warning("settings_migration failed: %s", exc)
+        try:
+            from src.db import init_db
+            init_db()
+            logger.info("settings_migration OK")
+        except Exception as exc:
+            logger.warning("settings_migration failed: %s", exc)
 
-    _check_critical_tables()
-    _apply_performance_indexes()
-    _apply_audit_helper_tables()
-    _apply_uploaded_document_context()
-    _apply_cv_upload_artifacts()
+        _check_critical_tables()
+        _apply_performance_indexes()
+        _apply_audit_helper_tables()
+        _apply_uploaded_document_context()
+        _apply_cv_upload_artifacts()
 
     try:
         # Kick the reasoning /models pre-check on a daemon thread: probes once now,
