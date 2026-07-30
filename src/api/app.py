@@ -150,6 +150,58 @@ _CRITICAL_TABLES = frozenset({
 })
 
 
+def _require_critical_tables_readonly() -> None:
+    """Strict read-only schema verification — used only when
+    RICO_RUN_STARTUP_MIGRATIONS=false.
+
+    A deployment that intentionally skips migrations must never silently
+    serve traffic against a database it hasn't verified is actually usable.
+    Every failure mode here aborts startup: missing DATABASE_URL, a failed
+    connection, a failed query, or missing critical tables. No write-capable
+    call is made anywhere in this path.
+    """
+    if not os.getenv("DATABASE_URL", "").strip():
+        raise RuntimeError(
+            "RICO_RUN_STARTUP_MIGRATIONS=false requires DATABASE_URL — "
+            "startup migrations are disabled, so a working database is not optional"
+        )
+
+    from src.db import get_db_connection
+    conn = get_db_connection()
+    if not conn:
+        raise RuntimeError(
+            "RICO_RUN_STARTUP_MIGRATIONS=false: database connection failed — "
+            "refusing to serve traffic against an unverified schema"
+        )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = ANY(%s)
+                """,
+                (list(_CRITICAL_TABLES),),
+            )
+            found = {row[0] for row in cur.fetchall()}
+    except Exception as exc:
+        raise RuntimeError(
+            f"RICO_RUN_STARTUP_MIGRATIONS=false: critical-tables query failed: {exc}"
+        ) from exc
+    finally:
+        conn.close()
+
+    missing = _CRITICAL_TABLES - found
+    if missing:
+        raise RuntimeError(
+            f"RICO_RUN_STARTUP_MIGRATIONS=false: missing critical tables {sorted(missing)} — "
+            "refusing to serve traffic against an incomplete schema"
+        )
+
+    logger.info("startup_check: critical tables present (migrations disabled, read-only verification)")
+
+
 def _check_critical_tables() -> None:
     from src.db import get_db_connection
     conn = get_db_connection()
@@ -251,27 +303,73 @@ def _apply_cv_upload_artifacts() -> None:
     _apply_sql_migration("038_cv_upload_artifacts", sql)
 
 
+_STARTUP_MIGRATIONS_TRUE_VALUES = frozenset({"true", "1", "yes", "on"})
+_STARTUP_MIGRATIONS_FALSE_VALUES = frozenset({"false", "0", "no", "off"})
+
+
+def _startup_migrations_enabled() -> bool:
+    """Gate for write-capable startup DB initialization (#railway-startup-safety).
+
+    Defaults to true (unset) so existing Render/main behavior is unchanged.
+    Set RICO_RUN_STARTUP_MIGRATIONS=false to connect to an existing, already-
+    initialized Neon database without the process issuing any startup DDL —
+    for standing up an additional deployment target (e.g. a second platform)
+    against a database that another deployment already owns and migrates.
+
+    Parsing is intentionally strict: an unrecognized explicit value must
+    never silently fall through to either "run migrations" or "skip
+    migrations" by guessing — it raises before any DB call is made (see
+    lifespan(), which calls this before anything else), aborting startup
+    rather than booting into an ambiguous configuration.
+    """
+    raw = os.getenv("RICO_RUN_STARTUP_MIGRATIONS", "").strip().lower()
+    if not raw:
+        return True
+    if raw in _STARTUP_MIGRATIONS_TRUE_VALUES:
+        return True
+    if raw in _STARTUP_MIGRATIONS_FALSE_VALUES:
+        return False
+    raise ValueError(
+        f"RICO_RUN_STARTUP_MIGRATIONS={raw!r} is not a recognized value — "
+        f"expected one of {sorted(_STARTUP_MIGRATIONS_TRUE_VALUES | _STARTUP_MIGRATIONS_FALSE_VALUES)} "
+        "or unset. Refusing to start rather than guess."
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        from src.rico_db import RicoDB
-        RicoDB().init()
-        logger.info("rico_db_init OK")
-    except Exception:
-        logger.warning("rico_db_init skipped (DB unavailable or tables already exist)")
+    # Evaluated first, before any DB call: an invalid explicit value aborts
+    # startup right here — RicoDB().init(), init_db(), the four _apply_*
+    # migrations, and the read-only schema check are all unreached.
+    migrations_enabled = _startup_migrations_enabled()
 
-    try:
-        from src.db import init_db
-        init_db()
-        logger.info("settings_migration OK")
-    except Exception as exc:
-        logger.warning("settings_migration failed: %s", exc)
+    if not migrations_enabled:
+        logger.info(
+            "startup_migrations_disabled: RICO_RUN_STARTUP_MIGRATIONS=false — "
+            "skipping RicoDB().init(), init_db(), and all _apply_* migrations; "
+            "performing a strict read-only schema check instead"
+        )
+        _require_critical_tables_readonly()
+    else:
+        try:
+            from src.rico_db import RicoDB
+            RicoDB().init()
+            logger.info("rico_db_init OK")
+        except Exception:
+            logger.warning("rico_db_init skipped (DB unavailable or tables already exist)")
 
-    _check_critical_tables()
-    _apply_performance_indexes()
-    _apply_audit_helper_tables()
-    _apply_uploaded_document_context()
-    _apply_cv_upload_artifacts()
+        try:
+            from src.db import init_db
+            init_db()
+            logger.info("settings_migration OK")
+        except Exception as exc:
+            logger.warning("settings_migration failed: %s", exc)
+
+        _check_critical_tables()
+        _apply_performance_indexes()
+        _apply_audit_helper_tables()
+        _apply_uploaded_document_context()
+        _apply_cv_upload_artifacts()
 
     try:
         # Kick the reasoning /models pre-check on a daemon thread: probes once now,
