@@ -38,7 +38,8 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 | `#1443` | **MERGED** as `cbcb4206b7b13a6de2fbbe84e42d610addc054e2` from head `542b66a6b7c65467b92385792ee0abe0201bf3d9`; read-only Delivery Smoke residual audit package |
 | `#1457` | **MERGED** as `dcc949af3e6300482be78146222d8d03fb6b092e` from head `acb33fe8b173cc05145acdbf760ae21fb907bee9`; bounded cache foundation, no production cache swapped |
 | `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
-| Open implementation PRs | **#1455** (frontend /applications board DnD, open) · **#1460** (Draft frontend /about Atelier migration, draft) · **#1454** (operational cleanup tooling, no production execution) |
+| Open implementation PRs | **#1455** (frontend /applications board DnD, open) · **#1460** (Draft frontend /about Atelier migration, draft) |
+| Open operational cleanup PRs | **#1454** (operational cleanup tooling; production deletion prohibited, no production execution) |
 
 ## Production verification boundary
 
@@ -127,7 +128,8 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | --- | --- |
 | Active implementation writers | **0** |
 | Active documentation writers | **1 — this reconciliation branch only; lease ends on merge/close** |
-| Open implementation PRs | **#1455** (frontend /applications board DnD, open) · **#1460** (Draft frontend /about Atelier migration, draft) · **#1454** (operational cleanup tooling, no production execution) |
+| Open implementation PRs | **#1455** (frontend /applications board DnD, open) · **#1460** (Draft frontend /about Atelier migration, draft) |
+| Open operational cleanup PRs | **#1454** (operational cleanup tooling; production deletion prohibited, no production execution) |
 | Multi-user reliability PR 1 / PR 2 | **merged through #1437 / #1438** |
 | D1 mapping/rehearsal | **complete** |
 | D1 final operating package | **merged** |
