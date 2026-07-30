@@ -2679,12 +2679,28 @@ class RicoChatAPI:
 
     #: Hard caps on the verified-evidence block. The serialized context is
     #: truncated to ``_PROFILE_CONTEXT_MAX_CHARS`` (4000) in rico_openai_runtime,
-    #: so an unbounded CV section would push the conversation history out of the
-    #: window it was deliberately ordered ahead of.
+    #: so an unbounded CV section would push out everything ordered after it.
+    #:
+    #: Counting entries is NOT bounding them. The parser writes each work entry
+    #: as ``{"text": <verbatim entry body>, ...}`` (see src/cv_parser.py), so
+    #: capping the entry COUNT while copying entry dicts wholesale leaves the
+    #: same verbatim CV prose unbounded — six entries measured 14,972 chars
+    #: against a 4,000-char budget, and an ordinary four-job CV was enough to
+    #: push `career_memory` (the blocked-companies list) out of the window.
+    #: Every string leaf is therefore capped, and the assembled block is then
+    #: checked against a total byte budget.
     _EVIDENCE_MAX_WORK_ENTRIES = 6
     _EVIDENCE_MAX_EDUCATION_ENTRIES = 4
     _EVIDENCE_MAX_LIST_ITEMS = 20
     _EVIDENCE_MAX_TEXT_CHARS = 1200
+    #: Per-string caps inside entries and scalar lists.
+    _EVIDENCE_MAX_ENTRY_VALUE_CHARS = 240
+    _EVIDENCE_MAX_ITEM_CHARS = 120
+    #: Total serialized budget for the whole block. Sized so the block plus
+    #: profile fields, career_context and uploaded_documents leave room for the
+    #: context sections ordered after it — conversation_history,
+    #: recently_discussed_jobs, learned_preferences, career_memory.
+    _EVIDENCE_MAX_TOTAL_CHARS = 1800
 
     @classmethod
     def _verified_cv_evidence(cls, cv_ctx: Any) -> dict[str, Any] | None:
@@ -2719,17 +2735,34 @@ class RicoChatAPI:
         except Exception:
             return None
 
+        def _cap(value: Any, limit: int) -> Any:
+            """Trim a string leaf. Non-strings pass through untouched."""
+            return value[:limit] if isinstance(value, str) else value
+
         def _entries(key: str, limit: int) -> list[dict[str, Any]]:
             raw = structured.get(key) or []
             if not isinstance(raw, (list, tuple)):
                 return []
-            return [e for e in raw if isinstance(e, dict)][:limit]
+            capped: list[dict[str, Any]] = []
+            for entry in raw[:limit] if limit else []:
+                if not isinstance(entry, dict):
+                    continue
+                # Cap every value inside the entry, not just the entry count —
+                # the parser puts the verbatim entry body in `text`.
+                capped.append({
+                    k: _cap(v, cls._EVIDENCE_MAX_ENTRY_VALUE_CHARS)
+                    for k, v in entry.items()
+                })
+            return capped
 
         def _items(key: str) -> list[str]:
             raw = structured.get(key) or []
             if not isinstance(raw, (list, tuple)):
                 return []
-            return [str(v) for v in raw if v][:cls._EVIDENCE_MAX_LIST_ITEMS]
+            return [
+                str(v)[:cls._EVIDENCE_MAX_ITEM_CHARS]
+                for v in raw if v
+            ][:cls._EVIDENCE_MAX_LIST_ITEMS]
 
         def _text(key: str) -> str | None:
             raw = structured.get(key)
@@ -2739,7 +2772,9 @@ class RicoChatAPI:
 
         evidence: dict[str, Any] = {}
         if structured.get("current_role"):
-            evidence["current_role"] = str(structured["current_role"])
+            evidence["current_role"] = _cap(
+                str(structured["current_role"]), cls._EVIDENCE_MAX_ENTRY_VALUE_CHARS
+            )
         for key, value in (
             ("work_experience", _entries("work_experience", cls._EVIDENCE_MAX_WORK_ENTRIES)),
             ("education", _entries("education", cls._EVIDENCE_MAX_EDUCATION_ENTRIES)),
@@ -2758,6 +2793,58 @@ class RicoChatAPI:
             return None
         # Provenance the model can cite. Deliberately carries no filename.
         evidence["source"] = "parsed_cv_structured"
+        return cls._fit_evidence_budget(evidence)
+
+    @classmethod
+    def _fit_evidence_budget(cls, evidence: dict[str, Any]) -> dict[str, Any]:
+        """Shrink *evidence* until it serializes within the block budget.
+
+        Per-leaf caps bound each value but not their SUM: a CV with the maximum
+        entries, skills, certifications and both verbatim sections still
+        overruns. Shed in order of what is least costly to lose, so the block
+        degrades instead of silently evicting the context sections ordered
+        after it:
+
+        1. the verbatim section texts — a readable restatement of the entries
+           that are already present as structured evidence;
+        2. then the trailing lowest-signal list items;
+        3. then the oldest work/education entries (the parser orders entries
+           most-recent first, so trailing entries are the oldest).
+
+        ``current_role``, ``source`` and at least the most recent entry are
+        never shed: an evidence block that cannot say what the user does now,
+        or where it came from, is not worth sending.
+        """
+        def _size(payload: dict[str, Any]) -> int:
+            try:
+                return len(json.dumps(payload, ensure_ascii=False, default=str))
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                return cls._EVIDENCE_MAX_TOTAL_CHARS + 1
+
+        if _size(evidence) <= cls._EVIDENCE_MAX_TOTAL_CHARS:
+            return evidence
+
+        for key in ("education_text", "work_experience_text"):
+            if key in evidence:
+                evidence.pop(key)
+                if _size(evidence) <= cls._EVIDENCE_MAX_TOTAL_CHARS:
+                    return evidence
+
+        for key in ("languages", "certifications", "skills"):
+            while len(evidence.get(key) or []) > 1:
+                evidence[key] = evidence[key][:-1]
+                if _size(evidence) <= cls._EVIDENCE_MAX_TOTAL_CHARS:
+                    return evidence
+
+        for key in ("education", "work_experience"):
+            while len(evidence.get(key) or []) > 1:
+                evidence[key] = evidence[key][:-1]
+                if _size(evidence) <= cls._EVIDENCE_MAX_TOTAL_CHARS:
+                    return evidence
+
+        # Floor reached: one entry per section plus current_role/source. Return
+        # it rather than dropping the block — this is still real evidence, and
+        # returning None here would put us back to grounding on nothing.
         return evidence
 
     def _is_file_list_query(self, message: str) -> bool:

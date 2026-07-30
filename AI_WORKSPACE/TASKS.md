@@ -8748,6 +8748,40 @@ post-filters · database schema · deployment.
   `career_context` owns years and withholds the figure on conflict; a second
   unreconciled number would let the model state what the resolver suppressed.
 
+#### Gap-port from the competing PR #1462 (2026-07-30)
+
+`#1462` (branch `fix/ai-context-filename-guardrail`, base `ccde2c4`) was opened
+~50 minutes BEFORE this branch and implements the same objective. It was missed
+because `PROJECT_STATUS.md` reported "Open implementation PRs: 0" and live
+GitHub was not checked before branching — the control panel's own rule of
+authority puts live GitHub above it. **Process failure recorded, not excused:
+verify live open PRs before cutting a branch.**
+
+An independent exact-head review of this branch found the same blocking defect
+`#1462` had already solved. Ported here:
+
+- **per-string caps inside evidence** (`_EVIDENCE_MAX_ENTRY_VALUE_CHARS = 240`,
+  `_EVIDENCE_MAX_ITEM_CHARS = 120`) plus a total block budget
+  (`_EVIDENCE_MAX_TOTAL_CHARS = 1800`) with ordered shedding. Counting entries
+  was not bounding them: the parser writes the verbatim entry body into
+  `entry["text"]`, so a 6-entry CV measured **14,972 chars against a 4,000-char
+  budget**, and an ordinary 4-job CV produced a 4,321-char context that silently
+  evicted `career_memory` — the blocked-companies list. Now 1,688 and 1,449.
+- **value-side filename guard test** — the key-side walker cannot see a filename
+  interpolated into a string VALUE, which is literally the second half of the
+  defect (the prose `note`).
+- **one-resolver-call-per-instance test** — `_cv_context` was memoised but
+  nothing asserted it.
+- **large-evidence + 4000-char `transcribed_text` test.**
+
+Deliberately NOT ported from `#1462`: leaving `content_available` untouched
+(its own PR body records this as unresolved — it is the false-promise half of
+the root cause); nesting evidence under `career_context` (couples CV content to
+identity/years provenance, which degrades independently); dropping
+`work_experience_text` entirely (`cv_structured.py:15-17` calls the verbatim
+section "the fallback that makes an unsplittable CV still usable" — it is
+bounded here, not deleted).
+
 #### Intentional technical debt
 
 - `_verified_cv_evidence` reads through `_cv_context`, which is memoised per

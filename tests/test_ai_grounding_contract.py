@@ -510,3 +510,206 @@ class TestSystemPromptEvidenceContract:
         for field in ("document_id", "doc_type", "is_primary",
                       "parse_status", "content_available", "filename_untrusted"):
             assert field in prompt
+
+
+# ── 6. Context budget (ported from PR #1462's bounding design) ───────────────
+
+class TestEvidenceBudget:
+    """Counting entries is not bounding them.
+
+    The parser writes each work entry as ``{"text": <verbatim entry body>}``
+    (``src/cv_parser.py``), so capping the entry COUNT while copying entry dicts
+    wholesale leaves the same verbatim prose unbounded. Measured on the
+    unbounded version: six entries produced 14,972 characters against a
+    4,000-character budget, and an ordinary four-job CV was enough to evict
+    ``career_memory`` — the blocked-companies list — from the prompt.
+    """
+
+    @staticmethod
+    def _fat_structured(entries=6, entry_chars=4000):
+        """A CV shaped like the parser really emits: verbatim prose per entry."""
+        return {
+            "schema_version": 1,
+            "current_role": "Founder & General Manager",
+            "skills": [f"Skill {i} " + "x" * 400 for i in range(40)],
+            "certifications": [f"Cert {i} " + "y" * 400 for i in range(40)],
+            "languages": [f"Lang {i} " + "z" * 400 for i in range(40)],
+            "work_experience": [
+                {"title": f"Role {i}", "company": f"Co {i}", "date_range": "2015-2020",
+                 "text": "w" * entry_chars}
+                for i in range(entries)
+            ],
+            "education": [
+                {"institution": f"Uni {i}", "text": "e" * entry_chars} for i in range(entries)
+            ],
+            "work_experience_text": "v" * 6000,
+            "education_text": "u" * 6000,
+            "extraction_quality": "good",
+            "extracted_chars": 90000,
+        }
+
+    def test_every_string_leaf_is_capped(self):
+        evidence = RicoChatAPI._verified_cv_evidence(
+            CVContext(state="structured", structured=self._fat_structured())
+        )
+        for entry in evidence.get("work_experience", []) + evidence.get("education", []):
+            for key, value in entry.items():
+                if isinstance(value, str):
+                    assert len(value) <= RicoChatAPI._EVIDENCE_MAX_ENTRY_VALUE_CHARS, key
+        for key in ("skills", "certifications", "languages"):
+            for item in evidence.get(key, []):
+                assert len(item) <= RicoChatAPI._EVIDENCE_MAX_ITEM_CHARS, key
+
+    def test_worst_case_block_fits_the_budget(self):
+        evidence = RicoChatAPI._verified_cv_evidence(
+            CVContext(state="structured", structured=self._fat_structured())
+        )
+        size = len(json.dumps(evidence, ensure_ascii=False))
+        assert size <= RicoChatAPI._EVIDENCE_MAX_TOTAL_CHARS, f"evidence block {size} chars"
+
+    def test_budget_shedding_keeps_the_load_bearing_facts(self):
+        """Degrade, don't collapse: identity of the current role, provenance,
+        and at least the most recent entry always survive."""
+        evidence = RicoChatAPI._verified_cv_evidence(
+            CVContext(state="structured", structured=self._fat_structured())
+        )
+        assert evidence["current_role"] == "Founder & General Manager"
+        assert evidence["source"] == "parsed_cv_structured"
+        assert len(evidence["work_experience"]) >= 1
+        assert evidence["work_experience"][0]["title"] == "Role 0"  # most recent kept
+
+    def test_realistic_four_job_cv_leaves_room_for_later_context(self):
+        """The case that actually shipped broken: four jobs at ~220 chars each.
+
+        Everything ordered AFTER conversation_history is delivered only through
+        this JSON blob, so it is what gets silently dropped — including
+        career_memory, which carries "Blocked companies (never apply)".
+        """
+        from src.rico_openai_runtime import _PROFILE_CONTEXT_MAX_CHARS
+
+        structured = {
+            "schema_version": 1,
+            "current_role": "Founder & General Manager",
+            "skills": ["Environmental Compliance", "ISO 14001", "Waste Management"],
+            "certifications": ["ISO 14001 Lead Auditor", "NEBOSH IGC"],
+            "work_experience": [
+                {"title": f"Role {i}", "company": f"Company {i}",
+                 "date_range": "2015-2020", "text": "d" * 220}
+                for i in range(4)
+            ],
+            "education": [],
+            "extraction_quality": "good",
+            "extracted_chars": 20000,
+        }
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api._cv_ctx_memo = ("u1", CVContext(state="structured", structured=structured))
+        api._collect_uploaded_documents = lambda uid, prof: _document_entries()
+        api._get_last_uploaded_document = lambda uid: None
+        api._get_recent_context = lambda uid: {}
+        api._get_recent_messages = lambda uid, limit=8: [
+            {"role": "user", "content": "find me operations roles in dubai"} for _ in range(8)
+        ]
+        api._recent_jobs_summary = lambda uid, limit=3: "AESG Operations Manager (discussed, today)"
+        with patch("src.services.career_context.resolve_career_context",
+                   return_value=_resolved_career_context()), \
+             patch("src.services.career_memory.build_memory_context",
+                   return_value="Blocked companies (never apply): BadCorp, WorseCorp"):
+            ctx = api._build_openai_context(_complete_profile(), user_id="u1")
+
+        assert ctx["career_memory"].startswith("Blocked companies")
+        truncated = json.dumps(ctx, ensure_ascii=False)[:_PROFILE_CONTEXT_MAX_CHARS]
+        # The blocked-companies memory must survive the runtime truncation.
+        assert "Blocked companies" in truncated
+        assert "parsed_cv_structured" in truncated
+
+    def test_large_evidence_beside_a_full_transcribed_text(self):
+        """A 4000-char uploaded-document transcript is the other big consumer.
+
+        Both can be present on the same turn; the evidence block must stay
+        bounded regardless of what else is competing for the window.
+        """
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api._cv_ctx_memo = ("u1", CVContext(
+            state="structured", structured=self._fat_structured()))
+        api._collect_uploaded_documents = lambda uid, prof: _document_entries()
+        api._get_last_uploaded_document = lambda uid: {
+            "filename": "job_ad.pdf", "display_label": "Job Description",
+            "extracted_text": "J" * 9000,
+        }
+        api._get_recent_context = lambda uid: {}
+        api._get_recent_messages = lambda uid, limit=8: []
+        api._recent_jobs_summary = lambda uid, limit=3: ""
+        with patch("src.services.career_context.resolve_career_context",
+                   return_value=_resolved_career_context()):
+            ctx = api._build_openai_context(_complete_profile(), user_id="u1")
+
+        assert len(ctx["last_uploaded_document"]["transcribed_text"]) == 4000
+        evidence_size = len(json.dumps(ctx["verified_cv_evidence"], ensure_ascii=False))
+        assert evidence_size <= RicoChatAPI._EVIDENCE_MAX_TOTAL_CHARS
+        assert unguarded_filename_keys(ctx) == []
+
+
+# ── 7. Value-side filename guard (ported from PR #1462) ─────────────────────
+
+class TestFilenameNotInStringValues:
+    """The key-side walker cannot see a filename interpolated into a VALUE —
+    which is literally the second half of the defect (the prose `note`)."""
+
+    def test_filename_appears_only_under_untrusted_keys(self):
+        def string_leaves(node, path="ctx", key=""):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    yield from string_leaves(v, f"{path}.{k}", str(k))
+            elif isinstance(node, list):
+                for i, v in enumerate(node):
+                    yield from string_leaves(v, f"{path}[{i}]", key)
+            elif isinstance(node, str):
+                yield path, key, node
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api._cv_ctx_memo = ("u1", CVContext(
+            state="structured", structured=_substantive_cv_structured()))
+        api._collect_uploaded_documents = lambda uid, prof: _document_entries()
+        api._get_last_uploaded_document = lambda uid: None
+        api._get_recent_context = lambda uid: {"last_uploaded_document": {
+            "document_type": "cv", "display_label": "CV",
+            "filename": MISLEADING_CV_FILENAME, "confidence": 0.9,
+        }}
+        api._get_recent_messages = lambda uid, limit=8: []
+        api._recent_jobs_summary = lambda uid, limit=3: ""
+        with patch("src.services.career_context.resolve_career_context",
+                   return_value=_resolved_career_context()):
+            ctx = api._build_openai_context(_complete_profile(), user_id="u1")
+
+        offenders = [
+            path for path, key, value in string_leaves(ctx)
+            if MISLEADING_CV_FILENAME in value and not key.lower().endswith("_untrusted")
+        ]
+        assert offenders == [], f"filename leaked into free text at: {offenders}"
+
+
+# ── 8. One CV resolver call per instance (ported from PR #1462) ─────────────
+
+class TestResolverCallBudget:
+    def test_repeated_context_builds_resolve_the_cv_once(self):
+        """`_cv_context` is memoised per request instance. Nothing asserted it,
+        so a refactor could turn one read per turn into N without failing."""
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api._collect_uploaded_documents = lambda uid, prof: _document_entries()
+        api._get_last_uploaded_document = lambda uid: None
+        api._get_recent_context = lambda uid: {}
+        api._get_recent_messages = lambda uid, limit=8: []
+        api._recent_jobs_summary = lambda uid, limit=3: ""
+
+        with patch("src.services.cv_context_resolver.resolve_cv_context",
+                   return_value=CVContext(state="structured",
+                                          structured=_substantive_cv_structured())) as resolver, \
+             patch("src.services.career_context.resolve_career_context",
+                   return_value=_resolved_career_context()):
+            for _ in range(3):
+                ctx = api._build_openai_context(_complete_profile(), user_id="u1")
+
+        assert resolver.call_count == 1, (
+            f"resolved the CV {resolver.call_count} times for one request instance"
+        )
+        assert "verified_cv_evidence" in ctx
