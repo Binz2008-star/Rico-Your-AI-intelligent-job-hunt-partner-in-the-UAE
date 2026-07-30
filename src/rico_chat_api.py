@@ -2597,7 +2597,11 @@ class RicoChatAPI:
         return entries
 
     @staticmethod
-    def _documents_for_llm(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _documents_for_llm(
+        entries: list[dict[str, Any]],
+        *,
+        evidence_available: bool = False,
+    ) -> list[dict[str, Any]]:
         """Two-layer identity guard for the LLM-facing document list (#P0).
 
         Layer 1 — exclude broken artifacts entirely: a zero-byte upload (the
@@ -2609,9 +2613,31 @@ class RicoChatAPI:
         structured fields (``document_id``, ``doc_type``, ``is_primary``,
         ``parse_status``, ``content_available``). This preserves document
         disambiguation ("compare X.pdf vs Y.pdf", active-CV references) without
-        presenting the filename as a person's name/employer/role. ``parse_status``
-        / ``content_available`` are derived — there is no such column — from
-        file size and parsed-CV signals (skills/years, or the parsed profile-CV).
+        presenting the filename as a person's name/employer/role.
+
+        ``parse_status`` and ``content_available`` answer DIFFERENT questions and
+        must not be derived from one another:
+
+        * ``parse_status`` is a property of the stored document — was it parsed?
+          Derived, as before, from file size and parsed-CV signals (skills/years,
+          or the parsed profile-CV). There is no such column.
+        * ``content_available`` is a property of THIS MODEL PAYLOAD — is the CV's
+          verified content actually in the prompt the model is about to read?
+          It is true only when ``evidence_available`` says a substantive
+          ``verified_cv_evidence`` block was assembled for this very turn, and
+          only for the active CV that block came from.
+
+        Deriving the second from the first is the defect this parameter closes: a
+        parsed CV with a non-zero ``skills_count`` reported ``content_available:
+        true`` while the serialized context carried no CV content at all, and the
+        system prompt tells the model that flag means "the parsed CV's extracted
+        text is available to you". Told it held the CV and handed none, the model
+        reached for the only career-shaped string left in the payload — the
+        filename — and inferred a career from it.
+
+        ``evidence_available`` defaults to False so every caller fails CLOSED: a
+        caller that cannot prove content is in the payload can only ever claim
+        metadata, never content.
 
         The deterministic My Files handler keeps using the full
         ``_collect_uploaded_documents`` projection; only this LLM copy is guarded.
@@ -2624,18 +2650,23 @@ class RicoChatAPI:
                 continue
             doc_type = e.get("doc_type", "")
             is_primary = bool(e.get("is_primary"))
-            # Only the active/parsed CV's extracted text is actually available to
-            # the model; every other file is metadata-only.
-            content_available = bool(e.get("is_legacy")) or (
+            # Was the stored document parsed? A document property, not a claim
+            # about what this payload carries.
+            parsed = bool(e.get("is_legacy")) or (
                 doc_type == "cv" and is_primary and (
                     (e.get("skills_count") or 0) > 0 or e.get("years_experience") is not None
                 )
+            )
+            # Is that content in THIS payload? Only the active CV can be, and
+            # only when the evidence block was actually assembled for this turn.
+            content_available = bool(
+                evidence_available and doc_type == "cv" and is_primary
             )
             item: dict[str, Any] = {
                 "document_id": e.get("id"),
                 "doc_type": doc_type,
                 "is_primary": is_primary,
-                "parse_status": "parsed" if content_available else "metadata_only",
+                "parse_status": "parsed" if parsed else "metadata_only",
                 "content_available": content_available,
                 # Untrusted: identifies a file only — never a person, employer,
                 # role, or credential. Rico must not read identity from it.
@@ -2645,6 +2676,182 @@ class RicoChatAPI:
                 item["is_legacy"] = True
             safe.append(item)
         return safe
+
+    #: Hard caps on the verified-evidence block. The serialized context is
+    #: truncated to ``_PROFILE_CONTEXT_MAX_CHARS`` (4000) in rico_openai_runtime,
+    #: so an unbounded CV section would push out everything ordered after it.
+    #:
+    #: Counting entries is NOT bounding them. The parser writes each work entry
+    #: as ``{"text": <verbatim entry body>, ...}`` (see src/cv_parser.py), so
+    #: capping the entry COUNT while copying entry dicts wholesale leaves the
+    #: same verbatim CV prose unbounded — six entries measured 14,972 chars
+    #: against a 4,000-char budget, and an ordinary four-job CV was enough to
+    #: push `career_memory` (the blocked-companies list) out of the window.
+    #: Every string leaf is therefore capped, and the assembled block is then
+    #: checked against a total byte budget.
+    _EVIDENCE_MAX_WORK_ENTRIES = 6
+    _EVIDENCE_MAX_EDUCATION_ENTRIES = 4
+    _EVIDENCE_MAX_LIST_ITEMS = 20
+    _EVIDENCE_MAX_TEXT_CHARS = 1200
+    #: Per-string caps inside entries and scalar lists.
+    _EVIDENCE_MAX_ENTRY_VALUE_CHARS = 240
+    _EVIDENCE_MAX_ITEM_CHARS = 120
+    #: Total serialized budget for the whole block. Sized so the block plus
+    #: profile fields, career_context and uploaded_documents leave room for the
+    #: context sections ordered after it — conversation_history,
+    #: recently_discussed_jobs, learned_preferences, career_memory.
+    _EVIDENCE_MAX_TOTAL_CHARS = 1800
+
+    @classmethod
+    def _verified_cv_evidence(cls, cv_ctx: Any) -> dict[str, Any] | None:
+        """The user's CV facts, or None when there is nothing verified to send.
+
+        Reads ONLY the ``cv_structured`` document resolved by the approved path
+        (``_cv_context`` → ``src.services.cv_context_resolver``), which returns
+        ``structured`` only when it earned the ``structured`` state — so a thin
+        or malformed document can never be presented here as evidence.
+
+        Two fields present in ``cv_structured`` are deliberately EXCLUDED:
+
+        * ``name`` — CV parses are known to write a title line ("Vip Relationship
+          Manager") into this field. The identity-name guard in
+          ``_build_openai_context`` exists to stop exactly that reaching the
+          model; re-admitting it through the evidence block would reopen it.
+        * ``years_experience_hint`` — its own schema calls it a hint, never the
+          authoritative value. ``career_context`` already governs years, and
+          suppresses the absolute figure on conflict. A second, unreconciled
+          number would let the model state a year count the resolver withheld.
+
+        Returns None rather than an empty dict so callers get one unambiguous
+        "no verified evidence" signal.
+        """
+        structured = getattr(cv_ctx, "structured", None)
+        if not isinstance(structured, dict) or not structured:
+            return None
+        try:
+            from src.services.cv_structured import is_substantive
+            if not is_substantive(structured):
+                return None
+        except Exception:
+            return None
+
+        def _cap(value: Any, limit: int) -> Any:
+            """Trim a string leaf. Non-strings pass through untouched."""
+            return value[:limit] if isinstance(value, str) else value
+
+        def _entries(key: str, limit: int) -> list[dict[str, Any]]:
+            raw = structured.get(key) or []
+            if not isinstance(raw, (list, tuple)):
+                return []
+            capped: list[dict[str, Any]] = []
+            for entry in raw[:limit] if limit else []:
+                if not isinstance(entry, dict):
+                    continue
+                # Cap every value inside the entry, not just the entry count —
+                # the parser puts the verbatim entry body in `text`.
+                capped.append({
+                    k: _cap(v, cls._EVIDENCE_MAX_ENTRY_VALUE_CHARS)
+                    for k, v in entry.items()
+                })
+            return capped
+
+        def _items(key: str) -> list[str]:
+            raw = structured.get(key) or []
+            if not isinstance(raw, (list, tuple)):
+                return []
+            return [
+                str(v)[:cls._EVIDENCE_MAX_ITEM_CHARS]
+                for v in raw if v
+            ][:cls._EVIDENCE_MAX_LIST_ITEMS]
+
+        def _text(key: str) -> str | None:
+            raw = structured.get(key)
+            if not isinstance(raw, str) or not raw.strip():
+                return None
+            return raw.strip()[:cls._EVIDENCE_MAX_TEXT_CHARS]
+
+        evidence: dict[str, Any] = {}
+        if structured.get("current_role"):
+            evidence["current_role"] = _cap(
+                str(structured["current_role"]), cls._EVIDENCE_MAX_ENTRY_VALUE_CHARS
+            )
+        for key, value in (
+            ("work_experience", _entries("work_experience", cls._EVIDENCE_MAX_WORK_ENTRIES)),
+            ("education", _entries("education", cls._EVIDENCE_MAX_EDUCATION_ENTRIES)),
+            ("skills", _items("skills")),
+            ("certifications", _items("certifications")),
+            ("languages", _items("languages")),
+        ):
+            if value:
+                evidence[key] = value
+        for key in ("work_experience_text", "education_text"):
+            text = _text(key)
+            if text:
+                evidence[key] = text
+        # How good the parse was. Lets the model hedge honestly on a poor
+        # extraction instead of treating a partial parse as complete evidence.
+        if structured.get("extraction_quality"):
+            evidence["extraction_quality"] = _cap(
+                str(structured["extraction_quality"]), cls._EVIDENCE_MAX_ITEM_CHARS
+            )
+
+        if not evidence:
+            return None
+        # Provenance the model can cite. Deliberately carries no filename.
+        evidence["source"] = "parsed_cv_structured"
+        return cls._fit_evidence_budget(evidence)
+
+    @classmethod
+    def _fit_evidence_budget(cls, evidence: dict[str, Any]) -> dict[str, Any]:
+        """Shrink *evidence* until it serializes within the block budget.
+
+        Per-leaf caps bound each value but not their SUM: a CV with the maximum
+        entries, skills, certifications and both verbatim sections still
+        overruns. Shed in order of what is least costly to lose, so the block
+        degrades instead of silently evicting the context sections ordered
+        after it:
+
+        1. the verbatim section texts — a readable restatement of the entries
+           that are already present as structured evidence;
+        2. then the trailing lowest-signal list items;
+        3. then the oldest work/education entries (the parser orders entries
+           most-recent first, so trailing entries are the oldest).
+
+        ``current_role``, ``source`` and at least the most recent entry are
+        never shed: an evidence block that cannot say what the user does now,
+        or where it came from, is not worth sending.
+        """
+        def _size(payload: dict[str, Any]) -> int:
+            try:
+                return len(json.dumps(payload, ensure_ascii=False, default=str))
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                return cls._EVIDENCE_MAX_TOTAL_CHARS + 1
+
+        if _size(evidence) <= cls._EVIDENCE_MAX_TOTAL_CHARS:
+            return evidence
+
+        for key in ("education_text", "work_experience_text"):
+            if key in evidence:
+                evidence.pop(key)
+                if _size(evidence) <= cls._EVIDENCE_MAX_TOTAL_CHARS:
+                    return evidence
+
+        for key in ("languages", "certifications", "skills"):
+            while len(evidence.get(key) or []) > 1:
+                evidence[key] = evidence[key][:-1]
+                if _size(evidence) <= cls._EVIDENCE_MAX_TOTAL_CHARS:
+                    return evidence
+
+        for key in ("education", "work_experience"):
+            while len(evidence.get(key) or []) > 1:
+                evidence[key] = evidence[key][:-1]
+                if _size(evidence) <= cls._EVIDENCE_MAX_TOTAL_CHARS:
+                    return evidence
+
+        # Floor reached: one entry per section plus current_role/source. Return
+        # it rather than dropping the block — this is still real evidence, and
+        # returning None here would put us back to grounding on nothing.
+        return evidence
 
     def _is_file_list_query(self, message: str) -> bool:
         text = (message or "").strip()
@@ -3223,7 +3430,15 @@ class RicoChatAPI:
                 from src.services.career_context import resolve_career_context
                 _cc = resolve_career_context(user_id, profile)
                 ctx["career_context"] = {
-                    "active_cv_filename": (
+                    # `_untrusted` is load-bearing, not decoration. The guard in
+                    # the system prompt was written about ONE named field
+                    # (`filename_untrusted` under `uploaded_documents`), so this
+                    # filename — sitting under a key literally called "career
+                    # context" — was outside the stated rule and read by the
+                    # model as career evidence ("your CV filename hints at a
+                    # banking background"). The suffix is now the convention the
+                    # prompt governs and a recursive test enforces.
+                    "active_cv_filename_untrusted": (
                         (_cc.active_cv or {}).get("original_filename")
                         or (_cc.active_cv or {}).get("filename")
                     ),
@@ -3284,6 +3499,39 @@ class RicoChatAPI:
             # history or the model never sees it. Lets Rico answer "which CVs do I
             # have?" and route requests like "use my finance CV" to the right
             # document. Active (is_primary=True) CV remains the default for matching.
+
+            # Verified CV evidence goes in ahead of that inventory — before the
+            # documents that REPORT on it, and well before the conversation
+            # history, so the same truncation rule protects it too.
+            #
+            # Without this the model received the user's skills list and nothing
+            # else: no work history, no certifications, no education. Asked for
+            # the user's strengths it had no verified career facts to ground on,
+            # while the payload simultaneously told it (`content_available:
+            # true`) that it held the CV's contents. The filename was the only
+            # career-shaped string left, so the filename is what it used.
+            #
+            # `_cv_context` is memoised per request instance, so this is one read
+            # per turn however many handlers ask.
+            _evidence: dict[str, Any] | None = None
+            try:
+                # `cv_structured` lives on the profile row, so no profile means
+                # no evidence to find. Guest/public turns and users without a
+                # profile therefore pay nothing for this: the resolver is not
+                # called at all rather than called to return None. A profile read
+                # that FAILED also lands here, which fails closed — the correct
+                # outcome, since content we could not read must never be claimed.
+                if profile is not None:
+                    _evidence = self._verified_cv_evidence(
+                        self._cv_context(user_id, profile)
+                    )
+                if _evidence:
+                    ctx["verified_cv_evidence"] = _evidence
+            except Exception:
+                # Fail CLOSED: no evidence block, and `content_available` stays
+                # False below. Claiming content we could not read is the defect.
+                _evidence = None
+
             try:
                 _entries = self._collect_uploaded_documents(user_id, profile)
                 if _entries:
@@ -3291,7 +3539,13 @@ class RicoChatAPI:
                     # artifacts and labels filenames as untrusted identifiers with
                     # safe structured fields; the templated My Files answer keeps
                     # the full projection.
-                    _llm_docs = self._documents_for_llm(_entries)
+                    #
+                    # `evidence_available` is what makes `content_available`
+                    # truthful: it is the same turn's evidence block, so the flag
+                    # can only claim content this payload actually carries.
+                    _llm_docs = self._documents_for_llm(
+                        _entries, evidence_available=bool(_evidence)
+                    )
                     if _llm_docs:
                         ctx["uploaded_documents"] = _llm_docs
             except Exception:
@@ -3308,7 +3562,7 @@ class RicoChatAPI:
                 _doc_text = (_last_doc or {}).get("extracted_text")
                 if _doc_text:
                     ctx["last_uploaded_document"] = {
-                        "filename": _last_doc.get("filename"),
+                        "filename_untrusted": _last_doc.get("filename"),
                         "type": _last_doc.get("display_label") or _last_doc.get("document_type"),
                         "transcribed_text": str(_doc_text)[:4000],
                     }
@@ -3327,9 +3581,16 @@ class RicoChatAPI:
                         _conf_str = f" — confidence {round(float(_conf) * 100)}%" if _conf else ""
                         ctx["last_uploaded_document"] = {
                             "type": _label,
-                            "filename": _fname,
-                            "note": f"[Uploaded document: {_label} ({_fname}){_conf_str}. "
-                                    "No full text available — describe based on document type.]",
+                            "filename_untrusted": _fname,
+                            # The filename is deliberately NOT interpolated into
+                            # this prose. Isolating it under a `_untrusted` key
+                            # and then restating it inside a free-text note the
+                            # model reads as narration would defeat the
+                            # isolation — the note is where it would look most
+                            # like a description of the document's contents.
+                            "note": f"[Uploaded document: {_label}{_conf_str}. "
+                                    "No full text available — describe based on document type. "
+                                    "The filename is not evidence of its contents.]",
                         }
             except Exception:
                 pass
@@ -14693,14 +14954,20 @@ class RicoChatAPI:
 
         # We have the transcript → let the AI answer the specific request from it.
         profile = self._resolve_profile(user_id)
+        # The document TYPE is what the model needs to interpret the transcript;
+        # the filename told it nothing it could legitimately use. Interpolating
+        # the filename into prose put it in the user message, outside the
+        # `_untrusted` context-field rule that governs every other filename we
+        # send — the same inference channel as the production incident, through
+        # a different door. The transcript below is the evidence; the file's
+        # name is not.
         augmented = (
             f"{message}\n\n"
-            f"[Transcribed text of the {label} the user just uploaded — file "
-            f"'{doc.get('filename') or 'upload'}']\n"
+            f"[Transcribed text of the {label} the user just uploaded]\n"
             f'"""\n{text[:4000]}\n"""\n'
             "Answer the user's request using ONLY the transcribed text above. Do not "
             "invent details, and do not produce a CV or resume unless the transcribed "
-            "text itself is a CV."
+            "text itself is a CV. The file's name is not evidence of its contents."
         )
         return self._answer_with_ai_fallback(
             user_id, message, profile,
@@ -15173,10 +15440,13 @@ class RicoChatAPI:
                 "next_action": "upload_cv",
             }
 
-        filename = str(doc.get("filename") or "uploaded document")
+        # No filename in the prompt: the job description's own text is the
+        # evidence, and a name like "Banking_Manager_JD.pdf" would let the model
+        # infer a sector the document never states. Same rule as every other
+        # filename Rico sends the model — see rico_identity.UNTRUSTED_METADATA_RULE.
         augmented = (
             "Score this job description against my current CV and give a detailed fit analysis.\n\n"
-            f"[Job description — '{filename}']\n\"\"\"\n{text[:3000]}\n\"\"\"\n\n"
+            f"[Job description — uploaded document]\n\"\"\"\n{text[:3000]}\n\"\"\"\n\n"
             f"[My current CV]\n\"\"\"\n{cv_text[:3000]}\n\"\"\"\n\n"
             "Provide:\n"
             "1. Overall fit score (0–100) with a brief justification.\n"

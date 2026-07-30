@@ -316,10 +316,23 @@ class RicoOpenAIAgent:
         if not is_available():
             return None
 
+        # The grounding contract is NOT optional on the fallback leg. This path
+        # is reached when the primary provider fails, and it receives the same
+        # user context — including `career_context.active_cv_filename_untrusted`
+        # and `verified_cv_evidence`. Without the shared contract the model saw
+        # a filename with no rule governing it, which is precisely the
+        # production incident ("your CV filename hints at a banking
+        # background"), silently reproducible whenever DeepSeek fell over.
+        #
+        # Imported from rico_identity so there is ONE copy of these rules. Do
+        # not inline a paraphrase here: a safety rule that exists twice drifts.
+        from src.rico_identity import get_grounding_contract
+
         system = (
             "You are Rico, a helpful UAE job-search assistant. "
             "Answer clearly, practically, and briefly. "
             "Help users find jobs, prepare applications, and track opportunities in the UAE."
+            "\n\n" + get_grounding_contract()
         )
         if _wants_arabic(language, user_message):
             system += " IMPORTANT: The user is writing in Arabic. Reply entirely in Arabic."

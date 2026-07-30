@@ -8674,3 +8674,242 @@ medium-workspace architecture.
   for CI, then mark Ready for Review
 - Stop condition: do not merge or deploy; stop on test/build failure,
   unexpected file overlap, or behavior change
+
+---
+
+### TASK-20260730-001 — A filename is not a career
+
+Status: review
+Owner: Claude (acting engineer)
+Branch: `fix/ai-grounding-contract`
+Issue/PR: Draft PR (see Continuity Block)
+
+Epic: AI Response Reliability & Performance (`ENGINEERING_ROADMAP.md` → Phase 2
+Hardening). Phase **1 of 6**. Phases 2–6 are NOT authorized by this task.
+
+#### Objective
+
+Rico told a user **"Your CV filename hints at a banking background."** Make that
+class of statement structurally impossible: no filename or document metadata may
+reach the model as evidence, verified CV facts must actually be in the payload,
+and the payload must stop claiming content it does not carry.
+
+#### Root cause (verified against `ccde2c4` before editing)
+
+Two defects compounded. Neither is a model failure.
+
+1. **Unguarded metadata.** `career_context.active_cv_filename` was injected raw
+   (`src/rico_chat_api.py`). The existing guard was written about ONE named field
+   — `uploaded_documents[].filename_untrusted` — so a filename under any other
+   key was outside the stated rule. It sat under a key literally called "career
+   context". `last_uploaded_document.filename` was equally unguarded, and the
+   metadata-only branch additionally restated the filename inside a prose `note`.
+2. **Evidence starvation with a false promise.** `_build_openai_context` never
+   read `cv_structured`, so no work history, certifications, or education ever
+   reached the model — only a skills list. Meanwhile `content_available` was
+   derived from a stored `skills_count`, not from the payload, so it reported
+   `true` while the payload carried no CV content. The system prompt tells the
+   model that flag means "the parsed CV's extracted text is available to you".
+   Told it held the CV and handed none, the model used the only career-shaped
+   string left.
+
+Reproduced read-only before any edit: the serialized context measured **1,025
+characters** against a 4,000-char cap — the facts were never assembled, not
+truncated.
+
+#### Constraints (Phase 1 isolation — all verified absent from the diff)
+
+Do not touch: HuggingFace timeouts · provider parameters/temperature ·
+connection pooling · tracing · JSearch · routing logic · duplicate profile or
+document read optimisation · RAG/vector storage · validator LLMs · response
+post-filters · database schema · deployment.
+
+#### Acceptance criteria
+
+- [x] Every filename-bearing key in the LLM context carries `_untrusted`
+- [x] `career_context.active_cv_filename` → `active_cv_filename_untrusted`
+- [x] `last_uploaded_document.filename` → `filename_untrusted` (both branches)
+- [x] The metadata-only `note` no longer restates the filename in prose
+- [x] Prompt rules govern the `_untrusted` convention as a CLASS, at any depth
+- [x] `verified_cv_evidence` loaded from `cv_structured` via the approved
+      memoised resolver (`_cv_context` → `cv_context_resolver`)
+- [x] Only evidence actually present is sent; absent sections omitted, not emptied
+- [x] `content_available` true only when that evidence is in the SAME payload
+- [x] Verified fact / general market context / missing evidence split in prompt
+- [x] Recursive deterministic test enforcing the naming convention
+- [x] Evidence block ordered before `conversation_history` (survives truncation)
+
+#### Deliberate exclusions from the evidence block
+
+- `cv_structured.name` — CV parses write title lines ("Vip Relationship
+  Manager") into it; the identity-name guard exists to stop that reaching the
+  model and must not be reopened through a new door.
+- `cv_structured.years_experience_hint` — a hint by its own schema.
+  `career_context` owns years and withholds the figure on conflict; a second
+  unreconciled number would let the model state what the resolver suppressed.
+
+#### Gap-port from the competing PR #1462 (2026-07-30)
+
+`#1462` (branch `fix/ai-context-filename-guardrail`, base `ccde2c4`) was opened
+~50 minutes BEFORE this branch and implements the same objective. It was missed
+because `PROJECT_STATUS.md` reported "Open implementation PRs: 0" and live
+GitHub was not checked before branching — the control panel's own rule of
+authority puts live GitHub above it. **Process failure recorded, not excused:
+verify live open PRs before cutting a branch.**
+
+An independent exact-head review of this branch found the same blocking defect
+`#1462` had already solved. Ported here:
+
+- **per-string caps inside evidence** (`_EVIDENCE_MAX_ENTRY_VALUE_CHARS = 240`,
+  `_EVIDENCE_MAX_ITEM_CHARS = 120`) plus a total block budget
+  (`_EVIDENCE_MAX_TOTAL_CHARS = 1800`) with ordered shedding. Counting entries
+  was not bounding them: the parser writes the verbatim entry body into
+  `entry["text"]`, so a 6-entry CV measured **14,972 chars against a 4,000-char
+  budget**, and an ordinary 4-job CV produced a 4,321-char context that silently
+  evicted `career_memory` — the blocked-companies list. Now 1,688 and 1,449.
+- **value-side filename guard test** — the key-side walker cannot see a filename
+  interpolated into a string VALUE, which is literally the second half of the
+  defect (the prose `note`).
+- **one-resolver-call-per-instance test** — `_cv_context` was memoised but
+  nothing asserted it.
+- **large-evidence + 4000-char `transcribed_text` test.**
+
+Deliberately NOT ported from `#1462`: leaving `content_available` untouched
+(its own PR body records this as unresolved — it is the false-promise half of
+the root cause); nesting evidence under `career_context` (couples CV content to
+identity/years provenance, which degrades independently); dropping
+`work_experience_text` entirely (`cv_structured.py:15-17` calls the verbatim
+section "the fallback that makes an unsplittable CV still usable" — it is
+bounded here, not deleted).
+
+#### Phase 1 closure work — F-1 and F-2 (owner ruling 2026-07-30)
+
+The owner ruled that the Phase 1 objective is **global grounding integrity
+across every provider and prompt path**, so these are not separate objectives —
+they belong inside this PR.
+
+**F-1 — the contract did not survive the provider cascade.** Production runs
+`RICO_AI_PROVIDER=deepseek` with a documented DeepSeek → HuggingFace fallback.
+`_call_hf_free` built its own three-line system prompt and never called
+`get_rico_system_prompt()`, so the identity-integrity rule, the `_untrusted`
+rule and the evidence contract were all absent on that leg — while `_skip` still
+forwarded `career_context` (carrying `active_cv_filename_untrusted`) and
+`verified_cv_evidence` to it. **A filename with no rule governing it is the
+production incident, silently reproducible whenever DeepSeek fell over.**
+
+Closed by EXTRACTION, not duplication: `IDENTITY_INTEGRITY_RULE`,
+`UNTRUSTED_METADATA_RULE` and `EVIDENCE_CONTRACT` are named constants, and
+`get_grounding_contract()` composes them for any leg. The primary prompt splices
+the same constants back at their existing positions and is **proven
+byte-identical** to before the refactor. Timeout, model, routing, retries,
+temperature and provider selection untouched.
+
+**F-2 — filenames in `prompt_override` prose.** Both builders
+(`_handle_uploaded_document_followup`, `_score_uploaded_job_against_cv`) put a
+bare filename into the USER message, outside the `_untrusted` context-field
+rule. Removed; the document type and transcript — the actual evidence — remain.
+The third builder (`_build_interview_prompt_override`) was verified clean and is
+now pinned by a test.
+
+Both are **mutation-tested**: restoring the filename interpolation fails the
+prompt_override tests; removing the contract from the HF prompt fails the
+cascade tests. A test that cannot fail proves nothing.
+
+#### PR #1462 consolidation (closed without merge)
+
+Every unique protection from `#1462` is present here:
+
+| `#1462` protection | State in `#1464` |
+| --- | --- |
+| `career_context.active_cv_filename_untrusted` | present |
+| `last_uploaded_document.filename_untrusted` | present |
+| filename removed from the metadata-only `note` | present |
+| `verified_cv_evidence` via the memoised `_cv_context` | present |
+| per-entry (240) / per-item (120) string caps | present, **plus** a 1800-char total block budget with ordered shedding |
+| entry-count caps | present (work 6 / education 4 vs `#1462`'s 5 / 3) |
+| `extraction_quality` as provenance | ported in this commit |
+| recursive filename-**key** guard | present, and proven to catch a real violation |
+| recursive string-**value** guard | ported |
+| one `_cv_context` call per instance | ported |
+| `transcribed_text` 4000-char + bounded-evidence budget test | ported |
+| profile facts preserved beside an oversized CV | ported in this commit |
+| prompt names the leaked fields + evidence contract | present, governed as a **class** at any depth |
+
+Deliberately NOT carried forward from `#1462`, with reasons: leaving
+`content_available` untouched (its own PR body records it as unresolved — it is
+the false-promise half of the root cause); nesting evidence under
+`career_context` (couples CV content to identity/years provenance, which
+degrades independently); deleting `work_experience_text` (`cv_structured.py`
+calls the verbatim section "the fallback that makes an unsplittable CV still
+usable" — bounded here, not deleted).
+
+#### Intentional technical debt
+
+- `_verified_cv_evidence` reads through `_cv_context`, which is memoised per
+  request instance but is still a database read on turns that had none. Phase 1
+  is explicitly barred from optimising duplicate reads. **Owned by Phase 2**,
+  together with the confirmed duplicate `list_user_documents` (once via
+  `resolve_career_context`, once via `_collect_uploaded_documents`).
+- Seven existing tests asserted the old contract — `content_available is True`
+  for a parsed document with no content in the payload, or a bare `filename`
+  key. They encoded the defect, so they were corrected rather than worked
+  around. Each edit is annotated in place.
+- `content_available` marks the ACTIVE document entry, while the evidence itself
+  comes from the profile row's `cv_structured`. If a user's primary
+  `user_documents` row ever diverges from the profile-level parsed CV (the known
+  email-scoped vs row-scoped split documented in `career_context.py`), the flag
+  could attach to a different document than the evidence came from. The evidence
+  block names its own provenance (`source: parsed_cv_structured`) and the prompt
+  directs grounding to the block rather than the document entry, so no claim is
+  unsourced — but the two are not yet reconciled. Not fixed here: reconciling
+  them is document-provenance work, outside the Phase 1 objective.
+
+#### Findings recorded, NOT fixed here (out of Phase 1 scope)
+
+- `should_stream_ai` → `IntentRouter.route` calls HuggingFace zero-shot
+  synchronously with `_REQUEST_TIMEOUT = 25` (`src/rico_hf_client.py`) before any
+  token can stream, for exactly the open-ended messages that miss the keyword
+  fast path. Matches the ~25s observation. → **Phase 2**.
+- No `temperature` is set on any DeepSeek/OpenAI call site. → **Phase 3**.
+- Connection pooling is disabled (`src/rico_db.py`), so every read opens a fresh
+  Neon connection. → **Phase 5, blocked**.
+
+#### Required verification
+
+- [x] Focused: `tests/test_ai_grounding_contract.py` (29 new tests)
+- [x] Regression: identity guardrails, uploaded-documents context, profile-CV
+      fallback, document upload context, storage quotas, file-list intent,
+      uploaded-image context
+- [x] Full backend suite, compared failure-for-failure against the base SHA
+- [ ] Frontend: not applicable — no `apps/web` change
+- [ ] Production smoke: NOT authorized and not performed
+
+#### Continuity Block
+
+- Task ID: TASK-20260730-001
+- Branch: `fix/ai-grounding-contract`
+- Base branch: `main`
+- Verified base SHA: `ccde2c483c76b782214f3bb117c4c07310121c4d`
+- Status: review — Draft PR only
+- Files changed: `src/rico_chat_api.py` (metadata isolation, evidence block,
+  truthful `content_available`), `src/rico_identity.py` (untrusted-class rule,
+  evidence contract), `tests/test_ai_grounding_contract.py` (new, 30 tests),
+  seven existing test files corrected to the new contract,
+  `.github/workflows/qa-tests.yml` (enumerate the new test file — the repo's own
+  enumeration guard correctly failed the build because a test no workflow runs
+  is not coverage), `AI_WORKSPACE/ENGINEERING_ROADMAP.md` and
+  `AI_WORKSPACE/TASKS.md` (this entry)
+- Files intentionally not touched: `src/rico_hf_client.py`,
+  `src/rico_intent_router.py`, `src/rico_openai_runtime.py`, `src/rico_db.py`,
+  `src/services/chat_service.py`, `src/api/routers/rico_chat.py`, `apps/web/**`,
+  `migrations/**` — each belongs to a later phase or is out of scope
+- Product scope: global and user-agnostic. The smoke-test account exposed the
+  bug, but the fix is global. Synthetic profiles and synthetic CV data only;
+  coverage spans a complete profile, a profile with no CV, a guest/public
+  session, Arabic and English filenames, and unrelated target roles
+- Deploy/CI/Neon: no deploy, no migration, no Neon action
+- Rollback: revert the single commit, or close the Draft PR. No data, schema, or
+  API unwind — the change is confined to the in-memory prompt payload and prompt
+  text; the next request rebuilds context from scratch
+- Stop condition: do not merge, do not deploy, do not begin Phase 2 without
+  explicit owner approval

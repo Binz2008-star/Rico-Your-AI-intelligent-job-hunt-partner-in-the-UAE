@@ -98,8 +98,13 @@ class TestContextOrdering:
         assert len(primary) == 1
         assert primary[0]["document_id"] == "doc-cv-1"
         assert primary[0]["doc_type"] == "cv"
-        assert primary[0]["content_available"] is True
         assert primary[0]["parse_status"] == "parsed"
+        # `content_available` describes THIS payload, not the stored document.
+        # These fixtures carry no cv_structured, so no verified evidence block
+        # is assembled and the flag is correctly False even though the document
+        # was parsed. Deriving it from skills_count is the defect fixed in
+        # tests/test_ai_grounding_contract.py.
+        assert primary[0]["content_available"] is False
         assert primary[0]["filename_untrusted"] == "Roben_Finance_CV.pdf"
         # a metadata-only file (cover letter) is kept but flagged unavailable
         other = [d for d in docs if not d["is_primary"]][0]
@@ -127,7 +132,10 @@ class TestLegacyProfileCvFallback:
         assert docs[0]["doc_type"] == "cv"
         assert docs[0]["is_primary"] is True
         assert docs[0]["is_legacy"] is True
-        assert docs[0]["content_available"] is True  # parsed profile CV
+        assert docs[0]["parse_status"] == "parsed"  # legacy profile CV was parsed
+        # …but its content is not in this payload (no cv_structured resolved),
+        # so the model is told metadata only. See test_ai_grounding_contract.py.
+        assert docs[0]["content_available"] is False
         assert docs[0]["filename_untrusted"] == "old_profile_cv.pdf"
         assert "filename" not in docs[0]
 

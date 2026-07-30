@@ -277,14 +277,20 @@ class TestIdentityIntegrityGuard:
             "label": "Some_Person_CV.pdf", "is_primary": True,
             "skills_count": 5, "years_experience": 6,
         }]
+        # Without proof that the CV's content is in the payload, the projection
+        # fails CLOSED: parsed document, but no content claim.
         llm = RicoChatAPI._documents_for_llm(entries)
         assert len(llm) == 1
         d = llm[0]
         assert d["document_id"] == "doc-cv-9"
         assert d["doc_type"] == "cv"
         assert d["is_primary"] is True
-        assert d["content_available"] is True
         assert d["parse_status"] == "parsed"
+        assert d["content_available"] is False
+        # With the evidence block present in the same payload, the active CV
+        # may claim its content. See tests/test_ai_grounding_contract.py.
+        with_evidence = RicoChatAPI._documents_for_llm(entries, evidence_available=True)
+        assert with_evidence[0]["content_available"] is True
         # filename retained for disambiguation — but only as an untrusted id.
         assert d["filename_untrusted"] == "Some_Person_CV.pdf"
         assert "filename" not in d and "label" not in d
