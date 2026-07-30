@@ -1362,6 +1362,9 @@ class TestVersionRoute:
         # stale the way the env-driven deployed_at can.
         started_at = body.pop("started_at")
         assert isinstance(started_at, str) and started_at.startswith("20")
+        # commit_source and commit_verified are new additive fields
+        assert body.pop("commit_source") == "generic_env"
+        assert body.pop("commit_verified") is False
         assert body == {
             "app": "ricohunt",
             "version": "1.0.0",
@@ -1405,6 +1408,216 @@ class TestVersionRoute:
         deployed_at = datetime.fromisoformat(body["deployed_at"].replace("Z", "+00:00"))
         assert deployed_at.year == 2020
         assert deployed_at < started_at
+
+
+from src.api.app import _resolve_deployment_revision  # noqa: E402
+
+
+class TestResolveDeploymentRevision:
+    """Unit tests for _resolve_deployment_revision platform-aware precedence.
+
+    Each test patches env vars and calls the resolver directly, avoiding
+    the full HTTP round-trip. Full /version integration via HTTP is covered
+    by TestVersionRoute above.
+    """
+
+    # ── Railway platform ─────────────────────────────────────────────────
+
+    def test_railway_native_sha_beats_stale_git_commit(self, monkeypatch):
+        """On Railway, RAILWAY_GIT_COMMIT_SHA must win over a stale GIT_COMMIT."""
+        monkeypatch.setenv("RAILWAY_REPLICA_ID", "rplc_abc123")
+        monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        monkeypatch.setenv("GIT_COMMIT", "cccccccccccccccccccccccccccccccccccccccc")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        assert result["commit_source"] == "RAILWAY_GIT_COMMIT_SHA"
+        assert result["commit_verified"] is True
+
+    def test_railway_mode_with_only_stale_generic_returns_unknown(self, monkeypatch):
+        """On Railway, a stale GIT_COMMIT alone must NOT be presented as verified."""
+        monkeypatch.setenv("RAILWAY_REPLICA_ID", "rplc_abc123")
+        monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "")
+        monkeypatch.setenv("GIT_COMMIT", "cccccccccccccccccccccccccccccccccccccccc")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "unknown"
+        assert result["commit_source"] == "unknown"
+        assert result["commit_verified"] is False
+
+    def test_railway_blank_native_sha_is_not_verified(self, monkeypatch):
+        """Blank RAILWAY_GIT_COMMIT_SHA on Railway yields unverified."""
+        monkeypatch.setenv("RAILWAY_REPLICA_ID", "rplc_abc123")
+        monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "")
+        result = _resolve_deployment_revision()
+        assert result["commit_verified"] is False
+        assert result["commit_source"] == "unknown"
+
+    def test_railway_stale_value_proves_no_identity(self, monkeypatch):
+        """Regression: old precedence let a stale static GIT_COMMIT win. With
+        Railway detected, the generic value must not impersonate the revision."""
+        monkeypatch.setenv("RAILWAY_REPLICA_ID", "rplc_abc123")
+        monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "")
+        monkeypatch.setenv("GIT_COMMIT", "ccde2c483c76b782214f3bb117c4c07310121c4d")
+        result = _resolve_deployment_revision()
+        # The stale ccde2c48 value must NOT be reported as the Railway revision
+        assert result["commit"] == "unknown"
+        assert result["commit_source"] == "unknown"
+        assert result["commit_verified"] is False
+
+    # ── Vercel platform ──────────────────────────────────────────────────
+
+    def test_vercel_native_sha_is_resolved(self, monkeypatch):
+        """On Vercel, VERCEL_GIT_COMMIT_SHA is authoritative."""
+        monkeypatch.setenv("VERCEL_ENV", "production")
+        monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        assert result["commit_source"] == "VERCEL_GIT_COMMIT_SHA"
+        assert result["commit_verified"] is True
+
+    def test_vercel_blank_sha_returns_unknown(self, monkeypatch):
+        """Vercel detected but SHA absent yields unknown/unverified."""
+        monkeypatch.setenv("VERCEL_ENV", "production")
+        monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "unknown"
+        assert result["commit_source"] == "unknown"
+        assert result["commit_verified"] is False
+
+    # ── Render platform ──────────────────────────────────────────────────
+
+    def test_render_native_sha_is_resolved(self, monkeypatch):
+        """On Render, RENDER_GIT_COMMIT is authoritative."""
+        monkeypatch.setenv("RENDER", "true")
+        monkeypatch.setenv("RENDER_GIT_COMMIT", "dddddddddddddddddddddddddddddddddddddddd")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "dddddddddddddddddddddddddddddddddddddddd"
+        assert result["commit_source"] == "RENDER_GIT_COMMIT"
+        assert result["commit_verified"] is True
+
+    def test_render_blank_sha_returns_unknown(self, monkeypatch):
+        """Render detected but SHA absent yields unknown/unverified."""
+        monkeypatch.setenv("RENDER", "true")
+        monkeypatch.setenv("RENDER_GIT_COMMIT", "")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "unknown"
+        assert result["commit_source"] == "unknown"
+        assert result["commit_verified"] is False
+
+    # ── Generic fallback (no platform detected) ──────────────────────────
+
+    def test_generic_fallback_with_git_commit(self, monkeypatch):
+        """Outside any known platform, GIT_COMMIT is used."""
+        monkeypatch.setenv("GIT_COMMIT", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        assert result["commit_source"] == "generic_env"
+        assert result["commit_verified"] is True
+
+    def test_generic_fallback_with_commit_sha(self, monkeypatch):
+        """Outside any known platform, COMMIT_SHA is checked after GIT_COMMIT."""
+        monkeypatch.setenv("COMMIT_SHA", "ffffffffffffffffffffffffffffffffffffffff")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "ffffffffffffffffffffffffffffffffffffffff"
+        assert result["commit_source"] == "generic_env"
+        assert result["commit_verified"] is True
+
+    def test_generic_fallback_with_source_version(self, monkeypatch):
+        """Outside any known platform, SOURCE_VERSION is checked last."""
+        monkeypatch.setenv("SOURCE_VERSION", "1111111111111111111111111111111111111111")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "1111111111111111111111111111111111111111"
+        assert result["commit_source"] == "generic_env"
+        assert result["commit_verified"] is True
+
+    def test_generic_fallback_none_set_returns_unknown(self, monkeypatch):
+        """No platform, no generic vars — unknown/unverified."""
+        monkeypatch.delenv("GIT_COMMIT", raising=False)
+        monkeypatch.delenv("COMMIT_SHA", raising=False)
+        monkeypatch.delenv("SOURCE_VERSION", raising=False)
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "unknown"
+        assert result["commit_source"] == "unknown"
+        assert result["commit_verified"] is False
+
+    # ── SHA format validation ────────────────────────────────────────────
+
+    @pytest.mark.parametrize("sha,expected_verified", [
+        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", True),    # full 40 hex
+        ("cccccccccccccccccccccccccccccccccccccccc", True),    # full 40 hex
+        ("abc123", False),                                      # too short
+        ("", False),                                            # blank
+        ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", False),   # non-hex chars
+        ("ghijklmnopqrstuvwxyzabcdefghijklmnopqrs", False),    # non-hex chars
+        ("abc", False),                                         # too short
+        (None, False),                                          # None
+    ])
+    def test_sha_format_verification(self, monkeypatch, sha, expected_verified):
+        """Only full 40-character hexadecimal SHAs are verified."""
+        monkeypatch.setenv("GIT_COMMIT", sha or "")
+        # Ensure no platform is detected
+        monkeypatch.delenv("RAILWAY_REPLICA_ID", raising=False)
+        monkeypatch.delenv("VERCEL_ENV", raising=False)
+        monkeypatch.delenv("RENDER", raising=False)
+        result = _resolve_deployment_revision()
+        assert result["commit_verified"] is expected_verified
+
+    # ── Platform detection ordering ──────────────────────────────────────
+
+    def test_platform_ordering_is_deterministic(self, monkeypatch):
+        """When multiple platforms are detected (shouldn't happen in practice),
+        Railway wins over Vercel and Render per the precedence contract."""
+        monkeypatch.setenv("RAILWAY_REPLICA_ID", "rplc_xyz")
+        monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        monkeypatch.setenv("VERCEL_ENV", "production")
+        monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        monkeypatch.setenv("RENDER", "true")
+        monkeypatch.setenv("RENDER_GIT_COMMIT", "dddddddddddddddddddddddddddddddddddddddd")
+        result = _resolve_deployment_revision()
+        # Railway is checked first, so its SHA should win
+        assert result["commit"] == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        assert result["commit_source"] == "RAILWAY_GIT_COMMIT_SHA"
+
+    # ── /version backward compatibility ──────────────────────────────────
+
+    def test_http_version_includes_new_fields(self, client):
+        """The /version endpoint must include commit_source and commit_verified
+        alongside the existing commit field for backward-compatible consumers.
+        In the test environment (no platform, no generic vars) both commit
+        and commit_source are 'unknown'."""
+        r = client.get("/version")
+        assert r.status_code == 200
+        body = r.json()
+        assert "commit" in body
+        assert "commit_source" in body
+        assert "commit_verified" in body
+        # Default test env has no platform and no generic vars set — unknown
+        assert body["commit_source"] == "unknown"
+        assert body["commit_verified"] is False
+        assert body["commit"] == "unknown"
+
+    def test_http_api_version_includes_new_fields(self, client):
+        """The /api/v1/version endpoint must also include the new fields."""
+        r = client.get("/api/v1/version")
+        assert r.status_code == 200
+        body = r.json()
+        assert "commit" in body
+        assert "commit_source" in body
+        assert "commit_verified" in body
+
+    # ── Deployment gate integration ──────────────────────────────────────
+
+    def test_deployment_gate_compares_commit(self, client):
+        """The deploy-production.yml reads commit from /version. A verified
+        commit paired with started_at establishes both identity and recency.
+        This test verifies the shape the workflow parser expects."""
+        r = client.get("/version")
+        assert r.status_code == 200
+        body = r.json()
+        commit = body.get("commit", "unknown")
+        assert isinstance(commit, str)
+        # In test environment, no platform is detected and no generic vars
+        # are set, so commit should be "unknown".
+        assert commit == "unknown"
 
 
 class TestRicoProfileRoute:

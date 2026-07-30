@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
@@ -77,20 +78,95 @@ def _first_env(*names: str, default: str = "") -> str:
 from datetime import datetime, timezone as _tz
 _PROCESS_STARTED_AT = datetime.now(_tz.utc).isoformat()
 
+_COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _revision_result(sha: str, source: str) -> Dict[str, Any]:
+    """Build a revision result dict from a SHA and its source identifier."""
+    verified = bool(sha and _COMMIT_SHA_RE.match(sha))
+    return {
+        "commit": sha if sha else "unknown",
+        "commit_source": source,
+        "commit_verified": verified,
+    }
+
+
+def _resolve_deployment_revision() -> Dict[str, Any]:
+    """Resolve the deployed source revision with platform-aware precedence.
+
+    Platform-native variables (Railway, Vercel, Render) are authoritative
+    on their respective platforms. Generic/static variables are used only
+    when no known platform is detected, preventing stale manually-configured
+    values from impersonating the deployed revision.
+
+    Railway detection uses RAILWAY_REPLICA_ID (always set for running
+    deployments). Vercel detection uses VERCEL_ENV. Render detection uses
+    RENDER. Once a platform is detected, only its native SHA variable is
+    accepted — a stale generic variable on the same platform is never used.
+    """
+    if os.getenv("RAILWAY_REPLICA_ID", "").strip():
+        sha = os.getenv("RAILWAY_GIT_COMMIT_SHA", "").strip()
+        if sha:
+            return _revision_result(sha, "RAILWAY_GIT_COMMIT_SHA")
+        return _revision_result("", "unknown")
+
+    if os.getenv("VERCEL_ENV", "").strip():
+        sha = os.getenv("VERCEL_GIT_COMMIT_SHA", "").strip()
+        if sha:
+            return _revision_result(sha, "VERCEL_GIT_COMMIT_SHA")
+        return _revision_result("", "unknown")
+
+    if os.getenv("RENDER", "").strip():
+        sha = os.getenv("RENDER_GIT_COMMIT", "").strip()
+        if sha:
+            return _revision_result(sha, "RENDER_GIT_COMMIT")
+        return _revision_result("", "unknown")
+
+    sha = _first_env("GIT_COMMIT", "COMMIT_SHA", "SOURCE_VERSION", default="")
+    if sha:
+        return _revision_result(sha, "generic_env")
+    return _revision_result("", "unknown")
+
 
 def version_metadata() -> Dict[str, Any]:
-    """Deployment metadata shared by legacy and versioned routes."""
+    """Deployment metadata shared by legacy and versioned routes.
+
+    Key fields for deploy verification:
+
+      commit (str)
+          The resolved deployed-source revision. Either a trustworthy
+          platform-native SHA, a generic/env fallback, or 'unknown'.
+          This is NOT the same as started_at — a process restart can
+          happen without a new deploy (e.g. platform health-replacement
+          of a failed replica), so started_at does not prove which code
+          revision is running. Only the commit field identifies the
+          source revision.
+
+      commit_source (str)
+          Which environment variable supplied the commit value, e.g.
+          'RAILWAY_GIT_COMMIT_SHA', 'VERCEL_GIT_COMMIT_SHA',
+          'RENDER_GIT_COMMIT', 'generic_env', or 'unknown'.
+
+      commit_verified (bool)
+          True only when commit is a trustworthy full 40-character hex
+          SHA from a platform-native variable. Shortened, malformed,
+          or blank values are unverified. A verified commit paired with
+          started_at establishes both identity and recency.
+
+      started_at (str, ISO-8601)
+          Process boot time. Every deploy restarts the process, so this
+          is a trustworthy 'no earlier than' signal. It is NOT source
+          identity — a platform replica replacement restarts the
+          process without changing the deployed code. Use commit to
+          identify the source revision.
+    """
+    revision = _resolve_deployment_revision()
     return {
         "app": "ricohunt",
         "version": app.version,
-        "commit": _first_env(
-            "GIT_COMMIT",
-            "VERCEL_GIT_COMMIT_SHA",
-            "RENDER_GIT_COMMIT",
-            "COMMIT_SHA",
-            "SOURCE_VERSION",
-            default="unknown",
-        ),
+        "commit": revision["commit"],
+        "commit_source": revision["commit_source"],
+        "commit_verified": revision["commit_verified"],
         "environment": _first_env(
             "RICO_ENV",
             "ENV",
@@ -98,10 +174,7 @@ def version_metadata() -> Dict[str, Any]:
             "VERCEL_ENV",
             default="production" if os.getenv("RENDER") else "development",
         ),
-        # Static env metadata — may be stale; prefer started_at + commit when
-        # verifying that a deploy is actually live.
         "deployed_at": _first_env("DEPLOYED_AT", "BUILD_TIME", "BUILD_TIMESTAMP"),
-        # Runtime-computed: when this process booted (resets on every deploy).
         "started_at": _PROCESS_STARTED_AT,
     }
 
