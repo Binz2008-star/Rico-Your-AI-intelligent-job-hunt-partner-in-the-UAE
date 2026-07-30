@@ -3222,8 +3222,15 @@ class RicoChatAPI:
             try:
                 from src.services.career_context import resolve_career_context
                 _cc = resolve_career_context(user_id, profile)
+                # Named/labeled to match uploaded_documents[].filename_untrusted (see
+                # get_rico_system_prompt): a filename identifies a file, never a
+                # person's employer, role, or background. Without the matching
+                # _untrusted suffix and note here, the model had no instruction
+                # telling it this field is unsafe to infer from — the system prompt
+                # only ever named the OTHER filename field (production incident:
+                # Rico inferred "a banking background" from a CV filename).
                 ctx["career_context"] = {
-                    "active_cv_filename": (
+                    "active_cv_filename_untrusted": (
                         (_cc.active_cv or {}).get("original_filename")
                         or (_cc.active_cv or {}).get("filename")
                     ),
