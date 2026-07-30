@@ -345,7 +345,6 @@ class TestRicoChatContext:
         # was resolved here, so it is False even for a parsed active CV.
         assert uploaded[0]["parse_status"] == "parsed"
         assert uploaded[0]["content_available"] is False
-        assert uploaded[0]["parse_status"] == "parsed"
 
     def test_multiple_cvs_all_injected(self):
         docs = [
