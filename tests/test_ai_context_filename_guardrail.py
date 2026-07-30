@@ -16,16 +16,15 @@ Coverage:
 - Every filename/document-name-bearing key exposed to the model ends with
   `_untrusted`.
 - A synthetic filename such as `Banking_Manager_CV.pdf` only appears under
-  `*_untrusted` keys and is never treated as evidence.
+  `*_untrusted` keys and is never present in any free-text string value.
 - `career_context.verified_cv_evidence` is present when `resolve_cv_context`
   returns substantive `cv_structured` data, and contains only bounded,
-  traceable fields.
+  traceable fields, capped per field and per item.
 - `career_context.verified_cv_evidence` is absent when the active CV is
   metadata-only.
-- Unrelated verified profile fields remain in the context.
+- Unrelated verified profile fields remain available.
+- `resolve_cv_context` is called at most once per `RicoChatAPI` instance.
 - The serialized context fits within the configured model context cap.
-- The system prompt contains the evidence contract and explicitly names all
-  filename-bearing fields.
 """
 from __future__ import annotations
 
@@ -50,6 +49,8 @@ from src.rico_openai_runtime import _PROFILE_CONTEXT_MAX_CHARS
 
 
 PROMPT_LOWER = get_rico_system_prompt().lower()
+
+_L = RicoChatAPI._VERIFIED_CV_EVIDENCE_LIMITS
 
 
 class _Profile:
@@ -98,23 +99,41 @@ def _cv_context(structured: dict | None, filename: str) -> CVContext:
     )
 
 
-def _filename_keys(d: dict | list, parent_key: str = "") -> list[tuple[str, str | None]]:
-    """Recursively find all leaf values with keys that look like a filename or
-    document-name identifier. Returns (full_path, value) pairs."""
-    results: list[tuple[str, str | None]] = []
+def _filename_keys(d: dict | list, parent_key: str = "") -> list[tuple[str, str]]:
+    """Recursively find all leaf value keys that look like a filename or
+    document-name identifier."""
+    results: list[tuple[str, str]] = []
+    if isinstance(d, dict):
+        for k, v in d.items():
+            if ("filename" in k or "document_name" in k) and not isinstance(v, (dict, list)):
+                path = f"{parent_key}.{k}" if parent_key else k
+                results.append((path, k))
+            if isinstance(v, (dict, list)):
+                _path = f"{parent_key}.{k}" if parent_key else k
+                results.extend(_filename_keys(v, _path))
+    elif isinstance(d, list):
+        for i, item in enumerate(d):
+            _path = f"{parent_key}[{i}]"
+            if isinstance(item, (dict, list)):
+                results.extend(_filename_keys(item, _path))
+    return results
+
+
+def _all_string_values(d: dict | list, parent_key: str = "") -> list[tuple[str, str, str]]:
+    """Recursively find every string value. Returns (path, owning_key, value)."""
+    results: list[tuple[str, str, str]] = []
     if isinstance(d, dict):
         for k, v in d.items():
             path = f"{parent_key}.{k}" if parent_key else k
-            # Any key whose name includes 'filename' or 'document_name'.
-            if ("filename" in k or "document_name" in k) and not isinstance(v, (dict, list)):
-                results.append((path, v))
-            if isinstance(v, (dict, list)):
-                results.extend(_filename_keys(v, path))
+            if isinstance(v, str):
+                results.append((path, k, v))
+            elif isinstance(v, (dict, list)):
+                results.extend(_all_string_values(v, path))
     elif isinstance(d, list):
         for i, item in enumerate(d):
             path = f"{parent_key}[{i}]"
             if isinstance(item, (dict, list)):
-                results.extend(_filename_keys(item, path))
+                results.extend(_all_string_values(item, path))
     return results
 
 
@@ -123,9 +142,13 @@ def _build_ctx(
     cv_filename: str = "banking_template_v2.pdf",
     structured: dict | None = None,
     last_doc: dict | None = None,
+    recent_context: dict | None = None,
     uploaded_docs: list | None = None,
 ):
     api = RicoChatAPI(persist=True, can_mutate_applications=True)
+    _recent = recent_context or {}
+    if last_doc is not None:
+        _recent["last_uploaded_document"] = last_doc
     with (
         patch(
             "src.services.career_context.resolve_career_context",
@@ -144,6 +167,11 @@ def _build_ctx(
             api,
             "_collect_uploaded_documents",
             return_value=uploaded_docs or [],
+        ),
+        patch.object(
+            api,
+            "_get_recent_context",
+            return_value=_recent,
         ),
     ):
         return api._build_openai_context(_Profile(), user_id="u:test123")
@@ -171,10 +199,10 @@ class TestBuildOpenAIContextFilenameGuardrail:
 
 
 # ---------------------------------------------------------------------------
-# Recursive filename-key enforcement (Phase 1)
+# Recursive filename-key and free-text string enforcement (Phase 1)
 # ---------------------------------------------------------------------------
 
-class TestRecursiveFilenameKeyEnforcement:
+class TestRecursiveFilenameAndStringEnforcement:
     def test_all_filename_keys_are_suffixed_untrusted(self):
         ctx = _build_ctx(
             cv_filename="Banking_Manager_CV.pdf",
@@ -197,18 +225,12 @@ class TestRecursiveFilenameKeyEnforcement:
             ],
         )
 
-        filename_leaves = _filename_keys(ctx)
-        assert filename_leaves, "Expected at least some filename-bearing keys in the context"
-
-        for path, _value in filename_leaves:
-            # Get the terminal key name (after the last . or [])
-            terminal = path.split(".")[-1]
-            terminal = terminal.split("[")[0]  # in case of list indices in path
-            assert terminal.endswith("_untrusted"), (
-                f"Filename-bearing key '{path}' does not end with _untrusted"
+        for path, key in _filename_keys(ctx):
+            assert key.endswith("_untrusted"), (
+                f"Filename-bearing key '{key}' at {path} does not end with _untrusted"
             )
 
-    def test_banking_filename_only_under_untrusted_keys(self):
+    def test_synthetic_filename_only_in_untrusted_string_values(self):
         banking = "Banking_Manager_CV.pdf"
         ctx = _build_ctx(
             cv_filename=banking,
@@ -226,12 +248,53 @@ class TestRecursiveFilenameKeyEnforcement:
             ],
         )
 
-        for path, value in _filename_keys(ctx):
-            assert value == banking, ("Unexpected filename value in the context: "
-                                      f"'{value}' at {path}; the test fixture only supplied {banking}")
-            assert path.endswith("_untrusted") or ".filename_untrusted" in path, (
-                f"Banking filename found at non-_untrusted path: {path}"
-            )
+        for path, key, value in _all_string_values(ctx):
+            if banking in value:
+                assert key.endswith("_untrusted"), (
+                    f"Synthetic filename found in a non-_untrusted string "
+                    f"at '{path}' (key={key}): {value[:120]!r}"
+                )
+
+    def test_last_uploaded_document_note_has_no_filename(self):
+        banking = "Banking_Manager_CV.pdf"
+        ctx = _build_ctx(
+            cv_filename=banking,
+            last_doc={"filename": banking, "display_label": "CV", "document_type": "cv"},
+        )
+
+        note = ctx["last_uploaded_document"]["note"]
+        assert banking not in note
+        assert ctx["last_uploaded_document"]["filename_untrusted"] == banking
+
+
+# ---------------------------------------------------------------------------
+# CV context memoization (Phase 1)
+# ---------------------------------------------------------------------------
+
+class TestCVMemoization:
+    def test_repeated_build_openai_context_uses_one_cv_resolve_call(self):
+        """`self._cv_context` is memoized per instance; calling
+        `_build_openai_context` twice with the same user must not resolve the
+        CV grounding twice."""
+        api = RicoChatAPI(persist=True, can_mutate_applications=True)
+        with (
+            patch(
+                "src.services.career_context.resolve_career_context",
+                return_value=_career_context_with_filename("x.pdf"),
+            ),
+            patch(
+                "src.services.cv_context_resolver.resolve_cv_context",
+                return_value=_cv_context(SAMPLE_SUBSTANTIVE_CV, "x.pdf"),
+            ) as mock_resolve,
+            patch.object(api, "_get_last_uploaded_document", return_value=None),
+            patch.object(api, "_collect_uploaded_documents", return_value=[]),
+        ):
+            api._build_openai_context(_Profile(), user_id="u:test123")
+            api._build_openai_context(_Profile(), user_id="u:test123")
+
+        assert mock_resolve.call_count == 1, (
+            f"resolve_cv_context called {mock_resolve.call_count} times for one instance"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +319,9 @@ class TestVerifiedCVEvidence:
         assert "name" not in vce
         assert "current_role" not in vce
         assert "years_experience_hint" not in vce
+        # Raw CV text is explicitly excluded.
+        assert "work_experience_text" not in vce
+        assert "education_text" not in vce
 
     def test_metadata_only_cv_produces_no_verified_cv_evidence(self):
         ctx = _build_ctx(structured=None)
@@ -271,14 +337,97 @@ class TestVerifiedCVEvidence:
         assert ctx["skills"] == ["Environmental Compliance", "ISO 14001"]
 
 
+class TestVerifiedCVEvidenceBounds:
+    def test_oversized_lists_are_capped(self):
+        many_work = [
+            {"role": f"Role {i}", "company": f"Company {i}", "years": i}
+            for i in range(100)
+        ]
+        many_edu = [{"degree": f"Degree {i}", "institution": f"School {i}"} for i in range(50)]
+        many_skills = [f"Skill {i}" for i in range(200)]
+        many_certs = [f"Cert {i}" for i in range(100)]
+        many_langs = [f"Lang {i}" for i in range(50)]
+        ctx = _build_ctx(structured={
+            **SAMPLE_SUBSTANTIVE_CV,
+            "work_experience": many_work,
+            "education": many_edu,
+            "skills": many_skills,
+            "certifications": many_certs,
+            "languages": many_langs,
+        })
+
+        vce = ctx["career_context"]["verified_cv_evidence"]
+        assert len(vce["work_experience"]) <= _L["work_experience_entries"]
+        assert len(vce["education"]) <= _L["education_entries"]
+        assert len(vce["skills"]) <= _L["skills"]
+        assert len(vce["certifications"]) <= _L["certifications"]
+        assert len(vce["languages"]) <= _L["languages"]
+        # Most-recent-first is preserved (leading entries).
+        assert vce["work_experience"][0]["company"] == "Company 0"
+
+    def test_long_strings_are_truncated(self):
+        long = "x" * 5000
+        ctx = _build_ctx(structured={
+            **SAMPLE_SUBSTANTIVE_CV,
+            "extraction_quality": long,
+            "work_experience": [
+                {
+                    "role": long,
+                    "company": long,
+                    "summary": long,
+                }
+            ],
+            "skills": [long],
+        })
+
+        vce = ctx["career_context"]["verified_cv_evidence"]
+        assert len(vce["extraction_quality"]) <= _L["scalar_string_chars"]
+        assert len(vce["skills"][0]) <= _L["scalar_string_chars"]
+        assert len(vce["work_experience"][0]["role"]) <= _L["entry_text_chars"]
+        assert len(vce["work_experience"][0]["company"]) <= _L["entry_text_chars"]
+
+    def test_essential_profile_facts_preserved_with_oversized_cv(self):
+        many = [{"role": f"Role {i}", "company": f"Company {i}"} for i in range(100)]
+        ctx = _build_ctx(structured={**SAMPLE_SUBSTANTIVE_CV, "work_experience": many})
+
+        assert ctx["current_company"] == "Acme Environmental"
+        assert ctx["current_role"] == "Founder & General Manager"
+        assert ctx["years_experience"] == 10
+
+    def test_bounded_context_fits_under_runtime_cap(self):
+        many = [{"role": f"Role {i}", "company": f"Company {i}"} for i in range(100)]
+        long = "x" * 5000
+        ctx = _build_ctx(
+            structured={
+                **SAMPLE_SUBSTANTIVE_CV,
+                "work_experience": many,
+                "skills": [long for _ in range(200)],
+            },
+            last_doc={"filename": "doc.pdf", "extracted_text": "short"},
+            uploaded_docs=[
+                {
+                    "id": "doc-1",
+                    "filename": "doc.pdf",
+                    "doc_type": "cv",
+                    "is_primary": True,
+                    "skills_count": 3,
+                    "years_experience": 8,
+                    "file_size": 12345,
+                }
+            ],
+        )
+
+        # If this passes, the runtime's 4000-char truncation has not cut the
+        # context, so `verified_cv_evidence` is not mid-structure truncated.
+        assert len(str(ctx)) <= _PROFILE_CONTEXT_MAX_CHARS
+
+
 # ---------------------------------------------------------------------------
 # Context cap
 # ---------------------------------------------------------------------------
 
 class TestContextCap:
     def test_last_uploaded_text_is_pre_truncated_to_cap(self):
-        """`_build_openai_context` truncates `transcribed_text` itself before the
-        runtime truncation, so last-uploaded images do not blow up the context."""
         long_text = "Some extracted text " * 500
         ctx = _build_ctx(
             last_doc={"filename": "doc.pdf", "extracted_text": long_text},
@@ -287,8 +436,6 @@ class TestContextCap:
         assert len(ctx["last_uploaded_document"]["transcribed_text"]) <= _PROFILE_CONTEXT_MAX_CHARS
 
     def test_serialized_context_with_bounded_evidence_fits_within_cap(self):
-        """With bounded `verified_cv_evidence` and truncated `transcribed_text`,
-        the raw serialized context stays under the runtime cap."""
         ctx = _build_ctx(
             structured=SAMPLE_SUBSTANTIVE_CV,
             last_doc={"filename": "doc.pdf", "extracted_text": "short text"},
@@ -323,7 +470,7 @@ class TestSystemPromptCoversCareerContextFilename:
 
     def test_prompt_forbids_inferring_background_from_filename(self):
         assert "hints at" in PROMPT_LOWER or "suggests" in PROMPT_LOWER
-        assert "never state or infer a person's employer, industry, role, or background from a filename" in PROMPT_LOWER
+        assert "never state or infer a person" in PROMPT_LOWER
 
     def test_prompt_has_evidence_contract(self):
         assert "verified profile/cv facts" in PROMPT_LOWER

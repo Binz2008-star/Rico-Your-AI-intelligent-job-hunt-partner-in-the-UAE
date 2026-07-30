@@ -3158,6 +3158,28 @@ class RicoChatAPI:
             "next_action": "manage_files",
         }
 
+    # Phase 1 contract: verified CV evidence exposed to the model is bounded
+    # both by field and by item count so the runtime 4000-char truncation does
+    # not silently slice the most important grounded evidence. The parser
+    # orders entries most-recent first, so taking the leading slice preserves
+    # relevance.
+    _VERIFIED_CV_EVIDENCE_LIMITS: dict[str, int] = {
+        "work_experience_entries": 5,
+        "education_entries": 3,
+        "skills": 20,
+        "certifications": 10,
+        "languages": 5,
+        "scalar_string_chars": 120,
+        "entry_text_chars": 240,
+    }
+
+    @staticmethod
+    def _truncate_verified_string(value: Any, max_chars: int) -> Any:
+        """Trim string leaves inside verified_cv_evidence; non-strings pass through."""
+        if isinstance(value, str):
+            return value[:max_chars]
+        return value
+
     def _build_openai_context(self, profile: Any, user_id: str | None = None) -> dict[str, Any]:
         """Build context for OpenAI agent from profile and recent conversation history."""
         if profile is None:
@@ -3251,11 +3273,12 @@ class RicoChatAPI:
                 # extraction. This is the positive counterpart to the filename
                 # guardrail: the model needs verified facts it can assert as
                 # user facts, or it will fill gaps from filenames/training data.
-                from src.services.cv_context_resolver import resolve_cv_context
-
-                _cv_ctx = resolve_cv_context(user_id, profile)
+                # Uses the existing memoized `self._cv_context` to preserve the
+                # one-read-per-turn contract (see `_cv_context` docstring).
+                _cv_ctx = self._cv_context(user_id, profile)
                 if _cv_ctx.structured:
                     _vce = {}
+                    _limits = self._VERIFIED_CV_EVIDENCE_LIMITS
                     _keep = {
                         "work_experience",
                         "skills",
@@ -3267,7 +3290,29 @@ class RicoChatAPI:
                     for k in _keep:
                         v = _cv_ctx.structured.get(k)
                         if v not in (None, "", [], {}):
-                            _vce[k] = v
+                            if k in ("work_experience", "education"):
+                                # Entries are ordered most-recent first by the
+                                # parser; keep the leading N and trim strings.
+                                entries = v[: _limits[f"{k}_entries"]]
+                                _vce[k] = []
+                                for entry in entries:
+                                    if isinstance(entry, dict):
+                                        _vce[k].append(
+                                            {
+                                                ek: self._truncate_verified_string(ev, _limits["entry_text_chars"])
+                                                for ek, ev in entry.items()
+                                            }
+                                        )
+                                    else:
+                                        _vce[k].append(entry)
+                            elif k in ("skills", "certifications", "languages"):
+                                _vce[k] = [
+                                    self._truncate_verified_string(s, _limits["scalar_string_chars"])
+                                    for s in v[: _limits[k]]
+                                ]
+                            else:
+                                # extraction_quality and any future scalars
+                                _vce[k] = self._truncate_verified_string(v, _limits["scalar_string_chars"])
                     if _vce:
                         ctx["career_context"]["verified_cv_evidence"] = _vce
 
@@ -3360,8 +3405,8 @@ class RicoChatAPI:
                         ctx["last_uploaded_document"] = {
                             "type": _label,
                             "filename_untrusted": _fname,
-                            "note": f"[Uploaded document: {_label} ({_fname}){_conf_str}. "
-                                    "No full text available — describe based on document type.]",
+                            "note": f"[Uploaded document: {_label}{_conf_str}. "
+                                    "No full text available — describe based on document type only.]",
                         }
             except Exception:
                 pass
