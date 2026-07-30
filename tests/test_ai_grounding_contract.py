@@ -713,3 +713,204 @@ class TestResolverCallBudget:
             f"resolved the CV {resolver.call_count} times for one request instance"
         )
         assert "verified_cv_evidence" in ctx
+
+
+# ── 9. Provider-cascade grounding parity (F-1) ───────────────────────────────
+
+class TestGroundingContractSurvivesTheCascade:
+    """Production runs RICO_AI_PROVIDER=deepseek with a documented
+    DeepSeek → HuggingFace → keyword cascade. The HuggingFace leg built its own
+    short system prompt and never called ``get_rico_system_prompt()``, so none
+    of the grounding rules reached the model there — while the SAME user
+    context, including ``career_context.active_cv_filename_untrusted``, was
+    still forwarded to it. A filename with no rule governing it is the
+    production incident, silently reproducible whenever DeepSeek fell over.
+    """
+
+    def test_contract_is_one_shared_source_not_two_copies(self):
+        from src.rico_identity import (
+            EVIDENCE_CONTRACT, IDENTITY_INTEGRITY_RULE, UNTRUSTED_METADATA_RULE,
+            get_grounding_contract,
+        )
+        contract = get_grounding_contract()
+        assert IDENTITY_INTEGRITY_RULE in contract
+        assert UNTRUSTED_METADATA_RULE in contract
+        assert EVIDENCE_CONTRACT in contract
+        # The primary prompt is built from the SAME constants — not a paraphrase.
+        primary = get_rico_system_prompt()
+        assert IDENTITY_INTEGRITY_RULE in primary
+        assert UNTRUSTED_METADATA_RULE in primary
+        assert EVIDENCE_CONTRACT in primary
+
+    def _hf_system_prompt(self, user_context=None, language=None):
+        """Capture the exact system prompt the HuggingFace leg sends."""
+        from src.rico_openai_agent import RicoOpenAIAgent
+
+        captured = {}
+
+        def _fake_generate_text(prompt, system=None, max_new_tokens=None, model=None):
+            captured["system"] = system
+            captured["prompt"] = prompt
+            return "ok"
+
+        agent = RicoOpenAIAgent.__new__(RicoOpenAIAgent)
+        with patch("src.rico_hf_client.is_available", return_value=True), \
+             patch("src.rico_hf_client.generate_text", side_effect=_fake_generate_text):
+            agent._call_hf_free("what are my strengths?", user_context, language=language)
+        return captured
+
+    def test_hf_fallback_receives_the_grounding_contract(self):
+        from src.rico_identity import (
+            IDENTITY_INTEGRITY_RULE, UNTRUSTED_METADATA_RULE, EVIDENCE_CONTRACT,
+        )
+        captured = self._hf_system_prompt()
+        system = captured["system"]
+        assert IDENTITY_INTEGRITY_RULE in system
+        assert UNTRUSTED_METADATA_RULE in system
+        assert EVIDENCE_CONTRACT in system
+
+    def test_hf_prompt_forbids_career_inference_from_a_banking_filename(self):
+        """The acceptance case, on the fallback leg: a synthetic
+        Banking_Manager_CV.pdf is forwarded, and the prompt that accompanies it
+        must forbid reading a career from it."""
+        ctx = {
+            "profile_exists": True,
+            "career_context": {"active_cv_filename_untrusted": "Banking_Manager_CV.pdf"},
+        }
+        captured = self._hf_system_prompt(ctx)
+        system, prompt = captured["system"], captured["prompt"]
+        # The filename reaches the model only under the governed key…
+        assert "Banking_Manager_CV.pdf" in prompt
+        assert "active_cv_filename_untrusted" in prompt
+        # …and the rule that governs it is present in the same call.
+        assert "_untrusted" in system
+        assert "banking background" in system.lower()
+        assert "NEVER infer" in system
+
+    def test_hf_fallback_keeps_verified_cv_evidence_as_evidence(self):
+        ctx = {
+            "profile_exists": True,
+            "verified_cv_evidence": {
+                "current_role": "Founder & General Manager",
+                "certifications": ["NEBOSH IGC"],
+                "source": "parsed_cv_structured",
+            },
+        }
+        captured = self._hf_system_prompt(ctx)
+        # Forwarded to the model…
+        assert "parsed_cv_structured" in captured["prompt"]
+        assert "NEBOSH IGC" in captured["prompt"]
+        # …and named by the contract as the thing to ground on.
+        assert "verified_cv_evidence" in captured["system"]
+
+    def test_hf_fallback_preserves_unrelated_behaviour(self):
+        """Grounding parity must not disturb the Arabic directive, the
+        assistant framing, or the conversation-turn prompt shape."""
+        captured = self._hf_system_prompt(
+            {"profile_exists": True, "conversation_history": [
+                {"role": "user", "content": "مرحبا"}]},
+            language="ar",
+        )
+        assert "You are Rico, a helpful UAE job-search assistant." in captured["system"]
+        assert "Reply entirely in Arabic" in captured["system"]
+        assert "User: what are my strengths?" in captured["prompt"]
+        assert captured["prompt"].rstrip().endswith("Rico:")
+
+    def test_primary_provider_prompt_is_unchanged_by_the_extraction(self):
+        """The refactor that made the contract shareable must not have altered
+        what the primary provider receives."""
+        primary = get_rico_system_prompt()
+        for marker in (
+            "Safety rules (non-negotiable):",
+            "9. Identity integrity:",
+            "10. Untrusted metadata rule:",
+            "Evidence contract (non-negotiable",
+            "Uploaded files (My Files):",
+            "When calling tools:",
+        ):
+            assert marker in primary, marker
+        # Rules stay in their numbered positions in the primary prompt.
+        assert primary.index("9. Identity integrity:") < primary.index("10. Untrusted metadata rule:")
+
+
+# ── 10. prompt_override filename leakage (F-2) ───────────────────────────────
+
+class TestPromptOverrideCarriesNoFilename:
+    """A filename interpolated into `prompt_override` lands in the USER
+    message, outside the `_untrusted` context-field rule — the same inference
+    channel through a different door."""
+
+    @staticmethod
+    def _capture_override(run):
+        captured = {}
+
+        def _fake(self, user_id, message, profile, *, save_user_message=False,
+                  language=None, prompt_override=None):
+            captured["override"] = prompt_override
+            captured["message"] = message
+            return {"type": "conversational", "message": "ok", "success": True}
+
+        with patch.object(RicoChatAPI, "_answer_with_ai_fallback", _fake):
+            run()
+        return captured
+
+    @pytest.mark.parametrize("filename", [
+        "Banking_Manager_CV.pdf",
+        "سيرة_ذاتية_مصرفية.pdf",          # Arabic filename
+    ])
+    def test_uploaded_document_followup_omits_the_filename(self, filename):
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api._resolve_profile = lambda uid: _complete_profile()
+        api._append_chat = lambda *a, **k: None
+        api._handle_job_doc_action = lambda *a, **k: None
+        doc = {"filename": filename, "display_label": "Job Description",
+               "document_type": "job_description",
+               "extracted_text": "Operations Manager. Dubai. Waste management."}
+        api._get_last_uploaded_document = lambda uid: doc
+
+        captured = self._capture_override(
+            lambda: api._handle_uploaded_document_followup(
+                "u1", "summarize this document", None)
+        )
+        override = captured["override"]
+        assert override is not None
+        assert filename not in override
+        # The document TYPE and its transcript — the real evidence — remain.
+        assert "Job Description" in override
+        assert "Waste management" in override
+        assert "not evidence of its contents" in override
+
+    @pytest.mark.parametrize("filename", [
+        "Banking_Manager_JD.pdf",
+        "وصف_وظيفي_مصرفي.pdf",
+    ])
+    def test_job_score_override_omits_the_filename(self, filename):
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api._resolve_profile = lambda uid: _complete_profile()
+        api._append_chat = lambda *a, **k: None
+        doc = {"filename": filename}
+
+        with patch("src.rico_db.RicoDB") as db:
+            db.return_value.get_user_bundle.return_value = {
+                "cv_text": "Founder & General Manager. Environmental compliance."
+            }
+            captured = self._capture_override(
+                lambda: api._score_uploaded_job_against_cv(
+                    "u1", doc, "Operations Manager, Dubai. Waste management.",
+                    False, None)
+            )
+        override = captured["override"]
+        assert override is not None
+        assert filename not in override
+        # The flow still produces its intended prompt.
+        assert "[Job description" in override
+        assert "[My current CV]" in override
+        assert "Overall fit score" in override
+        assert "Waste management" in override
+
+    def test_interview_prep_override_has_no_filename(self):
+        """The third prompt_override builder — verified clean, pinned so it
+        stays that way."""
+        import inspect
+        source = inspect.getsource(RicoChatAPI._build_interview_prompt_override)
+        assert "filename" not in source

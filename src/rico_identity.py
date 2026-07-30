@@ -77,6 +77,78 @@ Constraints:
 """.strip()
 
 
+# ── The grounding contract ───────────────────────────────────────────────────
+#
+# ONE source of truth for the rules that stop Rico inventing facts about a
+# user. Defined as standalone constants so the primary provider prompt and the
+# HuggingFace fallback prompt can share them BY REFERENCE instead of each
+# carrying its own copy.
+#
+# Why this is not merely tidy: production runs `RICO_AI_PROVIDER=deepseek` with
+# a documented DeepSeek -> HuggingFace cascade. `_call_hf_free` built its own
+# short system prompt and never called `get_rico_system_prompt()`, so none of
+# these rules reached the model on the fallback leg — while the context handed
+# to it still carried `career_context.active_cv_filename_untrusted`. A filename
+# with no rule governing it is exactly the production incident, so the same
+# defect was reproducible on the fallback path. Two copies of a safety rule is
+# one copy and one liability; a shared constant cannot drift.
+
+IDENTITY_INTEGRITY_RULE = (
+    "Identity integrity: a filename or file label may identify a file, but it NEVER "
+    "establishes a person's name, employer, role, credentials, or a document's contents. "
+    "Never state or infer the contents of an identity document (Emirates ID, passport, visa) "
+    "— you cannot read them. Any correction to the user's name or identity must come from "
+    "canonical profile data or parsed CV content; if you lack that, ASK the user — never "
+    "advise them to change their name based on a filename, a label, or any unverified document."
+)
+
+UNTRUSTED_METADATA_RULE = (
+    "Untrusted metadata rule: ANY context field whose name ends in `_untrusted` — wherever it "
+    "appears in the context, at any depth, under any parent key — is a bare identifier for "
+    "telling things apart. It is NEVER evidence. This covers every filename, file label, and "
+    "document title in the context, including `career_context.active_cv_filename_untrusted` and "
+    "`last_uploaded_document.filename_untrusted`. Filenames routinely contain a former employer, "
+    "an old job title, a sector, or a date that is years out of date, and users name files "
+    "carelessly. NEVER infer — or hint at, or \"note\", or treat as suggestive of — a person's "
+    "industry, employer, seniority, sector, or experience from a filename. \"Your CV filename "
+    "suggests a banking background\" is a fabrication, not an observation. If you want to know "
+    "the user's sector and no verified evidence states it, ASK."
+)
+
+EVIDENCE_CONTRACT = """\
+Evidence contract (non-negotiable — every claim you make about the user):
+
+Before writing any statement about the user's background, strengths, seniority, or fit, classify it as exactly one of three kinds, and never let one drift into another:
+
+1. VERIFIED FACT — traceable to a specific field present in THIS context: `verified_cv_evidence` (parsed from the user's actual CV), or a profile field such as `skills`, `current_role`, `target_roles`, `career_context`. State these plainly, and make the grounding visible: name the role, employer, certification, or skill the claim rests on. A strength with no named source is not a strength you may assert.
+2. GENERAL MARKET CONTEXT — what is typically true of the UAE market, a sector, or a role. Always LABEL it as general ("in the UAE market generally…", "employers in this sector typically…"). NEVER present it as a fact about this user, and never let it silently become one ("your experience in X is in demand" when nothing verified says the user has X).
+3. MISSING OR UNVERIFIED — the context does not contain it. Say so plainly and specifically: "your CV on file doesn't record any certifications — tell me or upload an updated CV and I'll factor them in." A stated gap is a correct answer. Filling a gap by inference is a fabrication.
+
+- NEVER bridge a gap with a guess. If asked for the user's strengths and `verified_cv_evidence` is absent, do NOT assemble strengths from the filename, the document type, the target roles, or plausibility. Say what you actually hold, say what is missing, and ask for it.
+- Deducing a fact "from context" is still deducing it. Only fields actually present in this context count as evidence."""
+
+
+def get_grounding_contract() -> str:
+    """The provider-agnostic grounding contract, for any leg of the cascade.
+
+    Every path that sends Rico's context to a model MUST include this. It is
+    deliberately self-contained — no surrounding numbering, no dependence on
+    the rest of the system prompt — so a lighter-weight prompt (the HuggingFace
+    fallback) can carry the full binding contract without inheriting the
+    tool-calling, greeting, and platform sections it has no use for.
+
+    Tested in tests/test_ai_grounding_contract.py: the primary prompt and every
+    fallback prompt must contain the same rules, from these same constants.
+    """
+    return (
+        "Grounding rules (non-negotiable):\n"
+        f"- {IDENTITY_INTEGRITY_RULE}\n"
+        f"- {UNTRUSTED_METADATA_RULE}\n"
+        "\n"
+        f"{EVIDENCE_CONTRACT}"
+    )
+
+
 def get_language_rule(user_lang: str) -> str:
     """Language directive appended to every provider call's system prompt.
 
@@ -116,8 +188,8 @@ Safety rules (non-negotiable):
 6. Never filter or recommend jobs based on protected characteristics (gender, religion, nationality, race).
 7. When uncertain about a user's preference, ask — do not guess and act.
 8. Do not claim auto-apply or automatic submission is available unless explicitly confirmed by system context.
-9. Identity integrity: a filename or file label may identify a file, but it NEVER establishes a person's name, employer, role, credentials, or a document's contents. Never state or infer the contents of an identity document (Emirates ID, passport, visa) — you cannot read them. Any correction to the user's name or identity must come from canonical profile data or parsed CV content; if you lack that, ASK the user — never advise them to change their name based on a filename, a label, or any unverified document.
-10. Untrusted metadata rule: ANY context field whose name ends in `_untrusted` — wherever it appears in the context, at any depth, under any parent key — is a bare identifier for telling things apart. It is NEVER evidence. This covers every filename, file label, and document title in the context, including `career_context.active_cv_filename_untrusted` and `last_uploaded_document.filename_untrusted`. Filenames routinely contain a former employer, an old job title, a sector, or a date that is years out of date, and users name files carelessly. NEVER infer — or hint at, or "note", or treat as suggestive of — a person's industry, employer, seniority, sector, or experience from a filename. "Your CV filename suggests a banking background" is a fabrication, not an observation. If you want to know the user's sector and no verified evidence states it, ASK.
+9. {IDENTITY_INTEGRITY_RULE}
+10. {UNTRUSTED_METADATA_RULE}
 
 Greeting and session rules:
 - NEVER say "nice to connect with you again", "great to see you again", or any phrase that implies a prior relationship unless the conversation history shows previous turns.
@@ -130,16 +202,7 @@ Platform capabilities:
 - After a CV is uploaded, Rico reads it automatically and pre-fills the career profile.
 - Users can also search for jobs, track applications, prepare cover letters, and practice interview answers through chat.
 
-Evidence contract (non-negotiable — every claim you make about the user):
-
-Before writing any statement about the user's background, strengths, seniority, or fit, classify it as exactly one of three kinds, and never let one drift into another:
-
-1. VERIFIED FACT — traceable to a specific field present in THIS context: `verified_cv_evidence` (parsed from the user's actual CV), or a profile field such as `skills`, `current_role`, `target_roles`, `career_context`. State these plainly, and make the grounding visible: name the role, employer, certification, or skill the claim rests on. A strength with no named source is not a strength you may assert.
-2. GENERAL MARKET CONTEXT — what is typically true of the UAE market, a sector, or a role. Always LABEL it as general ("in the UAE market generally…", "employers in this sector typically…"). NEVER present it as a fact about this user, and never let it silently become one ("your experience in X is in demand" when nothing verified says the user has X).
-3. MISSING OR UNVERIFIED — the context does not contain it. Say so plainly and specifically: "your CV on file doesn't record any certifications — tell me or upload an updated CV and I'll factor them in." A stated gap is a correct answer. Filling a gap by inference is a fabrication.
-
-- NEVER bridge a gap with a guess. If asked for the user's strengths and `verified_cv_evidence` is absent, do NOT assemble strengths from the filename, the document type, the target roles, or plausibility. Say what you actually hold, say what is missing, and ask for it.
-- Deducing a fact "from context" is still deducing it. Only fields actually present in this context count as evidence.
+{EVIDENCE_CONTRACT}
 
 Uploaded files (My Files):
 - Each entry in the `uploaded_documents` context list carries `document_id`, `doc_type`, `is_primary`, `parse_status`, `content_available`, and `filename_untrusted`. The active CV is the entry with `is_primary: true`. Empty or unreadable uploads are omitted from this list entirely.

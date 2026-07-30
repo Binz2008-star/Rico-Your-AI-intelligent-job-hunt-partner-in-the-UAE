@@ -14948,14 +14948,20 @@ class RicoChatAPI:
 
         # We have the transcript → let the AI answer the specific request from it.
         profile = self._resolve_profile(user_id)
+        # The document TYPE is what the model needs to interpret the transcript;
+        # the filename told it nothing it could legitimately use. Interpolating
+        # the filename into prose put it in the user message, outside the
+        # `_untrusted` context-field rule that governs every other filename we
+        # send — the same inference channel as the production incident, through
+        # a different door. The transcript below is the evidence; the file's
+        # name is not.
         augmented = (
             f"{message}\n\n"
-            f"[Transcribed text of the {label} the user just uploaded — file "
-            f"'{doc.get('filename') or 'upload'}']\n"
+            f"[Transcribed text of the {label} the user just uploaded]\n"
             f'"""\n{text[:4000]}\n"""\n'
             "Answer the user's request using ONLY the transcribed text above. Do not "
             "invent details, and do not produce a CV or resume unless the transcribed "
-            "text itself is a CV."
+            "text itself is a CV. The file's name is not evidence of its contents."
         )
         return self._answer_with_ai_fallback(
             user_id, message, profile,
@@ -15428,10 +15434,13 @@ class RicoChatAPI:
                 "next_action": "upload_cv",
             }
 
-        filename = str(doc.get("filename") or "uploaded document")
+        # No filename in the prompt: the job description's own text is the
+        # evidence, and a name like "Banking_Manager_JD.pdf" would let the model
+        # infer a sector the document never states. Same rule as every other
+        # filename Rico sends the model — see rico_identity.UNTRUSTED_METADATA_RULE.
         augmented = (
             "Score this job description against my current CV and give a detailed fit analysis.\n\n"
-            f"[Job description — '{filename}']\n\"\"\"\n{text[:3000]}\n\"\"\"\n\n"
+            f"[Job description — uploaded document]\n\"\"\"\n{text[:3000]}\n\"\"\"\n\n"
             f"[My current CV]\n\"\"\"\n{cv_text[:3000]}\n\"\"\"\n\n"
             "Provide:\n"
             "1. Overall fit score (0–100) with a brief justification.\n"
