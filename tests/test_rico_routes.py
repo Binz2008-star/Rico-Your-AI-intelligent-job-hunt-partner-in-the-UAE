@@ -1349,7 +1349,7 @@ class TestMeRoute:
 
 class TestVersionRoute:
     def test_versioned_route_returns_deployment_metadata(self, client, monkeypatch):
-        monkeypatch.setenv("GIT_COMMIT", "abc123")
+        monkeypatch.setenv("GIT_COMMIT", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         monkeypatch.setenv("RICO_ENV", "test")
         monkeypatch.setenv("DEPLOYED_AT", "2026-05-23T00:00:00Z")
 
@@ -1368,7 +1368,7 @@ class TestVersionRoute:
         assert body == {
             "app": "ricohunt",
             "version": "1.0.0",
-            "commit": "abc123",
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "environment": "test",
             "deployed_at": "2026-05-23T00:00:00Z",
         }
@@ -1385,7 +1385,7 @@ class TestVersionRoute:
         """
         from datetime import datetime
 
-        monkeypatch.setenv("GIT_COMMIT", "cur9ent")
+        monkeypatch.setenv("GIT_COMMIT", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
         monkeypatch.setenv("RICO_ENV", "test")
         # Deliberately ancient static metadata — the kind that lags main by weeks.
         monkeypatch.setenv("DEPLOYED_AT", "2020-01-01T00:00:00Z")
@@ -1396,7 +1396,7 @@ class TestVersionRoute:
 
         # commit is the authoritative version signal — driven by the live env,
         # never by the stale deployed_at value.
-        assert body["commit"] == "cur9ent"
+        assert body["commit"] == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
         # started_at is a real, recent boot timestamp (this decade), proving the
         # process is live regardless of the stale deployed_at.
@@ -1440,7 +1440,7 @@ class TestResolveDeploymentRevision:
         monkeypatch.setenv("GIT_COMMIT", "cccccccccccccccccccccccccccccccccccccccc")
         result = _resolve_deployment_revision()
         assert result["commit"] == "unknown"
-        assert result["commit_source"] == "unknown"
+        assert result["commit_source"] == "RAILWAY_GIT_COMMIT_SHA"
         assert result["commit_verified"] is False
 
     def test_railway_blank_native_sha_is_not_verified(self, monkeypatch):
@@ -1449,7 +1449,25 @@ class TestResolveDeploymentRevision:
         monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "")
         result = _resolve_deployment_revision()
         assert result["commit_verified"] is False
-        assert result["commit_source"] == "unknown"
+        assert result["commit_source"] == "RAILWAY_GIT_COMMIT_SHA"
+
+    def test_railway_malformed_native_sha_returns_unknown(self, monkeypatch):
+        """Malformed (non-hex) Railway native SHA returns unknown/unverified."""
+        monkeypatch.setenv("RAILWAY_REPLICA_ID", "rplc_abc123")
+        monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "unknown"
+        assert result["commit_source"] == "RAILWAY_GIT_COMMIT_SHA"
+        assert result["commit_verified"] is False
+
+    def test_railway_shortened_native_sha_returns_unknown(self, monkeypatch):
+        """Shortened Railway native SHA returns unknown/unverified."""
+        monkeypatch.setenv("RAILWAY_REPLICA_ID", "rplc_abc123")
+        monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "abc123")
+        result = _resolve_deployment_revision()
+        assert result["commit"] == "unknown"
+        assert result["commit_source"] == "RAILWAY_GIT_COMMIT_SHA"
+        assert result["commit_verified"] is False
 
     def test_railway_stale_value_proves_no_identity(self, monkeypatch):
         """Regression: old precedence let a stale static GIT_COMMIT win. With
@@ -1460,7 +1478,7 @@ class TestResolveDeploymentRevision:
         result = _resolve_deployment_revision()
         # The stale ccde2c48 value must NOT be reported as the Railway revision
         assert result["commit"] == "unknown"
-        assert result["commit_source"] == "unknown"
+        assert result["commit_source"] == "RAILWAY_GIT_COMMIT_SHA"
         assert result["commit_verified"] is False
 
     # ── Vercel platform ──────────────────────────────────────────────────
@@ -1480,7 +1498,7 @@ class TestResolveDeploymentRevision:
         monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "")
         result = _resolve_deployment_revision()
         assert result["commit"] == "unknown"
-        assert result["commit_source"] == "unknown"
+        assert result["commit_source"] == "VERCEL_GIT_COMMIT_SHA"
         assert result["commit_verified"] is False
 
     # ── Render platform ──────────────────────────────────────────────────
@@ -1500,18 +1518,18 @@ class TestResolveDeploymentRevision:
         monkeypatch.setenv("RENDER_GIT_COMMIT", "")
         result = _resolve_deployment_revision()
         assert result["commit"] == "unknown"
-        assert result["commit_source"] == "unknown"
+        assert result["commit_source"] == "RENDER_GIT_COMMIT"
         assert result["commit_verified"] is False
 
     # ── Generic fallback (no platform detected) ──────────────────────────
 
     def test_generic_fallback_with_git_commit(self, monkeypatch):
-        """Outside any known platform, GIT_COMMIT is used."""
+        """Outside any known platform, GIT_COMMIT is used but is unverified."""
         monkeypatch.setenv("GIT_COMMIT", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
         result = _resolve_deployment_revision()
         assert result["commit"] == "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         assert result["commit_source"] == "generic_env"
-        assert result["commit_verified"] is True
+        assert result["commit_verified"] is False
 
     def test_generic_fallback_with_commit_sha(self, monkeypatch):
         """Outside any known platform, COMMIT_SHA is checked after GIT_COMMIT."""
@@ -1519,7 +1537,7 @@ class TestResolveDeploymentRevision:
         result = _resolve_deployment_revision()
         assert result["commit"] == "ffffffffffffffffffffffffffffffffffffffff"
         assert result["commit_source"] == "generic_env"
-        assert result["commit_verified"] is True
+        assert result["commit_verified"] is False
 
     def test_generic_fallback_with_source_version(self, monkeypatch):
         """Outside any known platform, SOURCE_VERSION is checked last."""
@@ -1527,7 +1545,7 @@ class TestResolveDeploymentRevision:
         result = _resolve_deployment_revision()
         assert result["commit"] == "1111111111111111111111111111111111111111"
         assert result["commit_source"] == "generic_env"
-        assert result["commit_verified"] is True
+        assert result["commit_verified"] is False
 
     def test_generic_fallback_none_set_returns_unknown(self, monkeypatch):
         """No platform, no generic vars — unknown/unverified."""
@@ -1541,25 +1559,24 @@ class TestResolveDeploymentRevision:
 
     # ── SHA format validation ────────────────────────────────────────────
 
-    @pytest.mark.parametrize("sha,expected_verified", [
-        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", True),    # full 40 hex
-        ("cccccccccccccccccccccccccccccccccccccccc", True),    # full 40 hex
-        ("abc123", False),                                      # too short
-        ("", False),                                            # blank
-        ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", False),   # non-hex chars
-        ("ghijklmnopqrstuvwxyzabcdefghijklmnopqrs", False),    # non-hex chars
-        ("abc", False),                                         # too short
-        (None, False),                                          # None
+    @pytest.mark.parametrize("sha,expected_commit", [
+        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        ("abc123", "unknown"),
+        ("", "unknown"),
+        ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "unknown"),
+        ("abc", "unknown"),
+        (None, "unknown"),
     ])
-    def test_sha_format_verification(self, monkeypatch, sha, expected_verified):
-        """Only full 40-character hexadecimal SHAs are verified."""
+    def test_generic_with_malformed_sha_returns_unknown(self, monkeypatch, sha, expected_commit):
+        """Malformed/shortened/non-hex generic values produce 'unknown' commit and
+        are never verified. Generic fallback is always unverified regardless of format."""
         monkeypatch.setenv("GIT_COMMIT", sha or "")
-        # Ensure no platform is detected
         monkeypatch.delenv("RAILWAY_REPLICA_ID", raising=False)
         monkeypatch.delenv("VERCEL_ENV", raising=False)
         monkeypatch.delenv("RENDER", raising=False)
         result = _resolve_deployment_revision()
-        assert result["commit_verified"] is expected_verified
+        assert result["commit"] == expected_commit
+        assert result["commit_verified"] is False
 
     # ── Platform detection ordering ──────────────────────────────────────
 

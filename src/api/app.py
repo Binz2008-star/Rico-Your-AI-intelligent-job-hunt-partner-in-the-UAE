@@ -81,11 +81,29 @@ _PROCESS_STARTED_AT = datetime.now(_tz.utc).isoformat()
 _COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
-def _revision_result(sha: str, source: str) -> Dict[str, Any]:
-    """Build a revision result dict from a SHA and its source identifier."""
-    verified = bool(sha and _COMMIT_SHA_RE.match(sha))
+def _revision_result(sha: str, source: str, trusted: bool = False) -> Dict[str, Any]:
+    """Build a revision result dict from a SHA, source identifier, and trust flag.
+
+    Parameters:
+        sha: The raw SHA value from the environment variable.
+        source: The name of the environment variable that supplied the value.
+        trusted: True when the source is a platform-native variable (Railway,
+            Vercel, or Render). Generic/static variables are never trusted.
+
+    commit_verified is True only when:
+    - trusted is True, AND
+    - sha is a well-formed full 40-character hexadecimal string.
+
+    A malformed, shortened, or blank platform-native SHA is never exposed as
+    the deployed commit — commit is "unknown" and verified is False.
+
+    A well-formed generic SHA is returned as commit for backward compatibility
+    but commit_verified is always False.
+    """
+    valid_format = bool(sha and _COMMIT_SHA_RE.match(sha))
+    verified = trusted and valid_format
     return {
-        "commit": sha if sha else "unknown",
+        "commit": sha if valid_format else "unknown",
         "commit_source": source,
         "commit_verified": verified,
     }
@@ -106,21 +124,15 @@ def _resolve_deployment_revision() -> Dict[str, Any]:
     """
     if os.getenv("RAILWAY_REPLICA_ID", "").strip():
         sha = os.getenv("RAILWAY_GIT_COMMIT_SHA", "").strip()
-        if sha:
-            return _revision_result(sha, "RAILWAY_GIT_COMMIT_SHA")
-        return _revision_result("", "unknown")
+        return _revision_result(sha, "RAILWAY_GIT_COMMIT_SHA", trusted=True)
 
     if os.getenv("VERCEL_ENV", "").strip():
         sha = os.getenv("VERCEL_GIT_COMMIT_SHA", "").strip()
-        if sha:
-            return _revision_result(sha, "VERCEL_GIT_COMMIT_SHA")
-        return _revision_result("", "unknown")
+        return _revision_result(sha, "VERCEL_GIT_COMMIT_SHA", trusted=True)
 
     if os.getenv("RENDER", "").strip():
         sha = os.getenv("RENDER_GIT_COMMIT", "").strip()
-        if sha:
-            return _revision_result(sha, "RENDER_GIT_COMMIT")
-        return _revision_result("", "unknown")
+        return _revision_result(sha, "RENDER_GIT_COMMIT", trusted=True)
 
     sha = _first_env("GIT_COMMIT", "COMMIT_SHA", "SOURCE_VERSION", default="")
     if sha:

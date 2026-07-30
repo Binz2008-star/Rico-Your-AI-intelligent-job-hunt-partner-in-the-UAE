@@ -1958,9 +1958,9 @@ different fact from `no_cv_on_file`.
 
 ### DEC-20260731-001 — Authoritative deployment commit identity (Railway-native SHA precedence)
 
-Status: accepted
+Status: proposed
 Date: 2026-07-31
-Owner: Claude (architect + implementation)
+Owner: Rico Engineering
 Related PR: `#1470` (Draft)
 
 #### Context
@@ -1973,22 +1973,29 @@ checked `GIT_COMMIT` before any platform-native variable:
 _first_env("GIT_COMMIT", "VERCEL_GIT_COMMIT_SHA", "RENDER_GIT_COMMIT", ...)
 ```
 
-`GIT_COMMIT` is a generic name that was set as a static environment variable in the
-Railway dashboard — it held `ccde2c48` (the `main` SHA at the time of initial
-configuration) and was never updated. Because it appeared first in the list,
-every deploy reported `ccde2c48` regardless of what code Railway actually
-deployed. The Railway-native `RAILWAY_GIT_COMMIT_SHA` (auto-populated by Railway
-for GitHub-triggered deploys) was never checked.
+`GIT_COMMIT` is a generic name. Commits from the production `/version` endpoint
+reported `ccde2c48` — the same value across multiple deploys — consistent with
+a static or rarely-updated generic variable taking precedence at runtime.
+Because it appeared first in the list, every deploy potentially reported a stale
+value regardless of what code Railway actually deployed. The Railway-native
+`RAILWAY_GIT_COMMIT_SHA` (auto-populated by Railway for GitHub-triggered deploys)
+was never checked.
+
+The exact stale value source in the Railway dashboard is not console-verified
+here; the observable symptom is that `/version.commit` did not change across
+deploys that should have changed it.
 
 This meant:
-1. `/version.commit` was **not** trustworthy source identity — a static dashboard
-   variable could impersonate the deployed revision.
+1. `/version.commit` was **not** trustworthy source identity — a generic
+   variable could impersonate the deployed revision without detection.
 2. `started_at` (process boot time) proved a restart happened but did **not**
    identify **which** code revision is running. A platform health-replacement
    of a failed replica restarts the process without changing the deployed code.
-3. The `deploy-production.yml` workflow compared `GITHUB_SHA` (the run's commit)
-   against `/version.commit` — both matched `ccde2c48` after a deploy, producing
-   a false green that masked the divergence.
+3. The `deploy-production.yml` workflow fetches `/version` and prints both the
+   deployed commit and `$GITHUB_SHA` for human review. It does **not**
+   compare them or fail on mismatch. A stale `/version.commit` therefore
+   surfaces in the log but does not block the workflow, so divergence can go
+   unnoticed unless an operator reads the summary.
 
 #### Decision
 
@@ -2007,7 +2014,7 @@ This meant:
 
 3. **A stale generic value must not impersonate a platform revision.** When a
    platform is detected and its native SHA is absent, the resolver returns
-   `"unknown"` / unverified rather than falling through to a generic variable
+   `"unknown"` / unverified. It does not fall through to a generic variable
    that could be stale.
 
 4. **`commit_verified` (bool) and `commit_source` (str) are added** to
@@ -2023,23 +2030,27 @@ This meant:
 #### Consequences
 
 - Positive: `/version.commit` now reports the actual deployed source revision on
-  Railway, Vercel, and Render.
+  Railway, Vercel, and Render when the native SHA is available.
 - Positive: A stale static `GIT_COMMIT` in the Railway dashboard can no longer
   impersonate the deployed revision — Railway-mode ignores generics.
 - Positive: `commit_source` and `commit_verified` give operators immediate,
   code-provable insight into whether the reported commit is trustworthy.
-- Positive: The `deploy-production.yml` workflow's comparison of
-  `GITHUB_SHA` vs `/version.commit` now correctly detects divergence.
+- Positive: `deploy-production.yml` continues to print both the deployed commit
+  and `$GITHUB_SHA` for human review. The `commit` key remains the same field,
+  so the workflow parser needs no change.
 - Positive: Backward compatible — all existing consumers that read `commit`
-  continue to work, and the deploy-production.yml parser (`d.get('commit')`)
-  needs no change.
-- Trade-off: On Railway, if `RAILWAY_GIT_COMMIT_SHA` is absent (e.g., a deploy
-  triggered outside GitHub), `/version.commit` reports `"unknown"` instead of
-  falling back to a potentially stale generic. This is correct — an absent
-  platform-native SHA means the revision is not verifiable, not that a stale
-  value should be used.
+  continue to work.
+- Trade-off: On Railway, if `RAILWAY_GIT_COMMIT_SHA` is absent or malformed
+  (e.g., a deploy triggered outside GitHub), `/version.commit` reports
+  `"unknown"` instead of falling back to a potentially stale generic. This is
+  correct — an absent or malformed platform-native SHA means the revision is
+  not verifiable, not that a stale value should be used.
 - Trade-off: Three platform checks run on every `/version` call (negligible cost
   — `os.getenv` on already-cached env var state).
+- Trade-off: Exact-SHA post-deploy verification remains live/manual or requires
+  a separately designed non-gating workflow. The current `deploy-production.yml`
+  does not fail on SHA mismatch and adding that check must be evaluated for
+  Railway Wait-for-CI deadlock risk before introduction.
 
 #### Railway console evidence still required
 
@@ -2060,7 +2071,7 @@ Revert the single commit. This is an additive, runtime-only change:
 - No frontend change.
 - No workflow configuration change.
 - No feature flag or env var to toggle.
-- If the new resolver misbehaves, the `/version` endpoint falls back to the
-  generic `_first_env` fallback — it cannot prevent the app from starting,
-  serving traffic, or deploying.
-- To return to the old flat-list behavior: revert `#1470` commit.
+- If the new resolver misbehaves, `/version` returns `"unknown"` or falls back
+  to the generic `_first_env` fallback — it cannot prevent the app from
+  starting, serving traffic, or deploying.
+- To return to the old flat-list behavior: revert the PR commit.
