@@ -23,20 +23,25 @@
 
 A green deployment badge is not a product smoke. A rehearsal is not production-repair authorization. A merged SQL package is not permission to execute it.
 
-## Current reconciliation — 2026-07-29
+## Current reconciliation — 2026-07-30
 
 ### Verified repository state
 
 | Item | Verified state |
 | --- | --- |
-| `main` | `7714b49643485f7c87a28c0f7d85ed61cc017375` |
+| `main` | `ab5e60f6a774d4843889c34e18f11853da51c4f8` |
 | `#1432` | **MERGED** as `3fa214a2b6631d2f73d0980f7700983550dce717`; authenticated gratitude smoke still pending |
 | `#1435` | **MERGED** as `9f731f19f5c46d454525690fc44b2ec319a4f2d1`; records endpoint evidence and the `#1389` ruling |
 | `#1436` | **MERGED** as `a292f99bf4a6a80745f4b5e29151684f37530cfc`; final D1 operating package, no production execution authorization |
 | `#1437` | **MERGED** as `3e18737079d21da8db63f581b7d1d99c87cc1904`; synthetic persona/CV-fixture factory and required QA enrollment |
 | `#1438` | **MERGED** as `7714b49643485f7c87a28c0f7d85ed61cc017375`; real-Postgres cross-user document-isolation coverage, tests only |
+| `#1443` | **MERGED** as `cbcb4206b7b13a6de2fbbe84e42d610addc054e2` from head `542b66a6b7c65467b92385792ee0abe0201bf3d9`; read-only Delivery Smoke residual audit package |
+| `#1457` | **MERGED** as `dcc949af3e6300482be78146222d8d03fb6b092e` from head `acb33fe8b173cc05145acdbf760ae21fb907bee9`; bounded cache foundation, no production cache swapped |
+| `#1461` | **MERGED** as `ccde2c483c76b782214f3bb117c4c07310121c4d`; gate write-capable DB init behind `RICO_RUN_STARTUP_MIGRATIONS` |
+| `#1460` | **MERGED** as `ab5e60f6a774d4843889c34e18f11853da51c4f8` from head `9b8bcd0aeb0b22d4258bb9f62933ee412d49f4e7`; Atelier `/about` public island, verified by production smoke |
 | `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
-| Open implementation PRs | **0** |
+| Open implementation PRs | **#1455** (frontend /applications board DnD, open) · **#1464** (AI grounding and evidence contract Phase 1, draft) · **#1449** (version-control governance, draft) |
+| Open operational cleanup PRs | **#1454** (operational cleanup tooling; production deletion prohibited, no production execution) |
 
 ## Production verification boundary
 
@@ -48,6 +53,16 @@ The last direct production verification for `#1432` established:
 - `ricohunt.com` was reachable.
 
 The authenticated pending-search/gratitude interaction remains **not product-smoke verified**. A dedicated secret-safe smoke must prove that `شكرًا` causes no second search dispatch and leaves the pending offer available for a later explicit confirmation.
+
+### /about Atelier production verification (PR #1460)
+
+The production `/about` Atelier migration was verified on the merged `main@ab5e60f6a` Vercel deployment at `https://ricohunt.com/about`:
+
+- **Desktop EN** — `dir="ltr"`, `lang="en"`; Atelier island `.atelier`/`.atl-doc` present; legacy `.aura-glow`/`.glass-panel` absent; no horizontal overflow (1245 px ≤ 1249 px viewport); all expected links (`/`, `/contact`, `/faq`, `/terms`, `/privacy`) and CTA (`/contact`) present; zero console errors.
+- **Desktop AR RTL** — `dir="rtl"`, `lang="ar"`; Arabic H1 "بُني لسوق العمل في الإمارات." rendered; corrected `فعلاً` present (3×); no legacy glass; CTA "أرسل رسالة ←" → `/contact`; zero overflow; zero console errors.
+- **Mobile EN (375×812)** — `dir="ltr"`, `lang="en"`; no overflow (371 px ≤ 375 px); Atelier present; no legacy glass; zero console errors.
+- **Mobile AR RTL (375×812)** — `dir="rtl"`, `lang="ar"`; no overflow (371 px ≤ 375 px); Atelier present; no legacy glass; zero console errors.
+- **Language toggle round trip** — EN→AR and AR→EN both succeed on desktop and mobile without reload; no console errors.
 
 `#1436` is documentation/operator SQL only. `#1437` and `#1438` are tests/workflow enrollment only. Their merge SHAs do not constitute new runtime behavior evidence and do not close the `#1432` smoke gap.
 
@@ -125,14 +140,42 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | --- | --- |
 | Active implementation writers | **0** |
 | Active documentation writers | **1 — this reconciliation branch only; lease ends on merge/close** |
-| Open implementation PRs | **0** |
+| Open implementation PRs | **#1455** (frontend /applications board DnD, open) · **#1464** (AI grounding and evidence contract Phase 1, draft) · **#1449** (version-control governance, draft) |
+| Open operational cleanup PRs | **#1454** (operational cleanup tooling; production deletion prohibited, no production execution) |
 | Multi-user reliability PR 1 / PR 2 | **merged through #1437 / #1438** |
 | D1 mapping/rehearsal | **complete** |
 | D1 final operating package | **merged** |
 | Production database repair | **not authorized** |
 | `#1432` endpoint verification | **complete** |
 | `#1432` authenticated behavior smoke | **pending** |
+| `#1443` Delivery Smoke residual audit | **complete** |
+| `#1443` cleanup package preparation | **in progress; production deletion not authorized** |
+| CV smoke overall | **FAIL** |
+| `#355` | **deferred** |
 | `#1389` | **closed without merge; historical only** |
+
+## Delivery Smoke residual audit (`#1443`)
+
+A separate read-only audit was dispatched against production data at workflow run `30475312924` (checked out `main` `cbcb4206b7b13a6de2fbbe84e42d610addc054e2`, success):
+
+- **Total synthetic rows observed:** 84
+- **Tables audited:** 11
+- **Tables marked INCONCLUSIVE:** 0
+- **Residual tables:** `rico_users` (8), `rico_onboarding_states` (8), `rico_chat_history` (48), `rico_profiles` (4), `learning_signals` (3), `chat_operations` (3), `user_job_context` (5), `rico_job_recommendations` (5)
+- **No PII, credentials, or raw payload reached the log output.**
+
+This audit covered the full historical Delivery Smoke synthetic namespace (`smoke-delivery-*@synthetic-rico.test`) and is explicitly not attributed to a single workflow run.
+
+### Authorization state for cleanup
+
+| Action | State |
+| --- | --- |
+| Cleanup package preparation and non-production rehearsal | **AUTHORIZED** |
+| Production `commit=false` rehearsal | **NOT AUTHORIZED** |
+| Production committed cleanup transaction | **NOT AUTHORIZED** |
+| Production deletion of any kind | **NOT AUTHORIZED** |
+
+A fresh pre-cleanup Neon branch (or equivalent approved private backup) is a hard gate before any committed production execution.
 
 ## Documentation drift boundary
 
