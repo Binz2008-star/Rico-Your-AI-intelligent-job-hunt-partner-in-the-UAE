@@ -24,6 +24,7 @@ describe("/about Atelier island", () => {
 
     expect(container.firstChild).toHaveClass("atelier", "atl-doc");
     expect(container.firstChild).toHaveAttribute("dir", "ltr");
+    expect(container.firstChild).toHaveAttribute("lang", "en");
 
     expect(screen.getByText(/Our Story/i)).toBeInTheDocument();
     expect(screen.getByText(/Built for the UAE job market/i)).toBeInTheDocument();
@@ -48,11 +49,19 @@ describe("/about Atelier island", () => {
     expect(cta).toHaveAttribute("href", "/contact");
   });
 
-  it("calls setLanguage when the language toggle is pressed", () => {
+  it("toggles language to Arabic from the English page", () => {
     render(<AboutContent />);
     const toggle = screen.getByRole("button", { name: /Switch to Arabic/i });
     fireEvent.click(toggle);
     expect(setLanguage).toHaveBeenCalledWith("ar");
+  });
+
+  it("toggles language to English from the Arabic page", () => {
+    langState.current = "ar";
+    render(<AboutContent />);
+    const toggle = screen.getByRole("button", { name: /Switch to English/i });
+    fireEvent.click(toggle);
+    expect(setLanguage).toHaveBeenCalledWith("en");
   });
 
   it("preserves expected navigation and CTA hrefs", () => {
@@ -64,7 +73,7 @@ describe("/about Atelier island", () => {
     });
   });
 
-  it("does not render legacy AuraGlow or GlassPanel chrome", () => {
+  it("does not render legacy glass classes", () => {
     const { container } = render(<AboutContent />);
     expect(container.querySelector(".aura-glow")).not.toBeInTheDocument();
     expect(container.querySelector(".glass-panel")).not.toBeInTheDocument();
