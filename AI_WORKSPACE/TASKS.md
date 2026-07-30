@@ -8934,9 +8934,12 @@ confirmation. No generic dialog framework, no unrelated pending flows.
   transaction-scoped), and `classify_reply()` returning CONFIRM/CANCEL/CHANGE/
   NEW_REQUEST/OTHER.
 - `src/rico_chat_api.py` — rewritten `_store_pending_job_search` (returns bool),
-  `_get_pending_job_search` (repo-first, memory fallback), `_clear_pending_job_search`;
+  `_get_pending_job_search` (DB repo only), `_clear_pending_job_search`;
   new `_redeem_pending_job_search()` single entry point with turn-scoped cache
-  (`_pjs_redeemed_this_turn`); four redemption sites updated to share the entry point.
+  (`_PJS_SENTINEL`); four redemption sites updated to share the entry point.
+  User-facing fail-closed behavior: store failure replaces offer messages,
+  cancel failure returns error response, failed consume returns None (safe
+  fallthrough).
 - `tests/test_pending_job_search_contract.py` — 93 hermetic tests covering contract,
   classification, repo, redemption pipeline, location-only change, single-turn
   entry point, operation ownership.

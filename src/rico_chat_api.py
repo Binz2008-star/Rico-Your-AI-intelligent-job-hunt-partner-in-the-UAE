@@ -6640,20 +6640,26 @@ class RicoChatAPI:
         result: dict[str, Any] | None = None
 
         if cat == ReplyCategory.CANCEL:
-            self._clear_pending_job_search(user_id)
+            if not self._clear_pending_job_search(user_id):
+                result = self._pjs_error_response(user_id)
 
         elif cat == ReplyCategory.NEW_REQUEST:
-            self._clear_pending_job_search(user_id)
+            if not self._clear_pending_job_search(user_id):
+                result = self._pjs_error_response(user_id)
 
         elif cat == ReplyCategory.CHANGE:
             _, new_role, new_loc = classify_reply(message)
             self._discard_pending_role_confirmation(user_id)
             if new_role:
-                # New role: atomically invalidate old, search new
-                self._consume_pending_js(user_id)
-                result = self._target_role_search_response(
-                    user_id, new_role, profile, location=new_loc or "",
-                )
+                # New role: atomically invalidate old before executing new.
+                # If consume fails (stale, missing, DB down) do not execute.
+                consumed = self._consume_pending_js(user_id)
+                if consumed is not None:
+                    result = self._target_role_search_response(
+                        user_id, new_role, profile, location=new_loc or "",
+                    )
+                else:
+                    result = self._pjs_error_response(user_id)
             else:
                 # Location-only change: atomically consume, use stored role
                 pjs = self._consume_pending_js(user_id)
@@ -6669,16 +6675,39 @@ class RicoChatAPI:
                 result = self._target_role_search_response(
                     user_id, pjs.role, profile, location=pjs.location,
                 )
+            # If consume returns None (missing, expired, already consumed, DB down),
+            # result stays None and the caller falls through to normal routing.
+            # The single turn cache ensures this does not re-classify.  The caller
+            # (_resolve_pending_intent, answer_conversationally, etc.) either emits
+            # its own safe response or continues routing, which is acceptable because
+            # there is no actionable pending state to execute.
 
         # Cache so this turn never re-evaluates.
         object.__setattr__(self, "_pjs_redemption_attempted_this_turn", result)
         return result
+
+    @staticmethod
+    def _pjs_error_response(user_id: str) -> dict[str, Any]:
+        """Safe response when a PendingJobSearch operation fails.
+        Does not claim execution started.  Does not infer from context."""
+        arabic = bool(re.search(r"[\u0600-\u06FF]", str(user_id) or ""))
+        return {
+            "type": "clarification",
+            "message": (
+                "عذراً، تعذّر تجهيز البحث الآن. أعد كتابة المسمى الوظيفي والموقع وسأبحث مجدداً."
+                if arabic else
+                "Sorry, I couldn't prepare the search right now. Please restate the role and location, and I'll search for you."
+            ),
+            "intent": "pending_job_search_failed",
+            "success": True,
+        }
 
     def _consume_pending_js(self, user_id: str) -> PendingJobSearch | None:
         """Atomically read and consume the pending job search via the repo.
 
         Only the token path is used.  A dict without a token (legacy test
         state) returns None — no production path executes tokenless state.
+        Returns None on any error (DB unavailable, malformed, etc.).
         """
         raw = self._get_pending_job_search(user_id)
         if not raw or not raw.get("role"):
@@ -6686,7 +6715,10 @@ class RicoChatAPI:
         token = raw.get("token") or ""
         if not token:
             return None
-        return self.pjs_repo.consume(user_id, token)
+        try:
+            return self.pjs_repo.consume(user_id, token)
+        except Exception:
+            return None
 
     def _discard_pending_role_confirmation(self, user_id: str) -> None:
         """Drop the armed role-confirmation marker once its search executes."""
@@ -6714,8 +6746,9 @@ class RicoChatAPI:
         """Persist a pending job search when Rico's response offers/announces a
         search but does not execute one this turn.
 
-        Logs a warning when the arm fails; the response has already been built
-        so the user receives their answer, but confirmation will not be available.
+        When durable storage fails, replaces the response message with an honest
+        retry-now instruction rather than leaving the user believing they can
+        confirm later.
         """
         try:
             rtype = str(result.get("type") or "")
@@ -6731,7 +6764,14 @@ class RicoChatAPI:
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
             role = target_roles[0] if target_roles else None
             if role and not self._store_pending_job_search(user_id, role=role):
-                logger.warning("pending_job_search arm failed user=%s — confirmation will not be available", user_ref(user_id))
+                logger.warning("pending_job_search arm failed user=%s — replacing message", user_ref(user_id))
+                # Replace the response message so the user is not told to confirm later.
+                arabic = bool(re.search(r"[\u0600-\u06FF]", str(result.get("message", ""))))
+                result["message"] = (
+                    "لم أتمكن من تجهيز التأكيد. قل لي المسمى والموقع وسأبحث فوراً."
+                    if arabic else
+                    "I couldn't prepare the confirmation. Just tell me the role and location, and I'll search right away."
+                )
         except Exception:
             pass
 
@@ -8500,6 +8540,12 @@ class RicoChatAPI:
                 user_id, role=_adjacent_names_for_offer[0], query_type="adjacent_broaden"
             ):
                 logger.warning("failed to arm adjacent-broaden for user=%s", user_ref(user_id))
+                # Strip the broaden offer from the message so the user is not
+                # told to confirm something that cannot be redeemed.
+                message = re.sub(
+                    r"\s*Would you like me to (?:also )?search for .+?\?",
+                    "", message,
+                )
 
         response = {
             "type": "job_matches",
@@ -23798,6 +23844,12 @@ class RicoChatAPI:
             # rather than producing another hollow promise or a good-luck reply.
             if not self._store_pending_job_search(user_id, role=canonical_role, location=location, query_type="known_but_off_profile"):
                 logger.warning("failed to arm known-but-off-profile for user=%s", user_ref(user_id))
+                # Replace the response message so we do not promise confirmation that cannot be armed.
+                response = dict(response)
+                response["message"] = (
+                    f"'{canonical_role}' is a real role, but I couldn't prepare the search right now. "
+                    f"Please tell me the exact role and location, and I'll search right away."
+                )
             return response
 
         # unknown role — check if text is actually a company name from recent matches

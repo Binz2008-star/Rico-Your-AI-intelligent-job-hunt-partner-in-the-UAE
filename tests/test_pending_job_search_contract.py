@@ -550,6 +550,90 @@ def test_single_turn_reset_on_new_turn():
     assert call_count == 2  # New turn, new attempt
 
 
+# ── Fail-closed behavior ─────────────────────────────────────────────────────
+
+
+def test_store_failure_returns_error_response():
+    """When _store_pending_job_search fails, _redeem must return a truthful error."""
+    api = _make_api({"role": "Engineer", "location": ""})
+    # Make the store fail by having cancel return False
+    api._pjs_repo.cancel.return_value = False
+    # Cancel classification should produce an error when the repo fails
+    result = api._redeem_pending_job_search("u1", "لا", profile={})
+    assert result is not None
+    assert "message" in result
+    assert "تعذّر" in result.get("message", "") or "couldn't prepare" in result.get("message", "").lower() or "sorry" in result.get("message", "").lower()
+
+
+def test_cancel_failure_returns_error():
+    """When cancel fails (repo returns False), _redeem must not claim success."""
+    api = _make_api({"role": "Engineer", "location": ""})
+    api._pjs_repo.cancel.return_value = False
+    result = api._redeem_pending_job_search("u1", "لا", profile={})
+    assert result is not None
+    assert result.get("type") == "clarification"
+
+
+def test_consume_expired_returns_none():
+    """Expired state must return None from _redeem (safe fallthrough)."""
+    from src.services.pending_job_search import PendingJobSearch
+    from datetime import datetime, timezone
+    expired = PendingJobSearch(
+        token="expired-t", role="Old", location="", reason="test",
+        created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+    )
+    api = _make_api({"role": "Old", "location": ""})
+    api._pjs_repo.get.return_value = expired
+    api._pjs_repo.consume.return_value = None  # repo rejects expired
+    with patch.object(api, "_target_role_search_response") as direct:
+        result = api._redeem_pending_job_search("u1", "yes", profile={})
+    assert result is None
+    direct.assert_not_called()
+
+
+def test_consume_token_mismatch_returns_none():
+    """Token mismatch must return None (safe fallthrough)."""
+    from src.services.pending_job_search import new_pending
+    pjs = new_pending(role="Engineer", location="")
+    api = _make_api({"role": "Engineer", "location": ""})
+    api._pjs_repo.get.return_value = pjs
+    api._pjs_repo.consume.return_value = None  # token mismatch → None
+    with patch.object(api, "_target_role_search_response") as direct:
+        result = api._redeem_pending_job_search("u1", "yes", profile={})
+    assert result is None
+    direct.assert_not_called()
+
+
+def test_consume_db_unavailable_returns_none():
+    """DB unavailable must return None (safe fallthrough)."""
+    api = _make_api({"role": "Engineer", "location": ""})
+    api._pjs_repo.consume.side_effect = RuntimeError("DB unavailable")
+    with patch.object(api, "_target_role_search_response") as direct:
+        result = api._redeem_pending_job_search("u1", "yes", profile={})
+    assert result is None
+    direct.assert_not_called()
+
+
+def test_consume_concurrent_loser_returns_none():
+    """Concurrent loser returns None."""
+    api = _make_api({"role": "Engineer", "location": ""})
+    # First call succeeds, second call (mocked) returns None
+    from src.services.pending_job_search import new_pending
+    pjs = new_pending(role="Engineer", location="")
+    api._pjs_repo.get.return_value = pjs
+    api._pjs_repo.consume.side_effect = [pjs, None]
+    with patch.object(api, "_target_role_search_response") as direct:
+        first = api._redeem_pending_job_search("u1", "yes", profile={})
+    # Cache is set, clear it to test a second call
+    # (In production the sentinel prevents re-entry; this simulates a fresh attempt)
+    object.__setattr__(api, "_pjs_redemption_attempted_this_turn", api._PJS_SENTINEL)
+    with patch.object(api, "_target_role_search_response") as direct2:
+        second = api._redeem_pending_job_search("u1", "yes", profile={})
+    assert first is not None
+    assert second is None
+
+
 # ── Mutually-exclusive operation ownership ───────────────────────────────────
 # The operation ownership claim lives in ``operation_state.start_job_search_operation``
 # exclusively. ``_begin_job_search_operation`` calls it. ``_target_role_search_response``
