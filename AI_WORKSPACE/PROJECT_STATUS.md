@@ -29,7 +29,7 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 
 | Item | Verified state |
 | --- | --- |
-| `main` | `ab5e60f6a774d4843889c34e18f11853da51c4f8` |
+| `main` | `16e99a67330495d993a32a8d3f29838fc47b51d0` |
 | `#1432` | **MERGED** as `3fa214a2b6631d2f73d0980f7700983550dce717`; authenticated gratitude smoke still pending |
 | `#1435` | **MERGED** as `9f731f19f5c46d454525690fc44b2ec319a4f2d1`; records endpoint evidence and the `#1389` ruling |
 | `#1436` | **MERGED** as `a292f99bf4a6a80745f4b5e29151684f37530cfc`; final D1 operating package, no production execution authorization |
@@ -40,8 +40,9 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 | `#1461` | **MERGED** as `ccde2c483c76b782214f3bb117c4c07310121c4d`; gate write-capable DB init behind `RICO_RUN_STARTUP_MIGRATIONS` |
 | `#1460` | **MERGED** as `ab5e60f6a774d4843889c34e18f11853da51c4f8` from head `9b8bcd0aeb0b22d4258bb9f62933ee412d49f4e7`; Atelier `/about` public island, verified by production smoke |
 | `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
-| Open implementation PRs | **#1455** (frontend /applications board DnD, open) · **#1464** (AI grounding and evidence contract Phase 1, draft) · **#1449** (version-control governance, draft) |
-| Open operational cleanup PRs | **#1454** (operational cleanup tooling; production deletion prohibited, no production execution) |
+| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1455** (frontend /applications board DnD, open) |
+| Open audit / governance / documentation PRs | **#1465** (AI subsystem audit, draft) · **#1452** (product accountability scorecard, draft) · **#1449** (version-control governance, draft) · **#1447** (consolidated product PRD, open) |
+| Open operational cleanup PRs | **#1454** (delivery smoke residual cleanup; no production deletion authorized) |
 
 ## Production verification boundary
 
@@ -139,9 +140,10 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | Measure | State |
 | --- | --- |
 | Active implementation writers | **0** |
-| Active documentation writers | **1 — this reconciliation branch only; lease ends on merge/close** |
-| Open implementation PRs | **#1455** (frontend /applications board DnD, open) · **#1464** (AI grounding and evidence contract Phase 1, draft) · **#1449** (version-control governance, draft) |
-| Open operational cleanup PRs | **#1454** (operational cleanup tooling; production deletion prohibited, no production execution) |
+| Active documentation writers | **1 — this micro-reconciliation branch only; lease ends on merge/close** |
+| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1455** (frontend /applications board DnD, open) |
+| Open audit / governance / documentation PRs | **#1465** (AI subsystem audit, draft) · **#1452** (product accountability scorecard, draft) · **#1449** (version-control governance, draft) · **#1447** (consolidated product PRD, open) |
+| Open operational cleanup PRs | **#1454** (delivery smoke residual cleanup; no production deletion authorized) |
 | Multi-user reliability PR 1 / PR 2 | **merged through #1437 / #1438** |
 | D1 mapping/rehearsal | **complete** |
 | D1 final operating package | **merged** |
