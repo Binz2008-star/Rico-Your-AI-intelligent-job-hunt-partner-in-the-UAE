@@ -137,11 +137,15 @@ Status codes: **DONE** (on approved Atelier shell) · **PARTIAL** · **LEGACY** 
 
 ## Definition of done (program)
 
-1. Every production route listed in this matrix. 2. Every user-facing route on an
-approved Atelier shell. 3. No production navigation opens legacy UI. 4. Zero
-user-facing imports of legacy `AppShell`/`DashboardShell`. 5. Desktop + mobile
-consistent. 6. EN/AR + RTL pass. 7. Auth + billing work. 8. Paddle checkout + portal
-pass real Sandbox browser smoke. 9. Preview/demo routes removed or protected.
+1. Every production route listed in this matrix.
+2. Every user-facing route on an approved Atelier shell.
+3. No production navigation opens legacy UI.
+4. Zero user-facing imports of legacy `AppShell`/`DashboardShell`.
+5. Desktop + mobile consistent.
+6. EN/AR + RTL pass.
+7. Auth + billing work.
+8. Paddle checkout + portal pass real Sandbox browser smoke.
+9. Preview/demo routes removed or protected.
 10. Full frontend CI + Playwright green.
 
 ## Program closure — 2026-07-14 (owner decision)
@@ -207,14 +211,14 @@ Legacy-shell import census on `main` (production routes only): `AppShell` →
 `/queue` `/jobs` `/archive` `/saved-searches`; `DashboardShell` →
 `/subscription/success`. Step 8 legacy deletion is gated until these reach zero.
 
-### Refreshed route matrix — audited @ `main = dcc949af3e6300482be78146222d8d03fb6b092e` (2026-07-30)
+### Refreshed route matrix — audited @ `main = ab5e60f6a774d4843889c34e18f11853da51c4f8` (2026-07-30)
 
-`main` advanced past the 2026-07-14 base (`5cf9a6f`) to the current control-plane SHA `dcc949af` — a backend-only advance (**#1457** bounded cache merged), so the frontend route matrix below is unchanged from the 2026-07-29 audit. The open implementation PRs are **#1455** (frontend /applications board DnD) and **#1460** (frontend /about Atelier migration); **#1454** is operational cleanup tooling (production deletion prohibited). Re-audited from the live tree (33 `page.tsx` routes) — shell import verified per route.
+`main` advanced past the 2026-07-30 control-plane SHA `dcc949af` to the current SHA `ab5e60f6` — **#1457** bounded cache, **#1461** write-capable DB init gate, and **#1460** Atelier `/about` public island all merged. The open implementation PRs are **#1455** (frontend /applications board DnD) and **#1464** (AI grounding and evidence contract Phase 1, draft); **#1454** is operational cleanup tooling (production deletion prohibited). `/about` is now **DONE** and verified by production smoke. Re-audited from the live tree (33 `page.tsx` routes) — shell import verified per route.
 
 | Route | Shell on `main` dcc949af | Status | Owner step |
 | --- | --- | --- | --- |
 | `/` | `LandingPageV2` (own layout) | **PARTIAL** — parity verify vs approved public reference; landing-page production freeze #871 | Step 4 |
-| `/about` | `AboutContent` — legacy `GlassPanel`/`AuraGlow` | **LEGACY** | Step 4 |
+| `/about` | `AboutContent` — Atelier public island | **DONE** (#1460) | Step 4 |
 | `/contact` | `ContactContent` — Atelier public island | **DONE** | — |
 | `/faq` | `FAQContent` — Atelier public island | **DONE** | — |
 | `/privacy` `/terms` `/refund-policy` | Atelier editorial | **DONE** | — |
@@ -244,6 +248,7 @@ Legacy-shell import census on `main` (production routes only): `AppShell` →
 | Step 2 — `/command` composer (slice 4a) | **#1028** `feat/atelier-command-composer` | **MERGED** | **DONE (superseded).** The composer merged; since then the whole `/command` re-skinned to the product-wide **Atelier** system (`DEC-20260716-001`, #1059): re-skin + editorial serif replies (#1060) + gradient composer (#1061). The old acid-lime "Command Obsidian" direction is retired to reference. Remaining `/command` work (job cards #1062) is HELD under the containment freeze. |
 | Step 2 — `/command` composer (reference) | **#1029** (editorial-console composer) | **CLOSED, no merge** | **Technical reference only** — do not reopen or re-cut. Superseded by #1028. |
 | Step 3 — `/queue` | **#1016** `claude/queue-auth-guard` | DRAFT, guard-only (keeps `AppShell`) | Coordinate: merge-then-migrate, or supersede with full `/queue` Atelier PR |
+| Step 4 — public pages `/about` | **#1460** `feat/atelier-about` | **MERGED** `ab5e60f6` (squash) from head `9b8bcd0aeb0b22d4258bb9f62933ee412d49f4e7` | **DONE** — Atelier public island; production smoke EN/AR desktop/mobile + toggle round trip passed |
 | Step 7 — Paddle runtime | **#1022** `fix/paddle-event-callback` | DRAFT (split B of #1018) | Real Sandbox browser smoke gates merge |
 
 Out of scope for this program (owner: do not touch): #1024, #1025 (Career Memory
