@@ -87,7 +87,7 @@ export function AboutContent() {
             </h2>
             <p className="atl-doc-lede">
               {isAr
-                ? "سوق العمل في الإمارات متسارع وتنافسي للغاية. يقضي معظم الباحثين عن عمل وقتهم في إدارة لوجستيات البحث بدلاً من التحضير للفرص الفعلية. تعرض المنصات العامة مئات الوظائف غير الملائمة، وتُلزم المستخدمين بخطوات إعداد مطولة، وتقدم إرشادات محدودة حول الأدوار التي تتناسب فعلاًَ مع خلفياتهم."
+                ? "سوق العمل في الإمارات متسارع وتنافسي للغاية. يقضي معظم الباحثين عن عمل وقتهم في إدارة لوجستيات البحث بدلاً من التحضير للفرص الفعلية. تعرض المنصات العامة مئات الوظائف غير الملائمة، وتُلزم المستخدمين بخطوات إعداد مطولة، وتقدم إرشادات محدودة حول الأدوار التي تتناسب فعلاً مع خلفياتهم."
                 : "The UAE job market is fast-moving and highly competitive. Most job seekers spend more time managing the logistics of job hunting than actually preparing for opportunities. Generic platforms surface hundreds of mismatched listings, force users through lengthy setup wizards, and offer little guidance on which roles actually fit their background."}
             </p>
             <p className="atl-doc-lede" style={{ marginTop: 14 }}>

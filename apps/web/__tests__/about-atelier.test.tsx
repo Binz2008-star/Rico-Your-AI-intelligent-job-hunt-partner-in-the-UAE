@@ -2,18 +2,20 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const langState = vi.hoisted(() => ({ current: "en" as "en" | "ar" }));
+const setLanguage = vi.hoisted(() => vi.fn());
 
 vi.mock("@/app/_atelier/atelier-tokens.css", () => ({}));
 vi.mock("@/app/_atelier/atelier-support.css", () => ({}));
 
 vi.mock("@/contexts/LanguageContext", () => ({
-  useLanguage: () => ({ language: langState.current, setLanguage: vi.fn() }),
+  useLanguage: () => ({ language: langState.current, setLanguage }),
 }));
 
 import { AboutContent } from "@/app/about/AboutContent";
 
 beforeEach(() => {
   langState.current = "en";
+  setLanguage.mockClear();
 });
 
 describe("/about Atelier island", () => {
@@ -46,7 +48,23 @@ describe("/about Atelier island", () => {
     expect(cta).toHaveAttribute("href", "/contact");
   });
 
-  it("does not import legacy glass components", () => {
+  it("calls setLanguage when the language toggle is pressed", () => {
+    render(<AboutContent />);
+    const toggle = screen.getByRole("button", { name: /Switch to Arabic/i });
+    fireEvent.click(toggle);
+    expect(setLanguage).toHaveBeenCalledWith("ar");
+  });
+
+  it("preserves expected navigation and CTA hrefs", () => {
+    render(<AboutContent />);
+    const hrefs = screen.getAllByRole("link").map((el) => el.getAttribute("href"));
+
+    ["/", "/contact", "/faq", "/terms", "/privacy"].forEach((href) => {
+      expect(hrefs).toContain(href);
+    });
+  });
+
+  it("does not render legacy AuraGlow or GlassPanel chrome", () => {
     const { container } = render(<AboutContent />);
     expect(container.querySelector(".aura-glow")).not.toBeInTheDocument();
     expect(container.querySelector(".glass-panel")).not.toBeInTheDocument();
