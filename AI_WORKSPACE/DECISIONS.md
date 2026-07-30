@@ -28,6 +28,83 @@ Related task: TASK-YYYYMMDD-001
 
 ## Proposed decisions
 
+### DEC-20260730-001 — Railway is the canonical production backend; stale Render workflows were blocking every deploy
+
+Status: accepted
+Date: 2026-07-30
+Owner: Roben (console evidence) / Claude (diagnosis + repair)
+Related task: TASK-20260730-001 (Phase 1 grounding, the merge that exposed this)
+
+#### Context
+
+`ARCHITECTURE.md` and `DEC-20260707-001` both stated that Render remained the
+production backend and that Railway "does not exist in production". That was
+stale. Owner-verified from the Railway console on 2026-07-30:
+
+- service `rico-api`, custom domain `api.ricohunt.com` **Active/Verified**
+- `GET https://api.ricohunt.com/health` → 200, `Server: railway-hikari`, `x-railway-edge` present
+- `GET https://api.ricohunt.com/version` → 200, serving `ccde2c48`
+- `GET https://ricohunt.com/proxy/health` → 200 with Railway headers, so the Vercel proxy reaches Railway
+
+Meanwhile two workflows still targeted the retired Render host, which had
+stopped serving:
+
+| Workflow | Call | Result |
+| --- | --- | --- |
+| `deploy-render.yml` | POST `RENDER_DEPLOY_HOOK_URL` | **HTTP 409** |
+| `deploy-production.yml` | GET `rico-job-automation-api.onrender.com/health` | **HTTP 503** |
+
+Both run on `src/**` pushes to `main`. Both failed. GitHub therefore concluded
+the commit's **aggregate check suite had failed**, and Railway's "Wait for CI"
+gate skipped the deployment with "CI check suite failed". Production stayed
+pinned to `ccde2c48` while `main` advanced, and the Phase 1 grounding merge
+`41a95ad` never shipped.
+
+Docs-only commits passed only because the `#1086` path filters kept both deploy
+workflows from running at all — so the gate looked healthy exactly when nothing
+needed to deploy, and failed exactly when something did.
+
+#### Decision
+
+1. **Railway (`rico-api`, `https://api.ricohunt.com`) is the canonical production
+   backend.** Render no longer serves production. `ARCHITECTURE.md` "Current
+   live stack" is corrected accordingly.
+2. **`deploy-render.yml` is retired.** Railway auto-deploys from GitHub; a
+   deploy hook to a dead service deployed nothing and blocked everything.
+3. **`deploy-production.yml` verifies the canonical backend** — `/health`,
+   `/version` (surfacing the deployed commit next to the run's commit), and the
+   existing `https://ricohunt.com/proxy/health`. Every check stays fail-closed,
+   including an unreachable host.
+4. **The invariant, stated so it is not re-learned:** *a verification workflow
+   pointed at infrastructure that no longer serves does not merely report a
+   false red — through aggregate CI gating it stops the real host from ever
+   deploying.* Pinned by `tests/test_deployment_gate_targets.py`, which fails if
+   any push-to-main workflow references the retired host, if the deploy hook
+   returns under any filename, or if a check stops being fail-closed.
+
+#### Explicitly NOT decided here
+
+- The frontend **CSP still references** `https://rico-job-automation-api.onrender.com`.
+  Recorded as separate frontend/config drift. It was not proven to affect the
+  deployment gate, so it is not changed here.
+- `keep-warm.yml` and `render-audit.yml` still ping the retired host. Neither
+  runs on push-to-main, so neither can fail a commit's check suite;
+  `keep-warm.yml` additionally only emits `::warning::` and never fails — which
+  is why its green runs were never evidence that Render was alive. Cleanup
+  tracked separately.
+- `render.yaml` remains at the repo root, untouched.
+- Railway's "Wait for CI" setting is **not** changed. The gate is correct; what
+  was wrong was what it was gating on.
+
+#### Consequences
+
+Backend commits stop failing their check suite, so Railway auto-deploy resumes
+on the next `src/**` push. `41a95ad` is still not live at the time of this
+decision, and **Phase 1 remains MERGED but NOT VERIFIED** until an authenticated
+production smoke passes against the canonical backend.
+
+---
+
 ### DEC-20260718-001 — Canonical Neon data-architecture source-of-truth matrix
 
 Status: proposed (owner approval required; acceptance = owner approval of the

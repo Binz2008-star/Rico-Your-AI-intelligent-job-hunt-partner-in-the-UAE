@@ -1,5 +1,19 @@
 name: Deploy to Production
 
+# Verifies that production is healthy after a backend-affecting commit reaches
+# main. It does NOT trigger a deploy: Railway auto-deploys from GitHub, gated on
+# the commit's aggregate check suite.
+#
+# That gating is why this file was repointed (2026-07-30). The canonical backend
+# moved to Railway (service `rico-api`, https://api.ricohunt.com), but this
+# workflow still health-checked the retired Render host, which had stopped
+# serving and returned 503. Together with the Render deploy-hook workflow
+# (returning 409, retired in the same change) that made EVERY backend commit's
+# check suite fail — so Railway skipped every deployment with "CI check suite
+# failed" and production stalled on ccde2c48. A verification workflow pointed at
+# infrastructure that no longer serves does not just report a false red; through
+# aggregate CI gating it stops the real host from ever shipping.
+
 on:
   push:
     branches: [main]
@@ -11,10 +25,16 @@ on:
       - "apps/web/**"
       - "migrations/**"
       - "requirements.txt"
-      - "render.yaml"
       - "Dockerfile.backend"
       - ".github/workflows/deploy-production.yml"
   workflow_dispatch:
+
+env:
+  # Canonical production backend. Verified from the Railway console on
+  # 2026-07-30: service `rico-api`, custom domain Active/Verified, /health 200
+  # with `Server: railway-hikari` and `x-railway-edge` present.
+  API_BASE: https://api.ricohunt.com
+  FRONTEND_BASE: https://ricohunt.com
 
 jobs:
   deploy:
@@ -27,33 +47,59 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Wait for Render deploy propagation
+      - name: Wait for deploy propagation
         run: sleep 30
 
+      # Every check below is fail-closed: a non-200, an unreachable host, or a
+      # malformed body fails the workflow. `curl` is invoked without -f so the
+      # actual status code can be reported instead of a bare exit 22.
       - name: Verify backend health
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://rico-job-automation-api.onrender.com/health)
+          STATUS=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 30 "$API_BASE/health" || echo "000")
           if [ "$STATUS" != "200" ]; then
-            echo "Backend health check failed (HTTP $STATUS)"
+            echo "::error::Backend health check failed (HTTP $STATUS) at $API_BASE/health"
             exit 1
           fi
           echo "Backend health: OK ($STATUS)"
-          curl -s https://rico-job-automation-api.onrender.com/health | python3 -m json.tool
+          python3 -m json.tool < /tmp/health.json
+
+      - name: Verify backend version and report the deployed commit
+        run: |
+          STATUS=$(curl -s -o /tmp/version.json -w "%{http_code}" --max-time 30 "$API_BASE/version" || echo "000")
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Backend version check failed (HTTP $STATUS) at $API_BASE/version"
+            exit 1
+          fi
+          python3 -m json.tool < /tmp/version.json
+          # Surface what production is ACTUALLY serving next to what this run
+          # built. Deployment evidence that does not name a commit is not
+          # evidence; the two silently diverging is the failure mode that let
+          # production sit on ccde2c48 while main moved on.
+          DEPLOYED=$(python3 -c "import json;d=json.load(open('/tmp/version.json'));print(d.get('commit') or d.get('sha') or d.get('version') or 'unknown')")
+          echo "Deployed commit : $DEPLOYED"
+          echo "This run's commit: $GITHUB_SHA"
+          {
+            echo "### Production verification"
+            echo ""
+            echo "- Backend: \`$API_BASE\`"
+            echo "- Deployed commit: \`$DEPLOYED\`"
+            echo "- This run's commit: \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify frontend reachability
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://ricohunt.com)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$FRONTEND_BASE" || echo "000")
           if [ "$STATUS" != "200" ]; then
-            echo "Frontend check failed (HTTP $STATUS)"
+            echo "::error::Frontend check failed (HTTP $STATUS) at $FRONTEND_BASE"
             exit 1
           fi
           echo "Frontend: OK ($STATUS)"
 
       - name: Verify proxy pass-through
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://ricohunt.com/proxy/health)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$FRONTEND_BASE/proxy/health" || echo "000")
           if [ "$STATUS" != "200" ]; then
-            echo "Proxy pass-through failed (HTTP $STATUS)"
+            echo "::error::Proxy pass-through failed (HTTP $STATUS) at $FRONTEND_BASE/proxy/health"
             exit 1
           fi
           echo "Proxy: OK ($STATUS)"

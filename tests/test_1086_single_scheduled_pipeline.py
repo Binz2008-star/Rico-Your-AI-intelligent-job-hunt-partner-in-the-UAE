@@ -107,8 +107,18 @@ class TestNoGeneratedContentOnMain:
 
 
 class TestDeployPathFilters:
-    @pytest.mark.parametrize("name", ["deploy-render.yml", "deploy-production.yml"])
+    # `deploy-render.yml` was retired (DEC-20260730-001): it POSTed a deploy
+    # hook to the retired Render host, returned 409 on every backend commit, and
+    # through aggregate CI gating blocked Railway from deploying at all. The
+    # filter contract below is asserted for whichever deploy workflows actually
+    # exist, so retiring one does not fail this test and re-adding one is still
+    # covered.
+    DEPLOY_WORKFLOWS = ["deploy-render.yml", "deploy-production.yml"]
+
+    @pytest.mark.parametrize("name", DEPLOY_WORKFLOWS)
     def test_push_trigger_is_runtime_path_filtered(self, name):
+        if not os.path.exists(os.path.join(_WF_DIR, name)):
+            pytest.skip(f"{name} is retired — see DEC-20260730-001")
         doc, _ = _load(name)
         push = _on_block(doc).get("push", {})
         paths = push.get("paths") or []
@@ -117,6 +127,15 @@ class TestDeployPathFilters:
         assert "docs" not in joined and "AI_WORKSPACE" not in joined, (
             f"{name}: docs/workspace paths must not trigger deploys"
         )
+
+    def test_at_least_one_deploy_workflow_survives(self):
+        """Retiring the Render workflow must not leave main with no production
+        verification at all — that would trade a false red for a silent green."""
+        present = [
+            n for n in self.DEPLOY_WORKFLOWS
+            if os.path.exists(os.path.join(_WF_DIR, n))
+        ]
+        assert present, "no deploy/verification workflow remains on main"
 
 
 class TestApplyFlagsStayOff:
