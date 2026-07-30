@@ -9,10 +9,10 @@
  * are preserved verbatim.
  */
 
+import "@/app/_atelier/atelier-support.css";
+import "@/app/_atelier/atelier-tokens.css";
 import { useLanguage } from "@/contexts/LanguageContext";
 import Link from "next/link";
-import "../_atelier/atelier-support.css";
-import "../_atelier/atelier-tokens.css";
 
 export function AboutContent() {
   const { language, setLanguage } = useLanguage();
