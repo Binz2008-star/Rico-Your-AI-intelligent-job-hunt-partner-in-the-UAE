@@ -8917,7 +8917,7 @@ usable" — bounded here, not deleted).
 ### TASK-20260731-001 — PendingJobSearch typed contract with atomic DB-backed consume
 
 Status: **draft PR open** — `#1472`, branch `feat/pending-job-search-contract`
-Owner: current session
+Owner: Rico Engineering
 Issue/PR: `#1472` (Draft)
 
 #### Objective
@@ -8954,17 +8954,13 @@ They are separate concerns and must not be collapsed. Documented in module docst
 #### Intentionally uses `rico_agent_settings.settings["_pjs"]`
 
 RicoMemoryStore.set_context is a no-op when `RICO_MEMORY_BACKEND=postgres`
-(the production backend). The JSONB key `_pjs` in `rico_agent_settings.settings`
+(repository behavior is verified at `src/rico_memory.py:27`; the live Railway
+value is **unverified**). The JSONB key `_pjs` in `rico_agent_settings.settings`
 survives server restarts, multi-worker deployments, and the postgres backend.
 No migration required — the column and table already exist.
 
-#### Accepted temporary technical debt
-
-- `_read_pending_js_for_execution` has a test-only fallback for token-less dicts
-  (existing test mocks). Removed for production after all tests migrate to the
-  token format.
-- `_store_pending_job_search` and `_clear_pending_job_search` write to both the
-  DB repo and RicoMemoryStore for backward compatibility with existing tests.
+`RICO_MEMORY_BACKEND=postgres` — repository behavior is verified; live Railway
+value is unverified.
 
 #### Acceptance criteria
 

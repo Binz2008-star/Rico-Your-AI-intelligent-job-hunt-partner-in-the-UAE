@@ -316,25 +316,32 @@ class TestPendingJobSearchRepoUnit:
 
 
 def _make_api(pending: dict | None = None) -> tuple:
-    """Create a RicoChatAPI with a mocked pending job search."""
+    """Create a RicoChatAPI with a mocked pending job search.
+
+    Injects a tokenized PendingJobSearch into the mock repo so the
+    atomic consume path is exercised (no tokenless fallback).
+    """
     from src.rico_chat_api import RicoChatAPI
+    from src.services.pending_job_search import PendingJobSearch, new_pending
     api = RicoChatAPI.__new__(RicoChatAPI)
-    memory = MagicMock()
-    if pending:
-        def _get_context(user_id, key):
-            if key == RicoChatAPI._PENDING_JOB_SEARCH_KEY:
-                return pending
-            return {}
-        memory.get_context.side_effect = _get_context
-    else:
-        memory.get_context.return_value = {}
-    memory.set_context.return_value = None
-    api.memory = memory
+    api.memory = MagicMock()
     api._pjs_repo = MagicMock()
-    api._pjs_repo.get.return_value = None  # fall through to memory
     api._pjs_repo.cancel.return_value = True
     api._can_mutate_applications = False
     api._current_operation_id = None
+    api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
+    if pending:
+        role = pending.get("role", "Test")
+        location = pending.get("location", "")
+        reason = pending.get("query_type", "promise")
+        pjs = new_pending(role=role, location=location, reason=reason)
+        # repo.get returns the pending state; consume returns it once then None
+        api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.consume.return_value = pjs
+    else:
+        api._pjs_repo.get.return_value = None
+        api._pjs_repo.consume.return_value = None
+    api._pjs_repo.store.return_value = True
     return api
 
 
@@ -384,8 +391,18 @@ class TestRedemptionPipeline:
         direct.assert_not_called()
 
     def test_expired_does_not_execute(self):
-        pending = {"role": "Old", "expires_at": int(time.time()) - 10}
-        api = _make_api(pending)
+        from src.services.pending_job_search import PendingJobSearch
+        from datetime import datetime, timezone
+        expired = PendingJobSearch(
+            token="expired-token", role="Old", location="", reason="test",
+            created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+        api = _make_api({"role": "Old", "location": ""})
+        # The repo.get returns the expired PJS; consume returns None because
+        # the fake repo never allows consuming an expired search.
+        api._pjs_repo.get.return_value = expired
+        api._pjs_repo.consume.return_value = None
         with patch.object(api, "_target_role_search_response") as direct:
             result = api._redeem_pending_job_search("u1", "yes", profile={})
         assert result is None
@@ -505,8 +522,12 @@ def test_single_turn_caches_result():
 
 def test_single_turn_reset_on_new_turn():
     """The cache must reset at the start of each new user turn."""
-    fresh = {"role": "Engineer", "expires_at": int(time.time()) + 600}
-    api = _make_api(fresh)
+    from src.services.pending_job_search import new_pending
+    api = _make_api({"role": "Engineer", "location": ""})
+    pjs = new_pending(role="Engineer", location="")
+    fresh_token = pjs.token
+    api._pjs_repo.get.return_value = pjs
+    api._pjs_repo.consume.return_value = pjs
     call_count = 0
 
     def _counting_search(_self, uid, role, *a, profile=None, location="", **kw):
@@ -514,15 +535,16 @@ def test_single_turn_reset_on_new_turn():
         call_count += 1
         return {"type": "job_matches", "matches": []}
 
-    with patch.object(api, "_target_role_search_response", _counting_search), \
-         patch.object(api, "_get_pending_job_search", return_value=dict(fresh)):
+    with patch.object(api, "_target_role_search_response", _counting_search):
         first = api._redeem_pending_job_search("u1", "yes", profile={})
     assert first is not None
     assert call_count == 1
     # Simulate the turn-end reset done by _handle_active_user
-    object.__setattr__(api, "_pjs_redeemed_this_turn", None)
-    with patch.object(api, "_target_role_search_response", _counting_search), \
-         patch.object(api, "_get_pending_job_search", return_value=dict(fresh)):
+    object.__setattr__(api, "_pjs_redemption_attempted_this_turn", api._PJS_SENTINEL)
+    fresh2 = new_pending(role="Engineer", location="")
+    api._pjs_repo.get.return_value = fresh2
+    api._pjs_repo.consume.return_value = fresh2
+    with patch.object(api, "_target_role_search_response", _counting_search):
         second = api._redeem_pending_job_search("u1", "yes", profile={})
     assert second is not None
     assert call_count == 2  # New turn, new attempt

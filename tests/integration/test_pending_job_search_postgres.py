@@ -19,8 +19,10 @@ from src.services.pending_job_search import PendingJobSearchRepo, new_pending
 
 try:
     import psycopg2
+    from psycopg2.extras import Json as _PsyJson
 except Exception:
     psycopg2 = None
+    _PsyJson = None
 
 TEST_DATABASE_URL = os.environ.get("RICO_TEST_DATABASE_URL")
 
@@ -89,9 +91,9 @@ def _cleanup(_schema, monkeypatch):
                 pjs = new_pending(role="Accountant", location="Dubai", reason="promise")
                 cur.execute(
                     "INSERT INTO rico_agent_settings (user_id, settings) "
-                    "VALUES (%s, %s::jsonb) "
+                    "VALUES (%s, %s) "
                     "ON CONFLICT (user_id) DO UPDATE SET settings = EXCLUDED.settings",
-                    (user_id, '{"' + _PJS_KEY + '": ' + psycopg2.extras.Json(pjs.to_dict()).adapted + '}'),
+                    (user_id, _PsyJson({_PJS_KEY: pjs.to_dict()})),
                 )
                 # Store the token for the test
                 _cleanup._token = pjs.token

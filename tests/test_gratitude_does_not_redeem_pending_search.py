@@ -28,7 +28,7 @@ from unittest.mock import PropertyMock, patch
 import pytest
 
 USER = "synthetic@test"
-ARMED = {"role": "Quality Manager", "location": "", "query_type": "adjacent_broaden"}
+ARMED = {"role": "Quality Manager", "location": "", "query_type": "adjacent_broaden", "token": "test-token"}
 
 
 def _api_and_calls(stack: ExitStack) -> tuple[Any, list[str]]:
@@ -52,7 +52,17 @@ def _api_and_calls(stack: ExitStack) -> tuple[Any, list[str]]:
     p(patch.object(RicoChatAPI, "_store_recent_context", lambda _s, _u, _c: None))
     p(patch.object(RicoChatAPI, "_get_last_assistant_message", lambda _s, _u: ""))
     p(patch.object(RicoChatAPI, "_target_role_search_response", _search))
-    return RicoChatAPI(), calls
+    api = RicoChatAPI()
+    # Mock the repo so atomic consume works without a real DB.
+    from unittest.mock import MagicMock
+    from src.services.pending_job_search import new_pending
+    mock_repo = MagicMock()
+    mock_repo.consume.return_value = new_pending(role="Quality Manager", location="")
+    mock_repo.cancel.return_value = True
+    api._pjs_repo = mock_repo
+    # Set the sentinel so the single-turn guard allows the first call.
+    api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
+    return api, calls
 
 
 # ── The guard itself ──────────────────────────────────────────────────────────
