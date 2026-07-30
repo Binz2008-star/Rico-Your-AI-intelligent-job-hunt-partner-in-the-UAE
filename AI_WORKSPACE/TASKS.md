@@ -8913,3 +8913,81 @@ usable" — bounded here, not deleted).
   text; the next request rebuilds context from scratch
 - Stop condition: do not merge, do not deploy, do not begin Phase 2 without
   explicit owner approval
+
+### TASK-20260731-001 — PendingJobSearch typed contract with atomic DB-backed consume
+
+Status: **draft PR open** — `#1472`, branch `feat/pending-job-search-contract`
+Owner: current session
+Issue/PR: `#1472` (Draft)
+
+#### Objective
+
+Replace the memory-based pending job-search state (`RicoMemoryStore.set_context`,
+a no-op under `RICO_MEMORY_BACKEND=postgres`) with a typed, DB-backed contract
+using `rico_agent_settings.settings["_pjs"]`. One objective only: job-search
+confirmation. No generic dialog framework, no unrelated pending flows.
+
+#### Scope delivered
+
+- `src/services/pending_job_search.py` — `PendingJobSearch` frozen dataclass,
+  `PendingJobSearchRepo` with atomic `consume()` (FOR UPDATE row lock,
+  transaction-scoped), and `classify_reply()` returning CONFIRM/CANCEL/CHANGE/
+  NEW_REQUEST/OTHER.
+- `src/rico_chat_api.py` — rewritten `_store_pending_job_search` (returns bool),
+  `_get_pending_job_search` (repo-first, memory fallback), `_clear_pending_job_search`;
+  new `_redeem_pending_job_search()` single entry point with turn-scoped cache
+  (`_pjs_redeemed_this_turn`); four redemption sites updated to share the entry point.
+- `tests/test_pending_job_search_contract.py` — 93 hermetic tests covering contract,
+  classification, repo, redemption pipeline, location-only change, single-turn
+  entry point, operation ownership.
+- `tests/integration/test_pending_job_search_postgres.py` — real Postgres concurrency
+  test proving exactly-one-winner atomic consume.
+- `.github/workflows/qa-tests.yml` — enrolment in both the pytest job and the
+  postgres-integration job.
+
+#### Dialogue state vs operation ownership
+
+`PendingJobSearch` answers *"What is Rico waiting for?"* (dialogue state).
+`operation_state.py` answers *"Who owns this execution?"* (execution ownership).
+They are separate concerns and must not be collapsed. Documented in module docstring.
+
+#### Intentionally uses `rico_agent_settings.settings["_pjs"]`
+
+RicoMemoryStore.set_context is a no-op when `RICO_MEMORY_BACKEND=postgres`
+(the production backend). The JSONB key `_pjs` in `rico_agent_settings.settings`
+survives server restarts, multi-worker deployments, and the postgres backend.
+No migration required — the column and table already exist.
+
+#### Accepted temporary technical debt
+
+- `_read_pending_js_for_execution` has a test-only fallback for token-less dicts
+  (existing test mocks). Removed for production after all tests migrate to the
+  token format.
+- `_store_pending_job_search` and `_clear_pending_job_search` write to both the
+  DB repo and RicoMemoryStore for backward compatibility with existing tests.
+
+#### Acceptance criteria
+
+- [x] Atomic `consume()` with FOR UPDATE — exactly one concurrent winner
+- [x] Reply classification: CONFIRM, CANCEL, CHANGE, NEW_REQUEST, OTHER
+- [x] Location-only change: "نعم في أبوظبي" uses new location, not stale stored one
+- [x] Role change: "yes, search Product Manager" uses new role
+- [x] Cancel: لا clears without execution
+- [x] Expired state fails closed
+- [x] Missing state does not infer from last assistant message
+- [x] Gratitude does not redeem
+- [x] Single-turn cache: one classification, one DB read, one execution per turn
+- [x] Exactly one operation ownership claim
+- [x] Real Postgres concurrency test proving one winner
+
+#### Rollback
+
+`git revert` the merge commit on `main`. No migration, no schema, no data rollback —
+only the additive `_pjs` key in `rico_agent_settings.settings` JSONB.
+
+#### Required verification still needed
+
+- [ ] `/version` commit identity after deploy
+- [ ] `/health` 200
+- [ ] Live authenticated smoke: نعم → exact stored role/location executed
+- [ ] Concurrent double-confirmation test against real production-like Neon
