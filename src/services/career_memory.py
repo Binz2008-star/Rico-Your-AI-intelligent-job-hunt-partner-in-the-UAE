@@ -146,8 +146,45 @@ def get_recent_applied(user_id: str, limit: int = 5) -> List[str]:
     return seen
 
 
+#: Cap on companies named in the never-apply constraint. Kept small and
+#: separate from the preference caps: this list is a SAFETY constraint and is
+#: never shed under context pressure, so it must stay affordable at any budget.
+MAX_BLOCKED_COMPANIES = 15
+
+
+def build_safety_constraints(user_id: str) -> str:
+    """The user's never-apply list, alone, as its own context block.
+
+    Separated from ``build_memory_context`` deliberately. "Never apply to
+    these companies" is a **user decision Rico must not override**, while
+    "frequently skipped" and "recently applied" are preferences that merely
+    improve a suggestion. Bundling them into one string meant the constraint
+    inherited the preferences' priority — and when the context exceeded the
+    provider's character budget, the whole string was dropped together.
+    Rico would then be free to recommend a company the user had explicitly
+    blocked, with nothing in the payload saying otherwise.
+
+    Returns "" when the user has blocked nothing, so callers can skip the key.
+    """
+    try:
+        blocked = get_blocked_companies(user_id)
+        if not blocked:
+            return ""
+        return (
+            "Blocked companies (never apply): "
+            + ", ".join(blocked[:MAX_BLOCKED_COMPANIES])
+        )
+    except Exception:
+        return ""
+
+
 def build_memory_context(user_id: str) -> str:
     """Return a compact string ready for injection into Rico's system context.
+
+    Preferences only. The never-apply constraint moved to
+    ``build_safety_constraints`` so it can be prioritised separately — see that
+    function for why. Blocked companies are still excluded from "frequently
+    skipped" here so the two blocks never contradict each other.
 
     Returns "" when there is no useful memory so callers can skip appending it.
     """
@@ -157,8 +194,6 @@ def build_memory_context(user_id: str) -> str:
         applied = get_recent_applied(user_id)
 
         parts: list[str] = []
-        if blocked:
-            parts.append(f"Blocked companies (never apply): {', '.join(blocked[:15])}")
         if disliked:
             skipped_only = [c for c in disliked if c not in set(blocked)]
             if skipped_only:

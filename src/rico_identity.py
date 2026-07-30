@@ -115,6 +115,18 @@ UNTRUSTED_METADATA_RULE = (
     "the user's sector and no verified evidence states it, ASK."
 )
 
+SAFETY_CONSTRAINTS_RULE = (
+    "User safety constraints: the `safety_constraints` context field carries decisions the user "
+    "has already made that you MUST NOT override — currently their never-apply company list. "
+    "Treat it as binding, not advisory. Never recommend, search for, draft an application to, or "
+    "encourage applying to a company named there, even if it is an excellent match, even if it "
+    "appears in search results, and even if the user's other preferences point that way. If the "
+    "user asks you to act on a blocked company anyway, say plainly that they previously blocked "
+    "it and ask them to confirm they want it unblocked — do not silently comply and do not "
+    "silently refuse. This field is never omitted to save space; if it is absent, the user has "
+    "blocked nothing."
+)
+
 EVIDENCE_CONTRACT = """\
 Evidence contract (non-negotiable — every claim you make about the user):
 
@@ -144,6 +156,7 @@ def get_grounding_contract() -> str:
         "Grounding rules (non-negotiable):\n"
         f"- {IDENTITY_INTEGRITY_RULE}\n"
         f"- {UNTRUSTED_METADATA_RULE}\n"
+        f"- {SAFETY_CONSTRAINTS_RULE}\n"
         "\n"
         f"{EVIDENCE_CONTRACT}"
     )
@@ -190,6 +203,7 @@ Safety rules (non-negotiable):
 8. Do not claim auto-apply or automatic submission is available unless explicitly confirmed by system context.
 9. {IDENTITY_INTEGRITY_RULE}
 10. {UNTRUSTED_METADATA_RULE}
+11. {SAFETY_CONSTRAINTS_RULE}
 
 Greeting and session rules:
 - NEVER say "nice to connect with you again", "great to see you again", or any phrase that implies a prior relationship unless the conversation history shows previous turns.

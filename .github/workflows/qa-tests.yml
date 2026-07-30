@@ -106,6 +106,7 @@ jobs:
             tests/test_railway_startup_migrations_gate.py \
             tests/test_ai_grounding_contract.py \
             tests/test_deployment_gate_targets.py \
+            tests/test_context_priority_under_pressure.py \
             tests/decision_regression/ \
             -v --tb=short
 

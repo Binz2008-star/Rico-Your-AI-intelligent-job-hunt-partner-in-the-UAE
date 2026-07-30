@@ -13,6 +13,7 @@ Mocks/fixtures only — no AI/provider calls.
 """
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from src.rico_chat_api import RicoChatAPI
@@ -67,9 +68,20 @@ def test_no_transcript_when_text_empty():
 
 
 def test_transcript_truncated_to_4000_chars():
+    """A 9000-char transcript is never passed whole.
+
+    The builder caps it at 4000; the context budget then trims it further so the
+    WHOLE payload fits the provider window (see
+    RicoChatAPI._fit_context_budget). It is trimmed, never dropped — the user
+    asked about this document. The exact surviving length depends on what else
+    is competing for the window, so assert the contract, not a magic number.
+    """
     api = _api()
     ctx = _ctx_with(api, {"last_uploaded_document": {"extracted_text": "x" * 9000}})
-    assert len(ctx["last_uploaded_document"]["transcribed_text"]) == 4000
+    transcript = ctx["last_uploaded_document"]["transcribed_text"]
+    assert len(transcript) <= 4000
+    assert len(transcript) >= RicoChatAPI._CONTEXT_MIN_TRANSCRIPT_CHARS
+    assert len(json.dumps(ctx, ensure_ascii=False)) <= RicoChatAPI._CONTEXT_MAX_CHARS
 
 
 def test_type_falls_back_to_document_type():
