@@ -29,8 +29,9 @@ Coverage:
 from __future__ import annotations
 
 import os
+import re
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -45,7 +46,7 @@ from src.rico_identity import get_rico_system_prompt
 from src.services.career_context import CareerContext
 from src.services.cv_context_resolver import CVContext
 from src.services.cv_state import STATE_METADATA_ONLY, STATE_STRUCTURED
-from src.rico_openai_runtime import _PROFILE_CONTEXT_MAX_CHARS
+from src.rico_openai_runtime import _PROFILE_CONTEXT_MAX_CHARS, call_openai_stream
 
 
 PROMPT_LOWER = get_rico_system_prompt().lower()
@@ -453,6 +454,118 @@ class TestContextCap:
         )
 
         assert len(str(ctx)) <= _PROFILE_CONTEXT_MAX_CHARS
+
+
+# ---------------------------------------------------------------------------
+# Runtime serialization / truncation path
+# ---------------------------------------------------------------------------
+
+class TestRuntimeTruncationPath:
+    def test_truncation_preserves_essential_grounded_evidence(self):
+        """Exercise the actual `call_openai_stream` profile-context build,
+        proving bounded `verified_cv_evidence` survives before long
+        `transcribed_text`, that profile facts come first, that raw CV text
+        fields are absent, and that the filename stays under `*_untrusted`."""
+        banking = "Banking_Manager_CV.pdf"
+        long_text = "x" * 4000
+        many_work = [
+            {
+                "role": f"Role {i}",
+                "company": f"Company {i} " * 20,
+                "summary": f"Summary {i} " * 20,
+            }
+            for i in range(100)
+        ]
+        many_skills = [f"Skill {i}" for i in range(200)]
+        ctx = _build_ctx(
+            cv_filename=banking,
+            structured={
+                **SAMPLE_SUBSTANTIVE_CV,
+                "work_experience": many_work,
+                "skills": many_skills,
+            },
+            last_doc={
+                "filename": banking,
+                "display_label": "CV",
+                "extracted_text": long_text,
+            },
+            recent_context={
+                "last_uploaded_document": {
+                    "document_type": "cv",
+                    "filename": banking,
+                    "display_label": "CV",
+                }
+            },
+            uploaded_docs=[
+                {
+                    "id": "doc-1",
+                    "filename": banking,
+                    "label": banking,
+                    "doc_type": "cv",
+                    "is_primary": True,
+                    "skills_count": 3,
+                    "years_experience": 8,
+                    "file_size": 12345,
+                }
+            ],
+        )
+
+        captured_messages = []
+
+        def fake_stream(*, model, messages, max_tokens, stream):
+            captured_messages.append(messages)
+            return []
+
+        fake_client = MagicMock()
+        fake_client.chat.completions.create = fake_stream
+
+        with (
+            patch("src.rico_openai_runtime._build_client", return_value=fake_client),
+            patch("src.rico_openai_runtime._deepseek_model_chain", return_value=["deepseek-v4-flash"]),
+            patch("src.rico_openai_runtime._advisory_chain", side_effect=lambda chain, provider: chain),
+        ):
+            list(call_openai_stream("test", profile_context=ctx, provider="deepseek", conversation_history=[]))
+
+        assert captured_messages, "call_openai_stream did not build messages"
+        final_message = captured_messages[-1][-1]["content"]
+        profile_part, _ = final_message.split("\n\n[User message]\n")
+        safe_context = profile_part.split("[User profile]\n")[1]
+
+        # 1. Runtime cap respected.
+        assert len(safe_context) <= _PROFILE_CONTEXT_MAX_CHARS
+
+        # 2. Essential profile facts preserved and come first.
+        assert safe_context.startswith("{'profile_exists': True")
+        assert "'current_company': 'Acme Environmental'" in safe_context
+        assert "'current_role': 'Founder & General Manager'" in safe_context
+        assert "'years_experience': 10" in safe_context
+
+        # 3. verified_cv_evidence is present and structurally valid (bounded, leading entries only).
+        assert "'verified_cv_evidence'" in safe_context
+        # Leading, most-recent work_experience entry present; cap drops Company 5 onward.
+        assert "Company 0" in safe_context
+        assert "Company 4" in safe_context
+        assert "Company 5" not in safe_context
+        # Skill cap keeps the first 20.
+        assert "Skill 0" in safe_context
+        assert "Skill 19" in safe_context
+        assert "Skill 20" not in safe_context
+
+        # 4. Truncation order is deterministic: the cut lands inside the long
+        # transcribed_text because safe_context ends before the 4000 x's finish.
+        assert safe_context.index("'transcribed_text'") < len(safe_context)
+
+        # 5. Filename appears only under *_untrusted keys.
+        for m in re.finditer(re.escape(banking), safe_context):
+            window = safe_context[max(0, m.start() - 60):m.start()]
+            assert "filename_untrusted" in window, (
+                f"Filename leaked into free text in serialized prompt: ...{window!r}"
+            )
+
+        # 6. Raw CV text never enters the serialized prompt.
+        assert "cv_text" not in safe_context
+        assert "work_experience_text" not in safe_context
+        assert "education_text" not in safe_context
 
 
 # ---------------------------------------------------------------------------
