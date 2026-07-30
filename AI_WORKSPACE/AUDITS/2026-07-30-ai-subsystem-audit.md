@@ -11,8 +11,9 @@ approval, its own branch, and its own governance check.
 
 - **Why it exists:** one evidence-backed map of what is actually wrong in the AI
   subsystem, so phase order is chosen from defects rather than intuition.
-- **Evidence class:** static code reading plus locally executed probes against
-  `main` @ `ccde2c4`. **No production read, no live provider call, no Neon
+- **Evidence class:** static code reading plus locally executed probes.
+  Baseline **revalidated against `main` @ `4a63249`** (2026-07-30); every line
+  citation below was re-checked at that commit. **No production read, no live provider call, no Neon
   access.** Where a number is measured, the measurement is stated; where a cost
   is inferred, it is labelled inferred.
 - **Source of truth:** `PROJECT_STATUS.md` + live `main` outrank this file.
@@ -22,16 +23,23 @@ approval, its own branch, and its own governance check.
 
 | Item | Value |
 |---|---|
-| `main` | `ccde2c483c76b782214f3bb117c4c07310121c4d` |
-| Phase 1 PR | `#1464` Draft, head `de29b67`, CI green, 0 regressions |
-| Competing PR | `#1462` Draft, same objective, same base — **must be closed after the gap-port** |
-| Backend suite on `main` | 25 failed / 9624 passed (pre-existing, DB-dependent + 2 duplicate task IDs) |
+| `main` | `4a6324957de35d09c0804800bef9ac83fa56e768` |
+| Phase 1 PR | `#1464` Draft — now also carries the **F-1 and F-2 closure work** (owner ruling 2026-07-30) |
+| Competing PR | `#1462` **CLOSED without merge**; every unique protection consolidated into `#1464`, branch retained |
+| Backend suite on `main` | 25 pre-existing failures (DB-dependent + 2 duplicate task IDs in `TASKS.md`) |
 
 ---
 
 ## F-1 — The grounding contract does not survive the provider cascade
 
-**Severity: HIGH. Production impact: the Phase 1 fix silently does not apply on the HuggingFace leg.**
+> **STATUS: CLOSED IN `#1464`.** The owner ruled (2026-07-30) that the Phase 1
+> objective is global grounding integrity across every provider and prompt
+> path, so this is Phase 1 closure work, not a later phase. The rules are now
+> shared constants composed by `get_grounding_contract()` and injected into the
+> HuggingFace leg; the primary prompt is proven byte-identical. Kept here as the
+> finding record.
+
+**Severity: HIGH. Production impact: the Phase 1 fix silently did not apply on the HuggingFace leg.**
 
 `RICO_AI_PROVIDER=deepseek` in production, and the documented chain is
 `DeepSeek → HuggingFace → keyword fallback`. When DeepSeek fails, `respond()`
@@ -61,6 +69,10 @@ The exact production defect is reproducible on this leg after Phase 1 merges.
   invariant, not a per-provider detail).
 
 ## F-2 — Raw filenames still interpolated into `prompt_override` prose
+
+> **STATUS: CLOSED IN `#1464`** as Phase 1 closure work. Both builders now omit
+> the filename; the third was verified clean and pinned by a test. Kept here as
+> the finding record.
 
 **Severity: MEDIUM-HIGH. Production impact: the same inference channel, on a different path.**
 
@@ -199,11 +211,11 @@ interactive budget exists.
   match what the user was shown.
 - **Rollback:** env-tunable constants.
 
-## F-9 — `rico_chat_api.py` is 23,802 lines and one class with 318 methods
+## F-9 — `rico_chat_api.py` is 23,547 lines and one class with 318 methods
 
 **Severity: MEDIUM (systemic). Production impact: every AI change is high-blast-radius.**
 
-`RicoChatAPI` (`:2236`) holds 318 methods in a single class. Every phase in this
+`RicoChatAPI` holds 318 methods in a single class (23,547 lines at `4a63249`). Every phase in this
 epic touches it. This is the reason each fix needs a full-suite comparison to
 prove it changed nothing else.
 
@@ -225,22 +237,22 @@ Ordered by (production impact × evidence strength) ÷ risk, not by phase number
 
 | # | Finding | Why here |
 |---|---|---|
-| 1 | **F-1** cascade prompt parity | Phase 1 is incomplete without it — the fix has a hole on a live fallback path |
-| 2 | **F-3** slice 1 (timeout) | Largest measured latency win, pure config, instantly revertable |
-| 3 | **F-2** prompt_override filenames | Same defect class as Phase 1, tiny diff |
-| 4 | **F-7** tracing | Makes F-3 slice 2, F-6 and F-8 measurable instead of argued |
-| 5 | **F-3** slice 2 (skip classifier) | Needs F-7 to prove routing outcomes unchanged |
-| 6 | **F-6** duplicate reads | Cheap, compounds with F-5 |
-| 7 | **F-4** temperature policy | Needs a measured baseline, which F-7 provides |
-| 8 | **F-8** interactive search budget | Needs F-7 evidence; disconnect layer unproven |
-| 9 | **F-9** decomposition | Continuous, one seam at a time, after each seam stabilises |
+| — | **F-1**, **F-2** | **CLOSED in `#1464`** as Phase 1 closure work |
+| 1 | **F-3** slice 1 (classifier timeout) | Largest measured latency win, pure config, instantly revertable. **The next phase.** |
+| 2 | **F-7** tracing | Makes F-3 slice 2, F-6 and F-8 measurable instead of argued |
+| 3 | **F-3** slice 2 (skip classifier) | Needs F-7 to prove routing outcomes unchanged |
+| 4 | **F-6** duplicate reads | Cheap, compounds with F-5 |
+| 5 | **F-4** temperature policy | Needs a measured baseline, which F-7 provides |
+| 6 | **F-8** interactive search budget | Needs F-7 evidence; disconnect layer unproven |
+| 7 | **F-9** decomposition | Continuous, one seam at a time, after each seam stabilises |
 | — | **F-5** pooling | **BLOCKED** — do not attempt until every listed gate is satisfied |
 
 ## Standing constraints
 
 - One objective per PR. No unrelated production changes combined.
 - Before each phase: verify live GitHub, current `main`, and open competing PRs.
-  Phase 1 was cut without that check and duplicated `#1462`. Do not repeat it.
+  Phase 1 was cut without that check and duplicated `#1462`, which cost real
+  work and had to be consolidated and closed. **Do not repeat it.**
 - No merge, deploy, migration, env, Neon, Railway, or Vercel change without
   explicit approval.
 - Do not rewrite `rico_chat_api.py`.
