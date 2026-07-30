@@ -104,6 +104,7 @@ jobs:
             tests/test_rico_db_connect.py \
             tests/test_bounded_cache.py \
             tests/test_railway_startup_migrations_gate.py \
+            tests/test_ai_grounding_contract.py \
             tests/decision_regression/ \
             -v --tb=short
 

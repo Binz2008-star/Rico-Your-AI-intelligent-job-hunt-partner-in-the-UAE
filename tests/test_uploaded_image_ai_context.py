@@ -48,7 +48,10 @@ def test_transcript_injected_into_ai_context():
     assert doc is not None
     assert doc["transcribed_text"] == "Product Design Manager at Crypto.com. Location: Dubai."
     assert doc["type"] == "Job Description"
-    assert doc["filename"] == "crypto-job.png"
+    # The filename is isolated as an untrusted identifier — it names the file,
+    # it is not evidence of its contents. See tests/test_ai_grounding_contract.py.
+    assert doc["filename_untrusted"] == "crypto-job.png"
+    assert "filename" not in doc
 
 
 def test_no_transcript_when_absent():

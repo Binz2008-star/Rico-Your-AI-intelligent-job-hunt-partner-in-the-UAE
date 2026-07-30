@@ -329,6 +329,40 @@ EPIC        Career Operating System
               └ Task        documents-inventory-contract
 ```
 
+#### Epic: AI Response Reliability & Performance 🔵 (started 2026-07-30)
+
+An owner-approved, phased program. It exists because a production reply asserted
+**"Your CV filename hints at a banking background."** A filename is not career
+evidence. Investigation found the model was told (`content_available: true`) that
+it held the user's CV while the payload carried no CV content at all, and the
+only career-shaped string in reach was a filename injected without any untrusted
+marker. The reply was the context working as built.
+
+Each phase is **one PR, one objective**, in order. A later phase is not
+authorized by the merge of an earlier one.
+
+| Phase | Branch | Objective | State |
+| --- | --- | --- | --- |
+| 1 | `fix/ai-grounding-contract` | Grounding and evidence integrity: isolate all document metadata as `*_untrusted`, load verified CV evidence, make `content_available` truthful, split verified fact / market context / missing evidence | **in review** — `TASK-20260730-001` |
+| 2 | `perf/ai-critical-path-latency` | Redundant profile/document reads; cap the HuggingFace classifier where routing already proves the request is AI-bound; measure route/context/TTFT/completion | ⬜ not started |
+| 3 | `feat/ai-provider-parameter-policy` | Measured parameter baseline, then `temperature` policy with a bounded env override across supported call sites | ⬜ not started |
+| 4 | `feat/ai-request-tracing` | `operation_id` across request → routing → context → provider → persistence → stream; stage timing, TTFT, no PII | ⬜ not started |
+| 5 | `perf/database-connection-pooling` | Re-enable pooling safely | ⛔ **BLOCKED** — requires DB-consumer audit, incident review, Neon connection-limit review, acquire/release analysis, load tests, canary plan, rollback proof. Not to be implemented in any earlier phase |
+| 6 | `fix/interactive-job-search-delivery-budget` | JSearch 429 handling, interactive retry budget, partial results, stream heartbeat, persisted-vs-visible consistency. Kept **separate** from AI provider work | ⬜ not started |
+
+Phase 1 deliberately excludes — and Phase 1's PR must not contain — HuggingFace
+timeouts, provider parameters, connection pooling, tracing, JSearch, routing
+logic, duplicate-read optimisation, RAG/vector storage, validator LLMs, response
+post-filters, schema changes, and any deployment.
+
+```text
+EPIC        AI Response Reliability & Performance
+  └ Milestone   Grounded AI responses
+      └ Phase       Hardening (Phase 2)
+          └ PR          Phase 1 — AI grounding and evidence contract
+              └ Task        TASK-20260730-001
+```
+
 ### Phase 3 — Chat Integration 🔵 (current)
 
 Wire chat to what is already persisted — almost no new logic, just connection.

@@ -202,9 +202,13 @@ class TestBuildOpenaiContextDocumentInjection:
 
         assert "last_uploaded_document" in ctx
         assert ctx["last_uploaded_document"]["type"] == "Offer Letter"
-        assert ctx["last_uploaded_document"]["filename"] == "emaar_offer.pdf"
+        # The filename is isolated under an `_untrusted` key and deliberately
+        # NOT restated inside the note — narrating it back as prose would
+        # defeat the isolation. See tests/test_ai_grounding_contract.py.
+        assert ctx["last_uploaded_document"]["filename_untrusted"] == "emaar_offer.pdf"
+        assert "filename" not in ctx["last_uploaded_document"]
         assert "Offer Letter" in ctx["last_uploaded_document"]["note"]
-        assert "emaar_offer.pdf" in ctx["last_uploaded_document"]["note"]
+        assert "emaar_offer.pdf" not in ctx["last_uploaded_document"]["note"]
         assert "87%" in ctx["last_uploaded_document"]["note"]
 
     def test_extracted_text_path_still_works(self):

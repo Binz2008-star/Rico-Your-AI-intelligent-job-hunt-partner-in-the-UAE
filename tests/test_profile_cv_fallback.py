@@ -188,7 +188,10 @@ class TestChatContextMirrorsFilesEndpoint:
         assert docs[0]["doc_type"] == "cv"
         assert docs[0]["is_primary"] is True
         assert docs[0]["is_legacy"] is True
-        assert docs[0]["content_available"] is True
+        assert docs[0]["parse_status"] == "parsed"
+        # `content_available` is a claim about THIS payload: no verified CV
+        # evidence was resolved here, so the model is told metadata only.
+        assert docs[0]["content_available"] is False
         assert docs[0]["filename_untrusted"] == "Roben_Parsed_Profile_CV.pdf"
         assert docs[1]["doc_type"] == "other"
         assert docs[1]["filename_untrusted"] == "Roben_Edwan_VIP_Relationship_Manager_CV.pdf"
