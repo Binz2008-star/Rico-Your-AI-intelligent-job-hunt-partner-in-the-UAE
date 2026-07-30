@@ -6641,11 +6641,11 @@ class RicoChatAPI:
 
         if cat == ReplyCategory.CANCEL:
             if not self._clear_pending_job_search(user_id):
-                result = self._pjs_error_response(user_id)
+                result = self._pjs_error_response(message_context=message)
 
         elif cat == ReplyCategory.NEW_REQUEST:
             if not self._clear_pending_job_search(user_id):
-                result = self._pjs_error_response(user_id)
+                result = self._pjs_error_response(message_context=message)
 
         elif cat == ReplyCategory.CHANGE:
             _, new_role, new_loc = classify_reply(message)
@@ -6659,7 +6659,7 @@ class RicoChatAPI:
                         user_id, new_role, profile, location=new_loc or "",
                     )
                 else:
-                    result = self._pjs_error_response(user_id)
+                    result = self._pjs_error_response(message_context=message)
             else:
                 # Location-only change: atomically consume, use stored role
                 pjs = self._consume_pending_js(user_id)
@@ -6669,28 +6669,34 @@ class RicoChatAPI:
                     )
 
         elif cat == ReplyCategory.CONFIRM:
+            # First check whether any pending state exists at all.
+            had_pending = bool(self._get_pending_job_search(user_id).get("role"))
             pjs = self._consume_pending_js(user_id)
             if pjs is not None:
                 self._discard_pending_role_confirmation(user_id)
                 result = self._target_role_search_response(
                     user_id, pjs.role, profile, location=pjs.location,
                 )
-            # If consume returns None (missing, expired, already consumed, DB down),
-            # result stays None and the caller falls through to normal routing.
-            # The single turn cache ensures this does not re-classify.  The caller
-            # (_resolve_pending_intent, answer_conversationally, etc.) either emits
-            # its own safe response or continues routing, which is acceptable because
-            # there is no actionable pending state to execute.
+            elif had_pending:
+                # Pending existed but consume failed (expired, malformed,
+                # token mismatch, concurrent loser, DB unavailable).
+                # Return a truthful error instead of falling through.
+                result = self._pjs_error_response(message_context=message)
 
         # Cache so this turn never re-evaluates.
         object.__setattr__(self, "_pjs_redemption_attempted_this_turn", result)
         return result
 
     @staticmethod
-    def _pjs_error_response(user_id: str) -> dict[str, Any]:
+    def _pjs_error_response(user_id: str = "", message_context: str = "") -> dict[str, Any]:
         """Safe response when a PendingJobSearch operation fails.
-        Does not claim execution started.  Does not infer from context."""
-        arabic = bool(re.search(r"[\u0600-\u06FF]", str(user_id) or ""))
+        Does not claim execution started.  Does not infer from context.
+
+        Language is derived from ``message_context`` if provided; otherwise
+        from ``user_id``, and falls back to English.
+        """
+        context = message_context or user_id or ""
+        arabic = bool(re.search(r"[\u0600-\u06FF]", str(context)))
         return {
             "type": "clarification",
             "message": (
@@ -6742,13 +6748,20 @@ class RicoChatAPI:
         "هل تريد البحث",  # Arabic career-change offer: "هل تريد البحث عن وظائف في X؟"
     )
 
+    _PJS_OFFER_FIELD = "_pending_job_search_offer"
+
     def _maybe_store_pending_job_search(self, user_id: str, result: dict[str, Any]) -> None:
         """Persist a pending job search when Rico's response offers/announces a
         search but does not execute one this turn.
 
-        When durable storage fails, replaces the response message with an honest
-        retry-now instruction rather than leaving the user believing they can
-        confirm later.
+        Only arms when the response contains an explicit, confirmable search CTA
+        (e.g. \"Shall I search for X?\", \"Want me to look for jobs?\").  Generic
+        informational responses mentioning \"search\" (career advice, employer
+        lists, tips, skill-gap analysis) are never converted into a pending
+        operation.
+
+        When durable storage fails, only the confirmation CTA is removed from the
+        message; the primary answer is preserved.
         """
         try:
             rtype = str(result.get("type") or "")
@@ -6763,15 +6776,9 @@ class RicoChatAPI:
             profile = self._resolve_profile(user_id)
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
             role = target_roles[0] if target_roles else None
-            if role and not self._store_pending_job_search(user_id, role=role):
-                logger.warning("pending_job_search arm failed user=%s — replacing message", user_ref(user_id))
-                # Replace the response message so the user is not told to confirm later.
-                arabic = bool(re.search(r"[\u0600-\u06FF]", str(result.get("message", ""))))
-                result["message"] = (
-                    "لم أتمكن من تجهيز التأكيد. قل لي المسمى والموقع وسأبحث فوراً."
-                    if arabic else
-                    "I couldn't prepare the confirmation. Just tell me the role and location, and I'll search right away."
-                )
+            if role:
+                if not self._store_pending_job_search(user_id, role=role):
+                    logger.warning("pending_job_search arm failed user=%s", user_ref(user_id))
         except Exception:
             pass
 
@@ -8540,12 +8547,6 @@ class RicoChatAPI:
                 user_id, role=_adjacent_names_for_offer[0], query_type="adjacent_broaden"
             ):
                 logger.warning("failed to arm adjacent-broaden for user=%s", user_ref(user_id))
-                # Strip the broaden offer from the message so the user is not
-                # told to confirm something that cannot be redeemed.
-                message = re.sub(
-                    r"\s*Would you like me to (?:also )?search for .+?\?",
-                    "", message,
-                )
 
         response = {
             "type": "job_matches",

@@ -399,13 +399,12 @@ class TestRedemptionPipeline:
             expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
         )
         api = _make_api({"role": "Old", "location": ""})
-        # The repo.get returns the expired PJS; consume returns None because
-        # the fake repo never allows consuming an expired search.
         api._pjs_repo.get.return_value = expired
         api._pjs_repo.consume.return_value = None
         with patch.object(api, "_target_role_search_response") as direct:
             result = api._redeem_pending_job_search("u1", "yes", profile={})
-        assert result is None
+        assert result is not None
+        assert result.get("type") == "clarification"
         direct.assert_not_called()
 
     def test_missing_does_not_infer_from_last_message(self):
@@ -574,8 +573,8 @@ def test_cancel_failure_returns_error():
     assert result.get("type") == "clarification"
 
 
-def test_consume_expired_returns_none():
-    """Expired state must return None from _redeem (safe fallthrough)."""
+def test_consume_expired_returns_clarification():
+    """Expired pending state must return a truthful clarification, not fallthrough."""
     from src.services.pending_job_search import PendingJobSearch
     from datetime import datetime, timezone
     expired = PendingJobSearch(
@@ -586,51 +585,49 @@ def test_consume_expired_returns_none():
     api = _make_api({"role": "Old", "location": ""})
     api._pjs_repo.get.return_value = expired
     api._pjs_repo.consume.return_value = None  # repo rejects expired
-    with patch.object(api, "_target_role_search_response") as direct:
-        result = api._redeem_pending_job_search("u1", "yes", profile={})
-    assert result is None
-    direct.assert_not_called()
+    result = api._redeem_pending_job_search("u1", "yes", profile={})
+    assert result is not None
+    assert result.get("type") == "clarification"
+    assert "pending_job_search_failed" in str(result.get("intent", ""))
 
 
-def test_consume_token_mismatch_returns_none():
-    """Token mismatch must return None (safe fallthrough)."""
+def test_consume_token_mismatch_returns_clarification():
+    """Token mismatch must return a truthful clarification."""
     from src.services.pending_job_search import new_pending
     pjs = new_pending(role="Engineer", location="")
     api = _make_api({"role": "Engineer", "location": ""})
     api._pjs_repo.get.return_value = pjs
     api._pjs_repo.consume.return_value = None  # token mismatch → None
-    with patch.object(api, "_target_role_search_response") as direct:
-        result = api._redeem_pending_job_search("u1", "yes", profile={})
-    assert result is None
-    direct.assert_not_called()
+    result = api._redeem_pending_job_search("u1", "yes", profile={})
+    assert result is not None
+    assert result.get("type") == "clarification"
 
 
-def test_consume_db_unavailable_returns_none():
-    """DB unavailable must return None (safe fallthrough)."""
+def test_consume_db_unavailable_returns_clarification():
+    """DB unavailable must return a truthful clarification."""
     api = _make_api({"role": "Engineer", "location": ""})
     api._pjs_repo.consume.side_effect = RuntimeError("DB unavailable")
-    with patch.object(api, "_target_role_search_response") as direct:
-        result = api._redeem_pending_job_search("u1", "yes", profile={})
-    assert result is None
-    direct.assert_not_called()
+    result = api._redeem_pending_job_search("u1", "yes", profile={})
+    assert result is not None
+    assert result.get("type") == "clarification"
 
 
-def test_consume_concurrent_loser_returns_none():
-    """Concurrent loser returns None."""
+def test_consume_concurrent_loser_returns_clarification():
+    """Concurrent loser returns clarification, not fallthrough."""
     api = _make_api({"role": "Engineer", "location": ""})
-    # First call succeeds, second call (mocked) returns None
     from src.services.pending_job_search import new_pending
     pjs = new_pending(role="Engineer", location="")
     api._pjs_repo.get.return_value = pjs
     api._pjs_repo.consume.side_effect = [pjs, None]
     with patch.object(api, "_target_role_search_response") as direct:
         first = api._redeem_pending_job_search("u1", "yes", profile={})
-    # Cache is set, clear it to test a second call
-    # (In production the sentinel prevents re-entry; this simulates a fresh attempt)
+    assert first is not None
+    # Simulate fresh turn
     object.__setattr__(api, "_pjs_redemption_attempted_this_turn", api._PJS_SENTINEL)
+    api._pjs_repo.get.return_value = None  # already consumed
     with patch.object(api, "_target_role_search_response") as direct2:
         second = api._redeem_pending_job_search("u1", "yes", profile={})
-    assert first is not None
+    # Loser on a subsequent turn where the state is gone → safe fallthrough to None
     assert second is None
 
 
