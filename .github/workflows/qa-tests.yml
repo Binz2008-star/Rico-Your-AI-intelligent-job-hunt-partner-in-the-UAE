@@ -102,6 +102,7 @@ jobs:
             tests/test_provider_cascade_cancellation.py \
             tests/test_1101_private_response_cache.py \
             tests/test_rico_db_connect.py \
+            tests/test_bounded_cache.py \
             tests/decision_regression/ \
             -v --tb=short
 
