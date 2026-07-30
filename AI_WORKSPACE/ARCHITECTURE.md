@@ -20,7 +20,12 @@
 - Frontend: Next.js 14 / TypeScript / Tailwind in `apps/web`
 - Backend: Python / FastAPI in `src/api`
 - Database: Neon PostgreSQL
-- Backend deployment: Render
+- Backend deployment: **Railway** — service `rico-api`, canonical URL
+  `https://api.ricohunt.com`. Verified from the Railway console 2026-07-30:
+  custom domain Active/Verified, `GET /health` 200 with `Server: railway-hikari`
+  and `x-railway-edge` present, `GET /version` 200, and
+  `https://ricohunt.com/proxy/health` 200 carrying Railway headers (so the
+  Vercel proxy reaches Railway). Render no longer serves production.
 - Frontend deployment: Vercel
 - Job search API: JSearch / RapidAPI
 - Notifications: Telegram
@@ -207,11 +212,29 @@ historically relied on Render's ephemeral disk for state that must be durable. S
 > "Migration rules for `rico_chat_api.py`" **for those paths only — and satisfying it is not
 > authorization to extract.**
 >
-> **The infrastructure end-state below is still untouched.** The production backend is FastAPI on
-> **Render** (see "Current live stack" at the top of this file). Railway, the separate worker
-> service, and Redis/Queue do **not** exist in production. Render remains production until Railway
-> passes full production smoke testing. Read "implementation has begun" as two domain contracts in
-> place, not as a migration under way.
+> **Backend hosting has moved to Railway; the rest of the infrastructure end-state below is still
+> untouched.** The production backend is FastAPI on **Railway** (service `rico-api`,
+> `https://api.ricohunt.com`) — see "Current live stack" at the top of this file for the verifying
+> evidence. The separate worker service and Redis/Queue still do **not** exist in production.
+> Read "implementation has begun" as two domain contracts in place plus a completed hosting move,
+> not as the wider migration being under way.
+>
+> **How the move was discovered, and what it cost.** This document previously stated that Render
+> remained production. That was stale, and the staleness was not merely cosmetic: two workflows
+> (`deploy-render.yml`, `deploy-production.yml`) still targeted the retired Render host, which had
+> stopped serving. They returned 409 and 503 on every `src/**` push, which made the commit's
+> aggregate GitHub check suite fail, which made Railway's "Wait for CI" gate skip the deployment
+> with "CI check suite failed". Production therefore sat on `ccde2c48` while `main` moved on, and
+> the Phase 1 grounding merge `41a95ad` never shipped. **A verification workflow pointed at
+> infrastructure that no longer serves does not just report a false red — through aggregate CI
+> gating it stops the real host from ever deploying.** Repaired by retiring the deploy-hook
+> workflow and repointing production verification at `https://api.ricohunt.com`, with a
+> deterministic guard in `tests/test_deployment_gate_targets.py`.
+>
+> **Known remaining drift, tracked separately, NOT fixed here:** the frontend CSP still references
+> `https://rico-job-automation-api.onrender.com`; `keep-warm.yml` and `render-audit.yml` still ping
+> the retired host (neither runs on push-to-main, so neither can block a deploy — `keep-warm.yml`
+> additionally only warns); and `render.yaml` is still present at the repo root.
 >
 > Near-term execution gate: read `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
 > **before** starting any feature, redesign, worker, notification, or infrastructure work. That
