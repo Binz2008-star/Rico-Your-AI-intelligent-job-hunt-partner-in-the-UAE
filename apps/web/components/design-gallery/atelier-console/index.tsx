@@ -21,18 +21,18 @@
 
 import { IBM_Plex_Sans } from "next/font/google";
 import "./atelier-console.css";
+import { atelierFontVars } from "./fonts";
+import { ConsoleProviders, useLang, useTheme } from "./i18n";
+import { RicoChat } from "./RicoChat";
 
 // Route-scoped: IBM Plex Sans used to be a global layout font purely for this
 // console; it now loads only when the gallery renders (perf slice 2026-07-21).
 const consolePlexSans = IBM_Plex_Sans({
-    subsets: ["latin"],
-    weight: ["200", "300", "400", "500", "600", "700"],
-    variable: "--font-ibm-plex-sans",
-    display: "swap",
+  subsets: ["latin"],
+  weight: ["200", "300", "400", "500", "600", "700"],
+  variable: "--font-ibm-plex-sans",
+  display: "swap",
 });
-import { atelierFontVars } from "./fonts";
-import { ConsoleProviders, useLang, useTheme } from "./i18n";
-import { RicoChat } from "./RicoConsole";
 
 function AtelierConsoleFrame() {
   const { theme } = useTheme();
