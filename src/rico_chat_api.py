@@ -3493,6 +3493,24 @@ class RicoChatAPI:
 
         # Embed last 8 turns so the AI has conversation context for yes/no and follow-ups
         if user_id:
+            # Safety constraints FIRST, and never shed (see `_CONTEXT_PRIORITY`).
+            # "Never apply to these companies" is a user decision Rico must not
+            # override. It used to travel inside `career_memory`, bundled with
+            # "frequently skipped" and "recently applied" — so it inherited the
+            # priority of a preference, and a long conversation plus a large CV
+            # was enough to push the whole string out of the provider's
+            # character budget. A dropped preference costs a worse suggestion;
+            # a dropped never-apply constraint means Rico can recommend a
+            # company the user explicitly ruled out, with nothing in the
+            # payload to stop it.
+            try:
+                from src.services.career_memory import build_safety_constraints
+                _constraints = build_safety_constraints(user_id)
+                if _constraints:
+                    ctx["safety_constraints"] = _constraints
+            except Exception:
+                pass
+
             # Inject uploaded documents FIRST: the serialized context is truncated
             # to _PROFILE_CONTEXT_MAX_CHARS in rico_openai_runtime and dict insertion
             # order is preserved, so file metadata must precede the long conversation
@@ -3653,7 +3671,9 @@ class RicoChatAPI:
             except Exception:
                 pass
 
-            # Inject career memory (CAREER-OS-09): blocked companies, recent applies, etc.
+            # Inject career memory (CAREER-OS-09): preferences only. The
+            # never-apply constraint is injected separately, above, at safety
+            # priority — see `_CONTEXT_PRIORITY`.
             try:
                 from src.services.career_memory import build_memory_context
                 _mem = build_memory_context(user_id)
@@ -3662,6 +3682,112 @@ class RicoChatAPI:
             except Exception:
                 pass
 
+        return self._fit_context_budget(ctx)
+
+    #: What Rico keeps when the context cannot hold everything.
+    #:
+    #: The provider layer truncates the serialized context with a raw
+    #: ``[:_PROFILE_CONTEXT_MAX_CHARS]`` string slice, so before this ladder
+    #: existed "priority" was nothing but dict insertion order, and overflow was
+    #: resolved by cutting whatever happened to be last — mid-JSON, silently.
+    #: A long conversation plus a large CV was enough to push the
+    #: blocked-companies constraint out of the payload, which means Rico could
+    #: recommend a company the user had explicitly told it never to apply to.
+    #:
+    #: Order is deliberate, most important first:
+    #:
+    #:   1. safety_constraints  — user decisions Rico must not override
+    #:   2. verified_cv_evidence — facts about the user, parsed from their CV
+    #:   3. profile facts        — everything not named here (see _CONTEXT_TIER_OTHER)
+    #:   4. career_memory        — preferences that improve a suggestion
+    #:   5. conversation_history — recent transcript
+    #:   6. low-value metadata   — recall/telemetry niceties
+    #:
+    #: Shedding runs from the BOTTOM up. Tier 1 is never shed: if the context
+    #: cannot fit with it, the context is over budget with it — which is the
+    #: honest outcome, because dropping it silently is the defect.
+    _CONTEXT_PRIORITY: tuple[tuple[int, tuple[str, ...]], ...] = (
+        (1, ("safety_constraints",)),
+        # `last_uploaded_document` sits here, not in the metadata tier: when it
+        # carries a transcript it is the document the user just uploaded and is
+        # usually the very thing they are asking about. It is trimmed under
+        # pressure (below), never dropped.
+        (2, ("verified_cv_evidence", "last_uploaded_document")),
+        (4, ("career_memory",)),
+        (5, ("conversation_history",)),
+        (6, ("recently_discussed_jobs", "recent_job_verification_status",
+             "learned_preferences")),
+    )
+    #: Tier 3 — every key not named above (profile fields, career_context,
+    #: uploaded_documents). Never shed by key; they are small and identifying.
+    _CONTEXT_TIER_OTHER = 3
+
+    #: Budget for the whole serialized context. Must stay at or below the
+    #: provider's `_PROFILE_CONTEXT_MAX_CHARS`, so fitting here means the raw
+    #: slice downstream never actually cuts anything.
+    _CONTEXT_MAX_CHARS = 4000
+    #: Floor for a trimmed upload transcript. Below this the excerpt stops being
+    #: usable evidence, so we keep it and accept being over budget rather than
+    #: pretend a useless fragment is the document.
+    _CONTEXT_MIN_TRANSCRIPT_CHARS = 800
+
+    @classmethod
+    def _fit_context_budget(cls, ctx: dict[str, Any]) -> dict[str, Any]:
+        """Shed lowest-priority context until it serializes within budget.
+
+        Deterministic and order-independent: the same context always sheds the
+        same things regardless of the order keys were inserted — which is the
+        point, since "priority" used to mean nothing but dict insertion order
+        resolved by a raw string slice.
+
+        Two things degrade instead of disappearing: the transcript is trimmed
+        oldest-first, and a freshly uploaded document's text is shortened to a
+        floor. Tiers 1-3 are never shed at all.
+        """
+        def _size(payload: dict[str, Any]) -> int:
+            try:
+                return len(json.dumps(payload, ensure_ascii=False, default=str))
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                return cls._CONTEXT_MAX_CHARS + 1
+
+        if _size(ctx) <= cls._CONTEXT_MAX_CHARS:
+            return ctx
+
+        # Bottom-up: tier 6, then 5, then 4. Tiers 1-3 are never dropped.
+        for _tier, keys in sorted(cls._CONTEXT_PRIORITY, reverse=True):
+            if _tier <= cls._CONTEXT_TIER_OTHER:
+                break
+            for key in keys:
+                if key not in ctx:
+                    continue
+                if key == "conversation_history":
+                    # Trim oldest turns first — a shorter transcript is far more
+                    # useful than none, and the newest turns carry the request.
+                    while len(ctx.get(key) or []) > 1:
+                        ctx[key] = ctx[key][1:]
+                        if _size(ctx) <= cls._CONTEXT_MAX_CHARS:
+                            return ctx
+                ctx.pop(key, None)
+                if _size(ctx) <= cls._CONTEXT_MAX_CHARS:
+                    return ctx
+
+        # Last resort before giving up: shorten the uploaded document's text.
+        # Done after the lower tiers and never by dropping the key — the user
+        # asked about that document, so a shorter excerpt beats no excerpt.
+        doc = ctx.get("last_uploaded_document")
+        if isinstance(doc, dict) and isinstance(doc.get("transcribed_text"), str):
+            overshoot = _size(ctx) - cls._CONTEXT_MAX_CHARS
+            text = doc["transcribed_text"]
+            keep = max(cls._CONTEXT_MIN_TRANSCRIPT_CHARS, len(text) - overshoot)
+            if keep < len(text):
+                doc["transcribed_text"] = text[:keep]
+                if _size(ctx) <= cls._CONTEXT_MAX_CHARS:
+                    return ctx
+
+        # Still over budget with only tiers 1-3 left. Return it rather than
+        # shedding a safety constraint or the user's verified facts: an
+        # over-budget payload is visible downstream, a silently dropped
+        # never-apply instruction is not.
         return ctx
 
     def _recent_jobs_summary(self, user_id: str, limit: int = 3) -> str:
@@ -8708,6 +8834,11 @@ class RicoChatAPI:
         blocked_questions = self._get_blocked_questions(profile, user_id=user_id)
         if isinstance(user_context, dict):
             user_context["blocked_questions"] = blocked_questions
+            # Re-fit: this key is added AFTER the builder returned, so without
+            # this the context could be pushed back over budget here and be
+            # resolved downstream by the raw string slice — the exact
+            # uncontrolled truncation `_fit_context_budget` exists to replace.
+            user_context = self._fit_context_budget(user_context)
 
         # Safety always evaluates the user's ORIGINAL message, never an
         # augmented prompt embedding untrusted document/OCR content — a

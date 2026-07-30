@@ -643,7 +643,13 @@ class TestEvidenceBudget:
                    return_value=_resolved_career_context()):
             ctx = api._build_openai_context(_complete_profile(), user_id="u1")
 
-        assert len(ctx["last_uploaded_document"]["transcribed_text"]) == 4000
+        # The builder caps the transcript at 4000, but the context budget then
+        # trims it further so the whole payload fits. It is TRIMMED, never
+        # dropped: the user asked about that document, so a shorter excerpt
+        # beats no excerpt. See RicoChatAPI._fit_context_budget.
+        transcript = ctx["last_uploaded_document"]["transcribed_text"]
+        assert 0 < len(transcript) <= 4000
+        assert len(transcript) >= RicoChatAPI._CONTEXT_MIN_TRANSCRIPT_CHARS
         evidence_size = len(json.dumps(ctx["verified_cv_evidence"], ensure_ascii=False))
         assert evidence_size <= RicoChatAPI._EVIDENCE_MAX_TOTAL_CHARS
         assert unguarded_filename_keys(ctx) == []
