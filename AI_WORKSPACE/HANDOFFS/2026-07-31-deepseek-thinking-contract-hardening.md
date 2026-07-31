@@ -13,8 +13,10 @@ This change removes an unsafe implicit provider default. It does not claim the p
 - **Milestone:** Provider-contract reliability
 - **Phase:** P1 bounded runtime hardening
 - **Task:** `TASK-20260731-004`
+- **PR:** `#1478` (Draft)
 - **Branch:** `fix/deepseek-thinking-contract`
 - **Base:** `f5f5fd14aadfb63f3870a73169ee7b3da83b9c02`
+- **Implementation commit:** `8ab58a1f6297c4b59f54ab520d61c9bc4feebb01`
 - **Owner:** Rico Engineering
 - **Source of truth:** `src/rico_openai_runtime.py` for runtime behavior; this handoff records the PR scope and verification boundary.
 - **Update when:** the branch head, validation state, merge state, or post-merge smoke evidence changes.
@@ -46,6 +48,19 @@ Make Rico's final-answer-only DeepSeek contract explicit by disabling thinking f
 5. A genuine primary failure invokes the existing fallback exactly once.
 6. Existing reasoning-provider hardening tests and test enumeration remain green.
 
+## Verified branch evidence
+
+The bounded implementation was applied and verified in GitHub Actions before the temporary patch workflow and patch script deleted themselves from the branch.
+
+- Python compile checks: **PASS**.
+- `tests/test_reasoning_provider_hardening.py`: **41 passed**, 2 pre-existing warnings.
+- Test enumeration guard: **PASS**; unexplained files `0` and frozen debt unchanged at `204`.
+- `git diff --check`: **PASS**.
+- Final PR file set after cleanup: runtime, focused existing test suite, and this handoff only.
+- No live provider call, production credential, deployment, migration, Neon mutation, or production smoke was performed.
+
+This targeted validation does not replace exact-head repository CI. The documentation update recording this evidence intentionally triggers a fresh PR synchronization so required checks can evaluate the final three-file diff.
+
 ## Risks
 
 - DeepSeek may change or reject the provider-specific request field in a future API revision. Existing fail-closed categorization and fallback remain the mitigation.
@@ -65,4 +80,4 @@ Revert the eventual squash merge commit. No database, environment, migration, or
 
 ## Current state
 
-Draft implementation only. Merge, deployment, and production smoke are not authorized by this record.
+Draft PR implementation is complete and targeted checks are green. Exact-head CI and independent review remain required. Merge, deployment, and production smoke are not authorized by this record.
