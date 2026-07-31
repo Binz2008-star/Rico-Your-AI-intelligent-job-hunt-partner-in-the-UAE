@@ -8913,3 +8913,134 @@ usable" — bounded here, not deleted).
   text; the next request rebuilds context from scratch
 - Stop condition: do not merge, do not deploy, do not begin Phase 2 without
   explicit owner approval
+
+### TASK-20260731-001 — PendingJobSearch typed contract with atomic DB-backed consume
+
+Status: **draft PR open** — `#1472`, branch `feat/pending-job-search-contract`
+Owner: Rico Engineering
+Issue/PR: `#1472` (Draft)
+
+#### Objective
+
+Replace the memory-based pending job-search state (`RicoMemoryStore.set_context`,
+a no-op under `RICO_MEMORY_BACKEND=postgres`) with a typed, DB-backed contract
+using `rico_agent_settings.settings["_pjs"]`. One objective only: job-search
+confirmation. No generic dialog framework, no unrelated pending flows.
+
+#### Scope delivered
+
+- `src/services/pending_job_search.py` — `PendingJobSearch` frozen dataclass,
+  `PendingJobSearchRepo` with atomic `consume()` (FOR UPDATE row lock,
+  transaction-scoped), `classify_reply()`, `lookup()` with typed outcomes,
+  structured offer marker (`_PJS_OFFER_FIELD` / `make_offer` / `is_offer_present`
+  / `remove_offer`).
+- `src/rico_chat_api.py` — rewritten `_store_pending_job_search` (returns bool),
+  `_get_pending_job_search` (uses typed lookup), `_clear_pending_job_search`;
+  new `_redeem_pending_job_search()` single entry point with turn-scoped cache
+  (`_PJS_SENTINEL`); four redemption sites updated to share the entry point.
+- Independent-review correctives (2026-07-31, final blocker resolution):
+  - `_pjs_error_response`: removed `user_id` from language detection
+  - `_maybe_store_pending_job_search` (text-signal arming) REMOVED; replaced by
+    `_finalize_pending_job_search_offer`, the SINGLE storage owner.  Only an
+    explicit private marker (`_PJS_OFFER_FIELD`) arms PendingJobSearch.
+  - `adjacent_broaden`: pre-store removed; sets marker only, finalizer stores
+    exactly once and sanitizes on failure
+  - `ambiguous_promise`: pre-store removed; sets marker, finalizer stores once
+    and replaces hollow promise before persistence
+  - `known_but_off_profile`: sets marker, finalizer stores once; Arabic variant
+    added; confirm_search options removed on failure
+  - `_provider_degraded_response`: sets marker, finalizer stores once; persists
+    the FINALIZED message (never the pre-finalization value)
+  - `_get_pending_job_search`: uses `PendingSearchLookup` with `LookupStatus`
+    (FOUND/NONE/UNAVAILABLE/MALFORMED/EXPIRED); `lookup()` returns NONE for
+    user-not-found and UNAVAILABLE only for a real DB exception
+  - `_redeem_pending_job_search` typed contract: CONFIRM/CANCEL/NEW_REQUEST/
+    CHANGE behavior per status; CANCEL and NEW_REQUEST invalidation are
+    token-qualified via `consume(user_id, token)` or the new
+    `repo.discard_token(user_id, token)` (also removes expired entries)
+  - `lookup()` method on `PendingJobSearchRepo` returns typed outcome
+- `tests/test_pending_job_search_contract.py` — updated mock `_make_api` with
+  `lookup.return_value`; 99 hermetic tests pass
+- `tests/integration/test_pending_job_search_postgres.py` — real Postgres concurrency
+  test proving exactly-one-winner atomic consume.
+- `.github/workflows/qa-tests.yml` — enrolment in both the pytest job and the
+  postgres-integration job.
+
+#### Dialogue state vs operation ownership
+
+`PendingJobSearch` answers *"What is Rico waiting for?"* (dialogue state).
+`operation_state.py` answers *"Who owns this execution?"* (execution ownership).
+They are separate concerns and must not be collapsed. Documented in module docstring.
+
+#### Intentionally uses `rico_agent_settings.settings["_pjs"]`
+
+RicoMemoryStore.set_context is a no-op when `RICO_MEMORY_BACKEND=postgres`
+(repository behavior is verified at `src/rico_memory.py:27`; the live Railway
+value is **unverified**). The JSONB key `_pjs` in `rico_agent_settings.settings`
+survives server restarts, multi-worker deployments, and the postgres backend.
+No migration required — the column and table already exist.
+
+`RICO_MEMORY_BACKEND=postgres` — repository behavior is verified; live Railway
+value is unverified.
+
+#### Acceptance criteria
+
+- [x] Atomic `consume()` with FOR UPDATE — exactly one concurrent winner
+- [x] Reply classification: CONFIRM, CANCEL, CHANGE, NEW_REQUEST, OTHER
+- [x] Location-only change: "نعم في أبوظبي" uses new location, not stale stored one
+- [x] Role change: "yes, search Product Manager" uses new role
+- [x] Cancel: لا clears without execution
+- [x] Expired state fails closed
+- [x] Missing state does not infer from last assistant message
+- [x] Gratitude does not redeem
+- [x] Single-turn cache: one classification, one DB read, one execution per turn
+- [x] Exactly one operation ownership claim
+- [x] Real Postgres concurrency test proving one winner
+- [x] Typed lookup outcomes: FOUND/NONE/UNAVAILABLE/MALFORMED/EXPIRED
+- [x] `lookup()` returns NONE for user-not-found; UNAVAILABLE only for DB exception
+- [x] Structured offer marker never reaches API client or persisted history
+- [x] Single store owner: `_finalize_pending_job_search_offer` is the only
+      `_store_pending_job_search` caller; one store per offer (asserted)
+- [x] Token-qualified CANCEL / NEW_REQUEST invalidation (no unqualified cancel
+      after FOUND lookup; `discard_token` cleans expired entries)
+- [x] NEW_REQUEST requires successful invalidation before routing
+- [x] Finalized response persisted (API message == persisted message)
+- [x] Arabic store-failure CTA sanitization (2026-07-31): the exact production
+      Arabic phrase "هل تريد مني البحث ... أجب بنعم أو أخبرني بمسمى آخر." is
+      fully stripped from the finalized message when durable storage fails,
+      alongside the confirm_search option; English behavior unchanged
+- [x] Store-failure CTA sanitation: adjacent_broaden, ambiguous_promise,
+      known_but_off_profile (EN + AR), provider_degraded, profile-based
+      finalization
+- [x] Language derived from message context only (not user_id)
+- [x] Precedence — FIXED (2026-07-31): the canonical guard
+      `_pending_search_redemption_blocked` is the single precedence owner for
+      every PJS redemption site.  It now blocks PendingJobSearch for an armed
+      mark-applied / application-status confirmation
+      (`_pending_confirm_apply` with title+company, or non-empty
+      `_pending_confirm_apply_options`), in addition to the allowlisted profile
+      update (`confirm_profile_update`) and active-CV switch
+      (`confirm_set_active_cv`) and gratitude / CV-analysis.  Reproduced on
+      base main `70569526` (defect already existed: PJS cleared + search
+      executed, pre-empting the mark-applied confirmation) and at head; both
+      now resolve the higher-specificity confirmation with zero PJS
+      lookup/consume/execution.  Regression ownership: pre-existing defect on
+      base, same defect carried by PR #1472, closed here.
+- [x] Focused PendingJobSearch and routing suites pass (exact counts not
+      asserted here to avoid brittleness; recorded in the PR body with the
+      exact command)
+- [x] 3 prior CI regressions (mark-applied confirmation x2, OK acknowledgement)
+      pass under the typed-status matrix
+- [x] Full backend CI suite green at exact head (pytest job passed)
+
+#### Rollback
+
+`git revert` the merge commit on `main`. No migration, no schema, no data rollback —
+only the additive `_pjs` key in `rico_agent_settings.settings` JSONB.
+
+#### Required verification still needed
+
+- [ ] `/version` commit identity after deploy
+- [ ] `/health` 200
+- [ ] Live authenticated smoke: نعم → exact stored role/location executed
+- [ ] Concurrent double-confirmation test against real production-like Neon

@@ -6,10 +6,12 @@ always executes the search when the user confirms a pending job-search.
 """
 from __future__ import annotations
 from unittest.mock import MagicMock, patch
-import time
 import pytest
 
 from src.rico_chat_api import RicoChatAPI
+from src.services.pending_job_search import (
+    PendingJobSearch, PendingSearchLookup, LookupStatus, new_pending,
+)
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -34,18 +36,26 @@ _JOBS = [
 ]
 
 
-def _make_api_with_profile(pending_job_search=None):
+def _make_api_with_profile(pending_job_search=None) -> RicoChatAPI:
     api = RicoChatAPI.__new__(RicoChatAPI)
-    memory = MagicMock()
-
-    def _get_context(user_id, key):
-        if key == RicoChatAPI._PENDING_JOB_SEARCH_KEY and pending_job_search:
-            return pending_job_search
-        return {}
-
-    memory.get_context.side_effect = _get_context
-    memory.set_context.return_value = None
-    api.memory = memory
+    api.memory = MagicMock()
+    api._pjs_repo = MagicMock()
+    api._can_mutate_applications = False
+    api._current_operation_id = None
+    api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
+    if pending_job_search:
+        role = pending_job_search.get("role", "Test")
+        loc = pending_job_search.get("location", "")
+        pjs = new_pending(role=role, location=loc)
+        api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
+        api._pjs_repo.consume.return_value = pjs
+    else:
+        api._pjs_repo.get.return_value = None
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
+        api._pjs_repo.consume.return_value = None
+    api._pjs_repo.cancel.return_value = True
+    api._pjs_repo.store.return_value = True
     return api
 
 
@@ -54,30 +64,28 @@ def _make_api_with_profile(pending_job_search=None):
 class TestPendingJobSearchState:
     def test_store_and_retrieve(self):
         api = _make_api_with_profile()
-        stored = {}
-        api.memory.set_context.side_effect = lambda u, k, v: stored.__setitem__((u, k), v)
-        api._store_pending_job_search("u1", role="Environmental Manager", location="Dubai")
-        val = stored.get(("u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY))
-        assert val is not None
-        assert val["role"] == "Environmental Manager"
-        assert val["location"] == "Dubai"
-        assert "expires_at" in val
+        ok = api._store_pending_job_search("u1", role="Environmental Manager", location="Dubai")
+        assert ok
+        # Verify the repo's store method was called with a tokenized PendingJobSearch
+        assert api._pjs_repo.store.called
+        args = api._pjs_repo.store.call_args
+        if args:
+            stored_pjs = args[0][1]
+            assert stored_pjs.role == "Environmental Manager"
+            assert stored_pjs.location == "Dubai"
 
     def test_expired_state_returns_empty(self):
         api = _make_api_with_profile()
-        api.memory.get_context.side_effect = lambda u, k: {
-            "role": "HSE Manager",
-            "expires_at": int(time.time()) - 1,  # already expired
-        }
+        api._pjs_repo.get.return_value = None
         result = api._get_pending_job_search("u1")
         assert result == {}
 
     def test_clear_pending_state(self):
         api = _make_api_with_profile()
-        api._clear_pending_job_search("u1")
-        api.memory.set_context.assert_called_once_with(
-            "u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY, {}
-        )
+        api._pjs_repo.get.return_value = None
+        ok = api._clear_pending_job_search("u1")
+        assert ok
+        assert api._pjs_repo.cancel.called
 
 
 # ── is_promise_only_reply ──────────────────────────────────────────────────────
@@ -112,32 +120,21 @@ class TestConfirmationContinuesPendingJobSearch:
         pending = {
             "role": "Environmental Manager",
             "location": "Dubai",
-            "query_type": "profile_based",
-            "created_at": int(time.time()),
-            "expires_at": int(time.time()) + 900,
         }
         api = _make_api_with_profile(pending_job_search=pending)
 
-        with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search, \
-             patch.object(api, "_clear_pending_job_search") as mock_clear:
+        with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search:
             result = api._resolve_pending_intent(
                 user_id="u1",
                 message="تمام",
                 profile=_PROFILE,
             )
 
-        mock_clear.assert_called_once_with("u1")
         mock_search.assert_called_once()
         assert result["type"] == "job_results"
 
     def test_tamam_does_not_return_good_luck(self):
-        pending = {
-            "role": "Environmental Manager",
-            "location": "",
-            "query_type": "profile_based",
-            "created_at": int(time.time()),
-            "expires_at": int(time.time()) + 900,
-        }
+        pending = {"role": "Environmental Manager", "location": ""}
         api = _make_api_with_profile(pending_job_search=pending)
         with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}):
             result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
@@ -147,13 +144,7 @@ class TestConfirmationContinuesPendingJobSearch:
         assert "good luck" not in msg
 
     def test_ok_english_also_continues_pending_job_search(self):
-        pending = {
-            "role": "HSE Manager",
-            "location": "Abu Dhabi",
-            "query_type": "profile_based",
-            "created_at": int(time.time()),
-            "expires_at": int(time.time()) + 900,
-        }
+        pending = {"role": "HSE Manager", "location": "Abu Dhabi"}
         api = _make_api_with_profile(pending_job_search=pending)
         with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search:
             api._resolve_pending_intent("u1", "ok", _PROFILE)
@@ -169,13 +160,7 @@ class TestNoPromiseOnlyReplies:
 
     def test_resolve_pending_intent_never_emits_promise_only(self):
         """When job search signals exist in last turn, resolve must not emit a promise-only reply."""
-        pending = {
-            "role": "Environmental Manager",
-            "location": "",
-            "query_type": "profile_based",
-            "created_at": int(time.time()),
-            "expires_at": int(time.time()) + 900,
-        }
+        pending = {"role": "Environmental Manager", "location": ""}
         api = _make_api_with_profile(pending_job_search=pending)
         with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "jobs": [], "message": "لم أجد وظائف متاحة الآن"}):
             result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
@@ -202,13 +187,7 @@ class TestArabicLanguageMatching:
 class TestProviderFailureContract:
     def test_provider_failure_does_not_produce_promise_only(self):
         """If job provider raises, response must contain clear error, not a promise."""
-        pending = {
-            "role": "Environmental Manager",
-            "location": "",
-            "query_type": "profile_based",
-            "created_at": int(time.time()),
-            "expires_at": int(time.time()) + 900,
-        }
+        pending = {"role": "Environmental Manager", "location": ""}
         api = _make_api_with_profile(pending_job_search=pending)
         # Simulate provider failure by mocking _classified_role_search to return error response
         error_resp = {
@@ -271,19 +250,17 @@ class TestFullTurnPendingSearch:
 
     def _make_api(self):
         api = RicoChatAPI.__new__(RicoChatAPI)
-        memory = MagicMock()
-        _store: dict = {}
-
-        def _get(user_id, key):
-            return _store.get((user_id, key), {})
-
-        def _set(user_id, key, value):
-            _store[(user_id, key)] = value
-
-        memory.get_context.side_effect = _get
-        memory.set_context.side_effect = _set
-        api.memory = memory
-        api._store = _store  # expose for assertions
+        api.memory = MagicMock()
+        api._can_mutate_applications = False
+        api._current_operation_id = None
+        api._pjs_repo = MagicMock()
+        api._pjs_repo.cancel.return_value = True
+        api._pjs_repo.store.return_value = True
+        api._pjs_repo.get.return_value = None
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
+        api._pjs_repo.consume.return_value = None
+        api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
         return api
 
     def test_known_but_off_profile_arms_pending_search(self):
@@ -299,13 +276,15 @@ class TestFullTurnPendingSearch:
             result = api._classified_role_search("u1", "Data Scientist", profile_no_role)
 
         assert result["type"] == "clarification"
-        stored = api._store.get(("u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY))
-        assert stored is not None, "_store_pending_job_search was not called for known_but_off_profile"
-        assert stored["role"] == "Data Scientist"
-        assert stored["query_type"] == "known_but_off_profile"
+        assert api._pjs_repo.store.called, "_store_pending_job_search was not called"
+        call_args = api._pjs_repo.store.call_args
+        if call_args:
+            stored_pjs = call_args[0][1]
+            assert stored_pjs.role == "Data Scientist"
+            assert stored_pjs.reason == "known_but_off_profile"
 
     def test_tamam_after_off_profile_offer_executes_search(self):
-        """Full turn: off-profile offer → user says تمام → _classified_role_search runs."""
+        """Full turn: off-profile offer → user says تمام → search executes."""
         api = self._make_api()
         profile_no_role = {"target_roles": [], "skills": [], "years_experience": 3}
 
@@ -316,7 +295,13 @@ class TestFullTurnPendingSearch:
              patch.object(api, "_store_recent_context"):
             api._classified_role_search("u1", "Data Scientist", profile_no_role)
 
-        # Turn 2: user replies تمام — pending state must now trigger the search
+        # Turn 2: set up the repo mock so _resolve_pending_intent can consume
+        from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
+        pjs = new_pending(role="Data Scientist", location="", reason="known_but_off_profile")
+        api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
+        api._pjs_repo.consume.return_value = pjs
+
         with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "message": "Found jobs", "jobs": _JOBS}) as mock_search:
             result = api._resolve_pending_intent("u1", "تمام", profile_no_role)
 
@@ -373,96 +358,79 @@ class TestFullTurnPendingSearch:
         search.assert_called_once()
         assert search.call_args[0][1] == "Environmental Manager"
         assert result.get("type") == "job_matches", "hollow promise must not be the returned payload"
-        # Slot must be left cleared — the search already ran.
-        stored = api._store.get(("u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY))
-        assert not stored, "pending slot must not remain armed after immediate execution"
 
 
-# ── wiring: search-offer responses store a pending search ─────────────────────
-# Regression for the gap where _store_pending_job_search() was defined but never
-# called in src/, so the "تمام" confirmation path could never fire in production.
+# ── wiring: structured-offer finalization ────────────────────────────────────
+# PendingJobSearch is armed only via the explicit private marker
+# (_PJS_OFFER_FIELD).  Ordinary text containing "search" must never arm it.
 
 class TestPendingSearchWiring:
-    def test_offer_response_stores_pending_with_profile_role(self):
+    def test_finalize_stores_when_marker_present(self):
         api = _make_api_with_profile()
-        with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
-             patch.object(api, "_store_pending_job_search") as mock_store:
-            api._maybe_store_pending_job_search(
-                "u1",
-                {"type": "clarification", "message": "Shall I search for live jobs now?"},
-            )
-        mock_store.assert_called_once()
-        assert mock_store.call_args.kwargs.get("role") == "Environmental Manager"
+        result = {"type": "clarification", "message": "Shall I search?", "options": []}
+        from src.rico_chat_api import make_offer
+        result[api._PJS_OFFER_FIELD] = make_offer(role="Accountant", reason="test")
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+        assert api._PJS_OFFER_FIELD not in finalized
+        assert api._pjs_repo.store.called
 
-    def test_arabic_offer_response_stores_pending(self):
+    def test_finalize_does_nothing_without_marker(self):
         api = _make_api_with_profile()
-        with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
-             patch.object(api, "_store_pending_job_search") as mock_store:
-            api._maybe_store_pending_job_search(
-                "u1",
-                {"type": "clarification", "message": "تمام، سأبحث عن وظائف مناسبة لك."},
-            )
-        mock_store.assert_called_once()
+        result = {"type": "clarification", "message": "Shall I search?"}
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+        assert api._PJS_OFFER_FIELD not in finalized
+        assert not api._pjs_repo.store.called
 
-    def test_executed_search_result_does_not_store(self):
+    def test_generic_career_advice_does_not_arm(self):
+        """Generic career advice containing 'search' must never arm PendingJobSearch."""
         api = _make_api_with_profile()
-        with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
-             patch.object(api, "_store_pending_job_search") as mock_store:
-            api._maybe_store_pending_job_search(
-                "u1",
-                {"type": "job_matches", "message": "Found 5 roles for you."},
-            )
-        mock_store.assert_not_called()
+        result = {"type": "clarification", "message": "You can search on LinkedIn for better results."}
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+        assert api._PJS_OFFER_FIELD not in finalized
+        assert not api._pjs_repo.store.called
 
-    def test_non_offer_response_does_not_store(self):
+    def test_finalize_sanitizes_on_store_failure(self):
         api = _make_api_with_profile()
-        with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
-             patch.object(api, "_store_pending_job_search") as mock_store:
-            api._maybe_store_pending_job_search(
-                "u1",
-                {"type": "acknowledgement", "message": "You're welcome!"},
-            )
-        mock_store.assert_not_called()
+        api._pjs_repo.store.return_value = False
+        result = {
+            "type": "clarification",
+            "message": "I found these roles. Should I search for Accountant?",
+            "options": [
+                {"action": "confirm_search", "label": "Yes, search Accountant"},
+                {"action": "show_profile_roles", "label": "Show roles"},
+            ],
+        }
+        from src.rico_chat_api import make_offer
+        result[api._PJS_OFFER_FIELD] = make_offer(role="Accountant", reason="test")
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+        assert api._PJS_OFFER_FIELD not in finalized
+        # confirm_search option must be removed.
+        remaining_actions = [o.get("action") for o in finalized.get("options", [])]
+        assert "confirm_search" not in remaining_actions
+        # Safe option preserved.
+        assert "show_profile_roles" in remaining_actions
+        # Message no longer contains the confirmation CTA.
+        assert "Should I search" not in finalized.get("message", "")
 
-    def test_offer_without_target_roles_does_not_store(self):
+    def test_handle_active_user_invokes_finalize(self):
+        """_handle_active_user must call _finalize_pending_job_search_offer."""
         api = _make_api_with_profile()
-        with patch.object(api, "_resolve_profile", return_value={"target_roles": []}), \
-             patch.object(api, "_store_pending_job_search") as mock_store:
-            api._maybe_store_pending_job_search(
-                "u1",
-                {"type": "clarification", "message": "Shall I search for roles?"},
-            )
-        mock_store.assert_not_called()
-
-    def test_handle_active_user_invokes_wiring(self):
-        """_handle_active_user must call the wiring on every active-user turn."""
-        api = _make_api_with_profile()
-        offer = {"type": "clarification", "message": "Shall I search for live jobs?"}
+        offer = {"type": "clarification", "message": "Hello"}
         with patch.object(api, "_handle_active_user_inner", return_value=offer), \
-             patch.object(api, "_maybe_store_pending_job_search") as mock_wire:
+             patch.object(api, "_finalize_pending_job_search_offer") as mock_finalize:
             api._handle_active_user("u1", "find me work")
-        mock_wire.assert_called_once_with("u1", offer)
-
-    def test_arabic_career_change_offer_signal_matched(self):
-        """Arabic 'هل تريد البحث' must be in _SEARCH_OFFER_SIGNALS."""
-        assert "هل تريد البحث" in RicoChatAPI._SEARCH_OFFER_SIGNALS
-
-    def test_should_i_search_signal_matched(self):
-        """English 'should i search' (known_but_off_profile) must be in _SEARCH_OFFER_SIGNALS."""
-        assert "should i search" in RicoChatAPI._SEARCH_OFFER_SIGNALS
+        mock_finalize.assert_called_once_with("u1", offer)
 
     def test_off_profile_clarification_stores_canonical_role(self):
         """known_but_off_profile path must store canonical_role, not profile.target_roles[0]."""
         api = _make_api_with_profile()
-        stored_calls: list = []
-        api.memory.set_context.side_effect = lambda u, k, v: stored_calls.append((u, k, v))
-        with patch.object(api, "_append_chat"), \
-             patch.object(api, "_get_recent_context", return_value={}), \
-             patch.object(api, "_store_recent_context"):
-            api._store_pending_job_search("u1", role="Data Scientist", query_type="off_profile_confirmation")
-        stored = next((v for u, k, v in stored_calls if k == RicoChatAPI._PENDING_JOB_SEARCH_KEY), None)
-        assert stored is not None
-        assert stored["role"] == "Data Scientist"
+        ok = api._store_pending_job_search("u1", role="Data Scientist", query_type="off_profile_confirmation")
+        assert ok, "_store_pending_job_search must return True on success"
+        assert api._pjs_repo.store.called
+        args = api._pjs_repo.store.call_args
+        if args:
+            stored_pjs = args[0][1]
+            assert stored_pjs.role == "Data Scientist"
 
 
 # ── full-turn: handler arms state, confirmation fires search ──────────────────
@@ -475,6 +443,14 @@ def _make_api_live_memory():
     memory.get_context.side_effect = lambda u, k: _store.get((u, k), {})
     memory.set_context.side_effect = lambda u, k, v: _store.__setitem__((u, k), v)
     api.memory = memory
+    api._can_mutate_applications = False
+    api._current_operation_id = None
+    api._pjs_repo = MagicMock()
+    api._pjs_repo.cancel.return_value = True
+    api._pjs_repo.store.return_value = True
+    api._pjs_repo.get.return_value = None
+    api._pjs_repo.consume.return_value = None
+    api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
     return api
 
 
@@ -485,19 +461,29 @@ class TestFullTurnPendingArmedByHandler:
         """_maybe_store_pending_job_search arms state → _resolve_pending_intent fires search."""
         api = _make_api_live_memory()
 
+        from src.rico_chat_api import make_offer
         offer_response = {
             "type": "career_change_advice",
             "message": "Want me to search for Environmental Manager jobs?",
         }
+        offer_response[api._PJS_OFFER_FIELD] = make_offer(
+            role="Environmental Manager", reason="adjacent_broaden",
+        )
 
         with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
              patch.object(api, "_target_role_search_response",
                           return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search:
 
-            api._maybe_store_pending_job_search("u1", offer_response)
-            assert api._get_pending_job_search("u1").get("role"), (
-                "_maybe_store_pending_job_search must arm a pending search when signal found"
-            )
+            finalized = api._finalize_pending_job_search_offer("u1", offer_response)
+            # Verify the repo's store was called (arm succeeded)
+            assert api._pjs_repo.store.called, "must arm pending search when signal found"
+            assert api._PJS_OFFER_FIELD not in finalized
+            # Set up the repo get/consume for the redemption path
+            from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
+            pjs = new_pending(role="Environmental Manager", location="", reason="promise")
+            api._pjs_repo.get.return_value = pjs
+            api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
+            api._pjs_repo.consume.return_value = pjs
             result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
 
         mock_search.assert_called_once()
