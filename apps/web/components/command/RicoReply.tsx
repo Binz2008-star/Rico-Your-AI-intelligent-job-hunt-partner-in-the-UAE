@@ -28,13 +28,29 @@
 
 import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { useWorkspaceTheme } from "@/components/workspace/theme";
+import { cn } from "@/lib/utils";
 import { Check, Copy, RotateCcw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { RicoReplyMarkdown } from "./RicoReplyMarkdown";
 import { useThinkingStages } from "./thinkingStages";
 
-export function RicoReply({ text, streaming = false, canRegenerate = false, onRegenerate, isAr = false }:
-  { text: string; streaming?: boolean; canRegenerate?: boolean; onRegenerate?: () => void; isAr?: boolean }) {
+export function RicoReply({
+  text,
+  streaming = false,
+  canRegenerate = false,
+  onRegenerate,
+  isAr = false,
+  hideEyebrow = false,
+  className,
+}: {
+  text: string;
+  streaming?: boolean;
+  canRegenerate?: boolean;
+  onRegenerate?: () => void;
+  isAr?: boolean;
+  hideEyebrow?: boolean;
+  className?: string;
+}) {
   const [copied, setCopied] = useState(false);
   const copy = useCallback(() => { void navigator.clipboard?.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); }, [text]);
   if (!text) return null; // empty pending → nothing (RicoThinking handles the shimmer)
@@ -43,8 +59,17 @@ export function RicoReply({ text, streaming = false, canRegenerate = false, onRe
   // `animate-fade-up` here used to compound with it (message settle ~400ms
   // vs. the ~150-220ms this is meant to feel like) — one animation, not two.
   return (
-    <div className="relative ps-3.5" aria-live="polite" aria-busy={streaming || undefined}>
+    <div className={cn("group/rico relative ps-3.5", className)} aria-live="polite" aria-busy={streaming || undefined}>
       <span aria-hidden className="absolute inset-y-1 start-0 w-px animate-rail-draw motion-reduce:animate-none bg-gradient-to-b from-ink/50 via-ink/20 to-transparent" />
+      {!hideEyebrow && (
+        <span
+          aria-hidden
+          className="mb-1.5 block text-[10px] uppercase tracking-[0.22em] text-ink-mute/80"
+          style={{ fontFamily: ATELIER_FONT.mono }}
+        >
+          {isAr ? "ريكو" : "Rico"}
+        </span>
+      )}
       {/* Structured answer: the same reply string rendered as safe markdown —
           headings, lists, links, code, blockquotes, hierarchy — at a controlled
           reading width. Markdown renders during streaming too (not a plain→
@@ -55,7 +80,7 @@ export function RicoReply({ text, streaming = false, canRegenerate = false, onRe
         {streaming && <span data-testid="transcript-streaming-caret" aria-hidden className="animate-caret motion-reduce:animate-none ms-0.5 inline-block h-[1em] w-[0.55ch] translate-y-[0.15em] bg-ink align-baseline" />}
       </div>
       {!streaming && (
-        <div className="mt-3 flex gap-1.5 animate-fade-up motion-reduce:animate-none">
+        <div className="mt-3 flex gap-1.5 animate-fade-up motion-reduce:animate-none opacity-60 transition-opacity duration-150 focus-within:opacity-100 group-hover/rico:opacity-100">
           <button type="button" onClick={copy} className="inline-flex h-7 items-center gap-1 rounded-sm border border-transparent px-2 text-[11px] uppercase tracking-[0.14em] text-ink-mute transition-colors hover:border-rule hover:text-ink focus-visible:border-rule focus-visible:text-ink focus-visible:outline-none">
             {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{copied ? (isAr ? "نُسخ" : "Copied") : (isAr ? "نسخ" : "Copy")}
           </button>
@@ -77,7 +102,7 @@ export function RicoUserBubble({ text }: { text: string }) {
     <div className="flex justify-end">
       <div
         dir="auto"
-        className="max-w-[74%] rounded-[14px] bg-ink px-[18px] py-[10px] text-[14px] leading-[1.55] text-paper"
+        className="max-w-[74%] whitespace-pre-wrap rounded-sm border border-ink bg-ink px-[18px] py-[10px] text-[14px] leading-[1.55] text-paper"
         style={{
           fontFamily: ATELIER_FONT.body,
           fontWeight: 450,
