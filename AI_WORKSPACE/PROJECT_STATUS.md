@@ -23,13 +23,13 @@
 
 A green deployment badge is not a product smoke. A rehearsal is not production-repair authorization. A merged SQL package is not permission to execute it.
 
-## Current reconciliation — 2026-07-30
+## Current reconciliation — 2026-07-31
 
 ### Verified repository state
 
 | Item | Verified state |
 | --- | --- |
-| `main` | `16e99a67330495d993a32a8d3f29838fc47b51d0` |
+| `main` | `1d00d46f40e187ce6c83d80ada3b7f94b4efefef` |
 | `#1432` | **MERGED** as `3fa214a2b6631d2f73d0980f7700983550dce717`; authenticated gratitude smoke still pending |
 | `#1435` | **MERGED** as `9f731f19f5c46d454525690fc44b2ec319a4f2d1`; records endpoint evidence and the `#1389` ruling |
 | `#1436` | **MERGED** as `a292f99bf4a6a80745f4b5e29151684f37530cfc`; final D1 operating package, no production execution authorization |
@@ -38,11 +38,12 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 | `#1443` | **MERGED** as `cbcb4206b7b13a6de2fbbe84e42d610addc054e2` from head `542b66a6b7c65467b92385792ee0abe0201bf3d9`; read-only Delivery Smoke residual audit package |
 | `#1457` | **MERGED** as `dcc949af3e6300482be78146222d8d03fb6b092e` from head `acb33fe8b173cc05145acdbf760ae21fb907bee9`; bounded cache foundation, no production cache swapped |
 | `#1461` | **MERGED** as `ccde2c483c76b782214f3bb117c4c07310121c4d`; gate write-capable DB init behind `RICO_RUN_STARTUP_MIGRATIONS` |
-| `#1460` | **MERGED** as `ab5e60f6a774d4843889c34e18f11853da51c4f8` from head `9b8bcd0aeb0b22d4258bb9f62933ee412d49f4e7`; Atelier `/about` public island, verified by production smoke |
+| `#1472` | **MERGED** as `1d00d46f40e187ce6c83d80ada3b7f94b4efefef` (squash); typed `PendingJobSearch` contract with atomic DB-backed consume; post-merge production smoke **pending** |
 | `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
-| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1455** (frontend /applications board DnD, open) |
-| Open audit / governance / documentation PRs | **#1465** (AI subsystem audit, draft) · **#1452** (product accountability scorecard, draft) · **#1449** (version-control governance, draft) · **#1447** (consolidated product PRD, open) |
-| Open operational cleanup PRs | **#1454** (delivery smoke residual cleanup; no production deletion authorized) |
+| Closed without merge | `#1467` (superseded by #1468, #1469, #1470, #1472); `#1473` (stale career-profile contract); `#1465` (stale AI audit); `#1455` (empty template); `#1454` (stale smoke-residual cleanup); `#1452` (stacked on closed #1449); `#1449` (stale governance); `#1447` (empty PRD body) |
+| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1474** (RicoReply hardening, draft; next candidate after sync with main and fresh CI) · **#1471** (GuardrailWarnings, draft; needs rebase, fresh CI, and light/dark + EN/AR screenshots) |
+| Open audit / governance / documentation PRs | (none pending merge; stale branches closed on 2026-07-31) |
+| Open operational cleanup PRs | (none pending merge; a fresh fingerprint, backup, and dry-run are required before any future smoke-residual cleanup PR) |
 
 ## Production verification boundary
 
@@ -140,10 +141,10 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | Measure | State |
 | --- | --- |
 | Active implementation writers | **0** |
-| Active documentation writers | **1 — this micro-reconciliation branch only; lease ends on merge/close** |
-| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1455** (frontend /applications board DnD, open) |
-| Open audit / governance / documentation PRs | **#1465** (AI subsystem audit, draft) · **#1452** (product accountability scorecard, draft) · **#1449** (version-control governance, draft) · **#1447** (consolidated product PRD, open) |
-| Open operational cleanup PRs | **#1454** (delivery smoke residual cleanup; no production deletion authorized) |
+| Active documentation writers | **1 — docs/reconcile-project-status-20260731 branch; lease ends on merge/close** |
+| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1474** (RicoReply hardening, draft; next candidate) · **#1471** (GuardrailWarnings, draft) |
+| Open audit / governance / documentation PRs | (none; stale branches closed) |
+| Open operational cleanup PRs | (none; new PR requires fresh fingerprint/backup/dry-run) |
 | Multi-user reliability PR 1 / PR 2 | **merged through #1437 / #1438** |
 | D1 mapping/rehearsal | **complete** |
 | D1 final operating package | **merged** |
@@ -151,7 +152,8 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | `#1432` endpoint verification | **complete** |
 | `#1432` authenticated behavior smoke | **pending** |
 | `#1443` Delivery Smoke residual audit | **complete** |
-| `#1443` cleanup package preparation | **in progress; production deletion not authorized** |
+| `#1443` cleanup package preparation | **not authorized; no open cleanup PR** |
+| `#1472` PendingJobSearch post-merge smoke | **pending** |
 | CV smoke overall | **FAIL** |
 | `#355` | **deferred** |
 | `#1389` | **closed without merge; historical only** |
