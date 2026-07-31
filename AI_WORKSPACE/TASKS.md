@@ -8938,20 +8938,26 @@ confirmation. No generic dialog framework, no unrelated pending flows.
   `_get_pending_job_search` (uses typed lookup), `_clear_pending_job_search`;
   new `_redeem_pending_job_search()` single entry point with turn-scoped cache
   (`_PJS_SENTINEL`); four redemption sites updated to share the entry point.
-- Independent-review correctives (2026-07-31 continuation):
+- Independent-review correctives (2026-07-31, final blocker resolution):
   - `_pjs_error_response`: removed `user_id` from language detection
-  - `_maybe_store_pending_job_search`: on store failure, strips CTA from message
-  - `adjacent_broaden`: on store failure, strips broaden question from message
-  - `ambiguous-promise`: on store failure, replaces hollow reply with fallback
-  - `known_but_off_profile`: on store failure, removes confirm_search options,
-    adds Arabic variant, preserves safe non-confirmation options
-  - `_provider_degraded_response`: verified no false confirmation promise
+  - `_maybe_store_pending_job_search` (text-signal arming) REMOVED; replaced by
+    `_finalize_pending_job_search_offer`, the SINGLE storage owner.  Only an
+    explicit private marker (`_PJS_OFFER_FIELD`) arms PendingJobSearch.
+  - `adjacent_broaden`: pre-store removed; sets marker only, finalizer stores
+    exactly once and sanitizes on failure
+  - `ambiguous_promise`: pre-store removed; sets marker, finalizer stores once
+    and replaces hollow promise before persistence
+  - `known_but_off_profile`: sets marker, finalizer stores once; Arabic variant
+    added; confirm_search options removed on failure
+  - `_provider_degraded_response`: sets marker, finalizer stores once; persists
+    the FINALIZED message (never the pre-finalization value)
   - `_get_pending_job_search`: uses `PendingSearchLookup` with `LookupStatus`
-    (FOUND/NONE/UNAVAILABLE/MALFORMED/EXPIRED) — never conflates UNAVAILABLE
-    with NONE
-  - Structured offer marker `_pending_job_search_offer` set/cleaned by every
-    caller; safety strip at `_handle_active_user` return point ensures marker
-    never reaches API client, persisted history, logs, or model context
+    (FOUND/NONE/UNAVAILABLE/MALFORMED/EXPIRED); `lookup()` returns NONE for
+    user-not-found and UNAVAILABLE only for a real DB exception
+  - `_redeem_pending_job_search` typed contract: CONFIRM/CANCEL/NEW_REQUEST/
+    CHANGE behavior per status; CANCEL and NEW_REQUEST invalidation are
+    token-qualified via `consume(user_id, token)` or the new
+    `repo.discard_token(user_id, token)` (also removes expired entries)
   - `lookup()` method on `PendingJobSearchRepo` returns typed outcome
 - `tests/test_pending_job_search_contract.py` — updated mock `_make_api` with
   `lookup.return_value`; 99 hermetic tests pass
@@ -8991,12 +8997,24 @@ value is unverified.
 - [x] Exactly one operation ownership claim
 - [x] Real Postgres concurrency test proving one winner
 - [x] Typed lookup outcomes: FOUND/NONE/UNAVAILABLE/MALFORMED/EXPIRED
+- [x] `lookup()` returns NONE for user-not-found; UNAVAILABLE only for DB exception
 - [x] Structured offer marker never reaches API client or persisted history
-- [x] Store-failure CTA sanitation: _maybe_store_pending_job_search,
-      adjacent_broaden, ambiguous-promise, known_but_off_profile, provider_degraded
+- [x] Single store owner: `_finalize_pending_job_search_offer` is the only
+      `_store_pending_job_search` caller; one store per offer (asserted)
+- [x] Token-qualified CANCEL / NEW_REQUEST invalidation (no unqualified cancel
+      after FOUND lookup; `discard_token` cleans expired entries)
+- [x] NEW_REQUEST requires successful invalidation before routing
+- [x] Finalized response persisted (API message == persisted message)
+- [x] Precedence preserved: mark_applied / application-status / OK
+      acknowledgement are never hijacked by PJS
+- [x] Store-failure CTA sanitation: adjacent_broaden, ambiguous_promise,
+      known_but_off_profile, provider_degraded, profile-based finalization
 - [x] Language derived from message context only (not user_id)
-- [x] 99 PJS contract tests pass
-- [x] 1243 related tests pass (3 pre-existing TestRetryLastSearch failures unrelated)
+- [x] 248 focused PendingJobSearch / routing / action-contract / gratitude /
+      convergence tests pass
+- [x] 3 prior CI regressions (mark-applied confirmation x2, OK acknowledgement)
+      pass under the typed-status matrix
+- [x] Full backend CI suite green at exact head (pytest 6129+ passed)
 
 #### Rollback
 
