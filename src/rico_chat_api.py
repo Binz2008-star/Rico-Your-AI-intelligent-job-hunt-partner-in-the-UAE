@@ -7009,6 +7009,15 @@ class RicoChatAPI:
         reaching the confirmation flow or the CV-analysis handler (the transcript
         نعم→search misfire, and #1360's documented known gap).
 
+        This is the canonical precedence owner for the PendingJobSearch
+        redemption sites.  It answers: "does a more specific pending action own
+        this confirmation turn?"  Armed confirmations that own a bare
+        yes/نعم/تمام — profile update, active-CV switch, and mark-applied /
+        application-status (`_pending_confirm_apply` /
+        `_pending_confirm_apply_options`) — all block PendingJobSearch so the
+        user's confirmation applies to the higher-specificity action and the
+        PJS token is neither consumed, cleared, nor executed.
+
         Deliberately narrow on BOTH axes: it blocks only for a pending field that
         actually owns a yes/no confirmation (the allowlist above — never a bare
         "any pending field exists" check) or for an explicit higher-specificity
@@ -7023,6 +7032,25 @@ class RicoChatAPI:
             ctx = self._get_recent_context(user_id) or {}
             pending_field = ctx.get("_pending_field") or ""
             if pending_field in self._SEARCH_OUTRANKING_PENDING_FIELDS:
+                return True
+            # A pending mark-applied / application-status confirmation owns a
+            # bare affirmative exactly like the allowlisted mutation
+            # confirmations.  It is resolved later in the
+            # follow_up_confirmation branch; blocking PendingJobSearch here
+            # lets that higher-specificity confirmation win instead of a stale
+            # search consuming the turn and executing (double-armed precedence
+            # defect).  Only complete confirmations block — a partial flag that
+            # the confirmation handler itself cannot resolve must never dead-end
+            # a valid search.
+            _apply = ctx.get("_pending_confirm_apply") or {}
+            if (
+                isinstance(_apply, dict)
+                and _apply.get("title")
+                and _apply.get("company")
+            ):
+                return True
+            _apply_opts = ctx.get("_pending_confirm_apply_options") or []
+            if isinstance(_apply_opts, list) and _apply_opts:
                 return True
         except Exception:
             pass

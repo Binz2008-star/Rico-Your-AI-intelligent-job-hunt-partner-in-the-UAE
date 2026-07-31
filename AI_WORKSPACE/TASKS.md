@@ -9013,19 +9013,19 @@ value is unverified.
       known_but_off_profile (EN + AR), provider_degraded, profile-based
       finalization
 - [x] Language derived from message context only (not user_id)
-- [x] Precedence — verified for the tested flows: mark_applied /
-      application-status / OK acknowledgement pass when no real PJS exists
-      (CONFIRM + NONE/UNAVAILABLE falls through).  **OPEN DEFECT (not fixed,
-      reported):** with a real FOUND PendingJobSearch AND an armed
-      `_pending_confirm_apply` simultaneously, a bare "yes" reaches
-      `_resolve_pending_intent` → `_redeem_pending_job_search`
-      (CONFIRM + FOUND → consume + execute) at `_handle_active_user_inner`
-      before the `follow_up_confirmation` branch that owns `_pending_confirm_apply`
-      (line ~12048).  `_pending_confirm_apply` is not in
-      `_SEARCH_OUTRANKING_PENDING_FIELDS`, so the search pre-empts the apply
-      confirmation.  Characterization test failed with `search_error` after
-      consume — see the session report.  Precedence fix is out of scope for
-      this branch and NOT implemented.
+- [x] Precedence — FIXED (2026-07-31): the canonical guard
+      `_pending_search_redemption_blocked` is the single precedence owner for
+      every PJS redemption site.  It now blocks PendingJobSearch for an armed
+      mark-applied / application-status confirmation
+      (`_pending_confirm_apply` with title+company, or non-empty
+      `_pending_confirm_apply_options`), in addition to the allowlisted profile
+      update (`confirm_profile_update`) and active-CV switch
+      (`confirm_set_active_cv`) and gratitude / CV-analysis.  Reproduced on
+      base main `70569526` (defect already existed: PJS cleared + search
+      executed, pre-empting the mark-applied confirmation) and at head; both
+      now resolve the higher-specificity confirmation with zero PJS
+      lookup/consume/execution.  Regression ownership: pre-existing defect on
+      base, same defect carried by PR #1472, closed here.
 - [x] Focused PendingJobSearch and routing suites pass (exact counts not
       asserted here to avoid brittleness; recorded in the PR body with the
       exact command)

@@ -158,3 +158,60 @@ def test_atomic_consume_one_winner():
                 assert _PJS_KEY not in settings, "_pjs must be removed after consume"
     finally:
         conn2.close()
+
+
+def test_higher_priority_confirmation_leaves_exact_token_untouched():
+    """When a more specific pending confirmation owns the turn, the canonical
+    guard blocks PendingJobSearch redemption BEFORE any storage read, so the
+    exact token row stays intact (real Postgres)."""
+    from unittest.mock import MagicMock, patch
+    from src.rico_db import RicoDB
+    from src.rico_chat_api import RicoChatAPI
+
+    db = RicoDB(database_url=TEST_DATABASE_URL)
+    token = getattr(_cleanup, "_token", None)
+    assert token is not None, "Pending job search must have a token"
+
+    api = RicoChatAPI.__new__(RicoChatAPI)
+    api._pjs_repo = PendingJobSearchRepo(db)
+    api._current_operation_id = None
+    api._persist = False
+    api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
+
+    # Armed higher-specificity mark-applied confirmation.
+    with patch.object(api, "_get_recent_context", return_value={
+        "_pending_confirm_apply": {
+            "title": "Environmental Manager - Railway Construction Project",
+            "company": "Confidential Jobs",
+        }
+    }):
+        blocked = api._pending_search_redemption_blocked(_USER, "yes")
+    assert blocked is True, "armed mark-applied confirmation must block PJS"
+
+    # Drive redemption as the blocked turn would; token must be untouched.
+    result = api._redeem_pending_job_search(_USER, "yes", profile={}, blocked=True)
+    assert result is None
+
+    conn = _raw()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM rico_users WHERE email = %s", (_USER,),
+                )
+                row = cur.fetchone()
+                db_user_id = str(row["id"] if isinstance(row, dict) else row[0])
+                cur.execute(
+                    "SELECT settings FROM rico_agent_settings WHERE user_id = %s",
+                    (db_user_id,),
+                )
+                srow = cur.fetchone()
+        settings = srow["settings"] if isinstance(srow, dict) else srow[0]
+        assert settings and isinstance(settings, dict)
+        raw = settings.get(_PJS_KEY)
+        assert raw is not None, "_pjs must remain after a blocked turn"
+        from src.services.pending_job_search import PendingJobSearch
+        pjs = PendingJobSearch.from_dict(raw)
+        assert pjs.token == token, "exact token must remain unchanged"
+    finally:
+        conn.close()

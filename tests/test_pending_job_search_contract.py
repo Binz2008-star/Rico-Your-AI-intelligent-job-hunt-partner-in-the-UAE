@@ -1321,3 +1321,241 @@ class TestArabicStoreFailureSanitization:
         finalized = api._finalize_pending_job_search_offer("u1", result)
         assert not api._pjs_repo.store.called
         assert "يمكنك البحث عن وظائف" in finalized.get("message", "")
+
+
+# ── Canonical precedence: higher-specificity pending actions outrank PJS ──────
+# A more specific armed mutation confirmation owns a bare yes/نعم/تمام turn.
+# PendingJobSearch must NOT consume its token, execute, or write history when
+# such a confirmation is armed.
+
+def _make_precedence_api() -> tuple[Any, Any, Any]:
+    """A RicoChatAPI with a real FOUND PJS repo mock plus recording mocks.
+
+    Returns (api, repo, appended) where appended collects every message passed
+    to _append_chat.
+    """
+    from src.rico_chat_api import _application_status_visible, _no_saved_jobs_visible, RicoChatAPI
+    from src.services.pending_job_search import (
+        PendingSearchLookup, LookupStatus, new_pending,
+    )
+
+    api = RicoChatAPI.__new__(RicoChatAPI)
+    api._persist = False
+    api._current_operation_id = None
+    mock_memory = MagicMock()
+    mock_memory.get_chat_messages.return_value = []
+    api.memory = mock_memory
+    api._application_status_visible = _application_status_visible
+    api._no_saved_jobs_visible = _no_saved_jobs_visible
+    api.system = MagicMock()
+    api.system.run_for_profile.side_effect = AssertionError("job search must not run")
+
+    pjs = new_pending(role="Accountant", location="Dubai", reason="known_but_off_profile")
+    repo = MagicMock()
+    repo.store.return_value = True
+    repo.cancel.return_value = True
+    repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
+    repo.consume.return_value = pjs
+    api._pjs_repo = repo
+    api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
+
+    appended: list = []
+    return api, repo, appended
+
+
+def _simple_profile() -> MagicMock:
+    profile = MagicMock()
+    profile.has_cv = True
+    profile.target_roles = ["Accountant"]
+    profile.skills = []
+    profile.name = "Test User"
+    profile.email = "test@rico.ai"
+    return profile
+
+
+def _apply_intent() -> "Any":
+    from src.agent.intelligence.intent_classifier import IntentResult
+    return IntentResult(intent="follow_up_confirmation", confidence=1.0, source="exact")
+
+
+class TestPrecedenceContract:
+    def test_found_pjs_with_confirm_apply_yes_wins_application(self):
+        """FOUND PJS + armed _pending_confirm_apply + 'yes' → mark-applied wins,
+        no PJS consume, no search execution, token untouched."""
+        api, repo, appended = _make_precedence_api()
+        intent = _apply_intent()
+        profile = _simple_profile()
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch.object(api, "_resolve_profile", return_value=profile), \
+             patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)), \
+             patch.object(api, "_get_openai_agent", return_value=MagicMock()), \
+             patch.object(api, "_get_recent_context", return_value={
+                 "_pending_confirm_apply": {
+                     "title": "Environmental Manager - Railway Construction Project",
+                     "company": "Confidential Jobs",
+                 }
+             }), \
+             patch.object(api, "_store_recent_context"), \
+             patch("src.rico_chat_api.classify_intent", return_value=intent), \
+             patch("src.repositories.applications_repo.create_manual", return_value=True):
+            result = api.process_message("test@rico.ai", "yes")
+
+        assert result.get("type") == "mark_applied"
+        assert repo.consume.call_count == 0, "PJS token must not be consumed"
+        assert repo.lookup.call_count == 0, "no PJS lookup when guard blocks first"
+        api.system.run_for_profile.assert_not_called()  # no search execution
+
+    def test_found_pjs_with_confirm_apply_nnam_wins_application(self):
+        """Arabic 'نعم' with FOUND PJS + armed _pending_confirm_apply → the
+        application confirmation wins, no PJS consume."""
+        api, repo, appended = _make_precedence_api()
+        intent = _apply_intent()
+        profile = _simple_profile()
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch.object(api, "_resolve_profile", return_value=profile), \
+             patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)), \
+             patch.object(api, "_get_openai_agent", return_value=MagicMock()), \
+             patch.object(api, "_get_recent_context", return_value={
+                 "_pending_confirm_apply": {
+                     "title": "Environmental Manager - Railway Construction Project",
+                     "company": "Confidential Jobs",
+                 }
+             }), \
+             patch.object(api, "_store_recent_context"), \
+             patch("src.rico_chat_api.classify_intent", return_value=intent), \
+             patch("src.repositories.applications_repo.create_manual", return_value=True):
+            result = api.process_message("test@rico.ai", "نعم")
+
+        assert result.get("type") == "mark_applied"
+        assert repo.consume.call_count == 0
+        assert repo.lookup.call_count == 0
+
+    def test_found_pjs_with_confirm_apply_write_failure_keeps_application_status(self):
+        """FOUND PJS + armed _pending_confirm_apply + failed manual write → the
+        application-status update outcome wins; PJS is untouched."""
+        api, repo, appended = _make_precedence_api()
+        intent = _apply_intent()
+        profile = _simple_profile()
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch.object(api, "_resolve_profile", return_value=profile), \
+             patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)), \
+             patch.object(api, "_get_openai_agent", return_value=MagicMock()), \
+             patch.object(api, "_get_recent_context", return_value={
+                 "_pending_confirm_apply": {
+                     "title": "Environmental Manager - Railway Construction Project",
+                     "company": "Confidential Jobs",
+                 }
+             }), \
+             patch.object(api, "_store_recent_context"), \
+             patch("src.rico_chat_api.classify_intent", return_value=intent), \
+             patch("src.repositories.applications_repo.create_manual", return_value=False):
+            result = api.process_message("test@rico.ai", "yes")
+
+        assert result.get("type") == "application_status_update_failed"
+        assert repo.consume.call_count == 0
+        assert repo.lookup.call_count == 0
+
+    def test_found_pjs_with_confirm_profile_update_wins_profile(self):
+        """FOUND PJS + armed profile-update confirmation + 'yes' → profile
+        update wins; PJS is untouched."""
+        api, repo, appended = _make_precedence_api()
+        profile = _simple_profile()
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch.object(api, "_resolve_profile", return_value=profile), \
+             patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)), \
+             patch.object(api, "_get_recent_context", return_value={
+                 "_pending_field": "confirm_profile_update",
+                 "_pending_profile_update": {"target_roles": ["Data Analyst"]},
+             }), \
+             patch.object(api, "_store_recent_context"), \
+             patch("src.rico_chat_api.upsert_profile", return_value=profile), \
+             patch("src.rico_chat_api._route",
+                   return_value=MagicMock(tool_name=None, entities={}, tool_args={},
+                                          confirmation_prompt=None, source="keyword")):
+            result = api._handle_active_user("test@rico.ai", "yes")
+
+        assert result.get("type") == "preferences_updated"
+        assert repo.consume.call_count == 0
+        assert repo.lookup.call_count == 0
+
+    def test_found_pjs_with_confirm_set_active_cv_wins_active_cv(self):
+        """FOUND PJS + armed active-CV confirmation + 'yes' → the active-CV
+        switch wins; PJS is untouched."""
+        api, repo, appended = _make_precedence_api()
+        profile = _simple_profile()
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch.object(api, "_resolve_profile", return_value=profile), \
+             patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)), \
+             patch.object(api, "_get_recent_context", return_value={
+                 "_pending_field": "confirm_set_active_cv",
+                 "_pending_active_cv": {"target_document_id": "doc-1"},
+             }), \
+             patch.object(api, "_store_recent_context"), \
+             patch("src.rico_chat_api._route",
+                   return_value=MagicMock(tool_name=None, entities={}, tool_args={},
+                                          confirmation_prompt=None, source="keyword")):
+            result = api._handle_active_user("test@rico.ai", "yes")
+
+        # Either the active-CV confirmation resolves (type != search_error) or,
+        # if the switch cannot complete without a document store, routing still
+        # continues WITHOUT consuming the PJS.  The invariant under test: no
+        # PJS consume/lookup and no search execution.
+        assert result.get("type") != "search_error"
+        assert repo.consume.call_count == 0
+        assert repo.lookup.call_count == 0
+        api.system.run_for_profile.assert_not_called()
+
+    def test_found_pjs_alone_yes_consumes_and_executes_once(self):
+        """FOUND PJS with NO higher-specificity pending action: 'yes' still
+        consumes and executes exactly once."""
+        api = _make_api(pending={"role": "Accountant", "location": "Dubai"})
+        with patch.object(api, "_target_role_search_response",
+                          return_value={"type": "job_matches", "matches": []}) as search:
+            result = api._redeem_pending_job_search("u1", "yes", profile={})
+        assert result is not None
+        assert result.get("type") == "job_matches"
+        api._pjs_repo.lookup.assert_called_once()
+        api._pjs_repo.consume.assert_called_once()
+        search.assert_called_once()
+
+    def test_repeated_confirmation_same_turn_no_double(self):
+        """Two redemption calls in the same turn share the single-turn cache:
+        exactly one lookup, one consume, one execution."""
+        api = _make_api(pending={"role": "Accountant", "location": "Dubai"})
+        with patch.object(api, "_target_role_search_response",
+                          return_value={"type": "job_matches", "matches": []}) as search:
+            first = api._redeem_pending_job_search("u1", "yes", profile={})
+            second = api._redeem_pending_job_search("u1", "yes", profile={})
+        assert first is not None and second is not None
+        assert first is second, "turn-cached result must be returned for both calls"
+        api._pjs_repo.lookup.assert_called_once()
+        api._pjs_repo.consume.assert_called_once()
+        search.assert_called_once()
+
+    def test_response_equals_persisted_assistant_response(self):
+        """Returned response equals the finalized persisted assistant response:
+        same message, no private marker, no search response written to history."""
+        api, repo, appended = _make_precedence_api()
+        intent = _apply_intent()
+        profile = _simple_profile()
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch.object(api, "_resolve_profile", return_value=profile), \
+             patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)), \
+             patch.object(api, "_get_openai_agent", return_value=MagicMock()), \
+             patch.object(api, "_get_recent_context", return_value={
+                 "_pending_confirm_apply": {
+                     "title": "Environmental Manager - Railway Construction Project",
+                     "company": "Confidential Jobs",
+                 }
+             }), \
+             patch.object(api, "_store_recent_context"), \
+             patch("src.rico_chat_api.classify_intent", return_value=intent), \
+             patch("src.repositories.applications_repo.create_manual", return_value=True):
+            result = api.process_message("test@rico.ai", "yes")
+
+        assert appended, "must persist an assistant reply"
+        # The persisted message is the same as the returned message.
+        assert appended[-1] == result.get("message", "")
+        # No search response was persisted.
+        assert all(("job_matches" not in str(m) and "search" not in str(m).lower()) for m in appended)
+        assert api._PJS_OFFER_FIELD not in result
