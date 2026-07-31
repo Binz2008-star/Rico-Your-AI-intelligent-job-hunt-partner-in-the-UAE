@@ -17,9 +17,9 @@ import {
     CommandTranscriptStep,
     TranscriptWorkingRow,
 } from "@/components/command/CommandTranscriptStep";
-import { render, screen } from "@testing-library/react";
-import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { RicoReply, RicoUserBubble } from "@/components/command/RicoReply";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/contexts/LanguageContext", () => ({
     useLanguage: () => ({ language: "en" }),
@@ -248,5 +248,139 @@ describe("CommandTranscriptStep — skipEntranceAnimation (history replay)", () 
             </CommandTranscriptStep>,
         );
         expect(document.querySelector('[dir="ltr"]')?.className).not.toMatch(/animate-in/);
+    });
+});
+
+/**
+ * RicoReply handoff hardening — post-merge regression coverage.
+ */
+describe("RicoReply — handoff hardening", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+    });
+
+    it("shows Rico in English and hides the eyebrow when hideEyebrow is true", () => {
+        const { rerender } = render(<RicoReply text="Hi" isAr={false} hideEyebrow={false} />);
+        expect(screen.getByText("Rico")).toBeInTheDocument();
+
+        rerender(<RicoReply text="Hi" isAr={false} hideEyebrow={true} />);
+        expect(screen.queryByText("Rico")).not.toBeInTheDocument();
+    });
+
+    it("shows ريكو in Arabic and hides the eyebrow when hideEyebrow is true", () => {
+        const { rerender } = render(<RicoReply text="مرحبا" isAr={true} hideEyebrow={false} />);
+        expect(screen.getByText("ريكو")).toBeInTheDocument();
+
+        rerender(<RicoReply text="مرحبا" isAr={true} hideEyebrow={true} />);
+        expect(screen.queryByText("ريكو")).not.toBeInTheDocument();
+    });
+
+    it("hides the Rico eyebrow on subsequent grouped rico replies", () => {
+        const { rerender } = render(
+            <CommandTranscriptStep authenticated message={{ role: "rico", text: "first" } as never} isFirstInGroup isStructured={false}>
+                first
+            </CommandTranscriptStep>,
+        );
+        expect(screen.getByText("Rico")).toBeInTheDocument();
+
+        rerender(
+            <CommandTranscriptStep authenticated message={{ role: "rico", text: "second" } as never} isFirstInGroup={false} isStructured={false}>
+                second
+            </CommandTranscriptStep>,
+        );
+        expect(screen.queryByText("Rico")).not.toBeInTheDocument();
+        expect(screen.getByTestId("transcript-rico-row")).toHaveTextContent("second");
+    });
+
+    it("shows Copied only after a successful clipboard write, then returns to idle", async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+        render(<RicoReply text="Copy me" />);
+        const button = screen.getByRole("button", { name: "Copy" });
+
+        fireEvent.click(button);
+        await act(() => Promise.resolve());
+
+        expect(screen.getByText("Copied")).toBeInTheDocument();
+        expect(writeText).toHaveBeenCalledWith("Copy me");
+
+        act(() => {
+            vi.advanceTimersByTime(1200);
+        });
+
+        expect(screen.queryByText("Copied")).not.toBeInTheDocument();
+        expect(screen.getByText("Copy")).toBeInTheDocument();
+    });
+
+    it("shows Copy failed when clipboard write is rejected, then returns to idle", async () => {
+        const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+        vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+        render(<RicoReply text="Copy me" />);
+        const button = screen.getByRole("button", { name: "Copy" });
+
+        fireEvent.click(button);
+        await act(() => Promise.resolve());
+
+        expect(screen.getByText("Copy failed")).toBeInTheDocument();
+
+        act(() => {
+            vi.advanceTimersByTime(1200);
+        });
+
+        expect(screen.queryByText("Copy failed")).not.toBeInTheDocument();
+        expect(screen.getByText("Copy")).toBeInTheDocument();
+    });
+
+    it("shows Copy failed when clipboard API is missing", async () => {
+        vi.stubGlobal("navigator", {});
+
+        render(<RicoReply text="Copy me" />);
+        const button = screen.getByRole("button", { name: "Copy" });
+
+        fireEvent.click(button);
+        await act(() => Promise.resolve());
+
+        expect(screen.getByText("Copy failed")).toBeInTheDocument();
+    });
+
+    it("shows Copy failed when writeText is not a function", async () => {
+        vi.stubGlobal("navigator", { clipboard: {} });
+
+        render(<RicoReply text="Copy me" />);
+        const button = screen.getByRole("button", { name: "Copy" });
+
+        fireEvent.click(button);
+        await act(() => Promise.resolve());
+
+        expect(screen.getByText("Copy failed")).toBeInTheDocument();
+    });
+
+    it("retains focus and hover visibility classes for action buttons", () => {
+        const { container } = render(<RicoReply text="Hi" canRegenerate />);
+        const actionRow = container.querySelector(".mt-3");
+        const copyButton = screen.getByRole("button", { name: "Copy" });
+
+        expect(actionRow).toHaveClass("focus-within:opacity-100", "group-hover/rico:opacity-100", "opacity-60");
+        expect(copyButton).toHaveClass("focus-visible:outline-none", "focus-visible:border-rule");
+    });
+});
+
+describe("RicoUserBubble — handoff hardening", () => {
+    it("preserves multiline content and wraps unbroken text", () => {
+        const text = "first line\nsecond line\n" + "a".repeat(300);
+        const { container } = render(<RicoUserBubble text={text} />);
+        const bubble = container.querySelector("[dir='auto']");
+
+        expect(bubble).not.toBeNull();
+        expect(bubble).toHaveClass("whitespace-pre-wrap", "break-words", "min-w-0");
+        expect(bubble).toHaveTextContent("first line");
+        expect(bubble).toHaveTextContent("second line");
     });
 });
