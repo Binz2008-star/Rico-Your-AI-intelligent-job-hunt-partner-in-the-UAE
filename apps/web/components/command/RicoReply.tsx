@@ -30,7 +30,7 @@ import { ATELIER_FONT } from "@/components/atelier-kit/tokens";
 import { useWorkspaceTheme } from "@/components/workspace/theme";
 import { cn } from "@/lib/utils";
 import { Check, Copy, RotateCcw } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RicoReplyMarkdown } from "./RicoReplyMarkdown";
 import { useThinkingStages } from "./thinkingStages";
 
@@ -51,8 +51,42 @@ export function RicoReply({
   hideEyebrow?: boolean;
   className?: string;
 }) {
-  const [copied, setCopied] = useState(false);
-  const copy = useCallback(() => { void navigator.clipboard?.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); }, [text]);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const timeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        window.clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  const scheduleReset = useCallback(() => {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = window.setTimeout(() => setCopyState("idle"), 1200);
+  }, []);
+
+  const copy = useCallback(async () => {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+    }
+    if (!navigator?.clipboard || typeof navigator.clipboard.writeText !== "function") {
+      setCopyState("failed");
+      scheduleReset();
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+    scheduleReset();
+  }, [text, scheduleReset]);
+
   if (!text) return null; // empty pending → nothing (RicoThinking handles the shimmer)
   // No entrance animation of its own: CommandTranscriptStep's row wrapper
   // (`animate-in fade-in`) already handles entrance. A second, independent
@@ -82,7 +116,8 @@ export function RicoReply({
       {!streaming && (
         <div className="mt-3 flex gap-1.5 animate-fade-up motion-reduce:animate-none opacity-60 transition-opacity duration-150 focus-within:opacity-100 group-hover/rico:opacity-100">
           <button type="button" onClick={copy} className="inline-flex h-7 items-center gap-1 rounded-sm border border-transparent px-2 text-[11px] uppercase tracking-[0.14em] text-ink-mute transition-colors hover:border-rule hover:text-ink focus-visible:border-rule focus-visible:text-ink focus-visible:outline-none">
-            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{copied ? (isAr ? "نُسخ" : "Copied") : (isAr ? "نسخ" : "Copy")}
+            {copyState === "copied" ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            {copyState === "copied" ? (isAr ? "نُسخ" : "Copied") : copyState === "failed" ? (isAr ? "تعذر النسخ" : "Copy failed") : (isAr ? "نسخ" : "Copy")}
           </button>
           {canRegenerate && (
             <button type="button" onClick={onRegenerate} className="inline-flex h-7 items-center gap-1 rounded-sm border border-transparent px-2 text-[11px] uppercase tracking-[0.14em] text-ink-mute transition-colors hover:border-rule hover:text-ink focus-visible:border-rule focus-visible:text-ink focus-visible:outline-none">
@@ -102,7 +137,7 @@ export function RicoUserBubble({ text }: { text: string }) {
     <div className="flex justify-end">
       <div
         dir="auto"
-        className="max-w-[74%] whitespace-pre-wrap rounded-sm border border-ink bg-ink px-[18px] py-[10px] text-[14px] leading-[1.55] text-paper"
+        className="max-w-[74%] min-w-0 whitespace-pre-wrap break-words rounded-sm border border-ink bg-ink px-[18px] py-[10px] text-[14px] leading-[1.55] text-paper"
         style={{
           fontFamily: ATELIER_FONT.body,
           fontWeight: 450,
