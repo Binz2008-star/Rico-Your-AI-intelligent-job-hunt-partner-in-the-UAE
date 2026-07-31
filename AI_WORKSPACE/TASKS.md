@@ -756,6 +756,7 @@ Branch: `claude/md-best-practices-generator-auau3b` (final home of the
 CLAUDE.md refactor commit, reconciled onto the pre-existing PR #1346 rather
 than opened as a competing PR)
 Issue/PR: #1346 (tooling+refactor), plus reviewed-and-merged #1347, #1348,
+
 # 1349, #1350 as part of the same session
 
 #### Objective
@@ -9044,3 +9045,67 @@ only the additive `_pjs` key in `rico_agent_settings.settings` JSONB.
 - [ ] `/health` 200
 - [ ] Live authenticated smoke: نعم → exact stored role/location executed
 - [ ] Concurrent double-confirmation test against real production-like Neon
+
+### TASK-20260731-002 — Career Profile — typed read-only contract foundation
+
+Status: in_progress
+Owner: Devin
+Branch: `feat/career-profile-read-contract`
+Issue/PR: #1476
+
+#### Objective
+
+Expose a typed, bounded Career Profile read contract derived only from canonical legacy storage (skills, certifications, languages). Remove all nested write support from this PR; defer atomic mutation, provenance, and real-Postgres concurrency to a separate PR.
+
+#### Constraints
+
+- Legacy `profile.skills`, `profile.certifications`, and `profile.languages` remain canonical.
+- `PATCH /profile` does not accept `career_profile`.
+- `ConfirmCVProfileRequest.preview` stays `dict[str, Any]` to preserve compatibility.
+- No migrations; no summary provenance; no client-provenance accepted.
+- Keep `evaluate_minimum_profile` gating unchanged.
+
+#### Acceptance criteria
+
+- [x] `GET /api/v1/rico/profile` returns `career_profile` as typed `CareerProfile` or `null`.
+- [x] `career_profile` is derived from legacy `skills`/`certifications`/`languages` only.
+- [x] `PATCH /api/v1/rico/profile` remains compatible with existing payloads and ignores `career_profile`.
+- [x] `POST /api/v1/rico/upload-cv` preview includes bounded, server-sanitized `work_experience`/`education`.
+- [x] Client-forged `provenance`/`id`/`confidence`/`confirmed_at`/`updated_at` are overwritten by the server.
+- [x] Backend and frontend contract tests pass.
+- [ ] Full backend CI, `npm run build`, Vitest, and Playwright green on PR head.
+
+#### Continuity Block
+
+- Task ID: TASK-20260731-002
+- GitHub issue/PR: (new PR)
+- Branch: `feat/career-profile-read-contract`
+- Base branch: `main`
+- Base SHA: `1d00d46f40e187ce6c83d80ada3b7f94b4efefef`
+- Current head SHA: (set at push)
+- Uncommitted changes present: no (after commit)
+- Status: in_progress
+- Files changed:
+  - `src/schemas/career_profile.py` — new typed read/preview models
+  - `src/rico_agent.py` — add `certifications` canonical field
+  - `src/api/routers/rico_chat.py` — derive `career_profile` for `GET`, sanitize upload preview
+  - `apps/web/lib/schemas/careerProfile.ts` — new Zod/TS schemas
+  - `apps/web/lib/schemas/index.ts` — wire `CareerProfileSchema` and typed `ProfilePreview`
+  - `apps/web/lib/api.ts` — add `career_profile` to `ProfileResponse`/`ProfilePreview`
+  - `tests/test_career_profile_contract.py` — backend contract tests
+  - `apps/web/__tests__/career-profile-contract.test.ts` — frontend contract tests
+  - `.github/workflows/qa-tests.yml` — enroll backend test file
+  - `AI_WORKSPACE/TASKS.md` — this entry
+- Files intentionally not touched:
+  - `ProfileUpdateRequest` remains unchanged (no `career_profile` field)
+  - `ConfirmCVProfileRequest.preview` remains `dict[str, Any]`
+  - No migrations, no Neon changes, no deployment
+- What is complete: backend/frontend read-only contract, upload preview sanitation and bounds, 12/12 backend tests green, test enumeration passed.
+- What is incomplete: full CI run on PR head, frontend `npm run build` + `npm run test`, Playwright, final commit/push, PR creation, merge.
+- Known blockers: none
+- Validation already run:
+  - `python -m py_compile src/rico_agent.py src/schemas/career_profile.py src/api/routers/rico_chat.py` ✅
+  - `python -m pytest tests/test_career_profile_contract.py -v` ✅ 12/12
+  - `python scripts/check_test_enumeration.py` ✅
+- Validation still required: `npm run build` + `npm run test` in `apps/web`, full backend pytest, Playwright, PR CI.
+- Rollback plan: `git revert` the merge commit on `main` or abandon `feat/career-profile-read-contract`.

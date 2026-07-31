@@ -65,6 +65,15 @@ from src.services.matching_guardrails import build_matching_guardrail_warnings
 from src.services.cv_quality_warnings import build_cv_quality_warnings
 from src.services.settings_service import get_settings
 from src.schemas.actions import ActionRequest, ActionResponse, ExecutePermissionActionRequest
+from src.schemas.career_profile import (
+    CareerProfile,
+    CertificationItem,
+    EducationItem,
+    ExperienceItem,
+    LanguageItem,
+    ProvenanceState,
+    SkillItem,
+)
 from src.schemas.chat import RicoChatResponse, RicoSessionContext
 from src.services import chat_service
 from src.mutation_guard import MutationConfirmationGuard, MutationResult
@@ -226,7 +235,39 @@ class ProfileResponse(BaseModel):
     current_company: str | None = None
     linkedin_url: str | None = None
     completeness_score: float | None = None
+    career_profile: CareerProfile | None = None
     warnings: list[dict[str, str]] = Field(default_factory=list)
+
+
+def _derive_career_profile(profile) -> CareerProfile | None:
+    """Build a read-only CareerProfile from canonical legacy profile fields.
+
+    Silently ignores non-string or empty entries; returns None when no career
+    data exists so the response stays truthfully empty rather than an empty
+    object.
+    """
+    if profile is None:
+        return None
+
+    def _strings(items):
+        return [
+            item.strip()
+            for item in (items or [])
+            if isinstance(item, str) and item.strip()
+        ]
+
+    skills = [SkillItem(name=name) for name in _strings(getattr(profile, "skills", []))]
+    certifications = [CertificationItem(name=name) for name in _strings(getattr(profile, "certifications", []))]
+    languages = [LanguageItem(name=name) for name in _strings(getattr(profile, "languages", []))]
+
+    if not any((skills, certifications, languages)):
+        return None
+
+    try:
+        return CareerProfile(skills=skills, certifications=certifications, languages=languages)
+    except Exception:
+        # Defensive: never let derived career data break the profile GET.
+        return None
 
 
 class ConfirmCVProfileRequest(BaseModel):
@@ -607,8 +648,8 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         preferred_cities=getattr(profile, "preferred_cities", None),
         salary_expectation_aed=getattr(profile, "salary_expectation_aed", None),
         minimum_salary_aed=getattr(profile, "minimum_salary_aed", None),
-        skills=getattr(profile, "skills", None),
-        industries=getattr(profile, "industries", None),
+        skills=[s for s in (getattr(profile, "skills", []) or []) if isinstance(s, str)] or None,
+        industries=[i for i in (getattr(profile, "industries", []) or []) if isinstance(i, str)] or None,
         visa_status=getattr(profile, "visa_status", None),
         notice_period=getattr(profile, "notice_period", None),
         years_experience=getattr(profile, "years_experience", None),
@@ -616,6 +657,7 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         current_company=getattr(profile, "current_company", None),
         linkedin_url=getattr(profile, "linkedin_url", None),
         completeness_score=agent_ctx.completeness_score,
+        career_profile=_derive_career_profile(profile),
         warnings=build_matching_guardrail_warnings(
             settings=settings,
             profile=profile,
@@ -1739,6 +1781,71 @@ def _stored_document_with_hash_exists(user_id: str, content_hash: str) -> bool:
         return False
 
 
+def _truncate_str(value: Any, max_len: int) -> str | None:
+    """Coerce and truncate an extracted value to a bounded string."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    return s[:max_len]
+
+
+def _build_experience_preview(raw_items: list[Any] | None) -> list[dict]:
+    """Sanitize and bound parser work_experience for upload preview.
+
+    Server-owned metadata is always overwritten; content fields are truncated.
+    """
+    if not raw_items:
+        return []
+    out = []
+    for raw in raw_items[:50]:
+        if not isinstance(raw, dict):
+            continue
+        item = ExperienceItem(
+            role=_truncate_str(raw.get("role"), 200),
+            company=_truncate_str(raw.get("company"), 200),
+            start_date=_truncate_str(raw.get("start_date"), 20),
+            end_date=_truncate_str(raw.get("end_date"), 20),
+            description=_truncate_str(raw.get("description"), 2000),
+            location=_truncate_str(raw.get("location"), 200),
+            # Server-owned; parser-supplied values are always overwritten.
+            id=None,
+            source_document_id=None,
+            provenance=ProvenanceState.EXTRACTED_FROM_CV,
+            confidence=None,
+            confirmed_at=None,
+            updated_at=None,
+        )
+        out.append(item.model_dump())
+    return out
+
+
+def _build_education_preview(raw_items: list[Any] | None) -> list[dict]:
+    """Sanitize and bound parser education for upload preview."""
+    if not raw_items:
+        return []
+    out = []
+    for raw in raw_items[:20]:
+        if not isinstance(raw, dict):
+            continue
+        item = EducationItem(
+            institution=_truncate_str(raw.get("institution"), 200),
+            degree=_truncate_str(raw.get("degree"), 100),
+            field=_truncate_str(raw.get("field"), 100),
+            start_date=_truncate_str(raw.get("start_date"), 20),
+            end_date=_truncate_str(raw.get("end_date"), 20),
+            id=None,
+            source_document_id=None,
+            provenance=ProvenanceState.EXTRACTED_FROM_CV,
+            confidence=None,
+            confirmed_at=None,
+            updated_at=None,
+        )
+        out.append(item.model_dump())
+    return out
+
+
 @router.post("/upload-cv")
 @limiter.limit(LIMIT_UPLOAD)
 async def rico_upload_cv(
@@ -2260,6 +2367,8 @@ async def rico_upload_cv(
             "skills": detected_skills if detected_skills else existing_skills,  # For backward compatibility
             "certifications": parsed.get("certifications", []),
             "languages": parsed.get("languages", []),
+            "work_experience": _build_experience_preview(parsed.get("work_experience")),
+            "education": _build_education_preview(parsed.get("education")),
         }
 
         cv_warnings = build_cv_quality_warnings(
