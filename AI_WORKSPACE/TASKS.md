@@ -8931,18 +8931,30 @@ confirmation. No generic dialog framework, no unrelated pending flows.
 
 - `src/services/pending_job_search.py` — `PendingJobSearch` frozen dataclass,
   `PendingJobSearchRepo` with atomic `consume()` (FOR UPDATE row lock,
-  transaction-scoped), and `classify_reply()` returning CONFIRM/CANCEL/CHANGE/
-  NEW_REQUEST/OTHER.
+  transaction-scoped), `classify_reply()`, `lookup()` with typed outcomes,
+  structured offer marker (`_PJS_OFFER_FIELD` / `make_offer` / `is_offer_present`
+  / `remove_offer`).
 - `src/rico_chat_api.py` — rewritten `_store_pending_job_search` (returns bool),
-  `_get_pending_job_search` (DB repo only), `_clear_pending_job_search`;
+  `_get_pending_job_search` (uses typed lookup), `_clear_pending_job_search`;
   new `_redeem_pending_job_search()` single entry point with turn-scoped cache
   (`_PJS_SENTINEL`); four redemption sites updated to share the entry point.
-  User-facing fail-closed behavior: store failure replaces offer messages,
-  cancel failure returns error response, failed consume returns None (safe
-  fallthrough).
-- `tests/test_pending_job_search_contract.py` — 93 hermetic tests covering contract,
-  classification, repo, redemption pipeline, location-only change, single-turn
-  entry point, operation ownership.
+- Independent-review correctives (2026-07-31 continuation):
+  - `_pjs_error_response`: removed `user_id` from language detection
+  - `_maybe_store_pending_job_search`: on store failure, strips CTA from message
+  - `adjacent_broaden`: on store failure, strips broaden question from message
+  - `ambiguous-promise`: on store failure, replaces hollow reply with fallback
+  - `known_but_off_profile`: on store failure, removes confirm_search options,
+    adds Arabic variant, preserves safe non-confirmation options
+  - `_provider_degraded_response`: verified no false confirmation promise
+  - `_get_pending_job_search`: uses `PendingSearchLookup` with `LookupStatus`
+    (FOUND/NONE/UNAVAILABLE/MALFORMED/EXPIRED) — never conflates UNAVAILABLE
+    with NONE
+  - Structured offer marker `_pending_job_search_offer` set/cleaned by every
+    caller; safety strip at `_handle_active_user` return point ensures marker
+    never reaches API client, persisted history, logs, or model context
+  - `lookup()` method on `PendingJobSearchRepo` returns typed outcome
+- `tests/test_pending_job_search_contract.py` — updated mock `_make_api` with
+  `lookup.return_value`; 99 hermetic tests pass
 - `tests/integration/test_pending_job_search_postgres.py` — real Postgres concurrency
   test proving exactly-one-winner atomic consume.
 - `.github/workflows/qa-tests.yml` — enrolment in both the pytest job and the
@@ -8978,6 +8990,13 @@ value is unverified.
 - [x] Single-turn cache: one classification, one DB read, one execution per turn
 - [x] Exactly one operation ownership claim
 - [x] Real Postgres concurrency test proving one winner
+- [x] Typed lookup outcomes: FOUND/NONE/UNAVAILABLE/MALFORMED/EXPIRED
+- [x] Structured offer marker never reaches API client or persisted history
+- [x] Store-failure CTA sanitation: _maybe_store_pending_job_search,
+      adjacent_broaden, ambiguous-promise, known_but_off_profile, provider_degraded
+- [x] Language derived from message context only (not user_id)
+- [x] 99 PJS contract tests pass
+- [x] 1243 related tests pass (3 pre-existing TestRetryLastSearch failures unrelated)
 
 #### Rollback
 

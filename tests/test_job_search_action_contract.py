@@ -9,7 +9,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.rico_chat_api import RicoChatAPI
-from src.services.pending_job_search import PendingJobSearch, new_pending
+from src.services.pending_job_search import (
+    PendingJobSearch, PendingSearchLookup, LookupStatus, new_pending,
+)
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -46,9 +48,11 @@ def _make_api_with_profile(pending_job_search=None) -> RicoChatAPI:
         loc = pending_job_search.get("location", "")
         pjs = new_pending(role=role, location=loc)
         api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
         api._pjs_repo.consume.return_value = pjs
     else:
         api._pjs_repo.get.return_value = None
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
         api._pjs_repo.consume.return_value = None
     api._pjs_repo.cancel.return_value = True
     api._pjs_repo.store.return_value = True
@@ -253,6 +257,8 @@ class TestFullTurnPendingSearch:
         api._pjs_repo.cancel.return_value = True
         api._pjs_repo.store.return_value = True
         api._pjs_repo.get.return_value = None
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
         api._pjs_repo.consume.return_value = None
         api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
         return api
@@ -290,9 +296,10 @@ class TestFullTurnPendingSearch:
             api._classified_role_search("u1", "Data Scientist", profile_no_role)
 
         # Turn 2: set up the repo mock so _resolve_pending_intent can consume
-        from src.services.pending_job_search import new_pending
+        from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
         pjs = new_pending(role="Data Scientist", location="", reason="known_but_off_profile")
         api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
         api._pjs_repo.consume.return_value = pjs
 
         with patch.object(api, "_target_role_search_response", return_value={"type": "job_results", "message": "Found jobs", "jobs": _JOBS}) as mock_search:
@@ -479,9 +486,10 @@ class TestFullTurnPendingArmedByHandler:
             # Verify the repo's store was called (arm succeeded)
             assert api._pjs_repo.store.called, "must arm pending search when signal found"
             # Set up the repo get/consume for the redemption path
-            from src.services.pending_job_search import new_pending
+            from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
             pjs = new_pending(role="Environmental Manager", location="", reason="promise")
             api._pjs_repo.get.return_value = pjs
+            api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
             api._pjs_repo.consume.return_value = pjs
             result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
 

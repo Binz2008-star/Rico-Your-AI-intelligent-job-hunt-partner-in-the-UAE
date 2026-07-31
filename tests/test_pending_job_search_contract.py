@@ -322,7 +322,9 @@ def _make_api(pending: dict | None = None) -> tuple:
     atomic consume path is exercised (no tokenless fallback).
     """
     from src.rico_chat_api import RicoChatAPI
-    from src.services.pending_job_search import PendingJobSearch, new_pending
+    from src.services.pending_job_search import (
+        PendingJobSearch, PendingSearchLookup, LookupStatus, new_pending,
+    )
     api = RicoChatAPI.__new__(RicoChatAPI)
     api.memory = MagicMock()
     api._pjs_repo = MagicMock()
@@ -335,11 +337,12 @@ def _make_api(pending: dict | None = None) -> tuple:
         location = pending.get("location", "")
         reason = pending.get("query_type", "promise")
         pjs = new_pending(role=role, location=location, reason=reason)
-        # repo.get returns the pending state; consume returns it once then None
         api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
         api._pjs_repo.consume.return_value = pjs
     else:
         api._pjs_repo.get.return_value = None
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
         api._pjs_repo.consume.return_value = None
     api._pjs_repo.store.return_value = True
     return api
@@ -615,7 +618,7 @@ def test_consume_db_unavailable_returns_clarification():
 def test_consume_concurrent_loser_returns_clarification():
     """Concurrent loser returns clarification, not fallthrough."""
     api = _make_api({"role": "Engineer", "location": ""})
-    from src.services.pending_job_search import new_pending
+    from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
     pjs = new_pending(role="Engineer", location="")
     api._pjs_repo.get.return_value = pjs
     api._pjs_repo.consume.side_effect = [pjs, None]
@@ -625,6 +628,7 @@ def test_consume_concurrent_loser_returns_clarification():
     # Simulate fresh turn
     object.__setattr__(api, "_pjs_redemption_attempted_this_turn", api._PJS_SENTINEL)
     api._pjs_repo.get.return_value = None  # already consumed
+    api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
     with patch.object(api, "_target_role_search_response") as direct2:
         second = api._redeem_pending_job_search("u1", "yes", profile={})
     # Loser on a subsequent turn where the state is gone → safe fallthrough to None

@@ -23,7 +23,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.rico_chat_api import RicoChatAPI
-from src.services.pending_job_search import PendingJobSearch, new_pending
+from src.services.pending_job_search import (
+    PendingJobSearch, PendingSearchLookup, LookupStatus, new_pending,
+)
 
 
 _PROFILE = {
@@ -54,9 +56,11 @@ def _make_api(pending_job_search: dict | None = None) -> RicoChatAPI:
         reason = pending_job_search.get("query_type", "promise")
         pjs = new_pending(role=role, location=loc, reason=reason)
         api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
         api._pjs_repo.consume.return_value = pjs
     else:
         api._pjs_repo.get.return_value = None
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
         api._pjs_repo.consume.return_value = None
     api._pjs_repo.cancel.return_value = True
     api._pjs_repo.store.return_value = True

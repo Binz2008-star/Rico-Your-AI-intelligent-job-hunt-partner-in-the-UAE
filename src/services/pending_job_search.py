@@ -136,6 +136,67 @@ class PendingJobSearchConsumed(Exception):
     """The pending search was already consumed by another caller."""
 
 
+# ── Typed lookup outcome ──────────────────────────────────────────────────────
+# Distinguishes DB-unavailable from genuine-no-pending so callers never
+# misclassify an outage as "nothing to do".
+
+
+class LookupStatus:
+    FOUND = "found"
+    NONE = "none"
+    UNAVAILABLE = "unavailable"
+    MALFORMED = "malformed"
+    EXPIRED = "expired"
+
+
+class PendingSearchLookup:
+    """Typed result of a pending-job-search lookup.
+
+    Attributes:
+        status: One of ``LookupStatus.*``.
+        pjs: The deserialised ``PendingJobSearch`` when status is FOUND or EXPIRED.
+    """
+
+    __slots__ = ("status", "pjs")
+
+    def __init__(self, status: str, pjs: PendingJobSearch | None = None) -> None:
+        self.status = status
+        self.pjs = pjs
+
+
+# ── Structured offer marker ───────────────────────────────────────────────────
+# Private transient marker that travels with response dicts during assembly
+# only.  Never reaches API clients, persisted history, logs, or model context.
+
+_PJS_OFFER_FIELD = "_pending_job_search_offer"
+
+
+def make_offer(
+    role: str,
+    location: str = "",
+    reason: str = "promise",
+) -> dict[str, str]:
+    """Build a private offer marker dict for the pending-job-search protocol.
+
+    The marker is consumed (removed) before the response leaves the API layer.
+    """
+    return {
+        "role": role,
+        "location": location,
+        "reason": reason,
+    }
+
+
+def is_offer_present(result: dict) -> bool:
+    """True when the response dict carries an armed offer marker."""
+    return _PJS_OFFER_FIELD in result
+
+
+def remove_offer(result: dict) -> None:
+    """Safely strip the private offer marker from a response dict."""
+    result.pop(_PJS_OFFER_FIELD, None)
+
+
 # ── Reply classification ──────────────────────────────────────────────────────
 
 import re as _re
@@ -543,6 +604,42 @@ class PendingJobSearchRepo:
                 conn.close()
             except Exception:
                 pass
+
+    # ── lookup (typed) ────────────────────────────────────────────────────────
+
+    def lookup(self, user_id: str) -> PendingSearchLookup:
+        """Typed lookup that distinguishes DB-unavailable from genuine absence.
+
+        Returns one of:
+
+        * ``FOUND`` — valid pending search exists (``pjs`` populated).
+        * ``NONE`` — no pending row, no settings, or no ``_pjs`` key.
+        * ``UNAVAILABLE`` — DB unreachable or identity resolution failed.
+        * ``MALFORMED`` — the stored value exists but cannot be deserialised.
+        * ``EXPIRED`` — found but past its TTL (``pjs`` populated for logging).
+        """
+        db_uuid = _resolve_db_user_id(self._db, user_id)
+        if db_uuid is None:
+            return PendingSearchLookup(LookupStatus.UNAVAILABLE)
+        try:
+            bundle = self._db.get_user_bundle(db_uuid)
+        except Exception:
+            return PendingSearchLookup(LookupStatus.UNAVAILABLE)
+        if bundle is None:
+            return PendingSearchLookup(LookupStatus.NONE)
+        settings = bundle.get("settings")
+        if not settings or not isinstance(settings, dict):
+            return PendingSearchLookup(LookupStatus.NONE)
+        raw = settings.get(_PJS_KEY)
+        if raw is None or not isinstance(raw, dict):
+            return PendingSearchLookup(LookupStatus.NONE)
+        try:
+            pjs = PendingJobSearch.from_dict(raw)
+        except (ValueError, TypeError, KeyError):
+            return PendingSearchLookup(LookupStatus.MALFORMED)
+        if pjs.is_expired:
+            return PendingSearchLookup(LookupStatus.EXPIRED, pjs)
+        return PendingSearchLookup(LookupStatus.FOUND, pjs)
 
     # ── internal helpers ────────────────────────────────────────────────────
 

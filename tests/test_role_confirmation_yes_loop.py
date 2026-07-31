@@ -62,15 +62,17 @@ def _make_api(pending_job_search: dict | None = None) -> RicoChatAPI:
     api._current_operation_id = None
     api._pjs_repo = MagicMock()
     api._pjs_repo.cancel.return_value = True
-    from src.services.pending_job_search import new_pending
+    from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
     if pending_job_search:
         role = pending_job_search.get("role", "Test")
         loc = pending_job_search.get("location", "")
         pjs = new_pending(role=role, location=loc)
         api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
         api._pjs_repo.consume.return_value = pjs
     else:
         api._pjs_repo.get.return_value = None
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
         api._pjs_repo.consume.return_value = None
     api._pjs_repo.store.return_value = True
     api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL

@@ -78,9 +78,14 @@ from src.mutation_guard import MutationConfirmationGuard, MutationResult
 from src.services.pending_job_search import (
     PendingJobSearch,
     PendingJobSearchRepo,
+    PendingSearchLookup,
+    LookupStatus,
     ReplyCategory,
     classify_reply,
+    is_offer_present,
+    make_offer,
     new_pending,
+    remove_offer,
 )
 
 _MUTATION_CONFIRMATION_GUARD = MutationConfirmationGuard()
@@ -6564,20 +6569,19 @@ class RicoChatAPI:
         """Return a plain dict for backward compatibility with existing callers.
 
         DB-backed repo only — no RicoMemoryStore fallback.
+        Uses typed lookup so UNAVAILABLE and NONE are never conflated.
         """
-        try:
-            pjs = self.pjs_repo.get(user_id)
-            if pjs is not None:
-                return {
-                    "token": pjs.token,
-                    "role": pjs.role,
-                    "location": pjs.location,
-                    "query_type": pjs.reason,
-                    "created_at": pjs.created_at.isoformat(),
-                    "expires_at": pjs.expires_at.isoformat(),
-                }
-        except Exception:
-            pass
+        lookup = self.pjs_repo.lookup(user_id)
+        if lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
+            pjs = lookup.pjs
+            return {
+                "token": pjs.token,
+                "role": pjs.role,
+                "location": pjs.location,
+                "query_type": pjs.reason,
+                "created_at": pjs.created_at.isoformat(),
+                "expires_at": pjs.expires_at.isoformat(),
+            }
         return {}
 
     def _clear_pending_job_search(self, user_id: str) -> bool:
@@ -6688,15 +6692,15 @@ class RicoChatAPI:
         return result
 
     @staticmethod
-    def _pjs_error_response(user_id: str = "", message_context: str = "") -> dict[str, Any]:
+    def _pjs_error_response(message_context: str = "") -> dict[str, Any]:
         """Safe response when a PendingJobSearch operation fails.
         Does not claim execution started.  Does not infer from context.
 
-        Language is derived from ``message_context`` if provided; otherwise
-        from ``user_id``, and falls back to English.
+        Language is derived from ``message_context`` only.
+        ``user_id``, email, UUID, or external principal must never influence
+        language selection.
         """
-        context = message_context or user_id or ""
-        arabic = bool(re.search(r"[\u0600-\u06FF]", str(context)))
+        arabic = bool(re.search(r"[\u0600-\u06FF]", str(message_context)))
         return {
             "type": "clarification",
             "message": (
@@ -6734,6 +6738,67 @@ class RicoChatAPI:
                 self._store_recent_context(user_id, ctx)
         except Exception:
             pass
+
+    # Regex to strip a search-offer sentence from the end of a message.
+    # Matches sentences like "Shall I search for X?" or "هل أبحث عن وظائف في X؟"
+    # leaving the primary answer intact.
+    _OFFER_STRIP_RE = re.compile(
+        r'\s*(?:'
+        r'Shall I search[^.]*[.?!]?'
+        r'|Shall I start searching[^.]*[.?!]?'
+        r'|Want me to search[^.]*[.?!]?'
+        r'|Would you like me to search[^.]*[.?!]?'
+        r'|Should I search[^.]*[.?!]?'
+        r'|You can now search[^.]*[.?!]?'
+        r'|Ready to search[^.]*[.?!]?'
+        r'|What should I search[^.]*[.?!]?'
+        r'|Shall I look for[^.]*[.?!]?'
+        r'|Find live jobs[^.]*[.?!]?'
+        r'|Search for roles[^.]*[.?!]?'
+        r'|Want me to broaden[^.]*[.?!]?'
+        r'|Want me to also look at[^.]*[.?!]?'
+        r'|I can also look at[^.]*[.?!]?'
+        r'|just say the word[^.]*[.?!]?'
+        r'|هل أبحث[^.]*[.?!]?'
+        r'|أبحث لك[^.]*[.?!]?'
+        r'|سأبحث[^.]*[.?!]?'
+        r'|ببحث[^.]*[.?!]?'
+        r'|وظائف حية[^.]*[.?!]?'
+        r'|أبحث عن وظائف[^.]*[.?!]?'
+        r'|هل تريد البحث[^.]*[.?!]?'
+        r'|هل أوسع البحث[^.]*[.?!]?'
+        r'|هل تريد أن أبحث أيضاً[^.]*[.?!]?'
+        r'|يمكنني أيضاً البحث[^.]*[.?!]?'
+        r'|هل تريد توسيع البحث[^.]*[.?!]?'
+        r')\s*$',
+        re.IGNORECASE,
+    )
+
+    _EN_FALLBACK_CTA = (
+        " Tell me the role and location again when you're ready."
+    )
+    _AR_FALLBACK_CTA = (
+        " قل لي المسمى الوظيفي والموقع مرة أخرى عندما تكون مستعداً."
+    )
+
+    def _strip_offer_from_message(self, message: str) -> str:
+        """Remove the trailing search-offer sentence from a message."""
+        stripped = self._OFFER_STRIP_RE.sub("", message).strip()
+        return stripped
+
+    def _append_fallback_cta(self, message: str, arabic: bool) -> str:
+        """Append the truthful fallback CTA when storage failed."""
+        return message.rstrip(".?!") + "." + (self._AR_FALLBACK_CTA if arabic else self._EN_FALLBACK_CTA)
+
+    def _remove_confirm_search_options(self, result: dict[str, Any]) -> None:
+        """Remove any confirm_search action options from the response."""
+        options = result.get("options")
+        if not options or not isinstance(options, list):
+            return
+        result["options"] = [
+            o for o in options
+            if o.get("action") != "confirm_search"
+        ]
 
     # Outgoing-message signals meaning Rico offered/announced a job search this
     # turn without executing it. Mirror of the read-side job_search_signals so a
@@ -6777,9 +6842,18 @@ class RicoChatAPI:
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
             role = target_roles[0] if target_roles else None
             if role:
+                # Set the structured offer marker before the store attempt.
+                result[self._PJS_OFFER_FIELD] = make_offer(role=role, reason="profile_based")
                 if not self._store_pending_job_search(user_id, role=role):
                     logger.warning("pending_job_search arm failed user=%s", user_ref(user_id))
+                    # Remove the confirmation CTA from the message.
+                    arabic = bool(re.search(r"[\u0600-\u06FF]", msg))
+                    stripped = self._strip_offer_from_message(msg)
+                    if stripped and stripped != msg:
+                        result["message"] = self._append_fallback_cta(stripped, arabic)
+                    remove_offer(result)
         except Exception:
+            remove_offer(result)
             pass
 
     def _get_last_assistant_message(self, user_id: str) -> str:
@@ -7652,10 +7726,15 @@ class RicoChatAPI:
 
         # Arm a pending search so a later "try again" re-runs this exact role once
         # quota recovers, without the user retyping it.
-        if not self._store_pending_job_search(
+        if self._store_pending_job_search(
             user_id, role=role, location=location, query_type="provider_degraded",
         ):
+            response[self._PJS_OFFER_FIELD] = make_offer(
+                role=role, location=location, reason="provider_degraded",
+            )
+        else:
             logger.warning("failed to arm degraded-search retry for user=%s", user_ref(user_id))
+            # The response contains no confirmation CTA, so no sanitisation needed.
 
         self._append_chat(user_id, "assistant", message)
         return response
@@ -8542,11 +8621,16 @@ class RicoChatAPI:
         _adjacent_names_for_offer = [
             r["role"] for r in _adjacent_for_offer[:3] if r.get("role")
         ]
+        _adjacent_armed = False
         if _adjacent_names_for_offer:
-            if not self._store_pending_job_search(
+            _adjacent_armed = self._store_pending_job_search(
                 user_id, role=_adjacent_names_for_offer[0], query_type="adjacent_broaden"
-            ):
+            )
+            if not _adjacent_armed:
                 logger.warning("failed to arm adjacent-broaden for user=%s", user_ref(user_id))
+                # Remove the broaden-search confirmation question so the user is
+                # not invited to confirm an operation that was never durably stored.
+                message = self._strip_offer_from_message(message)
 
         response = {
             "type": "job_matches",
@@ -8591,6 +8675,13 @@ class RicoChatAPI:
 
         if role_intelligence_data:
             response["role_intelligence"] = role_intelligence_data
+
+        # Set the private offer marker when PJS was durably stored.
+        if _adjacent_names_for_offer and _adjacent_armed:
+            response[self._PJS_OFFER_FIELD] = make_offer(
+                role=_adjacent_names_for_offer[0],
+                reason="adjacent_broaden",
+            )
 
         self._append_chat(user_id, "assistant", response)
         mark_completed(user_id, operation_id, len(formatted), attempt=self._operation_attempt())
@@ -9042,8 +9133,23 @@ class RicoChatAPI:
                     # Ambiguous promise (user message wasn't an explicit search
                     # request) — arm the slot; the promise IS the delivered reply,
                     # so it is persisted below.
-                    if not self._store_pending_job_search(user_id, role=str(_promise_roles[0])):
+                    _promise_armed = self._store_pending_job_search(user_id, role=str(_promise_roles[0]))
+                    if not _promise_armed:
                         logger.warning("failed to arm ambiguous-promise for user=%s", user_ref(user_id))
+                        # Replace the unredeemable promise with a truthful fallback
+                        # so the persisted history does not contain a hollow offer.
+                        _ar_promise = bool(re.search(r"[\u0600-\u06FF]", filtered_ai_message))
+                        filtered_ai_message = (
+                            "عذراً، تعذّر تجهيز البحث الآن. أخبرني بالمسمى الوظيفي والموقع وسأبحث لك."
+                            if _ar_promise else
+                            "Sorry, I couldn't prepare the search right now. "
+                            "Tell me the role and location and I'll search for you."
+                        )
+                        ai_response["message"] = filtered_ai_message
+                    else:
+                        ai_response[self._PJS_OFFER_FIELD] = make_offer(
+                            role=str(_promise_roles[0]), reason="ambiguous_promise",
+                        )
             # Persist the canonical assistant turn actually returned to the user.
             self._append_chat(user_id, "assistant", filtered_ai_message)
 
@@ -9562,6 +9668,10 @@ class RicoChatAPI:
             # but didn't run it, remember it so a follow-up "تمام"/"yes" executes the
             # real search (read side: _get_pending_job_search / _resolve_pending_intent).
             self._maybe_store_pending_job_search(user_id, result)
+            # Safety strip: ensure the private offer marker never reaches the
+            # API client, persisted history, logs, or model context.
+            if is_offer_present(result):
+                remove_offer(result)
             # Persist options so the user can reply "A"/"B"/"C"/"D" next turn.
             _options = result.get("options")
             if _options and isinstance(_options, list):
@@ -23823,17 +23933,31 @@ class RicoChatAPI:
             )
 
         if classification == "known_but_off_profile" and canonical_role:
-            response = {
-                "type": "clarification",
-                "message": (
-                    f"'{canonical_role}' is a real role, but it does not look close to your CV profile. "
-                    f"Should I search for {canonical_role} jobs anyway? Reply YES or tell me a different role."
-                ),
-                "options": [
-                    {"action": "confirm_search", "label": f"Yes, search {canonical_role}"},
-                    {"action": "show_profile_roles", "label": "Show roles from my CV"},
-                ],
-            }
+            _known_arabic = bool(re.search(r"[\u0600-\u06FF]", role_text))
+            if _known_arabic:
+                response = {
+                    "type": "clarification",
+                    "message": (
+                        f"'{canonical_role}' هو مسمى وظيفي معروف، لكنه لا يتطابق مع ملفك المهني بشكل كبير. "
+                        f"هل تريد مني البحث عن وظائف {canonical_role} مع ذلك؟ أجب بنعم أو أخبرني بمسمى آخر."
+                    ),
+                    "options": [
+                        {"action": "confirm_search", "label": f"نعم، ابحث عن {canonical_role}"},
+                        {"action": "show_profile_roles", "label": "عرض الأدوار من سيرتي الذاتية"},
+                    ],
+                }
+            else:
+                response = {
+                    "type": "clarification",
+                    "message": (
+                        f"'{canonical_role}' is a real role, but it does not look close to your CV profile. "
+                        f"Should I search for {canonical_role} jobs anyway? Reply YES or tell me a different role."
+                    ),
+                    "options": [
+                        {"action": "confirm_search", "label": f"Yes, search {canonical_role}"},
+                        {"action": "show_profile_roles", "label": "Show roles from my CV"},
+                    ],
+                }
             self._append_chat(user_id, "assistant", response["message"])
             try:
                 _ctx = self._get_recent_context(user_id)
@@ -23843,13 +23967,26 @@ class RicoChatAPI:
                 pass
             # Arm pending search so "تمام"/"yes"/"ok" in the next turn executes the search
             # rather than producing another hollow promise or a good-luck reply.
-            if not self._store_pending_job_search(user_id, role=canonical_role, location=location, query_type="known_but_off_profile"):
+            _known_armed = self._store_pending_job_search(user_id, role=canonical_role, location=location, query_type="known_but_off_profile")
+            if not _known_armed:
                 logger.warning("failed to arm known-but-off-profile for user=%s", user_ref(user_id))
                 # Replace the response message so we do not promise confirmation that cannot be armed.
                 response = dict(response)
-                response["message"] = (
-                    f"'{canonical_role}' is a real role, but I couldn't prepare the search right now. "
-                    f"Please tell me the exact role and location, and I'll search right away."
+                # Remove the confirm_search option; keep safe non-confirmation options.
+                self._remove_confirm_search_options(response)
+                if _known_arabic:
+                    response["message"] = (
+                        f"'{canonical_role}' هو مسمى وظيفي معروف، لكني لم أتمكن من تجهيز البحث الآن. "
+                        f"أخبرني بالمسمى والمرة أخرى وسأبحث لك."
+                    )
+                else:
+                    response["message"] = (
+                        f"'{canonical_role}' is a real role, but I couldn't prepare the search right now. "
+                        f"Please tell me the exact role and location, and I'll search right away."
+                    )
+            else:
+                response[self._PJS_OFFER_FIELD] = make_offer(
+                    role=canonical_role, location=location, reason="known_but_off_profile",
                 )
             return response
 
