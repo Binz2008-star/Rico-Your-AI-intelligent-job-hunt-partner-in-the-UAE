@@ -6622,6 +6622,18 @@ class RicoChatAPI:
         except Exception:
             return None
 
+    def _discard_pending_token(self, user_id: str, token: str) -> bool:
+        """Atomically remove the ``_pjs`` key only when ``token`` matches.
+
+        Unlike ``_consume_by_token`` this works for expired entries too, so
+        stale state can be cleaned up without executing it.  Returns True on
+        success.
+        """
+        try:
+            return bool(self.pjs_repo.discard_token(user_id, token))
+        except Exception:
+            return False
+
     def _redeem_pending_job_search(
         self,
         user_id: str,
@@ -6634,6 +6646,25 @@ class RicoChatAPI:
         Uses ``PendingSearchLookup`` to distinguish genuine absence from
         unavailable/malformed/expired state.  Never conflates UNAVAILABLE
         with NONE.
+
+        Typed contract:
+
+        * CONFIRM — FOUND: exact-token consume and execute once;
+          NONE/UNAVAILABLE: fall through (do not hijack unrelated
+          confirmations); MALFORMED/EXPIRED: clarification; zero execution
+          on any failure state.
+        * CANCEL — FOUND: exact-token atomic discard, zero execution;
+          NONE/UNAVAILABLE: fall through; MALFORMED: clarification;
+          EXPIRED: exact-token cleanup, never execute.
+        * NEW_REQUEST — NONE: continue routing; FOUND: exact-token
+          invalidation must succeed before routing; UNAVAILABLE/MALFORMED:
+          clarification (do not leave a possibly-live stale PJS behind);
+          EXPIRED: discard the expired exact token, then route only when
+          cleanup succeeds.
+        * CHANGE — FOUND: consume the exact old token then execute;
+          NONE: execute only when the message itself is a complete explicit
+          new role; UNAVAILABLE/MALFORMED: clarification; EXPIRED: clean the
+          expired exact token, then execute only when cleanup succeeds.
 
         Returns a response dict on successful redemption, or None when the
         pending state is absent, expired, blocked, or the reply does not
@@ -6659,69 +6690,82 @@ class RicoChatAPI:
         if cat != ReplyCategory.OTHER:
             lookup = self.pjs_repo.lookup(user_id)
 
-        # ── Helper: return a truthful clarification when expired state exists
-        # but cannot be consumed.  UNAVAILABLE and MALFORMED do NOT block
-        # CONFIRM / CANCEL / NEW_REQUEST — only CHANGE requires a readable
-        # pending state to fulfill its contract.
-        def _fail_closed() -> dict[str, Any] | None:
-            if lookup is None:
-                return None
-            if lookup.status == LookupStatus.EXPIRED:
-                return self._pjs_error_response(message_context=message)
-            return None
+        def _clarify() -> dict[str, Any]:
+            return self._pjs_error_response(message_context=message)
 
-        def _change_error() -> str | None:
-            """CHANGE requires readable pending state; error when unavailable."""
-            if lookup is None:
-                return None
-            if lookup.status in (
-                LookupStatus.UNAVAILABLE, LookupStatus.MALFORMED, LookupStatus.EXPIRED,
-            ):
-                return self._pjs_error_response(message_context=message)
-            return None
+        def _found() -> bool:
+            return (
+                lookup is not None
+                and lookup.status == LookupStatus.FOUND
+                and lookup.pjs is not None
+            )
+
+        def _expired() -> bool:
+            return lookup is not None and lookup.status == LookupStatus.EXPIRED
+
+        def _stale_or_unavailable() -> bool:
+            return lookup is not None and lookup.status in (
+                LookupStatus.UNAVAILABLE, LookupStatus.MALFORMED,
+            )
 
         if cat == ReplyCategory.CANCEL:
-            if lookup is not None and lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
-                if not self._clear_pending_job_search(user_id):
-                    result = self._pjs_error_response(message_context=message)
-            elif lookup is not None and lookup.status == LookupStatus.EXPIRED:
-                result = self._pjs_error_response(message_context=message)
-            # NONE / UNAVAILABLE / MALFORMED: safe fallthrough
+            if _found():
+                # Token-qualified atomic discard; zero execution.
+                if self._consume_by_token(user_id, lookup.pjs.token) is None:
+                    result = _clarify()
+            elif _expired():
+                # Exact-token cleanup; never execute.
+                if lookup.pjs is None or not self._discard_pending_token(user_id, lookup.pjs.token):
+                    result = _clarify()
+            elif lookup is not None and lookup.status == LookupStatus.MALFORMED:
+                result = _clarify()
+            # NONE / UNAVAILABLE: safe fallthrough
 
         elif cat == ReplyCategory.NEW_REQUEST:
-            if lookup is not None and lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
-                # Atomically invalidate the old pending search; failure is
-                # non-fatal — the new request continues routing regardless.
-                self._consume_by_token(user_id, lookup.pjs.token)
-            elif lookup is not None and lookup.status == LookupStatus.EXPIRED:
-                result = self._pjs_error_response(message_context=message)
-            # NONE / UNAVAILABLE / MALFORMED: continue as a new request.
-            # This is NOT a PendingJobSearch error.
+            if _found():
+                # Invalidation must succeed before the new request routes.
+                if self._consume_by_token(user_id, lookup.pjs.token) is not None:
+                    result = None
+                else:
+                    result = _clarify()
+            elif _expired():
+                if lookup.pjs is not None and self._discard_pending_token(user_id, lookup.pjs.token):
+                    result = None
+                else:
+                    result = _clarify()
+            elif _stale_or_unavailable():
+                # Do not leave a possibly-live stale PJS behind.
+                result = _clarify()
+            # NONE: continue routing
 
         elif cat == ReplyCategory.CHANGE:
             _, new_role, new_loc = classify_reply(message)
             self._discard_pending_role_confirmation(user_id)
             if new_role:
-                # New role: atomically invalidate old before executing new.
-                if lookup is not None and lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
+                if _found():
                     consumed = self._consume_by_token(user_id, lookup.pjs.token)
                     if consumed is not None:
                         result = self._target_role_search_response(
                             user_id, new_role, profile, location=new_loc or "",
                         )
                     else:
-                        result = self._pjs_error_response(message_context=message)
+                        result = _clarify()
                 elif lookup is not None and lookup.status == LookupStatus.NONE:
-                    # No pending state to invalidate — execute the new search
-                    # directly rather than erroring.
                     result = self._target_role_search_response(
                         user_id, new_role, profile, location=new_loc or "",
                     )
+                elif _expired():
+                    if lookup.pjs is not None and self._discard_pending_token(user_id, lookup.pjs.token):
+                        result = self._target_role_search_response(
+                            user_id, new_role, profile, location=new_loc or "",
+                        )
+                    else:
+                        result = _clarify()
                 else:
-                    result = _change_error()
+                    result = _clarify()
             else:
-                # Location-only change: atomically consume, use stored role.
-                if lookup is not None and lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
+                # Location-only change: consume the exact token, use stored role.
+                if _found():
                     consumed = self._consume_by_token(user_id, lookup.pjs.token)
                     if consumed is not None:
                         result = self._target_role_search_response(
@@ -6729,15 +6773,17 @@ class RicoChatAPI:
                             location=new_loc or consumed.location,
                         )
                     else:
-                        result = self._pjs_error_response(message_context=message)
+                        result = _clarify()
                 elif lookup is not None and lookup.status == LookupStatus.NONE:
-                    # No pending state, nothing to change — safe fallthrough.
                     pass
+                elif _expired():
+                    if lookup.pjs is None or not self._discard_pending_token(user_id, lookup.pjs.token):
+                        result = _clarify()
                 else:
-                    result = _change_error()
+                    result = _clarify()
 
         elif cat == ReplyCategory.CONFIRM:
-            if lookup is not None and lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
+            if _found():
                 consumed = self._consume_by_token(user_id, lookup.pjs.token)
                 if consumed is not None:
                     self._discard_pending_role_confirmation(user_id)
@@ -6747,10 +6793,10 @@ class RicoChatAPI:
                 else:
                     # Consume failed despite FOUND lookup — token mismatch,
                     # concurrent loser, or DB down mid-transaction.
-                    result = self._pjs_error_response(message_context=message)
-            elif lookup is not None and lookup.status == LookupStatus.EXPIRED:
-                result = self._pjs_error_response(message_context=message)
-            # NONE / UNAVAILABLE / MALFORMED: safe fallthrough
+                    result = _clarify()
+            elif _expired() or (lookup is not None and lookup.status == LookupStatus.MALFORMED):
+                result = _clarify()
+            # NONE / UNAVAILABLE: safe fallthrough
 
         # Cache so this turn never re-evaluates.
         object.__setattr__(self, "_pjs_redemption_attempted_this_turn", result)
@@ -7786,7 +7832,9 @@ class RicoChatAPI:
         # response type, so only the marker is stripped).
         response = self._finalize_pending_job_search_offer(user_id, response)
 
-        self._append_chat(user_id, "assistant", message)
+        # Persist the FINALIZED public message — never the pre-finalization
+        # value, so a store failure can never leave a hollow CTA in history.
+        self._append_chat(user_id, "assistant", str(response.get("message") or message))
         return response
 
     # Ultra-generic vocabulary that must never, on its own, qualify a job as a
@@ -8671,16 +8719,6 @@ class RicoChatAPI:
         _adjacent_names_for_offer = [
             r["role"] for r in _adjacent_for_offer[:3] if r.get("role")
         ]
-        _adjacent_armed = False
-        if _adjacent_names_for_offer:
-            _adjacent_armed = self._store_pending_job_search(
-                user_id, role=_adjacent_names_for_offer[0], query_type="adjacent_broaden"
-            )
-            if not _adjacent_armed:
-                logger.warning("failed to arm adjacent-broaden for user=%s", user_ref(user_id))
-                # Remove the broaden-search confirmation question so the user is
-                # not invited to confirm an operation that was never durably stored.
-                message = self._strip_offer_from_message(message)
 
         response = {
             "type": "job_matches",
@@ -8726,15 +8764,14 @@ class RicoChatAPI:
         if role_intelligence_data:
             response["role_intelligence"] = role_intelligence_data
 
-        # Set the private offer marker and finalize before persistence.
-        # This ensures the marker is removed and any store-failure sanitization
-        # happens before _append_chat.
+        # Set the private offer marker and let _finalize_pending_job_search_offer
+        # be the SINGLE storage owner.  It stores once, removes the marker on
+        # success, and sanitizes the message on failure — all before _append_chat.
         if _adjacent_names_for_offer:
-            if _adjacent_armed:
-                response[self._PJS_OFFER_FIELD] = make_offer(
-                    role=_adjacent_names_for_offer[0],
-                    reason="adjacent_broaden",
-                )
+            response[self._PJS_OFFER_FIELD] = make_offer(
+                role=_adjacent_names_for_offer[0],
+                reason="adjacent_broaden",
+            )
             response = self._finalize_pending_job_search_offer(user_id, response)
 
         self._append_chat(user_id, "assistant", response)
@@ -9185,25 +9222,15 @@ class RicoChatAPI:
                             _search_result.setdefault("response_source", "search_contract")
                             return _search_result
                     # Ambiguous promise (user message wasn't an explicit search
-                    # request) — arm the slot; the promise IS the delivered reply,
-                    # so it is persisted below.
-                    _promise_armed = self._store_pending_job_search(user_id, role=str(_promise_roles[0]))
-                    if not _promise_armed:
-                        logger.warning("failed to arm ambiguous-promise for user=%s", user_ref(user_id))
-                        # Replace the unredeemable promise with a truthful fallback
-                        # so the persisted history does not contain a hollow offer.
-                        _ar_promise = bool(re.search(r"[\u0600-\u06FF]", filtered_ai_message))
-                        filtered_ai_message = (
-                            "عذراً، تعذّر تجهيز البحث الآن. أخبرني بالمسمى الوظيفي والموقع وسأبحث لك."
-                            if _ar_promise else
-                            "Sorry, I couldn't prepare the search right now. "
-                            "Tell me the role and location and I'll search for you."
-                        )
-                        ai_response["message"] = filtered_ai_message
-                    else:
-                        ai_response[self._PJS_OFFER_FIELD] = make_offer(
-                            role=str(_promise_roles[0]), reason="ambiguous_promise",
-                        )
+                    # request).  Set the structured marker and let
+                    # _finalize_pending_job_search_offer be the SINGLE storage
+                    # owner: it stores exactly once, replaces the hollow promise
+                    # with truthful fallback on failure, and removes the marker.
+                    ai_response[self._PJS_OFFER_FIELD] = make_offer(
+                        role=str(_promise_roles[0]), reason="ambiguous_promise",
+                    )
+                    ai_response = self._finalize_pending_job_search_offer(user_id, ai_response)
+                    filtered_ai_message = str(ai_response.get("message") or "")
             # Persist the canonical assistant turn actually returned to the user.
             self._append_chat(user_id, "assistant", filtered_ai_message)
 

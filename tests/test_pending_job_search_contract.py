@@ -558,11 +558,10 @@ def test_single_turn_reset_on_new_turn():
 
 
 def test_store_failure_returns_error_response():
-    """When _store_pending_job_search fails, _redeem must return a truthful error."""
+    """When the token-qualified cancel (consume) fails, _redeem must return a
+    truthful error rather than claiming success."""
     api = _make_api({"role": "Engineer", "location": ""})
-    # Make the store fail by having cancel return False
-    api._pjs_repo.cancel.return_value = False
-    # Cancel classification should produce an error when the repo fails
+    api._pjs_repo.consume.return_value = None  # token-qualified discard fails
     result = api._redeem_pending_job_search("u1", "لا", profile={})
     assert result is not None
     assert "message" in result
@@ -570,9 +569,9 @@ def test_store_failure_returns_error_response():
 
 
 def test_cancel_failure_returns_error():
-    """When cancel fails (repo returns False), _redeem must not claim success."""
+    """When the token-qualified cancel fails, _redeem must not claim success."""
     api = _make_api({"role": "Engineer", "location": ""})
-    api._pjs_repo.cancel.return_value = False
+    api._pjs_repo.consume.return_value = None
     result = api._redeem_pending_job_search("u1", "لا", profile={})
     assert result is not None
     assert result.get("type") == "clarification"
@@ -816,12 +815,14 @@ class TestLookupFailureScenarios:
         result = api._redeem_pending_job_search("u1", "yes", profile={})
         assert result is None
 
-    def test_confirm_malformed_fallthrough(self):
+    def test_confirm_malformed_returns_clarification(self):
+        """CONFIRM with MALFORMED _pjs must return clarification (no execution)."""
         api = _make_api(pending=None)
         from src.services.pending_job_search import PendingSearchLookup, LookupStatus
         api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.MALFORMED)
         result = api._redeem_pending_job_search("u1", "yes", profile={})
-        assert result is None
+        assert result is not None
+        assert result.get("type") == "clarification"
 
     def test_confirm_expired_returns_clarification(self):
         api = _make_api(pending=None)
@@ -870,23 +871,28 @@ class TestLookupFailureScenarios:
             result = api._redeem_pending_job_search("u1", "yes", profile={})
         mock_search.assert_not_called()
 
-    def test_new_request_unavailable_continues_routing(self):
-        """NEW_REQUEST with UNAVAILABLE must fall through — new requests are
-        independent of pending state."""
+    def test_new_request_unavailable_returns_clarification(self):
+        """NEW_REQUEST with UNAVAILABLE must NOT fall through — a possibly-live
+        stale PJS must not be left behind."""
         api = _make_api(pending=None)
         from src.services.pending_job_search import PendingSearchLookup, LookupStatus
         api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.UNAVAILABLE)
         result = api._redeem_pending_job_search("u1", "search for data analyst", profile={})
-        assert result is None
+        assert result is not None
+        assert result.get("type") == "clarification"
+        assert "pending_job_search_failed" in str(result.get("intent", ""))
 
-    def test_new_request_malformed_continues_routing(self):
+    def test_new_request_malformed_returns_clarification(self):
         api = _make_api(pending=None)
         from src.services.pending_job_search import PendingSearchLookup, LookupStatus
         api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.MALFORMED)
         result = api._redeem_pending_job_search("u1", "search for data analyst", profile={})
-        assert result is None
+        assert result is not None
+        assert result.get("type") == "clarification"
 
-    def test_new_request_expired_returns_clarification(self):
+    def test_new_request_expired_routes_after_cleanup(self):
+        """NEW_REQUEST with EXPIRED token: discard the expired exact token, then
+        route only when cleanup succeeds."""
         from src.services.pending_job_search import (
             PendingSearchLookup, LookupStatus, PendingJobSearch,
         )
@@ -898,6 +904,24 @@ class TestLookupFailureScenarios:
             expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
         )
         api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.EXPIRED, expired)
+        api._pjs_repo.discard_token.return_value = True
+        result = api._redeem_pending_job_search("u1", "search for data analyst", profile={})
+        assert result is None, "successful cleanup must allow routing"
+        api._pjs_repo.discard_token.assert_called_once()
+
+    def test_new_request_expired_cleanup_failure_returns_clarification(self):
+        from src.services.pending_job_search import (
+            PendingSearchLookup, LookupStatus, PendingJobSearch,
+        )
+        from datetime import datetime, timezone
+        api = _make_api(pending=None)
+        expired = PendingJobSearch(
+            token="tok", role="Old", location="", reason="test",
+            created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.EXPIRED, expired)
+        api._pjs_repo.discard_token.return_value = False
         result = api._redeem_pending_job_search("u1", "search for data analyst", profile={})
         assert result is not None
         assert result.get("type") == "clarification"
@@ -942,3 +966,234 @@ class TestNoneBehavior:
         with patch.object(api, "_target_role_search_response") as mock_search:
             result = api._redeem_pending_job_search("u1", "yes, search Product Manager", profile={})
         mock_search.assert_called_once()
+
+
+# ── BLOCKER 1: NEW_REQUEST must not ignore invalidation failure ──────────────
+
+
+class TestNewRequestInvalidation:
+    def test_consume_failure_prevents_routing(self):
+        """FOUND + NEW_REQUEST: if the exact-token invalidation fails, the new
+        request must NOT route — it returns a truthful clarification."""
+        api = _make_api(pending={"role": "Engineer", "location": ""})
+        api._pjs_repo.consume.return_value = None  # invalidation fails
+        result = api._redeem_pending_job_search("u1", "search for data analyst", profile={})
+        assert result is not None
+        assert result.get("type") == "clarification"
+        assert "pending_job_search_failed" in str(result.get("intent", ""))
+
+    def test_consume_failure_prevents_search_execution(self):
+        api = _make_api(pending={"role": "Engineer", "location": ""})
+        api._pjs_repo.consume.return_value = None
+        with patch.object(api, "_target_role_search_response") as mock_search:
+            api._redeem_pending_job_search("u1", "search for data analyst", profile={})
+        mock_search.assert_not_called()
+
+    def test_lookup_once_consume_once(self):
+        api = _make_api(pending={"role": "Engineer", "location": ""})
+        api._redeem_pending_job_search("u1", "search for data analyst", profile={})
+        api._pjs_repo.lookup.assert_called_once()
+        api._pjs_repo.consume.assert_called_once()
+
+    def test_stale_pending_cannot_revive_on_later_confirmation(self):
+        """After NEW_REQUEST consumes the old token, a later CONFIRM finds no
+        pending state and falls through — the stale role never executes."""
+        api = _make_api(pending={"role": "Engineer", "location": ""})
+        # Turn 1: NEW_REQUEST consumes the old token.
+        first = api._redeem_pending_job_search("u1", "search for data analyst", profile={})
+        assert first is None  # routed (consume succeeded)
+        # Turn 2: simulate fresh turn with pending state gone.
+        object.__setattr__(api, "_pjs_redemption_attempted_this_turn", api._PJS_SENTINEL)
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
+        with patch.object(api, "_target_role_search_response") as mock_search:
+            second = api._redeem_pending_job_search("u1", "yes", profile={})
+        assert second is None
+        mock_search.assert_not_called()
+
+
+# ── BLOCKER 2: CANCEL must be token-qualified ────────────────────────────────
+
+
+class TestTokenQualifiedCancel:
+    def test_cancel_uses_exact_token_not_unqualified_clear(self):
+        """CANCEL + FOUND must consume the exact lookup token — never call the
+        unqualified cancel(user_id) which could delete a replacement token."""
+        api = _make_api(pending={"role": "Engineer", "location": ""})
+        api._pjs_repo.cancel = MagicMock()
+        with patch.object(api, "_target_role_search_response") as mock_search:
+            result = api._redeem_pending_job_search("u1", "cancel", profile={})
+        assert result is None
+        api._pjs_repo.lookup.assert_called_once()
+        api._pjs_repo.consume.assert_called_once()
+        api._pjs_repo.cancel.assert_not_called()
+        mock_search.assert_not_called()
+
+    def test_cancel_discards_exact_lookup_token(self):
+        """The token passed to consume must be the one from the typed lookup."""
+        from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
+        api = _make_api(pending=None)
+        pjs = new_pending(role="Engineer", location="")
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
+        api._redeem_pending_job_search("u1", "cancel", profile={})
+        api._pjs_repo.consume.assert_called_once()
+        assert api._pjs_repo.consume.call_args[0][1] == pjs.token
+
+    def test_cancel_never_removes_replacement_token(self):
+        """CANCEL consumes only the exact token; a replacement token stored by
+        a concurrent request is never clobbered (the consume is token-bound)."""
+        from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
+        api = _make_api(pending=None)
+        pjs_a = new_pending(role="Engineer", location="")
+        pjs_b = new_pending(role="Data Analyst", location="")
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs_a)
+        # consume simulates token-qualified delete: only token A matches.
+        api._pjs_repo.consume.side_effect = lambda u, token: pjs_a if token == pjs_a.token else None
+        result = api._redeem_pending_job_search("u1", "cancel", profile={})
+        assert result is None
+        api._pjs_repo.consume.assert_called_once_with("u1", pjs_a.token)
+
+    def test_cancel_performs_no_job_execution(self):
+        api = _make_api(pending={"role": "Engineer", "location": ""})
+        with patch.object(api, "_target_role_search_response") as mock_search:
+            api._redeem_pending_job_search("u1", "cancel", profile={})
+        mock_search.assert_not_called()
+
+    def test_cancel_discard_failure_returns_clarification(self):
+        api = _make_api(pending={"role": "Engineer", "location": ""})
+        api._pjs_repo.consume.return_value = None
+        result = api._redeem_pending_job_search("u1", "cancel", profile={})
+        assert result is not None
+        assert result.get("type") == "clarification"
+
+    def test_cancel_expired_cleanup_uses_exact_token(self):
+        from src.services.pending_job_search import (
+            new_pending, PendingSearchLookup, LookupStatus,
+        )
+        from datetime import datetime, timedelta, timezone
+        api = _make_api(pending=None)
+        expired = new_pending(role="Old", location="")
+        expired = type(expired)(
+            token=expired.token, role=expired.role, location=expired.location,
+            reason=expired.reason,
+            created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.EXPIRED, expired)
+        api._pjs_repo.discard_token.return_value = True
+        result = api._redeem_pending_job_search("u1", "cancel", profile={})
+        assert result is None
+        api._pjs_repo.discard_token.assert_called_once_with("u1", expired.token)
+
+
+# ── BLOCKER 3: finalizer is the single store owner ───────────────────────────
+
+
+class TestSingleStoreOwner:
+    @pytest.mark.parametrize("reason", [
+        "known_but_off_profile", "adjacent_broaden", "ambiguous_promise",
+        "provider_degraded", "profile_based",
+    ])
+    def test_finalize_stores_exactly_once(self, reason):
+        api = _make_api(pending=None)
+        from src.rico_chat_api import make_offer
+        result = {
+            "type": "clarification",
+            "message": "Should I search for Accountant?",
+            "options": [{"action": "confirm_search", "label": "Yes, search Accountant"}],
+        }
+        result[api._PJS_OFFER_FIELD] = make_offer(role="Accountant", reason=reason)
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+        assert api._pjs_repo.store.call_count == 1
+        assert api._PJS_OFFER_FIELD not in finalized
+        # CTA preserved on success.
+        actions = [o.get("action") for o in finalized.get("options", [])]
+        assert "confirm_search" in actions
+
+    def test_known_but_off_profile_stores_exactly_once(self):
+        api = _make_api(pending=None)
+        profile_no_role = {"target_roles": [], "skills": [], "years_experience": 3}
+        with patch("src.rico_chat_api.classify_role_candidate", return_value=("known_but_off_profile", "Data Scientist")), \
+             patch.object(api, "_append_chat"), \
+             patch.object(api, "_get_recent_context", return_value={}), \
+             patch.object(api, "_store_recent_context"):
+            api._classified_role_search("u1", "Data Scientist", profile_no_role)
+        assert api._pjs_repo.store.call_count == 1
+
+    def test_provider_degraded_stores_exactly_once(self):
+        api = _make_api(pending=None)
+        with patch.object(api, "_append_chat"):
+            api._provider_degraded_response("u1", "Engineer", location="Dubai")
+        assert api._pjs_repo.store.call_count == 1
+
+    def test_adjacent_broaden_response_no_prestore(self):
+        """adjacent_broaden must not pre-store: only the finalizer stores."""
+        from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
+        api = _make_api(pending=None)
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
+        # The offer-producing path sets a marker; a single finalize stores once.
+        from src.rico_chat_api import make_offer
+        response = {
+            "type": "job_matches",
+            "message": "These are Engineer roles. Want me to broaden?",
+            "matches": [],
+        }
+        response[api._PJS_OFFER_FIELD] = make_offer(role="Engineer", reason="adjacent_broaden")
+        finalized = api._finalize_pending_job_search_offer("u1", response)
+        assert api._pjs_repo.store.call_count == 1
+
+
+# ── BLOCKER 4: persist the finalized response ────────────────────────────────
+
+
+class TestFinalizedPersistence:
+    def test_provider_degraded_persists_finalized_message_on_success(self):
+        api = _make_api(pending=None)
+        appended = []
+        with patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)):
+            resp = api._provider_degraded_response("u1", "Engineer", location="Dubai")
+        assert appended, "must persist something"
+        assert appended[-1] == resp["message"]
+        assert api._PJS_OFFER_FIELD not in resp
+
+    def test_provider_degraded_persists_sanitized_message_on_failure(self):
+        api = _make_api(pending=None)
+        api._pjs_repo.store.return_value = False
+        appended = []
+        with patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)):
+            resp = api._provider_degraded_response("u1", "Engineer", location="Dubai")
+        assert appended, "must persist something"
+        assert appended[-1] == resp["message"]
+        assert api._PJS_OFFER_FIELD not in resp
+
+    def test_no_private_marker_in_api_response_or_history(self):
+        api = _make_api(pending=None)
+        appended = []
+        with patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)):
+            resp = api._provider_degraded_response("u1", "Engineer", location="Dubai")
+        assert api._PJS_OFFER_FIELD not in resp
+        assert all(api._PJS_OFFER_FIELD not in (m if isinstance(m, dict) else {}) for m in appended)
+
+
+# ── Precedence: unrelated pending operations still win ───────────────────────
+
+
+class TestUnrelatedConfirmationPrecedence:
+    def test_mark_applied_confirmation_wins(self):
+        """A pending mark-applied confirmation blocks PJS redemption."""
+        from src.rico_chat_api import RicoChatAPI
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api._pjs_repo = MagicMock()
+        api._pending_search_redemption_blocked = lambda *a, **k: True
+        result = api._redeem_pending_job_search("u1", "yes", profile={}, blocked=True)
+        assert result is None
+        api._pjs_repo.lookup.assert_not_called()
+
+    def test_pjs_does_not_own_every_yes(self):
+        """CONFIRM + NONE returns None so normal routing (acknowledgement,
+        application status, etc.) owns the turn."""
+        api = _make_api(pending=None)
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
+        result = api._redeem_pending_job_search("u1", "ok", profile={})
+        assert result is None

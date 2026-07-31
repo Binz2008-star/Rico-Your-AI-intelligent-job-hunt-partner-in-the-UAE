@@ -498,6 +498,72 @@ class PendingJobSearchRepo:
             except Exception:
                 pass
 
+    # ── discard_token (ATOMIC, token-qualified) ──────────────────────────────
+
+    def discard_token(self, user_id: str, token: str) -> bool:
+        """Atomically remove the ``_pjs`` key ONLY when its token matches.
+
+        Unlike ``consume``, this removes the key even when the entry is
+        expired, so stale state can be cleaned up without executing it.
+        Returns True when the key was removed; False on token mismatch,
+        missing state, or DB failure.  The row lock prevents a concurrent
+        store of a replacement token from being clobbered.
+        """
+        db_uuid = _resolve_db_user_id(self._db, user_id)
+        if db_uuid is None:
+            return False
+        try:
+            conn = self._db.connect()
+        except Exception:
+            return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT settings FROM rico_agent_settings "
+                    "WHERE user_id = %s FOR UPDATE",
+                    (db_uuid,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    conn.rollback()
+                    return False
+                settings = row["settings"] if isinstance(row, dict) else row[0]
+                if not settings or not isinstance(settings, dict):
+                    conn.rollback()
+                    return False
+                raw = settings.get(_PJS_KEY)
+                if raw is None:
+                    conn.rollback()
+                    return False
+                try:
+                    pjs = PendingJobSearch.from_dict(raw)
+                except (ValueError, TypeError, KeyError):
+                    conn.rollback()
+                    return False
+                if pjs.token != token:
+                    conn.rollback()
+                    return False
+                new_settings = dict(settings)
+                new_settings.pop(_PJS_KEY, None)
+                cur.execute(
+                    "UPDATE rico_agent_settings SET settings = %s, updated_at = now() "
+                    "WHERE user_id = %s",
+                    (json.dumps(new_settings), db_uuid),
+                )
+            conn.commit()
+            return True
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return False
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
     # ── cancel ──────────────────────────────────────────────────────────────
 
     def cancel(self, user_id: str) -> bool:
