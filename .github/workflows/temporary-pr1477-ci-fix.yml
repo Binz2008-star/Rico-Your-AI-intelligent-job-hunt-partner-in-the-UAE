@@ -1,0 +1,32 @@
+name: Temporary PR 1477 CI repair
+
+on:
+  push:
+    branches:
+      - fix/external-draft-identity-guard
+    paths:
+      - .github/workflows/temporary-pr1477-ci-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/external-draft-identity-guard
+          fetch-depth: 0
+
+      - name: Apply bounded regression-test repair
+        run: python scripts/temporary_fix_pr1477_ci.py
+
+      - name: Commit repair and remove temporary machinery
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_ai_grounding_contract.py scripts/temporary_fix_pr1477_ci.py .github/workflows/temporary-pr1477-ci-fix.yml
+          git commit -m "test(ai): align grounding-order regression with identity guard"
+          git push origin HEAD:fix/external-draft-identity-guard
