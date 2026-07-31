@@ -291,6 +291,7 @@ export function CommandTranscriptStep({
                         canRegenerate={canRegenerate}
                         onRegenerate={onRegenerate}
                         isAr={isAr}
+                        hideEyebrow={!isFirstInGroup}
                     />
                     {children}
                 </div>
