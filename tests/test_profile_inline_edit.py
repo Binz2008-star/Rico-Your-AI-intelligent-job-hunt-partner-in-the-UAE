@@ -114,6 +114,7 @@ def test_profile_patch_calls_upsert_profile_with_extended_fields(monkeypatch):
     """Verify PATCH /api/v1/rico/profile calls upsert_profile with extended fields."""
     from src.api.app import app
     import src.api.routers.rico_chat as rico_chat_router
+    import src.repositories.profile_repo as profile_repo
     from src.rico_agent import RicoProfile
 
     captured = {}
@@ -131,9 +132,13 @@ def test_profile_patch_calls_upsert_profile_with_extended_fields(monkeypatch):
         # Return RicoProfile as production does
         return RicoProfile(user_id=user_id, email=user_id, **updates)
 
+    def mock_get_profile(user_id):
+        return RicoProfile(user_id=user_id, email=user_id, **payload)
+
     # Patch get_current_user in the router module where it's called
     monkeypatch.setattr(rico_chat_router, "get_current_user", mock_get_user)
     monkeypatch.setattr(rico_chat_router, "upsert_profile", mock_upsert_profile)
+    monkeypatch.setattr(profile_repo, "get_profile", mock_get_profile)
 
     payload = {
         "phone": "+971501234567",

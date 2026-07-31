@@ -1222,14 +1222,14 @@ def test_upsert_profile_uses_bundle_resolver_for_email_users(monkeypatch):
                 "settings": {},
             }
 
-        def upsert_profile(self, user_id, profile_data, conn=None):
+        def upsert_profile(self, user_id, profile_data, conn=None, **kwargs):
             captured["profile_user_id"] = user_id
             captured["profile_data"] = profile_data
             captured["profile_conn"] = conn
             return {"user_id": user_id, "profile": profile_data}
 
     class FakeMemory:
-        def upsert_profile_from_dict(self, user_id, updates):
+        def upsert_profile_from_dict(self, user_id, updates, clear_fields=None):
             return RicoProfile(user_id=user_id, email=user_id, **updates)
 
     fake_db = FakeDB()
@@ -1281,13 +1281,13 @@ def test_upsert_profile_creates_email_user_with_email_column(monkeypatch):
             captured["user_payload"] = payload
             return {"id": "new-db-user-id"}
 
-        def upsert_profile(self, user_id, profile_data, conn=None):
+        def upsert_profile(self, user_id, profile_data, conn=None, **kwargs):
             captured["profile_user_id"] = user_id
             captured["profile_data"] = profile_data
             return {"user_id": user_id, "profile": profile_data}
 
     class FakeMemory:
-        def upsert_profile_from_dict(self, user_id, updates):
+        def upsert_profile_from_dict(self, user_id, updates, clear_fields=None):
             return RicoProfile(user_id=user_id, email=user_id, **updates)
 
     fake_db = FakeDB()
