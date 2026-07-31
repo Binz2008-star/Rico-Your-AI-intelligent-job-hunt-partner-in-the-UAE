@@ -613,19 +613,25 @@ class PendingJobSearchRepo:
         Returns one of:
 
         * ``FOUND`` — valid pending search exists (``pjs`` populated).
-        * ``NONE`` — no pending row, no settings, or no ``_pjs`` key.
-        * ``UNAVAILABLE`` — DB unreachable or identity resolution failed.
+        * ``NONE`` — no pending row, no user row, no settings, or no ``_pjs``
+          key.  A missing user row is NOT an outage — it is a genuine absence
+          of pending state.
+        * ``UNAVAILABLE`` — DB unreachable or ``get_user_bundle`` threw an
+          exception.
         * ``MALFORMED`` — the stored value exists but cannot be deserialised.
         * ``EXPIRED`` — found but past its TTL (``pjs`` populated for logging).
         """
-        db_uuid = _resolve_db_user_id(self._db, user_id)
-        if db_uuid is None:
-            return PendingSearchLookup(LookupStatus.UNAVAILABLE)
+        # Do NOT use ``_resolve_db_user_id`` here: that helper conflates
+        # user-not-found with DB-unavailable.  We call ``get_user_bundle``
+        # directly so we can separate the two.
         try:
-            bundle = self._db.get_user_bundle(db_uuid)
+            bundle = self._db.get_user_bundle(user_id)
         except Exception:
             return PendingSearchLookup(LookupStatus.UNAVAILABLE)
         if bundle is None:
+            return PendingSearchLookup(LookupStatus.NONE)
+        raw_id = bundle.get("id")
+        if raw_id is None:
             return PendingSearchLookup(LookupStatus.NONE)
         settings = bundle.get("settings")
         if not settings or not isinstance(settings, dict):

@@ -6659,11 +6659,24 @@ class RicoChatAPI:
         if cat != ReplyCategory.OTHER:
             lookup = self.pjs_repo.lookup(user_id)
 
-        # ── Helper: return a truthful clarification for non-recoverable states.
+        # ── Helper: return a truthful clarification when expired state exists
+        # but cannot be consumed.  UNAVAILABLE and MALFORMED do NOT block
+        # CONFIRM / CANCEL / NEW_REQUEST — only CHANGE requires a readable
+        # pending state to fulfill its contract.
         def _fail_closed() -> dict[str, Any] | None:
             if lookup is None:
                 return None
-            if lookup.status in (LookupStatus.UNAVAILABLE, LookupStatus.MALFORMED, LookupStatus.EXPIRED):
+            if lookup.status == LookupStatus.EXPIRED:
+                return self._pjs_error_response(message_context=message)
+            return None
+
+        def _change_error() -> str | None:
+            """CHANGE requires readable pending state; error when unavailable."""
+            if lookup is None:
+                return None
+            if lookup.status in (
+                LookupStatus.UNAVAILABLE, LookupStatus.MALFORMED, LookupStatus.EXPIRED,
+            ):
                 return self._pjs_error_response(message_context=message)
             return None
 
@@ -6671,18 +6684,19 @@ class RicoChatAPI:
             if lookup is not None and lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
                 if not self._clear_pending_job_search(user_id):
                     result = self._pjs_error_response(message_context=message)
-            else:
-                result = _fail_closed()
-            # NONE: safe fallthrough — nothing to cancel
+            elif lookup is not None and lookup.status == LookupStatus.EXPIRED:
+                result = self._pjs_error_response(message_context=message)
+            # NONE / UNAVAILABLE / MALFORMED: safe fallthrough
 
         elif cat == ReplyCategory.NEW_REQUEST:
             if lookup is not None and lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
                 # Atomically invalidate the old pending search; failure is
                 # non-fatal — the new request continues routing regardless.
                 self._consume_by_token(user_id, lookup.pjs.token)
-            # NONE / UNAVAILABLE / MALFORMED / EXPIRED: continue as a new
-            # request.  This is NOT a PendingJobSearch error.
-            result = None
+            elif lookup is not None and lookup.status == LookupStatus.EXPIRED:
+                result = self._pjs_error_response(message_context=message)
+            # NONE / UNAVAILABLE / MALFORMED: continue as a new request.
+            # This is NOT a PendingJobSearch error.
 
         elif cat == ReplyCategory.CHANGE:
             _, new_role, new_loc = classify_reply(message)
@@ -6704,7 +6718,7 @@ class RicoChatAPI:
                         user_id, new_role, profile, location=new_loc or "",
                     )
                 else:
-                    result = self._pjs_error_response(message_context=message)
+                    result = _change_error()
             else:
                 # Location-only change: atomically consume, use stored role.
                 if lookup is not None and lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
@@ -6720,7 +6734,7 @@ class RicoChatAPI:
                     # No pending state, nothing to change — safe fallthrough.
                     pass
                 else:
-                    result = self._pjs_error_response(message_context=message)
+                    result = _change_error()
 
         elif cat == ReplyCategory.CONFIRM:
             if lookup is not None and lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
@@ -6734,9 +6748,9 @@ class RicoChatAPI:
                     # Consume failed despite FOUND lookup — token mismatch,
                     # concurrent loser, or DB down mid-transaction.
                     result = self._pjs_error_response(message_context=message)
-            else:
-                result = _fail_closed()
-            # NONE: safe fallthrough — nothing to confirm.
+            elif lookup is not None and lookup.status == LookupStatus.EXPIRED:
+                result = self._pjs_error_response(message_context=message)
+            # NONE / UNAVAILABLE / MALFORMED: safe fallthrough
 
         # Cache so this turn never re-evaluates.
         object.__setattr__(self, "_pjs_redemption_attempted_this_turn", result)
