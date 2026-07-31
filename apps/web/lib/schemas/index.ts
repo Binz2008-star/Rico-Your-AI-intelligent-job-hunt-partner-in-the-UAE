@@ -5,6 +5,12 @@
  */
 
 import { z } from 'zod';
+import {
+    CareerProfileSchema,
+    CompletenessSchema,
+    EducationItemSchema,
+    ExperienceItemSchema,
+} from './careerProfile';
 
 // ============================================================================
 // Auth Schemas
@@ -578,6 +584,8 @@ export const RicoProfileResponseSchema = z.object({
     current_company: z.string().nullable().optional(),
     linkedin_url: z.string().nullable().optional(),
     completeness_score: z.number().nullable().optional(),
+    career_profile: CareerProfileSchema.optional(),
+    completeness: CompletenessSchema.optional(),
     settings: z.record(z.string(), z.unknown()).optional(),
     warnings: z.array(MatchingGuardrailWarningSchema).optional().default([]),
 }).passthrough();
@@ -681,6 +689,8 @@ export const ProfilePreviewSchema = z.object({
     skills: z.array(z.string()),
     certifications: z.array(z.string()),
     languages: z.array(z.string()),
+    work_experience: z.array(ExperienceItemSchema).default([]),
+    education: z.array(EducationItemSchema).default([]),
 }).passthrough();
 
 export const UploadCVResponseSchema = z.object({

@@ -51,6 +51,20 @@ from src.api.public_identity import (
 )
 from src.api.rate_limit import LIMIT_ADMIN, LIMIT_CHAT, LIMIT_FEEDBACK, LIMIT_OPERATION_STATUS, LIMIT_PROFILE, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
 from src.repositories import onboarding_repo, profile_repo
+from src.schemas.career_profile import (
+    CareerProfile,
+    CareerProfileUpdate,
+    CertificationItem,
+    Completeness,
+    CompletenessBreakdownItem,
+    EducationItem,
+    ExperienceItem,
+    LanguageItem,
+    ProfilePreview,
+    ProvenanceState,
+    SkillItem,
+    now_iso,
+)
 from src.repositories.learning_repo import get_learning_repository
 from src.agent.responses.schema import RicoResponse, build_error_response, _generate_debug_id
 from src.agent.runtime import agent_runtime
@@ -226,16 +240,16 @@ class ProfileResponse(BaseModel):
     current_company: str | None = None
     linkedin_url: str | None = None
     completeness_score: float | None = None
-    career_profile: dict[str, Any] | None = None
-    provenance: dict[str, Any] | None = None
-    completeness: dict[str, Any] | None = None
-    last_cv_sync_at: str | None = None
+    career_profile: CareerProfile | None = None
+    completeness: Completeness | None = None
     warnings: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ConfirmCVProfileRequest(BaseModel):
     """Request to confirm and save CV profile preview."""
-    preview: dict[str, Any] = Field(..., description="Profile preview data to confirm")
+    model_config = {"extra": "forbid"}
+
+    preview: ProfilePreview = Field(..., description="Profile preview data to confirm")
     filename: str = Field(..., description="Original CV filename")
     doc_type: str = Field(default="cv", description="Detected document type from upload step")
     upload_id: str | None = Field(
@@ -246,10 +260,6 @@ class ConfirmCVProfileRequest(BaseModel):
             "server-computed content hash, byte count, and parsed text for this "
             "exact upload — never trusted/recomputed from client-supplied values."
         ),
-    )
-    review: dict[str, Any] | None = Field(
-        default=None,
-        description="User review decisions per extracted section.",
     )
 
 
@@ -623,16 +633,8 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         current_company=getattr(profile, "current_company", None),
         linkedin_url=getattr(profile, "linkedin_url", None),
         completeness_score=agent_ctx.completeness_score,
-        career_profile=getattr(profile, "career_profile", None) or None,
-        provenance=getattr(profile, "provenance", None) or None,
-        completeness={
-            "score": agent_ctx.completeness_score,
-            "breakdown": [
-                {"section": "required", "missing": agent_ctx.missing_required},
-                {"section": "optional", "missing": agent_ctx.missing_optional},
-            ],
-        },
-        last_cv_sync_at=None,
+        career_profile=_safe_career_profile(profile),
+        completeness=_build_completeness(profile, agent_ctx),
         warnings=build_matching_guardrail_warnings(
             settings=settings,
             profile=profile,
@@ -1533,6 +1535,8 @@ def rico_ai_provider_health_public(request: Request) -> dict[str, Any]:
 # ============================================================================
 
 class ProfileUpdateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
     name: Optional[str] = Field(None, max_length=200)
     phone: Optional[str] = Field(None, max_length=30)
     telegram_username: Optional[str] = Field(None, max_length=100)
@@ -1548,8 +1552,7 @@ class ProfileUpdateRequest(BaseModel):
     notice_period: Optional[str] = Field(None, max_length=100)
     skills: Optional[list[str]] = Field(None, max_length=100)
     industries: Optional[list[str]] = Field(None, max_length=50)
-    career_profile: Optional[dict[str, Any]] = None
-    provenance: Optional[dict[str, Any]] = None
+    career_profile: Optional[CareerProfileUpdate] = None
 
 
 def _profile_updates_visible(user_id: str, updates: dict[str, Any]) -> bool:
@@ -1559,12 +1562,201 @@ def _profile_updates_visible(user_id: str, updates: dict[str, Any]) -> bool:
         return False
     for key, expected in updates.items():
         actual = getattr(profile, key, None)
+        if key == "career_profile" and expected is not None:
+            # Compare serialized dicts; the stored value is plain JSONB.
+            actual = actual or {}
+            expected = CareerProfileUpdate.model_validate(expected).model_dump()
+            if actual != expected:
+                return False
+            continue
         if isinstance(expected, list):
             if list(actual or []) != expected:
                 return False
         elif actual != expected:
             return False
     return True
+
+
+def _safe_career_profile(profile) -> CareerProfile | None:
+    raw = getattr(profile, "career_profile", None)
+    if not raw:
+        return None
+    return CareerProfile.model_validate(raw)
+
+
+def _apply_career_profile_update(user_id: str, update: CareerProfileUpdate) -> dict:
+    """Derive server-owned provenance and timestamps for a career-profile PATCH.
+
+    Rejects unknown item IDs and client attempts to claim server-owned metadata.
+    """
+    existing = profile_repo.get_profile(user_id)
+    existing_career = _safe_career_profile(existing)
+
+    existing_ids = set()
+    if existing_career:
+        for section in (
+            existing_career.experience,
+            existing_career.education,
+            existing_career.certifications,
+            existing_career.languages,
+            existing_career.skills,
+        ):
+            for item in section:
+                if item.id:
+                    existing_ids.add(item.id)
+
+    ts = now_iso()
+
+    def _process_item(update_item, item_cls, provenance_add):
+        item_id = getattr(update_item, "id", None)
+        if item_id is not None and item_id not in existing_ids:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown career profile item id: {item_id}",
+            )
+
+        if item_id is not None:
+            provenance = ProvenanceState.EDITED_BY_USER
+            new_id = item_id
+        else:
+            provenance = ProvenanceState.ADDED_BY_USER
+            new_id = secrets.token_urlsafe(8)
+
+        data = update_item.model_dump(exclude={"id"})
+        return item_cls(
+            id=new_id,
+            provenance=provenance,
+            source_document_id=None,
+            confidence=None,
+            confirmed_at=ts,
+            updated_at=ts,
+            **data,
+        )
+
+    experience = [
+        _process_item(item, ExperienceItem, None)
+        for item in update.experience
+    ]
+    education = [
+        _process_item(item, EducationItem, None)
+        for item in update.education
+    ]
+    certifications = [
+        _process_item(item, CertificationItem, None)
+        for item in update.certifications
+    ]
+    languages = [
+        _process_item(item, LanguageItem, None)
+        for item in update.languages
+    ]
+    skills = [
+        _process_item(item, SkillItem, None)
+        for item in update.skills
+    ]
+
+    return CareerProfile(
+        summary=update.summary,
+        experience=experience,
+        education=education,
+        certifications=certifications,
+        languages=languages,
+        skills=skills,
+    ).model_dump()
+
+
+def _build_completeness(profile, agent_ctx) -> Completeness | None:
+    """Informational completeness breakdown; does not gate matching eligibility."""
+    if not profile:
+        return None
+
+    career_profile = _safe_career_profile(profile)
+    cv_parsed = getattr(profile, "cv_status", None) == "parsed"
+    sections: list[CompletenessBreakdownItem] = []
+
+    # identity
+    missing = [
+        f for f in ["name", "email", "phone"]
+        if not getattr(profile, f, None)
+    ]
+    sections.append(CompletenessBreakdownItem(
+        section="identity",
+        score=1.0 if not missing else 0.0,
+        missing=missing,
+        needs_confirmation=False,
+    ))
+
+    # summary
+    has_summary = bool(career_profile and career_profile.summary)
+    sections.append(CompletenessBreakdownItem(
+        section="summary",
+        score=1.0 if has_summary else 0.0,
+        missing=["summary"] if not has_summary else [],
+        needs_confirmation=cv_parsed and not has_summary,
+    ))
+
+    # experience
+    has_exp = bool(career_profile and career_profile.experience)
+    sections.append(CompletenessBreakdownItem(
+        section="experience",
+        score=1.0 if has_exp else 0.0,
+        missing=["experience"] if not has_exp else [],
+        needs_confirmation=cv_parsed and not has_exp,
+    ))
+
+    # education
+    has_edu = bool(career_profile and career_profile.education)
+    sections.append(CompletenessBreakdownItem(
+        section="education",
+        score=1.0 if has_edu else 0.0,
+        missing=["education"] if not has_edu else [],
+        needs_confirmation=cv_parsed and not has_edu,
+    ))
+
+    # skills
+    has_skills = bool(
+        (career_profile and career_profile.skills) or getattr(profile, "skills", None)
+    )
+    sections.append(CompletenessBreakdownItem(
+        section="skills",
+        score=1.0 if has_skills else 0.0,
+        missing=["skills"] if not has_skills else [],
+        needs_confirmation=cv_parsed and not has_skills,
+    ))
+
+    # certifications
+    has_certs = bool(career_profile and career_profile.certifications)
+    sections.append(CompletenessBreakdownItem(
+        section="certifications",
+        score=1.0 if has_certs else 0.0,
+        missing=["certifications"] if not has_certs else [],
+        needs_confirmation=cv_parsed and not has_certs,
+    ))
+
+    # languages
+    has_langs = bool(
+        (career_profile and career_profile.languages) or getattr(profile, "languages", None)
+    )
+    sections.append(CompletenessBreakdownItem(
+        section="languages",
+        score=1.0 if has_langs else 0.0,
+        missing=["languages"] if not has_langs else [],
+        needs_confirmation=cv_parsed and not has_langs,
+    ))
+
+    # preferences
+    pref_fields = ["target_roles", "preferred_cities", "years_experience"]
+    missing = [f for f in pref_fields if not getattr(profile, f, None)]
+    sections.append(CompletenessBreakdownItem(
+        section="preferences",
+        score=1.0 if not missing else 0.0,
+        missing=missing,
+        needs_confirmation=False,
+    ))
+
+    return Completeness(
+        score=agent_ctx.completeness_score,
+        sections=sections,
+    )
 
 
 @router.patch("/profile")
@@ -1617,9 +1809,9 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     if body.industries is not None:
         updates["industries"] = [i.strip() for i in body.industries if i.strip()]
     if body.career_profile is not None:
-        updates["career_profile"] = body.career_profile
-    if body.provenance is not None:
-        updates["provenance"] = body.provenance
+        updates["career_profile"] = _apply_career_profile_update(
+            user_id, body.career_profile
+        )
 
     # Explicit clears for nullable NUMERIC fields. Pydantic gives an omitted
     # field and an explicit JSON null the same default (None), so
@@ -2283,8 +2475,24 @@ async def rico_upload_cv(
             "skills": detected_skills if detected_skills else existing_skills,  # For backward compatibility
             "certifications": parsed.get("certifications", []),
             "languages": parsed.get("languages", []),
-            "work_experience": parsed.get("work_experience", []),
-            "education": parsed.get("education", []),
+            "work_experience": [
+                ExperienceItem(
+                    id=secrets.token_urlsafe(8),
+                    provenance=ProvenanceState.EXTRACTED_FROM_CV,
+                    **item,
+                ).model_dump()
+                for item in parsed.get("work_experience", [])
+                if isinstance(item, dict)
+            ],
+            "education": [
+                EducationItem(
+                    id=secrets.token_urlsafe(8),
+                    provenance=ProvenanceState.EXTRACTED_FROM_CV,
+                    **item,
+                ).model_dump()
+                for item in parsed.get("education", [])
+                if isinstance(item, dict)
+            ],
             "extraction_quality": parsed.get("extraction_quality"),
             "extracted_chars": parsed.get("extracted_chars"),
         }
@@ -2508,7 +2716,8 @@ async def confirm_cv_profile(
         enforce_profile_optimization_allowed(resolved_user_id, is_first_upload=True)
 
         # Build profile updates from preview - use skills_detected if available, fallback to skills
-        preview_skills = payload.preview.get("skills_detected") or payload.preview.get("skills", [])
+        preview = payload.preview.model_dump()
+        preview_skills = preview.get("skills_detected") or preview.get("skills", [])
         # SECURITY: never persist email/phone parsed from CV text. A CV routinely contains a
         # referee's, a previous employer's, or a mis-parsed contact detail; routing it through
         # upsert_profile -> upsert_user (which COALESCEs email/phone) would silently overwrite
@@ -2517,13 +2726,13 @@ async def confirm_cv_profile(
         # not from uploaded document text. The parsed contact details are still surfaced to the
         # user in the upload preview for display; users set email/phone via their explicit input.
         profile_updates = {
-            "name": payload.preview.get("name"),
-            "current_role": payload.preview.get("current_role"),
+            "name": preview.get("name"),
+            "current_role": preview.get("current_role"),
             "skills": preview_skills,
-            "years_experience": payload.preview.get("experience_years"),
-            "target_roles": payload.preview.get("target_roles", []) if payload.preview.get("target_roles") else None,
-            "certifications": payload.preview.get("certifications", []),
-            "languages": payload.preview.get("languages", []),
+            "years_experience": preview.get("experience_years"),
+            "target_roles": preview.get("target_roles", []) if preview.get("target_roles") else None,
+            "certifications": preview.get("certifications", []),
+            "languages": preview.get("languages", []),
             "cv_filename": payload.filename,
             "cv_status": "parsed",
             "cv_extracted_at": datetime.now(_UTC).isoformat(),

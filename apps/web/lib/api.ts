@@ -23,6 +23,12 @@ import {
   ScheduledSearchesResponseSchema,
   UploadCVResponseSchema,
 } from "@/lib/schemas";
+import type {
+  CareerProfile,
+  Completeness,
+  EducationItem,
+  ExperienceItem,
+} from "@/lib/schemas/careerProfile";
 import { getSignupAttribution } from "@/lib/signupAttribution";
 import type {
   Application,
@@ -280,13 +286,8 @@ export interface ProfileResponse {
   current_company?: string | null;
   linkedin_url?: string | null;
   completeness_score?: number | null;
-  career_profile?: Record<string, unknown>;
-  provenance?: Record<string, unknown>;
-  completeness?: {
-    score: number;
-    breakdown: Array<{ section: string; missing: string[] }>;
-  };
-  last_cv_sync_at?: string | null;
+  career_profile?: CareerProfile;
+  completeness?: Completeness;
   settings?: Record<string, unknown>;
   warnings?: MatchingGuardrailWarning[];
 }
@@ -1282,8 +1283,8 @@ export interface ProfilePreview {
   skills: string[];
   certifications: string[];
   languages: string[];
-  work_experience?: Array<Record<string, unknown>>;
-  education?: Array<Record<string, unknown>>;
+  work_experience?: ExperienceItem[];
+  education?: EducationItem[];
   extraction_quality?: string;
   extracted_chars?: number;
 }
@@ -1330,7 +1331,6 @@ export interface ConfirmCVProfileRequest {
   // server-side against the caller's own identity. Omit only when no
   // artifact was returned by upload-cv.
   upload_id?: string | null;
-  review?: Record<string, unknown>;
 }
 
 export interface ConfirmCVProfileResponse {
@@ -1612,8 +1612,7 @@ export interface ProfileUpdatePayload {
   visa_status?: string;
   notice_period?: string;
   skills?: string[];
-  career_profile?: Record<string, unknown>;
-  provenance?: Record<string, unknown>;
+  career_profile?: CareerProfile;
 }
 
 export async function updateProfile(

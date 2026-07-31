@@ -756,6 +756,7 @@ Branch: `claude/md-best-practices-generator-auau3b` (final home of the
 CLAUDE.md refactor commit, reconciled onto the pre-existing PR #1346 rather
 than opened as a competing PR)
 Issue/PR: #1346 (tooling+refactor), plus reviewed-and-merged #1347, #1348,
+
 # 1349, #1350 as part of the same session
 
 #### Objective
@@ -7327,6 +7328,84 @@ language follows the user's message language.
 - Next exact action: none — task fully closed
 - Stop condition: any English-output regression or UI-contract failure in CI
 - Rollback plan: revert the PR; replies return to English-only
+
+### TASK-20260731-002 — Career Profile contract (PR 1) — typed models, server-owned provenance, completeness breakdown
+
+Status: in_progress
+Owner: Devin
+Branch: `feat/career-profile-contract`
+Issue/PR: Draft PR #1473
+
+#### Objective
+
+Close the blockers on the Draft PR #1473 for the first phase of the Career Profile feature: replace free-form `dict`/`Record<string, unknown>` contracts with typed Pydantic/Zod models, enforce server-owned provenance, remove the ignored `review` payload, drop the untruthful `last_cv_sync_at` field, implement a typed completeness breakdown, and add focused contract tests. The task is the contract layer only; persistence semantics and CV review actions follow in later PRs.
+
+#### Context
+
+- PR #1473 initially extended `RicoProfile`, `ProfileResponse`, `ProfileUpdateRequest`, and `ConfirmCVProfileRequest` with `career_profile`, `provenance`, `completeness`, `last_cv_sync_at`, `work_experience`, and `education` as loosely typed maps.
+- The blocker list (seven items) required: typed `CareerProfile`, `ExperienceItem`, `EducationItem`, `CertificationItem`, `LanguageItem`, `SkillItem`, `CareerProfileReview`, `ReviewDecision`, `ProvenanceState`, and `CompletenessBreakdownItem`; server-owned provenance derivation; removal of the `review` field from `ConfirmCVProfileRequest`; truthful sync timestamps only when derived from a primary CV record; real completeness sections; and contract tests.
+
+#### Constraints
+
+- No migrations: `career_profile` is stored as JSON inside the existing profile JSONB column.
+- Do not alter `evaluate_minimum_profile` gating.
+- Review semantics for `CareerProfileReview` are modeled but not wired in this PR.
+- Do not introduce a parallel status document; `AI_WORKSPACE/TASKS.md` is the source of truth.
+
+#### Acceptance criteria
+
+- [x] Typed backend models in `src/schemas/career_profile.py`.
+- [x] Typed frontend schemas in `apps/web/lib/schemas/careerProfile.ts`.
+- [x] `ProfileResponse` returns `career_profile: CareerProfile` and `completeness: Completeness`.
+- [x] `ProfileUpdateRequest` accepts `career_profile: CareerProfileUpdate` and rejects `provenance`.
+- [x] `ConfirmCVProfileRequest.preview` is `ProfilePreview` and `review` is removed.
+- [x] `upload-cv` preview returns `work_experience` and `education` as typed `ExperienceItem`/`EducationItem` objects.
+- [x] Server derives `provenance`, `confirmed_at`, `updated_at`, and rejects client-forged metadata.
+- [x] `last_cv_sync_at` and top-level `provenance` removed from the contract.
+- [x] Contract tests in `tests/test_career_profile_contract.py` pass.
+- [ ] Full backend CI, frontend build (`npm run build`), and Playwright/E2E smoke still to verify.
+
+#### Continuity Block
+
+- Task ID: TASK-20260731-002
+- GitHub issue/PR: Draft PR #1473
+- Branch: `feat/career-profile-contract`
+- Base branch: `main`
+- Last safe commit SHA: `d38328dcc12da82785ac9f0cf6f0c38bb84f7b88` (before this session)
+- Current head SHA: <to be recorded after push>
+- Uncommitted changes present: yes — backend schemas, router, repo, agent; frontend schemas + types; contract tests; AI_WORKSPACE/TASKS.md
+- Status: in_progress
+- Files inspected:
+  - `src/rico_agent.py`, `src/repositories/profile_repo.py`, `src/api/routers/rico_chat.py`
+  - `apps/web/lib/api.ts`, `apps/web/lib/schemas/index.ts`
+  - `AI_WORKSPACE/TASKS.md`
+- Files changed:
+  - `src/schemas/career_profile.py` — new typed models and provenance helpers
+  - `src/rico_agent.py` — removed top-level `provenance`
+  - `src/repositories/profile_repo.py` — removed `provenance` bundle mapping
+  - `src/api/routers/rico_chat.py` — typed request/response, server-owned provenance, completeness breakdown
+  - `apps/web/lib/schemas/careerProfile.ts` — new Zod schemas + TypeScript types
+  - `apps/web/lib/schemas/index.ts` — wired new schemas into response/preview
+  - `apps/web/lib/api.ts` — updated `ProfileResponse`, `ProfileUpdatePayload`, `ProfilePreview`, `ConfirmCVProfileRequest`
+  - `tests/test_career_profile_contract.py` — new contract tests
+  - `AI_WORKSPACE/TASKS.md` — this entry
+- Files intentionally not touched: `evaluate_minimum_profile` and gating logic; frontend page components beyond `lib/api.ts`/`lib/schemas`; no DB migrations.
+- What is complete: typed backend/frontend contract, server-owned provenance, removed `review`/`last_cv_sync_at`/top-level `provenance`, typed `completeness`, upload-cv typed preview, 9/9 new contract tests green, 33/33 profile persistence/inline-edit tests green.
+- What is incomplete: full backend pytest sweep; frontend `npm run build` (running in background as `9980fc`); Playwright/Vercel/Neon smoke; final commit and push.
+- Known blockers: none
+- Validation already run:
+  - `python -m py_compile src/schemas/career_profile.py src/rico_agent.py src/api/routers/rico_chat.py src/repositories/profile_repo.py` ✅
+  - `python -m pytest tests/test_career_profile_contract.py -v` ✅ 9/9
+  - `python -m pytest tests/test_profile_persistence.py tests/test_profile_inline_edit.py -v` ✅ 33/33
+  - `cd apps/web && npm run build` — started, background id `9980fc`, result pending
+- Validation still required:
+  - Collect `npm run build` result and fix any TypeScript error.
+  - Run a broader backend pytest sweep (`python -m pytest tests/ -q`) if build is green.
+  - Run `cd apps/web && npm run test` and Playwright smoke if frontend build passes.
+- Deployment/CI/Neon/Vercel state to check next: none until PR is pushed and CI runs
+- Next exact action: finish collecting build output, fix any remaining compile/test failures, commit, push, and update this continuity block with final SHAs.
+- Stop condition: stop and report if `npm run build` or backend tests fail after this session.
+- Rollback plan: `git reset --hard d38328dcc12da82785ac9f0cf6f0c38bb84f7b88`
 
 ### TASK-20260721-009 — Admin operations observability endpoint (stabilization slice 2)
 

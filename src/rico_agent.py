@@ -63,7 +63,6 @@ class RicoProfile:
     manual_profile_wizard_disabled: bool = False
     normalization_version: Optional[int] = None
     career_profile: Dict[str, Any] = field(default_factory=dict)
-    provenance: Dict[str, Any] = field(default_factory=dict)
     settings: RicoAgentSettings = field(default_factory=RicoAgentSettings)
 
 
