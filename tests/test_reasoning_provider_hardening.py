@@ -605,3 +605,107 @@ class TestStreamIsIncrementalNotBlob:
         token_frames = res.text.count('"type": "token"') + res.text.count('"type":"token"')
         assert token_frames >= 3, f"expected multiple incremental token frames, got {token_frames}"
         assert res.text.count(rt._FALLBACK_TEXT) == 0  # never the buffered fallback blob
+
+
+# ── DeepSeek explicit thinking contract ──────────────────────────────────────
+
+def _reasoning_chunk(*, content=None, reasoning_content=None):
+    delta = MagicMock()
+    delta.content = content
+    delta.reasoning_content = reasoning_content
+    choice = MagicMock()
+    choice.delta = delta
+    chunk = MagicMock()
+    chunk.choices = [choice]
+    return chunk
+
+
+def test_deepseek_non_stream_explicitly_disables_thinking(monkeypatch):
+    _deepseek_env(monkeypatch)
+    client = MagicMock()
+    client.chat.completions.create.return_value = _chat_response("Final answer")
+
+    with (
+        patch.object(rt, "_build_client", return_value=client),
+        patch.object(rt, "_deepseek_model_chain", return_value=["deepseek-v4-flash"]),
+        patch.object(rt, "_advisory_chain", side_effect=lambda models, provider=None: models),
+    ):
+        result = rt.call_openai_minimal("hello", provider="deepseek")
+
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert result["success"] is True
+    assert result["text"] == "Final answer"
+    assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert "stream" not in kwargs
+
+
+def test_deepseek_stream_explicitly_disables_thinking_and_never_yields_reasoning(monkeypatch):
+    _deepseek_env(monkeypatch)
+    client = MagicMock()
+    client.chat.completions.create.return_value = iter([
+        _reasoning_chunk(reasoning_content="private reasoning"),
+        _reasoning_chunk(content="Final answer"),
+    ])
+
+    with (
+        patch.object(rt, "_build_client", return_value=client),
+        patch.object(rt, "_deepseek_model_chain", return_value=["deepseek-v4-flash"]),
+        patch.object(rt, "_advisory_chain", side_effect=lambda models, provider=None: models),
+    ):
+        output = list(rt.call_openai_stream("hello", provider="deepseek"))
+
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert output == ["Final answer"]
+    assert "private reasoning" not in "".join(output)
+    assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert kwargs["stream"] is True
+
+
+def test_reasoning_only_stream_stays_fail_closed_and_falls_back_once(monkeypatch):
+    _deepseek_env(monkeypatch)
+    client = MagicMock()
+
+    def create(*, model, **kwargs):
+        assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
+        if model == "deepseek-v4-flash":
+            return iter([_reasoning_chunk(reasoning_content="private reasoning")])
+        return iter([_reasoning_chunk(content="Fallback answer")])
+
+    client.chat.completions.create.side_effect = create
+
+    with (
+        patch.object(rt, "_build_client", return_value=client),
+        patch.object(
+            rt,
+            "_deepseek_model_chain",
+            return_value=["deepseek-v4-flash", "deepseek-v4-pro"],
+        ),
+        patch.object(rt, "_advisory_chain", side_effect=lambda models, provider=None: models),
+    ):
+        output = list(rt.call_openai_stream("hello", provider="deepseek"))
+
+    attempts = rt.get_reasoning_health()["attempts"]
+    assert output == ["Fallback answer"]
+    assert client.chat.completions.create.call_count == 2
+    assert attempts[0]["model"] == "deepseek-v4-flash"
+    assert attempts[0]["category"] == "response_contract"
+    assert attempts[0]["ok"] is False
+    assert attempts[1]["model"] == "deepseek-v4-pro"
+    assert attempts[1]["ok"] is True
+
+
+def test_openai_responses_request_contract_is_unchanged(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-fake-openai-key-for-tests")
+    client = MagicMock()
+    response = MagicMock()
+    response.output_text = "OpenAI answer"
+    client.responses.create.return_value = response
+
+    with patch.object(rt, "_build_client", return_value=client):
+        result = rt.call_openai_minimal("hello", provider="openai")
+
+    kwargs = client.responses.create.call_args.kwargs
+    assert result["success"] is True
+    assert result["text"] == "OpenAI answer"
+    assert "extra_body" not in kwargs
+    assert "thinking" not in kwargs

@@ -907,6 +907,21 @@ def _build_client(provider: str):
     return OpenAI(**kwargs)
 
 
+def _deepseek_chat_request_options(*, stream: bool = False) -> Dict[str, Any]:
+    """Explicit DeepSeek request contract for Rico's final-answer-only chat.
+
+    DeepSeek V4 thinking defaults are provider-controlled. Rico does not expose
+    chain-of-thought and requires a final `content` answer, so ordinary chat
+    calls disable thinking explicitly rather than inheriting an upstream default.
+    """
+    options: Dict[str, Any] = {
+        "extra_body": {"thinking": {"type": "disabled"}},
+    }
+    if stream:
+        options["stream"] = True
+    return options
+
+
 def _call_openai_responses(
     client: Any,
     model: str,
@@ -949,6 +964,7 @@ def _call_deepseek_chat(
         max_tokens=(
             _SMOKE_MAX_OUTPUT_TOKENS if smoke else _DEFAULT_MAX_OUTPUT_TOKENS
         ),
+        **_deepseek_chat_request_options(),
     )
     return _extract_chat_completion_text(response)
 
@@ -1186,7 +1202,8 @@ def call_openai_stream(
             if active_provider == "deepseek":
                 stream = client.chat.completions.create(
                     model=model, messages=messages,
-                    max_tokens=_DEFAULT_MAX_OUTPUT_TOKENS, stream=True,
+                    max_tokens=_DEFAULT_MAX_OUTPUT_TOKENS,
+                    **_deepseek_chat_request_options(stream=True),
                 )
                 for chunk in stream:
                     delta = chunk.choices[0].delta if chunk.choices else None
