@@ -1,5 +1,6 @@
 name: Temporary DeepSeek Thinking Contract Apply
 
+# Temporary branch-only workflow. It must delete itself before review.
 on:
   push:
     branches:
