@@ -1,0 +1,57 @@
+name: Temporary DeepSeek Thinking Contract Apply
+
+on:
+  push:
+    branches:
+      - fix/deepseek-thinking-contract
+
+permissions:
+  contents: write
+
+jobs:
+  apply-verify-and-clean:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/deepseek-thinking-contract
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Apply bounded patch
+        run: python scripts/temporary_apply_deepseek_thinking_fix.py
+
+      - name: Compile changed Python
+        run: python -m py_compile src/rico_openai_runtime.py tests/test_reasoning_provider_hardening.py
+
+      - name: Run reasoning-provider hardening tests
+        run: python -m pytest tests/test_reasoning_provider_hardening.py -q
+
+      - name: Verify test enumeration
+        run: python scripts/check_test_enumeration.py
+
+      - name: Verify diff hygiene
+        run: git diff --check
+
+      - name: Remove temporary automation
+        run: |
+          rm scripts/temporary_apply_deepseek_thinking_fix.py
+          rm .github/workflows/temporary-deepseek-thinking-contract.yml
+
+      - name: Commit verified implementation
+        run: |
+          git config user.name "Rico Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(ai): make DeepSeek thinking contract explicit"
+          git push origin HEAD:fix/deepseek-thinking-contract
