@@ -1197,3 +1197,127 @@ class TestUnrelatedConfirmationPrecedence:
         api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
         result = api._redeem_pending_job_search("u1", "ok", profile={})
         assert result is None
+
+
+# ── Arabic store-failure CTA sanitization (final review blocker) ──────────────
+# When durable storage fails, the complete Arabic confirmation instruction
+# ("هل تريد مني البحث ... أجب بنعم أو أخبرني بمسمى آخر.") must be removed from
+# the finalized message, not just the confirm_search option.
+
+_AR_KNOWN_ROLE = "محاسب"
+_AR_KNOWN_MSG = (
+    f"'{_AR_KNOWN_ROLE}' هو مسمى وظيفي معروف، لكنه لا يتطابق مع ملفك المهني بشكل كبير. "
+    f"هل تريد مني البحث عن وظائف {_AR_KNOWN_ROLE} مع ذلك؟ أجب بنعم أو أخبرني بمسمى آخر."
+)
+
+
+class TestArabicStoreFailureSanitization:
+    def test_direct_finalizer_arabic_store_failure_sanitized(self):
+        """Direct finalizer regression with the exact production Arabic phrase."""
+        api = _make_api(pending=None)
+        api._pjs_repo.store.return_value = False
+        from src.rico_chat_api import make_offer
+        result = {
+            "type": "clarification",
+            "message": _AR_KNOWN_MSG,
+            "options": [
+                {"action": "confirm_search", "label": f"نعم، ابحث عن {_AR_KNOWN_ROLE}"},
+                {"action": "show_profile_roles", "label": "عرض الأدوار من سيرتي الذاتية"},
+            ],
+        }
+        result[api._PJS_OFFER_FIELD] = make_offer(role=_AR_KNOWN_ROLE, reason="known_but_off_profile")
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+
+        assert api._PJS_OFFER_FIELD not in finalized
+        actions = [o.get("action") for o in finalized.get("options", [])]
+        assert "confirm_search" not in actions
+        msg = finalized.get("message", "")
+        assert "هل تريد مني البحث" not in msg
+        assert "أجب بنعم" not in msg
+        assert "نعم، ابحث" not in msg
+        assert "قل لي المسمى الوظيفي والموقع مرة أخرى" in msg, "truthful fallback must be present"
+        assert "ابحث" not in msg, "no confirmation may be inferred from the final text"
+
+    def test_full_known_but_off_profile_arabic_store_failure(self):
+        """Drive _classified_role_search through the real Arabic path with
+        failed storage: sanitized API message, persisted == API message,
+        no marker, no confirm_search option."""
+        api = _make_api(pending=None)
+        api._pjs_repo.store.return_value = False
+        profile_no_role = {"target_roles": [], "skills": [], "years_experience": 3}
+        appended: list = []
+        with patch("src.rico_chat_api.classify_role_candidate",
+                   return_value=("known_but_off_profile", _AR_KNOWN_ROLE)), \
+             patch.object(api, "_append_chat", side_effect=lambda u, r, m: appended.append(m)), \
+             patch.object(api, "_get_recent_context", return_value={}), \
+             patch.object(api, "_store_recent_context"):
+            result = api._classified_role_search("u1", _AR_KNOWN_ROLE, profile_no_role)
+
+        assert result.get("type") == "clarification"
+        assert api._PJS_OFFER_FIELD not in result
+        actions = [o.get("action") for o in result.get("options", [])]
+        assert "confirm_search" not in actions
+        assert "show_profile_roles" in actions, "safe non-search option may remain"
+        msg = result.get("message", "")
+        assert "هل تريد مني البحث" not in msg
+        assert "أجب بنعم" not in msg
+        assert "قل لي المسمى الوظيفي والموقع مرة أخرى" in msg
+        # Persisted assistant message equals the API message.
+        assert appended and appended[-1] == msg
+
+    def test_english_store_failure_sanitized_regression(self):
+        """Prove the existing English store-failure sanitization is unchanged."""
+        api = _make_api(pending=None)
+        api._pjs_repo.store.return_value = False
+        from src.rico_chat_api import make_offer
+        en_msg = (
+            "'Accountant' is a real role, but it does not look close to your CV profile. "
+            "Should I search for Accountant jobs anyway? Reply YES or tell me a different role."
+        )
+        result = {
+            "type": "clarification",
+            "message": en_msg,
+            "options": [{"action": "confirm_search", "label": "Yes, search Accountant"}],
+        }
+        result[api._PJS_OFFER_FIELD] = make_offer(role="Accountant", reason="known_but_off_profile")
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+
+        msg = finalized.get("message", "")
+        assert "Should I search" not in msg
+        assert "Reply YES" not in msg
+        assert "Tell me the role and location again" in msg
+
+    def test_arabic_store_success_preserves_cta(self):
+        """When storage succeeds the Arabic confirmation text and the
+        confirm_search option remain; the marker is removed; store runs once."""
+        api = _make_api(pending=None)
+        api._pjs_repo.store.return_value = True
+        from src.rico_chat_api import make_offer
+        result = {
+            "type": "clarification",
+            "message": _AR_KNOWN_MSG,
+            "options": [
+                {"action": "confirm_search", "label": f"نعم، ابحث عن {_AR_KNOWN_ROLE}"},
+            ],
+        }
+        result[api._PJS_OFFER_FIELD] = make_offer(role=_AR_KNOWN_ROLE, reason="known_but_off_profile")
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+
+        assert api._PJS_OFFER_FIELD not in finalized
+        assert "هل تريد مني البحث" in finalized.get("message", "")
+        assert "أجب بنعم" in finalized.get("message", "")
+        actions = [o.get("action") for o in finalized.get("options", [])]
+        assert "confirm_search" in actions
+        assert api._pjs_repo.store.call_count == 1
+
+    def test_generic_arabic_prose_not_stripped(self):
+        """Ordinary Arabic career advice is not stripped unless it carries the
+        explicit structured offer marker and storage fails."""
+        api = _make_api(pending=None)
+        result = {
+            "type": "clarification",
+            "message": "يمكنك البحث عن وظائف على LinkedIn أو Bayt حسب مجال خبرتك ومؤهلاتك.",
+        }
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+        assert not api._pjs_repo.store.called
+        assert "يمكنك البحث عن وظائف" in finalized.get("message", "")

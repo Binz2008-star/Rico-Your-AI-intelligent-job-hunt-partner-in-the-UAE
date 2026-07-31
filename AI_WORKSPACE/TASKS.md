@@ -9005,16 +9005,33 @@ value is unverified.
       after FOUND lookup; `discard_token` cleans expired entries)
 - [x] NEW_REQUEST requires successful invalidation before routing
 - [x] Finalized response persisted (API message == persisted message)
-- [x] Precedence preserved: mark_applied / application-status / OK
-      acknowledgement are never hijacked by PJS
+- [x] Arabic store-failure CTA sanitization (2026-07-31): the exact production
+      Arabic phrase "هل تريد مني البحث ... أجب بنعم أو أخبرني بمسمى آخر." is
+      fully stripped from the finalized message when durable storage fails,
+      alongside the confirm_search option; English behavior unchanged
 - [x] Store-failure CTA sanitation: adjacent_broaden, ambiguous_promise,
-      known_but_off_profile, provider_degraded, profile-based finalization
+      known_but_off_profile (EN + AR), provider_degraded, profile-based
+      finalization
 - [x] Language derived from message context only (not user_id)
-- [x] 248 focused PendingJobSearch / routing / action-contract / gratitude /
-      convergence tests pass
+- [x] Precedence — verified for the tested flows: mark_applied /
+      application-status / OK acknowledgement pass when no real PJS exists
+      (CONFIRM + NONE/UNAVAILABLE falls through).  **OPEN DEFECT (not fixed,
+      reported):** with a real FOUND PendingJobSearch AND an armed
+      `_pending_confirm_apply` simultaneously, a bare "yes" reaches
+      `_resolve_pending_intent` → `_redeem_pending_job_search`
+      (CONFIRM + FOUND → consume + execute) at `_handle_active_user_inner`
+      before the `follow_up_confirmation` branch that owns `_pending_confirm_apply`
+      (line ~12048).  `_pending_confirm_apply` is not in
+      `_SEARCH_OUTRANKING_PENDING_FIELDS`, so the search pre-empts the apply
+      confirmation.  Characterization test failed with `search_error` after
+      consume — see the session report.  Precedence fix is out of scope for
+      this branch and NOT implemented.
+- [x] Focused PendingJobSearch and routing suites pass (exact counts not
+      asserted here to avoid brittleness; recorded in the PR body with the
+      exact command)
 - [x] 3 prior CI regressions (mark-applied confirmation x2, OK acknowledgement)
       pass under the typed-status matrix
-- [x] Full backend CI suite green at exact head (pytest 6129+ passed)
+- [x] Full backend CI suite green at exact head (pytest job passed)
 
 #### Rollback
 
