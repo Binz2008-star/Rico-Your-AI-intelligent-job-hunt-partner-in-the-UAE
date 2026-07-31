@@ -29,7 +29,7 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 
 | Item | Verified state |
 | --- | --- |
-| `main` | `1d00d46f40e187ce6c83d80ada3b7f94b4efefef` |
+| `main` | `f5f5fd14aadfb63f3870a73169ee7b3da83b9c02` |
 | `#1432` | **MERGED** as `3fa214a2b6631d2f73d0980f7700983550dce717`; authenticated gratitude smoke still pending |
 | `#1435` | **MERGED** as `9f731f19f5c46d454525690fc44b2ec319a4f2d1`; records endpoint evidence and the `#1389` ruling |
 | `#1436` | **MERGED** as `a292f99bf4a6a80745f4b5e29151684f37530cfc`; final D1 operating package, no production execution authorization |
@@ -39,12 +39,14 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 | `#1457` | **MERGED** as `dcc949af3e6300482be78146222d8d03fb6b092e` from head `acb33fe8b173cc05145acdbf760ae21fb907bee9`; bounded cache foundation, no production cache swapped |
 | `#1461` | **MERGED** as `ccde2c483c76b782214f3bb117c4c07310121c4d`; gate write-capable DB init behind `RICO_RUN_STARTUP_MIGRATIONS` |
 | `#1472` | **MERGED** as `1d00d46f40e187ce6c83d80ada3b7f94b4efefef` (squash); typed `PendingJobSearch` contract with atomic DB-backed consume; post-merge production smoke **pending** |
+| `#1474` | **MERGED** as `afe272cab8a4a3a5ccc2c42db13c99f3ef067195`; RicoReply truthful copy feedback and mobile wrapping hardening; production Vercel deployment **READY**; authenticated functional smoke remains unverified |
+| `#1476` | **MERGED** as `f5f5fd14aadfb63f3870a73169ee7b3da83b9c02`; typed read-only Career Profile contract; no write support or migrations; post-merge production/API verification **pending** |
 | `#1464` | **MERGED** as `41a95adf5e08b576571f32e57afd6919b0374a88`; AI grounding and evidence contract |
 | `#1462` | **CLOSED WITHOUT MERGE**; competing CV filename guardrail; superseded/consolidated into #1464 |
 | `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
 | Closed without merge | `#1467` (superseded by #1468, #1469, #1470, #1472); `#1473` (stale career-profile contract); `#1465` (stale AI audit); `#1455` (empty template); `#1454` (stale smoke-residual cleanup); `#1452` (stacked on closed #1449); `#1449` (stale governance); `#1447` (empty PRD body) |
-| Open implementation PRs | **#1474** (RicoReply hardening, Draft) · **#1471** (GuardrailWarnings palette, Draft) |
-| Open audit / governance / documentation PRs | (none pending merge; stale branches closed on 2026-07-31) |
+| Open implementation PRs | **#1471** (GuardrailWarnings palette, Draft) |
+| Open documentation PRs | **#1475** (PROJECT_STATUS reconciliation, Draft) |
 | Open operational cleanup PRs | (none pending merge; a fresh fingerprint, backup, and dry-run are required before any future smoke-residual cleanup PR) |
 
 ## Production verification boundary
@@ -144,8 +146,8 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | --- | --- |
 | Active implementation writers | **0** |
 | Active documentation writers | **1 — docs/reconcile-project-status-20260731 branch; lease ends on merge/close** |
-| Open implementation PRs | **#1474** (RicoReply hardening, Draft) · **#1471** (GuardrailWarnings palette, Draft) |
-| Open audit / governance / documentation PRs | (none; stale branches closed) |
+| Open implementation PRs | **#1471** (GuardrailWarnings palette, Draft) |
+| Open documentation PRs | **#1475** (PROJECT_STATUS reconciliation, Draft) |
 | Open operational cleanup PRs | (none; new PR requires fresh fingerprint/backup/dry-run) |
 | Multi-user reliability PR 1 / PR 2 | **merged through #1437 / #1438** |
 | `#1464` | **MERGED** as `41a95adf5e08b576571f32e57afd6919b0374a88`; AI grounding and evidence contract |
@@ -158,6 +160,8 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | `#1443` Delivery Smoke residual audit | **complete** |
 | `#1443` cleanup package preparation | **not authorized; no open cleanup PR** |
 | `#1472` PendingJobSearch post-merge smoke | **pending** |
+| `#1474` RicoReply hardening | **MERGED** as `afe272cab8a4a3a5ccc2c42db13c99f3ef067195`; Vercel deployment **READY**; authenticated functional smoke unverified |
+| `#1476` Career Profile read-only contract | **MERGED** as `f5f5fd14aadfb63f3870a73169ee7b3da83b9c02`; no write support or migrations; post-merge API verification **pending** |
 | CV smoke overall | **FAIL** |
 | `#355` | **deferred** |
 | `#1389` | **closed without merge; historical only** |
