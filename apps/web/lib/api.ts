@@ -23,6 +23,11 @@ import {
   ScheduledSearchesResponseSchema,
   UploadCVResponseSchema,
 } from "@/lib/schemas";
+import type {
+  CareerProfile,
+  EducationItem,
+  ExperienceItem,
+} from "@/lib/schemas/careerProfile";
 import { getSignupAttribution } from "@/lib/signupAttribution";
 import type {
   Application,
@@ -280,6 +285,7 @@ export interface ProfileResponse {
   current_company?: string | null;
   linkedin_url?: string | null;
   completeness_score?: number | null;
+  career_profile?: CareerProfile | null;
   settings?: Record<string, unknown>;
   warnings?: MatchingGuardrailWarning[];
 }
@@ -1275,6 +1281,8 @@ export interface ProfilePreview {
   skills: string[];
   certifications: string[];
   languages: string[];
+  work_experience?: ExperienceItem[];
+  education?: EducationItem[];
 }
 
 export interface DocumentClassificationScore {
