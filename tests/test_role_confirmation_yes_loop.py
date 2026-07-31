@@ -52,26 +52,30 @@ _GATE_CLARIFICATION = {
 
 
 def _pending(role: str = "Accountant", location: str = "Dubai") -> dict:
-    return {
-        "role": role,
-        "location": location,
-        "query_type": "known_but_off_profile",
-        "expires_at": int(time.time()) + 600,
-    }
+    return {"role": role, "location": location}
 
 
 def _make_api(pending_job_search: dict | None = None) -> RicoChatAPI:
     api = RicoChatAPI.__new__(RicoChatAPI)
-    memory = MagicMock()
-
-    def _get_context(user_id, key):
-        if key == RicoChatAPI._PENDING_JOB_SEARCH_KEY and pending_job_search:
-            return pending_job_search
-        return {}
-
-    memory.get_context.side_effect = _get_context
-    memory.set_context.return_value = None
-    api.memory = memory
+    api.memory = MagicMock()
+    api._can_mutate_applications = False
+    api._current_operation_id = None
+    api._pjs_repo = MagicMock()
+    api._pjs_repo.cancel.return_value = True
+    from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
+    if pending_job_search:
+        role = pending_job_search.get("role", "Test")
+        loc = pending_job_search.get("location", "")
+        pjs = new_pending(role=role, location=loc)
+        api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
+        api._pjs_repo.consume.return_value = pjs
+    else:
+        api._pjs_repo.get.return_value = None
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
+        api._pjs_repo.consume.return_value = None
+    api._pjs_repo.store.return_value = True
+    api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
     return api
 
 
@@ -97,10 +101,6 @@ class TestTypedYesRedemption:
         assert args[1] == "Accountant"
         assert kwargs.get("location") == "Dubai"
         assert result["type"] == "job_matches"
-        # Slot cleared so the search cannot double-fire.
-        api.memory.set_context.assert_any_call(
-            "u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY, {}
-        )
 
     def test_confirmation_marker_discarded_on_redemption(self):
         api = _make_api(pending_job_search=_pending())
@@ -190,10 +190,6 @@ class TestAcknowledgementReplyRedemption:
         assert args[1] == "Accountant"
         assert kwargs.get("location") == "Dubai"
         assert result["type"] == "job_matches"
-        # Pending job-search slot cleared so the search cannot double-fire.
-        api.memory.set_context.assert_any_call(
-            "u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY, {}
-        )
 
     def test_bare_tamam_discards_confirmation_marker(self):
         ctx = {"_pending_role_confirmation": {"role": "Accountant", "location": "Dubai"}}

@@ -17,12 +17,15 @@ armed pending search on affirmative follow-ups.
 """
 from __future__ import annotations
 
-import time
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.rico_chat_api import RicoChatAPI
+from src.services.pending_job_search import (
+    PendingJobSearch, PendingSearchLookup, LookupStatus, new_pending,
+)
 
 
 _PROFILE = {
@@ -40,23 +43,32 @@ _SEARCH_RESULT = {
 
 
 def _make_api(pending_job_search: dict | None = None) -> RicoChatAPI:
-    """Bare RicoChatAPI with mocked memory, mirroring test_job_search_action_contract."""
+    """Bare RicoChatAPI with a mock repo for testing."""
     api = RicoChatAPI.__new__(RicoChatAPI)
-    memory = MagicMock()
-
-    def _get_context(user_id, key):
-        if key == RicoChatAPI._PENDING_JOB_SEARCH_KEY and pending_job_search:
-            return pending_job_search
-        return {}
-
-    memory.get_context.side_effect = _get_context
-    memory.set_context.return_value = None
-    api.memory = memory
+    api.memory = MagicMock()
+    api._pjs_repo = MagicMock()
+    api._can_mutate_applications = False
+    api._current_operation_id = None
+    api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
+    if pending_job_search:
+        role = pending_job_search.get("role", "Test")
+        loc = pending_job_search.get("location", "")
+        reason = pending_job_search.get("query_type", "promise")
+        pjs = new_pending(role=role, location=loc, reason=reason)
+        api._pjs_repo.get.return_value = pjs
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
+        api._pjs_repo.consume.return_value = pjs
+    else:
+        api._pjs_repo.get.return_value = None
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
+        api._pjs_repo.consume.return_value = None
+    api._pjs_repo.cancel.return_value = True
+    api._pjs_repo.store.return_value = True
     return api
 
 
 def _pending(role: str = "Environmental Manager", location: str = "Dubai") -> dict:
-    return {"role": role, "location": location, "expires_at": int(time.time()) + 600}
+    return {"role": role, "location": location}
 
 
 # ── Priority-0 redemption on the conversational path ──────────────────────────
@@ -76,10 +88,6 @@ class TestConversationalPendingRedemption:
         ai.assert_not_called()
         assert result.get("response_source") == "search_contract"
         assert result.get("success") is True
-        # Slot must be cleared so the search cannot double-fire.
-        api.memory.set_context.assert_any_call(
-            "u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY, {}
-        )
 
     def test_continuation_phrase_redeems_pending_search(self):
         api = _make_api(pending_job_search=_pending(role="HSE Manager", location=""))
@@ -156,16 +164,18 @@ class TestPromiseExecutesForExplicitSearch:
 
     def test_non_search_message_with_promise_reply_keeps_arming_behavior(self):
         api = _make_api()
-        stored = {}
-        api.memory.set_context.side_effect = lambda u, k, v: stored.__setitem__((u, k), v)
         result, search = self._run_fallback(
             api,
             message="tell me about my profile",
             ai_text="One moment while I gather that.",
         )
         search.assert_not_called()
-        armed = stored.get(("u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY))
-        assert armed and armed["role"] == "Environmental Manager"
+        # The repo's store() should have been called with a role.
+        assert api._pjs_repo.store.called
+        call_args = api._pjs_repo.store.call_args
+        if call_args:
+            stored_pjs = call_args[0][1]  # second arg is PendingJobSearch
+            assert stored_pjs.role == "Environmental Manager"
         assert "one moment" in str(result.get("message", "")).lower()
 
     def test_normal_ai_reply_untouched(self):

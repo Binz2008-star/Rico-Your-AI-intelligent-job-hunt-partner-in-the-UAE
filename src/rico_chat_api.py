@@ -75,6 +75,18 @@ from src.services.operation_state import (
     start_job_search_operation,
 )
 from src.mutation_guard import MutationConfirmationGuard, MutationResult
+from src.services.pending_job_search import (
+    PendingJobSearch,
+    PendingJobSearchRepo,
+    PendingSearchLookup,
+    LookupStatus,
+    ReplyCategory,
+    classify_reply,
+    is_offer_present,
+    make_offer,
+    new_pending,
+    remove_offer,
+)
 
 _MUTATION_CONFIRMATION_GUARD = MutationConfirmationGuard()
 
@@ -2265,9 +2277,20 @@ class RicoChatAPI:
         # jotform-derived sessions with an email-shaped user_id.
         self._can_mutate_applications = can_mutate_applications
         self._current_operation_id: str | None = None
+        object.__setattr__(self, "_pjs_repo", None)
         # Assign module-level verifier functions as instance attributes for use in lambdas
         self._application_status_visible = _application_status_visible
         self._no_saved_jobs_visible = _no_saved_jobs_visible
+
+    @property
+    def pjs_repo(self) -> Any:
+        """Lazy-initialised PendingJobSearchRepo for this instance."""
+        repo = getattr(self, "_pjs_repo", None)
+        if repo is None:
+            from src.rico_db import RicoDB
+            repo = PendingJobSearchRepo(RicoDB())
+            object.__setattr__(self, "_pjs_repo", repo)
+        return repo
 
     @staticmethod
     def _is_broad_manager_role(role_text: str) -> bool:
@@ -6514,11 +6537,12 @@ class RicoChatAPI:
             return {}
 
     # ── Pending job search state helpers ─────────────────────────────────────
-    # Stores intent for job search so when user says "تمام"/"نعم"/"ok" after Rico
-    # announces a search plan, the search is actually executed rather than just
-    # re-promising. TTL is 15 minutes to avoid stale state across sessions.
+    # Stores intent for job search in ``rico_agent_settings.settings["_pjs"]``
+    # so it survives ``RICO_MEMORY_BACKEND=postgres``, server restarts, and
+    # multi-worker deployments.  TTL is 15 minutes to avoid stale state.
 
     _PENDING_JOB_SEARCH_KEY: str = "pending_job_search"
+    _PJS_TTL = 900
 
     def _store_pending_job_search(
         self,
@@ -6527,38 +6551,295 @@ class RicoChatAPI:
         role: str,
         location: str = "",
         query_type: str = "profile_based",
-    ) -> None:
+    ) -> bool:
+        """Persist a pending job search.  Returns True on success, False if
+        durable storage could not be written.
+
+        Callers MUST check the return value and NOT promise that confirmation
+        is armed when storage failed.
+        """
         try:
-            import time
-            self.memory.set_context(
-                user_id,
-                self._PENDING_JOB_SEARCH_KEY,
-                {
-                    "role": role,
-                    "location": location,
-                    "query_type": query_type,
-                    "created_at": int(time.time()),
-                    "expires_at": int(time.time()) + 900,  # 15 min TTL
-                },
-            )
+            pjs = new_pending(role=role, location=location, reason=query_type, ttl_seconds=self._PJS_TTL)
+            return bool(self.pjs_repo.store(user_id, pjs))
         except Exception:
-            pass
+            logger.warning("pending_job_search store failed user=%s", user_ref(user_id))
+            return False
 
     def _get_pending_job_search(self, user_id: str) -> dict:
-        try:
-            ctx = self.memory.get_context(user_id, self._PENDING_JOB_SEARCH_KEY) or {}
-            import time
-            if ctx.get("expires_at", 0) < int(time.time()):
-                return {}
-            return ctx
-        except Exception:
-            return {}
+        """Return a plain dict for backward compatibility with existing callers.
 
-    def _clear_pending_job_search(self, user_id: str) -> None:
+        DB-backed repo only — no RicoMemoryStore fallback.
+        Uses typed lookup so UNAVAILABLE and NONE are never conflated.
+        """
+        lookup = self.pjs_repo.lookup(user_id)
+        if lookup.status == LookupStatus.FOUND and lookup.pjs is not None:
+            pjs = lookup.pjs
+            return {
+                "token": pjs.token,
+                "role": pjs.role,
+                "location": pjs.location,
+                "query_type": pjs.reason,
+                "created_at": pjs.created_at.isoformat(),
+                "expires_at": pjs.expires_at.isoformat(),
+            }
+        return {}
+
+    def _clear_pending_job_search(self, user_id: str) -> bool:
+        """Clear the pending search.  Returns True on success."""
         try:
-            self.memory.set_context(user_id, self._PENDING_JOB_SEARCH_KEY, {})
+            return bool(self.pjs_repo.cancel(user_id))
         except Exception:
-            pass
+            return False
+
+    # ── Reply classification for pending job search ─────────────────────────
+
+    @staticmethod
+    def _classify_pending_search_reply(message: str) -> str:
+        """Classify a user's reply in the context of a pending job search.
+
+        Returns one of ``ReplyCategory.CONFIRM`` | ``CANCEL`` | ``CHANGE`` |
+        ``NEW_REQUEST`` | ``OTHER``.
+        """
+        cat, _, _ = classify_reply(message)
+        return cat
+
+    # ── Single redemption entry point ────────────────────────────────────────
+    # All PendingJobSearch replies pass through exactly one early entry point
+    # per user turn.  The four legacy redemption sites each call this method.
+    # It returns the ``_target_role_search_response`` dict on confirm, or None
+    # when no redemption occurs (letting normal routing continue).
+
+    _PJS_SENTINEL = object()
+
+    def _consume_by_token(self, user_id: str, token: str) -> PendingJobSearch | None:
+        """Atomically consume a pending job search using its token.
+
+        Returns the consumed PendingJobSearch on success, None on failure.
+        Does NOT perform a separate lookup — the token is the only input.
+        """
+        try:
+            return self.pjs_repo.consume(user_id, token)
+        except Exception:
+            return None
+
+    def _discard_pending_token(self, user_id: str, token: str) -> bool:
+        """Atomically remove the ``_pjs`` key only when ``token`` matches.
+
+        Unlike ``_consume_by_token`` this works for expired entries too, so
+        stale state can be cleaned up without executing it.  Returns True on
+        success.
+        """
+        try:
+            return bool(self.pjs_repo.discard_token(user_id, token))
+        except Exception:
+            return False
+
+    def _redeem_pending_job_search(
+        self,
+        user_id: str,
+        message: str,
+        profile: Any,
+        blocked: bool = False,
+    ) -> dict[str, Any] | None:
+        """Atomically redeem an armed pending job search when the user confirms.
+
+        Uses ``PendingSearchLookup`` to distinguish genuine absence from
+        unavailable/malformed/expired state.  Never conflates UNAVAILABLE
+        with NONE.
+
+        Typed contract:
+
+        * CONFIRM — FOUND: exact-token consume and execute once;
+          NONE/UNAVAILABLE: fall through (do not hijack unrelated
+          confirmations); MALFORMED/EXPIRED: clarification; zero execution
+          on any failure state.
+        * CANCEL — FOUND: exact-token atomic discard, zero execution;
+          NONE/UNAVAILABLE: fall through; MALFORMED: clarification;
+          EXPIRED: exact-token cleanup, never execute.
+        * NEW_REQUEST — NONE: continue routing; FOUND: exact-token
+          invalidation must succeed before routing; UNAVAILABLE/MALFORMED:
+          clarification (do not leave a possibly-live stale PJS behind);
+          EXPIRED: discard the expired exact token, then route only when
+          cleanup succeeds.
+        * CHANGE — FOUND: consume the exact old token then execute;
+          NONE: execute only when the message itself is a complete explicit
+          new role; UNAVAILABLE/MALFORMED: clarification; EXPIRED: clean the
+          expired exact token, then execute only when cleanup succeeds.
+
+        Returns a response dict on successful redemption, or None when the
+        pending state is absent, expired, blocked, or the reply does not
+        confirm the search.
+
+        The result is cached so every caller in the same user turn shares
+        exactly one classification, one DB read/consume attempt, and one
+        execution opportunity.
+        """
+        if blocked:
+            return None
+
+        cached = getattr(self, "_pjs_redemption_attempted_this_turn", self._PJS_SENTINEL)
+        if cached is not self._PJS_SENTINEL:
+            return cached
+
+        cat = self._classify_pending_search_reply(message)
+        result: dict[str, Any] | None = None
+
+        # Only perform a typed lookup for categories that meaningfully interact
+        # with pending state.  OTHER replies skip the lookup entirely.
+        lookup: PendingSearchLookup | None = None
+        if cat != ReplyCategory.OTHER:
+            lookup = self.pjs_repo.lookup(user_id)
+
+        def _clarify() -> dict[str, Any]:
+            return self._pjs_error_response(message_context=message)
+
+        def _found() -> bool:
+            return (
+                lookup is not None
+                and lookup.status == LookupStatus.FOUND
+                and lookup.pjs is not None
+            )
+
+        def _expired() -> bool:
+            return lookup is not None and lookup.status == LookupStatus.EXPIRED
+
+        def _stale_or_unavailable() -> bool:
+            return lookup is not None and lookup.status in (
+                LookupStatus.UNAVAILABLE, LookupStatus.MALFORMED,
+            )
+
+        if cat == ReplyCategory.CANCEL:
+            if _found():
+                # Token-qualified atomic discard; zero execution.
+                if self._consume_by_token(user_id, lookup.pjs.token) is None:
+                    result = _clarify()
+            elif _expired():
+                # Exact-token cleanup; never execute.
+                if lookup.pjs is None or not self._discard_pending_token(user_id, lookup.pjs.token):
+                    result = _clarify()
+            elif lookup is not None and lookup.status == LookupStatus.MALFORMED:
+                result = _clarify()
+            # NONE / UNAVAILABLE: safe fallthrough
+
+        elif cat == ReplyCategory.NEW_REQUEST:
+            if _found():
+                # Invalidation must succeed before the new request routes.
+                if self._consume_by_token(user_id, lookup.pjs.token) is not None:
+                    result = None
+                else:
+                    result = _clarify()
+            elif _expired():
+                if lookup.pjs is not None and self._discard_pending_token(user_id, lookup.pjs.token):
+                    result = None
+                else:
+                    result = _clarify()
+            elif _stale_or_unavailable():
+                # Do not leave a possibly-live stale PJS behind.
+                result = _clarify()
+            # NONE: continue routing
+
+        elif cat == ReplyCategory.CHANGE:
+            _, new_role, new_loc = classify_reply(message)
+            self._discard_pending_role_confirmation(user_id)
+            if new_role:
+                if _found():
+                    consumed = self._consume_by_token(user_id, lookup.pjs.token)
+                    if consumed is not None:
+                        result = self._target_role_search_response(
+                            user_id, new_role, profile, location=new_loc or "",
+                        )
+                    else:
+                        result = _clarify()
+                elif lookup is not None and lookup.status == LookupStatus.NONE:
+                    result = self._target_role_search_response(
+                        user_id, new_role, profile, location=new_loc or "",
+                    )
+                elif _expired():
+                    if lookup.pjs is not None and self._discard_pending_token(user_id, lookup.pjs.token):
+                        result = self._target_role_search_response(
+                            user_id, new_role, profile, location=new_loc or "",
+                        )
+                    else:
+                        result = _clarify()
+                else:
+                    result = _clarify()
+            else:
+                # Location-only change: consume the exact token, use stored role.
+                if _found():
+                    consumed = self._consume_by_token(user_id, lookup.pjs.token)
+                    if consumed is not None:
+                        result = self._target_role_search_response(
+                            user_id, consumed.role, profile,
+                            location=new_loc or consumed.location,
+                        )
+                    else:
+                        result = _clarify()
+                elif lookup is not None and lookup.status == LookupStatus.NONE:
+                    pass
+                elif _expired():
+                    if lookup.pjs is None or not self._discard_pending_token(user_id, lookup.pjs.token):
+                        result = _clarify()
+                else:
+                    result = _clarify()
+
+        elif cat == ReplyCategory.CONFIRM:
+            if _found():
+                consumed = self._consume_by_token(user_id, lookup.pjs.token)
+                if consumed is not None:
+                    self._discard_pending_role_confirmation(user_id)
+                    result = self._target_role_search_response(
+                        user_id, consumed.role, profile, location=consumed.location,
+                    )
+                else:
+                    # Consume failed despite FOUND lookup — token mismatch,
+                    # concurrent loser, or DB down mid-transaction.
+                    result = _clarify()
+            elif _expired() or (lookup is not None and lookup.status == LookupStatus.MALFORMED):
+                result = _clarify()
+            # NONE / UNAVAILABLE: safe fallthrough
+
+        # Cache so this turn never re-evaluates.
+        object.__setattr__(self, "_pjs_redemption_attempted_this_turn", result)
+        return result
+
+    @staticmethod
+    def _pjs_error_response(message_context: str = "") -> dict[str, Any]:
+        """Safe response when a PendingJobSearch operation fails.
+        Does not claim execution started.  Does not infer from context.
+
+        Language is derived from ``message_context`` only.
+        ``user_id``, email, UUID, or external principal must never influence
+        language selection.
+        """
+        arabic = bool(re.search(r"[\u0600-\u06FF]", str(message_context)))
+        return {
+            "type": "clarification",
+            "message": (
+                "عذراً، تعذّر تجهيز البحث الآن. أعد كتابة المسمى الوظيفي والموقع وسأبحث مجدداً."
+                if arabic else
+                "Sorry, I couldn't prepare the search right now. Please restate the role and location, and I'll search for you."
+            ),
+            "intent": "pending_job_search_failed",
+            "success": True,
+        }
+
+    def _consume_pending_js(self, user_id: str) -> PendingJobSearch | None:
+        """Atomically read and consume the pending job search via the repo.
+
+        Only the token path is used.  A dict without a token (legacy test
+        state) returns None — no production path executes tokenless state.
+        Returns None on any error (DB unavailable, malformed, etc.).
+        """
+        raw = self._get_pending_job_search(user_id)
+        if not raw or not raw.get("role"):
+            return None
+        token = raw.get("token") or ""
+        if not token:
+            return None
+        try:
+            return self.pjs_repo.consume(user_id, token)
+        except Exception:
+            return None
 
     def _discard_pending_role_confirmation(self, user_id: str) -> None:
         """Drop the armed role-confirmation marker once its search executes."""
@@ -6569,47 +6850,111 @@ class RicoChatAPI:
         except Exception:
             pass
 
-    # Outgoing-message signals meaning Rico offered/announced a job search this
-    # turn without executing it. Mirror of the read-side job_search_signals so a
-    # follow-up confirmation ("تمام"/"yes") runs the real search. Kept focused on
-    # explicit offers/promises to avoid storing on incidental CV-flow chatter.
-    _SEARCH_OFFER_SIGNALS: tuple[str, ...] = (
-        "shall i search", "shall i start searching", "want me to search",
-        "should i search",  # known_but_off_profile clarification path
-        "search for roles", "ready to search", "you can now search",
-        "what should i search", "find live jobs", "shall i look for",
-        "أبحث لك", "هل أبحث", "سأبحث", "ببحث", "وظائف حية", "أبحث عن وظائف",
-        "هل تريد البحث",  # Arabic career-change offer: "هل تريد البحث عن وظائف في X؟"
+    # Regex to strip a search-offer sentence from the end of a message.
+    # Matches sentences like "Shall I search for X?" or "هل أبحث عن وظائف في X؟"
+    # leaving the primary answer intact.
+    _OFFER_STRIP_RE = re.compile(
+        r'\s*(?:'
+        r'Shall I search[^.]*[.?!]?'
+        r'|Shall I start searching[^.]*[.?!]?'
+        r'|Want me to search[^.]*[.?!]?'
+        r'|Would you like me to search[^.]*[.?!]?'
+        r'|Should I search[^.]*[.?!]?'
+        r'|You can now search[^.]*[.?!]?'
+        r'|Ready to search[^.]*[.?!]?'
+        r'|What should I search[^.]*[.?!]?'
+        r'|Shall I look for[^.]*[.?!]?'
+        r'|Find live jobs[^.]*[.?!]?'
+        r'|Search for roles[^.]*[.?!]?'
+        r'|Want me to broaden[^.]*[.?!]?'
+        r'|Want me to also look at[^.]*[.?!]?'
+        r'|I can also look at[^.]*[.?!]?'
+        r'|just say the word[^.]*[.?!]?'
+        r'|هل أبحث[^.]*[.?!]?'
+        r'|أبحث لك[^.]*[.?!]?'
+        r'|سأبحث[^.]*[.?!]?'
+        r'|ببحث[^.]*[.?!]?'
+        r'|وظائف حية[^.]*[.?!]?'
+        r'|أبحث عن وظائف[^.]*[.?!]?'
+        r'|هل تريد البحث[^.]*[.?!]?'
+        r'|هل تريد مني البحث[^.]*[.?!]?'
+        r'|أجب بنعم[^.]*[.?!]?'
+        r'|هل أوسع البحث[^.]*[.?!]?'
+        r'|هل تريد أن أبحث أيضاً[^.]*[.?!]?'
+        r'|يمكنني أيضاً البحث[^.]*[.?!]?'
+        r'|هل تريد توسيع البحث[^.]*[.?!]?'
+        r')\s*$',
+        re.IGNORECASE,
     )
 
-    def _maybe_store_pending_job_search(self, user_id: str, result: dict[str, Any]) -> None:
-        """Persist a pending job search when Rico's response offers/announces a
-        search but does not execute one this turn.
+    _EN_FALLBACK_CTA = (
+        " Tell me the role and location again when you're ready."
+    )
+    _AR_FALLBACK_CTA = (
+        " قل لي المسمى الوظيفي والموقع مرة أخرى عندما تكون مستعداً."
+    )
 
-        Without this, ``_store_pending_job_search`` is never called, so the
-        ``_get_pending_job_search`` checks (Priority-0 in ``_resolve_pending_intent``
-        and the "تمام" acknowledgement intercept) can never fire and a confirmed
-        search silently falls back to a dead-end acknowledgement. Profile is only
-        resolved when an offer is actually detected to avoid a per-turn DB hit.
+    def _strip_offer_from_message(self, message: str) -> str:
+        """Remove the trailing search-offer sentence from a message."""
+        stripped = self._OFFER_STRIP_RE.sub("", message).strip()
+        return stripped
+
+    def _append_fallback_cta(self, message: str, arabic: bool) -> str:
+        """Append the truthful fallback CTA when storage failed."""
+        return message.rstrip(".?!") + "." + (self._AR_FALLBACK_CTA if arabic else self._EN_FALLBACK_CTA)
+
+    def _remove_confirm_search_options(self, result: dict[str, Any]) -> None:
+        """Remove any confirm_search action options from the response."""
+        options = result.get("options")
+        if not options or not isinstance(options, list):
+            return
+        result["options"] = [
+            o for o in options
+            if o.get("action") != "confirm_search"
+        ]
+
+    _PJS_OFFER_FIELD = "_pending_job_search_offer"
+
+    def _finalize_pending_job_search_offer(self, user_id: str, result: dict[str, Any]) -> dict[str, Any]:
+        """Finalize a pending job-search offer carried via the private marker.
+
+        This is the SINGLE storage owner for all PendingJobSearch offers.
+        Ordinary message text must never create PendingJobSearch state —
+        only an explicit private marker set by an offer-producing code path.
+
+        On success: remove the marker; preserve the confirmation CTA.
+        On failure: remove the marker; remove CTAs/options; add truthful fallback.
+
+        The returned dict is fully public-safe (no private marker, no false
+        confirmation CTA) and ready for ``_append_chat`` and API delivery.
         """
-        try:
-            rtype = str(result.get("type") or "")
-            # A search was already executed this turn — nothing left pending.
-            if rtype in ("job_matches", "job_list"):
-                return
-            msg = str(result.get("message") or "")
-            if not msg:
-                return
-            low = msg.lower()  # lower() leaves Arabic unchanged, so AR signals still match
-            if not any(sig in low for sig in self._SEARCH_OFFER_SIGNALS):
-                return
-            profile = self._resolve_profile(user_id)
-            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-            role = target_roles[0] if target_roles else None
-            if role:
-                self._store_pending_job_search(user_id, role=role)
-        except Exception:
-            pass
+        if not is_offer_present(result):
+            return result
+
+        offer = result.pop(self._PJS_OFFER_FIELD, {})
+        role = str(offer.get("role") or "").strip()
+        if not role:
+            return result
+
+        location = str(offer.get("location") or "").strip()
+        reason = str(offer.get("reason") or "profile_based").strip()
+
+        if self._store_pending_job_search(user_id, role=role, location=location, query_type=reason):
+            return result
+
+        logger.warning("pending_job_search arm failed user=%s role=%s", user_ref(user_id), role)
+        # Sanitize the public response: remove confirm-seeking content.
+        self._remove_confirm_search_options(result)
+        msg = str(result.get("message") or "")
+        arabic = bool(re.search(r"[\u0600-\u06FF]", msg))
+        stripped = self._strip_offer_from_message(msg)
+        if stripped and stripped != msg:
+            result["message"] = self._append_fallback_cta(stripped, arabic)
+        else:
+            result["message"] = msg.rstrip(".?!") + "." + (
+                self._AR_FALLBACK_CTA if arabic else self._EN_FALLBACK_CTA
+            )
+        return result
 
     def _get_last_assistant_message(self, user_id: str) -> str:
         """Return the last assistant message text for pending-intent resolution."""
@@ -6664,6 +7009,15 @@ class RicoChatAPI:
         reaching the confirmation flow or the CV-analysis handler (the transcript
         نعم→search misfire, and #1360's documented known gap).
 
+        This is the canonical precedence owner for the PendingJobSearch
+        redemption sites.  It answers: "does a more specific pending action own
+        this confirmation turn?"  Armed confirmations that own a bare
+        yes/نعم/تمام — profile update, active-CV switch, and mark-applied /
+        application-status (`_pending_confirm_apply` /
+        `_pending_confirm_apply_options`) — all block PendingJobSearch so the
+        user's confirmation applies to the higher-specificity action and the
+        PJS token is neither consumed, cleared, nor executed.
+
         Deliberately narrow on BOTH axes: it blocks only for a pending field that
         actually owns a yes/no confirmation (the allowlist above — never a bare
         "any pending field exists" check) or for an explicit higher-specificity
@@ -6678,6 +7032,25 @@ class RicoChatAPI:
             ctx = self._get_recent_context(user_id) or {}
             pending_field = ctx.get("_pending_field") or ""
             if pending_field in self._SEARCH_OUTRANKING_PENDING_FIELDS:
+                return True
+            # A pending mark-applied / application-status confirmation owns a
+            # bare affirmative exactly like the allowlisted mutation
+            # confirmations.  It is resolved later in the
+            # follow_up_confirmation branch; blocking PendingJobSearch here
+            # lets that higher-specificity confirmation win instead of a stale
+            # search consuming the turn and executing (double-armed precedence
+            # defect).  Only complete confirmations block — a partial flag that
+            # the confirmation handler itself cannot resolve must never dead-end
+            # a valid search.
+            _apply = ctx.get("_pending_confirm_apply") or {}
+            if (
+                isinstance(_apply, dict)
+                and _apply.get("title")
+                and _apply.get("company")
+            ):
+                return True
+            _apply_opts = ctx.get("_pending_confirm_apply_options") or []
+            if isinstance(_apply_opts, list) and _apply_opts:
                 return True
         except Exception:
             pass
@@ -6727,22 +7100,9 @@ class RicoChatAPI:
             _precomputed_blocked if _precomputed_blocked is not None
             else self._pending_search_redemption_blocked(user_id, message)
         )
-        pending_js = self._get_pending_job_search(user_id)
-        if pending_js and pending_js.get("role") and not _blocked:
-            self._clear_pending_job_search(user_id)
-            pending_role = pending_js["role"]
-            pending_loc = pending_js.get("location", "")
-            self._discard_pending_role_confirmation(user_id)
-            # Execute DIRECTLY: the pending slot only ever holds a role that
-            # was validated at arm time (profile target role, canonical role
-            # from the off-profile gate, or a promised role). Re-entering
-            # _classified_role_search here re-fires the role-fit gate for an
-            # off-profile role and re-emits the SAME clarification the user
-            # just confirmed — the typed-YES infinite loop (BUG-05's button
-            # interceptor already bypasses the gate for the quick-reply path).
-            return self._target_role_search_response(
-                user_id, pending_role, profile, location=pending_loc
-            )
+        redeemed = self._redeem_pending_job_search(user_id, message, profile, blocked=_blocked)
+        if redeemed is not None:
+            return redeemed
 
         if not self._is_affirmative(message):
             return None
@@ -7494,14 +7854,17 @@ class RicoChatAPI:
 
         # Arm a pending search so a later "try again" re-runs this exact role once
         # quota recovers, without the user retyping it.
-        try:
-            self._store_pending_job_search(
-                user_id, role=role, location=location, query_type="provider_degraded",
-            )
-        except Exception:
-            pass
+        response[self._PJS_OFFER_FIELD] = make_offer(
+            role=role, location=location, reason="provider_degraded",
+        )
+        # Finalize: store the pending search, then remove the marker.
+        # On failure, sanitize the response (no confirmation CTA in this
+        # response type, so only the marker is stripped).
+        response = self._finalize_pending_job_search_offer(user_id, response)
 
-        self._append_chat(user_id, "assistant", message)
+        # Persist the FINALIZED public message — never the pre-finalization
+        # value, so a store failure can never leave a hollow CTA in history.
+        self._append_chat(user_id, "assistant", str(response.get("message") or message))
         return response
 
     # Ultra-generic vocabulary that must never, on its own, qualify a job as a
@@ -8386,10 +8749,6 @@ class RicoChatAPI:
         _adjacent_names_for_offer = [
             r["role"] for r in _adjacent_for_offer[:3] if r.get("role")
         ]
-        if _adjacent_names_for_offer:
-            self._store_pending_job_search(
-                user_id, role=_adjacent_names_for_offer[0], query_type="adjacent_broaden"
-            )
 
         response = {
             "type": "job_matches",
@@ -8434,6 +8793,16 @@ class RicoChatAPI:
 
         if role_intelligence_data:
             response["role_intelligence"] = role_intelligence_data
+
+        # Set the private offer marker and let _finalize_pending_job_search_offer
+        # be the SINGLE storage owner.  It stores once, removes the marker on
+        # success, and sanitizes the message on failure — all before _append_chat.
+        if _adjacent_names_for_offer:
+            response[self._PJS_OFFER_FIELD] = make_offer(
+                role=_adjacent_names_for_offer[0],
+                reason="adjacent_broaden",
+            )
+            response = self._finalize_pending_job_search_offer(user_id, response)
 
         self._append_chat(user_id, "assistant", response)
         mark_completed(user_id, operation_id, len(formatted), attempt=self._operation_attempt())
@@ -8883,9 +9252,15 @@ class RicoChatAPI:
                             _search_result.setdefault("response_source", "search_contract")
                             return _search_result
                     # Ambiguous promise (user message wasn't an explicit search
-                    # request) — arm the slot; the promise IS the delivered reply,
-                    # so it is persisted below.
-                    self._store_pending_job_search(user_id, role=str(_promise_roles[0]))
+                    # request).  Set the structured marker and let
+                    # _finalize_pending_job_search_offer be the SINGLE storage
+                    # owner: it stores exactly once, replaces the hollow promise
+                    # with truthful fallback on failure, and removes the marker.
+                    ai_response[self._PJS_OFFER_FIELD] = make_offer(
+                        role=str(_promise_roles[0]), reason="ambiguous_promise",
+                    )
+                    ai_response = self._finalize_pending_job_search_offer(user_id, ai_response)
+                    filtered_ai_message = str(ai_response.get("message") or "")
             # Persist the canonical assistant turn actually returned to the user.
             self._append_chat(user_id, "assistant", filtered_ai_message)
 
@@ -8991,31 +9366,15 @@ class RicoChatAPI:
             # intent router sends to the AI path re-promises forever instead of
             # executing the stored search.
             if profile is not None:
-                try:
-                    _pending_js = self._get_pending_job_search(user_id)
-                except Exception:
-                    _pending_js = {}
-                if _pending_js.get("role") and (
-                    self._is_affirmative(message)
-                    or self._is_continuation_intent(message)
-                ) and not _search_redemption_blocked_this_turn:
+                _redeemed = self._redeem_pending_job_search(
+                    user_id, message, profile, blocked=_search_redemption_blocked_this_turn,
+                )
+                if _redeemed is not None:
                     self._append_chat(user_id, "user", message)
-                    self._clear_pending_job_search(user_id)
-                    self._discard_pending_role_confirmation(user_id)
-                    # Direct execution — same rationale as _resolve_pending_intent
-                    # Priority-0: the armed role is pre-validated; re-classifying
-                    # re-fires the off-profile gate into a confirmation loop.
-                    _redeemed = self._target_role_search_response(
-                        user_id,
-                        str(_pending_js["role"]),
-                        profile,
-                        location=str(_pending_js.get("location", "")),
-                    )
-                    if isinstance(_redeemed, dict):
-                        _redeemed.setdefault("debug_id", debug_id)
-                        _redeemed.setdefault("success", True)
-                        _redeemed.setdefault("response_source", "search_contract")
-                        return _redeemed
+                    _redeemed.setdefault("debug_id", debug_id)
+                    _redeemed.setdefault("success", True)
+                    _redeemed.setdefault("response_source", "search_contract")
+                    return _redeemed
             result = self._answer_with_ai_fallback(
                 user_id=user_id,
                 message=message,
@@ -9412,11 +9771,17 @@ class RicoChatAPI:
           5. Unknown / nonsense → clarification, not search
         """
         try:
+            # Reset the single-turn PendingJobSearch cache so each user turn
+            # gets exactly one classification and one DB read/consume attempt.
+            object.__setattr__(self, "_pjs_redemption_attempted_this_turn", self._PJS_SENTINEL)
             result = self._handle_active_user_inner(user_id, message)
-            # Wire pending job-search: if Rico offered/announced a search this turn
-            # but didn't run it, remember it so a follow-up "تمام"/"yes" executes the
-            # real search (read side: _get_pending_job_search / _resolve_pending_intent).
-            self._maybe_store_pending_job_search(user_id, result)
+            # Finalize any pending job-search offer carried via the private
+            # marker.  This is the SINGLE storage owner and sanitization point.
+            result = self._finalize_pending_job_search_offer(user_id, result)
+            # Safety strip: the private marker should already have been removed
+            # by finalize, but an assert-level cleanup guards against drift.
+            if is_offer_present(result):
+                remove_offer(result)
             # Persist options so the user can reply "A"/"B"/"C"/"D" next turn.
             _options = result.get("options")
             if _options and isinstance(_options, list):
@@ -10010,25 +10375,14 @@ class RicoChatAPI:
             # confirm_profile_update/confirm_set_active_cv was armed silently
             # dropped the real confirmation and ran the old search instead.
             # Reproduced directly against this exact block before the fix.
-            _ack_pending_js = self._get_pending_job_search(user_id)
-            if (
-                _ack_pending_js
-                and _ack_pending_js.get("role")
-                and not _search_redemption_blocked_this_turn
-            ):
-                _ack_role = _ack_pending_js["role"]
-                _ack_loc = _ack_pending_js.get("location", "")
-                self._clear_pending_job_search(user_id)
-                self._discard_pending_role_confirmation(user_id)
-                # Execute DIRECTLY — re-entering _classified_role_search here re-fires
-                # the known_but_off_profile gate and re-emits the SAME clarification
-                # the user just confirmed (the #1314 typed-YES loop, recurring here for
-                # bare "تمام"/"حسنا"/"ok"/"okay" acknowledgements).
-                return self._finalize(
-                    self._target_role_search_response(user_id, _ack_role, profile, location=_ack_loc),
-                    self.SOURCE_KEYWORD,
-                    profile=profile,
+            if not _search_redemption_blocked_this_turn:
+                _ack_redeemed = self._redeem_pending_job_search(
+                    user_id, message, profile, blocked=False,
                 )
+                if _ack_redeemed is not None:
+                    return self._finalize(
+                        _ack_redeemed, self.SOURCE_KEYWORD, profile=profile,
+                    )
             ack_text = _acknowledgement_reply(message)
             response = {"type": "acknowledgement", "message": ack_text}
             self._append_chat(user_id, "assistant", ack_text)
@@ -11783,34 +12137,16 @@ class RicoChatAPI:
             except Exception:
                 pass  # fall through to generic confirmation handling
 
-            # Priority 1.5: stored pending job search (set when Rico promised "ببحث" but
-            # the turn ended without executing the search). Checked here so that "تمام"
-            # and other follow_up_confirmation phrases correctly trigger the search.
-            # Execute DIRECTLY via _target_role_search_response — re-entering
-            # _classified_role_search here re-fires the known_but_off_profile gate and
-            # re-emits the SAME clarification the user just confirmed (the #1314 typed-YES
-            # loop, recurring here for bare "تمام"/"اوكي"/"اي"/"طيب"/"continue"/"confirm"
-            # confirmations that reach this legacy_intent branch).
-            # Finding 3 (review correction): this site was UNGUARDED — reproduced
-            # directly: with confirm_profile_update/confirm_set_active_cv armed, a
-            # bare "تمام" or "confirm" reached exactly this block and redeemed the
-            # stale search while the real confirmation was silently dropped. Now
-            # gated on the same turn-scoped guard as every other redemption site.
+            # Priority 1.5: stored pending job search.  Uses the single redemption
+            # entry point so all paths share one atomic-consume, one classification,
+            # and one execution ownership claim.
             try:
-                _pending_js = self._get_pending_job_search(user_id)
-                if (
-                    _pending_js
-                    and _pending_js.get("role")
-                    and not _search_redemption_blocked_this_turn
-                ):
-                    _js_role = _pending_js["role"]
-                    _js_loc = _pending_js.get("location", "")
-                    self._clear_pending_job_search(user_id)
-                    self._discard_pending_role_confirmation(user_id)
+                _js_redeemed = self._redeem_pending_job_search(
+                    user_id, message, profile, blocked=_search_redemption_blocked_this_turn,
+                )
+                if _js_redeemed is not None:
                     return self._finalize(
-                        self._target_role_search_response(user_id, _js_role, profile, location=_js_loc),
-                        self.SOURCE_KEYWORD,
-                        profile=profile,
+                        _js_redeemed, self.SOURCE_KEYWORD, profile=profile,
                     )
             except Exception:
                 pass
@@ -23707,18 +24043,31 @@ class RicoChatAPI:
             )
 
         if classification == "known_but_off_profile" and canonical_role:
-            response = {
-                "type": "clarification",
-                "message": (
-                    f"'{canonical_role}' is a real role, but it does not look close to your CV profile. "
-                    f"Should I search for {canonical_role} jobs anyway? Reply YES or tell me a different role."
-                ),
-                "options": [
-                    {"action": "confirm_search", "label": f"Yes, search {canonical_role}"},
-                    {"action": "show_profile_roles", "label": "Show roles from my CV"},
-                ],
-            }
-            self._append_chat(user_id, "assistant", response["message"])
+            _known_arabic = bool(re.search(r"[\u0600-\u06FF]", role_text))
+            if _known_arabic:
+                response = {
+                    "type": "clarification",
+                    "message": (
+                        f"'{canonical_role}' هو مسمى وظيفي معروف، لكنه لا يتطابق مع ملفك المهني بشكل كبير. "
+                        f"هل تريد مني البحث عن وظائف {canonical_role} مع ذلك؟ أجب بنعم أو أخبرني بمسمى آخر."
+                    ),
+                    "options": [
+                        {"action": "confirm_search", "label": f"نعم، ابحث عن {canonical_role}"},
+                        {"action": "show_profile_roles", "label": "عرض الأدوار من سيرتي الذاتية"},
+                    ],
+                }
+            else:
+                response = {
+                    "type": "clarification",
+                    "message": (
+                        f"'{canonical_role}' is a real role, but it does not look close to your CV profile. "
+                        f"Should I search for {canonical_role} jobs anyway? Reply YES or tell me a different role."
+                    ),
+                    "options": [
+                        {"action": "confirm_search", "label": f"Yes, search {canonical_role}"},
+                        {"action": "show_profile_roles", "label": "Show roles from my CV"},
+                    ],
+                }
             try:
                 _ctx = self._get_recent_context(user_id)
                 _ctx["_pending_role_confirmation"] = {"role": canonical_role, "location": location}
@@ -23727,7 +24076,15 @@ class RicoChatAPI:
                 pass
             # Arm pending search so "تمام"/"yes"/"ok" in the next turn executes the search
             # rather than producing another hollow promise or a good-luck reply.
-            self._store_pending_job_search(user_id, role=canonical_role, location=location, query_type="known_but_off_profile")
+            # Set the private offer marker before finalization.
+            # _finalize_pending_job_search_offer will attempt storage, remove
+            # the marker on success, and sanitize the response on failure.
+            response[self._PJS_OFFER_FIELD] = make_offer(
+                role=canonical_role, location=location, reason="known_but_off_profile",
+            )
+            response = self._finalize_pending_job_search_offer(user_id, response)
+            # Persist only the finalized (sanitized on failure) message.
+            self._append_chat(user_id, "assistant", response["message"])
             return response
 
         # unknown role — check if text is actually a company name from recent matches

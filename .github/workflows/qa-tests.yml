@@ -107,6 +107,7 @@ jobs:
             tests/test_ai_grounding_contract.py \
             tests/test_deployment_gate_targets.py \
             tests/test_context_priority_under_pressure.py \
+            tests/test_pending_job_search_contract.py \
             tests/decision_regression/ \
             -v --tb=short
 
@@ -170,6 +171,7 @@ jobs:
             tests/integration/test_audit_residuals_postgres.py \
             tests/integration/test_operation_ownership_postgres.py \
             tests/integration/test_operation_multiworker_postgres.py \
+            tests/integration/test_pending_job_search_postgres.py \
             -v --tb=short
 
   playwright:
