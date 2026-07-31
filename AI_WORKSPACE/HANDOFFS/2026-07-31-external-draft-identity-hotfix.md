@@ -13,8 +13,9 @@ This is a user-trust incident: external professional drafts must not silently pu
 - **Milestone:** Grounding integrity and user-trust containment
 - **Phase:** P1 production hotfix
 - **Task:** `TASK-20260731-003`
+- **PR:** `#1477` (Draft)
 - **Branch:** `fix/external-draft-identity-guard`
-- **Base:** `f5f5fd14aadfb63f3870a73169ee7b3da83b9c02`
+- **Base:** `3bcac4d5d418b3711b71976733b4baf3d6876570`
 - **Owner:** Rico Engineering
 
 ## Objective
@@ -29,6 +30,7 @@ Add one provider-agnostic rule that prevents Rico from treating saved profile or
 - Require one concise confirmation question when profile and parsed CV values disagree.
 - Forbid unsupported provenance claims such as “registered account data” or “from your CV” unless the current context proves that source.
 - Add focused regression tests and enroll them in required CI.
+- Keep the existing primary-prompt grounding-order regression synchronized with the intentional addition of the external-draft rule.
 
 ## Explicit exclusions
 
@@ -48,6 +50,19 @@ Add one provider-agnostic rule that prevents Rico from treating saved profile or
 5. Conflicting profile/CV identity requires a confirmation question, not silent selection.
 6. Provenance answers cite only an exact source present in context; otherwise Rico states that the source cannot be verified.
 7. Existing grounding, filename, safety-constraint, provider-cascade, frontend, and Postgres tests remain green.
+
+## CI finding and bounded repair
+
+The first QA run after synchronization with `main` completed with `6192 passed`, `1 skipped`, and one failed regression assertion. The failure was not an implementation failure: `tests/test_ai_grounding_contract.py` still expected the pre-change numbering where the untrusted-metadata rule was item 10. Adding the external-draft identity rule intentionally moved the shared grounding rules to items 9–12.
+
+The regression now asserts the complete ordered sequence:
+
+1. Identity integrity.
+2. External-draft identity.
+3. Untrusted metadata.
+4. User safety constraints.
+
+No runtime behavior was relaxed to satisfy the test. Exact-head CI must complete successfully before this Draft can be considered merge-ready.
 
 ## Risks and residual debt
 
