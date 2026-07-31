@@ -155,13 +155,13 @@ EditableItem = Union[
 
 
 class CareerProfileUpdate(BaseModel):
-    model_config = {"extra": "forbid"}
-
     """Client-writable subset of CareerProfile.
 
     Server-owned metadata (provenance, timestamps, confidence, source) is
     stripped and re-derived by the API before persistence.
     """
+
+    model_config = {"extra": "forbid"}
 
     summary: Optional[str] = None
     experience: List[ExperienceItemUpdate] = Field(default_factory=list)
@@ -239,18 +239,3 @@ class Completeness(BaseModel):
 def now_iso() -> str:
     """Server-owned timestamp factory for provenance and audit fields."""
     return datetime.now(timezone.utc).isoformat()
-
-
-_CLIENT_WRITABLE_PROVENANCE = {
-    ProvenanceState.ADDED_BY_USER,
-    ProvenanceState.EDITED_BY_USER,
-}
-
-
-def validate_client_provenance(state: ProvenanceState) -> None:
-    """Reject client attempts to claim server-owned provenance states."""
-    if state not in _CLIENT_WRITABLE_PROVENANCE:
-        raise ValueError(
-            f"provenance '{state.value}' cannot be set by client. "
-            f"Allowed: {[p.value for p in _CLIENT_WRITABLE_PROVENANCE]}"
-        )

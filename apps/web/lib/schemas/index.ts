@@ -584,8 +584,8 @@ export const RicoProfileResponseSchema = z.object({
     current_company: z.string().nullable().optional(),
     linkedin_url: z.string().nullable().optional(),
     completeness_score: z.number().nullable().optional(),
-    career_profile: CareerProfileSchema.optional(),
-    completeness: CompletenessSchema.optional(),
+    career_profile: CareerProfileSchema.nullable().optional(),
+    completeness: CompletenessSchema.nullable().optional(),
     settings: z.record(z.string(), z.unknown()).optional(),
     warnings: z.array(MatchingGuardrailWarningSchema).optional().default([]),
 }).passthrough();

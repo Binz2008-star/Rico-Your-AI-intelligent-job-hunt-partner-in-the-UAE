@@ -71,6 +71,52 @@ export const CompletenessSchema = z.object({
   sections: z.array(CompletenessBreakdownItemSchema).default([]),
 });
 
+export const ExperienceItemUpdateSchema = z.object({
+  id: z.string().optional(),
+  role: z.string().nullable().optional(),
+  company: z.string().nullable().optional(),
+  start_date: z.string().nullable().optional(),
+  end_date: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+}).strict();
+
+export const EducationItemUpdateSchema = z.object({
+  id: z.string().optional(),
+  institution: z.string().nullable().optional(),
+  degree: z.string().nullable().optional(),
+  field: z.string().nullable().optional(),
+  start_date: z.string().nullable().optional(),
+  end_date: z.string().nullable().optional(),
+}).strict();
+
+export const CertificationItemUpdateSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().nullable().optional(),
+  issuer: z.string().nullable().optional(),
+  date: z.string().nullable().optional(),
+}).strict();
+
+export const LanguageItemUpdateSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().nullable().optional(),
+  proficiency: z.string().nullable().optional(),
+}).strict();
+
+export const SkillItemUpdateSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().nullable().optional(),
+}).strict();
+
+export const CareerProfileUpdateSchema = z.object({
+  summary: z.string().nullable().optional(),
+  experience: z.array(ExperienceItemUpdateSchema).optional(),
+  education: z.array(EducationItemUpdateSchema).optional(),
+  certifications: z.array(CertificationItemUpdateSchema).optional(),
+  languages: z.array(LanguageItemUpdateSchema).optional(),
+  skills: z.array(SkillItemUpdateSchema).optional(),
+}).strict();
+
 export type ProvenanceState = z.infer<typeof ProvenanceStateSchema>;
 export type ExperienceItem = z.infer<typeof ExperienceItemSchema>;
 export type EducationItem = z.infer<typeof EducationItemSchema>;
@@ -80,3 +126,10 @@ export type SkillItem = z.infer<typeof SkillItemSchema>;
 export type CareerProfile = z.infer<typeof CareerProfileSchema>;
 export type CompletenessBreakdownItem = z.infer<typeof CompletenessBreakdownItemSchema>;
 export type Completeness = z.infer<typeof CompletenessSchema>;
+
+export type ExperienceItemUpdate = z.infer<typeof ExperienceItemUpdateSchema>;
+export type EducationItemUpdate = z.infer<typeof EducationItemUpdateSchema>;
+export type CertificationItemUpdate = z.infer<typeof CertificationItemUpdateSchema>;
+export type LanguageItemUpdate = z.infer<typeof LanguageItemUpdateSchema>;
+export type SkillItemUpdate = z.infer<typeof SkillItemUpdateSchema>;
+export type CareerProfileUpdate = z.infer<typeof CareerProfileUpdateSchema>;

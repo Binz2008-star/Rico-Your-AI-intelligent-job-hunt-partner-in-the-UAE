@@ -38,7 +38,7 @@ from functools import wraps
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from src.api.admin_guard import require_admin_user
 from src.api.deps import get_current_user, get_current_user_id
@@ -1563,10 +1563,15 @@ def _profile_updates_visible(user_id: str, updates: dict[str, Any]) -> bool:
     for key, expected in updates.items():
         actual = getattr(profile, key, None)
         if key == "career_profile" and expected is not None:
-            # Compare serialized dicts; the stored value is plain JSONB.
+            # Compare durable stored CareerProfile against expected CareerProfile
+            # through the same Pydantic/JSON serialization the response uses.
             actual = actual or {}
-            expected = CareerProfileUpdate.model_validate(expected).model_dump()
-            if actual != expected:
+            try:
+                actual_model = CareerProfile.model_validate(actual)
+                expected_model = CareerProfile.model_validate(expected)
+            except ValidationError:
+                return False
+            if actual_model.model_dump() != expected_model.model_dump():
                 return False
             continue
         if isinstance(expected, list):
@@ -1581,13 +1586,23 @@ def _safe_career_profile(profile) -> CareerProfile | None:
     raw = getattr(profile, "career_profile", None)
     if not raw:
         return None
-    return CareerProfile.model_validate(raw)
+    try:
+        return CareerProfile.model_validate(raw)
+    except ValidationError as exc:
+        user_id = getattr(profile, "user_id", None) or "unknown"
+        logger.warning(
+            "career_profile_malformed user=%s err_type=%s",
+            user_ref(user_id),
+            type(exc).__name__,
+        )
+        return None
 
 
 def _apply_career_profile_update(user_id: str, update: CareerProfileUpdate) -> dict:
     """Derive server-owned provenance and timestamps for a career-profile PATCH.
 
     Rejects unknown item IDs and client attempts to claim server-owned metadata.
+    Preserves omitted sections; only explicitly supplied sections are replaced.
     """
     existing = profile_repo.get_profile(user_id)
     existing_career = _safe_career_profile(existing)
@@ -1607,7 +1622,7 @@ def _apply_career_profile_update(user_id: str, update: CareerProfileUpdate) -> d
 
     ts = now_iso()
 
-    def _process_item(update_item, item_cls, provenance_add):
+    def _process_item(update_item, item_cls):
         item_id = getattr(update_item, "id", None)
         if item_id is not None and item_id not in existing_ids:
             raise HTTPException(
@@ -1633,29 +1648,25 @@ def _apply_career_profile_update(user_id: str, update: CareerProfileUpdate) -> d
             **data,
         )
 
-    experience = [
-        _process_item(item, ExperienceItem, None)
-        for item in update.experience
-    ]
-    education = [
-        _process_item(item, EducationItem, None)
-        for item in update.education
-    ]
-    certifications = [
-        _process_item(item, CertificationItem, None)
-        for item in update.certifications
-    ]
-    languages = [
-        _process_item(item, LanguageItem, None)
-        for item in update.languages
-    ]
-    skills = [
-        _process_item(item, SkillItem, None)
-        for item in update.skills
-    ]
+    def _section(field_name: str, item_cls):
+        if field_name not in update.model_fields_set:
+            return getattr(existing_career, field_name, []) if existing_career else []
+        return [_process_item(item, item_cls) for item in getattr(update, field_name)]
+
+    experience = _section("experience", ExperienceItem)
+    education = _section("education", EducationItem)
+    certifications = _section("certifications", CertificationItem)
+    languages = _section("languages", LanguageItem)
+    skills = _section("skills", SkillItem)
+
+    summary = (
+        existing_career.summary
+        if existing_career and "summary" not in update.model_fields_set
+        else update.summary
+    )
 
     return CareerProfile(
-        summary=update.summary,
+        summary=summary,
         experience=experience,
         education=education,
         certifications=certifications,
@@ -2479,7 +2490,14 @@ async def rico_upload_cv(
                 ExperienceItem(
                     id=secrets.token_urlsafe(8),
                     provenance=ProvenanceState.EXTRACTED_FROM_CV,
-                    **item,
+                    source_document_id=None,
+                    confidence=None,
+                    confirmed_at=None,
+                    updated_at=None,
+                    **{
+                        k: item.get(k)
+                        for k in ("role", "company", "start_date", "end_date", "description", "location")
+                    },
                 ).model_dump()
                 for item in parsed.get("work_experience", [])
                 if isinstance(item, dict)
@@ -2488,7 +2506,14 @@ async def rico_upload_cv(
                 EducationItem(
                     id=secrets.token_urlsafe(8),
                     provenance=ProvenanceState.EXTRACTED_FROM_CV,
-                    **item,
+                    source_document_id=None,
+                    confidence=None,
+                    confirmed_at=None,
+                    updated_at=None,
+                    **{
+                        k: item.get(k)
+                        for k in ("institution", "degree", "field", "start_date", "end_date")
+                    },
                 ).model_dump()
                 for item in parsed.get("education", [])
                 if isinstance(item, dict)

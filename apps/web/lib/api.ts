@@ -25,6 +25,7 @@ import {
 } from "@/lib/schemas";
 import type {
   CareerProfile,
+  CareerProfileUpdate,
   Completeness,
   EducationItem,
   ExperienceItem,
@@ -286,8 +287,8 @@ export interface ProfileResponse {
   current_company?: string | null;
   linkedin_url?: string | null;
   completeness_score?: number | null;
-  career_profile?: CareerProfile;
-  completeness?: Completeness;
+  career_profile?: CareerProfile | null;
+  completeness?: Completeness | null;
   settings?: Record<string, unknown>;
   warnings?: MatchingGuardrailWarning[];
 }
@@ -1612,7 +1613,7 @@ export interface ProfileUpdatePayload {
   visa_status?: string;
   notice_period?: string;
   skills?: string[];
-  career_profile?: CareerProfile;
+  career_profile?: CareerProfileUpdate;
 }
 
 export async function updateProfile(
