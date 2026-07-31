@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - fix/deepseek-thinking-contract
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+  workflow_dispatch:
 
 permissions:
   contents: write
