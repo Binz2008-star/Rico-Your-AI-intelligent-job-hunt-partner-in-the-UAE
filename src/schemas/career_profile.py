@@ -106,6 +106,26 @@ class CareerProfile(BaseModel):
             ]
         return value
 
+    @model_validator(mode="after")
+    def _ensure_unique_ids(self) -> "CareerProfile":
+        """Reject duplicate non-null IDs across all sections of a career profile."""
+        seen: set[str] = set()
+        for section in (
+            self.experience,
+            self.education,
+            self.certifications,
+            self.languages,
+            self.skills,
+        ):
+            for item in section:
+                if item.id is not None:
+                    if item.id in seen:
+                        raise ValueError(
+                            f"Duplicate career profile item id: {item.id}"
+                        )
+                    seen.add(item.id)
+        return self
+
 
 class BaseCareerItemUpdate(BaseModel):
     model_config = {"extra": "forbid"}

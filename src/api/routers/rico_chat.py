@@ -1601,36 +1601,49 @@ def _safe_career_profile(profile) -> CareerProfile | None:
 def _apply_career_profile_update(user_id: str, update: CareerProfileUpdate) -> dict:
     """Derive server-owned provenance and timestamps for a career-profile PATCH.
 
-    Rejects unknown item IDs and client attempts to claim server-owned metadata.
+    Rejects unknown item IDs, cross-section ID migration, duplicate IDs, and
+    client attempts to claim server-owned metadata.
     Preserves omitted sections; only explicitly supplied sections are replaced.
     """
     existing = profile_repo.get_profile(user_id)
     existing_career = _safe_career_profile(existing)
 
-    existing_ids = set()
+    existing_ids_by_section: dict[str, set[str]] = {
+        "experience": set(),
+        "education": set(),
+        "certifications": set(),
+        "languages": set(),
+        "skills": set(),
+    }
     if existing_career:
         for section in (
-            existing_career.experience,
-            existing_career.education,
-            existing_career.certifications,
-            existing_career.languages,
-            existing_career.skills,
+            "experience",
+            "education",
+            "certifications",
+            "languages",
+            "skills",
         ):
-            for item in section:
+            for item in getattr(existing_career, section):
                 if item.id:
-                    existing_ids.add(item.id)
+                    existing_ids_by_section[section].add(item.id)
 
     ts = now_iso()
+    request_ids_seen: set[str] = set()
 
-    def _process_item(update_item, item_cls):
+    def _process_item(update_item, item_cls, section: str):
         item_id = getattr(update_item, "id", None)
-        if item_id is not None and item_id not in existing_ids:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Unknown career profile item id: {item_id}",
-            )
-
         if item_id is not None:
+            if item_id not in existing_ids_by_section[section]:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Item id {item_id} does not belong to {section}",
+                )
+            if item_id in request_ids_seen:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Duplicate career profile item id: {item_id}",
+                )
+            request_ids_seen.add(item_id)
             provenance = ProvenanceState.EDITED_BY_USER
             new_id = item_id
         else:
@@ -1651,7 +1664,7 @@ def _apply_career_profile_update(user_id: str, update: CareerProfileUpdate) -> d
     def _section(field_name: str, item_cls):
         if field_name not in update.model_fields_set:
             return getattr(existing_career, field_name, []) if existing_career else []
-        return [_process_item(item, item_cls) for item in getattr(update, field_name)]
+        return [_process_item(item, item_cls, field_name) for item in getattr(update, field_name)]
 
     experience = _section("experience", ExperienceItem)
     education = _section("education", EducationItem)

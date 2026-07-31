@@ -653,3 +653,292 @@ class TestPatchPartialUpdate:
         )
 
         assert response.status_code == 422
+
+
+class TestIdOwnershipAndUniqueness:
+    def _seed_user(self, user_id, career):
+        from src.repositories import profile_repo
+        profile_repo.upsert_profile(
+            user_id,
+            {"name": "Test", "career_profile": career.model_dump()},
+            require_db=False,
+        )
+
+    def test_patch_skill_id_submitted_as_experience_is_rejected(self, client, monkeypatch):
+        import src.api.routers.rico_chat as rico_chat
+
+        monkeypatch.setattr(rico_chat, "get_current_user", _mock_current_user)
+
+        user_id = "contract-test@example.com"
+        existing = CareerProfile(
+            summary="Old",
+            experience=[ExperienceItem(id="exp-1", role="Dev")],
+            skills=[SkillItem(id="sk-1", name="Python")],
+        )
+        self._seed_user(user_id, existing)
+
+        response = client.patch(
+            "/api/v1/rico/profile",
+            json={
+                "career_profile": {
+                    "experience": [{"id": "sk-1", "role": "CEO"}],
+                }
+            },
+        )
+
+        assert response.status_code == 422
+
+    def test_patch_education_id_submitted_as_certification_is_rejected(self, client, monkeypatch):
+        import src.api.routers.rico_chat as rico_chat
+
+        monkeypatch.setattr(rico_chat, "get_current_user", _mock_current_user)
+
+        user_id = "contract-test@example.com"
+        existing = CareerProfile(
+            education=[EducationItem(id="edu-1", institution="U")],
+            certifications=[CertificationItem(id="cert-1", name="AWS")],
+        )
+        self._seed_user(user_id, existing)
+
+        response = client.patch(
+            "/api/v1/rico/profile",
+            json={
+                "career_profile": {
+                    "certifications": [{"id": "edu-1", "name": "PMP"}],
+                }
+            },
+        )
+
+        assert response.status_code == 422
+
+    def test_patch_same_id_submitted_twice_in_one_section_is_rejected(self, client, monkeypatch):
+        import src.api.routers.rico_chat as rico_chat
+
+        monkeypatch.setattr(rico_chat, "get_current_user", _mock_current_user)
+
+        user_id = "contract-test@example.com"
+        existing = CareerProfile(
+            experience=[ExperienceItem(id="exp-1", role="Dev")],
+        )
+        self._seed_user(user_id, existing)
+
+        response = client.patch(
+            "/api/v1/rico/profile",
+            json={
+                "career_profile": {
+                    "experience": [
+                        {"id": "exp-1", "role": "CEO"},
+                        {"id": "exp-1", "role": "CTO"},
+                    ],
+                }
+            },
+        )
+
+        assert response.status_code == 422
+
+    def test_patch_same_id_submitted_in_two_sections_is_rejected(self, client, monkeypatch):
+        import src.api.routers.rico_chat as rico_chat
+
+        monkeypatch.setattr(rico_chat, "get_current_user", _mock_current_user)
+
+        user_id = "contract-test@example.com"
+        existing = CareerProfile(
+            experience=[ExperienceItem(id="exp-1", role="Dev")],
+            skills=[SkillItem(id="sk-1", name="Python")],
+        )
+        self._seed_user(user_id, existing)
+
+        response = client.patch(
+            "/api/v1/rico/profile",
+            json={
+                "career_profile": {
+                    "experience": [{"id": "exp-1", "role": "CEO"}],
+                    "skills": [{"id": "exp-1", "name": "Go"}],
+                }
+            },
+        )
+
+        assert response.status_code == 422
+
+    def test_career_profile_model_rejects_duplicate_ids(self):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            CareerProfile(
+                experience=[ExperienceItem(id="dup-1", role="Dev")],
+                skills=[SkillItem(id="dup-1", name="Python")],
+            )
+
+    def test_get_profile_safe_when_duplicate_ids_in_storage(self, client, monkeypatch):
+        import src.api.routers.rico_chat as rico_chat
+        import src.repositories.profile_repo as profile_repo
+        import src.services.settings_service as settings_service
+        import src.services.profile_context_resolver as svc
+        import src.agent.context.resolver as agent_ctx
+
+        user_id = "contract-dupe@example.com"
+        profile_repo.upsert_profile(
+            user_id,
+            {
+                "career_profile": {
+                    "experience": [{"id": "dup-1", "role": "Dev"}],
+                    "skills": [{"id": "dup-1", "name": "Python"}],
+                }
+            },
+            require_db=False,
+        )
+
+        def mock_current_user(request):
+            user = {"email": user_id, "role": "user"}
+            request.state.current_user = user
+            request.state.user_id = user["email"]
+            return user
+
+        def mock_get_settings(user_id=None):
+            from src.rico_agent import RicoAgentSettings
+            return RicoAgentSettings()
+
+        monkeypatch.setattr(rico_chat, "get_current_user", mock_current_user)
+        monkeypatch.setattr(settings_service, "get_settings", mock_get_settings)
+        monkeypatch.setattr(agent_ctx, "resolve_profile_context", _mock_profile_context)
+        monkeypatch.setattr(svc, "resolve_profile_context", _mock_svc_ctx)
+        monkeypatch.setattr(svc, "has_career_profile_data", _mock_has_career_data)
+
+        response = client.get("/api/v1/rico/profile")
+
+        assert response.status_code == 200
+        assert response.json()["career_profile"] is None
+
+    def test_patch_valid_same_section_edit_succeeds(self, client, monkeypatch):
+        import src.api.routers.rico_chat as rico_chat
+        import src.repositories.profile_repo as profile_repo
+
+        monkeypatch.setattr(rico_chat, "get_current_user", _mock_current_user)
+
+        def _patched_upsert(user_id, updates, *, require_db=True, clear_fields=(), **kwargs):
+            return profile_repo.upsert_profile(
+                user_id, updates, require_db=False, clear_fields=clear_fields, **kwargs
+            )
+
+        monkeypatch.setattr(rico_chat, "upsert_profile", _patched_upsert)
+
+        user_id = "contract-test@example.com"
+        existing = CareerProfile(
+            experience=[ExperienceItem(id="exp-1", role="Dev")],
+            skills=[SkillItem(id="sk-1", name="Python")],
+        )
+        self._seed_user(user_id, existing)
+
+        response = client.patch(
+            "/api/v1/rico/profile",
+            json={
+                "career_profile": {
+                    "experience": [{"id": "exp-1", "role": "Senior Dev"}],
+                }
+            },
+        )
+
+        assert response.status_code == 200
+        stored = profile_repo.get_profile(user_id)
+        assert stored.career_profile["experience"][0]["role"] == "Senior Dev"
+        assert stored.career_profile["experience"][0]["provenance"] == "edited_by_user"
+        assert stored.career_profile["skills"][0]["name"] == "Python"
+
+    def test_patch_valid_same_section_edit_preserves_omitted_sections(self, client, monkeypatch):
+        import src.api.routers.rico_chat as rico_chat
+        import src.repositories.profile_repo as profile_repo
+
+        monkeypatch.setattr(rico_chat, "get_current_user", _mock_current_user)
+
+        def _patched_upsert(user_id, updates, *, require_db=True, clear_fields=(), **kwargs):
+            return profile_repo.upsert_profile(
+                user_id, updates, require_db=False, clear_fields=clear_fields, **kwargs
+            )
+
+        monkeypatch.setattr(rico_chat, "upsert_profile", _patched_upsert)
+
+        user_id = "contract-test@example.com"
+        existing = CareerProfile(
+            summary="Old",
+            experience=[ExperienceItem(id="exp-1", role="Dev")],
+            education=[EducationItem(id="edu-1", institution="U")],
+            skills=[SkillItem(id="sk-1", name="Python")],
+        )
+        self._seed_user(user_id, existing)
+
+        response = client.patch(
+            "/api/v1/rico/profile",
+            json={
+                "career_profile": {
+                    "experience": [{"id": "exp-1", "role": "Senior Dev"}],
+                }
+            },
+        )
+
+        assert response.status_code == 200
+        stored = profile_repo.get_profile(user_id)
+        assert stored.career_profile["summary"] == "Old"
+        assert stored.career_profile["experience"][0]["role"] == "Senior Dev"
+        assert stored.career_profile["education"][0]["id"] == "edu-1"
+        assert stored.career_profile["skills"][0]["id"] == "sk-1"
+
+    def test_patch_rejected_request_never_calls_upsert(self, client, monkeypatch):
+        import src.api.routers.rico_chat as rico_chat
+
+        monkeypatch.setattr(rico_chat, "get_current_user", _mock_current_user)
+
+        def boom(*args, **kwargs):
+            raise AssertionError("upsert_profile should not be called for rejected input")
+
+        monkeypatch.setattr(rico_chat, "upsert_profile", boom)
+
+        user_id = "contract-test@example.com"
+        existing = CareerProfile(
+            skills=[SkillItem(id="sk-1", name="Python")],
+        )
+        self._seed_user(user_id, existing)
+
+        response = client.patch(
+            "/api/v1/rico/profile",
+            json={
+                "career_profile": {
+                    "experience": [{"id": "sk-1", "role": "CEO"}],
+                }
+            },
+        )
+
+        assert response.status_code == 422
+
+    def test_new_items_receive_unique_server_generated_ids(self, client, monkeypatch):
+        import src.api.routers.rico_chat as rico_chat
+        import src.repositories.profile_repo as profile_repo
+
+        monkeypatch.setattr(rico_chat, "get_current_user", _mock_current_user)
+
+        def _patched_upsert(user_id, updates, *, require_db=True, clear_fields=(), **kwargs):
+            return profile_repo.upsert_profile(
+                user_id, updates, require_db=False, clear_fields=clear_fields, **kwargs
+            )
+
+        monkeypatch.setattr(rico_chat, "upsert_profile", _patched_upsert)
+
+        user_id = "contract-test@example.com"
+
+        response = client.patch(
+            "/api/v1/rico/profile",
+            json={
+                "career_profile": {
+                    "experience": [
+                        {"role": "A"},
+                        {"role": "B"},
+                    ],
+                }
+            },
+        )
+
+        assert response.status_code == 200
+        stored = profile_repo.get_profile(user_id)
+        ids = [e["id"] for e in stored.career_profile["experience"]]
+        assert len(ids) == 2
+        assert all(ids)
+        assert ids[0] != ids[1]
