@@ -108,6 +108,7 @@ jobs:
             tests/test_deployment_gate_targets.py \
             tests/test_context_priority_under_pressure.py \
             tests/test_pending_job_search_contract.py \
+            tests/test_career_profile_contract.py \
             tests/decision_regression/ \
             -v --tb=short
 

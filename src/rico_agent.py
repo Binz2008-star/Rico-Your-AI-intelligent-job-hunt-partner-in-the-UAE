@@ -50,6 +50,7 @@ class RicoProfile:
     industries: List[str] = field(default_factory=list)
     tools: List[str] = field(default_factory=list)
     languages: List[str] = field(default_factory=list)
+    certifications: List[str] = field(default_factory=list)
     current_role: Optional[str] = None
     current_company: Optional[str] = None
     linkedin_url: Optional[str] = None
