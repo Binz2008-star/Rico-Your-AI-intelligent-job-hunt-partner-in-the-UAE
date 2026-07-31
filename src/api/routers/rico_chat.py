@@ -226,6 +226,10 @@ class ProfileResponse(BaseModel):
     current_company: str | None = None
     linkedin_url: str | None = None
     completeness_score: float | None = None
+    career_profile: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None
+    completeness: dict[str, Any] | None = None
+    last_cv_sync_at: str | None = None
     warnings: list[dict[str, str]] = Field(default_factory=list)
 
 
@@ -243,7 +247,10 @@ class ConfirmCVProfileRequest(BaseModel):
             "exact upload — never trusted/recomputed from client-supplied values."
         ),
     )
-
+    review: dict[str, Any] | None = Field(
+        default=None,
+        description="User review decisions per extracted section.",
+    )
 
 
 class MetricsResponse(BaseModel):
@@ -616,6 +623,16 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         current_company=getattr(profile, "current_company", None),
         linkedin_url=getattr(profile, "linkedin_url", None),
         completeness_score=agent_ctx.completeness_score,
+        career_profile=getattr(profile, "career_profile", None) or None,
+        provenance=getattr(profile, "provenance", None) or None,
+        completeness={
+            "score": agent_ctx.completeness_score,
+            "breakdown": [
+                {"section": "required", "missing": agent_ctx.missing_required},
+                {"section": "optional", "missing": agent_ctx.missing_optional},
+            ],
+        },
+        last_cv_sync_at=None,
         warnings=build_matching_guardrail_warnings(
             settings=settings,
             profile=profile,
@@ -1531,6 +1548,8 @@ class ProfileUpdateRequest(BaseModel):
     notice_period: Optional[str] = Field(None, max_length=100)
     skills: Optional[list[str]] = Field(None, max_length=100)
     industries: Optional[list[str]] = Field(None, max_length=50)
+    career_profile: Optional[dict[str, Any]] = None
+    provenance: Optional[dict[str, Any]] = None
 
 
 def _profile_updates_visible(user_id: str, updates: dict[str, Any]) -> bool:
@@ -1597,6 +1616,10 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         updates["skills"] = validate_and_normalize_skills(body.skills)
     if body.industries is not None:
         updates["industries"] = [i.strip() for i in body.industries if i.strip()]
+    if body.career_profile is not None:
+        updates["career_profile"] = body.career_profile
+    if body.provenance is not None:
+        updates["provenance"] = body.provenance
 
     # Explicit clears for nullable NUMERIC fields. Pydantic gives an omitted
     # field and an explicit JSON null the same default (None), so
@@ -2260,6 +2283,10 @@ async def rico_upload_cv(
             "skills": detected_skills if detected_skills else existing_skills,  # For backward compatibility
             "certifications": parsed.get("certifications", []),
             "languages": parsed.get("languages", []),
+            "work_experience": parsed.get("work_experience", []),
+            "education": parsed.get("education", []),
+            "extraction_quality": parsed.get("extraction_quality"),
+            "extracted_chars": parsed.get("extracted_chars"),
         }
 
         cv_warnings = build_cv_quality_warnings(

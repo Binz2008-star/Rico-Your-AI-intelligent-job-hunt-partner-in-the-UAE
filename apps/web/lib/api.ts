@@ -280,6 +280,13 @@ export interface ProfileResponse {
   current_company?: string | null;
   linkedin_url?: string | null;
   completeness_score?: number | null;
+  career_profile?: Record<string, unknown>;
+  provenance?: Record<string, unknown>;
+  completeness?: {
+    score: number;
+    breakdown: Array<{ section: string; missing: string[] }>;
+  };
+  last_cv_sync_at?: string | null;
   settings?: Record<string, unknown>;
   warnings?: MatchingGuardrailWarning[];
 }
@@ -1275,6 +1282,10 @@ export interface ProfilePreview {
   skills: string[];
   certifications: string[];
   languages: string[];
+  work_experience?: Array<Record<string, unknown>>;
+  education?: Array<Record<string, unknown>>;
+  extraction_quality?: string;
+  extracted_chars?: number;
 }
 
 export interface DocumentClassificationScore {
@@ -1319,6 +1330,7 @@ export interface ConfirmCVProfileRequest {
   // server-side against the caller's own identity. Omit only when no
   // artifact was returned by upload-cv.
   upload_id?: string | null;
+  review?: Record<string, unknown>;
 }
 
 export interface ConfirmCVProfileResponse {
@@ -1600,6 +1612,8 @@ export interface ProfileUpdatePayload {
   visa_status?: string;
   notice_period?: string;
   skills?: string[];
+  career_profile?: Record<string, unknown>;
+  provenance?: Record<string, unknown>;
 }
 
 export async function updateProfile(
