@@ -7372,7 +7372,7 @@ Close the blockers on the Draft PR #1473 for the first phase of the Career Profi
 - Branch: `feat/career-profile-contract`
 - Base branch: `main`
 - Last safe commit SHA: `d38328dcc12da82785ac9f0cf6f0c38bb84f7b88` (before this session)
-- Current head SHA: <to be recorded after push>
+- Current head SHA: a9b0d0f321441deba021164405d650751629af07
 - Uncommitted changes present: yes — backend schemas, router, repo, agent; frontend schemas + types; contract tests; AI_WORKSPACE/TASKS.md
 - Status: in_progress
 - Files inspected:
