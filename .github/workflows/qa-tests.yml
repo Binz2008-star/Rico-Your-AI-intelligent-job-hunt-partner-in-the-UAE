@@ -105,6 +105,7 @@ jobs:
             tests/test_bounded_cache.py \
             tests/test_railway_startup_migrations_gate.py \
             tests/test_ai_grounding_contract.py \
+            tests/test_external_draft_identity_guard.py \
             tests/test_deployment_gate_targets.py \
             tests/test_context_priority_under_pressure.py \
             tests/test_pending_job_search_contract.py \
