@@ -39,9 +39,11 @@ A green deployment badge is not a product smoke. A rehearsal is not production-r
 | `#1457` | **MERGED** as `dcc949af3e6300482be78146222d8d03fb6b092e` from head `acb33fe8b173cc05145acdbf760ae21fb907bee9`; bounded cache foundation, no production cache swapped |
 | `#1461` | **MERGED** as `ccde2c483c76b782214f3bb117c4c07310121c4d`; gate write-capable DB init behind `RICO_RUN_STARTUP_MIGRATIONS` |
 | `#1472` | **MERGED** as `1d00d46f40e187ce6c83d80ada3b7f94b4efefef` (squash); typed `PendingJobSearch` contract with atomic DB-backed consume; post-merge production smoke **pending** |
+| `#1464` | **MERGED** as `41a95adf5e08b576571f32e57afd6919b0374a88`; AI grounding and evidence contract |
+| `#1462` | **CLOSED WITHOUT MERGE**; competing CV filename guardrail; superseded/consolidated into #1464 |
 | `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
 | Closed without merge | `#1467` (superseded by #1468, #1469, #1470, #1472); `#1473` (stale career-profile contract); `#1465` (stale AI audit); `#1455` (empty template); `#1454` (stale smoke-residual cleanup); `#1452` (stacked on closed #1449); `#1449` (stale governance); `#1447` (empty PRD body) |
-| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1474** (RicoReply hardening, draft; next candidate after sync with main and fresh CI) · **#1471** (GuardrailWarnings, draft; needs rebase, fresh CI, and light/dark + EN/AR screenshots) |
+| Open implementation PRs | **#1474** (RicoReply hardening, Draft) · **#1471** (GuardrailWarnings palette, Draft) |
 | Open audit / governance / documentation PRs | (none pending merge; stale branches closed on 2026-07-31) |
 | Open operational cleanup PRs | (none pending merge; a fresh fingerprint, backup, and dry-run are required before any future smoke-residual cleanup PR) |
 
@@ -142,10 +144,12 @@ Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the pr
 | --- | --- |
 | Active implementation writers | **0** |
 | Active documentation writers | **1 — docs/reconcile-project-status-20260731 branch; lease ends on merge/close** |
-| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1474** (RicoReply hardening, draft; next candidate) · **#1471** (GuardrailWarnings, draft) |
+| Open implementation PRs | **#1474** (RicoReply hardening, Draft) · **#1471** (GuardrailWarnings palette, Draft) |
 | Open audit / governance / documentation PRs | (none; stale branches closed) |
 | Open operational cleanup PRs | (none; new PR requires fresh fingerprint/backup/dry-run) |
 | Multi-user reliability PR 1 / PR 2 | **merged through #1437 / #1438** |
+| `#1464` | **MERGED** as `41a95adf5e08b576571f32e57afd6919b0374a88`; AI grounding and evidence contract |
+| `#1462` | **CLOSED WITHOUT MERGE**; competing CV filename guardrail; superseded/consolidated into #1464 |
 | D1 mapping/rehearsal | **complete** |
 | D1 final operating package | **merged** |
 | Production database repair | **not authorized** |
