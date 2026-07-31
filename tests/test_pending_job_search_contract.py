@@ -445,13 +445,15 @@ class TestRedemptionPipeline:
         assert "product manager" in args[1]
 
     def test_new_request_clears_old(self):
+        """NEW_REQUEST with a FOUND pending state must consume the old token
+        and continue routing (return None for PendingJobSearch)."""
         pending = {"role": "Old", "expires_at": int(time.time()) + 600}
         api = _make_api(pending)
-        with patch.object(api, "_clear_pending_job_search") as clear_mock, \
-             patch.object(api, "_target_role_search_response") as direct:
+        with patch.object(api, "_target_role_search_response") as direct:
             result = api._redeem_pending_job_search("u1", "search for data analyst", profile={})
         assert result is None
-        clear_mock.assert_called_once()
+        # The lookup was performed, consume was called to invalidate old state.
+        api._pjs_repo.consume.assert_called_once()
         direct.assert_not_called()
 
 
@@ -700,3 +702,179 @@ def test_memory_backend_postgres_disables_set_context():
     from pathlib import Path
     ctx_path = rm.RICO_MEMORY_DIR / f"context_{rm._safe_key('test')}.json"
     assert not ctx_path.exists(), "set_context must be a no-op under postgres backend"
+
+
+# ── BLOCKER 2: fresh new requests with no pending state ──────────────────────
+# These must NOT produce pending_job_search_failed errors.
+
+
+def test_new_request_with_no_pending_continues_routing():
+    """'search for data analyst' with no pending state must return None,
+    letting normal routing continue without a PendingJobSearch error."""
+    api = _make_api(pending=None)
+    result = api._redeem_pending_job_search("u1", "search for data analyst", profile={})
+    assert result is None, "NEW_REQUEST with NONE must not produce a PJS error"
+
+
+def test_arabic_new_request_with_no_pending_continues_routing():
+    """'ابحث عن وظائف محاسب' with no pending state must return None."""
+    api = _make_api(pending=None)
+    result = api._redeem_pending_job_search("u1", "ابحث عن وظائف محاسب", profile={})
+    assert result is None, "Arabic NEW_REQUEST with NONE must not produce a PJS error"
+
+
+def test_cancel_with_no_pending_continues_routing():
+    """'cancel' with no pending state must return None, not an error."""
+    api = _make_api(pending=None)
+    result = api._redeem_pending_job_search("u1", "cancel", profile={})
+    assert result is None, "CANCEL with NONE must not produce a PJS error"
+
+
+def test_change_with_no_pending_executes_new_search():
+    """'yes, search Product Manager' with no pending state executes the new
+    search directly (CHANGE with NONE is a new request, not an error)."""
+    api = _make_api(pending=None)
+    with patch.object(api, "_target_role_search_response") as mock_search:
+        result = api._redeem_pending_job_search("u1", "yes, search Product Manager", profile={})
+    mock_search.assert_called_once()
+    assert mock_search.call_args[0][1] == "product manager"
+
+
+# ── BLOCKER 5: typed lookup outcomes ─────────────────────────────────────────
+
+
+class TestPendingSearchLookup:
+    def test_lookup_returns_none_when_no_pending(self):
+        from src.services.pending_job_search import PendingJobSearchRepo, PendingSearchLookup, LookupStatus
+        db = MagicMock()
+        repo = PendingJobSearchRepo(db)
+        db.get_user_bundle.return_value = {"id": "u1", "settings": {}}
+        lookup = repo.lookup("u1")
+        assert lookup.status == LookupStatus.NONE
+
+    def test_lookup_returns_malformed_when_not_a_dict(self):
+        from src.services.pending_job_search import PendingJobSearchRepo, PendingSearchLookup, LookupStatus
+        db = MagicMock()
+        repo = PendingJobSearchRepo(db)
+        db.get_user_bundle.return_value = {"id": "u1", "settings": {"_pjs": "not-a-dict"}}
+        lookup = repo.lookup("u1")
+        assert lookup.status == LookupStatus.MALFORMED
+
+    def test_lookup_returns_expired_when_past_ttl(self):
+        from src.services.pending_job_search import (
+            PendingJobSearch, PendingJobSearchRepo, PendingSearchLookup, LookupStatus,
+        )
+        from datetime import datetime, timezone, timedelta
+        db = MagicMock()
+        repo = PendingJobSearchRepo(db)
+        expired_pjs = PendingJobSearch(
+            token="tok", role="Old", location="", reason="test",
+            created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+        db.get_user_bundle.return_value = {
+            "id": "u1", "settings": {"_pjs": expired_pjs.to_dict()},
+        }
+        lookup = repo.lookup("u1")
+        assert lookup.status == LookupStatus.EXPIRED
+        assert lookup.pjs is not None
+
+    def test_lookup_returns_unavailable_on_db_failure(self):
+        from src.services.pending_job_search import PendingJobSearchRepo, PendingSearchLookup, LookupStatus
+        db = MagicMock()
+        repo = PendingJobSearchRepo(db)
+        db.get_user_bundle.side_effect = RuntimeError("DB down")
+        lookup = repo.lookup("u1")
+        assert lookup.status == LookupStatus.UNAVAILABLE
+
+    def test_lookup_returns_found_for_valid(self):
+        from src.services.pending_job_search import PendingJobSearchRepo, PendingSearchLookup, LookupStatus, new_pending
+        db = MagicMock()
+        repo = PendingJobSearchRepo(db)
+        pjs = new_pending(role="Engineer", location="Dubai")
+        db.get_user_bundle.return_value = {
+            "id": "u1", "settings": {"_pjs": pjs.to_dict()},
+        }
+        lookup = repo.lookup("u1")
+        assert lookup.status == LookupStatus.FOUND
+        assert lookup.pjs is not None
+        assert lookup.pjs.role == "Engineer"
+
+
+# ── BLOCKER 6: typed lookup failure tests ────────────────────────────────────
+
+
+class TestLookupFailureScenarios:
+    """Failure tests that explicitly set repo.lookup.return_value."""
+
+    def test_confirm_unavailable_returns_clarification(self):
+        api = _make_api(pending=None)
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.UNAVAILABLE)
+        result = api._redeem_pending_job_search("u1", "yes", profile={})
+        assert result is not None
+        assert result.get("type") == "clarification"
+        assert "pending_job_search_failed" in str(result.get("intent", ""))
+
+    def test_confirm_malformed_returns_clarification(self):
+        api = _make_api(pending=None)
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.MALFORMED)
+        result = api._redeem_pending_job_search("u1", "yes", profile={})
+        assert result is not None
+        assert result.get("type") == "clarification"
+
+    def test_confirm_expired_returns_clarification(self):
+        api = _make_api(pending=None)
+        from src.services.pending_job_search import (
+            PendingSearchLookup, LookupStatus, PendingJobSearch,
+        )
+        from datetime import datetime, timezone
+        expired = PendingJobSearch(
+            token="tok", role="Old", location="", reason="test",
+            created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.EXPIRED, expired)
+        result = api._redeem_pending_job_search("u1", "yes", profile={})
+        assert result is not None
+        assert result.get("type") == "clarification"
+
+    def test_confirm_none_fallthrough(self):
+        """CONFIRM with NONE must return None (safe routing)."""
+        api = _make_api(pending=None)
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.NONE)
+        result = api._redeem_pending_job_search("u1", "yes", profile={})
+        assert result is None, "CONFIRM with NONE must fall through, not error"
+
+    def test_lookup_called_exactly_once_on_confirm(self):
+        api = _make_api(pending={"role": "Engineer", "location": ""})
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.UNAVAILABLE)
+        api._redeem_pending_job_search("u1", "yes", profile={})
+        assert api._pjs_repo.lookup.call_count == 1
+
+    def test_consume_not_called_on_lookup_failure(self):
+        api = _make_api(pending=None)
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.UNAVAILABLE)
+        api._redeem_pending_job_search("u1", "yes", profile={})
+        assert api._pjs_repo.consume.call_count == 0
+
+    def test_zero_execution_on_failure(self):
+        """Verify no _target_role_search_response on UNAVAILABLE/MALFORMED/EXPIRED."""
+        api = _make_api(pending=None)
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.UNAVAILABLE)
+        with patch.object(api, "_target_role_search_response") as mock_search:
+            result = api._redeem_pending_job_search("u1", "yes", profile={})
+        mock_search.assert_not_called()
+
+    def test_new_request_unavailable_fallthrough(self):
+        """NEW_REQUEST with UNAVAILABLE must still fall through (not a PJS error)."""
+        api = _make_api(pending=None)
+        from src.services.pending_job_search import PendingSearchLookup, LookupStatus
+        api._pjs_repo.lookup.return_value = PendingSearchLookup(LookupStatus.UNAVAILABLE)
+        result = api._redeem_pending_job_search("u1", "search for data analyst", profile={})
+        assert result is None, "NEW_REQUEST with UNAVAILABLE must fall through"

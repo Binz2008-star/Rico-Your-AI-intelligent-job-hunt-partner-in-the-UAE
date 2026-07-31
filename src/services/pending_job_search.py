@@ -631,8 +631,10 @@ class PendingJobSearchRepo:
         if not settings or not isinstance(settings, dict):
             return PendingSearchLookup(LookupStatus.NONE)
         raw = settings.get(_PJS_KEY)
-        if raw is None or not isinstance(raw, dict):
+        if raw is None:
             return PendingSearchLookup(LookupStatus.NONE)
+        if not isinstance(raw, dict):
+            return PendingSearchLookup(LookupStatus.MALFORMED)
         try:
             pjs = PendingJobSearch.from_dict(raw)
         except (ValueError, TypeError, KeyError):

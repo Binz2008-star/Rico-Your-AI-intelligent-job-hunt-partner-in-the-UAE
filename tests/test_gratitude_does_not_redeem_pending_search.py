@@ -45,19 +45,19 @@ def _api_and_calls(stack: ExitStack) -> tuple[Any, list[str]]:
         calls.append(role)
         return {"type": "job_matches", "matches": [], "message": "searched"}
 
-    p(patch.object(RicoChatAPI, "_get_pending_job_search", lambda _s, _u: dict(ARMED)))
-    p(patch.object(RicoChatAPI, "_clear_pending_job_search", lambda _s, _u: None))
     p(patch.object(RicoChatAPI, "_discard_pending_role_confirmation", lambda _s, _u: None))
     p(patch.object(RicoChatAPI, "_get_recent_context", lambda _s, _u: {}))
     p(patch.object(RicoChatAPI, "_store_recent_context", lambda _s, _u, _c: None))
     p(patch.object(RicoChatAPI, "_get_last_assistant_message", lambda _s, _u: ""))
     p(patch.object(RicoChatAPI, "_target_role_search_response", _search))
     api = RicoChatAPI()
-    # Mock the repo so atomic consume works without a real DB.
+    # Mock the repo so typed lookup and atomic consume work without a real DB.
     from unittest.mock import MagicMock
-    from src.services.pending_job_search import new_pending
+    from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
     mock_repo = MagicMock()
-    mock_repo.consume.return_value = new_pending(role="Quality Manager", location="")
+    pjs = new_pending(role="Quality Manager", location="")
+    mock_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
+    mock_repo.consume.return_value = pjs
     mock_repo.cancel.return_value = True
     api._pjs_repo = mock_repo
     # Set the sentinel so the single-turn guard allows the first call.
@@ -178,15 +178,12 @@ def test_ok_still_dispatches_the_armed_search():
 def test_pending_search_survives_a_thank_you():
     """Gratitude declines to redeem; it does not CLEAR the armed search, so a
     later 'yes' still works inside the 15-minute TTL."""
-    cleared: list[str] = []
     with ExitStack() as stack:
         p = stack.enter_context
         p(patch("src.rico_db.RicoDB.available", new_callable=PropertyMock, return_value=False))
         p(patch("src.db.DB_ENABLED", False))
         from src.rico_chat_api import RicoChatAPI
 
-        p(patch.object(RicoChatAPI, "_get_pending_job_search", lambda _s, _u: dict(ARMED)))
-        p(patch.object(RicoChatAPI, "_clear_pending_job_search", lambda _s, u: cleared.append(u)))
         p(patch.object(RicoChatAPI, "_discard_pending_role_confirmation", lambda _s, _u: None))
         p(patch.object(RicoChatAPI, "_get_recent_context", lambda _s, _u: {}))
         p(patch.object(RicoChatAPI, "_get_last_assistant_message", lambda _s, _u: ""))
@@ -194,10 +191,21 @@ def test_pending_search_survives_a_thank_you():
             RicoChatAPI, "_target_role_search_response",
             lambda *_a, **_k: {"type": "job_matches", "matches": []},
         ))
+        from unittest.mock import MagicMock
+        from src.services.pending_job_search import new_pending, PendingSearchLookup, LookupStatus
         api = RicoChatAPI()
+        mock_repo = MagicMock()
+        pjs = new_pending(role="Quality Manager", location="")
+        mock_repo.lookup.return_value = PendingSearchLookup(LookupStatus.FOUND, pjs)
+        mock_repo.consume.return_value = pjs
+        mock_repo.cancel.return_value = True
+        api._pjs_repo = mock_repo
+        api._pjs_redemption_attempted_this_turn = RicoChatAPI._PJS_SENTINEL
         api._resolve_pending_intent(USER, "thanks", profile=object())
 
-    assert cleared == [], "a thank-you must not consume the armed offer"
+    # A thank-you must not consume the armed offer.
+    # Check consume was never called for gratitude.
+    assert mock_repo.consume.call_count == 0, "a thank-you must not consume the armed offer"
 
 
 # ── The acknowledgement reply itself is unchanged ─────────────────────────────
