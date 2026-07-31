@@ -756,6 +756,7 @@ Branch: `claude/md-best-practices-generator-auau3b` (final home of the
 CLAUDE.md refactor commit, reconciled onto the pre-existing PR #1346 rather
 than opened as a competing PR)
 Issue/PR: #1346 (tooling+refactor), plus reviewed-and-merged #1347, #1348,
+
 # 1349, #1350 as part of the same session
 
 #### Objective
@@ -8913,3 +8914,60 @@ usable" — bounded here, not deleted).
   text; the next request rebuilds context from scratch
 - Stop condition: do not merge, do not deploy, do not begin Phase 2 without
   explicit owner approval
+
+### TASK-20260731-001 — Option Decision Chips (Atelier AskLine option chips for `/command`)
+
+Status: in_progress
+
+#### Objective
+
+Vision → AI Career Operating System → Atelier UX Facelift → Command Rich Response Foundation → Option Decision Chips → Draft PR
+
+Restyle the existing real `RicoOption` option buttons on the authenticated `/command` surface to use the Atelier `AskLine` chip language, the Workspace palette, and English/Arabic RTL.
+
+#### Relevant files
+
+- `apps/web/components/command/OptionButtons.tsx`
+- `apps/web/app/command/page.tsx`
+- `apps/web/__tests__/command-option-buttons.test.tsx`
+
+#### Existing behavior
+
+`RicoChatResponse.options` and `Message.options` already feed `CommandTranscriptStep` `needs_input` rows through `AtelierCardScope`. The previous inline `OptionButtons` used the `gold` token and `opt.action` as React key.
+
+#### Changes
+
+- Extract `OptionButtons` to `components/command/OptionButtons.tsx`
+- Consume `useWorkspaceTheme()` and `useLanguage()`
+- Remove `gold`/`lime`/Lovable theme classes
+- Use a composite React key tolerant of duplicate `opt.action`
+- Preserve `onAction(opt.message ?? opt.label)` behavior
+
+#### Do not touch
+
+- backend, schemas, API contracts, `CommandEventAdapter`, job cards, progress rendering, design-gallery reference components, `refactor/extract-rico-chat`, landing, PR #1472
+
+#### Acceptance criteria
+
+- [ ] Atelier chip styling
+- [ ] EN/AR + RTL
+- [ ] light/dark palette
+- [ ] keyboard activation
+- [ ] duplicate action values render
+- [ ] build green
+- [ ] `npm test` green
+- [ ] Playwright `/command` smoke
+- [ ] Draft PR open, no merge
+
+#### Continuity Block
+
+- Task ID: TASK-20260731-001
+- Branch: `design/command-rich-response-foundation`
+- Base branch: `main`
+- Base SHA: `7056952639c8afe1d1dcf78348c92aafcb78ec67`
+- Current head SHA: `7056952639c8afe1d1dcf78348c92aafcb78ec67`
+- Uncommitted changes present: yes — `apps/web/components/command/OptionButtons.tsx`, `apps/web/app/command/page.tsx`, `apps/web/__tests__/command-option-buttons.test.tsx`
+- Status: in_progress
+- Files changed: `apps/web/components/command/OptionButtons.tsx`, `apps/web/app/command/page.tsx`, `apps/web/__tests__/command-option-buttons.test.tsx`
+- Rollback: `git checkout apps/web/app/command/page.tsx apps/web/components/command/OptionButtons.tsx apps/web/__tests__/command-option-buttons.test.tsx`
+- Stop condition: Draft PR only; do not merge or deploy
