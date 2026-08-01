@@ -22,14 +22,14 @@
 | Element | Authorized value |
 | --- | --- |
 | Issuer | Roben |
-| Directive ID | `RICO-20260801-L7-RECONCILE` (initial) → `RICO-20260801-L7-RECONCILE-CORRECTION-1` (first corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-2` (second corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-3` (current, final state closure) |
+| Directive ID | `RICO-20260801-L7-RECONCILE` (initial) → `RICO-20260801-L7-RECONCILE-CORRECTION-1` (first corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-2` (second corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-3` (third corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-4` (current, final state closure) |
 | Target lane | `L7` |
 | Target branch | `agent/control-plane-reconcile-20260801` |
-| Expected remote HEAD | `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` (Correction-3 input head) |
+| Expected remote HEAD | `22c4dfa637eca202b45a4bc3d07fe80b8cc0cb2b` (Correction-4 input head) |
 | Expected live main | `5a5153614dd7e092f93d49abd09c928d32fcb456` |
-| Allowed scope | `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 title/body metadata only |
-| Write authorization | `FROZEN` after Correction-3 publication; awaiting independent review |
-| Stop condition | stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from eede42cabb6e4a9fc1f901abcf796f34ef7c45ce, another writer or overlapping change exists, or any fourth repository file would change |
+| Allowed scope | `PROJECT_STATUS.md` and `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, plus PR #1481 body only; no `TASKS.md` change for Correction-4 |
+| Write authorization | `AUTHORIZED` for one normal non-force Correction-4 push; `FROZEN` after publication; awaiting independent review |
+| Stop condition | stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from 22c4dfa637eca202b45a4bc3d07fe80b8cc0cb2b (Correction-4 input head), another writer or overlapping change exists, any fourth repository file would change, or `TASKS.md` is modified |
 
 Output is limited to a Draft PR. Merge, deployment, production mutation, Neon access, environment/secret change, and authenticated-user smoke are not authorized.
 
@@ -148,17 +148,18 @@ Focused local validation (corrective pass):
 
 ## Continuity Block
 
-- Objective: finalize corrective control-plane reconciliation at main@5a515361, addressing Codex review blockers and updating lineage from initial 9f5dccfa/b7f9a986 to corrective 5a515361/eede42ca. Preserve 9f5dccfa only where explicitly labelled historical initial evidence. Lane is now FROZEN awaiting independent review.
+- Objective: correct the #1483 draft flag in the existing 2026-08-01T10:25:11Z evidence cut; finalize corrective control-plane reconciliation at main@5a515361. Preserve 9f5dccfa only where explicitly labelled historical initial evidence. Lane is now FROZEN after Correction-4 publication, awaiting independent review.
+- Reason for Correction-4: the point-in-time evidence cut incorrectly classified `#1483` as Draft; live GitHub reports `draft=false` (Ready for Review), so the control snapshot is corrected to `(Ready for Review / draft=false, unmerged)`.
 - Branch: `agent/control-plane-reconcile-20260801`.
 - PR number: `#1481`.
 - Base SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from 9f5dccfa after #1482 merge).
-- Expected remote head: `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` (Correction-3 input head).
-- Current head: the final published SHA must be read live from PR #1481; it cannot self-identify inside its own commit. Lineage: 044cb60f (Correction-2 input head) → eede42ca (Correction-3 input head) → final published head (read live).
-- Uncommitted changes: no after the Correction-3 commit is published.
-- Tests/checks run: live GitHub/production evidence reads at 2026-08-01T10:25:11Z; branch/overlap preflight; three-path scope guard; `git diff --check`; stale-current-claim scan; documentation consistency — all PASS. Exact-head CI: all checks SUCCESS.
-- Exact status: review; Draft PR `#1481` open; lane FROZEN after Correction-3 publication; no merge/deploy/production mutation.
-- Complete: authorization, role claim, canonical read, live reconciliation, branch creation, three-file publication, Draft PR creation, corrective passes, CI observation.
+- Expected remote head: `22c4dfa637eca202b45a4bc3d07fe80b8cc0cb2b` (Correction-4 input head).
+- Current head: the final published SHA must be read live from PR #1481; it cannot self-identify inside its own commit. Lineage: 044cb60f (Correction-2 input head) → eede42ca (Correction-3 input head) → 22c4dfa (Correction-4 input head) → final published head (read live).
+- Uncommitted changes: no after the Correction-4 commit is published.
+- Tests/checks run: live GitHub/production evidence reads at 2026-08-01T10:25:11Z; branch/overlap preflight; three-path scope guard; `git diff --check`; stale-current-claim scan; documentation consistency — all PASS. Exact-head CI after Correction-3: all checks SUCCESS; exact-head CI after Correction-4: pending.
+- Exact status: review; Draft PR `#1481` open; lane FROZEN after Correction-4 publication; no merge/deploy/production mutation.
+- Complete: authorization, role claim, canonical read, live reconciliation, branch creation, two-file Correction-4 publication, Draft PR body update, corrective passes, CI observation.
 - Incomplete: independent review at exact published head; the separately scoped Render→Railway governance-doc correction; the reference-audited duplicate-task-ID repair.
 - Blockers: none at this point.
 - Next exact action: obtain independent review on Draft PR `#1481` at its exact published head; keep lane frozen; do not merge or deploy; do not begin #1480 in this pass.
-- Must not touch: anything outside the three authorized docs paths; `#1477`; `#1480` implementation; Neon; secrets; environment; deployments; `main`.
+- Must not touch: anything outside the two authorized docs paths; no `TASKS.md` change; `#1477`; `#1480` implementation; Neon; secrets; environment; deployments; `main`.

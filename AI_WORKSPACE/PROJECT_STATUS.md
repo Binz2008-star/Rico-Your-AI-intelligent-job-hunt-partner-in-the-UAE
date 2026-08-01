@@ -37,7 +37,7 @@ Evidence cut: 2026-08-01T03:35:38Z (07:35 GST) for initial reconciliation; corre
 | Frontend proxy | `https://ricohunt.com/proxy/health` HTTP 200 / `status=ok` |
 | Public frontend | `https://ricohunt.com/` reachable and serving the current Rico public experience |
 | Commit deployment statuses | Vercel success and two Railway service statuses success on `main@5a515361` |
-| Open pull requests | `#1477` (Draft, unmerged), `#1481` (Draft, L7 control plane reconciliation), `#1483` (Draft, Corridor security guardrails in AGENTS.md) |
+| Open pull requests | `#1477` (Draft, unmerged), `#1481` (Draft, L7 control plane reconciliation), `#1483` (Ready for Review / draft=false, unmerged, Corridor security guardrails in AGENTS.md) |
 | Closed stale docs PR | `#1475` closed without merge at head `baaaae90abbf55105c8258905b7bceb0cdd5bc67` |
 | Recently merged | `#1482` merged as `5a5153614dd7e092f93d49abd09c928d32fcb456` — test-only Windows multiworker process context support |
 | AI quality program | `#1479` open Epic; `#1480` open PR1 specification; no implementation PR exists for `#1480` |
