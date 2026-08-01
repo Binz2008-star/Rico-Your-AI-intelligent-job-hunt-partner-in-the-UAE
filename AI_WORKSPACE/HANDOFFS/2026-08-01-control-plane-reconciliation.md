@@ -22,13 +22,13 @@
 | Element | Authorized value |
 | --- | --- |
 | Issuer | Roben |
-| Directive ID | `RICO-20260801-L7-RECONCILE` |
+| Directive ID | `RICO-20260801-L7-RECONCILE` (initial) → `RICO-20260801-L7-RECONCILE-CORRECTION-1` (corrective) |
 | Target lane | `L7` |
 | Target branch | `agent/control-plane-reconcile-20260801` |
-| Expected remote HEAD | branch absent at preflight; create from `main@9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b` |
-| Allowed scope | `PROJECT_STATUS.md`, `TASKS.md`, and dependent verification documentation only |
-| Write authorization | `AUTHORIZED` |
-| Stop condition | changed `main`, overlapping writer, remote-head mismatch, or scope expansion |
+| Expected remote HEAD | `d95cec3829eea38209b1943c5e5534c949bd601e` (corrective directive) |
+| Allowed scope | `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 body only |
+| Write authorization | `AUTHORIZED` for one corrective reconciliation pass, then `FROZEN` |
+| Stop condition | stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch differs from d95cec3829eea38209b1943c5e5534c949bd601e, another overlapping writer appears, or scope expands |
 
 Output is limited to a Draft PR. Merge, deployment, production mutation, Neon access, environment/secret change, and authenticated-user smoke are not authorized.
 
@@ -48,13 +48,14 @@ Verified immediately before branch creation:
 
 ### Repository and open work
 
-- Current `main`: `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`.
+- Current `main`: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from `9f5dccfa` after #1482 merge).
 - `#1475`: closed, unmerged, Draft, stale documentation head `baaaae90abbf55105c8258905b7bceb0cdd5bc67`.
-- `#1477`: open Draft at actual head `4ac56805a0f5cb0ec2a3449db17ac7ee06fb3529`; merge base `3bcac4d5d418b3711b71976733b4baf3d6876570`; diverged and missing current-main commit `9f5dccfa`.
+- `#1477`: open Draft at actual head `4ac56805a0f5cb0ec2a3449db17ac7ee06fb3529`; merge base `3bcac4d5d418b3711b71976733b4baf3d6876570`; diverged and missing current-main commit `5a515361`.
 - `#1477` exact-head QA, enumeration, workflow-security, privacy-ratchet, branch-lifecycle, and Vercel checks succeeded.
 - Independent review on `#1477`: `PASS WITH LIMITS`; the PR remains not Ready and has stale refs in its body/handoff.
 - `#1479`: open Rico AI Quality Flywheel Epic.
 - `#1480`: open evaluation-foundation specification; no branch or implementation PR.
+- `#1482`: **MERGED** as `5a5153614dd7e092f93d49abd09c928d32fcb456` — test-only changes for Windows multiworker process context support (two test files added).
 
 ### Production
 

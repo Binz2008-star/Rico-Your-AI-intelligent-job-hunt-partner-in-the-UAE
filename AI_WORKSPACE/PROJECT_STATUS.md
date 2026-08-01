@@ -23,24 +23,25 @@
 
 A green deployment badge is not a product smoke. A merged runtime change is not proof that its changed path was exercised. An issue specification is not an implementation.
 
-## Current reconciliation — 2026-08-01
+## Current reconciliation — 2026-08-01 (CORRECTED)
 
-Evidence cut: 2026-08-01T03:35:38Z (07:35 GST). GitHub, the public production endpoints, and the repository checkout were read during this pass. No database, secret, environment, merge, deployment, or authenticated-user mutation was performed.
+Evidence cut: 2026-08-01T03:35:38Z (07:35 GST) for initial reconciliation; corrective pass at 2026-08-01T12:00:00Z. GitHub, the public production endpoints, and the repository checkout were read during this pass. No database, secret, environment, merge, deployment, or authenticated-user mutation was performed.
 
 ### Verified repository and delivery state
 
 | Item | Verified state |
 | --- | --- |
-| `main` | `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`; fetched from `refs/heads/main` immediately before the L7 branch was created |
-| Production backend | `/version` HTTP 200; `commit=9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`; `commit_verified=true`; `commit_source=RAILWAY_GIT_COMMIT_SHA`; `environment=production` |
+| `main` | `5a5153614dd7e092f93d49abd09c928d32fcb456`; corrected from `9f5dccfa` after #1482 merge |
+| Production backend | `/version` HTTP 200; `commit=5a5153614dd7e092f93d49abd09c928d32fcb456`; `commit_verified=true`; `commit_source=RAILWAY_GIT_COMMIT_SHA`; `environment=production` |
 | Backend health | `/health` HTTP 200 / `status=ok`; JSearch configured and non-degraded; DeepSeek configured; model precheck reachable with two available models; fallback exists and is available |
 | Frontend proxy | `https://ricohunt.com/proxy/health` HTTP 200 / `status=ok` |
 | Public frontend | `https://ricohunt.com/` reachable and serving the current Rico public experience |
-| Commit deployment statuses | Vercel success and two Railway service statuses success on `main@9f5dccfa` |
-| Open pull requests | Exactly one: `#1477`, Draft, unmerged |
+| Commit deployment statuses | Vercel success and two Railway service statuses success on `main@5a515361` |
+| Open pull requests | `#1477` (Draft, unmerged), `#1481` (Draft, L7 control plane reconciliation) |
 | Closed stale docs PR | `#1475` closed without merge at head `baaaae90abbf55105c8258905b7bceb0cdd5bc67` |
+| Recently merged | `#1482` merged as `5a5153614dd7e092f93d49abd09c928d32fcb456` — test-only Windows multiworker process context support |
 | AI quality program | `#1479` open Epic; `#1480` open PR1 specification; no implementation PR exists for `#1480` |
-| L7 reconciliation | Draft PR `#1481` on `agent/control-plane-reconcile-20260801`, created from exact `main@9f5dccfa`; first published head `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`; merge and deployment forbidden by directive `RICO-20260801-L7-RECONCILE` |
+| L7 reconciliation | Draft PR `#1481` on `agent/control-plane-reconcile-20260801`, corrective reconciliation per directive `RICO-20260801-L7-RECONCILE-CORRECTION-1`; merge and deployment forbidden |
 
 ### Production proof boundary
 
@@ -75,7 +76,7 @@ Not proven in this pass:
 | Actual head | `4ac56805a0f5cb0ec2a3449db17ac7ee06fb3529` |
 | Merge base | `3bcac4d5d418b3711b71976733b4baf3d6876570` |
 | State | Open, Draft, unmerged, GitHub reports mergeable |
-| Relation to current `main` | Diverged: the branch carries its own nine commits and is missing the one current-main commit `9f5dccfa` |
+| Relation to current `main` | Diverged: the branch carries its own nine commits and is missing current-main commits including `5a515361` |
 | Changed files | Five: shared AI identity contract, two focused test files, required QA enrollment, and its own handoff |
 | Exact-head checks | QA Tests, Test Enumeration Guard, Workflow Security Guards, Log Privacy Ratchet, branch lifecycle workflow, and Vercel all succeeded on `4ac56805` |
 | Review | Independent review recorded `PASS WITH LIMITS` at exact head `4ac56805`; no merge or deployment recommendation |
@@ -128,7 +129,7 @@ DeepEval may be isolated and pinned only if repository-CI compatibility and supp
 
 | Work | Ownership and authorization |
 | --- | --- |
-| L7 control-plane reconciliation | `WRITER`, branch `agent/control-plane-reconcile-20260801`, base `9f5dccfa`, write `AUTHORIZED` by Roben under `RICO-20260801-L7-RECONCILE`; docs scope only |
+| L7 control-plane reconciliation | `WRITER`, branch `agent/control-plane-reconcile-20260801`, base `5a515361`, write `AUTHORIZED` by Roben under `RICO-20260801-L7-RECONCILE-CORRECTION-1`; docs scope only, one corrective pass then FROZEN |
 | `#1477` containment | Existing foreign branch/PR; this L7 authorization grants no write, sync, Ready, merge, or deploy authority over it |
 | `#1480` implementation | No branch, no PR, and no implementation write authorization in this L7 directive |
 | Production/database work | No mutation authorization; Neon, secrets, environment, migrations, deployment, and authenticated production smoke are untouched |
@@ -163,24 +164,25 @@ The base `TASKS.md` already contains two headings for `TASK-20260722-001` and tw
 
 ## Governed execution order
 
-1. Keep L7 Draft PR `#1481` frozen after its final continuity update; observe exact-head CI and obtain independent review. No merge without a new explicit owner merge authorization.
-2. On its separately owned branch, synchronize `#1477`, correct its refs, and rerun exact-head CI while keeping it Draft.
-3. Start `#1480` only under a new attributed writer directive from then-current `main`; keep PR1 deterministic and evaluation-only.
-4. Open a separate governance-doc correction for the stale Render instructions, grounded in Railway deployment evidence; do not mix it into runtime or evaluation work.
-5. Audit references for the two pre-existing duplicate task IDs and repair them in a dedicated control-ledger PR before tightening the uniqueness gate.
-6. After relevant merges and deployments, run the dedicated secret-safe authenticated smoke matrix and record behavior separately from deployment health.
-7. Do not touch Neon, secrets, environment, provider selection, production data, or deployment from this reconciliation lane.
+1. Push corrective reconciliation to record #1482 merge and corrected main SHA; observe exact-head CI and obtain independent review.
+2. Keep L7 Draft PR `#1481` frozen after corrective update; no merge without a new explicit owner merge authorization.
+3. On its separately owned branch, synchronize `#1477`, correct its refs, and rerun exact-head CI while keeping it Draft.
+4. Start `#1480` only under a new attributed writer directive from then-current `main`; keep PR1 deterministic and evaluation-only.
+5. Open a separate governance-doc correction for the stale Render instructions, grounded in Railway deployment evidence; do not mix it into runtime or evaluation work.
+6. Audit references for the two pre-existing duplicate task IDs and repair them in a dedicated control-ledger PR before tightening the uniqueness gate.
+7. After relevant merges and deployments, run the dedicated secret-safe authenticated smoke matrix and record behavior separately from deployment health.
+8. Do not touch Neon, secrets, environment, provider selection, production data, or deployment from this reconciliation lane.
 
 ## Stop conditions
 
 Stop and return to Roben if:
 
-- `main` moves away from `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b` before the final continuity update is published;
+- `main` moves away from `5a5153614dd7e092f93d49abd09c928d32fcb456` before the corrective continuity update is published;
 - another writer or overlapping branch appears for L7;
-- the diff expands beyond `PROJECT_STATUS.md`, `TASKS.md`, and the single dated L7 verification handoff;
+- the diff expands beyond `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 body;
 - any step would merge, deploy, mutate production/Neon, change an environment or secret, or edit runtime/test/workflow files;
-- remote branch history differs from the expected head before a push.
+- remote branch history differs from `d95cec3829eea38209b1943c5e5534c949bd601e` before a push.
 
 ## Next exact action
 
-Observe exact-head CI on Draft PR `#1481`, obtain independent review at that same head, and report findings. Keep the lane frozen; do not merge or deploy.
+Push corrective reconciliation to update control plane with corrected main SHA and #1482 merge record, run exact-head CI, request independent review, then freeze lane. Do not merge or deploy.
