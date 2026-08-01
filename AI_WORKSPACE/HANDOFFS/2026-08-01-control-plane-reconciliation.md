@@ -15,6 +15,7 @@
 - **Phase:** `LAUNCH_EXECUTION_PLAN.md` Phase 0 — control plane and PR reconciliation.
 - **Task:** `TASK-20260801-001`.
 - **Directive:** `RICO-20260801-L7-RECONCILE`.
+- **Draft PR:** `#1481`.
 
 ## Attributed authorization
 
@@ -104,8 +105,10 @@ Focused local validation:
 - four new Task-ID headings unique: PASS;
 - documentation/reference consistency: PASS;
 - remote `main` and target-head recheck before publication: pending;
-- Draft PR: pending;
+- Draft PR: PASS — `#1481` opened from initial head `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`;
 - exact-head CI and independent review: pending.
+
+Publication preflight was repeated immediately before the first commit: `main` remained `9f5dccfa`, target branch remained absent, the open-PR inventory remained exactly `#1477`, its head remained `4ac56805`, and overlap remained empty. GitHub created commit `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`, branch `agent/control-plane-reconcile-20260801`, and Draft PR `#1481` with exactly three changed files. No merge or deployment occurred.
 
 The repository's supervisor script is scoped to `claude/*` branches and requires a local `gh` binary; neither condition holds for this owner-specified `agent/*` connector path. It was not used to bypass a failure. Its material protections — main drift, remote target head, open-PR file overlap, and newly added Task-ID collision — are performed manually against GitHub immediately before publication. The two inherited Task-ID duplicates are reported above, not attributed to this diff.
 
@@ -122,15 +125,15 @@ The repository's supervisor script is scoped to `claude/*` branches and requires
 
 - Objective: reconcile Rico's current control plane at exact `main@9f5dccfa`, publish a docs-only Draft PR, and stop before merge/deploy.
 - Branch: `agent/control-plane-reconcile-20260801`.
-- PR number: pending creation.
+- PR number: `#1481`.
 - Base SHA: `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`.
-- Expected remote head: branch absent at preflight; then exact base; then only this lane's documentation commit.
-- Current head: local base plus three authorized uncommitted documentation paths.
-- Uncommitted changes: yes, limited to the three authorized files.
+- Expected remote head: first published head `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`; then one final continuity commit on the same three paths.
+- Current head: the final continuity commit containing this line cannot self-identify; verify the exact live `#1481` head. Parent: `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`.
+- Uncommitted changes: no after the final continuity commit is published.
 - Tests/checks run: live GitHub/production evidence reads; branch/overlap preflight; three-path scope guard; `git diff --check`; Markdown structure; recent-main ancestry; new Task-ID uniqueness; reference consistency — all PASS.
-- Exact status: in progress; Draft not yet opened; no merge/deploy/production mutation.
-- Complete: authorization, role claim, canonical read, live reconciliation, branch creation, three-file documentation patch.
-- Incomplete: final remote preflight, controlled publication, Draft PR, exact-head CI observation, independent review, the separately scoped Render→Railway governance-doc correction, and the reference-audited duplicate-task-ID repair.
+- Exact status: review; Draft PR `#1481` open; lane frozen after final continuity update; no merge/deploy/production mutation.
+- Complete: authorization, role claim, canonical read, live reconciliation, branch creation, three-file publication, and Draft PR creation.
+- Incomplete: exact-head CI observation, independent review, the separately scoped Render→Railway governance-doc correction, and the reference-audited duplicate-task-ID repair.
 - Blockers: none at this point.
-- Next exact action: inspect the final complete diff, re-fetch remote state and open-PR overlap, then publish and open the Draft PR.
+- Next exact action: publish this final continuity update, verify the exact `#1481` head/file set, then observe CI and obtain independent review without merging.
 - Must not touch: anything outside the three authorized docs paths; `#1477`; `#1480` implementation; Neon; secrets; environment; deployments; `main`.

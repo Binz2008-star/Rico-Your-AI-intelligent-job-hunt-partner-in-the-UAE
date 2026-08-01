@@ -40,7 +40,7 @@ Evidence cut: 2026-08-01T03:35:38Z (07:35 GST). GitHub, the public production en
 | Open pull requests | Exactly one: `#1477`, Draft, unmerged |
 | Closed stale docs PR | `#1475` closed without merge at head `baaaae90abbf55105c8258905b7bceb0cdd5bc67` |
 | AI quality program | `#1479` open Epic; `#1480` open PR1 specification; no implementation PR exists for `#1480` |
-| L7 reconciliation | Authorized branch `agent/control-plane-reconcile-20260801` from exact `main@9f5dccfa`; Draft PR only; merge and deployment forbidden by directive `RICO-20260801-L7-RECONCILE` |
+| L7 reconciliation | Draft PR `#1481` on `agent/control-plane-reconcile-20260801`, created from exact `main@9f5dccfa`; first published head `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`; merge and deployment forbidden by directive `RICO-20260801-L7-RECONCILE` |
 
 ### Production proof boundary
 
@@ -163,7 +163,7 @@ The base `TASKS.md` already contains two headings for `TASK-20260722-001` and tw
 
 ## Governed execution order
 
-1. Complete this L7 docs-only branch through focused validation, a Draft PR, exact-head CI, and independent review. No merge without a new explicit owner merge authorization.
+1. Keep L7 Draft PR `#1481` frozen after its final continuity update; observe exact-head CI and obtain independent review. No merge without a new explicit owner merge authorization.
 2. On its separately owned branch, synchronize `#1477`, correct its refs, and rerun exact-head CI while keeping it Draft.
 3. Start `#1480` only under a new attributed writer directive from then-current `main`; keep PR1 deterministic and evaluation-only.
 4. Open a separate governance-doc correction for the stale Render instructions, grounded in Railway deployment evidence; do not mix it into runtime or evaluation work.
@@ -175,7 +175,7 @@ The base `TASKS.md` already contains two headings for `TASK-20260722-001` and tw
 
 Stop and return to Roben if:
 
-- `main` moves away from `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b` before this Draft PR is opened;
+- `main` moves away from `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b` before the final continuity update is published;
 - another writer or overlapping branch appears for L7;
 - the diff expands beyond `PROJECT_STATUS.md`, `TASKS.md`, and the single dated L7 verification handoff;
 - any step would merge, deploy, mutate production/Neon, change an environment or secret, or edit runtime/test/workflow files;
@@ -183,4 +183,4 @@ Stop and return to Roben if:
 
 ## Next exact action
 
-Validate the three-file L7 documentation diff, verify `main` and branch occupancy again, publish one controlled commit to `agent/control-plane-reconcile-20260801`, and open a Draft PR. Do not merge or deploy.
+Observe exact-head CI on Draft PR `#1481`, obtain independent review at that same head, and report findings. Keep the lane frozen; do not merge or deploy.
