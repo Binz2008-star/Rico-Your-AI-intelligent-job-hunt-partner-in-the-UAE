@@ -68,9 +68,20 @@ _HEARTBEAT = 0.3    # seconds — test-only fast heartbeat
 _USER = "worker-a@test.com"
 _OP = "op_multiworker_0001"
 
-# Fork keeps env + already-imported modules; each worker still re-randomizes
-# its nonce and re-reads env at use-time, so it behaves as a distinct process.
-_CTX = mp.get_context("fork")
+# Prefer fork on Unix-like systems because it preserves the parent environment
+# and already-imported modules. Fall back to spawn on Windows and other
+# platforms where fork is unavailable.
+
+def _get_test_context():
+    for method in ("fork", "spawn"):
+        try:
+            return mp.get_context(method)
+        except ValueError:
+            continue
+    raise RuntimeError("No supported multiprocessing start method is available")
+
+
+_CTX = _get_test_context()
 
 
 def _raw():
