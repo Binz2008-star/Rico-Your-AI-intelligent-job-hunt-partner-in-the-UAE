@@ -146,18 +146,18 @@ Update the block for your lane. Never duplicate one.
 
 - Lane alias: `L7`
 - Branch: `agent/control-plane-reconcile-20260801`
-- PR: `#1481` — open Draft; initial published head `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`
-- Base SHA: `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`
-- Expected remote HEAD: `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f` before the final continuity update; afterward the exact live `#1481` head containing this record is authoritative
-- Lease holder: `L7` — Roben-authorized Codex session
+- PR: `#1481` — open Draft; corrective published head `044cb60f4499eb1f03436163e680b3cd6ed61e37`
+- Base SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from `9f5dccfa` after #1482 merge)
+- Expected remote HEAD: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (corrective directive)
+- Lease holder: `L7` — Roben-authorized Windsurf session (lease transferred from Codex)
 - Lease ownership: `HELD`
-- Current activity: `REVIEWING` after the final continuity update
-- Write authorization: `FROZEN` after the final continuity update; Roben's `RICO-20260801-L7-RECONCILE` authorization is fulfilled by Draft PR `#1481`, and no further push is allowed without a new attributed correction directive
-- Last confirmed: `2026-08-01T03:48:30Z`; Draft PR `#1481` created from unchanged `main`, with initial head `b7f9a986` and three authorized files
-- Allowed files: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/TASKS.md`, and `AI_WORKSPACE/HANDOFFS/2026-08-01-control-plane-reconciliation.md`
+- Current activity: `CODER → TESTER` executing corrective pass per `RICO-20260801-L7-WINDSURF-CORRECTION-2`
+- Write authorization: `AUTHORIZED` for one normal non-force corrective push, then automatically `FROZEN`
+- Last confirmed: `2026-08-01T06:30:00Z`; Draft PR `#1481` corrective pass addressing Codex review blockers
+- Allowed files: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 title/body metadata only
 - Forbidden files: every runtime, frontend, test, workflow, migration, environment, secret, roadmap, architecture, and decision file
-- Objective: replace the stale 2026-07-30 control snapshot with the live `main`, deployment, PR, issue, ownership, and verification boundaries; open a Draft PR only
-- Stop condition: stop if `main` moves, another L7 writer/overlap appears, the remote branch head is unexpected, or the diff/operation expands beyond the authorized docs scope, Draft PR creation, or into merge/deploy/production mutation
+- Objective: finalize corrective control-plane reconciliation at main@5a515361, addressing Codex review blockers and updating lineage from initial 9f5dccfa/b7f9a986 to corrective 5a515361/044cb60f
+- Stop condition: stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from 044cb60f4499eb1f03436163e680b3cd6ed61e37, another writer or overlapping change exists, or any fourth repository file would change
 - Previous L7 branch: `claude/workspace-control-reconcile`; `#1402` closed and merged as `805dd4d6`; its lease remains released and write authorization revoked
 - Follow-through, in order: `#1402` (`805dd4d6`) deliberately excluded `ENGINEERING_ROADMAP.md` and flagged it as separately stale; `#1408` (`1c13147f`) restored it at `97af6ded`; `#1415` (`1c75f4d6`) re-anchored onto `ca266366`; `#1417` (`1592162e`) re-anchored onto `dac8d8e7` and required that the **next** pass cover four existing documents
 - **Pass completed 2026-07-28 (post-`#1422`):** docs-only, branched from `c64aa99`, covering exactly the four documents the `#1417` record named — `PROJECT_STATUS.md`, `TASKS.md`, `ENGINEERING_ROADMAP.md` and `ARCHITECTURE.md`. No new status document, roadmap, handoff or decision file was created, and `DECISIONS.md` was not modified: no binding decision was shown to be factually false. It touches no `src/`, no tests, no workflows, no migration
@@ -9135,8 +9135,8 @@ Prevent unconfirmed profile/CV identity and contact values from being treated as
 
 - Actual head: `4ac56805a0f5cb0ec2a3449db17ac7ee06fb3529`.
 - Merge base: `3bcac4d5d418b3711b71976733b4baf3d6876570`.
-- Current `main`: `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`.
-- GitHub reports the Draft mergeable, but it is diverged and missing the one current-main commit.
+- Current `main`: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from 9f5dccfa after #1482 merge).
+- GitHub reports the Draft mergeable, but it is diverged and missing current-main commits including `5a515361`.
 - Five files only; no overlap with L7's `PROJECT_STATUS.md`, `TASKS.md`, or dated reconciliation handoff.
 - QA Tests, Test Enumeration Guard, Workflow Security Guards, Log Privacy Ratchet, branch lifecycle, and Vercel succeeded on exact head `4ac56805`.
 - Independent review: `PASS WITH LIMITS`; tests prove prompt delivery, not model compliance or deterministic egress enforcement.
@@ -9180,10 +9180,10 @@ Issue/PR: `#1478`
 - Remaining verification is a separately authorized secret-safe Arabic/English chat smoke; no provider, model, secret, or environment change is authorized by this record.
 - Rollback: revert `3bcac4d5`; no schema, migration, or data rollback.
 
-### TASK-20260801-001 — L7 control-plane reconciliation at `main@9f5dccfa`
+### TASK-20260801-001 — L7 control-plane reconciliation at `main@5a515361`
 
-Status: review — Draft PR `#1481`; merge/deploy forbidden
-Owner: Roben; execution delegated to the L7 Codex WRITER session
+Status: in_progress — corrective pass per `RICO-20260801-L7-WINDSURF-CORRECTION-2`
+Owner: Roben; execution delegated to the L7 Windsurf WRITER session (lease transferred from Codex)
 Branch: `agent/control-plane-reconcile-20260801`
 Issue/PR: `#1481`
 
@@ -9198,32 +9198,39 @@ Issue/PR: `#1481`
 
 #### Objective
 
-Replace the stale 2026-07-30 control snapshot with current GitHub, production-deployment, PR, issue, ownership, verification, and execution-order evidence without changing runtime behavior.
+Finalize corrective control-plane reconciliation at main@5a515361, addressing Codex review blockers and updating lineage from initial 9f5dccfa/b7f9a986 to corrective 5a515361/044cb60f.
 
 #### Attributed directive
 
 - Issuer: Roben.
-- Directive ID: `RICO-20260801-L7-RECONCILE`.
+- Directive ID: `RICO-20260801-L7-RECONCILE` (initial) → `RICO-20260801-L7-RECONCILE-CORRECTION-1` (first corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-2` (current corrective)
 - Target lane: `L7`.
 - Target branch: `agent/control-plane-reconcile-20260801`.
-- Expected remote HEAD: branch absent at preflight; create from `main@9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`.
-- Allowed scope: `PROJECT_STATUS.md`, `TASKS.md`, and dependent verification documentation only.
-- Write authorization: `AUTHORIZED`.
-- Stop condition: `main` change, overlapping writer, remote-head mismatch, or scope expansion.
+- Expected remote HEAD: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (current corrective directive)
+- Expected live main: `5a5153614dd7e092f93d49abd09c928d32fcb456`
+- Allowed scope: `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 title/body metadata only
+- Write authorization: `AUTHORIZED` for one normal non-force corrective push, then automatically `FROZEN`
+- Stop condition: stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from 044cb60f4499eb1f03436163e680b3cd6ed61e37, another writer or overlapping change exists, or any fourth repository file would change
 - Output boundary: Draft PR only; no merge or deployment.
 
 #### Acceptance criteria
 
-- [x] Live `main` fetched and equals the authorized base SHA.
-- [x] Target branch absent before creation; local branch created from the exact base.
-- [x] Open PR inventory reconciled: exactly `#1477`, with actual head, checks, review limits, divergence, and file overlap recorded.
-- [x] `#1475` closure and `#1479` / `#1480` issue state reconciled.
-- [x] `/version`, `/health`, `/proxy/health`, public frontend reachability, and exact-main deployment statuses recorded with honest proof boundaries.
-- [x] Stale `#1472` and `#1476` task states corrected; missing `#1477` and `#1478` continuity added.
-- [x] Three-file documentation diff passes focused local validation; four new task headings are unique.
-- [x] Remote `main`, target-branch absence, `#1477` head, and overlap rechecked immediately before publication.
-- [x] Controlled commit `b7f9a986` published and Draft PR `#1481` opened; no merge or deploy.
-- [ ] Final continuity commit reaches `#1481`; exact-head CI and independent review remain pending.
+- [x] Live `main` fetched and equals `5a5153614dd7e092f93d49abd09c928d32fcb456`.
+- [x] Remote branch head equals `044cb60f4499eb1f03436163e680b3cd6ed61e37`.
+- [x] Worktree is clean.
+- [ ] Update L7 lane and TASK-20260801-001 from initial 9f5dccfa/b7f9a986 to corrective 5a515361/044cb60f lineage.
+- [ ] Update #1477 and #1480 continuity blocks to current main 5a515361.
+- [ ] Reconcile handoff objective, base, input head, production evidence, validation, incomplete work, and next action.
+- [ ] Preserve 9f5dccfa only where explicitly labelled historical initial evidence.
+- [ ] Replace invented/future 2026-08-01T12:00:00Z timestamp with real verification timestamp.
+- [ ] Re-read /version, /health, /proxy/health, live open PRs, and GitHub heads immediately before writing.
+- [ ] Avoid impossible self-referencing commit claims: record input head 044cb60f and state that final PR head must be read live after publication.
+- [ ] Update PR title to: docs(workspace): reconcile control plane at main@5a515361
+- [ ] After corrective push, update PR body with base/main 5a515361, corrective input head 044cb60f, exact new final head, exact three changed files, CI pending/current state, Draft, no merge/deploy authorization.
+- [ ] Run git diff --check, exact changed-file scope verification, stale-current-claim scan, documentation consistency check.
+- [ ] Commit once with: docs(workspace): finalize corrective control-plane reconciliation
+- [ ] Re-fetch and confirm remote head still equals 044cb60f, then push normally without force.
+- [ ] Keep PR #1481 Draft. Do not merge.
 
 #### Continuity Block
 
@@ -9231,23 +9238,23 @@ Replace the stale 2026-07-30 control snapshot with current GitHub, production-de
 - GitHub issue/PR: `#1481`
 - Branch: `agent/control-plane-reconcile-20260801`
 - Base branch: `main`
-- Base SHA: `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`
-- Expected remote HEAD: initial published head `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`; then one final continuity commit changing only the same three files
-- Current head SHA: the final continuity commit containing this record cannot self-identify; verify the exact live head on `#1481`. Its parent is `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`
-- Uncommitted changes present: no after the final continuity commit is published
-- Status: review / Draft / lane frozen after final update
-- Files inspected: root governance instructions; current control docs; recent task entries/handoffs; GitHub `main`, PR `#1477`, PRs `#1471/#1472/#1474/#1475/#1476/#1478`; issues `#1479/#1480`; public production endpoints and exact-commit statuses
-- Files changed: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/HANDOFFS/2026-08-01-control-plane-reconciliation.md`
-- Files intentionally not touched: all runtime, frontend, test, workflow, migration, environment, secret, roadmap, architecture, and decision files; all uploaded attachments
-- What is complete: evidence collection, occupancy/overlap gate, current-state rewrite, lane/task reconciliation, initial publication, and Draft PR `#1481`
-- What is incomplete: exact-head CI observation and independent review; stale Render instructions in `CLAUDE.md` / `OPERATING_RULES.md` require a separately authorized governance-doc correction
+- Base SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from 9f5dccfa after #1482 merge)
+- Expected remote HEAD: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (corrective directive)
+- Current head SHA: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (corrective input head)
+- Uncommitted changes present: no
+- Status: in_progress — corrective pass executing
+- Files inspected: AGENTS.md, CLAUDE.md, START_HERE.md, OPERATING_RULES.md, L7 block in TASKS.md, current reconciliation handoff
+- Files changed: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/HANDOFFS/2026-08-01-control-plane-reconciliation.md` (corrective updates in progress)
+- Files intentionally not touched: all runtime, frontend, test, workflow, migration, environment, secret, roadmap, architecture, and decision files; #1477, #1480 implementation
+- What is complete: preflight verification, governance file reading, live production evidence re-verification, L7 lane block update started
+- What is incomplete: TASK-20260801-001 update, #1477/#1480 continuity block updates, handoff reconciliation, PR title/body updates, validation checks, corrective push
 - Known blockers: none at this point
-- Validation already run: live GitHub/production reads and exact SHA/branch preflight; three-path scope guard; `git diff --check`; Markdown fence/trailing-space structure; recent-main ancestry; reference consistency; unique-heading checks for all four new task IDs
-- Validation still required: PR exact-head CI and independent review; the repository supervisor gate is not applicable to this owner-specified `agent/*` branch and also lacks `gh`, so its live checks were reproduced manually through GitHub before publication
-- Deployment/CI/Neon/Vercel state to check next: PR exact-head CI after opening; no deployment or Neon work
-- Next exact action: publish this final continuity update, freeze the lane, then observe exact-head CI and obtain independent review on `#1481`
-- Stop condition: stop on changed `main`, another writer/overlap, unexpected branch head, fourth changed path, merge/deploy/production mutation, or any need to read/use secrets
-- Rollback plan: close the Draft without merge and delete only this new branch if Roben later requests; no production/data rollback
+- Validation already run: live GitHub/production reads at 2026-08-01T06:30:00Z — /version returns 5a515361, /health ok, open PRs #1477, #1481, #1483
+- Validation still required: git diff --check, exact changed-file scope verification, stale-current-claim scan, documentation consistency check, corrective push, CI observation
+- Deployment/CI/Neon/Vercel state to check next: PR exact-head CI after corrective push; no deployment or Neon work
+- Next exact action: complete TASK-20260801-001 updates, reconcile handoff, update PR title/body, run validation checks, commit and push corrective update
+- Stop condition: stop on changed main, another writer/overlap, unexpected branch head, fourth changed path, merge/deploy/production mutation, or any need to read/use secrets
+- Rollback plan: close the Draft without merge; no production/data rollback
 
 ### TASK-20260801-002 — Rico AI evaluation foundation
 
@@ -9268,7 +9275,7 @@ Required first slice: Arabic/English sanitized golden cases, versioned schema, d
 - GitHub issue/PR: issue `#1480`; no PR
 - Branch: none
 - Base branch: future then-current `main`
-- Last safe commit SHA: `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b` is the issue-reconciliation snapshot, not an authorized implementation base
+- Last safe commit SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` is the issue-reconciliation snapshot, not an authorized implementation base
 - Current head SHA: n-a
 - Uncommitted changes present: unknown / n-a
 - Status: scoped

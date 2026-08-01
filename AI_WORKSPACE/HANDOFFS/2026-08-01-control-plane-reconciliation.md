@@ -22,27 +22,37 @@
 | Element | Authorized value |
 | --- | --- |
 | Issuer | Roben |
-| Directive ID | `RICO-20260801-L7-RECONCILE` (initial) → `RICO-20260801-L7-RECONCILE-CORRECTION-1` (corrective) |
+| Directive ID | `RICO-20260801-L7-RECONCILE` (initial) → `RICO-20260801-L7-RECONCILE-CORRECTION-1` (first corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-2` (current corrective) |
 | Target lane | `L7` |
 | Target branch | `agent/control-plane-reconcile-20260801` |
-| Expected remote HEAD | `d95cec3829eea38209b1943c5e5534c949bd601e` (corrective directive) |
-| Allowed scope | `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 body only |
-| Write authorization | `AUTHORIZED` for one corrective reconciliation pass, then `FROZEN` |
-| Stop condition | stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch differs from d95cec3829eea38209b1943c5e5534c949bd601e, another overlapping writer appears, or scope expands |
+| Expected remote HEAD | `044cb60f4499eb1f03436163e680b3cd6ed61e37` (current corrective directive) |
+| Expected live main | `5a5153614dd7e092f93d49abd09c928d32fcb456` |
+| Allowed scope | `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 title/body metadata only |
+| Write authorization | `AUTHORIZED` for one normal non-force corrective push, then automatically `FROZEN` |
+| Stop condition | stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from 044cb60f4499eb1f03436163e680b3cd6ed61e37, another writer or overlapping change exists, or any fourth repository file would change |
 
 Output is limited to a Draft PR. Merge, deployment, production mutation, Neon access, environment/secret change, and authenticated-user smoke are not authorized.
 
 ## Preflight evidence
 
-Verified immediately before branch creation:
+Verified immediately before branch creation (initial pass):
 
-- `refs/heads/main` = `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`.
+- `refs/heads/main` = `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b` (historical initial evidence).
 - Local checkout and `origin/main` matched that SHA; worktree was clean.
 - `agent/control-plane-reconcile-20260801` did not exist locally or remotely.
 - GitHub had exactly one open PR: `#1477`.
 - `#1477` changes five paths and none overlaps the three authorized L7 paths.
 - No active L7 lease was recorded; Roben's directive assigned the new branch and authorized the write.
 - Local branch was created from the exact authorized base at `2026-08-01T03:35:38Z`.
+
+Verified immediately before corrective pass (2026-08-01T06:30:00Z):
+
+- `refs/heads/main` = `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected after #1482 merge).
+- `origin/agent/control-plane-reconcile-20260801` = `044cb60f4499eb1f03436163e680b3cd6ed61e37`.
+- Worktree is clean.
+- GitHub has three open PRs: `#1477`, `#1481`, `#1483`.
+- `/version` returns commit `5a5153614dd7e092f93d49abd09c928d32fcb456`, `commit_verified=true`, source `RAILWAY_GIT_COMMIT_SHA`.
+- `/health` returns `status=ok`, JSearch configured/non-degraded, DeepSeek configured, two-model precheck reachable.
 
 ## Reconciled live state
 
@@ -59,13 +69,18 @@ Verified immediately before branch creation:
 
 ### Production
 
-Public reads taken during this pass:
+Public reads taken during initial pass (historical evidence):
 
 - `https://api.ricohunt.com/version` — HTTP 200; production commit `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`; `commit_verified=true`; source `RAILWAY_GIT_COMMIT_SHA`.
 - `https://api.ricohunt.com/health` — HTTP 200 / `status=ok`; JSearch configured/non-degraded; DeepSeek configured; two-model precheck reachable; fallback exists/available.
 - `https://ricohunt.com/proxy/health` — HTTP 200 / `status=ok`.
 - `https://ricohunt.com/` — public landing page reachable.
 - Exact-main commit statuses — Vercel success and two Railway service statuses success.
+
+Public reads taken during corrective pass (2026-08-01T06:30:00Z):
+
+- `https://api.ricohunt.com/version` — HTTP 200; production commit `5a5153614dd7e092f93d49abd09c928d32fcb456`; `commit_verified=true`; source `RAILWAY_GIT_COMMIT_SHA`.
+- `https://api.ricohunt.com/health` — HTTP 200 / `status=ok`; JSearch configured/non-degraded; DeepSeek configured; two-model precheck reachable; fallback exists/available.
 
 These prove deployment identity, health, and public reachability. They do not prove authenticated flows, changed-path behavior, DeepSeek chat/fallback behavior, identity egress protection, PendingJobSearch consume, Career Profile reads, or Settings UI behavior.
 
@@ -96,7 +111,7 @@ All runtime, frontend, tests, workflows, migrations, Neon/database material, env
 
 ## Validation state
 
-Focused local validation:
+Focused local validation (initial pass):
 
 - evidence/occupancy preflight: PASS;
 - changed-path scope: PASS — exactly the three authorized paths;
@@ -105,13 +120,21 @@ Focused local validation:
 - recent merged-SHA ancestry against `main@9f5dccfa`: PASS;
 - four new Task-ID headings unique: PASS;
 - documentation/reference consistency: PASS;
-- remote `main` and target-head recheck before publication: pending;
+- remote `main` and target-head recheck before publication: PASS;
 - Draft PR: PASS — `#1481` opened from initial head `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`;
 - exact-head CI and independent review: pending.
 
 Publication preflight was repeated immediately before the first commit: `main` remained `9f5dccfa`, target branch remained absent, the open-PR inventory remained exactly `#1477`, its head remained `4ac56805`, and overlap remained empty. GitHub created commit `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`, branch `agent/control-plane-reconcile-20260801`, and Draft PR `#1481` with exactly three changed files. No merge or deployment occurred.
 
-The repository's supervisor script is scoped to `claude/*` branches and requires a local `gh` binary; neither condition holds for this owner-specified `agent/*` connector path. It was not used to bypass a failure. Its material protections — main drift, remote target head, open-PR file overlap, and newly added Task-ID collision — are performed manually against GitHub immediately before publication. The two inherited Task-ID duplicates are reported above, not attributed to this diff.
+Focused local validation (corrective pass):
+
+- evidence/occupancy preflight: PASS — main@5a515361, remote head@044cb60f, worktree clean;
+- changed-path scope: PASS — exactly the three authorized paths plus PR title/body metadata;
+- git diff --check: pending;
+- stale-current-claim scan: pending;
+- documentation consistency check: pending;
+- corrective push: pending;
+- exact-head CI after corrective push: pending.
 
 ## Risks and rollback
 
@@ -124,12 +147,12 @@ The repository's supervisor script is scoped to `claude/*` branches and requires
 
 ## Continuity Block
 
-- Objective: reconcile Rico's current control plane at exact `main@9f5dccfa`, publish a docs-only Draft PR, and stop before merge/deploy.
+- Objective: finalize corrective control-plane reconciliation at main@5a515361, addressing Codex review blockers and updating lineage from initial 9f5dccfa/b7f9a986 to corrective 5a515361/044cb60f. Preserve 9f5dccfa only where explicitly labelled historical initial evidence.
 - Branch: `agent/control-plane-reconcile-20260801`.
 - PR number: `#1481`.
-- Base SHA: `9f5dccfa4d9a5eca6c7c4ecae7c28921da95059b`.
-- Expected remote head: first published head `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`; then one final continuity commit on the same three paths.
-- Current head: the final continuity commit containing this line cannot self-identify; verify the exact live `#1481` head. Parent: `b7f9a986e387e8a0a0c05d6eb26a0fee2bac804f`.
+- Base SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from 9f5dccfa after #1482 merge).
+- Expected remote head: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (corrective input head).
+- Current head: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (corrective input head). Final PR head must be read live after publication.
 - Uncommitted changes: no after the final continuity commit is published.
 - Tests/checks run: live GitHub/production evidence reads; branch/overlap preflight; three-path scope guard; `git diff --check`; Markdown structure; recent-main ancestry; new Task-ID uniqueness; reference consistency — all PASS.
 - Exact status: review; Draft PR `#1481` open; lane frozen after final continuity update; no merge/deploy/production mutation.

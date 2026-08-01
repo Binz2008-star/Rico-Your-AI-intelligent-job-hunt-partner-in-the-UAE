@@ -181,7 +181,7 @@ Stop and return to Roben if:
 - another writer or overlapping branch appears for L7;
 - the diff expands beyond `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 body;
 - any step would merge, deploy, mutate production/Neon, change an environment or secret, or edit runtime/test/workflow files;
-- remote branch history differs from `d95cec3829eea38209b1943c5e5534c949bd601e` before a push.
+- remote branch history differs from `044cb60f4499eb1f03436163e680b3cd6ed61e37` before a push.
 
 ## Next exact action
 
