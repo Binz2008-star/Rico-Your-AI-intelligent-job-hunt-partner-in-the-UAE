@@ -6903,14 +6903,38 @@ class RicoChatAPI:
         """Append the truthful fallback CTA when storage failed."""
         return message.rstrip(".?!") + "." + (self._AR_FALLBACK_CTA if arabic else self._EN_FALLBACK_CTA)
 
+    @staticmethod
+    def _contains_full_words(text: str, words: tuple[str, ...]) -> bool:
+        """True when the text contains any full word from the provided set."""
+        if not text:
+            return False
+        pattern = r"(?<!\w)(?:" + "|".join(re.escape(word) for word in words) + r")(?!\w)"
+        return re.search(pattern, text, re.IGNORECASE) is not None
+
+    def _looks_like_confirm_search_option(self, option: dict[str, Any]) -> bool:
+        """True when an option is a confirmation-style search CTA."""
+        action = str(option.get("action") or "").strip()
+        if action:
+            return action == "confirm_search"
+
+        label = str(option.get("label") or "").strip()
+        if not label:
+            return False
+
+        english_confirm = self._contains_full_words(label, ("yes", "ok", "okay", "sure", "confirm", "proceed", "continue"))
+        english_search = self._contains_full_words(label, ("search", "find", "look", "browse", "seek"))
+        arabic_confirm = self._contains_full_words(label, ("نعم", "موافق", "أكيد", "تفضل", "تمام", "طيب", "حسنا", "حسناً", "أوك", "اوك"))
+        arabic_search = self._contains_full_words(label, ("ابحث", "بحث", "البحث", "اعثر", "تبحث"))
+        return (english_confirm and english_search) or (arabic_confirm and arabic_search)
+
     def _remove_confirm_search_options(self, result: dict[str, Any]) -> None:
-        """Remove any confirm_search action options from the response."""
+        """Remove confirmation-style search options from the response."""
         options = result.get("options")
         if not options or not isinstance(options, list):
             return
         result["options"] = [
             o for o in options
-            if o.get("action") != "confirm_search"
+            if not (isinstance(o, dict) and self._looks_like_confirm_search_option(o))
         ]
 
     _PJS_OFFER_FIELD = "_pending_job_search_offer"
