@@ -22,14 +22,14 @@
 | Element | Authorized value |
 | --- | --- |
 | Issuer | Roben |
-| Directive ID | `RICO-20260801-L7-RECONCILE` (initial) → `RICO-20260801-L7-RECONCILE-CORRECTION-1` (first corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-2` (current corrective) |
+| Directive ID | `RICO-20260801-L7-RECONCILE` (initial) → `RICO-20260801-L7-RECONCILE-CORRECTION-1` (first corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-2` (second corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-3` (current, final state closure) |
 | Target lane | `L7` |
 | Target branch | `agent/control-plane-reconcile-20260801` |
-| Expected remote HEAD | `044cb60f4499eb1f03436163e680b3cd6ed61e37` (current corrective directive) |
+| Expected remote HEAD | `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` (Correction-3 input head) |
 | Expected live main | `5a5153614dd7e092f93d49abd09c928d32fcb456` |
 | Allowed scope | `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 title/body metadata only |
-| Write authorization | `AUTHORIZED` for one normal non-force corrective push, then automatically `FROZEN` |
-| Stop condition | stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from 044cb60f4499eb1f03436163e680b3cd6ed61e37, another writer or overlapping change exists, or any fourth repository file would change |
+| Write authorization | `FROZEN` after Correction-3 publication; awaiting independent review |
+| Stop condition | stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from eede42cabb6e4a9fc1f901abcf796f34ef7c45ce, another writer or overlapping change exists, or any fourth repository file would change |
 
 Output is limited to a Draft PR. Merge, deployment, production mutation, Neon access, environment/secret change, and authenticated-user smoke are not authorized.
 
@@ -45,12 +45,12 @@ Verified immediately before branch creation (initial pass):
 - No active L7 lease was recorded; Roben's directive assigned the new branch and authorized the write.
 - Local branch was created from the exact authorized base at `2026-08-01T03:35:38Z`.
 
-Verified immediately before corrective pass (2026-08-01T06:30:00Z):
+Verified immediately before corrective pass (2026-08-01T10:25:11Z):
 
 - `refs/heads/main` = `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected after #1482 merge).
-- `origin/agent/control-plane-reconcile-20260801` = `044cb60f4499eb1f03436163e680b3cd6ed61e37`.
+- `origin/agent/control-plane-reconcile-20260801` = `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` (Correction-3 input head).
 - Worktree is clean.
-- GitHub has three open PRs: `#1477`, `#1481`, `#1483`.
+- GitHub has three open PRs: `#1477` at `4ac56805a0f5cb0ec2a3449db17ac7ee06fb3529`, `#1481` at `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce`, `#1483` at `802509db45a1b0a34c06974b1fcf66fbb22927bd`.
 - `/version` returns commit `5a5153614dd7e092f93d49abd09c928d32fcb456`, `commit_verified=true`, source `RAILWAY_GIT_COMMIT_SHA`.
 - `/health` returns `status=ok`, JSearch configured/non-degraded, DeepSeek configured, two-model precheck reachable.
 
@@ -77,7 +77,7 @@ Public reads taken during initial pass (historical evidence):
 - `https://ricohunt.com/` — public landing page reachable.
 - Exact-main commit statuses — Vercel success and two Railway service statuses success.
 
-Public reads taken during corrective pass (2026-08-01T06:30:00Z):
+Public reads taken during corrective pass (2026-08-01T10:25:11Z):
 
 - `https://api.ricohunt.com/version` — HTTP 200; production commit `5a5153614dd7e092f93d49abd09c928d32fcb456`; `commit_verified=true`; source `RAILWAY_GIT_COMMIT_SHA`.
 - `https://api.ricohunt.com/health` — HTTP 200 / `status=ok`; JSearch configured/non-degraded; DeepSeek configured; two-model precheck reachable; fallback exists/available.
@@ -128,13 +128,14 @@ Publication preflight was repeated immediately before the first commit: `main` r
 
 Focused local validation (corrective pass):
 
-- evidence/occupancy preflight: PASS — main@5a515361, remote head@044cb60f, worktree clean;
+- evidence/occupancy preflight: PASS — main@5a515361, remote head@eede42ca, worktree clean;
 - changed-path scope: PASS — exactly the three authorized paths plus PR title/body metadata;
-- git diff --check: pending;
-- stale-current-claim scan: pending;
-- documentation consistency check: pending;
-- corrective push: pending;
-- exact-head CI after corrective push: pending.
+- git diff --check: PASS;
+- stale-current-claim scan: PASS — no current-state matches for 2026-08-01T12:00:00Z, main@9f5dccfa, Status: in_progress, Current activity: CODER, Write authorization: AUTHORIZED, pending push, corrective push: pending, Current head SHA: 044cb60f; historical/input-labelled matches retained only where explicitly labelled;
+- documentation consistency check: PASS;
+- corrective push: PASS — published normally without force;
+- exact-head CI: all checks SUCCESS (pytest, postgres-integration, playwright, frontend, enumeration, workflow-security-guards, trusted-ratchet, ratchet, Vercel);
+- independent review: pending.
 
 ## Risks and rollback
 
@@ -147,17 +148,17 @@ Focused local validation (corrective pass):
 
 ## Continuity Block
 
-- Objective: finalize corrective control-plane reconciliation at main@5a515361, addressing Codex review blockers and updating lineage from initial 9f5dccfa/b7f9a986 to corrective 5a515361/044cb60f. Preserve 9f5dccfa only where explicitly labelled historical initial evidence.
+- Objective: finalize corrective control-plane reconciliation at main@5a515361, addressing Codex review blockers and updating lineage from initial 9f5dccfa/b7f9a986 to corrective 5a515361/eede42ca. Preserve 9f5dccfa only where explicitly labelled historical initial evidence. Lane is now FROZEN awaiting independent review.
 - Branch: `agent/control-plane-reconcile-20260801`.
 - PR number: `#1481`.
 - Base SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from 9f5dccfa after #1482 merge).
-- Expected remote head: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (corrective input head).
-- Current head: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (corrective input head). Final PR head must be read live after publication.
-- Uncommitted changes: no after the final continuity commit is published.
-- Tests/checks run: live GitHub/production evidence reads; branch/overlap preflight; three-path scope guard; `git diff --check`; Markdown structure; recent-main ancestry; new Task-ID uniqueness; reference consistency — all PASS.
-- Exact status: review; Draft PR `#1481` open; lane frozen after final continuity update; no merge/deploy/production mutation.
-- Complete: authorization, role claim, canonical read, live reconciliation, branch creation, three-file publication, and Draft PR creation.
-- Incomplete: exact-head CI observation, independent review, the separately scoped Render→Railway governance-doc correction, and the reference-audited duplicate-task-ID repair.
+- Expected remote head: `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` (Correction-3 input head).
+- Current head: the final published SHA must be read live from PR #1481; it cannot self-identify inside its own commit. Lineage: 044cb60f (Correction-2 input head) → eede42ca (Correction-3 input head) → final published head (read live).
+- Uncommitted changes: no after the Correction-3 commit is published.
+- Tests/checks run: live GitHub/production evidence reads at 2026-08-01T10:25:11Z; branch/overlap preflight; three-path scope guard; `git diff --check`; stale-current-claim scan; documentation consistency — all PASS. Exact-head CI: all checks SUCCESS.
+- Exact status: review; Draft PR `#1481` open; lane FROZEN after Correction-3 publication; no merge/deploy/production mutation.
+- Complete: authorization, role claim, canonical read, live reconciliation, branch creation, three-file publication, Draft PR creation, corrective passes, CI observation.
+- Incomplete: independent review at exact published head; the separately scoped Render→Railway governance-doc correction; the reference-audited duplicate-task-ID repair.
 - Blockers: none at this point.
-- Next exact action: publish this final continuity update, verify the exact `#1481` head/file set, then observe CI and obtain independent review without merging.
+- Next exact action: obtain independent review on Draft PR `#1481` at its exact published head; keep lane frozen; do not merge or deploy; do not begin #1480 in this pass.
 - Must not touch: anything outside the three authorized docs paths; `#1477`; `#1480` implementation; Neon; secrets; environment; deployments; `main`.

@@ -25,7 +25,7 @@ A green deployment badge is not a product smoke. A merged runtime change is not 
 
 ## Current reconciliation — 2026-08-01 (CORRECTED)
 
-Evidence cut: 2026-08-01T03:35:38Z (07:35 GST) for initial reconciliation; corrective pass at 2026-08-01T12:00:00Z. GitHub, the public production endpoints, and the repository checkout were read during this pass. No database, secret, environment, merge, deployment, or authenticated-user mutation was performed.
+Evidence cut: 2026-08-01T03:35:38Z (07:35 GST) for initial reconciliation; corrective pass verified at 2026-08-01T10:25:11Z. GitHub, the public production endpoints, and the repository checkout were read during this pass. No database, secret, environment, merge, deployment, or authenticated-user mutation was performed.
 
 ### Verified repository and delivery state
 
@@ -37,11 +37,11 @@ Evidence cut: 2026-08-01T03:35:38Z (07:35 GST) for initial reconciliation; corre
 | Frontend proxy | `https://ricohunt.com/proxy/health` HTTP 200 / `status=ok` |
 | Public frontend | `https://ricohunt.com/` reachable and serving the current Rico public experience |
 | Commit deployment statuses | Vercel success and two Railway service statuses success on `main@5a515361` |
-| Open pull requests | `#1477` (Draft, unmerged), `#1481` (Draft, L7 control plane reconciliation) |
+| Open pull requests | `#1477` (Draft, unmerged), `#1481` (Draft, L7 control plane reconciliation), `#1483` (Draft, Corridor security guardrails in AGENTS.md) |
 | Closed stale docs PR | `#1475` closed without merge at head `baaaae90abbf55105c8258905b7bceb0cdd5bc67` |
 | Recently merged | `#1482` merged as `5a5153614dd7e092f93d49abd09c928d32fcb456` — test-only Windows multiworker process context support |
 | AI quality program | `#1479` open Epic; `#1480` open PR1 specification; no implementation PR exists for `#1480` |
-| L7 reconciliation | Draft PR `#1481` on `agent/control-plane-reconcile-20260801`, corrective reconciliation per directive `RICO-20260801-L7-RECONCILE-CORRECTION-1`; merge and deployment forbidden |
+| L7 reconciliation | Draft PR `#1481` on `agent/control-plane-reconcile-20260801`, corrective reconciliation per directive `RICO-20260801-L7-WINDSURF-CORRECTION-3`; lane FROZEN, awaiting independent review; merge and deployment forbidden |
 
 ### Production proof boundary
 
@@ -84,7 +84,7 @@ Not proven in this pass:
 
 `#1477` is **not Ready**. Before any Ready or merge decision, its owner must:
 
-1. synchronize it with `main@9f5dccfa` without expanding scope;
+1. synchronize it with `main@5a515361` without expanding scope;
 2. update the stale PR-body and handoff refs (`3bcac4d5` / `3a5a73b9` do not describe actual head `4ac56805`);
 3. rerun exact-head CI after synchronization;
 4. preserve the independent review boundary;
@@ -129,7 +129,7 @@ DeepEval may be isolated and pinned only if repository-CI compatibility and supp
 
 | Work | Ownership and authorization |
 | --- | --- |
-| L7 control-plane reconciliation | `WRITER`, branch `agent/control-plane-reconcile-20260801`, base `5a515361`, write `AUTHORIZED` by Roben under `RICO-20260801-L7-RECONCILE-CORRECTION-1`; docs scope only, one corrective pass then FROZEN |
+| L7 control-plane reconciliation | `IDLE`, branch `agent/control-plane-reconcile-20260801`, base `5a515361`, write `FROZEN` after Correction-3 publication per `RICO-20260801-L7-WINDSURF-CORRECTION-3`; docs scope only; awaiting independent review |
 | `#1477` containment | Existing foreign branch/PR; this L7 authorization grants no write, sync, Ready, merge, or deploy authority over it |
 | `#1480` implementation | No branch, no PR, and no implementation write authorization in this L7 directive |
 | Production/database work | No mutation authorization; Neon, secrets, environment, migrations, deployment, and authenticated production smoke are untouched |
@@ -164,8 +164,8 @@ The base `TASKS.md` already contains two headings for `TASK-20260722-001` and tw
 
 ## Governed execution order
 
-1. Push corrective reconciliation to record #1482 merge and corrected main SHA; observe exact-head CI and obtain independent review.
-2. Keep L7 Draft PR `#1481` frozen after corrective update; no merge without a new explicit owner merge authorization.
+1. Obtain independent review on Draft PR `#1481` at its exact published head; no merge without a new explicit owner merge authorization.
+2. Keep L7 Draft PR `#1481` frozen; no merge without a new explicit owner merge authorization.
 3. On its separately owned branch, synchronize `#1477`, correct its refs, and rerun exact-head CI while keeping it Draft.
 4. Start `#1480` only under a new attributed writer directive from then-current `main`; keep PR1 deterministic and evaluation-only.
 5. Open a separate governance-doc correction for the stale Render instructions, grounded in Railway deployment evidence; do not mix it into runtime or evaluation work.
@@ -177,12 +177,12 @@ The base `TASKS.md` already contains two headings for `TASK-20260722-001` and tw
 
 Stop and return to Roben if:
 
-- `main` moves away from `5a5153614dd7e092f93d49abd09c928d32fcb456` before the corrective continuity update is published;
+- `main` moves away from `5a5153614dd7e092f93d49abd09c928d32fcb456` before the final state closure is published;
 - another writer or overlapping branch appears for L7;
 - the diff expands beyond `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 body;
 - any step would merge, deploy, mutate production/Neon, change an environment or secret, or edit runtime/test/workflow files;
-- remote branch history differs from `044cb60f4499eb1f03436163e680b3cd6ed61e37` before a push.
+- remote branch history differs from `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` before a push.
 
 ## Next exact action
 
-Push corrective reconciliation to update control plane with corrected main SHA and #1482 merge record, run exact-head CI, request independent review, then freeze lane. Do not merge or deploy.
+Obtain independent review on Draft PR `#1481` at its exact published head. Keep the lane frozen; do not merge or deploy. Do not begin `#1480` in this pass.
