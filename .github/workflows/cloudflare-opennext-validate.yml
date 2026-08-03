@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
@@ -48,7 +48,7 @@ jobs:
           # Start preview in background
           npx opennextjs-cloudflare preview &
           PREVIEW_PID=$!
-          
+
           # Wait for server to be ready (max 30 seconds)
           for i in $(seq 1 30); do
             if curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/ | grep -q "200\|301\|302"; then
@@ -58,44 +58,44 @@ jobs:
             echo "Waiting for preview server... ($i/30)"
             sleep 1
           done
-          
+
           # Verify routes
           echo "=== Route checks ==="
-          
+
           echo "--- / ---"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/)
           echo "/ status: $STATUS"
-          
+
           echo "--- /login ---"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/login)
           echo "/login status: $STATUS"
-          
+
           echo "--- /signup ---"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/signup)
           echo "/signup status: $STATUS"
-          
+
           echo "--- /command ---"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/command)
           echo "/command status: $STATUS"
-          
+
           echo "--- /proxy/health ---"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/proxy/health)
           echo "/proxy/health status: $STATUS"
-          
+
           echo "--- /opengraph-image ---"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/opengraph-image)
           echo "/opengraph-image status: $STATUS"
-          
+
           # Check for missing static assets
           echo "=== Static asset check ==="
           ASSETS=$(curl -s http://localhost:8787/ | grep -oP 'src="[^"]*"' | head -5)
           echo "Found asset references:"
           echo "$ASSETS"
-          
+
           # Check for WASM or @vercel/og errors in preview output
           echo "=== Error check ==="
           # Kill the preview server
           kill $PREVIEW_PID 2>/dev/null || true
           wait $PREVIEW_PID 2>/dev/null || true
-          
+
           echo "Validation complete"
