@@ -11,6 +11,13 @@ jobs:
     permissions:
       contents: read
 
+    env:
+      # Real public backend — required for /proxy/health to return 200
+      BACKEND_API_BASE_URL: https://api.ricohunt.com
+      NEXT_PUBLIC_RICO_API: https://api.ricohunt.com
+      NEXT_PUBLIC_API_BASE_URL: https://api.ricohunt.com
+      NEXT_PUBLIC_USE_MOCK: "false"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,60 +49,155 @@ jobs:
           cd apps/web
           npx opennextjs-cloudflare build
 
-      - name: Start OpenNext preview and verify routes
+      - name: Start OpenNext preview and verify routes (enforcing)
         run: |
           cd apps/web
-          # Start preview in background
-          npx opennextjs-cloudflare preview &
+          # Capture all preview output to a log file for error scanning
+          npx opennextjs-cloudflare preview > /tmp/preview.log 2>&1 &
           PREVIEW_PID=$!
 
-          # Wait for server to be ready (max 30 seconds)
-          for i in $(seq 1 30); do
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/ | grep -q "200\|301\|302"; then
-              echo "Preview server is ready"
+          # Wait for server to be ready (max 60 seconds)
+          READY=0
+          for i in $(seq 1 60); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/ || true)
+            if echo "$CODE" | grep -q "200\|301\|302"; then
+              echo "Preview server is ready (HTTP $CODE after ${i}s)"
+              READY=1
               break
             fi
-            echo "Waiting for preview server... ($i/30)"
+            echo "Waiting for preview server... ($i/60, last code: $CODE)"
             sleep 1
           done
 
-          # Verify routes
-          echo "=== Route checks ==="
+          if [ "$READY" != "1" ]; then
+            echo "ERROR: Preview server did not become ready within 60 seconds"
+            echo "=== Preview log ==="
+            cat /tmp/preview.log
+            kill $PREVIEW_PID 2>/dev/null || true
+            wait $PREVIEW_PID 2>/dev/null || true
+            exit 1
+          fi
 
-          echo "--- / ---"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/)
-          echo "/ status: $STATUS"
+          # Helper: assert a route returns an expected status
+          assert_route() {
+            local path="$1"
+            local expected="$2"
+            local actual
+            actual=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8787${path}")
+            echo "Route ${path} -> expected ${expected}, got ${actual}"
+            if [ "$actual" != "$expected" ]; then
+              echo "FAIL: ${path} returned ${actual}, expected ${expected}"
+              kill $PREVIEW_PID 2>/dev/null || true
+              wait $PREVIEW_PID 2>/dev/null || true
+              exit 1
+            fi
+          }
 
-          echo "--- /login ---"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/login)
-          echo "/login status: $STATUS"
+          # Helper: assert a route returns 200 and a specific content-type prefix
+          assert_route_content_type() {
+            local path="$1"
+            local expected_type="$2"
+            local actual_code actual_type
+            actual_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8787${path}")
+            actual_type=$(curl -s -o /dev/null -w "%{content_type}" "http://localhost:8787${path}")
+            echo "Route ${path} -> expected 200 + ${expected_type}, got ${actual_code} + ${actual_type}"
+            if [ "$actual_code" != "200" ]; then
+              echo "FAIL: ${path} returned status ${actual_code}, expected 200"
+              kill $PREVIEW_PID 2>/dev/null || true
+              wait $PREVIEW_PID 2>/dev/null || true
+              exit 1
+            fi
+            if ! echo "$actual_type" | grep -qi "$expected_type"; then
+              echo "FAIL: ${path} content-type '${actual_type}' does not match '${expected_type}'"
+              kill $PREVIEW_PID 2>/dev/null || true
+              wait $PREVIEW_PID 2>/dev/null || true
+              exit 1
+            fi
+          }
 
-          echo "--- /signup ---"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/signup)
-          echo "/signup status: $STATUS"
+          echo ""
+          echo "=== Enforcing route checks ==="
+          assert_route "/" "200"
+          assert_route "/login" "200"
+          assert_route "/signup" "200"
+          assert_route "/command" "200"
+          assert_route "/proxy/health" "200"
+          assert_route_content_type "/opengraph-image.png" "image"
 
-          echo "--- /command ---"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/command)
-          echo "/command status: $STATUS"
+          echo ""
+          echo "=== Static asset checks ==="
+          # Extract at least 5 /_next/static asset URLs from the homepage
+          HOMEPAGE_HTML=$(curl -s http://localhost:8787/)
+          ASSET_URLS=$(echo "$HOMEPAGE_HTML" | grep -oP '/_next/static/[^"'"'"' ]+' | sort -u | head -5)
 
-          echo "--- /proxy/health ---"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/proxy/health)
-          echo "/proxy/health status: $STATUS"
+          ASSET_COUNT=$(echo "$ASSET_URLS" | grep -c "/_next/static/" || true)
+          echo "Found $ASSET_COUNT static asset URL(s) in homepage HTML"
+          echo "$ASSET_URLS"
 
-          echo "--- /opengraph-image ---"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/opengraph-image)
-          echo "/opengraph-image status: $STATUS"
+          if [ "$ASSET_COUNT" -lt 5 ]; then
+            echo "FAIL: Expected at least 5 static asset URLs, found $ASSET_COUNT"
+            kill $PREVIEW_PID 2>/dev/null || true
+            wait $PREVIEW_PID 2>/dev/null || true
+            exit 1
+          fi
 
-          # Check for missing static assets
-          echo "=== Static asset check ==="
-          ASSETS=$(curl -s http://localhost:8787/ | grep -oP 'src="[^"]*"' | head -5)
-          echo "Found asset references:"
-          echo "$ASSETS"
+          # Request each asset and require HTTP 200
+          ASSET_FAIL=0
+          while IFS= read -r asset; do
+            if [ -z "$asset" ]; then continue; fi
+            ASSET_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8787${asset}")
+            echo "Asset ${asset} -> ${ASSET_CODE}"
+            if [ "$ASSET_CODE" != "200" ]; then
+              echo "FAIL: Asset ${asset} returned ${ASSET_CODE}, expected 200"
+              ASSET_FAIL=1
+            fi
+          done <<< "$ASSET_URLS"
 
-          # Check for WASM or @vercel/og errors in preview output
-          echo "=== Error check ==="
-          # Kill the preview server
+          if [ "$ASSET_FAIL" != "0" ]; then
+            kill $PREVIEW_PID 2>/dev/null || true
+            wait $PREVIEW_PID 2>/dev/null || true
+            exit 1
+          fi
+
+          echo ""
+          echo "=== Preview log error scan ==="
+          # Kill the preview server first to flush logs
           kill $PREVIEW_PID 2>/dev/null || true
           wait $PREVIEW_PID 2>/dev/null || true
 
-          echo "Validation complete"
+          # Scan preview log for forbidden error patterns
+          LOG_ERRORS=0
+          for pattern in "@vercel/og" "WASM loader" "No loader is configured for" "Uncaught" "TypeError" "ReferenceError" "Internal Server Error"; do
+            MATCHES=$(grep -ci "$pattern" /tmp/preview.log || true)
+            if [ "$MATCHES" -gt 0 ]; then
+              echo "FAIL: Preview log contains '$pattern' ($MATCHES match(es))"
+              LOG_ERRORS=1
+            fi
+          done
+
+          if [ "$LOG_ERRORS" != "0" ]; then
+            echo "=== Full preview log ==="
+            cat /tmp/preview.log
+            exit 1
+          fi
+
+          echo "Preview log is clean (no forbidden error patterns)"
+          echo ""
+          echo "=== All enforcing checks passed ==="
+
+      - name: Upload preview log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-log
+          path: /tmp/preview.log
+          if-no-files-found: ignore
+
+      - name: npm audit (production only)
+        run: |
+          cd apps/web
+          echo "=== Production dependency audit (high+) ==="
+          npm audit --omit=dev --audit-level=high || true
+          echo ""
+          echo "=== Full audit (includes dev) ==="
+          npm audit --audit-level=high || true
