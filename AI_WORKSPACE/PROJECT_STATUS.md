@@ -21,201 +21,168 @@
 4. The latest dated handoff.
 5. Everything else.
 
-A green deployment badge is not a product smoke. A rehearsal is not production-repair authorization. A merged SQL package is not permission to execute it.
+A green deployment badge is not a product smoke. A merged runtime change is not proof that its changed path was exercised. An issue specification is not an implementation.
 
-## Current reconciliation — 2026-07-30
+## Current reconciliation — 2026-08-01 (CORRECTED)
 
-### Verified repository state
+Evidence cut: 2026-08-01T03:35:38Z (07:35 GST) for initial reconciliation; corrective pass verified at 2026-08-01T10:25:11Z. GitHub, the public production endpoints, and the repository checkout were read during this pass. No database, secret, environment, merge, deployment, or authenticated-user mutation was performed.
+
+### Verified repository and delivery state
 
 | Item | Verified state |
 | --- | --- |
-| `main` | `16e99a67330495d993a32a8d3f29838fc47b51d0` |
-| `#1432` | **MERGED** as `3fa214a2b6631d2f73d0980f7700983550dce717`; authenticated gratitude smoke still pending |
-| `#1435` | **MERGED** as `9f731f19f5c46d454525690fc44b2ec319a4f2d1`; records endpoint evidence and the `#1389` ruling |
-| `#1436` | **MERGED** as `a292f99bf4a6a80745f4b5e29151684f37530cfc`; final D1 operating package, no production execution authorization |
-| `#1437` | **MERGED** as `3e18737079d21da8db63f581b7d1d99c87cc1904`; synthetic persona/CV-fixture factory and required QA enrollment |
-| `#1438` | **MERGED** as `7714b49643485f7c87a28c0f7d85ed61cc017375`; real-Postgres cross-user document-isolation coverage, tests only |
-| `#1443` | **MERGED** as `cbcb4206b7b13a6de2fbbe84e42d610addc054e2` from head `542b66a6b7c65467b92385792ee0abe0201bf3d9`; read-only Delivery Smoke residual audit package |
-| `#1457` | **MERGED** as `dcc949af3e6300482be78146222d8d03fb6b092e` from head `acb33fe8b173cc05145acdbf760ae21fb907bee9`; bounded cache foundation, no production cache swapped |
-| `#1461` | **MERGED** as `ccde2c483c76b782214f3bb117c4c07310121c4d`; gate write-capable DB init behind `RICO_RUN_STARTUP_MIGRATIONS` |
-| `#1460` | **MERGED** as `ab5e60f6a774d4843889c34e18f11853da51c4f8` from head `9b8bcd0aeb0b22d4258bb9f62933ee412d49f4e7`; Atelier `/about` public island, verified by production smoke |
-| `#1389` | **CLOSED WITHOUT MERGE**; historical branch only, not an implementation branch |
-| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1455** (frontend /applications board DnD, open) |
-| Open audit / governance / documentation PRs | **#1465** (AI subsystem audit, draft) · **#1452** (product accountability scorecard, draft) · **#1449** (version-control governance, draft) · **#1447** (consolidated product PRD, open) |
-| Open operational cleanup PRs | **#1454** (delivery smoke residual cleanup; no production deletion authorized) |
+| `main` | `5a5153614dd7e092f93d49abd09c928d32fcb456`; corrected from `9f5dccfa` after #1482 merge |
+| Production backend | `/version` HTTP 200; `commit=5a5153614dd7e092f93d49abd09c928d32fcb456`; `commit_verified=true`; `commit_source=RAILWAY_GIT_COMMIT_SHA`; `environment=production` |
+| Backend health | `/health` HTTP 200 / `status=ok`; JSearch configured and non-degraded; DeepSeek configured; model precheck reachable with two available models; fallback exists and is available |
+| Frontend proxy | `https://ricohunt.com/proxy/health` HTTP 200 / `status=ok` |
+| Public frontend | `https://ricohunt.com/` reachable and serving the current Rico public experience |
+| Commit deployment statuses | Vercel success and two Railway service statuses success on `main@5a515361` |
+| Open pull requests | `#1477` (Draft, unmerged), `#1481` (Draft, L7 control plane reconciliation), `#1483` (Ready for Review / draft=false, unmerged, Corridor security guardrails in AGENTS.md) |
+| Closed stale docs PR | `#1475` closed without merge at head `baaaae90abbf55105c8258905b7bceb0cdd5bc67` |
+| Recently merged | `#1482` merged as `5a5153614dd7e092f93d49abd09c928d32fcb456` — test-only Windows multiworker process context support |
+| AI quality program | `#1479` open Epic; `#1480` open PR1 specification; no implementation PR exists for `#1480` |
+| L7 reconciliation | Draft PR `#1481` on `agent/control-plane-reconcile-20260801`, corrective reconciliation per directive `RICO-20260801-L7-WINDSURF-CORRECTION-3`; lane FROZEN, awaiting independent review; merge and deployment forbidden |
 
-## Production verification boundary
+### Production proof boundary
 
-The last direct production verification for `#1432` established:
+The endpoint reads prove that the backend is healthy and serves the exact current `main` commit. They do **not** prove the user-visible behavior of every change in that tree.
 
-- `/version` returned HTTP 200 and served `3fa214a2b6631d2f73d0980f7700983550dce717`;
-- `/health` returned HTTP 200 / `status=ok`;
-- configured providers were non-degraded at the read;
-- `ricohunt.com` was reachable.
+Proven in this pass:
 
-The authenticated pending-search/gratitude interaction remains **not product-smoke verified**. A dedicated secret-safe smoke must prove that `شكرًا` causes no second search dispatch and leaves the pending offer available for a later explicit confirmation.
+- exact backend production commit identity;
+- public backend and frontend-proxy health;
+- public landing-page reachability;
+- deployment status success attached to the exact `main` commit;
+- DeepSeek configuration, model-list precheck reachability, and fallback availability.
 
-### /about Atelier production verification (PR #1460)
+Not proven in this pass:
 
-The production `/about` Atelier migration was verified on the merged `main@ab5e60f6a` Vercel deployment at `https://ricohunt.com/about`:
+- authenticated end-to-end product behavior;
+- DeepSeek streaming or non-streaming response quality;
+- a real primary failure invoking fallback exactly once;
+- `PendingJobSearch` consume behavior in production;
+- the Career Profile read contract in production;
+- external-draft identity containment or provenance behavior;
+- the new Settings warning presentation on real mobile, light/dark, and Arabic surfaces.
 
-- **Desktop EN** — `dir="ltr"`, `lang="en"`; Atelier island `.atelier`/`.atl-doc` present; legacy `.aura-glow`/`.glass-panel` absent; no horizontal overflow (1245 px ≤ 1249 px viewport); all expected links (`/`, `/contact`, `/faq`, `/terms`, `/privacy`) and CTA (`/contact`) present; zero console errors.
-- **Desktop AR RTL** — `dir="rtl"`, `lang="ar"`; Arabic H1 "بُني لسوق العمل في الإمارات." rendered; corrected `فعلاً` present (3×); no legacy glass; CTA "أرسل رسالة ←" → `/contact`; zero overflow; zero console errors.
-- **Mobile EN (375×812)** — `dir="ltr"`, `lang="en"`; no overflow (371 px ≤ 375 px); Atelier present; no legacy glass; zero console errors.
-- **Mobile AR RTL (375×812)** — `dir="rtl"`, `lang="ar"`; no overflow (371 px ≤ 375 px); Atelier present; no legacy glass; zero console errors.
-- **Language toggle round trip** — EN→AR and AR→EN both succeed on desktop and mobile without reload; no console errors.
+`/health.reasoning_provider.models_precheck.reachable=true` is a model-list precheck, not a completed chat smoke. `reachable=null` and empty last-attempt fields mean no current response-path success may be inferred from that health read.
 
-`#1436` is documentation/operator SQL only. `#1437` and `#1438` are tests/workflow enrollment only. Their merge SHAs do not constitute new runtime behavior evidence and do not close the `#1432` smoke gap.
+## Current open PR — `#1477`
 
-## Journey-1 D1 evidence
-
-The single mapped ownership cluster is established:
-
-- five owner rows;
-- one unique exact authenticated-principal row;
-- two non-guest email-only rows;
-- two guest rows;
-- five profiles;
-- 1,463 chat messages;
-- 24 text-keyed learning signals;
-- 13 job-context rows;
-- five completed onboarding rows;
-- one canonical agent-settings row;
-- no authoritative stored document or pending CV artifact.
-
-The canonical rule is the unique exact authenticated-principal row. Shared email, recency, completeness, row order, and chat volume are not ownership proofs.
-
-## D1 production consolidation package
-
-The reviewed package is merged at `a292f99bf4a6a80745f4b5e29151684f37530cfc` and stored at:
-
-`AI_WORKSPACE/RUNBOOKS/2026-07-29-d1-production-consolidation.md`
-
-Adjacent SQL files provide:
-
-- read-only preflight;
-- private backup export from a fresh pre-repair Neon branch;
-- serializable fail-closed apply script;
-- aggregate postcheck;
-- targeted rollback from the private export.
-
-### Rehearsal evidence
-
-Non-production rehearsal passed for:
-
-- positive preflight;
-- fail-closed rejection of invalid onboarding lifecycle shapes;
-- dry-run with no state change;
-- committed apply preserving all expected dependent rows;
-- postcheck;
-- targeted rollback restoring the original fingerprint.
-
-The rehearsal branches are test evidence only and are not the mandatory production backup.
-
-### PITR and backup gate
-
-The verified Neon history-retention window was 24 hours at the time of package preparation. A fresh pre-repair branch plus private encrypted row export is a hard execution gate. Both must be retained for seven days after successful smoke.
-
-### Authorization state
-
-| Action | State |
+| Field | Verified state |
 | --- | --- |
-| Package preparation, review, merge, and non-production rehearsal | **COMPLETE** |
-| Production read-only preflight | **NOT AUTHORIZED** |
-| Production `commit=false` rehearsal | **NOT AUTHORIZED** |
-| Production committed transaction | **NOT AUTHORIZED** |
-| Targeted production rollback | authorized only by a defined rollback condition after final execution approval |
-| Any other cluster or bulk cleanup | **NOT AUTHORIZED** |
+| Title | `fix(ai): prevent unconfirmed identity in external drafts` |
+| Branch | `fix/external-draft-identity-guard` |
+| Actual head | `4ac56805a0f5cb0ec2a3449db17ac7ee06fb3529` |
+| Merge base | `3bcac4d5d418b3711b71976733b4baf3d6876570` |
+| State | Open, Draft, unmerged, GitHub reports mergeable |
+| Relation to current `main` | Diverged: the branch carries its own nine commits and is missing current-main commits including `5a515361` |
+| Changed files | Five: shared AI identity contract, two focused test files, required QA enrollment, and its own handoff |
+| Exact-head checks | QA Tests, Test Enumeration Guard, Workflow Security Guards, Log Privacy Ratchet, branch lifecycle workflow, and Vercel all succeeded on `4ac56805` |
+| Review | Independent review recorded `PASS WITH LIMITS` at exact head `4ac56805`; no merge or deployment recommendation |
+| Overlap with L7 | None: `#1477` does not change `PROJECT_STATUS.md`, `TASKS.md`, or this L7 handoff |
 
-A future production approval must explicitly name the merged package commit, the maintenance window, the exact target re-identification, the backup/export gate, the preflight, the `commit=false` rehearsal, the committed transaction, postcheck, authenticated smoke, and rollback conditions.
+`#1477` is **not Ready**. Before any Ready or merge decision, its owner must:
 
-## `#1389` ruling
+1. synchronize it with `main@5a515361` without expanding scope;
+2. update the stale PR-body and handoff refs (`3bcac4d5` / `3a5a73b9` do not describe actual head `4ac56805`);
+3. rerun exact-head CI after synchronization;
+4. preserve the independent review boundary;
+5. keep the PR Draft until an explicit owner merge authorization is issued.
 
-`#1389` is closed without merge. Its branch is substantially diverged and mixes backend, frontend, identity, artifact lifecycle, tests, and documentation.
+The PR is prompt-contract containment. Its tests prove that the shared rule reaches the primary and Hugging Face paths; they do not prove model compliance or deterministic PII/provenance enforcement.
 
-Do not reopen, rebase, mark Ready, merge, or treat it as resumable. After the production data repair is separately approved and verified, pending-artifact activation must be recut from then-current `main` as one or more small PRs. No old CI result, review, SHA, or code hunk carries forward without re-verification.
+## Recent merged baseline now in production
 
-## Current work state
+| PR | Main commit | Delivered boundary | Production evidence boundary |
+| ---: | --- | --- | --- |
+| `#1464` | `41a95ad` | shared AI grounding and filename-evidence integrity | included in deployed tree; changed behavior not authenticated-smoked here |
+| `#1468` | `a694dda` | retired Render workflows no longer block Railway delivery | workflow/configuration change; no product behavior claim |
+| `#1469` | `07942d6` | never-apply company recorded as a safety constraint | included in deployed tree; behavior not authenticated-smoked here |
+| `#1470` | `7056952` | platform-aware deployment commit identity | directly exercised by `/version.commit_verified=true` from `RAILWAY_GIT_COMMIT_SHA` |
+| `#1472` | `1d00d46` | typed `PendingJobSearch` with atomic Postgres consume | included in deployed tree; consume interaction not production-smoked here |
+| `#1474` | `afe272c` | RicoReply copy feedback and user-bubble wrapping hardening | Vercel status success; no manual browser smoke in this pass |
+| `#1476` | `f5f5fd1` | typed read-only Career Profile foundation | included in deployed tree; read contract not production-smoked here |
+| `#1478` | `3bcac4d` | explicit DeepSeek thinking-disabled request contract | included in deployed tree; chat/fallback behavior not production-smoked here |
+| `#1471` | `9f5dccf` | palette-aware Settings guardrail warnings | exact current production tree; UI behavior not manually smoked here |
 
-| Measure | State |
+## Active program and next governed increments
+
+### `#1479` — Rico AI Quality Flywheel
+
+Open Epic. It owns the system-wide quality architecture: anonymized evaluations, deterministic provenance and PII metrics, retrieval/reranking measurement, safe prompt optimization, and privacy-bounded observability. It is not a model-swap authorization.
+
+### `#1480` — evaluation foundation
+
+Open specification, not an implementation PR. The first implementation must start from then-current `main` on a new non-overlapping branch and remain evaluation-only:
+
+- anonymized Arabic/English golden cases;
+- deterministic schema, routing, provenance, identity-egress, permission, language, and fallback metrics;
+- machine-readable and human-readable reports;
+- no required provider credentials for critical trust checks;
+- no runtime prompt, provider, model, database, environment, or production dependency change;
+- no reuse of the historical `claude/rico-hunt-evaluation-2ff5kf` branch.
+
+DeepEval may be isolated and pinned only if repository-CI compatibility and supply-chain constraints are proven. DSPy, Presidio, retrieval models, and Langfuse remain later, separate decisions; none belongs in PR1 by default.
+
+## Current work and ownership
+
+| Work | Ownership and authorization |
 | --- | --- |
-| Active implementation writers | **0** |
-| Active documentation writers | **1 — this micro-reconciliation branch only; lease ends on merge/close** |
-| Open implementation PRs | **#1464** (AI grounding and evidence contract, draft) · **#1462** (competing CV filename guardrail, draft; pending consolidation/closure) · **#1455** (frontend /applications board DnD, open) |
-| Open audit / governance / documentation PRs | **#1465** (AI subsystem audit, draft) · **#1452** (product accountability scorecard, draft) · **#1449** (version-control governance, draft) · **#1447** (consolidated product PRD, open) |
-| Open operational cleanup PRs | **#1454** (delivery smoke residual cleanup; no production deletion authorized) |
-| Multi-user reliability PR 1 / PR 2 | **merged through #1437 / #1438** |
-| D1 mapping/rehearsal | **complete** |
-| D1 final operating package | **merged** |
-| Production database repair | **not authorized** |
-| `#1432` endpoint verification | **complete** |
-| `#1432` authenticated behavior smoke | **pending** |
-| `#1443` Delivery Smoke residual audit | **complete** |
-| `#1443` cleanup package preparation | **in progress; production deletion not authorized** |
-| CV smoke overall | **FAIL** |
-| `#355` | **deferred** |
-| `#1389` | **closed without merge; historical only** |
+| L7 control-plane reconciliation | `IDLE`, branch `agent/control-plane-reconcile-20260801`, base `5a515361`, write `FROZEN` after Correction-3 publication per `RICO-20260801-L7-WINDSURF-CORRECTION-3`; docs scope only; awaiting independent review |
+| `#1477` containment | Existing foreign branch/PR; this L7 authorization grants no write, sync, Ready, merge, or deploy authority over it |
+| `#1480` implementation | No branch, no PR, and no implementation write authorization in this L7 directive |
+| Production/database work | No mutation authorization; Neon, secrets, environment, migrations, deployment, and authenticated production smoke are untouched |
 
-## Delivery Smoke residual audit (`#1443`)
+GitHub cannot reveal unpushed work. The occupancy conclusion is therefore bounded: no overlapping open PR or remote target branch exists, and no active L7 lease was recorded before Roben issued this directive. It is not a claim that all other sessions are idle.
 
-A separate read-only audit was dispatched against production data at workflow run `30475312924` (checked out `main` `cbcb4206b7b13a6de2fbbe84e42d610addc054e2`, success):
+## Risks and unresolved gates
 
-- **Total synthetic rows observed:** 84
-- **Tables audited:** 11
-- **Tables marked INCONCLUSIVE:** 0
-- **Residual tables:** `rico_users` (8), `rico_onboarding_states` (8), `rico_chat_history` (48), `rico_profiles` (4), `learning_signals` (3), `chat_operations` (3), `user_job_context` (5), `rico_job_recommendations` (5)
-- **No PII, credentials, or raw payload reached the log output.**
+### High — external identity in content leaving Rico
 
-This audit covered the full historical Delivery Smoke synthetic namespace (`smoke-delivery-*@synthetic-rico.test`) and is explicitly not attributed to a single workflow run.
+`#1477` reduces risk through a shared prompt contract but is not a deterministic egress guard. The systemic follow-up must establish server-owned value, source, confirmation, conflict, and external-use state, followed by output validation.
 
-### Authorization state for cleanup
+### High — no unified evaluation gate yet
 
-| Action | State |
-| --- | --- |
-| Cleanup package preparation and non-production rehearsal | **AUTHORIZED** |
-| Production `commit=false` rehearsal | **NOT AUTHORIZED** |
-| Production committed cleanup transaction | **NOT AUTHORIZED** |
-| Production deletion of any kind | **NOT AUTHORIZED** |
+Prompt, provider, fallback, retrieval, and grounding changes still lack one Rico-owned regression baseline. `#1480` is the first safe treatment, not proof that the gap is already closed.
 
-A fresh pre-cleanup Neon branch (or equivalent approved private backup) is a hard gate before any committed production execution.
+### Medium — production behavior evidence remains incomplete
 
-## Documentation drift boundary
+Current deployment and health are proven. Authenticated behavior for the recent backend and AI changes is not. CI and health cannot substitute for a secret-safe product smoke.
 
-This control panel supersedes stale current-state wording still present in lower-authority historical snapshots, including references that describe `#1389` as open or `TASK-20260728-003` as blocked on Neon access. Those statements must not be used to authorize work. Historical entries are not deleted merely to make the current snapshot shorter.
+### Medium — control documents decay quickly
 
-## Standing rulings
+This snapshot is intentionally current-state only. Every SHA and open-PR statement must be re-read live before reuse; replace stale current claims rather than stacking another snapshot under them.
 
-- Trust-first remains binding; no unrelated feature expansion.
-- Production credentials and target identifiers must not enter repository material.
-- No production SQL may run from the package-preparation or merge authorization.
-- Shared email or contact data alone is not ownership proof.
-- Closed PR branches are historical sources, not implementation branches.
-- Do not re-upload a real CV merely to test this repair.
-- Any push changes the exact head and invalidates prior exact-head CI/review evidence.
+### Medium — deployment instructions still name Render
+
+Live `/version` and exact-main commit statuses prove that the current backend delivery is Railway, but root `CLAUDE.md` and the backend verification/rollback sections of `OPERATING_RULES.md` still instruct agents to verify and redeploy Render. `PROJECT_STATUS.md` outranks those stale platform-state claims, but the conflict remains an onboarding and release-safety risk. It is recorded here and must be corrected in a separate, explicitly scoped governance-doc PR; this L7 directive does not authorize expanding into those files.
+
+### Medium — two historical task IDs remain duplicated
+
+The base `TASKS.md` already contains two headings for `TASK-20260722-001` and two for `TASK-20260723-003`, in addition to the one deliberately frozen duplicate `TASK-20260721-005`. The current supervisor uniqueness gate does not exempt the first two and therefore cannot certify the unchanged base ledger. This PR introduces four new task headings and each is unique. Historical renumbering is withheld because it requires a separate reference audit rather than a blind in-place change.
+
+## Governed execution order
+
+1. Obtain independent review on Draft PR `#1481` at its exact published head; no merge without a new explicit owner merge authorization.
+2. Keep L7 Draft PR `#1481` frozen; no merge without a new explicit owner merge authorization.
+3. On its separately owned branch, synchronize `#1477`, correct its refs, and rerun exact-head CI while keeping it Draft.
+4. Start `#1480` only under a new attributed writer directive from then-current `main`; keep PR1 deterministic and evaluation-only.
+5. Open a separate governance-doc correction for the stale Render instructions, grounded in Railway deployment evidence; do not mix it into runtime or evaluation work.
+6. Audit references for the two pre-existing duplicate task IDs and repair them in a dedicated control-ledger PR before tightening the uniqueness gate.
+7. After relevant merges and deployments, run the dedicated secret-safe authenticated smoke matrix and record behavior separately from deployment health.
+8. Do not touch Neon, secrets, environment, provider selection, production data, or deployment from this reconciliation lane.
 
 ## Stop conditions
 
-Stop and report instead of guessing when:
+Stop and return to Roben if:
 
-- another writer already owns the same branch or objective;
-- branch history contains an unexpected commit;
-- scope expands beyond control-plane reconciliation;
-- the live D1 fingerprint differs from the approved `5/5/1463/24/13/5/1` contract;
-- the fresh pre-repair branch or encrypted export is missing;
-- the affected account is active during the maintenance window;
-- a production mutation, secret, migration, merge, deployment, or authenticated real-user smoke lacks explicit authorization;
-- a repair query cannot assert its exact target and expected cardinality before writing.
+- `main` moves away from `5a5153614dd7e092f93d49abd09c928d32fcb456` before the final state closure is published;
+- another writer or overlapping branch appears for L7;
+- the diff expands beyond `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 body;
+- any step would merge, deploy, mutate production/Neon, change an environment or secret, or edit runtime/test/workflow files;
+- remote branch history differs from `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` before a push.
 
 ## Next exact action
 
-```text
-1. Complete this one-file control-panel reconciliation through exact-head CI and
-   independent review. Do not merge without explicit owner merge approval.
-2. Close the separate #1432 authenticated gratitude smoke gap with a dedicated
-   smoke account and secret-safe path. Do not combine it with the D1 repaired account.
-3. Present the merged D1 package commit and maintenance plan for a new, explicit
-   production-execution approval. No production SQL, preflight, dry run, branch,
-   export, or real-user mutation is authorized before that approval.
-4. Only after successful D1 repair and smoke may pending-artifact activation be
-   recut from current main. Do not reopen or reuse #1389.
-```
+Obtain independent review on Draft PR `#1481` at its exact published head. Keep the lane frozen; do not merge or deploy. Do not begin `#1480` in this pass.

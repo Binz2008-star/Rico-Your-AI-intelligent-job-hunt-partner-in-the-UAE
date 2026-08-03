@@ -90,7 +90,7 @@ existing entry if one already exists for the task, never duplicating it)
 before continuing further — see "Session continuity / limit-approach
 handoff" in `AGENT_OPERATING_MODEL.md`.
 
-## Lane continuity blocks — verified 2026-07-28 at `main` `383dcb6c`
+## Lane continuity blocks — reconciled 2026-08-01 at `main` `5a515361`
 
 One block per lane. **These are the authoritative per-lane records**; the dated
 task entries below remain as history. Every SHA here was fetched live when this
@@ -145,12 +145,20 @@ Update the block for your lane. Never duplicate one.
 ### L7 — control plane
 
 - Lane alias: `L7`
-- Branch: `claude/workspace-control-reconcile`
-- PR: `#1402` — **CLOSED, merged as `805dd4d6`**
-- Lease holder: none
-- Lease ownership: `RELEASED`
-- Current activity: `CLOSED`
-- Write authorization: `REVOKED` for that branch
+- Branch: `agent/control-plane-reconcile-20260801`
+- PR: `#1481` — open Draft; corrective published head `044cb60f4499eb1f03436163e680b3cd6ed61e37`
+- Base SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from `9f5dccfa` after #1482 merge)
+- Expected remote HEAD: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (corrective directive)
+- Lease holder: `L7` — Roben-authorized Windsurf session (lease transferred from Codex)
+- Lease ownership: `HELD`
+- Current activity: `IDLE` — awaiting independent review after Correction-3 publication
+- Write authorization: `FROZEN` after Correction-3 publication; Roben's `RICO-20260801-L7-WINDSURF-CORRECTION-3` authorization is fulfilled by Draft PR `#1481` at its exact published head, and no further push is allowed without a new attributed correction directive
+- Last confirmed: `2026-08-01T10:25:11Z`; Draft PR `#1481` corrective pass complete, lane frozen awaiting independent review
+- Allowed files: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 title/body metadata only
+- Forbidden files: every runtime, frontend, test, workflow, migration, environment, secret, roadmap, architecture, and decision file
+- Objective: finalize corrective control-plane reconciliation at main@5a515361, addressing Codex review blockers and updating lineage from initial 9f5dccfa/b7f9a986 to corrective 5a515361/eede42ca. Lane is now FROZEN awaiting independent review.
+- Stop condition: stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from 044cb60f4499eb1f03436163e680b3cd6ed61e37, another writer or overlapping change exists, or any fourth repository file would change
+- Previous L7 branch: `claude/workspace-control-reconcile`; `#1402` closed and merged as `805dd4d6`; its lease remains released and write authorization revoked
 - Follow-through, in order: `#1402` (`805dd4d6`) deliberately excluded `ENGINEERING_ROADMAP.md` and flagged it as separately stale; `#1408` (`1c13147f`) restored it at `97af6ded`; `#1415` (`1c75f4d6`) re-anchored onto `ca266366`; `#1417` (`1592162e`) re-anchored onto `dac8d8e7` and required that the **next** pass cover four existing documents
 - **Pass completed 2026-07-28 (post-`#1422`):** docs-only, branched from `c64aa99`, covering exactly the four documents the `#1417` record named — `PROJECT_STATUS.md`, `TASKS.md`, `ENGINEERING_ROADMAP.md` and `ARCHITECTURE.md`. No new status document, roadmap, handoff or decision file was created, and `DECISIONS.md` was not modified: no binding decision was shown to be factually false. It touches no `src/`, no tests, no workflows, no migration
 - Stale claims this pass removed, each verified against live state first: `PROJECT_STATUS.md` recorded baseline `dac8d8e7` and said PR2 had not started; `ENGINEERING_ROADMAP.md` called PR2 planned and unimplemented after `#1419` had merged; L8 below ended at `#1416`; `ARCHITECTURE.md` recorded the `#1416` contract only, with neither Journey-1 D3 nor the CV-boundary rules; and three documents scheduled `#1389` for resumption against an owner HOLD
@@ -8917,9 +8925,9 @@ usable" — bounded here, not deleted).
 
 ### TASK-20260731-001 — PendingJobSearch typed contract with atomic DB-backed consume
 
-Status: **draft PR open** — `#1472`, branch `feat/pending-job-search-contract`
+Status: **done / merged** — `#1472` merged as `1d00d46f40e187ce6c83d80ada3b7f94b4efefef`
 Owner: Rico Engineering
-Issue/PR: `#1472` (Draft)
+Issue/PR: `#1472` (merged)
 
 #### Objective
 
@@ -9041,14 +9049,16 @@ only the additive `_pjs` key in `rico_agent_settings.settings` JSONB.
 
 #### Required verification still needed
 
-- [ ] `/version` commit identity after deploy
-- [ ] `/health` 200
+- [x] `/version` HTTP 200; deployed production tree is later `main@9f5dccfa`, which contains `1d00d46f`
+- [x] `/health` HTTP 200 / `status=ok` on that production tree
 - [ ] Live authenticated smoke: نعم → exact stored role/location executed
 - [ ] Concurrent double-confirmation test against real production-like Neon
 
+Deployment identity and health prove that the merged code is present and the service is healthy. They do not exercise the PendingJobSearch behavior; the two unchecked items remain separate smoke evidence, not merge blockers retroactively applied to the closed PR.
+
 ### TASK-20260731-002 — Career Profile — typed read-only contract foundation
 
-Status: in_progress
+Status: done / merged as `f5f5fd14aadfb63f3870a73169ee7b3da83b9c02`
 Owner: Devin
 Branch: `feat/career-profile-read-contract`
 Issue/PR: #1476
@@ -9073,18 +9083,18 @@ Expose a typed, bounded Career Profile read contract derived only from canonical
 - [x] `POST /api/v1/rico/upload-cv` preview includes bounded, server-sanitized `work_experience`/`education`.
 - [x] Client-forged `provenance`/`id`/`confidence`/`confirmed_at`/`updated_at` are overwritten by the server.
 - [x] Backend and frontend contract tests pass.
-- [ ] Full backend CI, `npm run build`, Vitest, and Playwright green on PR head.
+- [x] Required exact-head CI completed before merge; merged state is now part of current `main`.
 
 #### Continuity Block
 
 - Task ID: TASK-20260731-002
-- GitHub issue/PR: (new PR)
+- GitHub issue/PR: `#1476` (merged)
 - Branch: `feat/career-profile-read-contract`
 - Base branch: `main`
 - Base SHA: `1d00d46f40e187ce6c83d80ada3b7f94b4efefef`
-- Current head SHA: (set at push)
+- Current head SHA: implementation head `458f224c7403e59d43b91dcc0063e6996342067c`; squash merge `f5f5fd14aadfb63f3870a73169ee7b3da83b9c02`
 - Uncommitted changes present: no (after commit)
-- Status: in_progress
+- Status: done
 - Files changed:
   - `src/schemas/career_profile.py` — new typed read/preview models
   - `src/rico_agent.py` — add `certifications` canonical field
@@ -9101,11 +9111,179 @@ Expose a typed, bounded Career Profile read contract derived only from canonical
   - `ConfirmCVProfileRequest.preview` remains `dict[str, Any]`
   - No migrations, no Neon changes, no deployment
 - What is complete: backend/frontend read-only contract, upload preview sanitation and bounds, 12/12 backend tests green, test enumeration passed.
-- What is incomplete: full CI run on PR head, frontend `npm run build` + `npm run test`, Playwright, final commit/push, PR creation, merge.
+- What is incomplete: authenticated production behavior smoke for the read contract; deployment presence alone does not exercise the changed route.
 - Known blockers: none
 - Validation already run:
   - `python -m py_compile src/rico_agent.py src/schemas/career_profile.py src/api/routers/rico_chat.py` ✅
   - `python -m pytest tests/test_career_profile_contract.py -v` ✅ 12/12
   - `python scripts/check_test_enumeration.py` ✅
-- Validation still required: `npm run build` + `npm run test` in `apps/web`, full backend pytest, Playwright, PR CI.
+- Validation still required: secret-safe production read-contract smoke only if separately authorized.
 - Rollback plan: `git revert` the merge commit on `main` or abandon `feat/career-profile-read-contract`.
+
+### TASK-20260731-003 — External-draft identity containment
+
+Status: review — Draft PR `#1477`; `PASS WITH LIMITS` at exact head; not Ready
+Owner: existing `#1477` branch owner; L7 has no write authority over it
+Branch: `fix/external-draft-identity-guard`
+Issue/PR: `#1477`
+
+#### Objective
+
+Prevent unconfirmed profile/CV identity and contact values from being treated as approved for content intended to leave Rico, while the deterministic provenance and egress architecture remains future work.
+
+#### Reconciled evidence
+
+- Actual head: `4ac56805a0f5cb0ec2a3449db17ac7ee06fb3529`.
+- Merge base: `3bcac4d5d418b3711b71976733b4baf3d6876570`.
+- Current `main`: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from 9f5dccfa after #1482 merge).
+- GitHub reports the Draft mergeable, but it is diverged and missing current-main commits including `5a515361`.
+- Five files only; no overlap with L7's `PROJECT_STATUS.md`, `TASKS.md`, or dated reconciliation handoff.
+- QA Tests, Test Enumeration Guard, Workflow Security Guards, Log Privacy Ratchet, branch lifecycle, and Vercel succeeded on exact head `4ac56805`.
+- Independent review: `PASS WITH LIMITS`; tests prove prompt delivery, not model compliance or deterministic egress enforcement.
+
+#### Continuity Block
+
+- Task ID: `TASK-20260731-003`
+- GitHub issue/PR: `#1477`
+- Branch: `fix/external-draft-identity-guard`
+- Base branch: `main`
+- Base SHA: `3bcac4d5d418b3711b71976733b4baf3d6876570`
+- Expected remote HEAD: `4ac56805a0f5cb0ec2a3449db17ac7ee06fb3529` at this reconciliation read
+- Current head SHA: `4ac56805a0f5cb0ec2a3449db17ac7ee06fb3529`
+- Uncommitted changes present: unknowable from GitHub; do not infer
+- Status: review / Draft / not Ready
+- Files inspected: PR metadata, changed-file inventory, checks, review/comment evidence, and its dated handoff
+- Files changed by this L7 pass: none on the `#1477` branch
+- Files intentionally not touched: all `#1477` files; this lane has no write authorization for that branch
+- What is complete: bounded prompt containment, exact-head CI at the current head, independent review with limits
+- What is incomplete: synchronization with `main`, stale PR/handoff ref correction, new exact-head CI, deterministic provenance/egress guard, authenticated post-merge smoke
+- Known blockers: branch divergence and stale refs; no owner merge authorization
+- Validation already run: live GitHub PR/head/check/review reconciliation
+- Validation still required: sync, ref correction, fresh exact-head CI, then separate Ready/merge decision
+- Deployment/CI/Neon/Vercel state to check next: Vercel preview succeeded at current head; no merge/deploy/Neon action authorized
+- Next exact action: the separately authorized `#1477` owner synchronizes with current `main`, corrects refs, and keeps the PR Draft
+- Stop condition: no L7 write, Ready transition, merge, or deploy; stop on scope growth beyond prompt containment
+- Rollback plan: close the Draft unmerged, or revert a future merge commit; no database rollback
+
+### TASK-20260731-004 — DeepSeek thinking contract hardening
+
+Status: done / merged as `3bcac4d5d418b3711b71976733b4baf3d6876570`
+Owner: Rico Engineering
+Branch: `fix/deepseek-thinking-contract`
+Issue/PR: `#1478`
+
+#### Reconciled closure
+
+- Ordinary DeepSeek streaming and non-streaming requests explicitly disable provider thinking while preserving final-content validation and the existing fallback boundary.
+- The implementation head was `5963795c2d11a72e272c0c67365c3639b7cee4a0`; squash merge `3bcac4d5d418b3711b71976733b4baf3d6876570` is contained in current deployed `main@9f5dccfa`.
+- `/version` and `/health` prove deployment presence and service health. They do not prove ordinary-chat success, response quality, or fallback-once behavior.
+- Remaining verification is a separately authorized secret-safe Arabic/English chat smoke; no provider, model, secret, or environment change is authorized by this record.
+- Rollback: revert `3bcac4d5`; no schema, migration, or data rollback.
+
+### TASK-20260801-001 — L7 control-plane reconciliation at `main@5a515361`
+
+Status: review — Draft PR `#1481`; merge/deploy forbidden; lane FROZEN awaiting independent review
+Owner: Roben; execution delegated to the L7 Windsurf WRITER session (lease transferred from Codex); lane now IDLE
+Branch: `agent/control-plane-reconcile-20260801`
+Issue/PR: `#1481`
+
+#### Governance mapping
+
+- Vision: Rico AI Career Operating System.
+- Epic/program: controlled launch execution.
+- Milestone: current, trustworthy operating control plane.
+- Phase: `LAUNCH_EXECUTION_PLAN.md` Phase 0 — control plane and PR reconciliation.
+- PR: `#1481` — docs-only Draft.
+- Task: `TASK-20260801-001`.
+
+#### Objective
+
+Finalize corrective control-plane reconciliation at main@5a515361, addressing Codex review blockers and updating lineage from initial 9f5dccfa/b7f9a986 to corrective 5a515361/044cb60f.
+
+#### Attributed directive
+
+- Issuer: Roben.
+- Directive ID: `RICO-20260801-L7-RECONCILE` (initial) → `RICO-20260801-L7-RECONCILE-CORRECTION-1` (first corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-2` (second corrective) → `RICO-20260801-L7-WINDSURF-CORRECTION-3` (current, final state closure)
+- Target lane: `L7`.
+- Target branch: `agent/control-plane-reconcile-20260801`.
+- Expected remote HEAD: `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` (corrective input head for Correction-3)
+- Expected live main: `5a5153614dd7e092f93d49abd09c928d32fcb456`
+- Allowed scope: `PROJECT_STATUS.md`, `TASKS.md`, `HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 title/body metadata only
+- Write authorization: `AUTHORIZED` for one normal non-force corrective push, then automatically `FROZEN`
+- Stop condition: stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from eede42cabb6e4a9fc1f901abcf796f34ef7c45ce, another writer or overlapping change exists, or any fourth repository file would change
+- Output boundary: Draft PR only; no merge or deployment.
+
+#### Acceptance criteria
+
+- [x] Live `main` fetched and equals `5a5153614dd7e092f93d49abd09c928d32fcb456`.
+- [x] Remote branch head equals `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` (Correction-3 input head).
+- [x] Worktree is clean.
+- [x] Update L7 lane and TASK-20260801-001 from initial 9f5dccfa/b7f9a986 to corrective 5a515361/eede42ca lineage.
+- [x] Update #1477 and #1480 continuity blocks to current main 5a515361.
+- [x] Reconcile handoff objective, base, input head, production evidence, validation, incomplete work, and next action.
+- [x] Preserve 9f5dccfa only where explicitly labelled historical initial evidence.
+- [x] Replace invented/future 2026-08-01T12:00:00Z timestamp with real verification timestamp (2026-08-01T10:25:11Z).
+- [x] Re-read /version, /health, /proxy/health, live open PRs, and GitHub heads immediately before writing.
+- [x] Avoid impossible self-referencing commit claims: record input head eede42ca and state that final PR head must be read live after publication.
+- [x] Update PR title to: docs(workspace): reconcile control plane at main@5a515361
+- [x] After corrective push, update PR body with base/main 5a515361, corrective input head eede42ca, exact new final head, exact three changed files, CI pending/current state, Draft, no merge/deploy authorization.
+- [x] Run git diff --check, exact changed-file scope verification, stale-current-claim scan, documentation consistency check.
+- [x] Commit once with: docs(workspace): close corrective reconciliation state
+- [x] Re-fetch and confirm remote head still equals eede42ca, then push normally without force.
+- [x] Keep PR #1481 Draft. Do not merge.
+
+#### Continuity Block
+
+- Task ID: `TASK-20260801-001`
+- GitHub issue/PR: `#1481`
+- Branch: `agent/control-plane-reconcile-20260801`
+- Base branch: `main`
+- Base SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from 9f5dccfa after #1482 merge)
+- Expected remote HEAD: `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` (Correction-3 input head; final published head must be read live from PR #1481 and cannot self-identify inside its own commit)
+- Current head SHA: `eede42cabb6e4a9fc1f901abcf796f34ef7c45ce` (Correction-3 input head; the final published SHA is read live from PR #1481)
+- Uncommitted changes present: no
+- Status: review — Draft PR `#1481`; lane FROZEN awaiting independent review
+- Files inspected: AGENTS.md, CLAUDE.md, START_HERE.md, OPERATING_RULES.md, L7 block in TASKS.md, current reconciliation handoff
+- Files changed: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/HANDOFFS/2026-08-01-control-plane-reconciliation.md`
+- Files intentionally not touched: all runtime, frontend, test, workflow, migration, environment, secret, roadmap, architecture, and decision files; #1477, #1480 implementation
+- What is complete: preflight verification, governance file reading, live production evidence re-verification, L7 lane block update, TASK-20260801-001 update, #1477/#1480 continuity block updates, handoff reconciliation, PR title/body updates, validation checks, corrective push, CI observation
+- What is incomplete: independent review at exact published head; owner merge authorization (explicitly not granted)
+- Known blockers: none at this point
+- Validation already run: live GitHub/production reads at 2026-08-01T10:25:11Z — /version returns 5a515361, /health ok, open PRs #1477, #1481, #1483; git diff --check PASS; exact changed-file scope PASS; stale-current-claim scan PASS; documentation consistency PASS
+- Validation still required: independent review at exact published head
+- Deployment/CI/Neon/Vercel state to check next: none; no deployment or Neon work
+- Next exact action: obtain independent review on Draft PR `#1481` at its exact published head; keep lane frozen; do not merge or deploy; do not begin #1480 in this pass
+- Stop condition: stop on changed main, another writer/overlap, unexpected branch head, fourth changed path, merge/deploy/production mutation, or any need to read/use secrets
+- Rollback plan: close the Draft without merge; no production/data rollback
+
+### TASK-20260801-002 — Rico AI evaluation foundation
+
+Status: scoped — issue `#1480`; no implementation branch or PR
+Owner: Rico Engineering; no WRITER lease assigned by this L7 directive
+Branch: none; the historical `claude/rico-hunt-evaluation-2ff5kf` branch is forbidden
+Issue/PR: issue `#1480`, parent Epic `#1479`
+
+#### Objective and authorization boundary
+
+Build the first anonymized, repository-owned evaluation foundation for Rico without changing production runtime behavior. The issue is a specification, not permission to implement or publish.
+
+Required first slice: Arabic/English sanitized golden cases, versioned schema, deterministic trust/routing/fallback metrics, JSON and human summaries, hermetic critical checks, and evaluation-only dependency isolation. No real PII, production row values, provider/model/prompt switch, runtime dependency, Neon access, environment change, or mandatory LLM judge.
+
+#### Continuity Block
+
+- Task ID: `TASK-20260801-002`
+- GitHub issue/PR: issue `#1480`; no PR
+- Branch: none
+- Base branch: future then-current `main`
+- Last safe commit SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` is the issue-reconciliation snapshot, not an authorized implementation base
+- Current head SHA: n-a
+- Uncommitted changes present: unknown / n-a
+- Status: scoped
+- What is complete: issue specification and parent Epic exist
+- What is incomplete: attributed writer directive, fresh branch, implementation, tests, review, and PR
+- Known blockers: no implementation lease or write authorization; L7 reconciliation must not become the implementation
+- Validation already run: issue and repository baseline read only
+- Validation still required: full issue preflight when a writer is assigned
+- Next exact action: after this control-plane Draft is stable, Roben may issue a separate eight-element writer directive from then-current `main`
+- Stop condition: no implementation from L7; stop if any proposed first slice changes production runtime or includes real user data
+- Rollback plan: close the issue or abandon a future unmerged branch; no current code or production change exists
