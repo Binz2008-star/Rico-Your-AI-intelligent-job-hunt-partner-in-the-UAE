@@ -44,12 +44,12 @@ const csp = [
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
-    // https://rico-job-automation-api.onrender.com — backend proxy (existing)
+    // https://api.ricohunt.com — backend proxy (Railway; replaced suspended Render host)
     // https://sandbox-api.paddle.com — Paddle.js SDK calls during sandbox checkout
     // https://api.paddle.com          — Paddle.js SDK calls during production checkout
     // https://vitals.vercel-insights.com — @vercel/analytics beacon (Vercel only)
     // ws://localhost:3000 — dev-only Next.js HMR WebSocket
-    `connect-src 'self' https://rico-job-automation-api.onrender.com${vercelAnalyticsConnect} https://sandbox-api.paddle.com https://api.paddle.com${isDev ? " ws://localhost:3000 http://localhost:3000" : ""}`,
+    `connect-src 'self' https://api.ricohunt.com${vercelAnalyticsConnect} https://sandbox-api.paddle.com https://api.paddle.com${isDev ? " ws://localhost:3000 http://localhost:3000" : ""}`,
     // https://checkout.paddle.com — Paddle overlay checkout iframe (sandbox and production share this host)
     "frame-src 'self' https://checkout.paddle.com",
     "frame-ancestors 'none'",
