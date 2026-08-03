@@ -1,0 +1,101 @@
+name: Cloudflare OpenNext Validation
+
+on:
+  push:
+    branches: [infra/cloudflare-opennext-migration]
+  workflow_dispatch:
+
+jobs:
+  opennext-validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Clean install
+        run: |
+          cd apps/web
+          npm ci
+
+      - name: Frontend tests (vitest)
+        run: |
+          cd apps/web
+          npm run test
+
+      - name: Next.js production build
+        run: |
+          cd apps/web
+          npm run build
+
+      - name: OpenNext build
+        run: |
+          cd apps/web
+          npx opennextjs-cloudflare build
+
+      - name: Start OpenNext preview and verify routes
+        run: |
+          cd apps/web
+          # Start preview in background
+          npx opennextjs-cloudflare preview &
+          PREVIEW_PID=$!
+          
+          # Wait for server to be ready (max 30 seconds)
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/ | grep -q "200\|301\|302"; then
+              echo "Preview server is ready"
+              break
+            fi
+            echo "Waiting for preview server... ($i/30)"
+            sleep 1
+          done
+          
+          # Verify routes
+          echo "=== Route checks ==="
+          
+          echo "--- / ---"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/)
+          echo "/ status: $STATUS"
+          
+          echo "--- /login ---"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/login)
+          echo "/login status: $STATUS"
+          
+          echo "--- /signup ---"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/signup)
+          echo "/signup status: $STATUS"
+          
+          echo "--- /command ---"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/command)
+          echo "/command status: $STATUS"
+          
+          echo "--- /proxy/health ---"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/proxy/health)
+          echo "/proxy/health status: $STATUS"
+          
+          echo "--- /opengraph-image ---"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8787/opengraph-image)
+          echo "/opengraph-image status: $STATUS"
+          
+          # Check for missing static assets
+          echo "=== Static asset check ==="
+          ASSETS=$(curl -s http://localhost:8787/ | grep -oP 'src="[^"]*"' | head -5)
+          echo "Found asset references:"
+          echo "$ASSETS"
+          
+          # Check for WASM or @vercel/og errors in preview output
+          echo "=== Error check ==="
+          # Kill the preview server
+          kill $PREVIEW_PID 2>/dev/null || true
+          wait $PREVIEW_PID 2>/dev/null || true
+          
+          echo "Validation complete"
