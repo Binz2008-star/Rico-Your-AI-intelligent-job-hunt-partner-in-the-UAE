@@ -1,6 +1,15 @@
 import { ImageResponse } from "next/og";
 
-export const runtime = "edge";
+// OpenNext (Cloudflare Workers) does not support the Next.js edge runtime.
+// The OG image now runs in the Node.js runtime, which next/og supports in
+// Next.js 14+. This is a required migration step per the OpenNext docs:
+// https://opennext.js.org/cloudflare/get-started#8-remove-any-export-const-runtime--edge-if-present
+//
+// The edge runtime implicitly made this route dynamic (on-demand). Without it,
+// Next.js attempts static prerendering, which fails because @vercel/og cannot
+// resolve font file URLs during static generation. `force-dynamic` restores the
+// original on-demand rendering behavior.
+export const dynamic = "force-dynamic";
 export const alt = "Rico Hunt \u2014 AI Career Operating System for the UAE";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
