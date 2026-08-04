@@ -8,6 +8,13 @@ Supports a typed provider model controlled by ``EMAIL_PROVIDER``:
                  intended for local/non-Railway compatibility only.
 - ``disabled`` — return False immediately with a sanitized warning.
 
+Provider selection is fail-closed:
+
+- Invalid ``EMAIL_PROVIDER`` value → immediate False, no SMTP, no HTTP.
+- Unset ``EMAIL_PROVIDER`` in production (Railway) → immediate False, no SMTP.
+- Unset ``EMAIL_PROVIDER`` outside production → defaults to ``smtp``
+  for backward compatibility with local-dev and non-Railway environments.
+
 Callers pass an explicit recipient so individual notification flows can
 choose their own configured destination. The public caller contract
 ``send_email(*, to_email, subject, body, html=None) -> bool`` is preserved
@@ -25,15 +32,15 @@ from typing import Literal
 
 import httpx
 
-from src.log_privacy import user_ref
+from src.log_privacy import safe_exc, user_ref
 
 logger = logging.getLogger(__name__)
 
 EmailProvider = Literal["resend", "smtp", "disabled"]
 
 _RESEND_URL = "https://api.resend.com/emails"
-# Strict timeout budget: 10s connect/read/write, 5s pool acquisition.
-_RESEND_TIMEOUT = httpx.Timeout(connect=10.0, read=10.0, write=10.0, pool=5.0)
+# Strict timeout budget: connect 3s, read 5s, write 5s, pool 2s.
+_RESEND_TIMEOUT = httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=2.0)
 # Maximum attempts: initial + one retry.
 _MAX_ATTEMPTS = 2
 # Backoff between attempts (seconds).
@@ -44,17 +51,29 @@ _RETRY_BACKOFF = 0.5
 # Provider selection
 # ---------------------------------------------------------------------------
 
-def _resolve_provider() -> EmailProvider:
+def _is_production() -> bool:
+    """True when running on a known production platform (Railway)."""
+    return bool(os.getenv("RAILWAY_REPLICA_ID", "").strip())
+
+
+def _resolve_provider() -> EmailProvider | None:
     """Read and validate ``EMAIL_PROVIDER`` from the environment.
 
-    Defaults to ``smtp`` for backward compatibility when unset so existing
-    local-dev and non-Railway deployments keep working without config changes.
+    Returns one of ``resend``, ``smtp``, ``disabled``, or ``None`` when
+    the configuration is unsafe (invalid value, or unset in production).
+
+    - Invalid value → ``None`` (fail-closed, no SMTP fallback)
+    - Unset in production → ``None`` (fail-closed, no SMTP fallback)
+    - Unset outside production → ``smtp`` (backward compatibility)
     """
-    raw = os.getenv("EMAIL_PROVIDER", "smtp").strip().lower()
+    raw = os.getenv("EMAIL_PROVIDER", "").strip().lower()
+    if not raw:
+        if _is_production():
+            return None
+        return "smtp"
     if raw in ("resend", "smtp", "disabled"):
         return raw  # type: ignore[return-value]
-    logger.warning("email_provider_invalid value=%s falling_back=smtp", raw)
-    return "smtp"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -90,9 +109,15 @@ def send_email(
     Never raises — failures are logged and returned as ``False``.
     """
     provider = _resolve_provider()
+    if provider is None:
+        logger.warning(
+            "email_delivery_not_configured recipient=%s reason=invalid_or_unset_provider",
+            user_ref(to_email),
+        )
+        return False
     if provider == "disabled":
         logger.warning(
-            "email_delivery_disabled provider=disabled recipient=%s",
+            "email_delivery_disabled recipient=%s",
             user_ref(to_email),
         )
         return False
@@ -140,7 +165,6 @@ def _send_via_resend(
         "Idempotency-Key": idempotency_key,
     }
 
-    ref = user_ref(to_email)
     last_status: int | None = None
 
     for attempt in range(1, _MAX_ATTEMPTS + 1):
@@ -156,7 +180,7 @@ def _send_via_resend(
             if 200 <= resp.status_code < 300:
                 logger.info(
                     "email_delivery_sent provider=resend recipient=%s status=%d attempt=%d",
-                    ref,
+                    user_ref(to_email),
                     resp.status_code,
                     attempt,
                 )
@@ -167,7 +191,7 @@ def _send_via_resend(
             if should_retry and attempt < _MAX_ATTEMPTS:
                 logger.warning(
                     "email_delivery_retry provider=resend recipient=%s status=%d attempt=%d",
-                    ref,
+                    user_ref(to_email),
                     resp.status_code,
                     attempt,
                 )
@@ -179,7 +203,7 @@ def _send_via_resend(
             # Permanent failure — log sanitized error, do not retry
             logger.error(
                 "email_delivery_failed provider=resend recipient=%s status=%d attempt=%d permanent=true",
-                ref,
+                user_ref(to_email),
                 resp.status_code,
                 attempt,
             )
@@ -189,7 +213,7 @@ def _send_via_resend(
             if attempt < _MAX_ATTEMPTS:
                 logger.warning(
                     "email_delivery_retry provider=resend recipient=%s error=%s attempt=%d",
-                    ref,
+                    user_ref(to_email),
                     type(exc).__name__,
                     attempt,
                 )
@@ -199,7 +223,7 @@ def _send_via_resend(
                 continue
             logger.error(
                 "email_delivery_failed provider=resend recipient=%s error=%s attempt=%d permanent=false_exhausted",
-                ref,
+                user_ref(to_email),
                 type(exc).__name__,
                 attempt,
             )
@@ -207,11 +231,9 @@ def _send_via_resend(
 
         except Exception as exc:
             # Unexpected exception — never log str(exc) which may carry secrets
-            from src.log_privacy import safe_exc
-
             logger.error(
                 "email_delivery_failed provider=resend recipient=%s error=%s attempt=%d",
-                ref,
+                user_ref(to_email),
                 safe_exc(exc),
                 attempt,
             )
@@ -220,7 +242,7 @@ def _send_via_resend(
     # Should not reach here, but guard defensively
     logger.error(
         "email_delivery_failed provider=resend recipient=%s status=%s attempts_exhausted",
-        ref,
+        user_ref(to_email),
         last_status,
     )
     return False
@@ -253,7 +275,10 @@ def _send_via_smtp(
     smtp_password = os.getenv("SMTP_PASSWORD", os.getenv("EMAIL_PASS", "")).replace(" ", "").strip()
 
     if not smtp_user or not smtp_password:
-        logger.warning("email_delivery_not_configured recipient=%s", user_ref(to_email))
+        logger.warning(
+            "email_delivery_not_configured provider=smtp recipient=%s",
+            user_ref(to_email),
+        )
         return False
 
     email_from, email_from_name = _resolve_sender()
@@ -278,7 +303,15 @@ def _send_via_smtp(
                 server.starttls(context=context)
                 server.login(smtp_user, smtp_password)
                 server.send_message(msg)
+        logger.info(
+            "email_delivery_sent provider=smtp recipient=%s",
+            user_ref(to_email),
+        )
         return True
-    except Exception:
-        logger.exception("email_delivery_failed recipient=%s subject=%s", user_ref(to_email), subject)
+    except Exception as exc:
+        logger.error(
+            "email_delivery_failed provider=smtp recipient=%s error=%s",
+            user_ref(to_email),
+            safe_exc(exc),
+        )
         return False

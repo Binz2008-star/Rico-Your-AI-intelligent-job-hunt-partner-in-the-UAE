@@ -4,10 +4,8 @@ All network is mocked — no real HTTP calls, no SMTP, no secrets in logs.
 """
 from __future__ import annotations
 
-import io
 import logging
-import os
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch, Mock
 
 import httpx
 import pytest
@@ -49,13 +47,52 @@ class TestProviderSelection:
         monkeypatch.setenv("EMAIL_PROVIDER", "disabled")
         assert mailer._resolve_provider() == "disabled"
 
-    def test_invalid_provider_falls_back_to_smtp(self, monkeypatch):
+    def test_invalid_provider_returns_none(self, monkeypatch):
         monkeypatch.setenv("EMAIL_PROVIDER", "carrier-pigeon")
+        assert mailer._resolve_provider() is None
+
+    def test_unset_provider_defaults_to_smtp_outside_production(self, monkeypatch):
+        monkeypatch.delenv("EMAIL_PROVIDER", raising=False)
+        monkeypatch.delenv("RAILWAY_REPLICA_ID", raising=False)
         assert mailer._resolve_provider() == "smtp"
 
-    def test_unset_provider_defaults_to_smtp(self, monkeypatch):
+    def test_unset_provider_returns_none_in_production(self, monkeypatch):
         monkeypatch.delenv("EMAIL_PROVIDER", raising=False)
-        assert mailer._resolve_provider() == "smtp"
+        monkeypatch.setenv("RAILWAY_REPLICA_ID", "some-replica-id")
+        assert mailer._resolve_provider() is None
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed: invalid and production-unset configurations
+# ---------------------------------------------------------------------------
+
+class TestFailClosed:
+    def test_invalid_provider_returns_false_without_network(self, monkeypatch):
+        monkeypatch.setenv("EMAIL_PROVIDER", "carrier-pigeon")
+        with patch("src.services.mailer.httpx.post") as mock_post, \
+             patch("src.services.mailer.smtplib.SMTP_SSL") as mock_smtp_ssl, \
+             patch("src.services.mailer.smtplib.SMTP") as mock_smtp:
+            result = mailer.send_email(
+                to_email="user@example.com", subject="Test", body="Body"
+            )
+        assert result is False
+        mock_post.assert_not_called()
+        mock_smtp_ssl.assert_not_called()
+        mock_smtp.assert_not_called()
+
+    def test_unset_in_production_returns_false_without_network(self, monkeypatch):
+        monkeypatch.delenv("EMAIL_PROVIDER", raising=False)
+        monkeypatch.setenv("RAILWAY_REPLICA_ID", "some-replica-id")
+        with patch("src.services.mailer.httpx.post") as mock_post, \
+             patch("src.services.mailer.smtplib.SMTP_SSL") as mock_smtp_ssl, \
+             patch("src.services.mailer.smtplib.SMTP") as mock_smtp:
+            result = mailer.send_email(
+                to_email="user@example.com", subject="Test", body="Body"
+            )
+        assert result is False
+        mock_post.assert_not_called()
+        mock_smtp_ssl.assert_not_called()
+        mock_smtp.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +381,19 @@ class TestResendIdempotency:
 
 
 # ---------------------------------------------------------------------------
+# Resend: timeout budget
+# ---------------------------------------------------------------------------
+
+class TestResendTimeout:
+    def test_timeout_values_are_strict(self):
+        timeout = mailer._RESEND_TIMEOUT
+        assert timeout.connect == 3.0
+        assert timeout.read == 5.0
+        assert timeout.write == 5.0
+        assert timeout.pool == 2.0
+
+
+# ---------------------------------------------------------------------------
 # Resend: logging privacy
 # ---------------------------------------------------------------------------
 
@@ -437,6 +487,56 @@ class TestSmtpProviderPreserved:
             )
         assert result is True
         mock_post.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# SMTP provider: sanitized failure logging
+# ---------------------------------------------------------------------------
+
+class TestSmtpLogPrivacy:
+    def test_smtp_failure_no_raw_subject_in_logs(self, monkeypatch, caplog):
+        monkeypatch.setenv("EMAIL_PROVIDER", "smtp")
+        monkeypatch.setenv("SMTP_USER", "test@x.com")
+        monkeypatch.setenv("SMTP_PASSWORD", "pw")
+        monkeypatch.setenv("SMTP_PORT", "465")
+
+        with caplog.at_level(logging.DEBUG, logger="src.services.mailer"):
+            with patch("src.services.mailer.smtplib.SMTP_SSL", side_effect=Exception("SMTP server response with secret data")):
+                result = mailer.send_email(
+                    to_email="user@example.com",
+                    subject="Verify your RicoHunt email address",
+                    body="Body",
+                )
+        assert result is False
+        for record in caplog.records:
+            # Raw subject must not appear in logs
+            assert "Verify your RicoHunt email address" not in record.message
+            # Raw recipient must not appear in logs
+            assert "user@example.com" not in record.message
+            # Raw exception text must not appear in logs
+            assert "SMTP server response with secret data" not in record.message
+
+    def test_smtp_failure_logs_sanitized_error_category(self, monkeypatch, caplog):
+        monkeypatch.setenv("EMAIL_PROVIDER", "smtp")
+        monkeypatch.setenv("SMTP_USER", "test@x.com")
+        monkeypatch.setenv("SMTP_PASSWORD", "pw")
+        monkeypatch.setenv("SMTP_PORT", "465")
+
+        with caplog.at_level(logging.ERROR, logger="src.services.mailer"):
+            with patch("src.services.mailer.smtplib.SMTP_SSL", side_effect=ConnectionRefusedError("refused")):
+                result = mailer.send_email(
+                    to_email="user@example.com",
+                    subject="Test",
+                    body="Body",
+                )
+        assert result is False
+        # Should log the error category, not the raw exception text
+        error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(error_records) > 0
+        assert any("email_delivery_failed" in r.message for r in error_records)
+        assert any("ConnectionRefusedError" in r.message for r in error_records)
+        # Raw exception text must not appear
+        assert not any("refused" in r.message for r in error_records)
 
 
 if __name__ == "__main__":
