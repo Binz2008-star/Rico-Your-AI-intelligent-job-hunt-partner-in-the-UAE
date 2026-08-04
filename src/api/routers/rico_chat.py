@@ -775,6 +775,9 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
     """Authenticated chat endpoint."""
     start_time = time.time()
     request_ref = generate_error_ref()
+    from src.services.operation_timing import OperationTimer
+    timer = OperationTimer(payload.operation_id, request_ref=request_ref, log=logger)
+    timer.record("request_received")
     try:
         user = get_current_user(request)
         ctx = RicoSessionContext.for_authenticated(user["email"])
@@ -800,6 +803,7 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
                 message=payload.message,
                 operation_id=payload.operation_id,
                 language=payload.language,
+                _timer=timer,
             )
         finally:
             reset_active_chat_session(_session_token)
@@ -812,9 +816,44 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
             request_ref,
         )
 
+        timer.record("response_returned", http_status=200)
         _metrics.record_request((time.time() - start_time) * 1000)
         return RicoChatResponse(**result, trace_id=request_ref)
-    except HTTPException:
+    except HTTPException as exc:
+        # HTTPException is raised before a normal response — emit one terminal
+        # event with the HTTP status so the lifecycle is always closed.
+        timer.record("response_returned", http_status=exc.status_code, outcome="http_exception")
+        raise
+    except TimeoutError as exc:
+        # Explicit timeout classification before the generic handler so the
+        # terminal event carries outcome=timeout instead of outcome=error.
+        # Response shape is unchanged (same error_response builder).
+        logger.error(
+            "chat_timeout user=%s message_len=%d err=%s request_ref=%s",
+            user_ref(ctx.user_id if "ctx" in locals() else "unknown"),
+            len(payload.message) if "payload" in locals() else 0,
+            safe_exc(exc),
+            request_ref,
+        )
+        timer.record("response_returned", outcome="timeout")
+        _metrics.record_request((time.time() - start_time) * 1000)
+        error_response = build_error_response(
+            f"I couldn't process your request. Reference: {request_ref}. Please try again or rephrase your message.",
+            log_exc=exc,
+            user_id=ctx.user_id if "ctx" in locals() else "unknown",
+        )
+        error_response["error_ref"] = request_ref
+        return RicoChatResponse(**error_response, trace_id=request_ref)
+    except asyncio.CancelledError as exc:
+        # Real cancellation path: client disconnect or server-side cancellation.
+        # Emit exactly one terminal event with outcome=cancelled, then re-raise
+        # so the cancellation propagates correctly (do not swallow it).
+        logger.info(
+            "chat_cancelled user=%s request_ref=%s",
+            user_ref(ctx.user_id if "ctx" in locals() else "unknown"),
+            request_ref,
+        )
+        timer.record("response_returned", outcome="cancelled")
         raise
     except Exception as exc:
         logger.error(
@@ -824,6 +863,7 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
             safe_exc(exc),
             request_ref,
         )
+        timer.record("response_returned", outcome="error")
         _metrics.record_request((time.time() - start_time) * 1000)
         error_response = build_error_response(
             f"I couldn't process your request. Reference: {request_ref}. Please try again or rephrase your message.",

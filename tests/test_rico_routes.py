@@ -209,6 +209,115 @@ class TestRicoChatRouteExists:
         assert r.status_code == 200
 
 
+class TestOperationTimingRouterTerminalEvents:
+    """Router-level integration tests proving exactly one response_returned
+    terminal event is emitted for each outcome type: success, HTTPException,
+    unexpected exception, cancellation, timeout.
+
+    These tests capture the real OperationTimer log output from the actual
+    /api/v1/rico/chat endpoint — not manual timer.record() calls.
+    """
+
+    def _capture_timer_logs(self):
+        """Return (buf, handler, logger) for capturing operation_timing logs."""
+        import logging
+        from io import StringIO
+        buf = StringIO()
+        handler = logging.StreamHandler(buf)
+        handler.setLevel(logging.INFO)
+        op_logger = logging.getLogger("src.api.routers.rico_chat")
+        op_logger.setLevel(logging.INFO)
+        op_logger.addHandler(handler)
+        return buf, handler, op_logger
+
+    def _terminal_count(self, buf):
+        """Count response_returned lines in the captured log buffer."""
+        return buf.getvalue().count("stage=response_returned")
+
+    def test_success_emits_one_terminal_response_returned(self, auth_client):
+        buf, handler, op_logger = self._capture_timer_logs()
+        try:
+            with patch("src.services.chat_service.send_message", return_value=_CHAT_RESPONSE):
+                r = auth_client.post("/api/v1/rico/chat", json={"message": "Hello"})
+            assert r.status_code == 200
+            assert self._terminal_count(buf) == 1, "Success must emit exactly one response_returned"
+        finally:
+            op_logger.removeHandler(handler)
+
+    def test_http_exception_emits_one_terminal_response_returned(self, client):
+        """Unauthenticated request → 401 HTTPException → one terminal event."""
+        buf, handler, op_logger = self._capture_timer_logs()
+        try:
+            r = client.post("/api/v1/rico/chat", json={"message": "Hello"})
+            assert r.status_code == 401
+            assert self._terminal_count(buf) == 1, "HTTPException must emit exactly one response_returned"
+        finally:
+            op_logger.removeHandler(handler)
+
+    def test_unexpected_exception_emits_one_terminal_response_returned(self, auth_client):
+        """send_message raises an unexpected exception → one terminal event with outcome=error."""
+        buf, handler, op_logger = self._capture_timer_logs()
+        try:
+            with patch("src.services.chat_service.send_message", side_effect=RuntimeError("boom")):
+                r = auth_client.post("/api/v1/rico/chat", json={"message": "Hello"})
+            assert r.status_code == 200  # error_response is returned as 200 with error body
+            assert self._terminal_count(buf) == 1, "Unexpected exception must emit exactly one response_returned"
+            assert "outcome=error" in buf.getvalue()
+        finally:
+            op_logger.removeHandler(handler)
+
+    def test_timeout_emits_one_terminal_response_returned(self, auth_client):
+        """send_message raises TimeoutError → one terminal event."""
+        buf, handler, op_logger = self._capture_timer_logs()
+        try:
+            with patch("src.services.chat_service.send_message", side_effect=TimeoutError("request timed out")):
+                r = auth_client.post("/api/v1/rico/chat", json={"message": "Hello"})
+            assert r.status_code == 200  # error_response is returned as 200 with error body
+            assert self._terminal_count(buf) == 1, "Timeout must emit exactly one response_returned"
+        finally:
+            op_logger.removeHandler(handler)
+
+    def test_cancellation_emits_exactly_one_terminal_response_returned(self, auth_client):
+        """Real cancellation path: send_message raises asyncio.CancelledError.
+        The router's asyncio.CancelledError handler emits exactly one
+        response_returned with outcome=cancelled, then re-raises.
+
+        We assert terminal_count == 1 (not <= 1) and outcome=cancelled.
+        """
+        import asyncio
+        buf, handler, op_logger = self._capture_timer_logs()
+        try:
+            with patch("src.services.chat_service.send_message", side_effect=asyncio.CancelledError()):
+                # CancelledError propagates out of the endpoint; TestClient
+                # surfaces it. We catch it here to inspect the logs.
+                try:
+                    auth_client.post("/api/v1/rico/chat", json={"message": "Hello"})
+                except asyncio.CancelledError:
+                    pass  # expected — the router re-raises after recording
+            terminal_count = self._terminal_count(buf)
+            assert terminal_count == 1, f"Cancellation must emit exactly one response_returned, got {terminal_count}"
+            assert "outcome=cancelled" in buf.getvalue(), "Cancellation must record outcome=cancelled"
+        finally:
+            op_logger.removeHandler(handler)
+
+    def test_no_provider_on_service_lifecycle_events(self, auth_client):
+        """service_started and service_finished must NOT carry provider=ai or
+        provider=legacy — those are routes, not providers."""
+        buf, handler, op_logger = self._capture_timer_logs()
+        try:
+            with patch("src.services.chat_service.send_message", return_value=_CHAT_RESPONSE):
+                r = auth_client.post("/api/v1/rico/chat", json={"message": "Hello"})
+            assert r.status_code == 200
+            output = buf.getvalue()
+            # service_started/service_finished should not have provider=ai or provider=legacy
+            service_lines = [l for l in output.split("\n") if "service_started" in l or "service_finished" in l]
+            for line in service_lines:
+                assert "provider=ai" not in line, f"service lifecycle must not carry provider=ai: {line}"
+                assert "provider=legacy" not in line, f"service lifecycle must not carry provider=legacy: {line}"
+        finally:
+            op_logger.removeHandler(handler)
+
+
 class TestRicoProfileUpdateRouteExists:
     def test_profile_patch_route_returns_200_and_updates_fields(self, auth_client):
         captured = {}
@@ -1927,7 +2036,7 @@ class TestRicoChatSessionsRoute:
         sid = "0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f"
         seen: dict = {}
 
-        def fake_send(ctx, message, operation_id=None, language=None):
+        def fake_send(ctx, message, operation_id=None, language=None, _timer=None):
             seen["session"] = get_active_chat_session()
             return dict(_CHAT_RESPONSE)
 
