@@ -6,15 +6,13 @@ import { classifyMessage } from "@/components/command/CommandEventAdapter";
 import { AtelierMarkdownScope, CommandEmptyState } from "@/components/command/CommandMessages";
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
-import { RefineSearchPanel } from "@/components/command/RefineSearchPanel";
 import { AtelierCardScope, publicCommandArtifactVars } from "@/components/command/CommandStates";
-import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
-import { useTheme } from "@/contexts/ThemeContext";
 import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
-import { useThinkingStages } from "@/components/command/thinkingStages";
-import { SubscriptionCta } from "@/components/command/SubscriptionCta";
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
+import { RefineSearchPanel } from "@/components/command/RefineSearchPanel";
+import { SubscriptionCta } from "@/components/command/SubscriptionCta";
+import { useThinkingStages } from "@/components/command/thinkingStages";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
 import { MissionContextBar } from "@/components/mission/MissionContextBar";
 import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
@@ -22,20 +20,22 @@ import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
+import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import { ACCOUNT_CONFLICT_TYPE, isAccountConflictResponse } from "@/lib/accountConflict";
-import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
 import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, DEFAULT_CHAT_SESSION_ID, executePermissionAction, fetchChatHistory, fetchChatSessions, fetchMe, getCvQuotaError, logout, mintChatSessionId, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
+import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
 import { buildCopyText, getJobFallbackActions, resolveJobLink } from "@/lib/job-fallback";
-import { mentionsSubscription } from "@/lib/subscriptionCta";
 import { buildAuthHref } from "@/lib/redirect";
 import type { ExecuteAllowedAction, RicoAgenticUi, RicoAttachmentAnalysis, RicoChatAction, RicoProposedChange } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
+import { mentionsSubscription } from "@/lib/subscriptionCta";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
 import type { ApplicationStatus } from "@/types";
@@ -1310,9 +1310,14 @@ export default function CommandPage() {
         const controller = new AbortController();
         abortRef.current = controller;  // expose for cancelRequest()
         stopRequestedRef.current = false; // fresh request — no deliberate stop yet
-        // Hard 45-second timeout — aborts the stream and triggers the AbortError
-        // catch block below, which shows a user-readable message (BUG #4).
-        const timeoutId = setTimeout(() => controller.abort(), 45_000);
+        // Adaptive hard timeout: job-search operations can exceed 45s because the
+        // backend runs intent classification + provider cascade + response generation
+        // sequentially. Non-search messages (profile questions, chat, lifecycle lists)
+        // keep the 45s budget. The operation_id dedup guard on the backend prevents
+        // a second provider cascade even if this timeout fires mid-search.
+        const isJobSearchIntent = isRetryableJobSearchIntent(trimmed);
+        const hardTimeoutMs = isJobSearchIntent ? 90_000 : 45_000;
+        const timeoutId = setTimeout(() => controller.abort(), hardTimeoutMs);
         const slowHintId = setTimeout(() => setSlowHint(true), 5_000);
 
         // Trajectory-analysis reroute: for authenticated users, answer with the
@@ -1528,15 +1533,16 @@ export default function CommandPage() {
                         ]);
                         return;
                     }
-                    // For job-search queries, retry once with a longer timeout
-                    // before giving up so cold-start Render delays don't drop results.
+                    // For job-search queries, the backend operation is usually STILL
+                    // RUNNING when the frontend timeout fires. We do NOT re-send the
+                    // search — we poll the existing operation_id and recover its result.
                     // Standalone retry-only guard (not the chip classifier) so profile
                     // questions and applied/saved lists are never retried as a search,
                     // while real CV/career/comparison searches still are (TC-11 item 7).
                     const isJobSearch = isRetryableJobSearchIntent(trimmed);
                     if (isJobSearch) {
                         const retryId = nextId();
-                        setMessages((prev) => [...prev, { id: retryId, role: "rico", text: t("cmdRetryingSearch") }]);
+                        setMessages((prev) => [...prev, { id: retryId, role: "rico", text: t("cmdSearchStillRunning") }]);
                         try {
                             // Explicitly cancel the timed-out primary controller before
                             // creating the retry.  Without this the primary SSE connection
@@ -1616,7 +1622,7 @@ export default function CommandPage() {
                                 // carrying the SAME operationId so the server guard has the
                                 // final word even if our view of the state was stale.
                             }
-                            const retryTimeoutId = setTimeout(() => retryController.abort(), 45_000);
+                            const retryTimeoutId = setTimeout(() => retryController.abort(), 90_000);
                             const retryRes: ChatApiResponse =
                                 chatAudience === "authenticated"
                                     ? await sendChat(trimmed, retryController.signal, operationId, language, chatThread)
@@ -2804,8 +2810,8 @@ export default function CommandPage() {
                                         failures), and resends the exact original user text.
                                         C3: suppressed for the plain-text Rico turn — RicoReply owns
                                         Copy + Regenerate there (card/fail/stopped rows keep this row). */}
-                                        {!m.streaming && m.role === "rico" && !isEditorialRicoText && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
-                                            <AtelierCardScope authenticated={atelierCards}>
+                                    {!m.streaming && m.role === "rico" && !isEditorialRicoText && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
+                                        <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-2 flex items-center gap-3">
                                                 {m.text && (
                                                     <button
@@ -2831,8 +2837,8 @@ export default function CommandPage() {
                                                     </button>
                                                 )}
                                             </div>
-                                            </AtelierCardScope>
-                                        )}
+                                        </AtelierCardScope>
+                                    )}
                                 </CommandTranscriptStep>
                             );
                         })}
