@@ -1927,7 +1927,7 @@ class TestRicoChatSessionsRoute:
         sid = "0b6f3c1e-8b1a-4f6e-9c3d-2a1b4c5d6e7f"
         seen: dict = {}
 
-        def fake_send(ctx, message, operation_id=None, language=None):
+        def fake_send(ctx, message, operation_id=None, language=None, _timer=None):
             seen["session"] = get_active_chat_session()
             return dict(_CHAT_RESPONSE)
 
