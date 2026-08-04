@@ -6,15 +6,13 @@ import { classifyMessage } from "@/components/command/CommandEventAdapter";
 import { AtelierMarkdownScope, CommandEmptyState } from "@/components/command/CommandMessages";
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
-import { RefineSearchPanel } from "@/components/command/RefineSearchPanel";
 import { AtelierCardScope, publicCommandArtifactVars } from "@/components/command/CommandStates";
-import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
-import { useTheme } from "@/contexts/ThemeContext";
 import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
-import { useThinkingStages } from "@/components/command/thinkingStages";
-import { SubscriptionCta } from "@/components/command/SubscriptionCta";
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
+import { RefineSearchPanel } from "@/components/command/RefineSearchPanel";
+import { SubscriptionCta } from "@/components/command/SubscriptionCta";
+import { useThinkingStages } from "@/components/command/thinkingStages";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
 import { MissionContextBar } from "@/components/mission/MissionContextBar";
 import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
@@ -22,20 +20,23 @@ import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
+import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import { ACCOUNT_CONFLICT_TYPE, isAccountConflictResponse } from "@/lib/accountConflict";
-import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
 import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, DEFAULT_CHAT_SESSION_ID, executePermissionAction, fetchChatHistory, fetchChatSessions, fetchMe, getCvQuotaError, logout, mintChatSessionId, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
+import { getChatTimeoutMs, getRecoveryTimeoutMs } from "@/lib/chat-timeout-policy";
+import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
 import { buildCopyText, getJobFallbackActions, resolveJobLink } from "@/lib/job-fallback";
-import { mentionsSubscription } from "@/lib/subscriptionCta";
 import { buildAuthHref } from "@/lib/redirect";
 import type { ExecuteAllowedAction, RicoAgenticUi, RicoAttachmentAnalysis, RicoChatAction, RicoProposedChange } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
+import { mentionsSubscription } from "@/lib/subscriptionCta";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
 import type { ApplicationStatus } from "@/types";
@@ -44,7 +45,6 @@ import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { isRetryableJobSearchIntent, pickOperationState } from "./operationState";
 import { ensureSessionId, getSessionId } from "./sessionId";
-import { getChatTimeoutMs, getRecoveryTimeoutMs } from "@/lib/chat-timeout-policy";
 
 function prefersReducedMotion(): boolean {
     return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1558,7 +1558,7 @@ export default function CommandPage() {
                             // provider quota. Wait on the operation instead; only a
                             // definitively ended/unknown operation may be re-sent.
                             if (chatAudience === "authenticated") {
-                                const verdict = await pollOperationUntilSettled(operationId, retryController.signal);
+                                const verdict = await pollOperationUntilSettled(operationId, retryController.signal, { budgetMs: OPERATION_POLL_BUDGET_MS });
                                 if (verdict === "aborted") {
                                     setMessages((prev) => prev.map((m) =>
                                         m.id === retryId
@@ -1623,6 +1623,14 @@ export default function CommandPage() {
                             // Recovery resend gets the REMAINING time within the overall
                             // turn cap, NOT a fresh unbounded 90s budget.
                             const recoveryTimeoutMs = getRecoveryTimeoutMs(Date.now() - turnStartMs);
+                            // Zero-budget guard: if the overall turn cap is already
+                            // exhausted, do NOT begin a network call that setTimeout(…, 0)
+                            // would abort before the response arrives. Show the timeout
+                            // fallback with manual Retry instead.
+                            if (recoveryTimeoutMs <= 0) {
+                                setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrTimeout"), isError: true, retryText: trimmed }]);
+                                return;
+                            }
                             const retryTimeoutId = setTimeout(() => retryController.abort(), recoveryTimeoutMs);
                             const retryRes: ChatApiResponse =
                                 chatAudience === "authenticated"
@@ -2811,8 +2819,8 @@ export default function CommandPage() {
                                         failures), and resends the exact original user text.
                                         C3: suppressed for the plain-text Rico turn — RicoReply owns
                                         Copy + Regenerate there (card/fail/stopped rows keep this row). */}
-                                        {!m.streaming && m.role === "rico" && !isEditorialRicoText && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
-                                            <AtelierCardScope authenticated={atelierCards}>
+                                    {!m.streaming && m.role === "rico" && !isEditorialRicoText && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
+                                        <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-2 flex items-center gap-3">
                                                 {m.text && (
                                                     <button
@@ -2838,8 +2846,8 @@ export default function CommandPage() {
                                                     </button>
                                                 )}
                                             </div>
-                                            </AtelierCardScope>
-                                        )}
+                                        </AtelierCardScope>
+                                    )}
                                 </CommandTranscriptStep>
                             );
                         })}
