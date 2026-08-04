@@ -44,6 +44,7 @@ import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { isRetryableJobSearchIntent, pickOperationState } from "./operationState";
 import { ensureSessionId, getSessionId } from "./sessionId";
+import { getChatTimeoutMs, getRecoveryDecision, OPERATION_POLL_BUDGET_MS } from "@/lib/chat-timeout-policy";
 
 function prefersReducedMotion(): boolean {
     return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1310,9 +1311,11 @@ export default function CommandPage() {
         const controller = new AbortController();
         abortRef.current = controller;  // expose for cancelRequest()
         stopRequestedRef.current = false; // fresh request — no deliberate stop yet
-        // Hard 45-second timeout — aborts the stream and triggers the AbortError
-        // catch block below, which shows a user-readable message (BUG #4).
-        const timeoutId = setTimeout(() => controller.abort(), 45_000);
+        // Adaptive hard timeout from the production timeout policy module.
+        // Job-search intents get 90s; all other messages get 45s.
+        const turnStartMs = Date.now();
+        const hardTimeoutMs = getChatTimeoutMs(trimmed);
+        const timeoutId = setTimeout(() => controller.abort(), hardTimeoutMs);
         const slowHintId = setTimeout(() => setSlowHint(true), 5_000);
 
         // Trajectory-analysis reroute: for authenticated users, answer with the
@@ -1528,15 +1531,16 @@ export default function CommandPage() {
                         ]);
                         return;
                     }
-                    // For job-search queries, retry once with a longer timeout
-                    // before giving up so cold-start Render delays don't drop results.
+                    // For job-search queries, the backend operation is usually STILL
+                    // RUNNING when the frontend timeout fires. We do NOT re-send the
+                    // search — we poll the existing operation_id and recover its result.
                     // Standalone retry-only guard (not the chip classifier) so profile
                     // questions and applied/saved lists are never retried as a search,
                     // while real CV/career/comparison searches still are (TC-11 item 7).
                     const isJobSearch = isRetryableJobSearchIntent(trimmed);
                     if (isJobSearch) {
                         const retryId = nextId();
-                        setMessages((prev) => [...prev, { id: retryId, role: "rico", text: t("cmdRetryingSearch") }]);
+                        setMessages((prev) => [...prev, { id: retryId, role: "rico", text: t("cmdSearchStillRunning") }]);
                         try {
                             // Explicitly cancel the timed-out primary controller before
                             // creating the retry.  Without this the primary SSE connection
@@ -1554,7 +1558,7 @@ export default function CommandPage() {
                             // provider quota. Wait on the operation instead; only a
                             // definitively ended/unknown operation may be re-sent.
                             if (chatAudience === "authenticated") {
-                                const verdict = await pollOperationUntilSettled(operationId, retryController.signal);
+                                const verdict = await pollOperationUntilSettled(operationId, retryController.signal, { budgetMs: OPERATION_POLL_BUDGET_MS });
                                 if (verdict === "aborted") {
                                     setMessages((prev) => prev.map((m) =>
                                         m.id === retryId
@@ -1616,7 +1620,20 @@ export default function CommandPage() {
                                 // carrying the SAME operationId so the server guard has the
                                 // final word even if our view of the state was stale.
                             }
-                            const retryTimeoutId = setTimeout(() => retryController.abort(), 45_000);
+                            // Recovery resend decision from the production timeout policy module.
+                            // Zero-budget guard: if the overall turn cap is already exhausted,
+                            // do NOT begin a network call. Update the existing retryId row to
+                            // the timeout fallback state and return immediately.
+                            const recoveryDecision = getRecoveryDecision(Date.now() - turnStartMs);
+                            if (!recoveryDecision.shouldSend) {
+                                setMessages((prev) => prev.map((m) =>
+                                    m.id === retryId
+                                        ? { ...m, text: t("cmdErrTimeout"), isError: true, retryText: trimmed, streaming: false }
+                                        : m
+                                ));
+                                return;
+                            }
+                            const retryTimeoutId = setTimeout(() => retryController.abort(), recoveryDecision.timeoutMs);
                             const retryRes: ChatApiResponse =
                                 chatAudience === "authenticated"
                                     ? await sendChat(trimmed, retryController.signal, operationId, language, chatThread)
