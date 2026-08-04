@@ -64,3 +64,32 @@ export function getRecoveryTimeoutMs(elapsedMs: number): number {
   const remaining = MAX_TOTAL_TURN_MS - elapsedMs;
   return Math.max(0, Math.min(remaining, JOB_SEARCH_TIMEOUT_MS));
 }
+
+/**
+ * Recovery decision returned by `getRecoveryDecision`.
+ * - shouldSend=false means the turn cap is exhausted; the caller must NOT
+ *   issue a network request and must render the timeout fallback instead.
+ * - timeoutMs is the bounded timeout for the recovery send (0 when shouldSend
+ *   is false).
+ */
+export interface RecoveryDecision {
+  shouldSend: boolean;
+  timeoutMs: number;
+}
+
+/**
+ * Production helper that decides whether a recovery resend should be issued
+ * and with what timeout. When the overall turn cap is exhausted, returns
+ * { shouldSend: false, timeoutMs: 0 } so the caller can render the timeout
+ * fallback without beginning a network call that setTimeout(…, 0) would
+ * abort before the response arrives.
+ *
+ * @param elapsedMs - milliseconds since the turn started
+ */
+export function getRecoveryDecision(elapsedMs: number): RecoveryDecision {
+  const timeoutMs = getRecoveryTimeoutMs(elapsedMs);
+  return {
+    shouldSend: timeoutMs > 0,
+    timeoutMs,
+  };
+}
