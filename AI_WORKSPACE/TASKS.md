@@ -7622,9 +7622,56 @@ the sync OR async path.
 #### Caller audit
 
 - src/api/routers/link_verification.py (Pydantic `validate_url` /
+
+---
+
+### TASK-20260804-001 — Synthetic canary account cleanup (Identity and Account domain)
+
+- **Status:** `proposed`
+- **Domain:** Identity and Account
+- **Priority:** low (post-migration cleanup, not a migration blocker)
+- **Authorization:** not yet authorized for implementation
+- **Branch:** none (not yet created)
+- **PR:** none
+
+**Context:**
+
+A synthetic canary account was created during the 2026-08-04 production email
+canary and Cloudflare cutover verification:
+
+- Email: `robenedwan+canary-prod-1785841473@gmail.com`
+- Purpose: production email delivery verification (signup verification, admin
+  notification, password reset) and post-cutover auth smoke
+- Status: email verified, no real user data, no CV, no applications
+- Created: 2026-08-04 during PR #1487 canary
+
+The account is intentionally retained until post-merge verification is complete.
+It is NOT a blocker for the Cloudflare migration closeout (PR #1485 and #1487
+are merged and deployed).
+
+**Cleanup requirements (when authorized):**
+
+1. Dedicated admin-only cleanup command/script — not a public delete-account endpoint
+2. Dry-run first — enumerate all dependent rows before any deletion
+3. Explicit transaction — single atomic operation
+4. Rollback evidence — record the exact state before and after
+5. Audit record — log who ran the cleanup, when, what was deleted
+6. Targeted only to the synthetic canary identity — no broad deletion
+
+**Must NOT:**
+
+- Delete the account manually from Neon via ad-hoc SQL
+- Add a delete-account endpoint inside a migration PR
+- Make this a blocker for the current migration closeout
+- Affect any real user account
+
+**Next action:** after the Cloudflare migration closeout is complete, the owner
+may issue a writer directive to scope and implement this cleanup task as a
+separate PR from updated `main`.
   `validate_urls`): call `_is_safe_url` → `_is_safe_url_sync`; a False now
   raises the existing ValueError("URL is not allowed (SSRF protection)") —
   a clean 422, not a 500. Correct.
+
 - src/services/link_verifier.LinkVerifier.verify_link (async, self-protects
   via `_is_safe_url_async` for the initial URL and every redirect target):
   a False now returns LinkStatus.BLOCKED with no HTTP fetch — honest,
