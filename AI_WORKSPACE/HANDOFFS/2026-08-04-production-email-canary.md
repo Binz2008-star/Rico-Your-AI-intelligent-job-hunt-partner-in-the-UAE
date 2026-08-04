@@ -47,13 +47,13 @@ The Resend HTTPS email adapter is deployed to Railway production and all email f
 
 ## Smoke results
 
-| Flow | Result | Log |
-| --- | --- | --- |
-| Signup verification | PASS | `email_delivery_sent provider=resend status=200` |
-| Admin signup notification | PASS | `email_delivery_sent provider=resend status=200` |
-| Resend verification | PASS (noop, already verified) | `resend_verification_noop` |
-| Forgot password | PASS | `email_delivery_sent provider=resend status=200` |
-| Privacy (9 checks) | ALL PASS | No key, recipient, password, subject, token, SMTP, timeout |
+| Flow | Result | Inbox verified | Log |
+| --- | --- | --- | --- |
+| Signup verification | PASS | YES — Gmail inbox, DKIM/SPF/DMARC pass | `email_delivery_sent provider=resend status=200` |
+| Admin signup notification | YES — VERIFIED — Zoho inbox `info@ricohunt.com` received "New RicoHunt signup — Canary Test" | `email_delivery_sent provider=resend status=200` |
+| Resend verification | PASS (noop, already verified) | N/A | `resend_verification_noop` |
+| Forgot password | PASS | YES — Gmail inbox | `email_delivery_sent provider=resend status=200` |
+| Privacy (9 checks) | ALL PASS | N/A | No key, recipient, password, subject, token, SMTP, timeout |
 
 ## Files changed (3)
 
@@ -70,10 +70,13 @@ The Resend HTTPS email adapter is deployed to Railway production and all email f
 
 ## Remaining actions
 
-- **Owner:** Confirm inbox delivery of all 3 emails (verification, admin notification, password reset) with DKIM/SPF/DMARC pass
-- **Owner:** Decide when to merge PR #1487
-- **Owner:** Rotate the Resend API key (it was transmitted in chat during setup)
-- **Owner:** Delete the synthetic canary account after verification
+- **Owner:** Complete real incognito browser smoke on `https://staging.ricohunt.com/login` (synthetic canary account kept until this is done)
+- **After browser smoke:**
+  1. Delete the synthetic canary account (`robenedwan+canary-prod-1785841473@gmail.com`)
+  2. Rotate the Resend API key (it was transmitted in chat during setup)
+  3. Update Railway with the rotated key
+  4. Send one final low-impact delivery check
+  5. Present PR #1487 for merge approval
 - **Optional:** Remove SMTP vars from Railway after confirming Resend is stable
 
 ## Risks
