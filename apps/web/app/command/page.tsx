@@ -6,13 +6,15 @@ import { classifyMessage } from "@/components/command/CommandEventAdapter";
 import { AtelierMarkdownScope, CommandEmptyState } from "@/components/command/CommandMessages";
 import { CommandObsidianShell } from "@/components/command/CommandObsidianShell";
 import { CommandRail, deriveSessionPicks, type RailPipelineEntry } from "@/components/command/CommandRail";
+import { RefineSearchPanel } from "@/components/command/RefineSearchPanel";
 import { AtelierCardScope, publicCommandArtifactVars } from "@/components/command/CommandStates";
+import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
+import { useTheme } from "@/contexts/ThemeContext";
 import { CommandTranscriptStep, TranscriptWorkingRow } from "@/components/command/CommandTranscriptStep";
+import { useThinkingStages } from "@/components/command/thinkingStages";
+import { SubscriptionCta } from "@/components/command/SubscriptionCta";
 import { JobMatchCardAtelier } from "@/components/command/JobMatchCardAtelier";
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
-import { RefineSearchPanel } from "@/components/command/RefineSearchPanel";
-import { SubscriptionCta } from "@/components/command/SubscriptionCta";
-import { useThinkingStages } from "@/components/command/thinkingStages";
 import { CVDraftCard } from "@/components/mission/CVDraftCard";
 import { MissionContextBar } from "@/components/mission/MissionContextBar";
 import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
@@ -20,22 +22,20 @@ import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
-import { WORKSPACE_THEME, WorkspaceThemeContext } from "@/components/workspace/theme";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import { ACCOUNT_CONFLICT_TYPE, isAccountConflictResponse } from "@/lib/accountConflict";
+import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
 import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, DEFAULT_CHAT_SESSION_ID, executePermissionAction, fetchChatHistory, fetchChatSessions, fetchMe, getCvQuotaError, logout, mintChatSessionId, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
-import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
 import { buildCopyText, getJobFallbackActions, resolveJobLink } from "@/lib/job-fallback";
+import { mentionsSubscription } from "@/lib/subscriptionCta";
 import { buildAuthHref } from "@/lib/redirect";
 import type { ExecuteAllowedAction, RicoAgenticUi, RicoAttachmentAnalysis, RicoChatAction, RicoProposedChange } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
-import { mentionsSubscription } from "@/lib/subscriptionCta";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
 import type { ApplicationStatus } from "@/types";
@@ -44,6 +44,7 @@ import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { isRetryableJobSearchIntent, pickOperationState } from "./operationState";
 import { ensureSessionId, getSessionId } from "./sessionId";
+import { getChatTimeoutMs, getRecoveryTimeoutMs } from "@/lib/chat-timeout-policy";
 
 function prefersReducedMotion(): boolean {
     return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1310,13 +1311,10 @@ export default function CommandPage() {
         const controller = new AbortController();
         abortRef.current = controller;  // expose for cancelRequest()
         stopRequestedRef.current = false; // fresh request — no deliberate stop yet
-        // Adaptive hard timeout: job-search operations can exceed 45s because the
-        // backend runs intent classification + provider cascade + response generation
-        // sequentially. Non-search messages (profile questions, chat, lifecycle lists)
-        // keep the 45s budget. The operation_id dedup guard on the backend prevents
-        // a second provider cascade even if this timeout fires mid-search.
-        const isJobSearchIntent = isRetryableJobSearchIntent(trimmed);
-        const hardTimeoutMs = isJobSearchIntent ? 90_000 : 45_000;
+        // Adaptive hard timeout from the production timeout policy module.
+        // Job-search intents get 90s; all other messages get 45s.
+        const turnStartMs = Date.now();
+        const hardTimeoutMs = getChatTimeoutMs(trimmed);
         const timeoutId = setTimeout(() => controller.abort(), hardTimeoutMs);
         const slowHintId = setTimeout(() => setSlowHint(true), 5_000);
 
@@ -1622,7 +1620,10 @@ export default function CommandPage() {
                                 // carrying the SAME operationId so the server guard has the
                                 // final word even if our view of the state was stale.
                             }
-                            const retryTimeoutId = setTimeout(() => retryController.abort(), 90_000);
+                            // Recovery resend gets the REMAINING time within the overall
+                            // turn cap, NOT a fresh unbounded 90s budget.
+                            const recoveryTimeoutMs = getRecoveryTimeoutMs(Date.now() - turnStartMs);
+                            const retryTimeoutId = setTimeout(() => retryController.abort(), recoveryTimeoutMs);
                             const retryRes: ChatApiResponse =
                                 chatAudience === "authenticated"
                                     ? await sendChat(trimmed, retryController.signal, operationId, language, chatThread)
@@ -2810,8 +2811,8 @@ export default function CommandPage() {
                                         failures), and resends the exact original user text.
                                         C3: suppressed for the plain-text Rico turn — RicoReply owns
                                         Copy + Regenerate there (card/fail/stopped rows keep this row). */}
-                                    {!m.streaming && m.role === "rico" && !isEditorialRicoText && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
-                                        <AtelierCardScope authenticated={atelierCards}>
+                                        {!m.streaming && m.role === "rico" && !isEditorialRicoText && (m.text || ((m.isError || m.type === "stopped") && m.retryText)) && (
+                                            <AtelierCardScope authenticated={atelierCards}>
                                             <div className="mt-2 flex items-center gap-3">
                                                 {m.text && (
                                                     <button
@@ -2837,8 +2838,8 @@ export default function CommandPage() {
                                                     </button>
                                                 )}
                                             </div>
-                                        </AtelierCardScope>
-                                    )}
+                                            </AtelierCardScope>
+                                        )}
                                 </CommandTranscriptStep>
                             );
                         })}
