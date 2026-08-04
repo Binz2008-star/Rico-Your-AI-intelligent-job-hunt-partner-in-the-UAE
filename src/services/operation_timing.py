@@ -45,15 +45,18 @@ KNOWN_STAGES = frozenset({
 TERMINAL_STAGES = frozenset({"response_returned"})
 
 # ── Provider category contract ────────────────────────────────────────────────
+# NOTE: "ai" and "legacy" are NOT providers — they are service routes.
+# Route classification lives on intent_resolved (outcome), not on
+# service_started/service_finished (provider).
 KNOWN_PROVIDERS = frozenset({
-    "jsearch", "jooble", "adzuna", "cache", "internal", "none", "ai", "legacy",
+    "jsearch", "jooble", "adzuna", "cache", "internal", "none",
 })
 
 # ── Outcome category contract ─────────────────────────────────────────────────
 KNOWN_OUTCOMES = frozenset({
     "ok", "timeout", "rate_limited", "quota", "empty", "error",
     "profile", "no_profile", "ai", "legacy", "preflight_terminal",
-    "cancelled", "unknown",
+    "http_exception", "cancelled", "unknown",
 })
 
 # ── operation_id sanitization ─────────────────────────────────────────────────
@@ -66,34 +69,32 @@ _OP_ID_FALLBACK = "unknown"
 def sanitize_operation_id(raw: Optional[str]) -> str:
     """Sanitize a client-provided operation_id for logging.
 
-    - If the input contains ANY control characters or newlines, it is treated
-      as a log-injection attempt and falls back to 'unknown' — we do NOT
-      strip-and-keep because the remaining concatenated text is still
-      attacker-controlled and could forge log lines.
-    - Enforces a strict character allowlist (alphanumeric, dash, underscore, dot).
-    - Bounds length to 128 characters.
-    - Falls back to 'unknown' if empty, None, or contains no allowed characters.
+    Strict enforcement: the ENTIRE input must match [A-Za-z0-9._-]+.
+    Any value that contains a disallowed character (including control chars,
+    newlines, spaces, @, #, etc.) falls back to 'unknown'.
+
+    We do NOT strip invalid characters and retain the rest, because that can
+    create identifier collisions (e.g. "op-1@#$" and "op-1!#$" would both
+    become "op-1").
+
+    - Bounds length to 128 characters (truncation only for valid prefixes).
+    - Falls back to 'unknown' if empty, None, or contains any disallowed char.
     """
     if raw is None:
         return _OP_ID_FALLBACK
     raw_str = str(raw)
-    # If ANY control characters or newlines are present, reject entirely —
-    # stripping them would leave concatenated attacker text that could still
-    # be confusing in log analysis (log injection defense).
+    # Reject if ANY control characters or newlines are present.
     if re.search(r"[\x00-\x1f\x7f\r\n\t]", raw_str):
         return _OP_ID_FALLBACK
     cleaned = raw_str.strip()
     if not cleaned:
         return _OP_ID_FALLBACK
-    # Bound length
+    # Strict: the ENTIRE string must match the allowlist. No strip-and-keep.
+    if not _OP_ID_ALLOWLIST.match(cleaned):
+        return _OP_ID_FALLBACK
+    # Bound length (truncation preserves a valid prefix).
     if len(cleaned) > _OP_ID_MAX_LEN:
         cleaned = cleaned[:_OP_ID_MAX_LEN]
-    # Check allowlist — if it contains disallowed chars, extract only allowed
-    if not _OP_ID_ALLOWLIST.match(cleaned):
-        extracted = re.sub(r"[^A-Za-z0-9._-]", "", cleaned)
-        if not extracted:
-            return _OP_ID_FALLBACK
-        cleaned = extracted[:_OP_ID_MAX_LEN]
     return cleaned
 
 

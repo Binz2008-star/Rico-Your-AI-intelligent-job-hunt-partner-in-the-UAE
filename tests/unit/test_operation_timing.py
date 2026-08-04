@@ -92,11 +92,19 @@ class TestSanitizeOperationId:
         result = sanitize_operation_id(raw)
         assert "\t" not in result
 
-    def test_disallowed_chars_stripped(self):
+    def test_disallowed_chars_reject_entire_value(self):
+        # Strict: any disallowed char → unknown (no strip-and-keep)
         raw = "op-123@#$%^&*()"
         result = sanitize_operation_id(raw)
-        # Only allowed chars remain
-        assert re.match(r"^[A-Za-z0-9._-]+$", result)
+        assert result == "unknown"
+
+    def test_partial_valid_prefix_still_rejected(self):
+        # Even if a valid prefix exists, any disallowed char rejects the whole value.
+        # This prevents identifier collisions (op-1@#$ and op-1!#$ both → unknown,
+        # not both → op-1).
+        raw = "op-123@extra"
+        result = sanitize_operation_id(raw)
+        assert result == "unknown"
 
     def test_all_disallowed_returns_unknown(self):
         raw = "@#$%^&*()"
@@ -154,6 +162,18 @@ class TestStageEnforcement:
         assert "response_generation_finished" not in KNOWN_STAGES
         assert "result_persisted" not in KNOWN_STAGES
 
+    def test_ai_and_legacy_not_in_providers(self):
+        # "ai" and "legacy" are service routes, not provider identities.
+        # Route classification lives on intent_resolved (outcome), not on
+        # service_started/service_finished (provider).
+        assert "ai" not in KNOWN_PROVIDERS
+        assert "legacy" not in KNOWN_PROVIDERS
+
+    def test_http_exception_in_known_outcomes(self):
+        # http_exception must be in the allowed outcome contract so the
+        # router can emit it for HTTPException terminal events.
+        assert "http_exception" in KNOWN_OUTCOMES
+
 
 class TestProviderOutcomeEnforcement:
     def test_known_provider_logged_as_is(self, captured_logs):
@@ -169,6 +189,29 @@ class TestProviderOutcomeEnforcement:
         timer.record("service_finished", provider="https://evil.com/payload")
         parsed = _parse_log_line(_all_log_lines(buf)[0])
         assert parsed["provider"] == "unknown"
+
+    def test_ai_route_not_accepted_as_provider(self, captured_logs):
+        # "ai" is a route, not a provider — must be classified as "unknown"
+        buf, logger = captured_logs
+        timer = OperationTimer("op-p3", log=logger)
+        timer.record("service_finished", provider="ai")
+        parsed = _parse_log_line(_all_log_lines(buf)[0])
+        assert parsed["provider"] == "unknown"
+
+    def test_legacy_route_not_accepted_as_provider(self, captured_logs):
+        buf, logger = captured_logs
+        timer = OperationTimer("op-p4", log=logger)
+        timer.record("service_finished", provider="legacy")
+        parsed = _parse_log_line(_all_log_lines(buf)[0])
+        assert parsed["provider"] == "unknown"
+
+    def test_http_exception_outcome_logged_as_is(self, captured_logs):
+        buf, logger = captured_logs
+        timer = OperationTimer("op-p5", log=logger)
+        timer.record("response_returned", http_status=401, outcome="http_exception")
+        parsed = _parse_log_line(_all_log_lines(buf)[0])
+        assert parsed["outcome"] == "http_exception"
+        assert parsed["http_status"] == "401"
 
     def test_known_outcome_logged_as_is(self, captured_logs):
         buf, logger = captured_logs
@@ -253,8 +296,8 @@ class TestPrivacyContract:
         timer.record("request_received")
         timer.record("identity_profile_ready", outcome="profile")
         timer.record("intent_resolved", outcome="legacy")
-        timer.record("service_started", provider="legacy")
-        timer.record("service_finished", provider="legacy")
+        timer.record("service_started")
+        timer.record("service_finished", outcome="ok")
         timer.record("response_returned", http_status=200)
         output = buf.getvalue()
         for sensitive in self.SENSITIVE_VALUES:

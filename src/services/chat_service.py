@@ -205,7 +205,7 @@ def send_message(
     pre = run_chat_preflight(ctx, message)
     if pre.terminal is not None:
         if _timer is not None:
-            _timer.record("response_returned", outcome="preflight_terminal")
+            _timer.record("service_finished", outcome="preflight_terminal")
         return pre.terminal
     gate = pre.gate
 
@@ -275,16 +275,26 @@ def send_message(
         _timer.record("intent_resolved", outcome=_route)
     if (decision.should_use_ai or _force_ai) and not _force_real_search:
         if _timer is not None:
-            _timer.record("service_started", provider="ai")
-        result = _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
+            _timer.record("service_started")
+        try:
+            result = _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
+        except Exception:
+            if _timer is not None:
+                _timer.record("service_finished", outcome="error")
+            raise
         if _timer is not None:
-            _timer.record("service_finished", provider="ai")
+            _timer.record("service_finished", outcome="ok")
     else:
         if _timer is not None:
-            _timer.record("service_started", provider="legacy")
-        result = _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)
+            _timer.record("service_started")
+        try:
+            result = _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)
+        except Exception:
+            if _timer is not None:
+                _timer.record("service_finished", outcome="error")
+            raise
         if _timer is not None:
-            _timer.record("service_finished", provider="legacy")
+            _timer.record("service_finished", outcome="ok")
 
     # Warn authenticated users who are approaching their AI-message allowance.
     # Threshold: ≤10 remaining. For the Free daily allowance (10/day) this shows
