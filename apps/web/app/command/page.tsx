@@ -29,7 +29,7 @@ import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpda
 import { ApiError, clearChatHistory, confirmCVProfile, cvQuotaCountSuffix, DEFAULT_CHAT_SESSION_ID, executePermissionAction, fetchChatHistory, fetchChatSessions, fetchMe, getCvQuotaError, logout, mintChatSessionId, mintOperationId, pollOperationUntilSettled, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
-import { getChatTimeoutMs, getRecoveryTimeoutMs } from "@/lib/chat-timeout-policy";
+import { getChatTimeoutMs, getRecoveryTimeoutMs, OPERATION_POLL_BUDGET_MS } from "@/lib/chat-timeout-policy";
 import { historyRowId, nextId, WELCOME_MESSAGE_ID } from "@/lib/commandMessageIds";
 import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
 import { buildCopyText, getJobFallbackActions, resolveJobLink } from "@/lib/job-fallback";
