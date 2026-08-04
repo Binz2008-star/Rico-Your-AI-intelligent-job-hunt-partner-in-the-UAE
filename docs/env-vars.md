@@ -112,6 +112,23 @@ RICO_REDIS_URL=
 EMAIL_USER=
 EMAIL_PASS=
 EMAIL_TO=
+
+# Email provider selection (typed/validated).
+# resend   — use Resend HTTPS API only; requires RESEND_API_KEY.
+#            Never falls back to SMTP. Railway production default.
+# smtp     — use the existing SMTP implementation explicitly.
+#            Intended for local/non-Railway compatibility only.
+# disabled — return False immediately with a sanitized warning.
+# Unset defaults to "smtp" for backward compatibility.
+EMAIL_PROVIDER=smtp
+
+# Resend HTTPS API key (required when EMAIL_PROVIDER=resend).
+# Generate from the Resend dashboard → API Keys.
+RESEND_API_KEY=
+
+# Sender address and display name used by all providers.
+EMAIL_FROM=info@ricohunt.com
+EMAIL_FROM_NAME=Rico Hunt
 ```
 
 ## Frontend / Vercel
