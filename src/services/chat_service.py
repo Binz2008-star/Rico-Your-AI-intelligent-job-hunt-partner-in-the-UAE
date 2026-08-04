@@ -205,7 +205,7 @@ def send_message(
     pre = run_chat_preflight(ctx, message)
     if pre.terminal is not None:
         if _timer is not None:
-            _timer.record("service_finished", outcome="preflight_terminal")
+            _timer.record("preflight_terminal", outcome="preflight_terminal")
         return pre.terminal
     gate = pre.gate
 

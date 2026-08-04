@@ -277,20 +277,26 @@ class TestOperationTimingRouterTerminalEvents:
         finally:
             op_logger.removeHandler(handler)
 
-    def test_cancellation_emits_at_most_one_terminal_response_returned(self, auth_client):
-        """send_message raises an exception simulating cancellation → at most
-        one terminal event.
+    def test_cancellation_emits_exactly_one_terminal_response_returned(self, auth_client):
+        """Real cancellation path: send_message raises asyncio.CancelledError.
+        The router's asyncio.CancelledError handler emits exactly one
+        response_returned with outcome=cancelled, then re-raises.
 
-        The terminal guard in OperationTimer ensures that even if multiple
-        exception paths try to record response_returned, only the first one
-        succeeds. We verify the count is <= 1.
+        We assert terminal_count == 1 (not <= 1) and outcome=cancelled.
         """
+        import asyncio
         buf, handler, op_logger = self._capture_timer_logs()
         try:
-            with patch("src.services.chat_service.send_message", side_effect=RuntimeError("cancelled by user")):
-                r = auth_client.post("/api/v1/rico/chat", json={"message": "Hello"})
+            with patch("src.services.chat_service.send_message", side_effect=asyncio.CancelledError()):
+                # CancelledError propagates out of the endpoint; TestClient
+                # surfaces it. We catch it here to inspect the logs.
+                try:
+                    auth_client.post("/api/v1/rico/chat", json={"message": "Hello"})
+                except asyncio.CancelledError:
+                    pass  # expected — the router re-raises after recording
             terminal_count = self._terminal_count(buf)
-            assert terminal_count <= 1, f"Cancellation must emit at most one response_returned, got {terminal_count}"
+            assert terminal_count == 1, f"Cancellation must emit exactly one response_returned, got {terminal_count}"
+            assert "outcome=cancelled" in buf.getvalue(), "Cancellation must record outcome=cancelled"
         finally:
             op_logger.removeHandler(handler)
 

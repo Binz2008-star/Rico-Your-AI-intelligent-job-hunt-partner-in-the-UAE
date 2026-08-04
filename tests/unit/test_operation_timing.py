@@ -150,9 +150,17 @@ class TestStageEnforcement:
             "intent_resolved",
             "service_started",
             "service_finished",
+            "preflight_terminal",
             "response_returned",
         }
         assert expected == KNOWN_STAGES
+
+    def test_preflight_terminal_is_conditional_not_sequential(self):
+        # preflight_terminal is emitted INSTEAD of service_started/service_finished
+        # when the preflight gate returns a terminal response. It must NOT imply
+        # a service_started → service_finished chain that never occurred.
+        assert "preflight_terminal" in KNOWN_STAGES
+        assert "preflight_terminal" not in TERMINAL_STAGES
 
     def test_provider_search_stages_removed(self):
         # The old unapproved stages must NOT be present

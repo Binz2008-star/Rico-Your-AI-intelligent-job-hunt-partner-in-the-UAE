@@ -33,12 +33,22 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 # ── Stage contract (enforced at runtime) ──────────────────────────────────────
+# Lifecycle stages (sequential for a normal request):
+#   request_received → identity_profile_ready → intent_resolved
+#   → service_started → service_finished → response_returned (terminal)
+#
+# Conditional stage:
+#   preflight_terminal — emitted INSTEAD of service_started/service_finished
+#   when the preflight gate returns a terminal response (policy block,
+#   entitlement gate, etc.). This is truthful: the service lifecycle never
+#   started, so we do not emit service_started/service_finished for this path.
 KNOWN_STAGES = frozenset({
     "request_received",
     "identity_profile_ready",
     "intent_resolved",
     "service_started",
     "service_finished",
+    "preflight_terminal",
     "response_returned",
 })
 
