@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "rico-web",
+  "account_id": "e116bffa88ab746d1d9c04250688ce76",
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": [
+    // Enable Node.js APIs in the Workers runtime.
+    // See https://developers.cloudflare.com/workers/configuration/compatibility-flags/#nodejs-compatibility-flag
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      // Must match the "name" field above.
+      "service": "rico-web"
+    }
+  ],
+  "kv_namespaces": [
+    // Optional: enable Next.js incremental cache via Workers KV.
+    // Create a KV namespace and uncomment with its real id to use it.
+    // {
+    //   "binding": "NEXT_INC_CACHE_KV",
+    //   "id": "<BINDING_ID>"
+    // }
+  ]
+}

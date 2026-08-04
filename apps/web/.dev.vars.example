@@ -1,0 +1,6 @@
+# OpenNext / Wrangler local-Worker dev vars.
+# Copy to .dev.vars (gitignored) for local `opennextjs-cloudflare preview`.
+#
+# NEXTJS_ENV selects which Next.js .env file environment is loaded when the
+# Worker runs locally. Defaults to "production" when unset.
+NEXTJS_ENV=development

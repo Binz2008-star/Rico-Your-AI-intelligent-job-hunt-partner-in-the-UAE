@@ -24,21 +24,32 @@ const backendUrl =
 // so `next dev` and the Playwright e2e suite (which runs `npm run dev`) work,
 // while the deployed production build stays strict (no 'unsafe-eval').
 const isDev = process.env.NODE_ENV !== "production";
+// Vercel Analytics script/beacon endpoints — only needed when running on Vercel.
+// On Cloudflare Workers (or other platforms) @vercel/analytics is not rendered,
+// so these CSP entries are omitted to reduce external request surface.
+const isVercel = !!process.env.NEXT_PUBLIC_VERCEL_ENV || !!process.env.VERCEL;
+const vercelAnalyticsCsp = isVercel
+    ? " https://va.vercel-scripts.com"
+    : "";
+const vercelAnalyticsConnect = isVercel
+    ? " https://vitals.vercel-insights.com"
+    : "";
 const csp = [
     "default-src 'self'",
-    // https://va.vercel-scripts.com — @vercel/analytics beacon script
+    // https://va.vercel-scripts.com — @vercel/analytics beacon script (Vercel only)
     // https://cdn.paddle.com — Paddle.js v2 client SDK (loaded lazily by lib/paddle.ts)
     // Inline scripts (theme-init, lang-init, JSON-LD) are permitted via 'unsafe-inline'.
     // 'unsafe-eval' is dev-only (Next HMR/React Refresh) — never in production.
-    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://va.vercel-scripts.com https://cdn.paddle.com`,
+    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}${vercelAnalyticsCsp} https://cdn.paddle.com`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
-    // https://rico-job-automation-api.onrender.com — backend proxy (existing)
+    // https://api.ricohunt.com — backend proxy (Railway; replaced suspended Render host)
     // https://sandbox-api.paddle.com — Paddle.js SDK calls during sandbox checkout
     // https://api.paddle.com          — Paddle.js SDK calls during production checkout
+    // https://vitals.vercel-insights.com — @vercel/analytics beacon (Vercel only)
     // ws://localhost:3000 — dev-only Next.js HMR WebSocket
-    `connect-src 'self' https://rico-job-automation-api.onrender.com https://vitals.vercel-insights.com https://sandbox-api.paddle.com https://api.paddle.com${isDev ? " ws://localhost:3000 http://localhost:3000" : ""}`,
+    `connect-src 'self' https://api.ricohunt.com${vercelAnalyticsConnect} https://sandbox-api.paddle.com https://api.paddle.com${isDev ? " ws://localhost:3000 http://localhost:3000" : ""}`,
     // https://checkout.paddle.com — Paddle overlay checkout iframe (sandbox and production share this host)
     "frame-src 'self' https://checkout.paddle.com",
     "frame-ancestors 'none'",

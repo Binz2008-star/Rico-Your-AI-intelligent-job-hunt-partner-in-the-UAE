@@ -59,6 +59,10 @@ dashboard.html
 node_modules/
 apps/web/node_modules/
 apps/web/.next/
+apps/web/.open-next/
+apps/web/.dev.vars
+apps/web/cloudflare-env.d.ts
+apps/web/.wrangler/
 apps/web/.vercel/
 .vercel/
 *.tsbuildinfo

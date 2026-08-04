@@ -5,6 +5,9 @@ const config = [
   {
     ignores: [
       'tsconfig.tsbuildinfo',
+      '.open-next/**',
+      '.wrangler/**',
+      'cloudflare-env.d.ts',
     ],
   },
 ];
