@@ -269,3 +269,18 @@ If the agent fails twice on the same task:
 5. Restart from a clean branch/worktree.
 
 Before restarting, follow the Continuity and Handoff Gate above and record what was tried and why it failed — a clean restart without a handoff is how the next session repeats the same failed attempt.
+
+## Corridor Security Guardrails
+
+Hard runtime, data, and CI guardrails derived from the Rico production security model.
+
+1. Never log CV text, email, phone, tokens, cookies, or provider payloads.
+2. Authenticated identity must be derived server-side. Never trust `user_id`/`email`/approval supplied by the model or request payload.
+3. No SQL string concatenation. Use parameterized queries or `psycopg2.sql` composition.
+4. No success claim before authoritative persistence/read-back.
+5. No production DB write, migration, deployment, or secret change from an agent.
+6. AI tools may request an action but may not authorize or approve it.
+7. Application submission always requires explicit server-verified approval.
+8. External professional drafts may not include unconfirmed identity or contact data.
+9. Normal CI must not contact external AI, job, email, billing, or DNS services.
+10. Secrets must never enter Git, PR bodies, logs, screenshots, fixtures, or AI prompts.
