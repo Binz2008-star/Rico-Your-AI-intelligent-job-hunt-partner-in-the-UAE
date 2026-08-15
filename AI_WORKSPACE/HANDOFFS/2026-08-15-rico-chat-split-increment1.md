@@ -2,7 +2,20 @@
 
 ## Objective
 Split `src/rico_chat_api.py` (24,305 lines) into `src/chat/*` modules. One task,
-one branch/PR (blocked — see Git below). Logic-preserving move only.
+one branch/PR. Logic-preserving move only.
+
+## Status update (2026-08-15, post-commit)
+- Committed on branch **`refactor/rico-chat-split-increment1`** (PR-ready).
+  Rebasing onto live `origin/main` (`5098f290`) required cherry-picking the two
+  original commits (`7fe8d1dc`, `65238b71`, based on `obs/...` `0150c0fa`) onto
+  main. New SHAs: **`c6fd3280`** (refactor) and **`52ba813c`** (docs). Local
+  backup of the pre-rebase commits kept at `refactor/rico-chat-split-increment1-old`.
+- Files: `src/chat/__init__.py`, `src/chat/intent_router.py`, `src/rico_chat_api.py`,
+  this handoff. `+370 / -244` vs `main`.
+- Re-verified after rebase: 137 tests passed (see Verification).
+- Pre-existing dirty files in the real repo (2 broken-junction `.claude/skills/*`
+  deletions, untracked `0`, `Rico_AI_Architecture_Roadmap_2026.md`, `plans/`, and
+  the 2026-08-04 handoff) were left **untouched and unstaged** — not part of this work.
 
 ## Workspace / Git state (CRITICAL)
 - Working checkout: `X:\rico\Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE-worktree-main`
@@ -54,6 +67,7 @@ one branch/PR (blocked — see Git below). Logic-preserving move only.
   re-export pattern (used here) does NOT fix class-method patch targets.
 
 ## Stop conditions
-- No push/PR/merge/deploy without fixing git and owner approval.
+- No push/PR/merge/deploy without owner approval and live-GitHub verification.
 - Do not run the full `tests/` suite locally (many env-dependent hangs).
-- Restore path: copy `.bak` back over `src/rico_chat_api.py`.
+- Restore path: `git checkout 0150c0fa -- src/rico_chat_api.py` (or copy the
+  `.bak` at `C:\Users\loyal\AppData\Local\Temp\opencode\rico_chat_api.py.bak`).
