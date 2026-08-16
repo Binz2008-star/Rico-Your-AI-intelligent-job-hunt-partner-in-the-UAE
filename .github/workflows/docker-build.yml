@@ -28,8 +28,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_OWNER: ${{ github.repository_owner }}
-  IMAGE_NAME: ${{ github.event.repository.name }}
 
 concurrency:
   group: docker-build-${{ github.ref }}
@@ -42,6 +40,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      # GHCR image paths must be lowercase; github.repository preserves the
+      # repo's original (possibly mixed-case) spelling, so fold it explicitly.
+      - name: Set lowercase GHCR namespace
+        run: |
+          NS=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAMESPACE=$NS" >> "$GITHUB_ENV"
+          REFTAG=$(echo '${{ github.ref_name }}' | tr '/' '-')
+          echo "REFTAG=$REFTAG" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
@@ -84,10 +91,12 @@ jobs:
           if [ "$UID_OUT" = "0" ]; then echo "::error::image runs as root"; exit 1; fi
           echo "non-root uid=$UID_OUT"
 
-      - name: Start test Postgres
+      - name: Start test Postgres (shared bridge network)
         run: |
-          docker run -d --name ci-pg -e POSTGRES_USER=rico -e POSTGRES_PASSWORD=rico \
-            -e POSTGRES_DB=rico -p 5432:5432 postgres:16
+          docker network create smoke-net
+          docker run -d --name ci-pg --network smoke-net \
+            -e POSTGRES_USER=rico -e POSTGRES_PASSWORD=rico -e POSTGRES_DB=rico \
+            postgres:16
           for i in $(seq 1 20); do
             docker exec ci-pg pg_isready -U rico -d rico >/dev/null 2>&1 && break
             sleep 2
@@ -95,11 +104,15 @@ jobs:
 
       - name: Container smoke — migrate, /health, /ready, docs gated
         run: |
-          DSN="postgresql://rico:rico@localhost:5432/rico"
+          # On Linux runners a container's localhost is its OWN namespace — the
+          # app/migrate containers must reach Postgres by service name on a
+          # shared user-defined network, never by host-published port.
+          DSN="postgresql://rico:rico@ci-pg:5432/rico"
           # 1) migration one-shot on a FRESH database
-          docker run --rm rico-backend:ci python -m src.db_migrations --dsn "$DSN" apply || exit 1
+          docker run --rm --network smoke-net rico-backend:ci \
+            python -m src.db_migrations --dsn "$DSN" apply || exit 1
           # 2) run the app in production mode (strict startup check, docs off)
-          docker run -d --name ci-api -p 58001:8000 \
+          docker run -d --name ci-api --network smoke-net -p 58001:8000 \
             -e DATABASE_URL="$DSN" \
             -e JWT_SECRET="cismoke-secret-01234567890123456789" \
             -e GUEST_CAPABILITY_SECRET="cismoke-guest-0123456789012345678" \
@@ -119,6 +132,7 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:58001/ready)" = "200"
           test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:58001/api/docs)" = "404"
           docker stop ci-api ci-pg >/dev/null
+          docker network rm smoke-net >/dev/null
           echo "container smoke: OK"
 
       # ── Push immutable backend image ──────────────────────────────────────
@@ -130,8 +144,8 @@ jobs:
           file: Dockerfile.backend
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-backend:sha-${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-backend:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-backend:sha-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-backend:${{ env.REFTAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -141,6 +155,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      # GHCR image paths must be lowercase; github.repository preserves the
+      # repo's original (possibly mixed-case) spelling, so fold it explicitly.
+      - name: Set lowercase GHCR namespace
+        run: |
+          NS=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAMESPACE=$NS" >> "$GITHUB_ENV"
+          REFTAG=$(echo '${{ github.ref_name }}' | tr '/' '-')
+          echo "REFTAG=$REFTAG" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
@@ -191,8 +214,8 @@ jobs:
           file: apps/web/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-web:sha-${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-web:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-web:sha-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-web:${{ env.REFTAG }}
           build-args: |
             BACKEND_API_BASE_URL=https://api.ricohunt.com
             NEXT_PUBLIC_API_BASE_URL=https://api.ricohunt.com

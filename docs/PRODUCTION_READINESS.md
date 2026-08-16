@@ -17,24 +17,27 @@ the stopped-Render notes no longer apply).
 PRODUCTION BLOCKED — EXTERNAL ACTIONS ONLY
 ```
 
-The codebase is frozen, tested, and Docker-ready. All in-repo blockers are
-closed. The remaining gate items are external platform actions — see
+The codebase is frozen, tested, and Docker-ready. PR #1489 (production
+hardening) is **merged into main** (merge commit `d12624b2`) and the Docker
+build pipeline was fixed and validated in PR #1491. All post-merge CI is
+green. The remaining gate items are external platform actions — see
 [`LAUNCH_STATUS.md`](../LAUNCH_STATUS.md) for the full snapshot and the exact
 owner checklist:
 
-1. Rotate/revoke production credentials (Neon, JWT_SECRET, admin, Paddle,
-   Telegram, Jotform, cron secret, providers, SMTP; revoke the historical
-   commit-`1882e8b9` RapidAPI/Gmail values if active).
-2. Enable GitHub branch protection on `main` (required checks: QA Tests/pytest,
-   QA Tests/postgres-integration, QA Tests/playwright, QA Tests/frontend,
-   Workflow Security Guards, Test Enumeration Guard, Log Privacy Ratchet).
-3. Confirm the Railway/production deploy gate (green-commit-only).
-4. Record the first CI coverage baseline and tighten `--cov-fail-under` to
-   `baseline − tolerance`.
+1. **Railway deploy gate (currently FAILING).** `https://api.ricohunt.com/health`
+   returns HTTP 404 (backend not serving); the post-merge `Deploy to
+   Production` verification failed and green-commit-only deploy is unconfirmed.
+2. **Vercel account blocked** (external; `Vercel` check = "Account is blocked").
+3. Enable GitHub branch protection on `main` (NOT enabled; required checks:
+   QA Tests/pytest, QA Tests/postgres-integration, QA Tests/playwright,
+   QA Tests/frontend, Workflow Security Guards, Test Enumeration Guard,
+   Log Privacy Ratchet — all green and ready to mark required).
+4. Tighten `--cov-fail-under` from 30% toward the recorded first-main-CI
+   baseline (**57.55%**) minus tolerance (CTO decision).
 5. Confirm the Neon connection ceiling against
    `replicas × DATABASE_POOL_MAXCONN + cron pool + migrate one-shot`.
-6. Push to main / tag to build and push immutable Docker images, then set
-   `${BACKEND_IMAGE}` / `${WEB_IMAGE}` in `docker-compose.prod.yml`.
+6. Set `${BACKEND_IMAGE}` / `${WEB_IMAGE}` in `docker-compose.prod.yml` to the
+   GHCR immutable `sha-<git-sha>` images pushed by the pipeline.
 
 ## Runtime model
 

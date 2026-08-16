@@ -2,7 +2,8 @@
 
 > **Authoritative "where we are" snapshot.** Updated 2026-08-16 by the CTO
 > engineering review after Phases 1–3 + launch-blocker closure + Docker
-> production hardening. This supersedes the older headers in
+> production hardening, **including the post-merge verification of PR #1489 and
+> the Docker-build follow-up fix**. This supersedes the older headers in
 > `AI_WORKSPACE/CURRENT_STATE.md` for launch-state purposes.
 
 ## Verdict
@@ -12,10 +13,40 @@ PRODUCTION BLOCKED — EXTERNAL ACTIONS ONLY
 ```
 
 The codebase is **code-frozen**, fully tested, secret-free, and Docker-ready.
-Every remaining launch item requires access to external platforms (credential
-rotation, GitHub branch protection, Railway deploy gating, first CI coverage
-baseline, Neon capacity confirmation, first registry push). There are **no
-unexplained code or test blockers**.
+PR #1489 (production hardening) is **MERGED into main** and post-merge CI is
+green. Every remaining launch item requires access to external platforms
+(Railway deploy serving, Vercel account status, GitHub branch protection, Neon
+capacity confirmation, coverage-floor tightening, `${BACKEND_IMAGE}` /
+`${WEB_IMAGE}` injection). There are **no unexplained code or test blockers**.
+
+## Post-merge verification (2026-08-16)
+
+- PR #1489 **merged** into `main` 2026-08-16T20:02:52Z via the normal GitHub
+  merge mechanism (merge commit `d12624b2`); PR state `MERGED`; no conflicts.
+- Post-merge CI on the merge commit — **all green**:
+  - `QA Tests` (pytest / postgres-integration / playwright / frontend): success.
+  - `Workflow Security Guards`: success. `Test Enumeration Guard`: success.
+  - Coverage measured on the first main CI run: **57.55%** total (floor is 30%).
+  - `Docker Production Build` (push-to-main run) initially **failed** with two
+    genuine workflow defects — fixed in PR #1491 (merged) and validated
+    end-to-end by `workflow_dispatch` before landing:
+      1. GHCR rejects mixed-case image paths; `github.repository` preserves the
+         repo's original spelling, so the namespace is folded lowercase at
+         runtime (`IMAGE_NAMESPACE`).
+      2. On Linux runners a container's `localhost` is its own namespace — the
+         backend smoke's containers now share a user-defined bridge network and
+         reach Postgres via the `ci-pg` service name.
+      Ref-tag is sanitized (`/` → `-`) so the workflow is valid on any trigger.
+  - Images are pushed to GHCR under **immutable `sha-<git-sha>` references**
+    (plus the ref tag).
+- `Deploy to Production` (deploy-production.yml) post-merge **FAILED**:
+  `https://api.ricohunt.com/health` → HTTP 404, i.e. Railway is not currently
+  serving the backend. This is the **external Railway deploy gate** — no code
+  change was made to bypass it.
+- `Vercel` check: **FAIL** — "Account is blocked" (external platform account
+  blockage; not a code or gate issue).
+- GitHub **branch protection on `main`: NOT enabled** (API returns "Branch not
+  protected") — external launch-control blocker.
 
 ## What is DONE (in-repo)
 
@@ -88,25 +119,35 @@ unexplained code or test blockers**.
   200 on DB down), `/ready` 200 → 503 → recovery, docs 404, graceful shutdown,
   restart healthy, image secret scan clean.
 
-## EXTERNAL LAUNCH BLOCKERS (owner actions — not done)
+## EXTERNAL LAUNCH BLOCKERS (owner actions — still open)
 
-1. **Rotate all credentials** (Neon, JWT_SECRET, ADMIN, Paddle, Stripe-revoke,
-   Telegram, Jotform, RICO_CRON_SECRET, Render, OpenAI, DeepSeek, HuggingFace,
-   RapidAPI, SMTP/Resend, LinkedIn, NaukriGulf). See
-   `LAUNCH_STATUS.md` → "Credential rotation checklist" below.
-2. **Revoke historical credentials** from commit `1882e8b9` if still active:
-   `RAPIDAPI_KEY`, `EMAIL_USER` (Gmail app password), `EMAIL_PASS`.
-3. **Enable GitHub branch protection** on `main` requiring: `QA Tests /
-   pytest`, `QA Tests / postgres-integration`, `QA Tests / playwright`,
-   `QA Tests / frontend`, `Workflow Security Guards`, `Test Enumeration
-   Guard`, `Log Privacy Ratchet`.
-4. **Confirm the Railway/production deploy gate** (green-commit-only).
-5. **First CI coverage run** → record baseline → set `--cov-fail-under` to
-   `baseline − tolerance`.
-6. **Confirm the Neon connection ceiling** against
+Credential **rotation is CLOSED** (owner completed). What remains is external:
+
+1. **Railway deploy gate — currently FAILING.** `https://api.ricohunt.com/health`
+   returns HTTP 404 (backend not serving). The post-merge `Deploy to
+   Production` verification workflow correctly failed; deploy
+   green-commit-only is **not yet confirmed**. This must be resolved in
+   Railway before production can go live.
+2. **Vercel account blocked.** The `Vercel` CI check fails with "Account is
+   blocked" — an external platform account blockage on Vercel's side. It is
+   **not** a code or gate defect; do not weaken CI to bypass it.
+3. **Enable GitHub branch protection** on `main` (currently NOT enabled)
+   requiring: `QA Tests / pytest`, `QA Tests / postgres-integration`,
+   `QA Tests / playwright`, `QA Tests / frontend`, `Workflow Security
+   Guards`, `Test Enumeration Guard`, `Log Privacy Ratchet`. All are verified
+   green on main and ready to be marked required.
+4. **Tighten the coverage floor.** First main-CI baseline recorded: **57.55%**
+   (`--cov-fail-under` is 30%). Tighten to `baseline − tolerance` (CTO
+   decision) only after the baseline is stable.
+5. **Confirm the Neon connection ceiling** against
    `replicas × DATABASE_POOL_MAXCONN (5) + cron pool (5) + migrate (1)`.
-7. **Push to main / tag** → `docker-build.yml` pushes immutable images to
-   GHCR → set `${BACKEND_IMAGE}` / `${WEB_IMAGE}` in `docker-compose.prod.yml`.
+6. **Set `${BACKEND_IMAGE}` / `${WEB_IMAGE}`** in `docker-compose.prod.yml` to
+   the GHCR immutable `sha-<git-sha>` images now pushed by the pipeline.
+7. **Historical credential purge** (separate authorized security-maintenance
+   action, not a launch gate): revoke commit-`1882e8b9` `RAPIDAPI_KEY`,
+   `EMAIL_USER`, `EMAIL_PASS` if still active; rewrite history only under
+   explicit authorization. Do **not** recreate the deleted
+   `rico-job-automation-api.env`; secrets are runtime-only.
 
 ## How to migrate a database
 
