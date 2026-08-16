@@ -1287,6 +1287,46 @@ class TestArabicStoreFailureSanitization:
         assert "Reply YES" not in msg
         assert "Tell me the role and location again" in msg
 
+    def test_arabic_label_without_action_is_removed_on_store_failure(self):
+        """An Arabic confirmation-style label without an explicit action is removed."""
+        api = _make_api(pending=None)
+        api._pjs_repo.store.return_value = False
+        from src.rico_chat_api import make_offer
+        result = {
+            "type": "clarification",
+            "message": _AR_KNOWN_MSG,
+            "options": [
+                {"label": "نعم، ابحث عن محاسب"},
+                {"action": "show_search_filters", "label": "Look at search filters"},
+            ],
+        }
+        result[api._PJS_OFFER_FIELD] = make_offer(role=_AR_KNOWN_ROLE, reason="known_but_off_profile")
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+
+        labels = [o.get("label") for o in finalized.get("options", [])]
+        assert "نعم، ابحث عن محاسب" not in labels
+        assert "Look at search filters" in labels
+        assert "قل لي المسمى الوظيفي والموقع مرة أخرى" in finalized.get("message", "")
+
+    def test_explicit_non_confirm_action_is_preserved(self):
+        """A non-confirm_search action must be preserved even if its label looks search-like."""
+        api = _make_api(pending=None)
+        api._pjs_repo.store.return_value = False
+        from src.rico_chat_api import make_offer
+        result = {
+            "type": "clarification",
+            "message": "Should I search for Accountant jobs anyway?",
+            "options": [
+                {"action": "show_search_filters", "label": "Look at search filters"},
+            ],
+        }
+        result[api._PJS_OFFER_FIELD] = make_offer(role="Accountant", reason="known_but_off_profile")
+        finalized = api._finalize_pending_job_search_offer("u1", result)
+
+        labels = [o.get("label") for o in finalized.get("options", [])]
+        assert labels == ["Look at search filters"]
+        assert "Tell me the role and location again" in finalized.get("message", "")
+
     def test_arabic_store_success_preserves_cta(self):
         """When storage succeeds the Arabic confirmation text and the
         confirm_search option remain; the marker is removed; store runs once."""
