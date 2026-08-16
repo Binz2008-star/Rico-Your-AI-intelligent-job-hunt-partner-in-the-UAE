@@ -21,15 +21,18 @@ capacity confirmation, coverage-floor tightening, `${BACKEND_IMAGE}` /
 
 ## Post-merge verification (2026-08-16)
 
+- **Current `main` HEAD: `6b2a4042`** (PR #1491 merge commit). History:
+  `d12624b2` = PR #1489 merge, `6b2a4042` = PR #1491 (Docker-build fix) merge.
 - PR #1489 **merged** into `main` 2026-08-16T20:02:52Z via the normal GitHub
-  merge mechanism (merge commit `d12624b2`); PR state `MERGED`; no conflicts.
+  merge mechanism; PR state `MERGED`; no conflicts.
 - Post-merge CI on the merge commit — **all green**:
   - `QA Tests` (pytest / postgres-integration / playwright / frontend): success.
   - `Workflow Security Guards`: success. `Test Enumeration Guard`: success.
   - Coverage measured on the first main CI run: **57.55%** total (floor is 30%).
   - `Docker Production Build` (push-to-main run) initially **failed** with two
-    genuine workflow defects — fixed in PR #1491 (merged) and validated
-    end-to-end by `workflow_dispatch` before landing:
+    genuine workflow defects — fixed in PR #1491 (merged, `6b2a4042`),
+    validated end-to-end by `workflow_dispatch` before landing, and green on
+    the post-merge main run (4m32s). The defects were:
       1. GHCR rejects mixed-case image paths; `github.repository` preserves the
          repo's original spelling, so the namespace is folded lowercase at
          runtime (`IMAGE_NAMESPACE`).
