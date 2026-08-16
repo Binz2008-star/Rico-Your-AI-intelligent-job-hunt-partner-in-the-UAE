@@ -28,9 +28,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  # github.repository is always lowercase (owner/repo); GHCR tag paths must be
-  # lowercase, and github.repository_owner may be mixed-case.
-  IMAGE_NAMESPACE: ${{ github.repository }}
 
 concurrency:
   group: docker-build-${{ github.ref }}
@@ -43,6 +40,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      # GHCR image paths must be lowercase; github.repository preserves the
+      # repo's original (possibly mixed-case) spelling, so fold it explicitly.
+      - name: Set lowercase GHCR namespace
+        run: |
+          NS=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAMESPACE=$NS" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
@@ -149,6 +153,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      # GHCR image paths must be lowercase; github.repository preserves the
+      # repo's original (possibly mixed-case) spelling, so fold it explicitly.
+      - name: Set lowercase GHCR namespace
+        run: |
+          NS=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAMESPACE=$NS" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
