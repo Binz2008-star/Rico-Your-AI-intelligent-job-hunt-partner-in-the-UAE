@@ -56,6 +56,21 @@ def mock_rico_dependencies(monkeypatch):
 
     mock_system.run_for_profile = MagicMock(return_value={"matches": []})
 
+    # AI entitlement gate: pinned to ALLOWED for the whole unit suite. Unit
+    # tests verify message ROUTING / handlers in isolation; the DB-backed gate
+    # fails closed when usage cannot be verified (correct in production), which
+    # would short-circuit every authenticated message to the quota terminal
+    # under a fake/unreachable test DATABASE_URL. The gate's fail-closed
+    # behavior is covered by the top-level suites (test_billing_quota_fail_open,
+    # test_public_ai_usage, test_sse_stream_quota_enforcement). A test that
+    # needs a specific gate outcome overrides this with its own patch.
+    from src.services.subscription_gating import GateCheck
+
+    _allowed_gate = GateCheck(
+        allowed=True, feature="monthly_ai_message_limit",
+        usage=0, limit=300, remaining=300, plan="free", message="ok",
+    )
+
     # _route return value must look like a RouteResult:
     # tool_name, entities, tool_args, confirmation_prompt, source
     mock_route_result = MagicMock()
@@ -70,6 +85,10 @@ def mock_rico_dependencies(monkeypatch):
         patch("src.rico_agent.RicoAgent",              return_value=mock_agent),
         patch("src.rico_repo_adapter.RicoSystem",      return_value=mock_system),
         patch("src.rico_openai_agent.RicoOpenAIAgent", return_value=mock_openai),
+        patch(
+            "src.services.subscription_gating.check_ai_message_allowed",
+            return_value=_allowed_gate,
+        ),
         # DB / onboarding repos
         patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
         patch("src.rico_chat_api.mark_onboarding_complete"),
