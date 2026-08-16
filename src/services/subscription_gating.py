@@ -17,6 +17,34 @@ logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 
 
+class QuotaUnavailableError(Exception):
+    """Usage or entitlement state could NOT be verified (e.g. DB unreachable).
+
+    The quota gates turn this into a denial/503. Billing is a security boundary:
+    granting unlimited usage because we cannot count it is never acceptable
+    (#1096 reversed — fail closed, not open).
+    """
+
+
+def quota_unavailable_response() -> dict[str, Any]:
+    """A terminal chat response for "usage cannot be verified right now".
+
+    Deliberately NOT a subscription_limit GateCheck: the user has not actually
+    hit a limit, so an upgrade CTA would be wrong. This is a transient-outage
+    message the transports already return as a terminal reply.
+    """
+    return {
+        "type": "quota_unavailable",
+        "intent": "quota_unavailable",
+        "message": (
+            "I can't verify your usage right now because the service is "
+            "temporarily unavailable. Please try again in a few minutes."
+        ),
+        "response_source": "subscription_gate",
+        "next_action": "retry",
+    }
+
+
 @dataclass(frozen=True)
 class GateCheck:
     allowed: bool
@@ -148,6 +176,8 @@ def _db_user_uuid(user_id: str) -> str | None:
 
         db = RicoDB()
         if not db.available:
+            # No DB configured at all — the JSON-store/local product mode, not an
+            # outage. Fall through to the in-process store.
             return None
         bundle = db.get_user_bundle(user_id)
         return str(bundle["id"]) if bundle else None
@@ -158,8 +188,15 @@ def _db_user_uuid(user_id: str) -> str | None:
         # Failing open on quota and cost is the wrong direction; propagate instead.
         raise
     except Exception:
-        logger.debug("subscription_gating: db user lookup failed user=%s", user_ref(user_id), exc_info=True)
-        return None
+        # DB is configured but unreachable/failing: the source of truth for usage
+        # cannot be consulted. Surface a typed "cannot verify" so the gates deny
+        # (fail closed) instead of granting untracked usage.
+        logger.warning(
+            "subscription_gating: db user lookup unavailable user=%s",
+            user_ref(user_id),
+            exc_info=True,
+        )
+        raise QuotaUnavailableError("database unavailable for usage verification") from None
 
 
 def count_monthly_ai_messages(user_id: str, since: datetime) -> int:
@@ -191,7 +228,14 @@ def count_monthly_ai_messages(user_id: str, since: datetime) -> int:
             finally:
                 conn.close()
         except Exception:
-            logger.debug("subscription_gating: DB chat usage count failed user=%s", user_ref(user_id), exc_info=True)
+            # The identity lookup succeeded but the authoritative count failed —
+            # usage cannot be verified. Fail closed.
+            logger.warning(
+                "subscription_gating: DB chat usage count unavailable user=%s",
+                user_ref(user_id),
+                exc_info=True,
+            )
+            raise QuotaUnavailableError("chat usage count unavailable") from None
 
     try:
         from src.rico_memory import RicoMemoryStore
@@ -213,8 +257,12 @@ def count_monthly_ai_messages(user_id: str, since: datetime) -> int:
                 count += 1
         return count
     except Exception:
-        logger.debug("subscription_gating: memory chat usage count failed user=%s", user_ref(user_id), exc_info=True)
-        return 0
+        logger.warning(
+            "subscription_gating: memory chat usage count unavailable user=%s",
+            user_ref(user_id),
+            exc_info=True,
+        )
+        raise QuotaUnavailableError("chat usage count unavailable") from None
 
 
 def count_saved_jobs(user_id: str) -> int:
@@ -244,8 +292,10 @@ def count_saved_jobs(user_id: str) -> int:
     except Exception:
         logger.debug("subscription_gating: saved jobs count failed user=%s", user_ref(user_id), exc_info=True)
 
-    # Fail open (#1096): when both DB and fallback are unavailable, return 0
-    # so the quota check allows the request rather than blocking the user.
+    # Deliberate fail-open (#1096): in the DB-backed SaaS the save WRITE itself
+    # requires the DB and fails during an outage anyway, so allowing here cannot
+    # grant saved storage that survives; in the legacy JSON mode there is no
+    # billing relationship to protect. Fail-open keeps the degraded mode working.
     return 0
 
 
@@ -314,7 +364,31 @@ def check_ai_message_allowed_for_user(user_id: str) -> GateCheck:
         window_start = _usage_window_start(resolved)
         reset_at = getattr(resolved.subscription, "current_period_end", None)
 
-    usage = count_monthly_ai_messages(user_id, window_start)
+    try:
+        usage = count_monthly_ai_messages(user_id, window_start)
+    except QuotaUnavailableError:
+        # Usage cannot be verified (e.g. DB down) — fail closed: deny rather than
+        # grant untracked AI usage. Propagate so the chat layer can return a
+        # transient-outage terminal instead of a misleading "you hit your limit"
+        # upgrade prompt.
+        raise
+
+    # Public/guest turns keyed on this account (registered-email anti-dodge on
+    # /chat/public + /chat/stream/public) count toward the SAME allowance. The
+    # ledger is content-free, so no message text is written into the account's
+    # history. Read failures degrade to 0 (the authenticated count above is the
+    # primary source).
+    try:
+        from src.repositories.ai_usage_repo import count_public_ai_usage
+
+        usage += count_public_ai_usage(user_id, window_start)
+    except Exception:
+        logger.debug(
+            "subscription_gating: public usage count failed user=%s",
+            user_ref(user_id),
+            exc_info=True,
+        )
+
     base = _build_gate_check(user_id, "monthly_ai_message_limit", usage, resolved)
 
     if base.limit is None:
@@ -351,6 +425,9 @@ def enforce_saved_job_allowed(user_id: str) -> None:
     try:
         check = _build_gate_check(user_id, "saved_jobs_limit", count_saved_jobs(user_id))
     except Exception:
+        # Deliberate fail-open (#1096): the save WRITE itself needs the DB and
+        # fails during an outage, so allowing here cannot create surviving
+        # storage; this keeps the legacy JSON mode working (no billing there).
         logger.debug("subscription_gating: saved job gate failed open user=%s", user_ref(user_id), exc_info=True)
         return
     if not check.allowed:
@@ -413,7 +490,10 @@ _UPGRADE_HINTS: dict[str, str] = {
 def count_user_documents(user_id: str, doc_type: str) -> int:
     """Count documents of *doc_type* stored for *user_id* using RicoDB.
 
-    Returns 0 when DB is unavailable so callers can still proceed.
+    Returns 0 when the count cannot be verified (DB down) so the quota gate can
+    fail open. Deliberate: a document UPLOAD in the DB-backed SaaS persists to
+    user_documents and therefore fails during an outage anyway — allowing here
+    cannot create surviving storage — and the legacy JSON mode has no billing.
     """
     try:
         from src.rico_db import RicoDB
@@ -451,9 +531,9 @@ def enforce_document_quota(user_id: str, doc_type: str) -> None:
     Uses 422 (Unprocessable Entity) rather than 402 so the frontend can inspect
     the detail without triggering a global payment-required redirect.
 
-    Fails open (#1096): if the quota check itself errors (DB unavailable,
-    plan resolution failure), the request is allowed rather than blocking
-    a legitimate user behind a transient infrastructure issue.
+    Fails open (#1096): if the quota check itself errors (DB unavailable), the
+    upload is allowed — the upload itself persists to user_documents and fails
+    during an outage regardless, so no surviving storage can be granted.
     """
     from fastapi import HTTPException
 

@@ -1,129 +1,60 @@
 # Production Readiness
 
-This document records the current production-readiness state after the deployment and fix pass. It is operational documentation, not a claim that every future Rico feature is production-ready.
+Operational documentation. **Updated 2026-08-16** — supersedes the earlier
+Render-era status (the retired `rico-job-automation-api.onrender.com` host and
+the stopped-Render notes no longer apply).
 
 ## Production URLs
 
 - Frontend: `https://ricohunt.com`
-- Backend: `https://rico-job-automation-api.onrender.com`
-- Correct Vercel project: `web`
-- Correct production domain for authenticated testing: `https://ricohunt.com`
+- Backend: `https://api.ricohunt.com` (canonical, Railway; see
+  `.github/workflows/deploy-production.yml`)
+- Local/Docker: `docker-compose.prod.yml` exposes backend `:8000`, web `:3000`
 
-Notes:
+## Launch status
 
-- Current status: PR #191 merged. Backend deployment is blocked by the Render subscription being stopped. Do not deploy or validate Stripe or Telegram production flows until Render is restored.
-- Vercel preview or deployment URLs such as `web-*.vercel.app` do not share `.ricohunt.com` cookies. They may show guest mode or `Sign in` / `Sign up` even when the production domain is already authenticated.
-- The repo-root Vercel project `job-automation-system-1-main` is not the frontend deployment target.
+```
+PRODUCTION BLOCKED — EXTERNAL ACTIONS ONLY
+```
 
-## Temporary Render Outage Status
+The codebase is frozen, tested, and Docker-ready. All in-repo blockers are
+closed. The remaining gate items are external platform actions — see
+[`LAUNCH_STATUS.md`](../LAUNCH_STATUS.md) for the full snapshot and the exact
+owner checklist:
 
-Render currently requires subscription restoration before backend validation can continue. Keep Vercel/frontend online, but treat backend-dependent features as unavailable. Anything that depends on the backend can fail or produce misleading results while Render is stopped.
+1. Rotate/revoke production credentials (Neon, JWT_SECRET, admin, Paddle,
+   Telegram, Jotform, cron secret, providers, SMTP; revoke the historical
+   commit-`1882e8b9` RapidAPI/Gmail values if active).
+2. Enable GitHub branch protection on `main` (required checks: QA Tests/pytest,
+   QA Tests/postgres-integration, QA Tests/playwright, QA Tests/frontend,
+   Workflow Security Guards, Test Enumeration Guard, Log Privacy Ratchet).
+3. Confirm the Railway/production deploy gate (green-commit-only).
+4. Record the first CI coverage baseline and tighten `--cov-fail-under` to
+   `baseline − tolerance`.
+5. Confirm the Neon connection ceiling against
+   `replicas × DATABASE_POOL_MAXCONN + cron pool + migrate one-shot`.
+6. Push to main / tag to build and push immutable Docker images, then set
+   `${BACKEND_IMAGE}` / `${WEB_IMAGE}` in `docker-compose.prod.yml`.
 
-Safe work while Render is stopped:
+## Runtime model
 
-- Keep PR #191 merged and documented
-- Keep migration files ready
-- Prepare manual Neon SQL steps
-- Keep the temporary frontend maintenance message for subscription/backend features
-- Disable or hide paid subscription checkout buttons until the backend is back
-- Prepare the exact Render environment variables needed
+- **Docker is the canonical runtime.** Non-root containers, `/health` liveness
+  (never restart-looped on a DB blip), `/ready` readiness (503 on DB-down in
+  production), production docs gated off by default, strict startup schema
+  check (`RICO_RUN_STARTUP_MIGRATIONS=false`), migrations via the explicit
+  runner / `migrate` one-shot.
+- **Secrets are runtime-only.** No plaintext secret files; `docker-compose.prod.yml`
+  uses `${VAR:?required}` placeholders; `.dockerignore` excludes every
+  credential artifact from images.
+- **Bounded DB pool** (default max 5/process) with rollback-on-release,
+  dead-connection discard, and statement timeout.
+- **Scheduler:** exactly one web process per container, no in-process
+  scheduler; scheduled jobs run via external cron guarded by the Redis
+  distributed lock (fail-closed).
 
-Blocked until Render is restored:
+## Verification
 
-- Neon migration validation against the live backend
-- `TELEGRAM_WEBHOOK_SECRET` production verification
-- Telegram webhook production test
-- Stripe webhook test events
-- `/health` backend verification
-- `/api/docs` backend verification
-- `/subscription/plans` backend verification
-- `/subscription/me` backend verification
-- Render deploy
-
-Do not do these yet:
-
-- Do not run Stripe test events.
-- Do not advertise subscription checkout as live.
-- Do not validate Telegram webhook production behavior.
-- Do not mark deployment complete.
-
-Resume in this order when Render is back:
-
-1. Restore Render service/subscription.
-2. Set `TELEGRAM_WEBHOOK_SECRET` in Render.
-3. Apply migrations 015 and 016 to Neon.
-4. Deploy latest `main` to Render.
-5. Verify `/health`, `/api/docs`, `/subscription/plans`, and `/subscription/me`.
-6. Configure Telegram webhook secret.
-7. Run Stripe test events.
-8. Only then mark backend/subscription flow operational.
-
-## Required Frontend Vercel Environment Variables
-
-Set these on the `web` Vercel project:
-
-- `NEXT_PUBLIC_APP_URL=https://ricohunt.com`
-- `NEXT_PUBLIC_API_BASE_URL=https://rico-job-automation-api.onrender.com`
-- `BACKEND_API_BASE_URL=https://rico-job-automation-api.onrender.com`
-
-## Backend Production Environment Expectations
-
-- `RICO_ENV=production`
-- `COOKIE_SECURE=true`
-- `COOKIE_DOMAIN=.ricohunt.com`
-- `APP_URL=https://ricohunt.com`
-- `CORS_ORIGINS` includes:
-  - `https://ricohunt.com`
-  - `https://www.ricohunt.com`
-
-## Confirmed Route Behavior
-
-- `/` is the public landing page
-- `/command` is the canonical Rico command interface
-- `/chat` redirects to `/command`
-- `/orchestrate` redirects to `/command`
-- `/upload` supports CV upload and onboarding
-- `/login` and `/signup` are the authentication routes
-
-## Confirmed Live Behavior
-
-- Authenticated `/proxy/api/v1/me` returns `200`
-- Anonymous `/proxy/api/v1/me` returns `401` by design
-- `/proxy/api/v1/auth/me` can return guest/public state
-- Signup, login, and logout work with `HttpOnly` secure cookies
-- Logout clears `access_token`
-- CV upload works
-- Bad or non-CV uploads are rejected safely
-- `confirm-cv-profile` works
-- Authenticated Rico chat works and returns non-empty messages
-- `PATCH /proxy/api/v1/rico/profile` returns `200` after `b2cd2ae`
-- The command UI can render the Rico flow in production
-
-## Recent Production Fix Commits
-
-- `f69e501 fix: use app URL for production metadata`
-- `fec80cb fix: reject empty rico chat replies`
-- `b2cd2ae fix: restore rico profile patch validation`
-
-## Validation Checklist
-
-Backend:
-
-- `python -m pytest tests/test_rico_routes.py -q`
-- `python -m pytest tests/test_rico_chat_empty_message.py -q`
-
-Frontend:
-
-- `npm run build`
-- `npx tsc --noEmit --pretty false`
-- `npx vitest run __tests__/chat-confirm-profile.test.tsx`
-
-## Known Non-Blockers
-
-- Anonymous `/api/v1/me` returning `401` is expected
-- `web-*.vercel.app` preview URLs may show guest state because auth cookies are scoped to `.ricohunt.com`
-- Untracked local-only paths may exist:
-  - `.windsurf/`
-  - `mcp.json`
-  - `rico-ai-frontend/`
-- Lint debt is separate unless already resolved
+See `LAUNCH_STATUS.md` → "Test evidence" and "Docker production model".
+Backend 710 / frontend 992 / real-Postgres 186 (2 documented pre-existing
+routing-drift failures, unenumerated). All CI guards pass; all 28 workflows
+SHA-pinned.

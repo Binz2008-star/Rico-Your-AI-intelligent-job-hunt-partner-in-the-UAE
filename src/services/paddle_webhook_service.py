@@ -15,6 +15,10 @@ Security contract:
     transition and cleared once the subscription recovers; entitlement
     resolution (src/subscription_plans.py) honors a 7-day grace window
     from that timestamp before downgrading to Free.
+  - Money-back safety: transaction.refunded, transaction.disputed and
+    subscription.terminated/revoked downgrade entitlement immediately
+    (plan=free, status=inactive/canceled) — a refund/chargeback must never
+    leave paid entitlement active.
 
 Approved plan scope: Rico Monthly only (single plan, single price).
 """
@@ -454,6 +458,98 @@ def _handle_transaction_payment_failed(
     return {"customer_id": customer_id}
 
 
+def _handle_refund_like(
+    event_id: str,
+    event_type: str,
+    payload: Dict[str, Any],
+    db_module: Any,
+) -> Dict[str, Any]:
+    """Downgrade entitlement when money has been clawed back.
+
+    Handles transaction.refunded / transaction.disputed (chargeback). Paddle does
+    not guarantee a subscription.canceled accompanies these, so without this the
+    subscription row keeps status='active' and the user keeps paid entitlement
+    after the refund/chargeback — a silent revenue leak. Downgrading to
+    plan='free', status='inactive' fails closed (no entitlement); any legitimate
+    re-subscription later re-activates via its own subscription.* event, whose
+    occurred_at staleness guard still applies.
+    """
+    from src.repositories import paddle_repo
+
+    data = payload.get("data", {})
+    sub_id = data.get("subscription_id") or data.get("id")
+    customer_id = data.get("customer_id")
+
+    # DB-first identity resolution — never trust browser-supplied fields.
+    user_id = (
+        _user_id_from_sub_id(db_module, sub_id)
+        or _user_id_from_customer(db_module, customer_id)
+    )
+    if not user_id:
+        logger.warning("paddle_%s_no_user_id sub_id=%s", event_type, sub_id)
+        return {"sub_id": sub_id, "warning": "no_user_id"}
+
+    occurred_at = _parse_occurred_at(payload)
+    paddle_repo.upsert_paddle_subscription(
+        db_module,
+        user_id=user_id,
+        paddle_subscription_id=sub_id,
+        paddle_customer_id=customer_id,
+        plan="free",
+        status="inactive",
+        occurred_at=occurred_at,
+        clear_past_due=True,
+    )
+    logger.warning(
+        "paddle_%s_entitlement_revoked user_id=%s sub_id=%s",
+        event_type,
+        user_id,
+        sub_id,
+    )
+    return {"user_id": user_id, "subscription_status": "inactive"}
+
+
+def _handle_subscription_terminated(
+    event_id: str,
+    event_type: str,
+    payload: Dict[str, Any],
+    db_module: Any,
+) -> Dict[str, Any]:
+    """subscription.terminated / subscription.revoked — entitlement is over.
+
+    A terminated/revoked subscription must never keep paid entitlement. Status
+    'canceled' mirrors the existing subscription.canceled handling.
+    """
+    from src.repositories import paddle_repo
+
+    data = payload.get("data", {})
+    sub_id = data.get("id")
+    customer_id = data.get("customer_id")
+
+    user_id = (
+        _user_id_from_sub_id(db_module, sub_id)
+        or _user_id_from_customer(db_module, customer_id)
+    )
+    if not user_id:
+        logger.warning("paddle_%s_no_user_id sub_id=%s", event_type, sub_id)
+        return {"sub_id": sub_id, "warning": "no_user_id"}
+
+    occurred_at = _parse_occurred_at(payload)
+    paddle_repo.upsert_paddle_subscription(
+        db_module,
+        user_id=user_id,
+        paddle_subscription_id=sub_id,
+        paddle_customer_id=customer_id,
+        plan="free",
+        status="canceled",
+        canceled_at=data.get("canceled_at") or data.get("terminated_at"),
+        occurred_at=occurred_at,
+        clear_past_due=True,
+    )
+    logger.info("paddle_%s user_id=%s sub_id=%s", event_type, user_id, sub_id)
+    return {"user_id": user_id, "subscription_status": "canceled"}
+
+
 # ---------------------------------------------------------------------------
 # Handler dispatch table
 # ---------------------------------------------------------------------------
@@ -468,8 +564,12 @@ _HANDLERS = {
     "subscription.resumed":      _handle_subscription_status,
     "subscription.canceled":     _handle_subscription_canceled,
     "subscription.cancelled":    _handle_subscription_canceled,  # Paddle UK spelling
+    "subscription.terminated":   _handle_subscription_terminated,
+    "subscription.revoked":      _handle_subscription_terminated,
     "transaction.completed":     _handle_transaction_completed,
     "transaction.payment_failed": _handle_transaction_payment_failed,
+    "transaction.refunded":      _handle_refund_like,
+    "transaction.disputed":      _handle_refund_like,  # chargeback
 }
 
 

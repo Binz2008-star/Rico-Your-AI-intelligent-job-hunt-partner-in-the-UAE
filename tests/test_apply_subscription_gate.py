@@ -40,7 +40,17 @@ def _make_resolved(enabled: bool):
     return resolved
 
 
-JOB = {"link": "https://naukrigulf.com/hse-1", "title": "HSE Manager", "company": "Acme"}
+# A real ingested job carries trusted provenance (source_backed=True +
+# provider) so the apply-link trust gate (job_link_trust Gate 4) accepts its
+# URL — the gate rejects untrusted/placeholder links regardless of plan. This
+# keeps the subscription gate (the subject under test) the deciding factor.
+JOB = {
+    "link": "https://naukrigulf.com/hse-1",
+    "title": "HSE Manager",
+    "company": "Acme",
+    "provider": "naukrigulf",
+    "source_backed": True,
+}
 
 
 # ── apply_to_job: global flag off ────────────────────────────────────────────

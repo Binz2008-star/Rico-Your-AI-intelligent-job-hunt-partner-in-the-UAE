@@ -127,7 +127,15 @@ class TestApplyEndpointJobValidation:
 
 
 class TestJsonBackedJobActions:
-    """Regression tests for JSON-backed job action lookup after PR #131."""
+    """Regression tests for JSON-backed job action lookup after PR #131.
+
+    A job listed in job_history.json can be resolved and acted on even when the
+    DB is unavailable. NOTE (post-BUG-14): authenticated actions persist through
+    applications_repo (DB) — the legacy JSON file is deliberately NOT a write
+    target for authenticated users, so these tests mock the canonical repo to
+    verify the route-level contract (job resolution, dedup, persistence through
+    the canonical store) rather than the removed legacy JSON write path.
+    """
 
     @pytest.fixture
     def mock_json_history(self, monkeypatch):
@@ -146,6 +154,28 @@ class TestJsonBackedJobActions:
         monkeypatch.setattr("src.services.jobs_service.is_db_available", lambda: False)
         # Mock get_applied_jobs to return empty
         monkeypatch.setattr("src.applications.get_applied_jobs", lambda: [])
+
+        # Canonical repo fake: dedup read misses until a write happens, then the
+        # write succeeds and the read-back reports the saved status (what the
+        # save route's mutation-confirmation guard verifies).
+        class _Repo:
+            def __init__(self):
+                self.created = False
+
+            def find_by_job_id(self, job_key, user_id=None):
+                return {"status": "saved"} if self.created else None
+
+            def create(self, **kwargs):
+                self.created = True
+                return True
+
+        repo = _Repo()
+        monkeypatch.setattr(
+            "src.repositories.applications_repo.find_by_job_id", repo.find_by_job_id
+        )
+        monkeypatch.setattr(
+            "src.repositories.applications_repo.create", repo.create
+        )
 
     def test_skip_json_backed_listed_job_succeeds(self, client_with_auth, mock_json_history, monkeypatch):
         """skip endpoint should succeed for jobs listed in job_history.json."""

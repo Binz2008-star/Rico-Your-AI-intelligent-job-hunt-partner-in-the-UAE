@@ -1,5 +1,37 @@
 # Current State
 
+> **Header — 2026-08-16 (latest; supersedes all headers below).**
+> Code is FROZEN and all in-repo launch blockers are CLOSED. Backend 710 tests
+> pass; frontend 992 tests pass; real-Postgres integration 186 pass with only
+> the 2 documented `test_chat_cv_job_workflow.py` routing-drift failures
+> (unenumerated). All 28 GitHub workflows are SHA-pinned; CI runs on push to
+> main; coverage gate configured (temporary 30% floor pending first CI
+> baseline).
+>
+> **Docker is the canonical production runtime:** `Dockerfile.backend` +
+> `apps/web/Dockerfile` (non-root, `/health` liveness healthcheck),
+> `docker-compose.prod.yml` (secret-free, `${VAR:?required}` runtime secrets,
+> `migrate` one-shot → backend → web, immutable image placeholders),
+> `.github/workflows/docker-build.yml` (build → secret scan → non-root check →
+> container smoke → push immutable `sha-<git-sha>` images). `docker-compose.yml`
+> is LOCAL DEVELOPMENT ONLY.
+>
+> **New primitives:** bounded DB pool with rollback-on-release and dual-style
+> rows; deterministic migration runner (`python -m src.db_migrations
+> apply|check|status`, advisory-lock, self-bootstraps runtime DDL on fresh DBs);
+> account-confirmation ownership proof (migration 054) closing the Jotform
+> merge + Telegram /start bind vectors; public-usage ledger (migration 053)
+> enforcing the registered-email anti-dodge and native-Telegram AI allowance;
+> OCR external-processing consent + per-identity cap; production docs gating.
+>
+> **Final status: `PRODUCTION BLOCKED — EXTERNAL ACTIONS ONLY`.** Every
+> remaining item needs owner access: credential rotation (incl. revoking the
+> historical `1882e8b9` `RAPIDAPI_KEY`/`EMAIL_USER`/`EMAIL_PASS` if active),
+> GitHub branch protection on main, Railway deploy gating, first CI coverage
+> baseline, Neon connection-capacity confirmation, and the first Docker image
+> push to the registry. See `LAUNCH_STATUS.md` for the authoritative snapshot
+> and the exact owner checklist.
+
 > **Header — 2026-07-23 (latest; supersedes all headers below).**
 > `main` HEAD **`45fa80c4`**. This session reconciled `PROJECT_STATUS.md`
 > (`#1349`), then — with explicit owner approval ("merge/PRs all of them ...

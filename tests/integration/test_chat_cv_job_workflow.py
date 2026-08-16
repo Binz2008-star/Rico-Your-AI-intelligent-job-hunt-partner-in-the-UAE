@@ -570,3 +570,15 @@ class TestProfileContextTargetRolesAccess:
         assert response is not None
         assert response.get("type") in ("profile_incomplete", "profile_role_suggestions")
 
+import os
+
+TEST_DATABASE_URL = os.environ.get("RICO_TEST_DATABASE_URL")
+try:
+    import psycopg2
+except Exception:
+    psycopg2 = None
+
+pytestmark = pytest.mark.skipif(
+    not TEST_DATABASE_URL or psycopg2 is None,
+    reason="RICO_TEST_DATABASE_URL not set (or psycopg2 unavailable) - real-Postgres integration tests skipped.",
+)

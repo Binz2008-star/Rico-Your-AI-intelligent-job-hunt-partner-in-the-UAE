@@ -1,75 +1,92 @@
-# Python
+# ── Secrets / credentials — NEVER allow these into a build context ──────────
+.env
+.env.*
+*.env
+!.env.example
+*.env.example
+rico-job-automation-api.env
+cookies.txt
+token.json
+*.token.json
+zoho_token.json
+credentials.json
+client_secret.json
+client_secrets.json
+service_account*.json
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
 
 # Virtual environments
+.venv/
 venv/
 ENV/
-env/
 
-# Testing
+# ── Testing / CI artifacts ──────────────────────────────────────────────────
 .pytest_cache/
 .coverage
+coverage-ci.json
 htmlcov/
 .tox/
+playwright-report/
+test-results/
 
-# IDEs
+# ── Node (if any at root) ───────────────────────────────────────────────────
+node_modules/
+apps/web/node_modules/
+apps/web/.next/
+apps/web/.open-next/
+apps/web/.wrangler/
+
+# ── Runtime state (never baked into the image) ──────────────────────────────
+data/
+learning_cache/
+*.log
+*.pid
+*.sqlite
+*.db
+
+# ── Internal docs / worktrees / agent state ─────────────────────────────────
+.git/
+.gitignore
+.claude/
+.devin/
+.agents/
+.worktrees/
+worktrees/
+AI_WORKSPACE/
+plans/
+tours/
+design-handoffs/
+docs/
+*.md
+*.patch
+*.env.bak
+*.env.backup
+
+# ── IDEs / OS ───────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Git
-.git/
-.gitignore
-
-# Docker
+# ── Docker ──────────────────────────────────────────────────────────────────
 Dockerfile*
 docker-compose*.yml
 .dockerignore
-
-# Secrets
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-*.crt
-
-# Documentation
-docs/
-*.md
-
-# Cache and temporary files
-learning_cache/
-*.log
-cookies.txt
-
-# Worktrees
-.claude/worktrees/
-
-# Node modules (if any in root)
-node_modules/

@@ -2,3 +2,24 @@
 name = "job-automation-system-1"
 version = "0.1.0"
 requires-python = ">=3.11"
+
+# Coverage measurement for the backend (pytest-cov). The CI gate enforces a
+# regression floor derived from a measured baseline; generated/auxiliary code is
+# excluded so the reported number is meaningful application coverage.
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/tests/*",
+    "src/__pycache__/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

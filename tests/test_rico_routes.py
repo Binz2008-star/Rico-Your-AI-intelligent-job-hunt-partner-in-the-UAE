@@ -1188,9 +1188,22 @@ class TestChatService:
     def test_send_message_delegates_to_rico_chat_api(self):
         from src.schemas.chat import RicoSessionContext
         from src.services.chat_service import send_message
+        from src.services.subscription_gating import GateCheck
+
         ctx = RicoSessionContext.for_authenticated("u1")
         mock_api = type("API", (), {"process_message": lambda self, user_id, message, **kwargs: _CHAT_RESPONSE})()
+        # The AI entitlement gate is not this test's subject, and in a real/CI
+        # DB environment a usage lookup can fail closed — which would change the
+        # preflight result. Pin the gate to allowed so the test stays hermetic
+        # and keeps asserting the delegation contract it owns. send_message reads
+        # gate.allowed/remaining/limit, so a real GateCheck is used, not a stub.
+        _allowed_gate = GateCheck(
+            allowed=True, feature="monthly_ai_message_limit",
+            usage=0, limit=300, remaining=300, plan="free", message="ok",
+        )
         with patch("src.rico_env.get_ai_provider", return_value="openai"), \
+             patch("src.services.subscription_gating.check_ai_message_allowed",
+                   return_value=_allowed_gate), \
              patch("src.rico_chat_api.RicoChatAPI") as MockAPI:
             MockAPI.return_value = mock_api
             # "hi" is not a document action; the real staticmethod returns False, so

@@ -8,16 +8,19 @@ from typing import Any, Dict, List
 def generate_followup(job: Dict[str, Any]) -> str:
     title = job.get("title", "the role")
     company = job.get("company", "your team")
+    # Neutral template: never embeds an owner's identity or personal background.
+    # Any per-user personalisation must be injected by the caller from the
+    # requesting user's OWN profile.
     return f"""Dear Hiring Manager,
 
 I hope you are well. I wanted to follow up on my application for the {title} position at {company}.
 
-I remain very interested in the opportunity and believe my UAE experience in environmental compliance, HSE leadership, ISO 14001 systems, and multi-site operations would allow me to contribute effectively.
+I remain very interested in the opportunity and believe my skills and experience are a strong fit for the role.
 
 Please let me know if any additional information would be helpful.
 
 Kind regards,
-Roben Edwan
+[Applicant Name]
 """
 
 

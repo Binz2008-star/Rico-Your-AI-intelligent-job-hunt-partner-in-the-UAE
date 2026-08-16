@@ -21,12 +21,13 @@ The lesson these tests encode: **a verification workflow pointed at dead
 infrastructure does not merely report a false red — through aggregate CI gating
 it stops the real host from ever deploying.** A stale health check is an outage.
 
-Scope note. `keep-warm.yml` and `render-audit.yml` still reference the Render
-host and are deliberately left alone: neither runs on push-to-main, so neither
-can poison a commit's check suite. `keep-warm.yml` additionally ends in
-`::warning::` and never fails. Their cleanup is tracked separately. These tests
-pin exactly that distinction, so the cleanup can happen later without anyone
-having to re-derive which references were load-bearing.
+Scope note. `keep-warm.yml` was re-pointed at the canonical Railway host
+(`https://api.ricohunt.com/health`, final-hardening review) and no longer
+references Render. `render-audit.yml` still references the Render host and is
+deliberately left alone: it does not run on push-to-main, so it cannot poison a
+commit's check suite. These tests pin exactly that distinction, so the cleanup
+can happen later without anyone having to re-derive which references were
+load-bearing.
 
 Static analysis of workflow YAML only — no network, no database, no provider.
 """
@@ -48,12 +49,12 @@ RETIRED_BACKEND_HOST = "rico-job-automation-api.onrender.com"
 #: with `Server: railway-hikari`).
 CANONICAL_API_BASE = "https://api.ricohunt.com"
 
-#: Still reference the retired host, deliberately, because neither runs on
-#: push-to-main and so neither can fail a commit's check suite. Tracked for
+#: Still reference the retired host, deliberately, because it does not run on
+#: push-to-main and so cannot fail a commit's check suite. Tracked for
 #: separate cleanup. A workflow may only sit here while it stays off that
 #: trigger — `test_allowlisted_render_workflows_never_run_on_push_to_main`
 #: enforces that, so the allowlist cannot quietly become a loophole.
-NON_BLOCKING_RENDER_WORKFLOWS = {"keep-warm.yml", "render-audit.yml"}
+NON_BLOCKING_RENDER_WORKFLOWS = {"render-audit.yml"}
 
 
 def _load(path: pathlib.Path) -> dict:

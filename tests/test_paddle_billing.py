@@ -1057,5 +1057,108 @@ class TestBillingConfigEndpoint(unittest.TestCase):
         self.assertNotIn("PADDLE_API_KEY", body)
 
 
+class TestPaddleRefundAndTermination(unittest.TestCase):
+    """Money-back safety: refunds, chargebacks and terminations must downgrade
+    entitlement (audit CB-3). Previously these event types were marked 'processed'
+    and never acted on, so a refund with no accompanying subscription.canceled
+    left the user with paid entitlement after the money was clawed back."""
+
+    def _run_capture(self, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        from src.services.paddle_webhook_service import process_paddle_webhook
+        captured: Dict[str, Any] = {}
+
+        with patch("src.repositories.paddle_repo.paddle_event_already_processed", return_value=False), \
+             patch("src.repositories.paddle_repo.record_paddle_webhook_event", return_value=True), \
+             patch("src.repositories.paddle_repo.mark_paddle_event_processed"), \
+             patch("src.repositories.paddle_repo.upsert_paddle_customer"), \
+             patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id",
+                   return_value={"user_id": "user@example.com"}), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id",
+                   return_value={"user_id": "user@example.com"}), \
+             patch("src.repositories.paddle_repo.upsert_paddle_subscription",
+                   side_effect=lambda db, **kw: captured.update(kw) or {}), \
+             patch.dict(os.environ, _PRO_ENV, clear=False):
+            result = process_paddle_webhook(
+                event_id=payload["event_id"],
+                event_type=event_type,
+                payload=payload,
+                db_module=MagicMock(),
+            )
+        return {"result": result, "upsert": captured}
+
+    def test_transaction_refunded_downgrades_entitlement(self):
+        payload = {
+            "event_id": "evt_refund1",
+            "event_type": "transaction.refunded",
+            "data": {"id": "txn_001", "subscription_id": "sub_001",
+                     "customer_id": "ctm_001"},
+        }
+        out = self._run_capture("transaction.refunded", payload)
+        self.assertEqual(out["result"]["status"], "processed")
+        self.assertEqual(out["upsert"].get("plan"), "free")
+        self.assertEqual(out["upsert"].get("status"), "inactive")
+
+    def test_transaction_disputed_downgrades_entitlement(self):
+        payload = {
+            "event_id": "evt_disp1",
+            "event_type": "transaction.disputed",
+            "data": {"id": "txn_002", "subscription_id": "sub_001",
+                     "customer_id": "ctm_001"},
+        }
+        out = self._run_capture("transaction.disputed", payload)
+        self.assertEqual(out["result"]["status"], "processed")
+        self.assertEqual(out["upsert"].get("plan"), "free")
+        self.assertEqual(out["upsert"].get("status"), "inactive")
+
+    def test_subscription_terminated_downgrades_entitlement(self):
+        payload = {
+            "event_id": "evt_term1",
+            "event_type": "subscription.terminated",
+            "data": {"id": "sub_001", "customer_id": "ctm_001",
+                     "terminated_at": "2026-08-01T00:00:00Z"},
+        }
+        out = self._run_capture("subscription.terminated", payload)
+        self.assertEqual(out["result"]["status"], "processed")
+        self.assertEqual(out["upsert"].get("plan"), "free")
+        self.assertEqual(out["upsert"].get("status"), "canceled")
+
+    def test_subscription_revoked_downgrades_entitlement(self):
+        payload = {
+            "event_id": "evt_rev1",
+            "event_type": "subscription.revoked",
+            "data": {"id": "sub_001", "customer_id": "ctm_001",
+                     "canceled_at": "2026-08-01T00:00:00Z"},
+        }
+        out = self._run_capture("subscription.revoked", payload)
+        self.assertEqual(out["result"]["status"], "processed")
+        self.assertEqual(out["upsert"].get("plan"), "free")
+        self.assertEqual(out["upsert"].get("status"), "canceled")
+
+    def test_refund_no_user_id_returns_warning(self):
+        payload = {
+            "event_id": "evt_refund2",
+            "event_type": "transaction.refunded",
+            "data": {"id": "txn_003", "subscription_id": "sub_999",
+                     "customer_id": "ctm_999"},
+        }
+        with patch("src.repositories.paddle_repo.paddle_event_already_processed", return_value=False), \
+             patch("src.repositories.paddle_repo.record_paddle_webhook_event", return_value=True), \
+             patch("src.repositories.paddle_repo.mark_paddle_event_processed"), \
+             patch("src.repositories.paddle_repo.get_paddle_subscription_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.get_paddle_customer_by_paddle_id", return_value=None), \
+             patch("src.repositories.paddle_repo.upsert_paddle_subscription") as upsert, \
+             patch.dict(os.environ, _PRO_ENV, clear=False):
+            from src.services.paddle_webhook_service import process_paddle_webhook
+            result = process_paddle_webhook(
+                event_id="evt_refund2",
+                event_type="transaction.refunded",
+                payload=payload,
+                db_module=MagicMock(),
+            )
+        self.assertEqual(result["status"], "processed")
+        self.assertEqual(result.get("warning"), "no_user_id")
+        upsert.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

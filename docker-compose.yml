@@ -1,3 +1,11 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# LOCAL DEVELOPMENT ONLY — NOT the production runtime.
+#
+# Uses placeholder/local-only credentials and development flags
+# (--reload, ALLOW_ENV_AUTH_FALLBACK=true, dev admin login, bind mounts).
+# Production deployment uses docker-compose.prod.yml (secret-free, immutable
+# images, explicit migrations, non-root, healthchecks).
+# ══════════════════════════════════════════════════════════════════════════════
 services:
   postgres:
     image: postgres:16
@@ -32,6 +40,10 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     container_name: rico-backend
+    # The production image runs non-root without --reload; override for dev
+    # (bind-mounted source, hot reload, writable workspace).
+    user: root
+    command: [ "python", "-m", "uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload" ]
     ports:
       - "8000:8000"
     environment:
@@ -41,6 +53,7 @@ services:
       APP_ENV: local
       CORS_ORIGINS: http://localhost:3000
       COOKIE_SECURE: false
+      RICO_RUN_STARTUP_MIGRATIONS: "true"
       # LOCAL DEV ONLY — enables env-based admin login fallback.
       # Never set this in a deployed/staging/production environment.
       ALLOW_ENV_AUTH_FALLBACK: true
@@ -67,12 +80,19 @@ services:
       - /app/.pytest_cache
       - /app/__pycache__
       - /app/learning_cache
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3)" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
     container_name: rico-web
+    user: root
+    command: [ "npm", "run", "dev" ]
     ports:
       - "3000:3000"
     environment:
@@ -85,6 +105,11 @@ services:
       - ./apps/web:/app
       - /app/node_modules
       - /app/.next
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

@@ -1,22 +1,63 @@
-FROM python:3.11-slim
+# Rico backend — production image.
+#
+# Multi-stage: the builder carries a compiler (gcc) for any sdist-only Python
+# dependency; the runtime image is minimal (slim, no compiler) and runs as a
+# non-root user. No secrets are baked in: .dockerignore excludes every env /
+# token / credential artifact from the build context, and all configuration is
+# injected at runtime via environment variables.
+#
+# Migrations are NOT run by this container: production sets
+# RICO_RUN_STARTUP_MIGRATIONS=false and the app performs a strict read-only
+# critical-table check at startup, failing closed instead of serving on a
+# partially-migrated schema. Schema changes go through the explicit migration
+# runner (python -m src.db_migrations apply), typically as a one-shot compose
+# service or CI step.
+#
+# Health: /health is liveness (always HTTP 200; flips status to degraded on
+# provider/DB loss) and is what the Docker HEALTHCHECK uses — a transient DB
+# blip must not restart-loop the container. /ready is readiness (503 when the
+# DB is unreachable in production) and is the authoritative signal for traffic
+# / deployment decisions.
+
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+COPY requirements.txt .
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc \
+    && pip install --no-cache-dir --prefix=/install -r requirements.txt \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
+COPY --from=builder /install /usr/local
+
+# Minimal runtime system packages (postgresql-client only if the app shells out
+# to psql/pg_dump — currently it does not; added here for operator convenience
+# but intentionally small).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
 COPY . .
 
-# Expose port 8000
+# Non-root runtime user; /app/data is writable for the JSON-fallback store.
+RUN useradd --create-home --uid 10001 rico \
+    && mkdir -p /app/data \
+    && chown -R rico:rico /app
+USER rico
+
 EXPOSE 8000
 
-# Run FastAPI with uvicorn
-CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+
+# Production command: no --reload, canonical module path.
+CMD ["python", "-m", "uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

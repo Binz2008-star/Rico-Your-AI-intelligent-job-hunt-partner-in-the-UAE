@@ -2,6 +2,7 @@
 
 import { AtelierAuthShell } from '@/components/auth/AtelierAuthShell';
 import { ApiError, register, resendVerification } from '@/lib/api';
+import { getExistingPublicUserId } from '@/lib/publicSession';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation } from '@/lib/translations';
 import Link from 'next/link';
@@ -44,7 +45,12 @@ export function SignupForm() {
         setError('');
         setShowLoginLink(false);
         try {
-            const result = await register(email, password, null, name);
+            // H-5 guest→account merge: offer this browser's existing guest
+            // session for merge when creating the account. The backend is
+            // authoritative — it verifies the HttpOnly capability cookie and a
+            // durable claim before moving any guest data; a stale/foreign sid
+            // is ignored, never merged.
+            const result = await register(email, password, getExistingPublicUserId(), name);
             if (result.email_verification_required) {
                 setRegisteredEmail(result.email);
                 setVerificationSent(true);

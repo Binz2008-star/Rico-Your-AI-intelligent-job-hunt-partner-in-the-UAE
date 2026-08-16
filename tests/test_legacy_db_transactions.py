@@ -44,9 +44,35 @@ def test_get_db_connection_keeps_transactional_default(monkeypatch):
     monkeypatch.setattr(legacy_db, "DB_ENABLED", True)
     monkeypatch.setattr(legacy_db, "DATABASE_URL", "postgresql://example")
     monkeypatch.setattr(legacy_db.psycopg2, "connect", lambda url, **kw: conn)
+    # Isolate the pool for this test (the pool is a per-DSN singleton).
+    monkeypatch.setattr(legacy_db, "_POOLS", {})
 
-    assert legacy_db.get_db_connection() is conn
+    got = legacy_db.get_db_connection()
+    assert got is not None
+    # Phase-3: a wrapped pool connection. The raw psycopg2 connection is the
+    # one behind it; its transactional default (autocommit=False) must be
+    # preserved — the wrapper must never alter transaction semantics.
+    assert isinstance(got, legacy_db._PooledConnection)
+    assert got._raw is conn
     assert conn.autocommit is False
+    got.close()  # returned to the pool, not closed
+    assert conn.closed is False
+
+
+def test_get_db_connection_returns_none_when_db_disabled(monkeypatch):
+    monkeypatch.setattr(legacy_db, "DB_ENABLED", False)
+    assert legacy_db.get_db_connection() is None
+
+
+def test_get_db_connection_returns_none_when_db_unreachable(monkeypatch):
+    """DB-down at pool creation must keep the JSON-fallback contract (None),
+    never raise — and must never silently fall back on pool EXHAUSTION."""
+    monkeypatch.setattr(legacy_db, "DB_ENABLED", True)
+    monkeypatch.setattr(legacy_db, "DATABASE_URL", "postgresql://nobody:wrong@127.0.0.1:59999/nowhere")
+    monkeypatch.setattr(legacy_db, "_POOLS", {})
+
+    conn = legacy_db.get_db_connection()
+    assert conn is None  # DB unreachable -> JSON fallback, as before pooling
 
 
 def test_save_job_commits_on_success(monkeypatch):

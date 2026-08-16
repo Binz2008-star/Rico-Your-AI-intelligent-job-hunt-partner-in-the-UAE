@@ -1056,11 +1056,33 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
 
         registered = get_user_by_email(payload.email)
         if registered:
-            from src.services.subscription_gating import check_ai_message_allowed_for_user
+            from src.services.subscription_gating import (
+                QuotaUnavailableError,
+                check_ai_message_allowed_for_user,
+                quota_unavailable_response,
+            )
 
-            gate = check_ai_message_allowed_for_user(registered.email)
+            try:
+                gate = check_ai_message_allowed_for_user(registered.email)
+            except QuotaUnavailableError:
+                # Usage cannot be verified (DB down) — fail closed with a
+                # transient-outage terminal, never an untracked free pass.
+                logger.warning("public_chat: quota unavailable failed closed")
+                anti_dodge_terminal = _strip_internal_fields(quota_unavailable_response())
+                gate = None
             if gate and not gate.allowed:
                 anti_dodge_terminal = _strip_internal_fields(gate.to_response())
+            elif not anti_dodge_terminal:
+                # Anti-dodge enforcement (final hardening): record the
+                # registered email's public turn against its allowance so the
+                # cap actually enforces. Content-free ledger — no message text
+                # is written into the account's chat history.
+                try:
+                    from src.repositories.ai_usage_repo import record_public_ai_usage
+
+                    record_public_ai_usage(registered.email)
+                except Exception:
+                    pass
         # Namespaced public identity that cannot read/write any real profile.
         email_key = "e-" + hashlib.sha256(
             payload.email.strip().lower().encode("utf-8")
@@ -1284,16 +1306,38 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest, response:
             # visibility, account/subscription disclosure) — only the usage limit is applied.
             if registered:
                 from src.services.subscription_gating import (
+                    QuotaUnavailableError,
                     check_ai_message_allowed_for_user,
+                    quota_unavailable_response,
                 )
 
-                gate = check_ai_message_allowed_for_user(registered.email)
+                try:
+                    gate = check_ai_message_allowed_for_user(registered.email)
+                except QuotaUnavailableError:
+                    # Usage cannot be verified (DB down) — fail closed with a
+                    # transient-outage terminal, never an untracked free pass.
+                    logger.warning("public_chat: quota unavailable failed closed")
+                    _metrics.record_request((time.time() - start_time) * 1000)
+                    return RicoChatResponse(
+                        **quota_unavailable_response(),
+                        trace_id=request_ref,
+                    )
                 if gate and not gate.allowed:
                     _metrics.record_request((time.time() - start_time) * 1000)
                     return RicoChatResponse(
                         **_strip_internal_fields(gate.to_response()),
                         trace_id=request_ref,
                     )
+                # Anti-dodge enforcement (final hardening): the registered
+                # email's PUBLIC turn is now recorded against its allowance, so
+                # the cap actually enforces. Content-free ledger — no message
+                # text is written into the account's chat history.
+                try:
+                    from src.repositories.ai_usage_repo import record_public_ai_usage
+
+                    record_public_ai_usage(registered.email)
+                except Exception:
+                    pass
 
             # Namespaced public session that cannot read/write any real profile. The hash
             # keeps distinct emails in distinct public buckets without ever exposing the raw
@@ -1894,6 +1938,7 @@ async def rico_upload_cv(
     file: UploadFile = File(...),
     user_id: str | None = None,
     form_user_id: str | None = Form(None, alias="user_id"),
+    consent_to_external_processing: bool = False,
 ) -> dict[str, Any]:
     """Upload and parse CV file (PDF only)."""
     start_time = time.time()
@@ -2019,8 +2064,72 @@ async def rico_upload_cv(
         # screenshot → job_description with real actions). Falls back to the
         # format-only image response when no vision model is configured or it
         # returns nothing — the upload is never blocked.
+        #
+        # Launch-blocker closure (OCR consent boundary): an uploaded image may be
+        # sent to EXTERNAL OCR/vision providers (OpenRouter / HuggingFace /
+        # OCR.space). That requires the user's explicit consent for THIS upload,
+        # and is capped per identity per day so repeated image processing cannot
+        # bypass rate/billing limits. Without consent, the image is classified
+        # locally (format/type) and never leaves Rico infrastructure.
         if classification.file_format == "image":
             from src.services.image_extractor import extract_text_from_image
+
+            if not consent_to_external_processing:
+                logger.info(
+                    "doc_image_external_ocr_blocked_no_consent user=%s filename=%s request_ref=%s",
+                    resolved_user_id, safe_name, request_ref,
+                )
+                return {
+                    "ok": False,
+                    "status": "consent_required",
+                    "document_type": doc_type,
+                    "file_format": classification.file_format,
+                    "filename": safe_name,
+                    "message": (
+                        "To read text from this image it would be sent to an "
+                        "external OCR provider. Re-upload with explicit consent "
+                        "to continue."
+                    ),
+                }
+
+            # Per-identity daily cap on external OCR processing (fail closed on
+            # DB unavailability — never an unlimited external-processing path).
+            from datetime import datetime, timezone
+
+            from src.repositories.ai_usage_repo import (
+                count_public_ai_usage_strict,
+                record_public_ai_usage,
+            )
+
+            _ocr_daily_limit = int(os.environ.get("RICO_OCR_DAILY_LIMIT", "20") or "20")
+            _now = datetime.now(timezone.utc)
+            _ocr_key = f"ocr:{resolved_user_id}"
+            _ocr_window = _now.replace(hour=0, minute=0, second=0, microsecond=0)
+            try:
+                _ocr_usage = count_public_ai_usage_strict(_ocr_key, _ocr_window)
+            except Exception:
+                logger.warning("doc_image_ocr_cap_unverifiable user=%s request_ref=%s", resolved_user_id, request_ref)
+                raise HTTPException(
+                    status_code=503,
+                    detail="External OCR usage cannot be verified right now. Please try again shortly.",
+                )
+            if _ocr_usage >= _ocr_daily_limit:
+                logger.info(
+                    "doc_image_ocr_cap_reached user=%s used=%s limit=%s request_ref=%s",
+                    resolved_user_id, _ocr_usage, _ocr_daily_limit, request_ref,
+                )
+                return {
+                    "ok": False,
+                    "status": "ocr_limit_reached",
+                    "document_type": doc_type,
+                    "file_format": classification.file_format,
+                    "filename": safe_name,
+                    "message": (
+                        f"You've reached today's external image-processing limit "
+                        f"({_ocr_daily_limit}). Please try again tomorrow."
+                    ),
+                }
+            record_public_ai_usage(_ocr_key)
             extracted = await loop.run_in_executor(
                 None, extract_text_from_image, data, safe_name
             )
@@ -2999,17 +3108,11 @@ async def rico_telegram_webhook(request: Request) -> dict[str, Any]:
 
     result = chat_service.handle_telegram_update(update)
 
-    # process_telegram_update() returns {"chat_id": ..., "reply": ...} but does
-    # not call the Telegram Bot API — we must push the reply here.
-    chat_id = result.get("chat_id")
-    reply = result.get("reply")
-    if chat_id and reply:
-        reply_text = reply if isinstance(reply, str) else reply.get("message", "")
-        if reply_text:
-            from src.telegram_bot import send_telegram_to_user
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, send_telegram_to_user, str(chat_id), reply_text)
-
+    # process_telegram_update() is the sole owner of message delivery: it sends
+    # /start, /stop, text replies, and entitlement-gate replies itself, and
+    # answers callbacks via answerCallbackQuery. The router must NOT send the
+    # returned reply again — doing so delivered every Telegram reply twice in
+    # production (final-hardening review fix).
     return {"ok": True}
 
 

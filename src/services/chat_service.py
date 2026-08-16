@@ -116,7 +116,7 @@ def run_chat_preflight(ctx: RicoSessionContext, message: str) -> ChatPreflight:
     identical regardless of how the client fetched the turn.
     """
     from src.services.operation_state import build_status_response, is_status_followup
-    from src.services.subscription_gating import check_ai_message_allowed
+    from src.services.subscription_gating import check_ai_message_allowed, QuotaUnavailableError
     from src.rico.policy import classify_request
 
     if is_status_followup(message):
@@ -151,6 +151,14 @@ def run_chat_preflight(ctx: RicoSessionContext, message: str) -> ChatPreflight:
             "chat_preflight: quota refused reason=%s", "ambiguous_account_ownership"
         )
         return ChatPreflight(terminal=account_conflict_response(), gate=None)
+    except QuotaUnavailableError:
+        # Usage cannot be verified (DB down) — fail closed: never grant untracked
+        # AI usage. A distinct terminal (no upgrade CTA) so the user sees a
+        # transient-outage message, not a "hit your limit" upsell.
+        from src.services.subscription_gating import quota_unavailable_response
+
+        logger.warning("chat_preflight: quota unavailable failed closed")
+        return ChatPreflight(terminal=quota_unavailable_response(), gate=None)
     if gate and not gate.allowed:
         return ChatPreflight(terminal=gate.to_response(), gate=gate)
 

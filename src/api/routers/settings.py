@@ -77,11 +77,30 @@ def telegram_opt_in(
     body: TelegramOptInRequest,
     user_id: str = Depends(get_current_user_id),
 ) -> Dict[str, Any]:
-    """Enable Telegram job-alert notifications for the authenticated user."""
+    """Enable Telegram job-alert notifications for the authenticated user.
+
+    A client-supplied ``telegram_chat_id`` is only accepted when it equals the
+    chat already bound to THIS account by the /start handshake. Telegram chat
+    binding must come from the verified bot conversation, never from free-form
+    web input — otherwise a user could write another account's chat id onto
+    their own row and poison the victim's Telegram identity resolution.
+    """
     from src.services.telegram_notifications import opt_in, is_opted_in
     from src.repositories.profile_repo import get_profile
 
-    ok = opt_in(user_id=user_id, telegram_chat_id=body.telegram_chat_id)
+    supplied_chat_id = body.telegram_chat_id
+    if supplied_chat_id:
+        profile = get_profile(user_id)
+        stored_chat_id = getattr(profile, "telegram_chat_id", None) if profile else None
+        if not stored_chat_id or str(supplied_chat_id) != str(stored_chat_id):
+            raise HTTPException(
+                status_code=422,
+                detail="Telegram must be linked first via the /start command in the Rico bot.",
+            )
+        # Only ever persist the server-verified stored chat id.
+        supplied_chat_id = str(stored_chat_id)
+
+    ok = opt_in(user_id=user_id, telegram_chat_id=supplied_chat_id)
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to enable Telegram notifications.")
 
