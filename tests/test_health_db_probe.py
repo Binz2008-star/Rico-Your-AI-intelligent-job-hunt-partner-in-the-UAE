@@ -37,6 +37,12 @@ def test_ready_and_health_db_probe(client, db_state, prod, expected_status, expe
             "src.rico_openai_runtime.get_readiness",
             return_value={"ready": True, "provider": "deepseek"},
         ),
+        # /health flips to "degraded" when the reasoning provider is down too —
+        # pin it healthy so the DB probe is the only signal under test.
+        patch(
+            "src.rico_openai_runtime.get_reasoning_health",
+            return_value={"provider": "deepseek", "degraded": False},
+        ),
     ):
         ready = client.get("/ready")
         health = client.get("/health")

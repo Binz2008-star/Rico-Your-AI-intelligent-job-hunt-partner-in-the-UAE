@@ -144,13 +144,24 @@ class TestIdentityDocumentImageBypass:
             patch(
                 "src.services.subscription_gating.enforce_document_quota",
             ),
+            # The external-OCR daily cap is DB-backed and fails closed when usage
+            # cannot be verified; these tests exercise the identity-doc guard,
+            # not the cap (covered by tests/test_launch_blockers.py).
+            patch(
+                "src.repositories.ai_usage_repo.count_public_ai_usage_strict",
+                return_value=0,
+            ),
+            patch(
+                "src.repositories.ai_usage_repo.record_public_ai_usage",
+                return_value=True,
+            ),
         ):
             mock_mem = MagicMock()
             mock_mem_cls.return_value = mock_mem
 
             client = TestClient(app, raise_server_exceptions=False)
             response = client.post(
-                "/api/v1/rico/upload-cv",
+                "/api/v1/rico/upload-cv?consent_to_external_processing=true",
                 files={"file": ("passport.jpg", io.BytesIO(_JPEG_MAGIC), "image/jpeg")},
             )
 
@@ -202,13 +213,21 @@ class TestIdentityDocumentImageBypass:
             patch(
                 "src.services.subscription_gating.enforce_document_quota",
             ),
+            patch(
+                "src.repositories.ai_usage_repo.count_public_ai_usage_strict",
+                return_value=0,
+            ),
+            patch(
+                "src.repositories.ai_usage_repo.record_public_ai_usage",
+                return_value=True,
+            ),
         ):
             mock_mem = MagicMock()
             mock_mem_cls.return_value = mock_mem
 
             client = TestClient(app, raise_server_exceptions=False)
             response = client.post(
-                "/api/v1/rico/upload-cv",
+                "/api/v1/rico/upload-cv?consent_to_external_processing=true",
                 files={"file": ("job_screenshot.jpg", io.BytesIO(_JPEG_MAGIC), "image/jpeg")},
             )
 

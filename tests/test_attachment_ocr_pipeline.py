@@ -261,10 +261,22 @@ class TestRouterImageOCRFailureMultipart:
                 return_value=False,
             ),
             patch("src.services.subscription_gating.enforce_document_quota"),
+            # External-OCR consent is required for images, and the DB-backed
+            # daily cap fails closed when usage can't be verified — pin both so
+            # this test exercises the OCR-failure handling (the consent/cap
+            # contract is covered by tests/test_launch_blockers.py).
+            patch(
+                "src.repositories.ai_usage_repo.count_public_ai_usage_strict",
+                return_value=0,
+            ),
+            patch(
+                "src.repositories.ai_usage_repo.record_public_ai_usage",
+                return_value=True,
+            ),
         ):
             client = TestClient(app, raise_server_exceptions=False)
             response = client.post(
-                "/api/v1/rico/upload-cv",
+                "/api/v1/rico/upload-cv?consent_to_external_processing=true",
                 files={"file": ("job-screenshot.jpg", _io.BytesIO(self._JPEG_MAGIC), "image/jpeg")},
             )
 

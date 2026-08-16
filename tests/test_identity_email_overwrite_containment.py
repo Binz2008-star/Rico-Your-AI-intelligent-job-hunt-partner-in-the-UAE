@@ -288,11 +288,26 @@ def _resolution(matched_user_id: str):
 
 
 def _run_jotform(payload: dict, matched_user_id: str) -> dict:
-    """Drive the webhook with identity resolution forced to merge."""
+    """Drive the webhook with identity resolution forced to merge.
+
+    A merge into an EXISTING account now requires out-of-band ownership proof
+    (launch-blocker closure): the webhook does NOT write to the account. It
+    stores the pending payload for confirmation and emails the owner. This
+    helper captures that pending payload so the email-containment invariant
+    (the form email must not be carried into the deferred identity write) is
+    still verified — while asserting no account write happens before proof.
+    """
     from src.rico_jotform_webhook import handle_jotform_submission
 
     db = _jotform_db()
     env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+    captured: dict = {}
+
+    def _fake_create(account_email, pending):
+        captured["account"] = account_email
+        captured["pending"] = pending
+        return True
+
     with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
          patch.dict(os.environ, env, clear=True), \
          patch("src.rico_jotform_webhook.find_identity_candidates", return_value=[]), \
@@ -300,11 +315,17 @@ def _run_jotform(payload: dict, matched_user_id: str) -> dict:
              "src.rico_jotform_webhook.map_identity_flow",
              return_value=_resolution(matched_user_id),
          ), \
-         patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
+         patch("src.repositories.onboarding_repo.mark_onboarding_complete"), \
+         patch(
+             "src.services.account_confirmation_service.create_jotform_merge_confirmation",
+             side_effect=_fake_create,
+         ):
         handle_jotform_submission(payload)
 
-    db.upsert_user.assert_called_once()
-    return db.upsert_user.call_args[0][0]
+    # A merge never writes the account before the owner confirms.
+    db.upsert_user.assert_not_called()
+    db.upsert_profile.assert_not_called()
+    return captured["pending"]["user"]
 
 
 def test_phone_only_merge_does_not_carry_the_form_email_into_identity():
