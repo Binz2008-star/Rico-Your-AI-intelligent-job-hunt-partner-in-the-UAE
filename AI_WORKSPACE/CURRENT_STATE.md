@@ -5,8 +5,8 @@
 > pass; frontend 992 tests pass; real-Postgres integration 186 pass with only
 > the 2 documented `test_chat_cv_job_workflow.py` routing-drift failures
 > (unenumerated). All 28 GitHub workflows are SHA-pinned; CI runs on push to
-> main; coverage gate configured (temporary 30% floor pending first CI
-> baseline).
+> main; coverage gate configured (temporary 30% floor; first-main-CI baseline
+> recorded at 57.55%).
 >
 > **Docker is the canonical production runtime:** `Dockerfile.backend` +
 > `apps/web/Dockerfile` (non-root, `/health` liveness healthcheck),
@@ -24,13 +24,19 @@
 > enforcing the registered-email anti-dodge and native-Telegram AI allowance;
 > OCR external-processing consent + per-identity cap; production docs gating.
 >
-> **Final status: `PRODUCTION BLOCKED — EXTERNAL ACTIONS ONLY`.** Every
-> remaining item needs owner access: credential rotation (incl. revoking the
-> historical `1882e8b9` `RAPIDAPI_KEY`/`EMAIL_USER`/`EMAIL_PASS` if active),
-> GitHub branch protection on main, Railway deploy gating, first CI coverage
-> baseline, Neon connection-capacity confirmation, and the first Docker image
-> push to the registry. See `LAUNCH_STATUS.md` for the authoritative snapshot
-> and the exact owner checklist.
+> **Final status: `PRODUCTION BLOCKED — EXTERNAL ACTIONS ONLY`.** PR #1489
+> (production hardening) is **merged into main** (merge commit `d12624b2`);
+> post-merge CI is green (coverage baseline 57.55%); the Docker build pipeline
+> was fixed and validated in PR #1491; images push to GHCR under immutable
+> `sha-<git-sha>` refs. Every remaining item needs owner/external-platform
+> access: the **Railway deploy gate (currently failing — backend 404)**,
+> **Vercel account blockage**, GitHub branch protection on main (not enabled),
+> coverage-floor tightening toward the recorded baseline, Neon
+> connection-capacity confirmation, and `${BACKEND_IMAGE}` / `${WEB_IMAGE}`
+> injection. Credential rotation is CLOSED (owner completed); the historical
+> `1882e8b9` purge remains a separate authorized security-maintenance action.
+> See `LAUNCH_STATUS.md` for the authoritative snapshot and the exact owner
+> checklist.
 
 > **Header — 2026-07-23 (latest; supersedes all headers below).**
 > `main` HEAD **`45fa80c4`**. This session reconciled `PROJECT_STATUS.md`

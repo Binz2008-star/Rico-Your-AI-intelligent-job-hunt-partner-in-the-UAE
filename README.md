@@ -398,11 +398,14 @@ Implemented and tested:
 
 Still required for production launch (EXTERNAL, not in-repo):
 
-- Rotate/revoke all production credentials (see LAUNCH_STATUS.md checklist).
-- GitHub branch protection on `main` (required checks listed in
+- Railway deploy gate — currently FAILING (`https://api.ricohunt.com/health`
+  returns 404; backend not serving).
+- Vercel account blockage (external "Account is blocked" check failure).
+- GitHub branch protection on `main` (not enabled; required checks listed in
   LAUNCH_STATUS.md).
-- Railway deploy gating, first CI coverage baseline, Neon capacity
-  confirmation, first Docker image push to the registry.
+- Tighten the coverage floor from 30% to the recorded baseline (57.55%) minus
+  tolerance, Neon capacity confirmation, and setting `${BACKEND_IMAGE}` /
+  `${WEB_IMAGE}` to the GHCR immutable `sha-<git-sha>` images.
 
 See [`LAUNCH_STATUS.md`](LAUNCH_STATUS.md) for the full launch gate and the
 exact verification steps.
