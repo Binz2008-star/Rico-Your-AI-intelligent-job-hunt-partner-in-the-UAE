@@ -159,6 +159,11 @@ def resolve_effective_user_plan(user_id: str) -> SubscriptionResponse:
     current_period_end = row.get("current_period_end")
     if current_period_end and current_period_end < now and not in_grace_period:
         is_active = False
+    if is_active and not current_period_end:
+        # A status-affirming row with NO period end cannot be proven to still be
+        # within a paid period — fail closed toward Free rather than granting
+        # indefinite entitlement (final-hardening review).
+        is_active = False
 
     plan_obj = PAID_PLANS.get(tier)
     entitlements = plan_obj.entitlements if (plan_obj and is_active) else FREE_ENTITLEMENTS

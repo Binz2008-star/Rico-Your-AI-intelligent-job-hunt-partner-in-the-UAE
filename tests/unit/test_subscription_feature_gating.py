@@ -37,11 +37,24 @@ def _resolved_free():
 
 
 def test_chat_blocks_when_monthly_ai_message_limit_reached():
+    from datetime import datetime, timedelta, timezone
+
     from src.services.chat_service import send_message
+    from src.services.subscription_gating import GateCheck
 
     ctx = RicoSessionContext.for_authenticated("limit@rico.ai")
-    with patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=_resolved_free()), \
-         patch("src.services.subscription_gating.count_monthly_ai_messages", return_value=10), \
+    reset_at = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    blocked = GateCheck(
+        allowed=False, feature="monthly_ai_message_limit",
+        usage=10, limit=10, remaining=0, plan="free",
+        reset_at=reset_at,
+        message="You've used your 10 free AI messages for today.",
+    )
+    # This test pins the BLOCKING contract end-to-end through send_message. The
+    # unit-suite autouse fixture pins check_ai_message_allowed to ALLOWED (so
+    # routing tests are hermetic); a blocked gate is constructed here explicitly
+    # — the fail-closed DB path itself is covered by the top-level suites.
+    with patch("src.services.subscription_gating.check_ai_message_allowed", return_value=blocked), \
          patch("src.repositories.profile_repo.get_profile") as get_profile, \
          patch("src.services.chat_service._legacy_send_message") as legacy, \
          patch("src.services.chat_service._conversational_ai_reply") as ai:

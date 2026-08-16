@@ -52,7 +52,7 @@ BASELINE_SENTINEL = "baseline gap at main@1c13147f"
 # High-water mark for the frozen baseline. It may only ever be lowered, and
 # lowering it is the visible record of debt actually paid. A change that raises
 # it fails the guard, so the backlog cannot quietly grow back.
-BASELINE_HIGH_WATER = 204
+BASELINE_HIGH_WATER = 200
 
 # The frozen baseline: the exact set of test files reachable by no pytest
 # invocation at main@1c13147f45365c10d518356a429f757c740f3a06, measured by
@@ -72,7 +72,6 @@ FROZEN_BASELINE = frozenset((
     "tests/integration/test_chat_cv_job_workflow.py",
     "tests/integration/test_chat_routing_phase1.py",
     "tests/integration/test_cv_parse_quality_gate_postgres.py",
-    "tests/integration/test_jotform_webhook_to_chat_flow.py",
     "tests/integration/test_live_chat_role_parsing_path.py",
     "tests/test_1249_scheduled_search.py",
     "tests/test_1262_conversational.py",
@@ -94,7 +93,6 @@ FROZEN_BASELINE = frozenset((
     "tests/test_application_lifecycle.py",
     "tests/test_applied_screenshot_ocr_fallback.py",
     "tests/test_apply_approval_gate.py",
-    "tests/test_apply_subscription_gate.py",
     "tests/test_apply_tracking_and_freshness.py",
     "tests/test_arabic_context_retention.py",
     "tests/test_arabic_jobsearch_vs_cv_status.py",
@@ -108,7 +106,6 @@ FROZEN_BASELINE = frozenset((
     "tests/test_billing_hardening.py",
     "tests/test_billing_mode.py",
     "tests/test_billing_ops_no_stripe.py",
-    "tests/test_billing_quota_fail_open.py",
     "tests/test_bug03_source_url_fallback.py",
     "tests/test_bug04_profile_mutation.py",
     "tests/test_bug05_confirmation_loop.py",
@@ -173,7 +170,6 @@ FROZEN_BASELINE = frozenset((
     "tests/test_hardening_proxy_timing_pipeline.py",
     "tests/test_import_profile_command.py",
     "tests/test_issue_135_production_verification.py",
-    "tests/test_job_action_isolation.py",
     "tests/test_job_card_trust.py",
     "tests/test_job_context_foundation.py",
     "tests/test_job_doc_actions.py",

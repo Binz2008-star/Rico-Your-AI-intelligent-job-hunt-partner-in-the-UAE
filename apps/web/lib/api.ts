@@ -1421,6 +1421,17 @@ export async function uploadCV(
 ): Promise<UploadCVResponse> {
   const form = new FormData();
   form.append("file", file);
+  const params: Record<string, string> = {};
+  if (userId) {
+    params.user_id = userId;
+  }
+  // An image is sent to an EXTERNAL OCR/vision provider to extract its text —
+  // that requires explicit per-upload consent (launch-blocker closure). The
+  // user uploading an image for text extraction IS that consent; documents
+  // (CVs) are never sent to external providers and need no flag.
+  if (file.type && file.type.startsWith("image/")) {
+    params.consent_to_external_processing = "true";
+  }
   const data = await requestJson<unknown>(
     "/api/v1/rico/upload-cv",
     {
@@ -1428,7 +1439,7 @@ export async function uploadCV(
       credentials: "include",
       body: form,
     },
-    userId ? { user_id: userId } : undefined,
+    Object.keys(params).length ? params : undefined,
   );
   return validateShape(UploadCVResponseSchema, data, "CV upload");
 }

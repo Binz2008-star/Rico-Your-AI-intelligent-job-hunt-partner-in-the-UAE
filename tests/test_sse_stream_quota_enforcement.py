@@ -101,6 +101,30 @@ class TestSharedPreflight:
         assert pre.terminal is None
         assert pre.gate is None
 
+    def test_quota_unavailable_yields_transient_outage_terminal(self) -> None:
+        # Fail closed: when usage cannot be verified (DB down) the user gets a
+        # transient-outage terminal, never an untracked free pass or an upgrade
+        # upsell that pretends they hit their limit.
+        from src.services.subscription_gating import QuotaUnavailableError
+
+        ctx = RicoSessionContext.for_authenticated("u@example.com")
+        with (
+            patch("src.services.operation_state.is_status_followup", return_value=False),
+            patch("src.services.operation_state.build_status_response", return_value=None),
+            patch("src.rico.policy.classify_request", return_value=MagicMock(route="chat")),
+            patch(
+                "src.services.subscription_gating.check_ai_message_allowed",
+                side_effect=QuotaUnavailableError("db down"),
+            ),
+        ):
+            from src.services import chat_service
+
+            pre = chat_service.run_chat_preflight(ctx, "hello")
+        assert pre.terminal is not None
+        assert pre.terminal["type"] == "quota_unavailable"
+        assert "unavailable" in pre.terminal["message"]
+        assert pre.gate is None
+
     def test_should_stream_ai_false_for_document_action(self) -> None:
         ctx = RicoSessionContext.for_authenticated("u@example.com")
         with patch("src.rico_chat_api.RicoChatAPI.is_document_action_message", return_value=True):

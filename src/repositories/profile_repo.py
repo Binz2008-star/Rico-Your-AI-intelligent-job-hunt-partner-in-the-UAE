@@ -1297,6 +1297,54 @@ def find_identity_candidates(signal: IdentitySignal) -> list[Any]:
     return list(candidates_by_id.values())
 
 
+def find_registered_user_by_telegram_chat_id(chat_id: str) -> str | None:
+    """Return the external_user_id of a REGISTERED (web) account bound to this chat.
+
+    A Telegram chat is bound to a web account by /start when the sender's username
+    matches a rico_users row (telegram_chat_id is written onto that row). Native
+    Telegram users (external_user_id == chat_id) are deliberately NOT returned:
+    they have no web account and therefore no subscription/entitlement binding.
+
+    Returns None on DB unavailability, no match, or a public-only identity.
+    """
+    if not chat_id:
+        return None
+    db = _db()
+    if not db:
+        return None
+    try:
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT external_user_id
+                      FROM rico_users
+                     WHERE telegram_chat_id = %s
+                       AND external_user_id IS NOT NULL
+                       AND external_user_id <> ''
+                       AND external_user_id <> %s
+                       AND external_user_id NOT LIKE 'public:%%'
+                     ORDER BY updated_at DESC
+                     LIMIT 1
+                    """,
+                    (str(chat_id), str(chat_id)),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                return row["external_user_id"] if isinstance(row, dict) else row[0]
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.error(
+            "profile_repo: find_registered_user_by_telegram_chat_id failed ref=%s err=%s",
+            user_ref(f"tgchat:{str(chat_id)}"),
+            safe_exc(e),
+        )
+        return None
+
+
 # ============================================================================
 # Telegram alert roster
 # ============================================================================

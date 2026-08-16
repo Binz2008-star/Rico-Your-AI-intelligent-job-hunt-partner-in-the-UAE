@@ -1,10 +1,17 @@
 """
 Neon Postgres Database Integration
 Provides database functions with JSON fallback for reliability.
+
+Phase-3: all connections come from a bounded, thread-safe, per-process pool
+(``_ConnectionPool``). The pool replaces the previous open-a-fresh-connection-
+per-call model, which burned a new TCP+TLS handshake for every query and could
+exhaust the Neon connection ceiling under concurrency.
 """
 
 import logging
 import os
+import threading
+import time
 import psycopg2
 from psycopg2 import sql, OperationalError
 from dotenv import load_dotenv
@@ -25,18 +32,268 @@ DB_ENABLED = bool(DATABASE_URL and (
 # Fallback to JSON if DB fails
 JSON_FALLBACK = True
 
+
+class PoolTimeoutError(Exception):
+    """No free connection became available within the acquisition timeout."""
+
+
+class _CompatibleRow(dict):
+    """Row that supports BOTH dict-style and positional access.
+
+    The codebase mixes ``row["col"]`` / ``row.get("col")`` (RealDict style) and
+    ``row[0]`` / ``row[1]`` (tuple style) against the same shared connections.
+    After pooling, a single cursor factory must serve both — ``RealDictRow`` is
+    name-only (``row[0]`` raises KeyError) and ``DictRow`` has no ``.get()``.
+    This row is a dict (name access, ``.get()``, ``isinstance(row, dict)``,
+    ``dict(row)`` all work) whose integer indexing resolves against the column
+    order.
+    """
+
+    def __init__(self, cursor) -> None:
+        super().__init__()
+        self._keys = [d[0] for d in (cursor.description or ())]
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return super().__getitem__(self._keys[key])
+        return super().__getitem__(key)
+
+    def __setitem__(self, key, value):
+        if isinstance(key, int):
+            return super().__setitem__(self._keys[key], value)
+        return super().__setitem__(key, value)
+
+
+def _compatible_row_factory(cursor):
+    """psycopg2 row_factory protocol: (cursor) -> row object."""
+    return _CompatibleRow(cursor)
+
+
+class _CompatibleCursor(psycopg2.extensions.cursor):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.row_factory = _compatible_row_factory
+
+
+class _ConnectionPool:
+    """Bounded, thread-safe pool of live psycopg2 connections (per process).
+
+    Properties required by Phase-3:
+      * bounded max (``maxconn``) — never exceed Neon/Postgres limits;
+      * acquire timeout — a caller waits at most ``acquire_timeout`` seconds;
+      * dead-connection discard — a connection whose ``closed`` flag is set is
+        dropped instead of returned, and replaced on demand;
+      * process-local — lazy module-level init means a forked worker creates its
+        own pool on first use, never inheriting another process's connections;
+      * clean shutdown — ``close()`` closes every idle connection.
+    """
+
+    def __init__(
+        self,
+        dsn: str,
+        minconn: int = 1,
+        maxconn: int = 5,
+        acquire_timeout: float = 5.0,
+        connect_timeout: int = 5,
+        statement_timeout_ms: int = 0,
+    ) -> None:
+        self._dsn = dsn
+        self._minconn = max(0, minconn)
+        self._maxconn = max(1, maxconn)
+        self._acquire_timeout = max(0.5, acquire_timeout)
+        self._connect_timeout = max(1, connect_timeout)
+        self._statement_timeout_ms = max(0, int(statement_timeout_ms))
+        self._idle: List[Any] = []
+        self._total = 0
+        self._closed = False
+        self._cond = threading.Condition()
+        for _ in range(self._minconn):
+            self._idle.append(self._new_conn())
+            self._total += 1
+
+    def _new_conn(self):
+        kwargs: Dict[str, Any] = {
+            "cursor_factory": _CompatibleCursor,
+            "connect_timeout": self._connect_timeout,
+        }
+        if self._statement_timeout_ms:
+            # A shared connection must never be held hostage by one runaway
+            # query: statement_timeout bounds each statement server-side.
+            kwargs["options"] = f"-c statement_timeout={self._statement_timeout_ms}"
+        return psycopg2.connect(self._dsn, **kwargs)
+
+    def acquire(self):
+        deadline = time.monotonic() + self._acquire_timeout
+        with self._cond:
+            while True:
+                if self._closed:
+                    raise RuntimeError("database connection pool is closed")
+                while self._idle:
+                    conn = self._idle.pop()
+                    if not getattr(conn, "closed", True):
+                        return conn
+                    # Dead idle connection — discard; a fresh one replaces it.
+                    self._total = max(0, self._total - 1)
+                if self._total < self._maxconn:
+                    self._total += 1
+                    try:
+                        return self._new_conn()
+                    except Exception:
+                        self._total = max(0, self._total - 1)
+                        raise
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise PoolTimeoutError(
+                        "database connection pool exhausted "
+                        f"(maxconn={self._maxconn}) within {self._acquire_timeout}s"
+                    )
+                self._cond.wait(remaining)
+
+    def release(self, conn, *, close: bool = False) -> None:
+        with self._cond:
+            if self._closed or close or getattr(conn, "closed", True):
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                self._total = max(0, self._total - 1)
+            else:
+                # Never reuse a connection carrying an open transaction: the
+                # previous request's uncommitted rows, row locks, and snapshot
+                # must not leak into the next request or user. rollback() is a
+                # no-op on a clean connection and clears INTRANS otherwise. If
+                # rollback itself fails the connection is dead — discard it.
+                try:
+                    if not getattr(conn, "autocommit", False):
+                        conn.rollback()
+                    self._idle.append(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    self._total = max(0, self._total - 1)
+            self._cond.notify()
+
+    def close(self) -> None:
+        with self._cond:
+            self._closed = True
+            for conn in self._idle:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self._idle.clear()
+            self._total = 0
+            self._cond.notify_all()
+
+
+class _PooledConnection:
+    """Proxy over a pooled psycopg2 connection.
+
+    ``close()`` returns the connection to the pool instead of closing it, so
+    every existing ``conn.close()`` / ``finally: conn.close()`` call site works
+    unchanged. ``with conn:`` still commits/rolls back (delegated); if the
+    caller never closes explicitly, ``__exit__`` returns the connection to the
+    pool so nothing leaks. Attribute access, cursors, commits and rollbacks all
+    delegate to the underlying connection.
+    """
+
+    def __init__(self, raw, pool: "_ConnectionPool") -> None:
+        object.__setattr__(self, "_raw", raw)
+        object.__setattr__(self, "_pool", pool)
+        object.__setattr__(self, "_closed", False)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        object.__setattr__(self, "_closed", True)
+        self._pool.release(self._raw)
+
+    def __getattr__(self, name):
+        return getattr(self._raw, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            return self._raw.__exit__(exc_type, exc, tb)
+        finally:
+            self.close()
+
+    def __del__(self) -> None:
+        try:
+            if not self._closed and not getattr(self._raw, "closed", True):
+                # Caller never released it: never leak a live connection.
+                self.close()
+        except Exception:
+            pass
+
+
+_POOLS: Dict[str, _ConnectionPool] = {}
+_POOLS_LOCK = threading.Lock()
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _pool_for(dsn: str) -> _ConnectionPool:
+    """Lazy per-process pool, one per distinct DSN. Never shares a pool across
+    processes (each forked worker builds its own on first use)."""
+    with _POOLS_LOCK:
+        pool = _POOLS.get(dsn)
+        if pool is None:
+            pool = _ConnectionPool(
+                dsn,
+                minconn=_int_env("DATABASE_POOL_MINCONN", 1),
+                maxconn=_int_env("DATABASE_POOL_MAXCONN", 5),
+                acquire_timeout=_int_env("DATABASE_POOL_TIMEOUT", 5),
+                connect_timeout=_int_env("DATABASE_CONNECT_TIMEOUT", 5),
+                statement_timeout_ms=_int_env("DATABASE_STATEMENT_TIMEOUT_MS", 0),
+            )
+            _POOLS[dsn] = pool
+            logger.info(
+                "db_pool_initialized maxconn=%s minconn=%s",
+                pool._maxconn, pool._minconn,
+            )
+        return pool
+
+
+def get_pooled_connection(dsn: Optional[str] = None):
+    """Acquire a pooled connection (wrapped) for *dsn* (default DATABASE_URL).
+
+    Returns None when no DSN is available; raises on connect failure or pool
+    exhaustion."""
+    target = dsn or DATABASE_URL
+    if not target:
+        return None
+    pool = _pool_for(target)
+    return _PooledConnection(pool.acquire(), pool)
+
+
 def get_db_connection():
-    """Get database connection with error handling."""
+    """Get database connection with error handling.
+
+    Returns None only when the DB is not configured or unreachable at
+    acquisition time (the JSON-fallback contract). Pool exhaustion raises
+    (PoolTimeoutError) rather than silently falling back to JSON — an overloaded
+    pool must never turn a write into a fake JSON success.
+    """
     if not DB_ENABLED:
         return None
 
     try:
-        return psycopg2.connect(DATABASE_URL, connect_timeout=5)
+        return get_pooled_connection()
     except OperationalError as e:
         logger.warning("db_connection_failed: %s", e)
-        return None
-    except Exception as e:
-        logger.warning("db_connection_unexpected_error: %s", e)
         return None
 
 
@@ -105,6 +362,12 @@ def init_db():
             """)
 
             # Create settings table (used by /api/v1/settings)
+            # `notifications` JSONB mirrors migration 005's definition: the
+            # historical numbered migration 005 COMMENTS on settings.notifications,
+            # so a fresh database created by this runtime DDL must carry the
+            # column or a replay of the numbered migrations would fail. The
+            # application reads the keyword/threshold columns; this is a
+            # compatibility column (dead-but-present), safe on all deployments.
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
                     user_id TEXT PRIMARY KEY,
@@ -115,11 +378,16 @@ def init_db():
                     telegram_chat_id TEXT,
                     score_threshold_apply INTEGER DEFAULT 75,
                     score_threshold_watch INTEGER DEFAULT 50,
+                    notifications JSONB NOT NULL DEFAULT '{}',
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
 
             # Ensure new columns exist in legacy tables (idempotent migration)
+            cursor.execute("""
+                ALTER TABLE settings
+                ADD COLUMN IF NOT EXISTS notifications JSONB NOT NULL DEFAULT '{}'
+            """)
             cursor.execute("""
                 ALTER TABLE settings
                 ADD COLUMN IF NOT EXISTS score_threshold_apply INTEGER DEFAULT 75

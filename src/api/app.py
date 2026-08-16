@@ -55,6 +55,7 @@ from src.api.routers.avatar import router as avatar_router
 from src.api.routers.files import router as files_router
 from src.api.routers.paddle_billing import paddle_billing_router
 from src.api.routers.billing_whatsapp import billing_whatsapp_router
+from src.api.routers.confirm_account import router as confirm_account_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -189,6 +190,52 @@ def version_metadata() -> Dict[str, Any]:
         "deployed_at": _first_env("DEPLOYED_AT", "BUILD_TIME", "BUILD_TIMESTAMP"),
         "started_at": _PROCESS_STARTED_AT,
     }
+
+
+def _is_production_deploy() -> bool:
+    """True when running on a managed production platform.
+
+    Health/readiness semantics differ by deployment: in production a configured-
+    but-unreachable DB means the platform is NOT ready; in local dev/test (no
+    platform, JSON-store mode) it is a supported degraded configuration.
+    """
+    return bool(
+        os.getenv("RAILWAY_SERVICE_NAME")
+        or os.getenv("RAILWAY_REPLICA_ID")
+        or os.getenv("RENDER")
+        or os.getenv("VERCEL")
+        or os.getenv("RICO_ENV") == "production"
+        or os.getenv("ENVIRONMENT") == "production"
+    )
+
+
+def _probe_db() -> str:
+    """Return one of 'ok' | 'disabled' | 'unavailable'.
+
+    'disabled' — no DATABASE_URL configured (supported JSON-store/local mode).
+    'unavailable' — DATABASE_URL is configured but a SELECT 1 round-trip fails
+    (a real outage). This is a live probe, not an env check. Never raises.
+    """
+    try:
+        from src.db import DATABASE_URL, get_db_connection
+
+        if not DATABASE_URL:
+            return "disabled"
+        conn = get_db_connection()
+        if conn is None:
+            return "unavailable"
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+            return "ok"
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    except Exception:
+        return "unavailable"
 
 
 def init_sentry() -> None:
@@ -469,6 +516,22 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# ── API docs gating (launch-blocker closure) ──────────────────────────────────
+# OpenAPI docs are disabled by default in production and enabled by explicit
+# configuration (RICO_ENABLE_API_DOCS=true) or in non-production environments.
+# /api/openapi.json would otherwise expose the full API surface publicly.
+def _docs_enabled() -> bool:
+    if os.getenv("RICO_ENABLE_API_DOCS", "").strip().lower() in ("1", "true", "yes", "on"):
+        return True
+    return not _is_production_deploy()
+
+
+_DOCS_KWARGS: dict[str, str | None] = {
+    "docs_url": "/api/docs" if _docs_enabled() else None,
+    "redoc_url": "/api/redoc" if _docs_enabled() else None,
+    "openapi_url": "/api/openapi.json" if _docs_enabled() else None,
+}
+
 app = FastAPI(
     title="Rico API",
     version="1.0.0",
@@ -478,9 +541,7 @@ app = FastAPI(
         "Authenticated endpoints require a JWT in an httpOnly cookie. "
         "Public endpoints are session-based and rate-limited."
     ),
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    **_DOCS_KWARGS,
 )
 
 app.state.limiter = limiter
@@ -600,6 +661,7 @@ app.include_router(apply_queue_router)
 app.include_router(mission_router)
 app.include_router(paddle_billing_router)
 app.include_router(billing_whatsapp_router)
+app.include_router(confirm_account_router)
 
 
 @app.get("/health")
@@ -629,6 +691,14 @@ def health_check() -> Dict[str, Any]:
             payload["status"] = "degraded"
     except Exception:
         pass
+    # Database connectivity — the app is not actually healthy with a dead DB
+    # (most endpoints and ALL SaaS state live in Postgres). /health stays HTTP 200
+    # to avoid liveness restart-loops, but reports db=unavailable and flips status
+    # to "degraded" in production so monitoring/deploy gates can see it. A DB that
+    # is simply not configured (db=disabled) is the supported JSON-store mode.
+    payload["db"] = _probe_db()
+    if payload["db"] == "unavailable" and _is_production_deploy():
+        payload["status"] = "degraded"
     return payload
 
 
@@ -639,12 +709,15 @@ def readiness_check() -> JSONResponse:
 
     Returns HTTP 503 when core reasoning has NO reachable valid model (provider
     not configured, or a fresh /models probe lists none of the resolved chain, or
-    a persistent unusable failure with no backup); HTTP 200 otherwise. /health
-    stays 200 always so a transient provider blip never restart-loops the process.
+    a persistent unusable failure with no backup) OR when the database is
+    unreachable (no SaaS state can be served without it); HTTP 200 otherwise.
+    /health stays 200 always so a transient provider blip never restart-loops the
+    process.
 
     Cache-only: answers from the SAME cached provider state as /health and makes
     NO per-request upstream call, so it cannot be looped to burn the provider
-    balance. The /models cache is refreshed only by the background daemon.
+    balance. The /models cache is refreshed only by the background daemon. The DB
+    probe is a single SELECT 1 bounded by connect_timeout.
     """
     body: Dict[str, Any] = {"ready": True, "service": "Job Automation Platform API"}
     status = 200
@@ -657,6 +730,11 @@ def readiness_check() -> JSONResponse:
         # Never crash the probe: a computation error is not evidence of unreadiness.
         body = {"ready": True, "error": "readiness_indeterminate"}
         status = 200
+    db = _probe_db()
+    body["db"] = db
+    if db == "unavailable" and _is_production_deploy():
+        body["ready"] = False
+        status = 503
     return JSONResponse(content=body, status_code=status)
 
 

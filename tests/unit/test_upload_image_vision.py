@@ -25,6 +25,22 @@ def _guest_capability_owner_browser(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _ocr_cap_allowed(monkeypatch):
+    """The external-OCR daily cap is DB-backed and fails closed when usage
+    cannot be verified. These unit tests exercise the OCR transcription path,
+    not the cap (whose fail-closed + limit behavior is covered by
+    tests/test_launch_blockers.py) — pin the cap to allowed."""
+    monkeypatch.setattr(
+        "src.repositories.ai_usage_repo.count_public_ai_usage_strict",
+        lambda *a, **k: 0,
+    )
+    monkeypatch.setattr(
+        "src.repositories.ai_usage_repo.record_public_ai_usage",
+        lambda *a, **k: True,
+    )
+
+
 
 os.environ.setdefault("JWT_SECRET", "ricosecret" + "x" * 21)
 
@@ -56,8 +72,12 @@ def reset_rate_limiter():
 
 
 def _post_image(client):
+    # Images are transcribed by an EXTERNAL OCR/vision provider, which requires
+    # explicit per-upload consent (launch-blocker consent boundary). These tests
+    # exercise the OCR path, so they opt in. The no-consent refusal is covered
+    # by tests/test_launch_blockers.py.
     return client.post(
-        f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UID}",
+        f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UID}&consent_to_external_processing=true",
         files={"file": ("crypto-job.png", io.BytesIO(_PNG), "image/png")},
     )
 

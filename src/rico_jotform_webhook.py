@@ -289,6 +289,41 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "identity_resolution": resolution_meta,
             }
 
+        # ── Launch-blocker closure: merge into an EXISTING registered account ──
+        # requires out-of-band ownership proof. The form input (email / Telegram
+        # handle) is unverified — the submitter merely typed it. We NEVER write
+        # profile/settings/CV into the matched account on that basis. Instead we
+        # create a single-use, time-limited confirmation bound to the account and
+        # email the ACCOUNT OWNER a link. Only proof of the owner's mailbox may
+        # apply the pending payload (see confirm-account endpoint).
+        if resolution.action == "merge" and resolution.matched_user_id:
+            from src.services.account_confirmation_service import (
+                create_jotform_merge_confirmation,
+            )
+
+            pending = {
+                "user": mapped["user"],
+                "profile": mapped["profile"],
+                "settings": mapped["settings"],
+                "cv_file_url": mapped.get("cv_file_url"),
+            }
+            if not create_jotform_merge_confirmation(resolution.matched_user_id, pending):
+                # The owner could not be reached and nothing was written — fail
+                # closed so the provider retries; never silently drop the merge.
+                raise RuntimeError("jotform_merge_confirmation_dispatch_failed")
+            db.mark_webhook_event_processed(
+                provider="jotform",
+                submission_id=submission_id,
+                status="pending_confirmation",
+                metadata={"external_user_id": user_id, "identity_resolution": resolution_meta},
+                conn=conn,
+            )
+            return {
+                "status": "accepted",
+                "reason": "confirmation_required",
+                "identity_resolution": resolution_meta,
+            }
+
         if not user_id:
             logger.info(
                 "jotform_webhook: no stable user_id in submission=%s — skipping DB write",

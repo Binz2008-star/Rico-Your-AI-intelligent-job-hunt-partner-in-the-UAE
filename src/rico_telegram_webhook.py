@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from collections import deque
 from threading import Lock
-from typing import Any, Deque, Dict, Set, Tuple
+from typing import Any, Deque, Dict, Optional, Set, Tuple
 
 from src.rico_chat_api import RicoChatAPI
 from src.rico_telegram_ui import handle_callback_only
 from src.telegram_actions import answer_callback_query
 from src.telegram_bot import send_telegram_to_user
 from src.repositories.profile_repo import find_profiles_by_telegram_username, upsert_profile
+from src.models.principal import IdentityOwnershipAmbiguous
+from src.log_privacy import user_ref
 
 logger = logging.getLogger(__name__)
 
@@ -29,26 +32,32 @@ _SEEN_MAX = 2000
 _SEEN_TTL = 3600  # 1 hour — Telegram retries expire well within this window
 
 
-def _is_duplicate_update(update_id: int) -> bool:
-    """Return True if this update_id was already processed. Thread-safe."""
+def _is_seen_update(update_id: int) -> bool:
+    """Return True if this update_id was already processed (no side effect).
+
+    Thread-safe, read-only: marking happens ONLY after processing succeeds
+    (see _mark_seen_update), so a failed delivery is never silently swallowed
+    as a duplicate — Telegram retries it and the action is not lost.
+    """
     now = time.monotonic()
     with _SEEN_LOCK:
-        # Purge expired entries from the front of the deque
         while _SEEN_IDS and _SEEN_IDS[0][1] < now:
             _SEEN_SET.discard(_SEEN_IDS.popleft()[0])
+        return update_id in _SEEN_SET
 
-        if update_id in _SEEN_SET:
-            return True
 
-        # Evict oldest if at capacity
+def _mark_seen_update(update_id: int) -> None:
+    """Record an update_id as processed. Thread-safe; capacity-bounded."""
+    now = time.monotonic()
+    with _SEEN_LOCK:
+        while _SEEN_IDS and _SEEN_IDS[0][1] < now:
+            _SEEN_SET.discard(_SEEN_IDS.popleft()[0])
         if len(_SEEN_SET) >= _SEEN_MAX:
             oldest_id, _ = _SEEN_IDS.popleft()
             _SEEN_SET.discard(oldest_id)
-
         expiry = now + _SEEN_TTL
         _SEEN_IDS.append((update_id, expiry))
         _SEEN_SET.add(update_id)
-        return False
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +71,13 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
     1. Match message.from.username against rico_users.telegram_username (WebApp users
        who have already shared their handle via chat).
     2. If no match, treat the chat_id itself as the Rico user_id (pure Telegram users).
+
+    Launch-blocker closure: a Telegram username match is NOT sufficient durable
+    ownership proof — a freed/abandoned handle could be re-bound to a victim's
+    account. When a username matches an EXISTING account, an out-of-band
+    one-time code is emailed to that account's address and the chat is bound
+    only after the owner replies with the code. Native (unmatched) chats bind by
+    chat identity as before.
     """
     chat_id = str(message.get("chat", {}).get("id") or message.get("from", {}).get("id") or "")
     username = (message.get("from", {}).get("username") or "").strip().lstrip("@").lower()
@@ -72,9 +88,27 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
         try:
             matches = find_profiles_by_telegram_username(username)
             if matches:
-                bound_user_id = matches[0].user_id
+                matched = matches[0].user_id
+                from src.services.account_confirmation_service import (
+                    create_telegram_bind_confirmation,
+                )
+
+                if create_telegram_bind_confirmation(matched, chat_id, username):
+                    reply = (
+                        "This Telegram username is already linked to a Rico account. "
+                        "I emailed a one-time confirmation code to that account's email. "
+                        "Reply with the code here to link this chat."
+                    )
+                else:
+                    reply = (
+                        "I couldn't verify this account right now. "
+                        "Please try /start again in a moment."
+                    )
+                if chat_id:
+                    send_telegram_to_user(chat_id, reply)
+                return {"chat_id": chat_id, "reply": reply}
         except Exception as exc:
-            logger.warning("telegram_start: lookup failed username=%s: %s", username, exc)
+            logger.warning("telegram_start: confirmation path failed username=%s: %s", username, exc)
 
     # Fall back to chat_id as the Rico user identity (native Telegram users)
     if not bound_user_id:
@@ -161,14 +195,161 @@ def _handle_stop(message: Dict[str, Any]) -> Dict[str, Any]:
 # Main dispatcher
 # ---------------------------------------------------------------------------
 
+def _resolve_registered_user(chat_id: str) -> str | None:
+    """Return the registered web account bound to this Telegram chat, if any.
+
+    Only a Telegram chat that was linked to a web account (/start with a matching
+    username) has an entitlement relationship; a bound account must be held to the
+    same subscription gates as the web surface. Never raises.
+    """
+    if not chat_id:
+        return None
+    try:
+        from src.repositories.profile_repo import find_registered_user_by_telegram_chat_id
+
+        return find_registered_user_by_telegram_chat_id(chat_id)
+    except Exception:
+        logger.warning("telegram: registered-user resolution failed chat_id=%s", chat_id)
+        return None
+
+
+def _gate_telegram_ai(user_id: str) -> str | None:
+    """Return a gate reply when this user has no AI-message allowance left.
+
+    Mirrors the web surface's entitlement gate (check_ai_message_allowed_for_user)
+    so a Telegram chat bound to a registered account cannot bypass the paid
+    AI-message cap. Returns None when allowed or when usage cannot be verified.
+    """
+    try:
+        from src.services.subscription_gating import (
+            QuotaUnavailableError,
+            check_ai_message_allowed_for_user,
+        )
+
+        gate = check_ai_message_allowed_for_user(user_id)
+    except QuotaUnavailableError:
+        # Usage cannot be verified (DB down) — fail closed rather than granting
+        # untracked AI usage on the Telegram surface.
+        return "I can't verify your usage right now because the service is temporarily unavailable. Please try again in a few minutes."
+    except IdentityOwnershipAmbiguous:
+        # Ambiguous/undecidable account ownership must NOT fail open on Telegram:
+        # the web surface refuses (account_conflict) rather than granting usage.
+        logger.warning("telegram: ai gate ambiguous account identity user=%s", user_ref(user_id))
+        return (
+            "This account could not be resolved unambiguously, so it cannot "
+            "be used right now. Please contact support."
+        )
+    except Exception:
+        return None
+    if gate and not gate.allowed:
+        return gate.message
+    return None
+
+
 def process_telegram_update(update: Dict[str, Any]) -> Dict[str, Any]:
-    # Deduplicate: Telegram retries the same update_id if our server returns
-    # a non-2xx response or times out. Silently ack duplicates without re-processing.
+    """Dispatch a Telegram update, deduplicating retries WITHOUT losing work.
+
+    Telegram retries the same update_id when our server returns a non-2xx
+    response or times out. The seen-mark is applied ONLY after processing
+    succeeds, so a failed delivery is retried (at-least-once) instead of being
+    silently skipped as a duplicate — an action (save/apply/stop) is never lost
+    to a transient 500.
+    """
     update_id = update.get("update_id")
-    if update_id is not None and _is_duplicate_update(int(update_id)):
+    if update_id is not None and _is_seen_update(int(update_id)):
         logger.debug("telegram_duplicate_update skipped update_id=%s", update_id)
         return {"ok": True, "skipped": True}
 
+    result = _process_update(update)
+
+    if update_id is not None:
+        _mark_seen_update(int(update_id))
+    return result
+
+
+def _looks_like_bind_code(text: str) -> bool:
+    """True when *text* has the shape of a confirmation code (urlsafe 43 chars).
+
+    Keeps the code-reply check off every ordinary message.
+    """
+    if len(text) != 43:
+        return False
+    return all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-" for c in text)
+
+
+def _handle_bind_code_reply(text: str, chat_id: str) -> Optional[Dict[str, Any]]:
+    """Bind this chat to the account whose emailed code was just redeemed.
+
+    Returns a reply dict when the code was valid AND bound; None otherwise
+    (fall through to normal message handling). Single-use code, chat-scoped.
+    """
+    if not _looks_like_bind_code(text) or not chat_id:
+        return None
+    from src.services.account_confirmation_service import resolve_telegram_bind_code
+
+    bound_email = resolve_telegram_bind_code(text, chat_id)
+    if not bound_email:
+        return None
+    try:
+        upsert_profile(
+            bound_email,
+            {
+                "telegram_chat_id": chat_id,
+                "telegram_notifications_enabled": True,
+            },
+            require_db=True,
+        )
+        reply = "Telegram is now linked to your Rico account."
+    except Exception as exc:
+        logger.warning("telegram_bind: profile write failed chat_id=%s: %s", chat_id, exc)
+        reply = "I couldn't link your account right now. Please try /start again."
+    if chat_id:
+        send_telegram_to_user(chat_id, reply)
+    return {"chat_id": chat_id, "reply": {"message": reply}}
+
+
+def _gate_native_telegram(chat_id: str) -> str | None:
+    """Bounded daily AI allowance for unbound (native) Telegram chats.
+
+    Launch-blocker closure: an unbound chat must not be an unlimited LLM proxy.
+    The allowance is a fixed daily cap keyed by the chat identity in the
+    content-free usage ledger. DB failures FAIL CLOSED (deny) — never unlimited.
+    """
+    if not chat_id:
+        return None
+    limit = int(os.environ.get("RICO_TELEGRAM_GUEST_DAILY_LIMIT", "10") or "10")
+    from datetime import datetime, timezone
+
+    from src.repositories.ai_usage_repo import (
+        count_public_ai_usage_strict,
+        record_public_ai_usage,
+    )
+
+    now = datetime.now(timezone.utc)
+    window_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        usage = count_public_ai_usage_strict(chat_id, window_start)
+    except Exception:
+        logger.warning("telegram: native gate verification failed chat_id=%s", chat_id)
+        return (
+            "I can't verify your usage right now because the service is "
+            "temporarily unavailable. Please try again in a few minutes."
+        )
+    if usage >= limit:
+        return (
+            f"You've reached today's free message limit ({limit}). "
+            "Link your Rico account with /start to continue."
+        )
+    record_public_ai_usage(chat_id)
+    return None
+
+
+def _process_update(update: Dict[str, Any]) -> Dict[str, Any]:
+    """Process one Telegram update. Raises on failure so the caller can retry.
+
+    The deduplication seen-mark is applied by process_telegram_update only after
+    this returns without raising.
+    """
     if update.get("callback_query"):
         result = handle_callback_only(update)
         callback_id = result.get("callback_id", "")
@@ -191,6 +372,38 @@ def process_telegram_update(update: Dict[str, Any]) -> Dict[str, Any]:
         return _handle_start(message)
     if command in ("/stop", "/stop@ricobot"):
         return _handle_stop(message)
+
+    # Telegram bind confirmation: a code emailed to the account owner, replied
+    # in this chat, binds the chat to the account (single-use, chat-scoped).
+    bind_result = _handle_bind_code_reply(text, chat_id)
+    if bind_result is not None:
+        return bind_result
+
+    # Entitlement gate: a Telegram chat bound to a registered web account is held
+    # to the same AI-message cap as the web chat (billing bypass fix). Native
+    # Telegram-only chats (no web account, no subscription relationship) are not
+    # gated here — that remains an explicit product decision.
+    bound_user = _resolve_registered_user(chat_id)
+    if bound_user:
+        gate_reply = _gate_telegram_ai(bound_user)
+        if gate_reply:
+            if chat_id:
+                send_telegram_to_user(chat_id, gate_reply)
+            return {"chat_id": chat.get("id"), "reply": {"message": gate_reply}}
+        # The bound account runs under ITS identity (email), not the raw
+        # chat_id: the turn is recorded in rico_chat_history under the account
+        # so the AI-message allowance is actually consumed by Telegram usage
+        # (final-hardening billing fix). The gate above already verified the
+        # allowance.
+        user_id = bound_user
+    else:
+        # Unbound (native) Telegram chat: bounded daily AI allowance, fail
+        # closed on DB outage — never an unlimited LLM proxy.
+        native_gate = _gate_native_telegram(chat_id)
+        if native_gate:
+            if chat_id:
+                send_telegram_to_user(chat_id, native_gate)
+            return {"chat_id": chat.get("id"), "reply": {"message": native_gate}}
 
     try:
         response = chat_api.process_message(user_id=user_id, message=text)

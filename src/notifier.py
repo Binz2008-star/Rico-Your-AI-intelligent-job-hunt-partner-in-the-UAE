@@ -33,13 +33,16 @@ def send_email(subject: str, content: str) -> bool:
         msg["To"] = email_to
 
         context = ssl.create_default_context()
-        # Use SSL for port 465, STARTTLS for port 587
+        # Use SSL for port 465, STARTTLS for port 587.
+        # A hard timeout keeps a silent-but-connected SMTP server (accepts TCP,
+        # never responds) from hanging the entire daily pipeline indefinitely.
+        _SMTP_TIMEOUT = 10
         if smtp_port == 465:
-            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context) as server:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=_SMTP_TIMEOUT, context=context) as server:
                 server.login(smtp_user, smtp_password)
                 server.send_message(msg)
         else:
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=_SMTP_TIMEOUT) as server:
                 server.starttls(context=context)
                 server.login(smtp_user, smtp_password)
                 server.send_message(msg)

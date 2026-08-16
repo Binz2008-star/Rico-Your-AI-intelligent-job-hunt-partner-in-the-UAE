@@ -173,3 +173,16 @@ def test_t6_degraded_still_recognises_roles():
     # Role recognition survives a degraded provider (preamble lists the roles).
     assert "recognised 5 target roles" in (res.get("message") or "").lower() \
         or res.get("recognized_roles")
+
+import os
+
+TEST_DATABASE_URL = os.environ.get("RICO_TEST_DATABASE_URL")
+try:
+    import psycopg2
+except Exception:
+    psycopg2 = None
+
+pytestmark = pytest.mark.skipif(
+    not TEST_DATABASE_URL or psycopg2 is None,
+    reason="RICO_TEST_DATABASE_URL not set (or psycopg2 unavailable) - real-Postgres integration tests skipped.",
+)

@@ -1,17 +1,14 @@
 name: Keep Warm
 
-# Keeps the Render backend from idling out (cold-start fix, owner decision
-# 2026-07-21 — «نفذ أ»): the instance sleeps after ~15 minutes without
-# traffic, so the first request each morning paid the full boot (observed
-# 41.75s end-to-end in production). A tiny read-only /health GET every 10
-# minutes keeps it resident.
+# Keeps the backend warm (cold-start avoidance). The canonical backend moved to
+# Railway (https://api.ricohunt.com — see deploy-production.yml, 2026-07-30);
+# the retired onrender.com host is no longer served. This heater pings the
+# canonical Railway /health every 10 minutes.
 #
 # - Read-only, no secrets, no repo checkout, no state.
 # - This is a HEATER, not a monitor: a non-200 emits a warning, never a red
-#   run — deploy gates (deploy-render.yml) and smoke workflows own alerting.
+#   run — deploy gates and smoke workflows own alerting.
 # - Kill switch: disable this workflow from the Actions UI.
-# - Render budget: one always-warm instance stays within the plan's monthly
-#   instance-hours for a single service.
 
 on:
   schedule:
@@ -33,7 +30,7 @@ jobs:
         run: |
           for i in 1 2 3; do
             code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 \
-              "https://rico-job-automation-api.onrender.com/health" || true)
+              "https://api.ricohunt.com/health" || true)
             if [ "$code" = "200" ]; then
               echo "healthy (200)"
               exit 0

@@ -1,0 +1,201 @@
+name: Docker Production Build
+
+# Final-launch-preparation: the production Docker pipeline.
+#
+# Flow (never `latest` as a deployment identity):
+#   commit -> tests (qa-tests.yml / guards) -> backend build -> frontend build
+#   -> image secret scan -> non-root verification -> container smoke test
+#   -> push IMMUTABLE image (digest + sha-<git-sha> tag) -> deploy by digest
+#
+# Images are pushed to GitHub Container Registry (ghcr.io) under the repo's
+# package namespace. The frontend image is environment-specific (its /proxy
+# rewrite target is inlined at build) and is built with the canonical
+# production origin here; per-environment builds must supply the correct
+# BACKEND_API_BASE_URL/NEXT_PUBLIC_* build args.
+#
+# No runtime secrets are used in this pipeline. The GITHUB_TOKEN is scoped to
+# contents:read + packages:write only.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+  IMAGE_NAME: ${{ github.event.repository.name }}
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-backend:
+    name: Build + scan + smoke (backend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Log in to GHCR
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build backend image (local)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: false
+          load: true
+          tags: rico-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Image verification: no credential artifacts ───────────────────────
+      - name: Scan image for secret artifacts
+        run: |
+          HITS=$(docker run --rm --entrypoint sh rico-backend:ci -c \
+            "find /app -type f \( -name '*.env' -o -name 'rico-job-automation-api.env' \
+              -o -name 'cookies.txt' -o -name 'token.json' -o -name '*.token.json' \
+              -o -name 'credentials.json' -o -name 'client_secret*' -o -name '*.pem' \
+              -o -name '*.key' -o -name '.git' \) 2>/dev/null" || true)
+          if [ -n "$HITS" ]; then
+            echo "::error::Credential artifact(s) found in image:"; echo "$HITS"; exit 1
+          fi
+          echo "image secret scan: clean"
+
+      - name: Verify container runs as non-root
+        run: |
+          UID_OUT=$(docker run --rm --entrypoint sh rico-backend:ci -c "id -u")
+          if [ "$UID_OUT" = "0" ]; then echo "::error::image runs as root"; exit 1; fi
+          echo "non-root uid=$UID_OUT"
+
+      - name: Start test Postgres
+        run: |
+          docker run -d --name ci-pg -e POSTGRES_USER=rico -e POSTGRES_PASSWORD=rico \
+            -e POSTGRES_DB=rico -p 5432:5432 postgres:16
+          for i in $(seq 1 20); do
+            docker exec ci-pg pg_isready -U rico -d rico >/dev/null 2>&1 && break
+            sleep 2
+          done
+
+      - name: Container smoke — migrate, /health, /ready, docs gated
+        run: |
+          DSN="postgresql://rico:rico@localhost:5432/rico"
+          # 1) migration one-shot on a FRESH database
+          docker run --rm rico-backend:ci python -m src.db_migrations --dsn "$DSN" apply || exit 1
+          # 2) run the app in production mode (strict startup check, docs off)
+          docker run -d --name ci-api -p 58001:8000 \
+            -e DATABASE_URL="$DSN" \
+            -e JWT_SECRET="cismoke-secret-01234567890123456789" \
+            -e GUEST_CAPABILITY_SECRET="cismoke-guest-0123456789012345678" \
+            -e RICO_CRON_SECRET="cismoke-cron" \
+            -e ADMIN_EMAIL="smoke@ci.local" -e ADMIN_PASSWORD="SmokePass123!" \
+            -e ALLOW_ENV_AUTH_FALLBACK="false" -e COOKIE_SECURE="true" \
+            -e RICO_ENV="production" -e ENVIRONMENT="production" \
+            -e RICO_RUN_STARTUP_MIGRATIONS="false" -e RICO_ENABLE_API_DOCS="false" \
+            -e DEEPSEEK_API_KEY="sk-fake" -e RICO_AI_PROVIDER="deepseek" \
+            rico-backend:ci
+          for i in $(seq 1 30); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:58001/health || true)
+            [ "$CODE" = "200" ] && break
+            sleep 2
+          done
+          test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:58001/health)" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:58001/ready)" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:58001/api/docs)" = "404"
+          docker stop ci-api ci-pg >/dev/null
+          echo "container smoke: OK"
+
+      # ── Push immutable backend image ──────────────────────────────────────
+      - name: Push backend image (immutable)
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-backend:sha-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-backend:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-frontend:
+    name: Build + scan (frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Log in to GHCR
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build frontend image (local)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./apps/web
+          file: apps/web/Dockerfile
+          push: false
+          load: true
+          tags: rico-web:ci
+          build-args: |
+            BACKEND_API_BASE_URL=https://api.ricohunt.com
+            NEXT_PUBLIC_API_BASE_URL=https://api.ricohunt.com
+            NEXT_PUBLIC_APP_URL=https://ricohunt.com
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan frontend image for secret artifacts
+        run: |
+          HITS=$(docker run --rm --entrypoint sh rico-web:ci -c \
+            "find /app -type f \( -name '*.env' -o -name 'cookies.txt' -o -name 'token.json' \
+              -o -name 'credentials.json' -o -name 'client_secret*' -o -name '*.pem' \
+              -o -name '*.key' -o -name '.git' \) 2>/dev/null" || true)
+          if [ -n "$HITS" ]; then echo "::error::Credential artifact(s) in frontend image:"; echo "$HITS"; exit 1; fi
+          echo "frontend image secret scan: clean"
+
+      - name: Verify frontend runs as non-root
+        run: |
+          UID_OUT=$(docker run --rm --entrypoint sh rico-web:ci -c "id -u")
+          if [ "$UID_OUT" = "0" ]; then echo "::error::frontend image runs as root"; exit 1; fi
+          echo "frontend non-root uid=$UID_OUT"
+
+      - name: Push frontend image (immutable)
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./apps/web
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-web:sha-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-web:${{ github.ref_name }}
+          build-args: |
+            BACKEND_API_BASE_URL=https://api.ricohunt.com
+            NEXT_PUBLIC_API_BASE_URL=https://api.ricohunt.com
+            NEXT_PUBLIC_APP_URL=https://ricohunt.com
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

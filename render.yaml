@@ -27,6 +27,17 @@ services:
       # ── Database ──────────────────────────────────────────────────────────────
       - key: DATABASE_URL
         sync: false
+      # Production schema contract (launch-blocker closure): migrations are
+      # applied OUTSIDE the app (migration runner in CI / operator), and the app
+      # performs a strict read-only critical-table check at startup, failing
+      # closed instead of serving on a partially-migrated schema. Keep false in
+      # production; true only for local/dev databases.
+      - key: RICO_RUN_STARTUP_MIGRATIONS
+        value: "false"
+      # OpenAPI docs are disabled in production by default; set true only if
+      # intentionally exposing /api/docs on the public host.
+      - key: RICO_ENABLE_API_DOCS
+        value: "false"
 
       # ── Email / SMTP (secrets) ────────────────────────────────────────────────
       - key: EMAIL_USER

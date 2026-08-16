@@ -116,7 +116,7 @@ def run_chat_preflight(ctx: RicoSessionContext, message: str) -> ChatPreflight:
     identical regardless of how the client fetched the turn.
     """
     from src.services.operation_state import build_status_response, is_status_followup
-    from src.services.subscription_gating import check_ai_message_allowed
+    from src.services.subscription_gating import check_ai_message_allowed, QuotaUnavailableError
     from src.rico.policy import classify_request
 
     if is_status_followup(message):
@@ -151,6 +151,14 @@ def run_chat_preflight(ctx: RicoSessionContext, message: str) -> ChatPreflight:
             "chat_preflight: quota refused reason=%s", "ambiguous_account_ownership"
         )
         return ChatPreflight(terminal=account_conflict_response(), gate=None)
+    except QuotaUnavailableError:
+        # Usage cannot be verified (DB down) — fail closed: never grant untracked
+        # AI usage. A distinct terminal (no upgrade CTA) so the user sees a
+        # transient-outage message, not a "hit your limit" upsell.
+        from src.services.subscription_gating import quota_unavailable_response
+
+        logger.warning("chat_preflight: quota unavailable failed closed")
+        return ChatPreflight(terminal=quota_unavailable_response(), gate=None)
     if gate and not gate.allowed:
         return ChatPreflight(terminal=gate.to_response(), gate=gate)
 
@@ -198,11 +206,14 @@ def send_message(
     message: str,
     operation_id: str | None = None,
     language: str | None = None,
+    _timer: Any = None,
 ) -> Dict[str, Any]:
     """Policy Gateway → IntentRouter → legacy classifier."""
     # Shared, transport-independent preflight: status / policy / entitlement gate.
     pre = run_chat_preflight(ctx, message)
     if pre.terminal is not None:
+        if _timer is not None:
+            _timer.record("preflight_terminal", outcome="preflight_terminal")
         return pre.terminal
     gate = pre.gate
 
@@ -210,6 +221,8 @@ def send_message(
     from src.repositories.profile_repo import get_profile
     profile = get_profile(ctx.user_id)
     profile_present = profile is not None
+    if _timer is not None:
+        _timer.record("identity_profile_ready", outcome="profile" if profile_present else "no_profile")
 
     # ── Uploaded-document action — deterministic, before the AI/legacy split ───
     # "Summarize this document", "Extract key information", "Describe this image"
@@ -265,10 +278,31 @@ def send_message(
     # onboarding welcome on every turn because it can never persist state.
     # Route to conversational AI instead so public users get real responses.
     _force_ai = not decision.should_use_ai and profile is None and not ctx.can_persist_profile
+    _route = "ai" if (decision.should_use_ai or _force_ai) and not _force_real_search else "legacy"
+    if _timer is not None:
+        _timer.record("intent_resolved", outcome=_route)
     if (decision.should_use_ai or _force_ai) and not _force_real_search:
-        result = _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
+        if _timer is not None:
+            _timer.record("service_started")
+        try:
+            result = _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
+        except Exception:
+            if _timer is not None:
+                _timer.record("service_finished", outcome="error")
+            raise
+        if _timer is not None:
+            _timer.record("service_finished", outcome="ok")
     else:
-        result = _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)
+        if _timer is not None:
+            _timer.record("service_started")
+        try:
+            result = _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)
+        except Exception:
+            if _timer is not None:
+                _timer.record("service_finished", outcome="error")
+            raise
+        if _timer is not None:
+            _timer.record("service_finished", outcome="ok")
 
     # Warn authenticated users who are approaching their AI-message allowance.
     # Threshold: ≤10 remaining. For the Free daily allowance (10/day) this shows

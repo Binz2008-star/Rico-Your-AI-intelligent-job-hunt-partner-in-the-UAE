@@ -320,8 +320,14 @@ class TestDuplicateGuard:
 
 class TestStartHandler:
 
-    def test_start_opts_in_known_username(self):
-        """Known Telegram username → opt_in called with chat_id."""
+    def test_start_known_username_requires_email_confirmation(self):
+        """A known Telegram username now requires an emailed one-time code.
+
+        Launch-blocker closure: a freed/abandoned handle must not silently
+        re-bind a victim's account. A username match creates a confirmation
+        bound to the matched account and does NOT bind the chat until the owner
+        redeems the code in-chat.
+        """
         from src.rico_telegram_webhook import _handle_start
 
         mock_profile = MagicMock()
@@ -329,15 +335,33 @@ class TestStartHandler:
 
         with patch("src.rico_telegram_webhook.find_profiles_by_telegram_username",
                    return_value=[mock_profile]), \
-             patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert:
+             patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert, \
+             patch("src.services.account_confirmation_service.create_telegram_bind_confirmation",
+                   return_value=True) as create_bind:
 
             result = _handle_start({"chat": {"id": 999}, "from": {"id": 999, "username": "Robin_amg"}})
 
-        mock_upsert.assert_called_once()
-        updates = mock_upsert.call_args[0][1]
-        assert updates.get("telegram_notifications_enabled") is True
-        reply = result["reply"]
-        assert "job alerts" in reply.lower() or "notifications" in reply.lower() or "receive" in reply.lower() or "/stop" in reply.lower()
+        create_bind.assert_called_once()
+        assert create_bind.call_args[0][0] == "user@example.com"  # matched account
+        assert create_bind.call_args[0][1] == "999"               # this chat
+        mock_upsert.assert_not_called()  # no premature binding without proof
+        assert "confirmation code" in result["reply"]
+
+    def test_start_known_username_confirmation_dispatch_failure_does_not_bind(self):
+        """If the owner cannot be emailed a code, fail closed — never bind."""
+        from src.rico_telegram_webhook import _handle_start
+
+        mock_profile = MagicMock()
+        mock_profile.user_id = "user@example.com"
+
+        with patch("src.rico_telegram_webhook.find_profiles_by_telegram_username",
+                   return_value=[mock_profile]), \
+             patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert, \
+             patch("src.services.account_confirmation_service.create_telegram_bind_confirmation",
+                   return_value=False):
+            result = _handle_start({"chat": {"id": 999}, "from": {"id": 999, "username": "Robin_amg"}})
+
+        mock_upsert.assert_not_called()
 
     def test_start_unknown_username_returns_link_prompt(self):
         """Unknown Telegram username → creates record under chat_id."""

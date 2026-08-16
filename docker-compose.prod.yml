@@ -1,0 +1,162 @@
+# Rico — PRODUCTION docker-compose
+#
+# This file is the production runtime model. It is distinct from
+# docker-compose.yml (LOCAL DEVELOPMENT ONLY).
+#
+# SECRETS: nothing here is hardcoded. Every secret (DATABASE_URL, JWT_SECRET,
+# API keys, webhook secrets, tokens) is injected at runtime from the operating
+# environment / orchestrator secret store via the ${VAR:?required} placeholders.
+# Never add a literal secret value to this file or to any image.
+#
+# IMAGES: deploy immutable digests/tags produced by CI (never `latest`). Replace
+# the `${BACKEND_IMAGE}` / `${WEB_IMAGE}` placeholders with the verified image
+# reference from the build pipeline.
+#
+# MIGRATIONS: the `migrate` service runs the explicit migration runner
+# (`python -m src.db_migrations apply`) and the backend waits for it to complete
+# successfully. The backend itself sets RICO_RUN_STARTUP_MIGRATIONS=false and
+# fails closed if the schema is unusable.
+#
+# HEALTH: backend container HEALTHCHECK uses /health (liveness — 200 always,
+# never restart-looped on a transient DB blip). /ready (503 on DB-down in
+# production) is the authoritative readiness signal for traffic / the load
+# balancer.
+
+name: rico-prod
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  migrate:
+    image: ${BACKEND_IMAGE:?set to the CI-built immutable backend image}
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?required}
+    command: ["python", "-m", "src.db_migrations", "--dsn", "${DATABASE_URL}", "apply"]
+    networks:
+      - internal
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  backend:
+    image: ${BACKEND_IMAGE:?set to the CI-built immutable backend image}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?required}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      JWT_SECRET: ${JWT_SECRET:?required}
+      GUEST_CAPABILITY_SECRET: ${GUEST_CAPABILITY_SECRET:?required}
+      RICO_CRON_SECRET: ${RICO_CRON_SECRET:?required}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?required}
+      ALLOW_ENV_AUTH_FALLBACK: "false"
+      COOKIE_SECURE: "true"
+      RICO_ENV: production
+      ENVIRONMENT: production
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://ricohunt.com}
+      # Schema is managed by the explicit migration runner; the app validates
+      # critical tables read-only at startup and fails closed.
+      RICO_RUN_STARTUP_MIGRATIONS: "false"
+      # API docs disabled in production by default.
+      RICO_ENABLE_API_DOCS: ${RICO_ENABLE_API_DOCS:-false}
+      # Pool sizing — see the Phase-3 report: max_connections ≈ replicas ×
+      # DATABASE_POOL_MAXCONN must stay within Neon/Postgres limits.
+      DATABASE_POOL_MINCONN: ${DATABASE_POOL_MINCONN:-1}
+      DATABASE_POOL_MAXCONN: ${DATABASE_POOL_MAXCONN:-5}
+      DATABASE_POOL_TIMEOUT: ${DATABASE_POOL_TIMEOUT:-5}
+      DATABASE_CONNECT_TIMEOUT: ${DATABASE_CONNECT_TIMEOUT:-5}
+      DATABASE_STATEMENT_TIMEOUT_MS: ${DATABASE_STATEMENT_TIMEOUT_MS:-30000}
+      # Provider / webhook secrets — all runtime-injected.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      RICO_AI_PROVIDER: ${RICO_AI_PROVIDER:-deepseek}
+      HF_TOKEN: ${HF_TOKEN:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      JOTFORM_API_KEY: ${JOTFORM_API_KEY:-}
+      JOTFORM_WEBHOOK_SECRET: ${JOTFORM_WEBHOOK_SECRET:-}
+      JOTFORM_FORM_ID: ${JOTFORM_FORM_ID:-}
+      PADDLE_API_KEY: ${PADDLE_API_KEY:-}
+      PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-}
+      PADDLE_PRO_MONTHLY_PRICE_ID: ${PADDLE_PRO_MONTHLY_PRICE_ID:-}
+      BILLING_MODE: ${BILLING_MODE:-paddle}
+      RAPIDAPI_KEY: ${RAPIDAPI_KEY:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-disabled}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      RICO_ENABLE_AUTO_APPLY: "false"
+      RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS: "true"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    networks:
+      - internal
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  web:
+    image: ${WEB_IMAGE:?set to the CI-built immutable frontend image}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - internal
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  redis_data:

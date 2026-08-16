@@ -131,10 +131,43 @@ EMAIL_FROM=info@ricohunt.com
 EMAIL_FROM_NAME=Rico Hunt
 ```
 
-## Frontend / Vercel
+## Frontend (build-time)
+
+The frontend origin variables are **build-time** (inlined at `npm run build`;
+see `apps/web/Dockerfile` build args). The `/proxy` rewrite target and all
+`NEXT_PUBLIC_*` values are baked into the image, so the web image is
+environment-specific.
 
 ```env
-NEXT_PUBLIC_RICO_API=https://rico-job-automation-api.onrender.com
+BACKEND_API_BASE_URL=https://api.ricohunt.com
+NEXT_PUBLIC_API_BASE_URL=https://api.ricohunt.com
+NEXT_PUBLIC_APP_URL=https://ricohunt.com
+```
+
+## Phase-3 / launch-blocker variables (runtime)
+
+```env
+# Bounded per-process DB connection pool (src/db.py).
+DATABASE_POOL_MINCONN=1
+DATABASE_POOL_MAXCONN=5
+DATABASE_POOL_TIMEOUT=5
+DATABASE_CONNECT_TIMEOUT=5
+DATABASE_STATEMENT_TIMEOUT_MS=30000
+
+# Schema contract: false in production — the app runs a strict read-only
+# critical-table check at startup and FAILS CLOSED; migrations run via
+# `python -m src.db_migrations apply` (see LAUNCH_STATUS.md).
+RICO_RUN_STARTUP_MIGRATIONS=false
+
+# Expose /api/docs, /api/redoc, /api/openapi.json in production.
+RICO_ENABLE_API_DOCS=false
+
+# Per-identity daily cap on EXTERNAL OCR/vision processing (image uploads
+# require consent_to_external_processing=true).
+RICO_OCR_DAILY_LIMIT=20
+
+# Daily AI-message allowance for unbound (native) Telegram chats.
+RICO_TELEGRAM_GUEST_DAILY_LIMIT=10
 ```
 
 Do not invent new env var names unless the code is being intentionally migrated.

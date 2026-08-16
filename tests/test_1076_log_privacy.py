@@ -285,7 +285,10 @@ class TestStaticRegressionGuard:
     def test_no_forbidden_logging_patterns_in_src(self):
         violations = []
         for path in pathlib.Path("src").rglob("*.py"):
-            rel = str(path)
+            # Forward slashes everywhere: allowlist keys are repo-relative
+            # ("src/jsearch_client.py"), but on Windows str(path) uses backslashes
+            # and would silently disable the allowlist.
+            rel = str(path).replace("\\", "/")
             text = path.read_text(encoding="utf-8", errors="replace")
             for pattern, allow in _FORBIDDEN:
                 if rel in allow:
@@ -693,7 +696,10 @@ def _scan_internal_id_sites(path: pathlib.Path) -> list[tuple[str, str, str]]:
         fmt = node.args[0]
         if isinstance(fmt, ast.Constant) and isinstance(fmt.value, str):
             if "internal_id=" in fmt.value:
-                sites.append((str(path), scope, fmt.value))
+                # Forward slashes: allowlist keys are repo-relative
+                # ("src/api/auth.py"), while str(path) is backslash-qualified on
+                # Windows — a raw key comparison would fail every module here.
+                sites.append((str(path).replace("\\", "/"), scope, fmt.value))
     return sites
 
 

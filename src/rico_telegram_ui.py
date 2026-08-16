@@ -242,6 +242,40 @@ def handle_job_action(action: str, job: Dict[str, Any], user_id: str = "") -> Di
     """
     from src.agent.runtime import agent_runtime
     job_key = get_job_id(job)
+
+    # Bound-web-account saves must persist canonically (user-scoped, saved-job
+    # quota enforced) exactly like the web surface — the legacy JSON save tool is
+    # user-scopeless and ungated and must NEVER be the persistence path for an
+    # account with a billing relationship (Telegram entitlement-bypass fix). For
+    # such users we persist via the board first, then let the runtime run
+    # side-effects only (persist=False skips the legacy JSON write entirely).
+    if action == "save":
+        registered = _resolve_telegram_registered_user(user_id)
+        if registered:
+            from src.services.application_board import persist_job_action
+
+            board = persist_job_action(registered, job, "saved", save_key=job_key)
+            if not board.ok:
+                if board.error == "quota_exceeded":
+                    return {
+                        "ok": False,
+                        "reply": board.quota_message
+                        or "You've reached your saved-jobs limit on this plan.",
+                    }
+                return {
+                    "ok": False,
+                    "reply": "I couldn't save this job right now. Please try again.",
+                }
+            result = agent_runtime.handle_action(
+                user_id=user_id,
+                action=action,
+                job_key=job_key,
+                job=job,
+                source="telegram",
+                persist=False,
+            )
+            return {"ok": result.ok, "reply": result.message}
+
     result = agent_runtime.handle_action(
         user_id=user_id,
         action=action,
@@ -250,3 +284,28 @@ def handle_job_action(action: str, job: Dict[str, Any], user_id: str = "") -> Di
         source="telegram",
     )
     return {"ok": result.ok, "reply": result.message}
+
+
+def _resolve_telegram_registered_user(telegram_user_id: str) -> str | None:
+    """Return the registered web account bound to this Telegram user, if any.
+
+    For a bound account the Telegram save/apply actions must respect the same
+    quotas as the web surface. Native Telegram-only users (no web account, no
+    subscription relationship) return None. Never raises.
+    """
+    if not telegram_user_id:
+        return None
+    try:
+        from src.repositories.profile_repo import find_registered_user_by_telegram_chat_id
+
+        return find_registered_user_by_telegram_chat_id(telegram_user_id)
+    except Exception:
+        import logging
+
+        from src.log_privacy import user_ref
+
+        logging.getLogger(__name__).warning(
+            "telegram_ui: registered-user resolution failed user=%s",
+            user_ref(telegram_user_id),
+        )
+        return None

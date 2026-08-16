@@ -164,9 +164,25 @@ def _ctx_for(message: str) -> RicoSessionContext:
 
 
 def _send(message: str):
-    """Drive chat_service.send_message and report which branch was taken."""
+    """Drive chat_service.send_message and report which branch was taken.
+
+    The AI entitlement gate is pinned to allowed: these tests verify message
+    ROUTING (deterministic vs conversational), and in the CI environment the
+    fake DATABASE_URL makes a real usage lookup fail closed — which would
+    short-circuit every message to the quota terminal and break the routing
+    assertion. The gate's fail-closed behavior is covered by its own suites
+    (test_billing_quota_fail_open.py, test_public_ai_usage.py).
+    """
+    from src.services.subscription_gating import GateCheck
+
+    _allowed_gate = GateCheck(
+        allowed=True, feature="monthly_ai_message_limit",
+        usage=0, limit=300, remaining=300, plan="free", message="ok",
+    )
     with patch(
         "src.repositories.profile_repo.get_profile", return_value={"cv_status": "parsed"}
+    ), patch(
+        "src.services.subscription_gating.check_ai_message_allowed", return_value=_allowed_gate
     ), patch(
         "src.rico_chat_api.RicoChatAPI.answer_conversationally",
         return_value={"message": "AI", "type": "openai_response", "response_source": "openai"},

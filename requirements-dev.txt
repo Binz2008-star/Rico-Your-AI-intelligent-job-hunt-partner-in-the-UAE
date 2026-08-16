@@ -1,6 +1,7 @@
 pytest
 pytest-cov
 coverage
+pytest-timeout
 bandit
 pip-audit
 safety

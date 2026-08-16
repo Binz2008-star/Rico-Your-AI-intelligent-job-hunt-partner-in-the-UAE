@@ -118,6 +118,15 @@ CHECKS: list[tuple[str, str, object]] = [
     # the table exists.
     ("051", "table", "chat_operations"),
     ("051", "index", "idx_chat_operations_user_latest"),
+    # Phase-3 settings.notifications reconciliation (052): forward fix so the
+    # numbered migrations (005) replay on a fresh runtime-DDL database.
+    ("052", "column", ("settings", "notifications")),
+    # Final-hardening review: content-free public-usage ledger (053) so the
+    # registered-email anti-dodge actually enforces the AI allowance.
+    ("053", "table", "rico_public_ai_usage"),
+    # Launch-blocker closure: out-of-band account confirmation ledger (054) for
+    # the Jotform merge / Telegram bind ownership-proof flow.
+    ("054", "table", "account_confirmations"),
 ]
 
 

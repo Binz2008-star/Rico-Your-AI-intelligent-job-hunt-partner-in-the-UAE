@@ -372,33 +372,40 @@ ARCHITECTURE_RICO_AI.md         # Production architecture blueprint
 
 ## Current Status
 
-Rico currently has:
+Rico is code-frozen and fully tested in-repo, pending external launch actions.
+See [`LAUNCH_STATUS.md`](LAUNCH_STATUS.md) for the authoritative state.
 
-- Quick Start onboarding form
-- FastAPI server scaffold
-- Jotform webhook route
-- Telegram webhook route
-- CV parser
-- Neon DB layer
-- memory fallback
-- multilingual NLU
-- safety layer
-- quality layer
-- OpenAI agent scaffold
-- tool registry
-- existing pipeline adapter
+Implemented and tested:
 
-Still required for full production:
+- FastAPI server (all SaaS endpoints under `/api/v1`), auth (JWT cookie +
+  DB-backed role/auth_version), guest identity + guest→account merge,
+  rate limiting, webhooks (Telegram/Jotform/GitHub/Paddle) with HMAC/secret
+  verification.
+- Billing: Paddle-only entitlement (server-enforced), refund/chargeback/
+  termination downgrades, fail-closed AI spend gate, content-free usage ledger.
+- Scheduler: Redis distributed lock (fail-closed + renewal heartbeat), stale
+  `pipeline_runs` recovery, chat-operation ownership layer.
+- Database: bounded per-process connection pool (rollback-on-release, statement
+  timeout), deterministic migration runner
+  (`python -m src.db_migrations apply`), forward migrations 052–054.
+- CI: full test suite on push-to-main, coverage measurement, SHA-pinned GitHub
+  Actions, enumeration/log-privacy guards.
+- Docker production model: `Dockerfile.backend` + `apps/web/Dockerfile`
+  (non-root, healthchecked), `docker-compose.prod.yml` (secret-free, immutable
+  images, migrate one-shot). `docker-compose.yml` is LOCAL DEVELOPMENT ONLY.
+- Safety: apply approval gate, no LLM tool execution, OCR external-processing
+  consent + cap, Jotform merge ownership proof, Telegram bounded allowance.
 
-- live cloud deployment
-- webhook verification
-- Telegram inline callback execution
-- Redis workers
-- WebSocket streaming
-- frontend chat UI
-- auth and rate limiting
-- secure CV storage
-- full OpenAI tool execution loop
+Still required for production launch (EXTERNAL, not in-repo):
+
+- Rotate/revoke all production credentials (see LAUNCH_STATUS.md checklist).
+- GitHub branch protection on `main` (required checks listed in
+  LAUNCH_STATUS.md).
+- Railway deploy gating, first CI coverage baseline, Neon capacity
+  confirmation, first Docker image push to the registry.
+
+See [`LAUNCH_STATUS.md`](LAUNCH_STATUS.md) for the full launch gate and the
+exact verification steps.
 
 ---
 

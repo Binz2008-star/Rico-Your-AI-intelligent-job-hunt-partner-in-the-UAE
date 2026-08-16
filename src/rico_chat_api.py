@@ -3192,12 +3192,15 @@ class RicoChatAPI:
                 # by the JWT, not the profile record. Including email in the AI
                 # context risks leaking a stale or cross-user email into the
                 # model's reply (e.g. "you have a profile on record as X@Y.com").
-                "phone", "skills", "years_experience",
+                # Also excluded (final-hardening privacy review): phone,
+                # telegram_username, telegram_chat_id, linkedin_url — contact and
+                # routing identifiers that are unnecessary for career reasoning
+                # and must not be transmitted to third-party LLM providers.
+                "skills", "years_experience",
                 "preferred_cities", "target_roles", "industries",
                 "salary_expectation_aed", "deal_breakers",
-                "telegram_username", "telegram_chat_id",
                 "name", "visa_status", "notice_period",
-                "current_company", "current_role", "linkedin_url",
+                "current_company", "current_role",
             }
             ctx = {
                 "profile_exists": True,

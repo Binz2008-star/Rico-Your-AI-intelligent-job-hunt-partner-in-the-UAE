@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import uuid
 from contextlib import contextmanager
@@ -287,12 +288,45 @@ else
 end
 """
 
+# Atomic lock renewal: extends the TTL only while this process still owns the
+# lock (token match). A long pipeline (N users x provider queries can exceed the
+# base TTL) must not lose its lock mid-run, or a second process could acquire it
+# and start a concurrent pipeline. Renewal is the heartbeat of the pipeline.
+_RENEW_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("expire", KEYS[1], ARGV[2])
+else
+    return 0
+end
+"""
+
+# Renew the lock TTL this often. Well under the base TTL so a transient Redis
+# blip cannot lose the lock; a single missed renewal is absorbed by the runway.
+_LOCK_RENEW_INTERVAL_S = 30
+
 @contextmanager
 def distributed_lock(lock_key: str, timeout: int = 3600):
-    """Redis distributed lock to prevent concurrent pipeline runs with Lua unlock script."""
+    """Redis distributed lock to prevent concurrent pipeline runs with Lua unlock script.
+
+    Yields one of:
+      "acquired"       — this process holds the lock; run the pipeline.
+      "already_running"— another process holds it; skip (normal concurrency).
+      "unavailable"    — the lock could NOT be established (Redis unreachable /
+                         not configured). FAILS CLOSED: callers must skip the run,
+                         because running without the lock can execute two pipelines
+                         concurrently (duplicate emails, duplicate applies,
+                         duplicate dashboard writes) — strictly worse than one
+                         missed run. Failures surface loudly (workflow exit 1)
+                         instead of silently running unlocked.
+
+    While held, a background thread renews the lock TTL every
+    ``_LOCK_RENEW_INTERVAL_S`` (token-guarded), so a run that outlives the base
+    TTL never loses ownership — the lock is the cross-process heartbeat of the
+    pipeline and the backstop against double execution.
+    """
     if not REDIS_AVAILABLE:
-        logger.warning("redis_unavailable lock_disabled")
-        yield True
+        logger.error("redis_unavailable lock_fail_closed")
+        yield "unavailable"
         return
 
     try:
@@ -302,17 +336,32 @@ def distributed_lock(lock_key: str, timeout: int = 3600):
 
         if not acquired:
             logger.warning(f"pipeline_already_running lock_key={lock_key}")
-            yield False
+            yield "already_running"
             return
 
+        stop_renewer = threading.Event()
+
+        def _renew() -> None:
+            while not stop_renewer.wait(_LOCK_RENEW_INTERVAL_S):
+                try:
+                    r.eval(_RENEW_SCRIPT, 1, lock_key, lock_id, timeout)
+                except Exception:
+                    # Best-effort: a missed renewal is absorbed by the remaining
+                    # TTL runway; the next attempt extends again.
+                    logger.warning("redis_lock_renew_failed lock_key=%s", lock_key)
+
+        renewer = threading.Thread(target=_renew, name="pipeline-lock-renewer", daemon=True)
+        renewer.start()
+
         try:
-            yield True
+            yield "acquired"
         finally:
+            stop_renewer.set()
             # Atomic unlock with Lua script to prevent race conditions
             r.eval(_UNLOCK_SCRIPT, 1, lock_key, lock_id)
     except Exception as e:
-        logger.warning(f"redis_lock_unavailable_using_local_execution: {e}")
-        yield True
+        logger.error(f"redis_lock_unavailable_fail_closed: {e}")
+        yield "unavailable"
 
 
 def retryable(max_retries: int = 3, delay: int = 5, retry_exceptions: Tuple[Exception, ...] = (TimeoutError, ConnectionError)):
@@ -776,10 +825,16 @@ def run_pipeline() -> int:
 
     # Acquire distributed lock to prevent concurrent runs
     lock_key = f"rico:pipeline:running"
-    with distributed_lock(lock_key, timeout=3600) as acquired:
-        if not acquired:
+    with distributed_lock(lock_key, timeout=3600) as state:
+        if state == "already_running":
             logger.warning(f"pipeline_skipped already_running run_id={run_id}", extra={"run_id": run_id})
             return 0
+        if state != "acquired":
+            # Fail-closed: without the lock we cannot guarantee single execution.
+            # Return non-zero so the scheduled workflow fails and the existing
+            # error-notification pipeline alerts the operator.
+            logger.error(f"pipeline_skipped lock_unavailable_fail_closed run_id={run_id}", extra={"run_id": run_id})
+            return 1
 
         _init_metrics()
         _init_db()

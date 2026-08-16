@@ -285,8 +285,6 @@ def _llm_decision(job: Dict[str, Any], fallback: Tuple[str, str, float, int, Dic
     factors = fallback[4]
     prompt = f"""<s>[INST]
 You are an expert UAE ESG/HSE recruitment decision agent.
-Candidate: Roben Edwan, Ajman UAE, 10+ years ESG/HSE/environmental compliance, ISO 14001, UAE municipalities, waste management, wastewater/FOG, multi-site operations, ESG reporting.
-
 Return JSON only with keys: decision, reasoning, confidence.
 Allowed decision values: apply, watch, skip.
 
