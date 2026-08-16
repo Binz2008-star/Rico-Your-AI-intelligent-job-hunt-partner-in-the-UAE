@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from src.db import get_db_connection
+from src.log_privacy import user_ref
 
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -55,7 +56,7 @@ def create_confirmation(
 
     conn = get_db_connection()
     if conn is None:
-        logger.warning("confirmation: create skipped (db unavailable) account=%s", account_key[:8])
+        logger.warning("confirmation: create skipped (db unavailable) account=%s", user_ref(account_key))
         return None
     try:
         with conn.cursor() as cur:
@@ -70,7 +71,7 @@ def create_confirmation(
         conn.commit()
         return raw_token
     except Exception:
-        logger.warning("confirmation: create failed account=%s", account_key[:8], exc_info=True)
+        logger.warning("confirmation: create failed account=%s", user_ref(account_key), exc_info=True)
         try:
             conn.rollback()
         except Exception:

@@ -302,7 +302,10 @@ def _resolve_telegram_registered_user(telegram_user_id: str) -> str | None:
     except Exception:
         import logging
 
+        from src.log_privacy import user_ref
+
         logging.getLogger(__name__).warning(
-            "telegram_ui: registered-user resolution failed user=%s", telegram_user_id
+            "telegram_ui: registered-user resolution failed user=%s",
+            user_ref(telegram_user_id),
         )
         return None

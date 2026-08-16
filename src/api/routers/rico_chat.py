@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.api.admin_guard import require_admin_user
 from src.api.deps import get_current_user, get_current_user_id
-from src.log_privacy import safe_exc, safe_fields, user_ref
+from src.log_privacy import filename_ref, safe_exc, safe_fields, user_ref
 from src.api.public_identity import (
     is_safe_public_session_id,
     is_valid_public_user_id,
@@ -2077,7 +2077,7 @@ async def rico_upload_cv(
             if not consent_to_external_processing:
                 logger.info(
                     "doc_image_external_ocr_blocked_no_consent user=%s filename=%s request_ref=%s",
-                    resolved_user_id, safe_name, request_ref,
+                    user_ref(resolved_user_id), filename_ref(safe_name), request_ref,
                 )
                 return {
                     "ok": False,
@@ -2108,7 +2108,7 @@ async def rico_upload_cv(
             try:
                 _ocr_usage = count_public_ai_usage_strict(_ocr_key, _ocr_window)
             except Exception:
-                logger.warning("doc_image_ocr_cap_unverifiable user=%s request_ref=%s", resolved_user_id, request_ref)
+                logger.warning("doc_image_ocr_cap_unverifiable user=%s request_ref=%s", user_ref(resolved_user_id), request_ref)
                 raise HTTPException(
                     status_code=503,
                     detail="External OCR usage cannot be verified right now. Please try again shortly.",
@@ -2116,7 +2116,7 @@ async def rico_upload_cv(
             if _ocr_usage >= _ocr_daily_limit:
                 logger.info(
                     "doc_image_ocr_cap_reached user=%s used=%s limit=%s request_ref=%s",
-                    resolved_user_id, _ocr_usage, _ocr_daily_limit, request_ref,
+                    user_ref(resolved_user_id), _ocr_usage, _ocr_daily_limit, request_ref,
                 )
                 return {
                     "ok": False,

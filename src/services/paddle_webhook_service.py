@@ -503,7 +503,7 @@ def _handle_refund_like(
     logger.warning(
         "paddle_%s_entitlement_revoked user_id=%s sub_id=%s",
         event_type,
-        user_id,
+        user_ref(user_id),
         sub_id,
     )
     return {"user_id": user_id, "subscription_status": "inactive"}
@@ -546,7 +546,7 @@ def _handle_subscription_terminated(
         occurred_at=occurred_at,
         clear_past_due=True,
     )
-    logger.info("paddle_%s user_id=%s sub_id=%s", event_type, user_id, sub_id)
+    logger.info("paddle_%s user_id=%s sub_id=%s", event_type, user_ref(user_id), sub_id)
     return {"user_id": user_id, "subscription_status": "canceled"}
 
 
