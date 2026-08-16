@@ -47,6 +47,8 @@ jobs:
         run: |
           NS=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
           echo "IMAGE_NAMESPACE=$NS" >> "$GITHUB_ENV"
+          REFTAG=$(echo '${{ github.ref_name }}' | tr '/' '-')
+          echo "REFTAG=$REFTAG" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
@@ -143,7 +145,7 @@ jobs:
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-backend:sha-${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-backend:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-backend:${{ env.REFTAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -160,6 +162,8 @@ jobs:
         run: |
           NS=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
           echo "IMAGE_NAMESPACE=$NS" >> "$GITHUB_ENV"
+          REFTAG=$(echo '${{ github.ref_name }}' | tr '/' '-')
+          echo "REFTAG=$REFTAG" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
@@ -211,7 +215,7 @@ jobs:
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-web:sha-${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-web:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-web:${{ env.REFTAG }}
           build-args: |
             BACKEND_API_BASE_URL=https://api.ricohunt.com
             NEXT_PUBLIC_API_BASE_URL=https://api.ricohunt.com
