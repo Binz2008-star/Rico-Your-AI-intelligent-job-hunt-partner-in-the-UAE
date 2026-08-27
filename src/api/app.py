@@ -727,9 +727,16 @@ def readiness_check() -> JSONResponse:
         body = readiness
         status = 200 if readiness.get("ready") else 503
     except Exception:
-        # Never crash the probe: a computation error is not evidence of unreadiness.
-        body = {"ready": True, "error": "readiness_indeterminate"}
-        status = 200
+        # A readiness-computation failure is indeterminate, not proof that traffic
+        # can be accepted. Fail closed while preserving /health as the liveness
+        # endpoint, and do not expose exception details in the response.
+        logger.exception("readiness_check_failed")
+        body = {
+            "ready": False,
+            "service": "Job Automation Platform API",
+            "reason": "readiness_indeterminate",
+        }
+        status = 503
     db = _probe_db()
     body["db"] = db
     if db == "unavailable" and _is_production_deploy():

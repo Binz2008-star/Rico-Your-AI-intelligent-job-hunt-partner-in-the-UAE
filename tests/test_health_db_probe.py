@@ -66,3 +66,19 @@ def test_ready_still_honors_reasoning_readiness(client):
         ready = client.get("/ready")
     assert ready.status_code == 503
     assert ready.json()["ready"] is False
+
+
+def test_ready_fails_closed_when_reasoning_check_raises(client):
+    with (
+        patch("src.api.app._probe_db", return_value="ok"),
+        patch(
+            "src.rico_openai_runtime.get_readiness",
+            side_effect=RuntimeError("simulated readiness probe failure"),
+        ),
+    ):
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["ready"] is False
+    assert response.json()["reason"] == "readiness_indeterminate"
+    assert response.json()["db"] == "ok"
