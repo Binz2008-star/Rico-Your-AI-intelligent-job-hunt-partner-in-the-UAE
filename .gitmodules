@@ -1,0 +1,3 @@
+[submodule "anthropic-cybersecurity-skills"]
+	path = external/anthropic-cybersecurity-skills
+	url = https://github.com/mukul975/Anthropic-Cybersecurity-Skills.git
