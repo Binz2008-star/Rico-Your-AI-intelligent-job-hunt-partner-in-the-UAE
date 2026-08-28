@@ -823,20 +823,30 @@ class TestGroundingContractSurvivesTheCascade:
         assert captured["prompt"].rstrip().endswith("Rico:")
 
     def test_primary_provider_prompt_is_unchanged_by_the_extraction(self):
-        """The refactor that made the contract shareable must not have altered
-        what the primary provider receives."""
+        """The primary provider must receive every shared grounding rule in
+        the same numbered order as the provider-agnostic contract."""
         primary = get_rico_system_prompt()
         for marker in (
             "Safety rules (non-negotiable):",
             "9. Identity integrity:",
-            "10. Untrusted metadata rule:",
+            "10. External-draft identity rule:",
+            "11. Untrusted metadata rule:",
+            "12. User safety constraints:",
             "Evidence contract (non-negotiable",
             "Uploaded files (My Files):",
             "When calling tools:",
         ):
             assert marker in primary, marker
-        # Rules stay in their numbered positions in the primary prompt.
-        assert primary.index("9. Identity integrity:") < primary.index("10. Untrusted metadata rule:")
+        # Shared grounding rules stay in their numbered order in the primary prompt.
+        ordered_markers = (
+            "9. Identity integrity:",
+            "10. External-draft identity rule:",
+            "11. Untrusted metadata rule:",
+            "12. User safety constraints:",
+        )
+        assert [primary.index(marker) for marker in ordered_markers] == sorted(
+            primary.index(marker) for marker in ordered_markers
+        )
 
 
 # ── 10. prompt_override filename leakage (F-2) ───────────────────────────────
