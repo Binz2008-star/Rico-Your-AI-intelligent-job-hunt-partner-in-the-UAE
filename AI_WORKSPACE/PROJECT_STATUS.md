@@ -23,25 +23,25 @@
 
 A green deployment badge is not a product smoke. A merged runtime change is not proof that its changed path was exercised. An issue specification is not an implementation.
 
-## Current reconciliation — 2026-08-01 (CORRECTED)
+## Current reconciliation — 2026-09-19 (CORRECTED-4)
 
-Evidence cut: 2026-08-01T03:35:38Z (07:35 GST) for initial reconciliation; corrective pass verified at 2026-08-01T10:25:11Z. GitHub, the public production endpoints, and the repository checkout were read during this pass. No database, secret, environment, merge, deployment, or authenticated-user mutation was performed.
+Evidence cut: 2026-09-19T08:06Z. GitHub live state read after PR #1483 merge. L7 self-corrected per stop-condition trigger (main moved from 5a515361 to 215c316). No database, secret, environment, deployment, or authenticated-user mutation performed.
 
 ### Verified repository and delivery state
 
 | Item | Verified state |
 | --- | --- |
-| `main` | `5a5153614dd7e092f93d49abd09c928d32fcb456`; corrected from `9f5dccfa` after #1482 merge |
-| Production backend | `/version` HTTP 200; `commit=5a5153614dd7e092f93d49abd09c928d32fcb456`; `commit_verified=true`; `commit_source=RAILWAY_GIT_COMMIT_SHA`; `environment=production` |
+| `main` | `215c316979731eedcdf2f99bcbd97b727229abf5` (merged #1483 docs-only, was 5a515361) |
+| Production backend | `/version` HTTP 200; requires re-verification against new main; last proven commit was 5a515361 |
 | Backend health | `/health` HTTP 200 / `status=ok`; JSearch configured and non-degraded; DeepSeek configured; model precheck reachable with two available models; fallback exists and is available |
 | Frontend proxy | `https://ricohunt.com/proxy/health` HTTP 200 / `status=ok` |
 | Public frontend | `https://ricohunt.com/` reachable and serving the current Rico public experience |
 | Commit deployment statuses | Vercel success and two Railway service statuses success on `main@5a515361` |
-| Open pull requests | `#1477` (Draft, unmerged), `#1481` (Draft, L7 control plane reconciliation), `#1483` (Ready for Review / draft=false, unmerged, Corridor security guardrails in AGENTS.md) |
+| Open pull requests | `#1477` (Draft, diverged, external-draft identity guard), `#1481` (Draft, L7 control plane reconciliation, HEAD 4c7106dc), `#1495` (Draft, local-llm-rig docs-only, DO NOT MERGE - out of scope) |
 | Closed stale docs PR | `#1475` closed without merge at head `baaaae90abbf55105c8258905b7bceb0cdd5bc67` |
-| Recently merged | `#1482` merged as `5a5153614dd7e092f93d49abd09c928d32fcb456` — test-only Windows multiworker process context support |
+| Recently merged | `#1483` merged as `215c316979731eedcdf2f99bcbd97b727229abf5` — docs(security): record Corridor security guardrails in AGENTS.md |
 | AI quality program | `#1479` open Epic; `#1480` open PR1 specification; no implementation PR exists for `#1480` |
-| L7 reconciliation | Draft PR `#1481` on `agent/control-plane-reconcile-20260801`, corrective reconciliation per directive `RICO-20260801-L7-WINDSURF-CORRECTION-3`; lane FROZEN, awaiting independent review; merge and deployment forbidden |
+| L7 reconciliation | Draft PR `#1481` on `agent/control-plane-reconcile-20260801`, HEAD 4c7106dc, self-corrected after main move per stop-condition; lane FROZEN after Correction-4, awaiting independent review; merge and deployment forbidden |
 
 ### Production proof boundary
 

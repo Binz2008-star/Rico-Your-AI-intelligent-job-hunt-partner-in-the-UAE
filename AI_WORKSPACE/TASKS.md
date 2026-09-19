@@ -146,18 +146,18 @@ Update the block for your lane. Never duplicate one.
 
 - Lane alias: `L7`
 - Branch: `agent/control-plane-reconcile-20260801`
-- PR: `#1481` — open Draft; corrective published head `044cb60f4499eb1f03436163e680b3cd6ed61e37`
-- Base SHA: `5a5153614dd7e092f93d49abd09c928d32fcb456` (corrected from `9f5dccfa` after #1482 merge)
-- Expected remote HEAD: `044cb60f4499eb1f03436163e680b3cd6ed61e37` (corrective directive)
-- Lease holder: `L7` — Roben-authorized Windsurf session (lease transferred from Codex)
+- PR: `#1481` — open Draft; corrective published head `4c7106dca82bb8617c1085638d375ddd2f113fbd` (Correction-4)
+- Base SHA: `215c316979731eedcdf2f99bcbd97b727229abf5` (updated after #1483 merge, was 5a515361)
+- Expected remote HEAD: `4c7106dca82bb8617c1085638d375ddd2f113fbd` (corrective directive Correction-4)
+- Lease holder: `L7` — Roben-authorized
 - Lease ownership: `HELD`
-- Current activity: `IDLE` — awaiting independent review after Correction-3 publication
-- Write authorization: `FROZEN` after Correction-3 publication; Roben's `RICO-20260801-L7-WINDSURF-CORRECTION-3` authorization is fulfilled by Draft PR `#1481` at its exact published head, and no further push is allowed without a new attributed correction directive
-- Last confirmed: `2026-08-01T10:25:11Z`; Draft PR `#1481` corrective pass complete, lane frozen awaiting independent review
+- Current activity: `IDLE` — self-corrected after main move, awaiting independent review
+- Write authorization: `FROZEN` after Correction-4 publication; main@215c316 triggered stop-condition, L7 self-corrected per the documented freeze protocol, and no further push is allowed without a new attributed correction directive
+- Last confirmed: `2026-09-19T08:06Z`; L7 self-corrected after main move, Draft PR `#1481` frozen awaiting independent review
 - Allowed files: `AI_WORKSPACE/PROJECT_STATUS.md`, `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/HANDOFFS/2026-08-01-control-plane-reconciliation.md`, and PR #1481 title/body metadata only
 - Forbidden files: every runtime, frontend, test, workflow, migration, environment, secret, roadmap, architecture, and decision file
-- Objective: finalize corrective control-plane reconciliation at main@5a515361, addressing Codex review blockers and updating lineage from initial 9f5dccfa/b7f9a986 to corrective 5a515361/eede42ca. Lane is now FROZEN awaiting independent review.
-- Stop condition: stop if main differs from 5a5153614dd7e092f93d49abd09c928d32fcb456, remote branch head differs from 044cb60f4499eb1f03436163e680b3cd6ed61e37, another writer or overlapping change exists, or any fourth repository file would change
+- Objective: finalize corrective control-plane reconciliation at main@215c316 after #1483 merge, maintaining lineage documentation. Corrective push to 4c7106dc after main moved from 5a515361. Lane is now FROZEN awaiting independent review.
+- Stop condition: stop if main differs from 215c316979731eedcdf2f99bcbd97b727229abf5, remote branch head differs from 4c7106dca82bb8617c1085638d375ddd2f113fbd, another writer or overlapping change exists, or any fourth repository file would change
 - Previous L7 branch: `claude/workspace-control-reconcile`; `#1402` closed and merged as `805dd4d6`; its lease remains released and write authorization revoked
 - Follow-through, in order: `#1402` (`805dd4d6`) deliberately excluded `ENGINEERING_ROADMAP.md` and flagged it as separately stale; `#1408` (`1c13147f`) restored it at `97af6ded`; `#1415` (`1c75f4d6`) re-anchored onto `ca266366`; `#1417` (`1592162e`) re-anchored onto `dac8d8e7` and required that the **next** pass cover four existing documents
 - **Pass completed 2026-07-28 (post-`#1422`):** docs-only, branched from `c64aa99`, covering exactly the four documents the `#1417` record named — `PROJECT_STATUS.md`, `TASKS.md`, `ENGINEERING_ROADMAP.md` and `ARCHITECTURE.md`. No new status document, roadmap, handoff or decision file was created, and `DECISIONS.md` was not modified: no binding decision was shown to be factually false. It touches no `src/`, no tests, no workflows, no migration
