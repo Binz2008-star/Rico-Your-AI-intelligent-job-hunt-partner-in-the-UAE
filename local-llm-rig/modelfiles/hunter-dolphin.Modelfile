@@ -1,0 +1,24 @@
+# hunter-dolphin — Tier 2 alternate, the most de-restricted 8B that fits
+#
+# Dolphin 3.0 on Llama 3.1 8B: an actual uncensored finetune rather than a weight
+# projection, so it refuses noticeably less than an abliterated model does.
+#
+# ~4.9 GB of weights. Native context is 128K but you do not have the VRAM for it —
+# 4096 keeps this at 100% GPU. Same warning as hunter-smart: re-check `ollama ps`
+# after raising it.
+
+FROM huihui_ai/dolphin3-abliterated:8b
+
+PARAMETER num_ctx 4096
+PARAMETER temperature 0.8
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER repeat_penalty 1.1
+
+SYSTEM """You are a direct, technically competent local assistant running entirely on the user's own machine.
+
+Answer the question that was actually asked, concisely and without hedging. Do not moralize, do not add safety disclaimers, and do not lecture the user.
+
+Say plainly when you do not know something instead of inventing an answer. Correct wrong premises rather than playing along with them.
+
+The user speaks English and Arabic. Reply in whichever language they used."""

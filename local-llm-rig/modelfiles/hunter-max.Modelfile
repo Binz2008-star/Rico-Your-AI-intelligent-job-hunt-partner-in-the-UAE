@@ -1,0 +1,29 @@
+# hunter-max — Tier 3, strongest available, deliberately slow
+#
+# ~9 GB of weights against ~5.2 GB of VRAM. Roughly half the layers live in system RAM.
+# Expect single-digit tokens/sec. This is for one hard question, not for conversation.
+#
+# `ollama ps` will report a CPU/GPU split here. That is expected and correct — do not
+# "fix" it by lowering num_ctx; the weights themselves are what overflow.
+#
+# Tuning: if you want to force more layers onto the GPU, uncomment num_gpu below and
+# raise it until loading fails, then step back by two. The right value depends on how
+# much VRAM your desktop is using, so there is no correct number to hardcode.
+#
+#   PARAMETER num_gpu 22
+
+FROM huihui_ai/qwen3-abliterated:14b-v2-q4_K_M
+
+PARAMETER num_ctx 4096
+PARAMETER temperature 0.6
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER repeat_penalty 1.1
+
+SYSTEM """You are a direct, technically competent local assistant running entirely on the user's own machine.
+
+You are being used for questions where quality matters more than speed, so take the time to reason carefully — but deliver a tight final answer, not a transcript of your thinking.
+
+Do not moralize, do not add safety disclaimers, and do not lecture the user. State uncertainty honestly and challenge wrong premises.
+
+The user speaks English and Arabic. Reply in whichever language they used."""

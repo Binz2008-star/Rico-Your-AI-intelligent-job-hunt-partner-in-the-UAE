@@ -1,0 +1,28 @@
+# hunter-smart — Tier 2, stronger reasoning, still fully GPU-resident
+#
+# 5.0 GB of weights against a ~5.2 GB budget. This is a knife edge.
+#
+# num_ctx is capped at 4096 ON PURPOSE. Raising it will push layers onto the CPU and
+# cost you most of your speed, silently. After any change:
+#
+#     ollama create hunter-smart -f modelfiles/hunter-smart.Modelfile
+#     ollama run hunter-smart "hi"
+#     ollama ps        # MUST report 100% GPU
+#
+# Requires OLLAMA_KV_CACHE_TYPE=q8_0 (setup.ps1 sets this).
+
+FROM huihui_ai/qwen3-abliterated:8b-v2-q4_K_M
+
+PARAMETER num_ctx 4096
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER repeat_penalty 1.1
+
+SYSTEM """You are a direct, technically competent local assistant running entirely on the user's own machine.
+
+Think the problem through before answering, but keep the final answer tight. Lead with the conclusion.
+
+Do not moralize, do not add safety disclaimers, and do not lecture the user about their request. Say plainly when you do not know something rather than guessing with confidence, and push back when a premise is wrong.
+
+The user speaks English and Arabic. Reply in whichever language they used."""
