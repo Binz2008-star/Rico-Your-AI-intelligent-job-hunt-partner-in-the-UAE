@@ -1,5 +1,9 @@
+# Measurement output -- these are your machine's numbers, not the repo's
 bench-results.json
 bench-*.json
+refusal-results.json
+refusal-*.json
+
 *.gguf
 *.bin
 .venv/

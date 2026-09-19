@@ -88,20 +88,34 @@ if (-not $haveSmi) {
 # -------------------------------------------------------------------- Env / settings
 Write-Section "Settings"
 
-$kv = [Environment]::GetEnvironmentVariable("OLLAMA_KV_CACHE_TYPE", "User")
+# Read Process, then User, then Machine. Checking only "User" reports a false
+# "not set" when the variable lives at Machine scope or in the current session,
+# which sends you chasing a problem that is not there.
+function Get-EnvAnyScope($name) {
+    foreach ($scope in @("Process", "User", "Machine")) {
+        $value = [Environment]::GetEnvironmentVariable($name, $scope)
+        if (-not [string]::IsNullOrEmpty($value)) {
+            return [pscustomobject]@{ Value = $value; Scope = $scope }
+        }
+    }
+    return $null
+}
+
+$kvFound = Get-EnvAnyScope "OLLAMA_KV_CACHE_TYPE"
+$kv = if ($kvFound) { $kvFound.Value } else { $null }
 if ($kv -eq "q8_0") {
-    Write-Ok "OLLAMA_KV_CACHE_TYPE = q8_0"
+    Write-Ok "OLLAMA_KV_CACHE_TYPE = q8_0  (from $($kvFound.Scope) scope)"
 } elseif ([string]::IsNullOrEmpty($kv)) {
     Write-Warn "OLLAMA_KV_CACHE_TYPE not set -- the KV cache will use f16 and waste VRAM."
     Write-Host "         Fix: run scripts\setup.ps1, or  setx OLLAMA_KV_CACHE_TYPE ""q8_0""" -ForegroundColor DarkGray
     $warnings += "KV cache not quantized"
 } else {
-    Write-Warn "OLLAMA_KV_CACHE_TYPE = $kv (expected q8_0)"
+    Write-Warn "OLLAMA_KV_CACHE_TYPE = $kv (expected q8_0, from $($kvFound.Scope) scope)"
     $warnings += "unexpected KV cache type"
 }
 
-$fa = [Environment]::GetEnvironmentVariable("OLLAMA_FLASH_ATTENTION", "User")
-$faShown = if ([string]::IsNullOrEmpty($fa)) { "<unset>" } else { $fa }
+$faFound = Get-EnvAnyScope "OLLAMA_FLASH_ATTENTION"
+$faShown = if ($faFound) { "$($faFound.Value)  (from $($faFound.Scope) scope)" } else { "<unset>" }
 Write-Host "  [info] OLLAMA_FLASH_ATTENTION = $faShown" -ForegroundColor DarkGray
 Write-Host "         Flash attention is not a guaranteed win on Pascal. Benchmark both." -ForegroundColor DarkGray
 
@@ -115,7 +129,8 @@ if ($installed.Count -eq 0) {
     Write-Warn "no models installed -- cannot verify GPU is used. Run scripts\setup.ps1 first."
     $warnings += "no models installed"
 } else {
-    # Prefer a hunter-* model; otherwise just use whatever is smallest.
+    # Prefer the small hunter model -- it loads fast and should be 100% GPU,
+    # which makes it the cleanest signal. Otherwise fall back to the first listed.
     $probe = $installed | Where-Object { $_ -like "hunter-open-fast*" } | Select-Object -First 1
     if (-not $probe) { $probe = $installed | Select-Object -First 1 }
 
