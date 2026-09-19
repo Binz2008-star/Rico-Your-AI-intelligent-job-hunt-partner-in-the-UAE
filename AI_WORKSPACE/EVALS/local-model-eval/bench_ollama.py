@@ -49,9 +49,15 @@ from typing import Any, Callable, Optional
 
 DEFAULT_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
 
-# CPU-only by default. num_gpu=0 is deliberate: the GTX 1060 CUDA/PTX
-# toolchain incompatibility is tracked separately and must not silently
-# contaminate CPU measurements.
+# CPU-only by DEFAULT (num_gpu=0): the GTX 1060 CUDA/PTX toolchain
+# incompatibility is tracked separately and must not silently contaminate CPU
+# measurements. Override with --num-gpu.
+#
+# num_gpu is the NUMBER OF LAYERS offloaded to GPU, not a boolean:
+#   0   -> force CPU (the default here)
+#   99  -> request maximum offload (use on a working GPU, incl. Colab/Kaggle)
+# Leaving this at 0 on a cloud GPU runner silently burns the session on a weak
+# vCPU, so any GPU run MUST pass --num-gpu explicitly.
 BASE_OPTIONS: dict[str, Any] = {
     "num_gpu": 0,
     "temperature": 0,
@@ -370,6 +376,10 @@ class RunResult:
     category: str
     sample_index: int
     outcome: str
+    # Execution mode. Recorded on every row so GPU and CPU results can never be
+    # silently mixed in the same analysis.
+    num_gpu: int = 0
+    run_mode: str = "cpu"
     # Prefill (prompt processing)
     prompt_tokens: int = 0
     prefill_seconds: float = 0.0
@@ -418,6 +428,7 @@ def run_once(
     sample_index: int,
     timeout: float,
     num_predict: int,
+    num_gpu: int = 0,
 ) -> RunResult:
     result = RunResult(
         model=model,
@@ -427,10 +438,13 @@ def run_once(
         category=task.category,
         sample_index=sample_index,
         outcome=OUTCOME_ERROR,
+        num_gpu=num_gpu,
+        run_mode="gpu" if num_gpu > 0 else "cpu",
     )
 
     options = dict(BASE_OPTIONS)
     options["num_predict"] = num_predict
+    options["num_gpu"] = num_gpu
 
     payload: dict[str, Any] = {
         "model": model,
@@ -512,6 +526,16 @@ def main() -> int:
         help="Output token ceiling per request (default 700)",
     )
     parser.add_argument(
+        "--num-gpu",
+        type=int,
+        default=0,
+        help=(
+            "Layers to offload to GPU. 0 = force CPU (default). 99 = max "
+            "offload; use this on a working GPU or a Colab/Kaggle runner. "
+            "Recorded on every result row as num_gpu/run_mode."
+        ),
+    )
+    parser.add_argument(
         "--out",
         default="results",
         help="Output directory for results and raw outputs",
@@ -541,6 +565,14 @@ def main() -> int:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     results: list[RunResult] = []
 
+    mode = f"GPU (num_gpu={args.num_gpu})" if args.num_gpu > 0 else "CPU (num_gpu=0)"
+    print(f"Run mode: {mode}")
+    if args.num_gpu == 0:
+        print(
+            "  NOTE: forcing CPU. On a GPU runner (Colab/Kaggle/working local\n"
+            "  GPU) pass --num-gpu 99, or the session is spent on CPU."
+        )
+
     for model in args.models:
         digest, quant = describe_model(args.host, model)
         print(f"\n=== {model}  digest={digest}  quant={quant} ===", flush=True)
@@ -558,6 +590,7 @@ def main() -> int:
                     sample_index + 1,
                     args.timeout,
                     args.num_predict,
+                    args.num_gpu,
                 )
                 results.append(res)
 
