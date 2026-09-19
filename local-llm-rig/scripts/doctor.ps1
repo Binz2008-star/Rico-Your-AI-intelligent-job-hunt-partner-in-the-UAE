@@ -75,7 +75,7 @@ if (-not $haveSmi) {
 
         # Tier 2 needs roughly 5.2 GB (~5300 MiB) free to stay fully on the GPU.
         if ($freeMiB -lt 5300) {
-            Write-Warn "less than 5300 MiB free -- Tier 2 (hunter-smart) will likely spill to CPU."
+            Write-Warn "less than 5300 MiB free -- hunter-open (5.0 GB) will likely spill to CPU."
             Write-Host "         Close the browser and anything else using the GPU." -ForegroundColor DarkGray
             $warnings += "low free VRAM"
         }
@@ -116,7 +116,7 @@ if ($installed.Count -eq 0) {
     $warnings += "no models installed"
 } else {
     # Prefer a hunter-* model; otherwise just use whatever is smallest.
-    $probe = $installed | Where-Object { $_ -like "hunter-fast*" } | Select-Object -First 1
+    $probe = $installed | Where-Object { $_ -like "hunter-open-fast*" } | Select-Object -First 1
     if (-not $probe) { $probe = $installed | Select-Object -First 1 }
 
     Write-Host "  loading $probe ..." -NoNewline

@@ -43,7 +43,7 @@ cards you enable it and move on; here it can be neutral or slower. Measure it:
 
 ```powershell
 $env:OLLAMA_FLASH_ATTENTION="1"; # restart ollama, then bench
-python .\scripts\bench.py --model hunter-fast
+python .\scripts\bench.py --model hunter-open
 ```
 
 Then set it to `"0"`, restart, and bench again. Keep whichever wins.

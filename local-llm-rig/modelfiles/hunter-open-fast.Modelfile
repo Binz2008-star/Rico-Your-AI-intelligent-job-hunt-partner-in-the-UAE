@@ -1,0 +1,15 @@
+# hunter-open-fast — same openness tuning, small enough to actually breathe.
+#
+# The 4B JOSIEFIED. Gives up reasoning against the 8B, but fits with ~2.7 GB left over,
+# which buys a real context window instead of 4096 tokens. Use this when you want an
+# uncensored model you can paste documents into.
+#
+# Same rule as hunter-open: no SYSTEM block, the model's own tuned prompt is inherited.
+
+FROM goekdenizguelmez/JOSIEFIED-Qwen3:4b-q4_k_m
+
+PARAMETER num_ctx 16384
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER repeat_penalty 1.1

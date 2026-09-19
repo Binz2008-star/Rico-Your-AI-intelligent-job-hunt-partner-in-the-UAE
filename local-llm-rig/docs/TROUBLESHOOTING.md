@@ -4,7 +4,7 @@
 
 The model did not fit. In order of what to try:
 
-1. Lower `num_ctx` in the Modelfile and rebuild (`ollama create hunter-smart -f ...`).
+1. Lower `num_ctx` in the Modelfile and rebuild (`ollama create hunter-open -f modelfiles\hunter-open.Modelfile`).
 2. Confirm `OLLAMA_KV_CACHE_TYPE=q8_0` is actually set in the *service's* environment —
    `setx` only affects new processes, so you must restart Ollama (see below).
 3. Close the browser and anything else using the GPU, then check real free VRAM:
@@ -55,12 +55,41 @@ lot and running into this.
 
 ## The model still refuses things
 
-Abliteration is not perfect, and refusals can survive in some phrasings.
+No abliteration is perfect and refusals survive in some phrasings. In order of what to try:
 
-- Try `hunter-dolphin` instead — Dolphin 3.0 is an uncensored finetune rather than a
-  weight projection, and is generally more compliant.
-- A system prompt helps. The shipped Modelfiles already set a direct, non-moralizing one.
-- Reformulating the request usually works better than arguing with the model about it.
+1. **Switch lineage.** Run the same prompt against `hunter-dolphin`. Surviving refusals are
+   specific to the base model, so a Llama-lineage model often answers what a Qwen-lineage
+   one declines. This works more often than any prompt trick.
+2. **Check you did not override the system prompt.** `hunter-open` and `hunter-open-fast`
+   must have **no** `SYSTEM` block in their Modelfiles — the JOSIEFIED system prompt is
+   part of the openness finetune, and replacing it weakens compliance. If you added one,
+   remove it and rebuild.
+3. **Reformulate rather than argue.** Restating the request usually beats trying to talk
+   the model out of a refusal in a follow-up turn.
+4. **Confirm the model you think you are running.** `ollama ps` shows what is actually
+   loaded. `hunter-max` is abliteration-only and refuses noticeably more than the others.
+
+If a whole category is being refused, measure it rather than guessing:
+
+```powershell
+python .\scripts\refusal-probe.py --all --show
+```
+
+That gives you refusal and hedge rates per model side by side, and `--show` prints the
+responses so you can see whether it is a hard refusal or the classifier miscounting.
+
+## Refusal rates look identical across every model
+
+Check the responses with `--show`. Two likely causes: the probe set is not hitting the
+categories you actually care about (extend `probes/false-refusal.json` with your own
+prompts — that is what it is for), or the models never loaded and every probe errored.
+
+## The refusal probe says 0% but the model still annoys me
+
+Look at the hedge column. A model can answer everything and still wrap each answer in
+disclaimers. That is a system-prompt problem, not a weights problem — for `hunter-dolphin`
+and `hunter-max` you can edit the `SYSTEM` block in their Modelfiles and rebuild. Do not
+do this for the JOSIEFIED models.
 
 ## `bench.py` can't connect
 

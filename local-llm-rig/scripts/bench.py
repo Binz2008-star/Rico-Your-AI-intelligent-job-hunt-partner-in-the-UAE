@@ -10,7 +10,7 @@ actually ended up in VRAM.
 Standard library only. No pip install.
 
     python scripts/bench.py --all
-    python scripts/bench.py --model hunter-fast --runs 5
+    python scripts/bench.py --model hunter-open --runs 5
     python scripts/bench.py --all --json results-before.json
 """
 
@@ -28,8 +28,8 @@ DEFAULT_HOST = "http://127.0.0.1:11434"
 
 # Built by setup.ps1. Anything not installed is skipped with a note.
 DEFAULT_MODELS = [
-    "hunter-fast",
-    "hunter-smart",
+    "hunter-open",
+    "hunter-open-fast",
     "hunter-dolphin",
     "hunter-max",
 ]
@@ -76,7 +76,7 @@ def installed_models(host: str) -> set[str]:
     for model in tags.get("models", []):
         name = model.get("name", "")
         names.add(name)
-        # "hunter-fast:latest" should also match a request for "hunter-fast"
+        # "hunter-open:latest" should also match a request for "hunter-open"
         if ":" in name:
             names.add(name.split(":", 1)[0])
     return names

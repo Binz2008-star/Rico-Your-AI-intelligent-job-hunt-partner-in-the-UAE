@@ -1,0 +1,23 @@
+# hunter-open — DEFAULT. The most de-restricted model that fits on this card.
+#
+# Josiefied-Qwen3-8B-abliterated-v1: abliterated AND then finetuned for openness and
+# instruction-following. The double treatment is why it sits above a plain abliterated
+# model on compliance -- abliteration alone leaves refusals surviving in some phrasings.
+#
+# NOTE: there is deliberately NO SYSTEM block here.
+#
+# The JOSIEFIED models ship their own system prompt, tuned as part of the openness
+# finetune. Overriding it with a generic one measurably weakens compliance -- the prompt
+# is part of the product. Omitting SYSTEM makes Ollama inherit the base model's.
+# Do not "improve" this by adding one.
+#
+# 5.0 GB of weights against a ~5.2 GB budget: knife edge. Requires
+# OLLAMA_KV_CACHE_TYPE=q8_0 and this small context. Check `ollama ps` says 100% GPU.
+
+FROM goekdenizguelmez/JOSIEFIED-Qwen3:8b-q4_k_m
+
+PARAMETER num_ctx 4096
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER repeat_penalty 1.1

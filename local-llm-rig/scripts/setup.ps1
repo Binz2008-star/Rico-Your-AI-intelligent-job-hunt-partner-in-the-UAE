@@ -75,11 +75,18 @@ if (-not $SkipEnv) {
 # name -> base model to pull. The Modelfile of the same name is built on top.
 $plan = [ordered]@{}
 
+# Ordered by how de-restricted the model is, not by size.
+#
+# hunter-open and hunter-open-fast are JOSIEFIED builds: abliterated AND finetuned for
+# openness. hunter-dolphin is an uncensored finetune on a different base (Llama 3.1),
+# kept because refusals that survive abliteration are base-model-specific -- when one
+# lineage balks, the other usually does not.
+
 if ($Tier -eq "1" -or $Tier -eq "All") {
-    $plan["hunter-fast"] = "huihui_ai/qwen3.5-abliterated:4B"
+    $plan["hunter-open"]      = "goekdenizguelmez/JOSIEFIED-Qwen3:8b-q4_k_m"
+    $plan["hunter-open-fast"] = "goekdenizguelmez/JOSIEFIED-Qwen3:4b-q4_k_m"
 }
 if ($Tier -eq "2" -or $Tier -eq "All") {
-    $plan["hunter-smart"]   = "huihui_ai/qwen3-abliterated:8b-v2-q4_K_M"
     $plan["hunter-dolphin"] = "huihui_ai/dolphin3-abliterated:8b"
 }
 if ($IncludeMax) {
@@ -138,7 +145,8 @@ Write-Host ""
 Write-Host "Next:" -ForegroundColor White
 Write-Host "  1. Restart Ollama so OLLAMA_KV_CACHE_TYPE applies."
 Write-Host "  2. powershell -ExecutionPolicy Bypass -File .\scripts\doctor.ps1"
-Write-Host "  3. python .\scripts\bench.py --all"
+Write-Host "  3. python .\scripts\bench.py --all           # speed"
+Write-Host "  4. python .\scripts\refusal-probe.py --all   # how uncensored, measured"
 Write-Host ""
 if (-not $IncludeMax) {
     Write-Host "hunter-max (14B, ~9 GB, partly on CPU) was skipped. Add -IncludeMax to install it." -ForegroundColor DarkGray

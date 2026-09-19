@@ -39,72 +39,122 @@ powershell -ExecutionPolicy Bypass -File .\scripts\doctor.ps1
 # 3. Pull the recommended models and build the tuned variants
 powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 
-# 4. Measure real tokens/sec on YOUR box (not someone's blog)
+# 4. Measure real tokens/sec, and real refusal rates, on YOUR box
 python .\scripts\bench.py --all
+python .\scripts\refusal-probe.py --all
 ```
 
 Then just:
 
 ```powershell
-ollama run hunter-fast      # daily driver
-ollama run hunter-smart     # when you need more reasoning
-ollama run hunter-max       # slow, strongest, partially on CPU
+ollama run hunter-open       # default -- most de-restricted that fits
+ollama run hunter-open-fast  # same openness, faster, long context
+ollama run hunter-dolphin    # different lineage, when hunter-open balks
+ollama run hunter-max        # strongest reasoning, slow, refuses more
 ```
 
 ---
 
-## The three tiers
+## The models, ranked by how de-restricted they are
 
-Pick by what you are doing, not by parameter count.
+Compliance is the ranking criterion here, not speed. Speed is the price.
 
-### Tier 1 — `hunter-fast` (default, use this 90% of the time)
+### Why some "uncensored" models are more uncensored than others
 
-```
-Base:  huihui_ai/qwen3.5-abliterated:4B        (~2.5 GB, Q4_K_M)
-Fits:  fully on GPU, with room for a large context window
-Speed: fast — highest tokens/sec of the three
-```
+Two different techniques, and the difference decides the ranking:
 
-Newest-generation base, fully GPU-resident, and the ~2.7 GB of leftover VRAM buys you a
-genuinely long context instead of a 2K window. On a 6 GB card, a small modern model with
-room to breathe beats a big model that thrashes.
+- **Abliteration** projects the refusal direction out of the weights. Surgery, not
+  training. Works, but refusals survive in some phrasings and it nicks capability.
+- **Uncensored finetuning** (Dolphin, Lexi) retrains on de-aligned data. Holds up better
+  on capability and tends to comply more thoroughly.
 
-### Tier 2 — `hunter-smart` (harder reasoning, still all-GPU)
+**Models that do both are the most de-restricted available.** That is the JOSIEFIED
+family, and it is why the default below is a JOSIEFIED build rather than a plain
+abliterated one.
 
-```
-Base:  huihui_ai/qwen3-abliterated:8b-v2-q4_K_M   (5.0 GB, 8.19B params)
-Alt:   huihui_ai/dolphin3-abliterated:8b          (~4.9 GB, Llama 3.1 base, 128K ctx)
-Fits:  only just — requires q8_0 KV cache and a capped context
-Speed: roughly half of Tier 1
-```
+Also: **the system prompt is part of the model.** The JOSIEFIED builds ship one tuned as
+part of the openness finetune, and replacing it with your own weakens compliance. Their
+Modelfiles deliberately have no `SYSTEM` block so the tuned one is inherited. Do not
+"improve" that.
 
-5.0 GB against ~5.2 GB usable is a **knife edge**. `hunter-smart` therefore pins
-`num_ctx` low and the setup script sets `OLLAMA_KV_CACHE_TYPE=q8_0`. If you raise the
-context, Ollama silently pushes layers to CPU and you lose most of the speed. Watch for it
-with `ollama ps` — anything other than `100% GPU` means you overshot.
-
-Dolphin 3.0 is the more thoroughly de-restricted of the two and has a much larger native
-context; Qwen3-8B is the stronger reasoner. Both are built and installed — try both.
-
-### Tier 3 — `hunter-max` (strongest, deliberately slow)
+### 1. `hunter-open` — the default
 
 ```
-Base:  huihui_ai/qwen3-abliterated:14b-v2-q4_K_M  (~9 GB)
-Fits:  NO — ~55% on GPU, the rest in your 32 GB of RAM
-Speed: single-digit tokens/sec. Fine for one-shot hard questions, not for chat.
+Base:  goekdenizguelmez/JOSIEFIED-Qwen3:8b-q4_k_m   (5.0 GB)
+       abliterated AND finetuned for openness -- both treatments
+Fits:  100% GPU, but only just: needs q8_0 KV cache and num_ctx 4096
+Cost:  knife-edge VRAM, short context, ~half the speed of the 4B
 ```
 
-This is where the 32 GB of RAM earns its place. It will not be interactive. Use it when
-quality matters more than latency, and expect to wait.
+Josiefied-Qwen3-8B-abliterated-v1. Listed on the UGI (Uncensored General Intelligence)
+leaderboard, which scores willingness rather than capability alone.
 
-### Bonus — vision
+**This is the honest trade:** prioritising compliance means running a 5.0 GB model on a
+5.2 GB budget. 4096 tokens of context, and it spills to CPU if your desktop grabs more
+VRAM. Watch `ollama ps` — anything other than `100% GPU` means you overshot.
+
+### 2. `hunter-open-fast` — when the knife edge gets annoying
 
 ```
-huihui_ai/qwen3-vl-abliterated:4b    (3.3 GB) — uncensored image understanding, fits fine
+Base:  goekdenizguelmez/JOSIEFIED-Qwen3:4b-q4_k_m   (~2.5 GB)
+Fits:  100% GPU with ~2.7 GB spare -- 16K context and up
 ```
 
-Full reasoning behind these picks, with the alternatives that were rejected and why:
+Same openness treatment, weaker reasoning. Compliance comes from the treatment, not the
+parameter count, so you give up intelligence here, not openness. Use it for long documents
+and for speed.
+
+### 3. `hunter-dolphin` — the second lineage
+
+```
+Base:  huihui_ai/dolphin3-abliterated:8b   (~4.9 GB)
+       Dolphin 3.0 uncensored finetune on Llama 3.1, then abliterated
+```
+
+Not redundant with `hunter-open`. Refusal behaviour that survives abliteration is specific
+to the base model, so when the Qwen lineage balks at a phrasing, the Llama lineage usually
+does not. Keeping one of each is the cheapest way to raise your effective ceiling.
+**When `hunter-open` refuses, try this before rewriting your prompt.**
+
+### 4. `hunter-max` — reasoning, not compliance
+
+```
+Base:  huihui_ai/qwen3-abliterated:14b-v2-q4_K_M   (~9 GB)
+Fits:  NO -- ~55% GPU, the rest in your 32 GB of RAM
+Speed: single-digit tok/s
+```
+
+Abliteration only, no openness finetune, so **it refuses more than the three above**. The
+one place here where capability outranks de-restriction — opt in with
+`setup.ps1 -IncludeMax`. If it balks, take the question to `hunter-open`.
+
+Full reasoning, the rejected alternatives, and the technique comparison:
 [`docs/MODEL_SELECTION.md`](docs/MODEL_SELECTION.md).
+
+---
+
+## Measure the censorship instead of trusting a ranking
+
+The ordering above is a prior built from leaderboard positions and model-card claims. Your
+prompts are not their prompts.
+
+```powershell
+python .\scripts\refusal-probe.py --all          # refusal + hedge rate per model
+python .\scripts\refusal-probe.py --all --show   # and read the actual responses
+```
+
+`probes/false-refusal.json` holds lawful requests across the categories where aligned
+models most often refuse by mistake — security research, pharmacology, chemistry, physical
+security, dark fiction, blunt tone, contested politics, law — plus two in Arabic, because
+models routinely refuse in Arabic what they answer in English.
+
+You get two numbers per model:
+
+- **refusal rate** — declined outright
+- **hedge rate** — answered, but buried it in disclaimers and moralizing
+
+Both matter. A model at 0% refusal that lectures you every time is still not what you
+want. The probe set is a JSON file so you can extend it with your own prompts.
 
 ---
 
@@ -135,8 +185,9 @@ Registry tags move and blog benchmarks are run on other people's hardware. Two c
 settle any disagreement on your own machine:
 
 ```powershell
-ollama ps                       # is it 100% GPU, or did it spill to CPU?
-python .\scripts\bench.py --all # real tok/s, prompt speed, and GPU/CPU split per model
+ollama ps                            # is it 100% GPU, or did it spill to CPU?
+python .\scripts\bench.py --all      # real tok/s and GPU/CPU split per model
+python .\scripts\refusal-probe.py --all  # real refusal and hedge rates per model
 ```
 
 `bench.py` writes `bench-results.json` so you can compare before and after a settings
